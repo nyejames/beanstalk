@@ -1,7 +1,7 @@
 use crate::compiler_frontend::analysis::borrow_checker::types::{
     BorrowStateSnapshot, LocalBorrowSnapshot, LocalMode,
 };
-use crate::compiler_frontend::hir::hir_nodes::{LocalId, RegionId};
+use crate::compiler_frontend::hir::hir_nodes::{BlockId, LocalId, RegionId};
 use rustc_hash::FxHashMap;
 
 #[derive(Debug, Clone)]
@@ -10,6 +10,18 @@ pub(super) struct FunctionLayout {
     pub local_index_by_id: FxHashMap<LocalId, usize>,
     pub local_mutable: Vec<bool>,
     pub local_regions: Vec<RegionId>,
+    pub local_last_use_line: Vec<i32>,
+    pub block_successors: FxHashMap<BlockId, Vec<BlockId>>,
+    pub block_local_max_use_line: FxHashMap<BlockId, Vec<i32>>,
+    pub may_use_from_block: FxHashMap<BlockId, RootSet>,
+    pub must_use_from_block: FxHashMap<BlockId, RootSet>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum FutureUseKind {
+    None,
+    May,
+    Must,
 }
 
 impl FunctionLayout {
@@ -17,6 +29,11 @@ impl FunctionLayout {
         local_ids: Vec<LocalId>,
         local_mutable: Vec<bool>,
         local_regions: Vec<RegionId>,
+        local_last_use_line: Vec<i32>,
+        block_successors: FxHashMap<BlockId, Vec<BlockId>>,
+        block_local_max_use_line: FxHashMap<BlockId, Vec<i32>>,
+        may_use_from_block: FxHashMap<BlockId, RootSet>,
+        must_use_from_block: FxHashMap<BlockId, RootSet>,
     ) -> Self {
         let mut local_index_by_id =
             FxHashMap::with_capacity_and_hasher(local_ids.len(), Default::default());
@@ -30,6 +47,11 @@ impl FunctionLayout {
             local_index_by_id,
             local_mutable,
             local_regions,
+            local_last_use_line,
+            block_successors,
+            block_local_max_use_line,
+            may_use_from_block,
+            must_use_from_block,
         }
     }
 
@@ -39,6 +61,69 @@ impl FunctionLayout {
 
     pub(super) fn index_of(&self, local_id: LocalId) -> Option<usize> {
         self.local_index_by_id.get(&local_id).copied()
+    }
+
+    pub(super) fn local_is_expired(&self, local_index: usize, current_line: i32) -> bool {
+        let last_use = self.local_last_use_line[local_index];
+        last_use >= 0 && last_use < current_line
+    }
+
+    pub(super) fn future_use_kind(
+        &self,
+        block_id: BlockId,
+        local_index: usize,
+        current_line: i32,
+    ) -> FutureUseKind {
+        if self.local_has_future_use_in_block(block_id, local_index, current_line) {
+            return FutureUseKind::Must;
+        }
+
+        let Some(successors) = self.block_successors.get(&block_id) else {
+            return FutureUseKind::None;
+        };
+        if successors.is_empty() {
+            return FutureUseKind::None;
+        }
+
+        let mut may = false;
+        let mut must = true;
+
+        for successor in successors {
+            let successor_may = self
+                .may_use_from_block
+                .get(successor)
+                .map(|roots| roots.contains(local_index))
+                .unwrap_or(false);
+            let successor_must = self
+                .must_use_from_block
+                .get(successor)
+                .map(|roots| roots.contains(local_index))
+                .unwrap_or(false);
+
+            may |= successor_may;
+            must &= successor_must;
+        }
+
+        if !may {
+            FutureUseKind::None
+        } else if must {
+            FutureUseKind::Must
+        } else {
+            FutureUseKind::May
+        }
+    }
+
+    fn local_has_future_use_in_block(
+        &self,
+        block_id: BlockId,
+        local_index: usize,
+        current_line: i32,
+    ) -> bool {
+        self.block_local_max_use_line
+            .get(&block_id)
+            .and_then(|max_use_lines| max_use_lines.get(local_index))
+            .map(|line| *line > current_line)
+            .unwrap_or(false)
     }
 }
 
@@ -110,10 +195,13 @@ impl BorrowState {
 
             let mut alias_roots = left.alias_roots.clone();
             alias_roots.union_with(&right.alias_roots);
+            let mut direct_alias_roots = left.direct_alias_roots.clone();
+            direct_alias_roots.union_with(&right.direct_alias_roots);
 
             joined_locals.push(LocalState {
                 mode: left.mode.union(right.mode),
                 alias_roots,
+                direct_alias_roots,
             });
         }
 
@@ -142,11 +230,13 @@ impl BorrowState {
             let mut next = self.locals[local_index].clone();
             if next.mode.contains(LocalMode::ALIAS) {
                 next.alias_roots.intersect_with(visible_mask);
+                next.direct_alias_roots.intersect_with(visible_mask);
                 if next.alias_roots.is_empty() {
                     next = if next.mode.contains(LocalMode::SLOT) {
                         LocalState {
                             mode: LocalMode::SLOT,
                             alias_roots: RootSet::empty(local_count),
+                            direct_alias_roots: RootSet::empty(local_count),
                         }
                     } else {
                         LocalState::uninit(local_count)
@@ -185,6 +275,34 @@ impl BorrowState {
         BorrowStateSnapshot { locals }
     }
 
+    pub(super) fn invalidate_root(&mut self, root_index: usize) {
+        let local_count = self.locals.len();
+
+        for local_index in 0..local_count {
+            if local_index == root_index {
+                self.locals[local_index] = LocalState::uninit(local_count);
+                continue;
+            }
+
+            let mut next = self.locals[local_index].clone();
+            if next.mode.contains(LocalMode::ALIAS) && next.alias_roots.contains(root_index) {
+                next.alias_roots.remove(root_index);
+                next.direct_alias_roots.remove(root_index);
+                if next.alias_roots.is_empty() {
+                    next = if next.mode.contains(LocalMode::SLOT) {
+                        LocalState::slot(local_count)
+                    } else {
+                        LocalState::uninit(local_count)
+                    };
+                }
+            }
+
+            self.locals[local_index] = next;
+        }
+
+        self.recompute_root_ref_counts();
+    }
+
     fn effective_roots_from_state(&self, local_index: usize, state: &LocalState) -> RootSet {
         let local_count = self.locals.len();
         let mut roots = RootSet::empty(local_count);
@@ -216,6 +334,7 @@ impl BorrowState {
 pub(super) struct LocalState {
     pub mode: LocalMode,
     pub alias_roots: RootSet,
+    pub direct_alias_roots: RootSet,
 }
 
 impl LocalState {
@@ -223,6 +342,7 @@ impl LocalState {
         Self {
             mode: LocalMode::UNINIT,
             alias_roots: RootSet::empty(local_count),
+            direct_alias_roots: RootSet::empty(local_count),
         }
     }
 
@@ -230,13 +350,20 @@ impl LocalState {
         Self {
             mode: LocalMode::SLOT,
             alias_roots: RootSet::empty(local_count),
+            direct_alias_roots: RootSet::empty(local_count),
         }
     }
 
     pub(super) fn alias(alias_roots: RootSet) -> Self {
+        let local_count = alias_roots.bit_len;
+        Self::alias_with_direct(alias_roots, RootSet::empty(local_count))
+    }
+
+    pub(super) fn alias_with_direct(alias_roots: RootSet, direct_alias_roots: RootSet) -> Self {
         Self {
             mode: LocalMode::ALIAS,
             alias_roots,
+            direct_alias_roots,
         }
     }
 }
@@ -254,6 +381,19 @@ impl RootSet {
             words: vec![0; word_len],
             bit_len,
         }
+    }
+
+    pub(super) fn full(bit_len: usize) -> Self {
+        let word_len = bit_len.div_ceil(64);
+        let mut words = vec![u64::MAX; word_len];
+        if bit_len % 64 != 0 {
+            let remainder = bit_len % 64;
+            let mask = (1u64 << remainder) - 1;
+            if let Some(last) = words.last_mut() {
+                *last = mask;
+            }
+        }
+        Self { words, bit_len }
     }
 
     pub(super) fn insert(&mut self, bit_index: usize) {
@@ -274,6 +414,16 @@ impl RootSet {
         let word_index = bit_index / 64;
         let bit_offset = bit_index % 64;
         (self.words[word_index] & (1u64 << bit_offset)) != 0
+    }
+
+    pub(super) fn remove(&mut self, bit_index: usize) {
+        if bit_index >= self.bit_len {
+            return;
+        }
+
+        let word_index = bit_index / 64;
+        let bit_offset = bit_index % 64;
+        self.words[word_index] &= !(1u64 << bit_offset);
     }
 
     pub(super) fn union_with(&mut self, other: &Self) {

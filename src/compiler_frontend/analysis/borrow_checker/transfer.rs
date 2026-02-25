@@ -63,6 +63,7 @@ pub(super) fn transfer_block(
             context,
             layout,
             state,
+            block.id,
             statement,
             &mut stats,
             &mut value_fact_buffer,

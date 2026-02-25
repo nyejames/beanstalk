@@ -5,7 +5,7 @@
 //! and emits statement/terminator/value facts.
 
 use crate::compiler_frontend::analysis::borrow_checker::state::{
-    BorrowState, FunctionLayout, LocalState, RootSet,
+    BorrowState, FunctionLayout, FutureUseKind, LocalState, RootSet,
 };
 use crate::compiler_frontend::analysis::borrow_checker::types::{
     AccessKind, LocalMode, StatementBorrowFact, TerminatorBorrowFact, ValueAccessClassification,
@@ -25,6 +25,7 @@ pub(super) fn transfer_statement(
     context: &BorrowTransferContext<'_>,
     layout: &FunctionLayout,
     state: &mut BorrowState,
+    block_id: BlockId,
     statement: &HirStatement,
     stats: &mut BlockTransferStats,
     value_fact_buffer: &mut ValueFactBuffer,
@@ -61,6 +62,7 @@ pub(super) fn transfer_statement(
                 context,
                 layout,
                 state,
+                block_id,
                 target,
                 value,
                 &mut tracker,
@@ -155,6 +157,9 @@ pub(super) fn transfer_statement(
                             &mutable_roots,
                             false,
                             None,
+                            false,
+                            argument_location.start_pos.line_number,
+                            false,
                             &mut tracker,
                             argument_location,
                             stats,
@@ -256,32 +261,8 @@ pub(super) fn transfer_terminator(
     let conflicts_before = stats.conflicts_checked;
 
     match terminator {
-        HirTerminator::Jump { args, .. } => {
-            for local in args {
-                let Some(local_index) = layout.index_of(*local) else {
-                    return_borrow_checker_error!(
-                        format!(
-                            "Jump argument local '{}' is not in the active function layout",
-                            context.diagnostics.local_name(*local)
-                        ),
-                        location.clone(),
-                        {
-                            CompilationStage => "Borrow Checking",
-                        }
-                    );
-                };
-
-                let roots = state.effective_roots(local_index);
-                check_shared_access(
-                    context,
-                    layout,
-                    &roots,
-                    &mut tracker,
-                    location.clone(),
-                    stats,
-                )?;
-            }
-        }
+        // Jump argument passing is CFG plumbing, not a semantic read.
+        HirTerminator::Jump { .. } => {}
 
         HirTerminator::If { condition, .. } => {
             record_shared_reads_in_expression(
@@ -410,6 +391,7 @@ fn transfer_assign_target(
     context: &BorrowTransferContext<'_>,
     layout: &FunctionLayout,
     state: &mut BorrowState,
+    block_id: BlockId,
     target: &HirPlace,
     value: &HirExpression,
     tracker: &mut StatementAccessTracker,
@@ -434,9 +416,93 @@ fn transfer_assign_target(
             let local_state = state.local_state(local_index).clone();
             let rhs_alias_roots =
                 direct_place_roots_from_expression(layout, state, value, location.clone())?;
+            let rhs_direct_alias_roots = rhs_alias_roots.as_ref().map(|rhs_roots| {
+                direct_root_aliases_from_expression(layout, state, value, rhs_roots)
+            });
+            let current_line = location.start_pos.line_number;
 
             if local_state.mode.is_definitely_uninit() {
-                apply_slot_rebinding(state, layout.local_count(), local_index, rhs_alias_roots);
+                match rhs_alias_roots {
+                    Some(rhs_roots) => {
+                        let move_decision =
+                            classify_move_decision(layout, block_id, &rhs_roots, current_line);
+                        let target_is_mutable = layout.local_mutable[local_index];
+                        let source_has_mutable_root = rhs_roots
+                            .iter_ones()
+                            .any(|root_index| layout.local_mutable[root_index]);
+                        let effective_decision = if target_is_mutable {
+                            move_decision
+                        } else {
+                            match move_decision {
+                                MoveDecision::Move if source_has_mutable_root => MoveDecision::Move,
+                                _ => MoveDecision::Borrow,
+                            }
+                        };
+
+                        if let MoveDecision::Inconsistent(root_index) = effective_decision {
+                            let root_name =
+                                context.diagnostics.local_name(layout.local_ids[root_index]);
+                            return_borrow_checker_error!(
+                                format!(
+                                    "Inconsistent ownership outcome for '{}' across control-flow paths",
+                                    root_name
+                                ),
+                                location.clone(),
+                                {
+                                    CompilationStage => "Borrow Checking",
+                                    LifetimeHint => "This access may move on one path and borrow on another",
+                                    PrimarySuggestion => "Make later uses of this value consistent across all branches",
+                                }
+                            );
+                        }
+
+                        let requires_exclusive =
+                            target_is_mutable || matches!(effective_decision, MoveDecision::Move);
+                        if requires_exclusive && !rhs_roots.is_empty() {
+                            check_mutable_access(
+                                context,
+                                layout,
+                                state,
+                                &rhs_roots,
+                                true,
+                                Some(local_index),
+                                false,
+                                current_line,
+                                matches!(effective_decision, MoveDecision::Move)
+                                    && !target_is_mutable,
+                                tracker,
+                                location.clone(),
+                                stats,
+                            )?;
+                        }
+
+                        match effective_decision {
+                            MoveDecision::Move => {
+                                for root_index in rhs_roots.iter_ones() {
+                                    state.invalidate_root(root_index);
+                                }
+                                state.update_local_state(
+                                    local_index,
+                                    LocalState::slot(layout.local_count()),
+                                );
+                            }
+                            MoveDecision::Borrow | MoveDecision::Inconsistent(_) => {
+                                let direct_roots = rhs_direct_alias_roots
+                                    .unwrap_or_else(|| RootSet::empty(layout.local_count()));
+                                state.update_local_state(
+                                    local_index,
+                                    LocalState::alias_with_direct(rhs_roots, direct_roots),
+                                );
+                            }
+                        }
+                    }
+                    None => {
+                        state.update_local_state(
+                            local_index,
+                            LocalState::slot(layout.local_count()),
+                        );
+                    }
+                }
                 return Ok(());
             }
 
@@ -455,6 +521,9 @@ fn transfer_assign_target(
                 &write_roots,
                 true,
                 Some(local_index),
+                true,
+                current_line,
+                false,
                 tracker,
                 location.clone(),
                 stats,
@@ -469,13 +538,23 @@ fn transfer_assign_target(
                 }
 
                 (true, false) => {
-                    apply_slot_rebinding(state, layout.local_count(), local_index, rhs_alias_roots);
+                    apply_slot_rebinding(
+                        state,
+                        layout.local_count(),
+                        local_index,
+                        rhs_alias_roots,
+                        rhs_direct_alias_roots,
+                    );
                 }
 
                 (true, true) => {
                     let mut alias_roots = local_state.alias_roots;
+                    let mut direct_alias_roots = local_state.direct_alias_roots;
                     if let Some(rhs_roots) = rhs_alias_roots {
                         alias_roots.union_with(&rhs_roots);
+                    }
+                    if let Some(rhs_direct_roots) = rhs_direct_alias_roots {
+                        direct_alias_roots.union_with(&rhs_direct_roots);
                     }
 
                     state.update_local_state(
@@ -483,6 +562,7 @@ fn transfer_assign_target(
                         LocalState {
                             mode: LocalMode::SLOT.union(LocalMode::ALIAS),
                             alias_roots,
+                            direct_alias_roots,
                         },
                     );
                 }
@@ -495,8 +575,20 @@ fn transfer_assign_target(
 
         _ => {
             let roots = roots_for_place(layout, state, target, location.clone())?;
+            let current_line = location.start_pos.line_number;
             check_mutable_access(
-                context, layout, state, &roots, true, None, tracker, location, stats,
+                context,
+                layout,
+                state,
+                &roots,
+                true,
+                None,
+                true,
+                current_line,
+                false,
+                tracker,
+                location,
+                stats,
             )?;
         }
     }
@@ -509,17 +601,61 @@ fn apply_slot_rebinding(
     local_count: usize,
     local_index: usize,
     rhs_alias_roots: Option<RootSet>,
+    rhs_direct_alias_roots: Option<RootSet>,
 ) {
     match rhs_alias_roots {
-        Some(roots) => state.update_local_state(local_index, LocalState::alias(roots)),
+        Some(roots) => {
+            let direct_roots =
+                rhs_direct_alias_roots.unwrap_or_else(|| RootSet::empty(local_count));
+            state.update_local_state(
+                local_index,
+                LocalState::alias_with_direct(roots, direct_roots),
+            )
+        }
         None => state.update_local_state(local_index, LocalState::slot(local_count)),
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MoveDecision {
+    Borrow,
+    Move,
+    Inconsistent(usize),
+}
+
+fn classify_move_decision(
+    layout: &FunctionLayout,
+    block_id: BlockId,
+    roots: &RootSet,
+    current_line: i32,
+) -> MoveDecision {
+    let mut saw_must = false;
+    let mut saw_none = false;
+
+    for root_index in roots.iter_ones() {
+        match layout.future_use_kind(block_id, root_index, current_line) {
+            FutureUseKind::Must => saw_must = true,
+            FutureUseKind::None => saw_none = true,
+            FutureUseKind::May => return MoveDecision::Inconsistent(root_index),
+        }
+    }
+
+    if saw_must {
+        MoveDecision::Borrow
+    } else if saw_none {
+        MoveDecision::Move
+    } else {
+        MoveDecision::Borrow
     }
 }
 
 fn check_shared_access(
     context: &BorrowTransferContext<'_>,
     layout: &FunctionLayout,
+    state: &BorrowState,
     roots: &RootSet,
+    actor_index_hint: Option<usize>,
+    current_line: i32,
     tracker: &mut StatementAccessTracker,
     location: ErrorLocation,
     stats: &mut BlockTransferStats,
@@ -545,6 +681,32 @@ fn check_shared_access(
             );
         }
 
+        if let Some(conflicting_index) = active_mutable_alias_for_root(
+            context,
+            layout,
+            state,
+            root_index,
+            actor_index_hint,
+            current_line,
+        ) {
+            let root_name = context.diagnostics.local_name(layout.local_ids[root_index]);
+            let alias_name = context
+                .diagnostics
+                .local_name(layout.local_ids[conflicting_index]);
+            return_borrow_checker_error!(
+                format!(
+                    "Cannot read '{}' as shared while mutable alias '{}' is still active",
+                    root_name, alias_name
+                ),
+                location.clone(),
+                {
+                    CompilationStage => "Borrow Checking",
+                    BorrowKind => "Shared",
+                    LifetimeHint => "Shared access is blocked until mutable aliases are no longer used",
+                }
+            );
+        }
+
         tracker.record(root_index, AccessKind::Shared);
     }
 
@@ -558,6 +720,9 @@ fn check_mutable_access(
     roots: &RootSet,
     allow_prior_shared: bool,
     actor_index_hint: Option<usize>,
+    require_root_mutable: bool,
+    current_line: i32,
+    strict_move_exclusivity: bool,
     tracker: &mut StatementAccessTracker,
     location: ErrorLocation,
     stats: &mut BlockTransferStats,
@@ -566,29 +731,26 @@ fn check_mutable_access(
         stats.conflicts_checked += 1;
 
         if let Some(existing) = tracker.conflict(root_index, AccessKind::Mutable) {
-            if allow_prior_shared && existing == AccessKind::Shared {
-                tracker.record(root_index, AccessKind::Mutable);
-                continue;
+            if !(allow_prior_shared && existing == AccessKind::Shared) {
+                let root_name = context.diagnostics.local_name(layout.local_ids[root_index]);
+
+                return_borrow_checker_error!(
+                    format!(
+                        "Cannot mutably access '{}' due to overlapping {:?} access in the same evaluation sequence",
+                        root_name,
+                        existing
+                    ),
+                    location.clone(),
+                    {
+                        CompilationStage => "Borrow Checking",
+                        BorrowKind => "Mutable",
+                        PrimarySuggestion => "Split mutable and shared accesses into separate statements",
+                    }
+                );
             }
-
-            let root_name = context.diagnostics.local_name(layout.local_ids[root_index]);
-
-            return_borrow_checker_error!(
-                format!(
-                    "Cannot mutably access '{}' due to overlapping {:?} access in the same evaluation sequence",
-                    root_name,
-                    existing
-                ),
-                location.clone(),
-                {
-                    CompilationStage => "Borrow Checking",
-                    BorrowKind => "Mutable",
-                    PrimarySuggestion => "Split mutable and shared accesses into separate statements",
-                }
-            );
         }
 
-        if !layout.local_mutable[root_index] {
+        if require_root_mutable && !layout.local_mutable[root_index] {
             let root_name = context.diagnostics.local_name(layout.local_ids[root_index]);
             return_borrow_checker_error!(
                 format!("Cannot mutably access immutable local '{}'", root_name),
@@ -601,17 +763,29 @@ fn check_mutable_access(
             );
         }
 
-        let alias_count = state.alias_count_for_root(root_index);
+        let actor_index = actor_index_hint.unwrap_or(root_index);
+        let alias_count = active_alias_count_for_root(
+            layout,
+            state,
+            root_index,
+            actor_index,
+            current_line,
+            strict_move_exclusivity,
+        );
         if alias_count > 1 {
-            let actor_index = actor_index_hint.unwrap_or(root_index);
             let actor_name = context
                 .diagnostics
                 .local_name(layout.local_ids[actor_index]);
-            let conflicting_local = context
-                .diagnostics
-                .conflicting_local_for_root(layout, state, actor_index, root_index)
-                .map(|local| context.diagnostics.local_name(local))
-                .unwrap_or_else(|| String::from("<unknown>"));
+            let conflicting_local = conflicting_active_local_for_root(
+                layout,
+                state,
+                root_index,
+                actor_index,
+                current_line,
+                strict_move_exclusivity,
+            )
+            .map(|index| context.diagnostics.local_name(layout.local_ids[index]))
+            .unwrap_or_else(|| String::from("<unknown>"));
 
             return_borrow_checker_error!(
                 format!(
@@ -631,6 +805,173 @@ fn check_mutable_access(
     }
 
     Ok(())
+}
+
+fn active_alias_count_for_root(
+    layout: &FunctionLayout,
+    state: &BorrowState,
+    root_index: usize,
+    actor_index: usize,
+    current_line: i32,
+    strict_move_exclusivity: bool,
+) -> u32 {
+    let mut count = 0u32;
+    let actor_state = state.local_state(actor_index);
+    let actor_is_alias_for_root = actor_index != root_index
+        && actor_state.mode.contains(LocalMode::ALIAS)
+        && actor_state.alias_roots.contains(root_index);
+
+    for candidate_index in 0..layout.local_count() {
+        if actor_is_alias_for_root && candidate_index == root_index {
+            continue;
+        }
+
+        let roots = state.effective_roots(candidate_index);
+        if !roots.contains(root_index) {
+            continue;
+        }
+
+        if candidate_index == actor_index {
+            count += 1;
+            continue;
+        }
+
+        if !is_local_active_for_alias_conflict(
+            layout,
+            state,
+            root_index,
+            candidate_index,
+            current_line,
+            strict_move_exclusivity,
+        ) {
+            continue;
+        }
+
+        count += 1;
+    }
+
+    count
+}
+
+fn active_mutable_alias_for_root(
+    context: &BorrowTransferContext<'_>,
+    layout: &FunctionLayout,
+    state: &BorrowState,
+    root_index: usize,
+    actor_index_hint: Option<usize>,
+    current_line: i32,
+) -> Option<usize> {
+    for candidate_index in 0..layout.local_count() {
+        if Some(candidate_index) == actor_index_hint {
+            continue;
+        }
+
+        if !layout.local_mutable[candidate_index] {
+            continue;
+        }
+
+        if context
+            .diagnostics
+            .local_name(layout.local_ids[candidate_index])
+            .starts_with("__hir_tmp_")
+        {
+            continue;
+        }
+
+        if layout.local_is_expired(candidate_index, current_line) {
+            continue;
+        }
+
+        let candidate_state = state.local_state(candidate_index);
+        if !candidate_state.mode.contains(LocalMode::ALIAS) {
+            continue;
+        }
+
+        let roots = state.effective_roots(candidate_index);
+        if roots.contains(root_index) {
+            return Some(candidate_index);
+        }
+    }
+
+    None
+}
+
+fn conflicting_active_local_for_root(
+    layout: &FunctionLayout,
+    state: &BorrowState,
+    root_index: usize,
+    actor_index: usize,
+    current_line: i32,
+    strict_move_exclusivity: bool,
+) -> Option<usize> {
+    let actor_state = state.local_state(actor_index);
+    let actor_is_alias_for_root = actor_index != root_index
+        && actor_state.mode.contains(LocalMode::ALIAS)
+        && actor_state.alias_roots.contains(root_index);
+
+    for candidate_index in 0..layout.local_count() {
+        if actor_is_alias_for_root && candidate_index == root_index {
+            continue;
+        }
+
+        if candidate_index == actor_index {
+            continue;
+        }
+
+        if !is_local_active_for_alias_conflict(
+            layout,
+            state,
+            root_index,
+            candidate_index,
+            current_line,
+            strict_move_exclusivity,
+        ) {
+            continue;
+        }
+
+        let roots = state.effective_roots(candidate_index);
+        if roots.contains(root_index) {
+            return Some(candidate_index);
+        }
+    }
+
+    None
+}
+
+fn is_local_active_for_alias_conflict(
+    layout: &FunctionLayout,
+    state: &BorrowState,
+    root_index: usize,
+    local_index: usize,
+    current_line: i32,
+    strict_move_exclusivity: bool,
+) -> bool {
+    let last_use = layout.local_last_use_line[local_index];
+    if last_use >= 0 {
+        return last_use >= current_line;
+    }
+
+    let local_state = state.local_state(local_index);
+    if !local_state.mode.contains(LocalMode::ALIAS) {
+        return false;
+    }
+
+    if strict_move_exclusivity {
+        return local_state.direct_alias_roots.contains(root_index)
+            || layout.local_mutable[local_index];
+    }
+
+    // Unused mutable aliases remain active until the end of the scope.
+    layout.local_mutable[local_index]
+}
+
+fn place_root_local_index(layout: &FunctionLayout, place: &HirPlace) -> Option<usize> {
+    match place {
+        HirPlace::Local(local_id) => layout.index_of(*local_id),
+        HirPlace::Field { base, .. } | HirPlace::Index { base, .. } => {
+            place_root_local_index(layout, base)
+        }
+    }
 }
 
 fn mutable_argument_roots(
@@ -659,6 +1000,34 @@ fn direct_place_roots_from_expression(
     }
 
     Ok(None)
+}
+
+fn direct_root_aliases_from_expression(
+    layout: &FunctionLayout,
+    state: &BorrowState,
+    expression: &HirExpression,
+    rhs_roots: &RootSet,
+) -> RootSet {
+    let mut direct_roots = RootSet::empty(layout.local_count());
+
+    let HirExpressionKind::Load(place) = &expression.kind else {
+        return direct_roots;
+    };
+
+    let HirPlace::Local(source_local_id) = place else {
+        return direct_roots;
+    };
+
+    let Some(source_index) = layout.index_of(*source_local_id) else {
+        return direct_roots;
+    };
+
+    let source_state = state.local_state(source_index);
+    if source_state.mode.contains(LocalMode::SLOT) && rhs_roots.contains(source_index) {
+        direct_roots.insert(source_index);
+    }
+
+    direct_roots
 }
 
 fn roots_for_place(
@@ -789,7 +1158,18 @@ fn record_shared_reads_in_expression(
             )?;
 
             let roots = roots_for_place(layout, state, place, value_location.clone())?;
-            check_shared_access(context, layout, &roots, tracker, value_location, stats)?;
+            let actor_index_hint = place_root_local_index(layout, place);
+            check_shared_access(
+                context,
+                layout,
+                state,
+                &roots,
+                actor_index_hint,
+                location.start_pos.line_number,
+                tracker,
+                value_location,
+                stats,
+            )?;
         }
 
         HirExpressionKind::BinOp { left, right, .. } => {

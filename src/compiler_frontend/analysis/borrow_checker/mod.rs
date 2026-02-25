@@ -27,8 +27,8 @@ use crate::compiler_frontend::analysis::borrow_checker::types::{
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::hir::hir_display::HirLocation;
 use crate::compiler_frontend::hir::hir_nodes::{
-    BlockId, FunctionId, HirExpression, HirExpressionKind, HirFunction, HirModule, HirPlace,
-    HirTerminator, LocalId, RegionId,
+    BlockId, FunctionId, HirExpression, HirExpressionKind, HirFunction, HirModule, HirPattern,
+    HirPlace, HirStatement, HirStatementKind, HirTerminator, LocalId, RegionId,
 };
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
@@ -378,6 +378,16 @@ impl<'a> BorrowChecker<'a> {
                     successor_input.kill_invisible(mask);
                 }
 
+                if let Some(existing) = in_states.get(&successor) {
+                    self.check_inconsistent_move_join(
+                        function.id,
+                        successor,
+                        &layout,
+                        existing,
+                        &successor_input,
+                    )?;
+                }
+
                 let next_state = match in_states.get(&successor) {
                     Some(existing) => existing.join(&successor_input),
                     None => successor_input,
@@ -468,8 +478,76 @@ impl<'a> BorrowChecker<'a> {
             .iter()
             .map(|local_id| local_info_by_id[local_id].1)
             .collect::<Vec<_>>();
+        let mut local_index_by_id = FxHashMap::default();
+        for (index, local_id) in local_ids.iter().enumerate() {
+            local_index_by_id.insert(*local_id, index);
+        }
 
-        Ok(FunctionLayout::new(local_ids, local_mutable, local_regions))
+        let reachable_block_set = reachable_blocks.iter().copied().collect::<FxHashSet<_>>();
+        let mut local_last_use_line = vec![-1; local_ids.len()];
+        let mut block_successors = FxHashMap::default();
+        let mut block_local_max_use_line = FxHashMap::default();
+
+        for block_id in reachable_blocks {
+            let block = self.block_by_id_or_error(*block_id, function.id)?;
+            let mut max_use_line = vec![-1; local_ids.len()];
+
+            for statement in &block.statements {
+                let line = statement.location.start_pos.line_number;
+                collect_statement_loaded_locals(statement, &mut |local_id| {
+                    if let Some(index) = local_index_by_id.get(&local_id).copied() {
+                        local_last_use_line[index] = local_last_use_line[index].max(line);
+                        max_use_line[index] = max_use_line[index].max(line);
+                    }
+                });
+            }
+
+            let terminator_line = self
+                .module
+                .side_table
+                .hir_source_location_for_hir(HirLocation::Terminator(*block_id))
+                .or_else(|| {
+                    self.module
+                        .side_table
+                        .ast_location_for_hir(HirLocation::Terminator(*block_id))
+                })
+                .map(|location| location.start_pos.line_number)
+                .unwrap_or_default();
+
+            collect_terminator_loaded_locals(&block.terminator, &mut |local_id| {
+                if let Some(index) = local_index_by_id.get(&local_id).copied() {
+                    local_last_use_line[index] = local_last_use_line[index].max(terminator_line);
+                    max_use_line[index] = max_use_line[index].max(terminator_line);
+                }
+            });
+
+            block_local_max_use_line.insert(*block_id, max_use_line);
+            block_successors.insert(
+                *block_id,
+                successors(&block.terminator)
+                    .into_iter()
+                    .filter(|successor| reachable_block_set.contains(successor))
+                    .collect(),
+            );
+        }
+
+        let (may_use_from_block, must_use_from_block) = compute_future_use_sets(
+            local_ids.len(),
+            reachable_blocks,
+            &block_successors,
+            &block_local_max_use_line,
+        );
+
+        Ok(FunctionLayout::new(
+            local_ids,
+            local_mutable,
+            local_regions,
+            local_last_use_line,
+            block_successors,
+            block_local_max_use_line,
+            may_use_from_block,
+            must_use_from_block,
+        ))
     }
 
     fn build_visibility_masks(
@@ -602,6 +680,161 @@ impl<'a> BorrowChecker<'a> {
         total.terminators_analyzed += block.terminators_analyzed;
         total.conflicts_checked += block.conflicts_checked;
     }
+
+    fn check_inconsistent_move_join(
+        &self,
+        function_id: FunctionId,
+        successor: BlockId,
+        layout: &FunctionLayout,
+        existing: &BorrowState,
+        incoming: &BorrowState,
+    ) -> Result<(), CompilerError> {
+        for local_index in 0..layout.local_count() {
+            let existing_uninit = existing
+                .local_state(local_index)
+                .mode
+                .is_definitely_uninit();
+            let incoming_uninit = incoming
+                .local_state(local_index)
+                .mode
+                .is_definitely_uninit();
+
+            if existing_uninit == incoming_uninit {
+                continue;
+            }
+
+            let location = self
+                .module
+                .side_table
+                .hir_source_location_for_hir(HirLocation::Block(successor))
+                .or_else(|| {
+                    self.module
+                        .side_table
+                        .ast_location_for_hir(HirLocation::Block(successor))
+                })
+                .map(|source| source.to_error_location(self.string_table))
+                .unwrap_or_else(|| self.diagnostics.function_error_location(function_id));
+
+            return_borrow_checker_error!(
+                format!(
+                    "Inconsistent ownership outcome for '{}' across control-flow paths",
+                    self.diagnostics.local_name(layout.local_ids[local_index])
+                ),
+                location,
+                {
+                    CompilationStage => "Borrow Checking",
+                    LifetimeHint => "A value cannot be moved on one path and borrowed on another",
+                    PrimarySuggestion => "Make ownership outcomes consistent across all branches",
+                }
+            );
+        }
+
+        Ok(())
+    }
+}
+
+fn compute_future_use_sets(
+    local_count: usize,
+    reachable_blocks: &[BlockId],
+    block_successors: &FxHashMap<BlockId, Vec<BlockId>>,
+    block_local_max_use_line: &FxHashMap<BlockId, Vec<i32>>,
+) -> (FxHashMap<BlockId, RootSet>, FxHashMap<BlockId, RootSet>) {
+    let mut block_use_sets = FxHashMap::default();
+    for block_id in reachable_blocks {
+        let mut uses = RootSet::empty(local_count);
+        if let Some(max_use_line) = block_local_max_use_line.get(block_id) {
+            for (local_index, line) in max_use_line.iter().enumerate() {
+                if *line >= 0 {
+                    uses.insert(local_index);
+                }
+            }
+        }
+        block_use_sets.insert(*block_id, uses);
+    }
+
+    let mut may_use_from_block = FxHashMap::default();
+    for block_id in reachable_blocks {
+        may_use_from_block.insert(*block_id, RootSet::empty(local_count));
+    }
+
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for block_id in reachable_blocks.iter().rev() {
+            let mut next = block_use_sets
+                .get(block_id)
+                .cloned()
+                .unwrap_or_else(|| RootSet::empty(local_count));
+
+            if let Some(successors) = block_successors.get(block_id) {
+                for successor in successors {
+                    if let Some(successor_may) = may_use_from_block.get(successor) {
+                        next.union_with(successor_may);
+                    }
+                }
+            }
+
+            let should_update = may_use_from_block
+                .get(block_id)
+                .map(|existing| existing != &next)
+                .unwrap_or(true);
+
+            if should_update {
+                may_use_from_block.insert(*block_id, next);
+                changed = true;
+            }
+        }
+    }
+
+    let mut must_use_from_block = FxHashMap::default();
+    for block_id in reachable_blocks {
+        must_use_from_block.insert(*block_id, RootSet::full(local_count));
+    }
+
+    changed = true;
+    while changed {
+        changed = false;
+        for block_id in reachable_blocks.iter().rev() {
+            let mut next = block_use_sets
+                .get(block_id)
+                .cloned()
+                .unwrap_or_else(|| RootSet::empty(local_count));
+
+            let successors = block_successors
+                .get(block_id)
+                .map(Vec::as_slice)
+                .unwrap_or(&[]);
+
+            let successor_must = if successors.is_empty() {
+                RootSet::empty(local_count)
+            } else {
+                let mut intersection = RootSet::full(local_count);
+                for successor in successors {
+                    if let Some(must_set) = must_use_from_block.get(successor) {
+                        intersection.intersect_with(must_set);
+                    } else {
+                        intersection = RootSet::empty(local_count);
+                        break;
+                    }
+                }
+                intersection
+            };
+
+            next.union_with(&successor_must);
+
+            let should_update = must_use_from_block
+                .get(block_id)
+                .map(|existing| existing != &next)
+                .unwrap_or(true);
+
+            if should_update {
+                must_use_from_block.insert(*block_id, next);
+                changed = true;
+            }
+        }
+    }
+
+    (may_use_from_block, must_use_from_block)
 }
 
 fn merge_return_alias(
@@ -636,49 +869,58 @@ fn classify_return_expression(
     param_index_by_local: &FxHashMap<LocalId, usize>,
 ) -> FunctionReturnAliasSummary {
     // Direct `return load(param_root)` is a precise alias.
-    // Any other load usage is conservatively treated as Unknown.
+    // Loads of non-parameter locals are considered fresh values from the callee frame.
     if let HirExpressionKind::Load(place) = &expression.kind {
         if let Some(root_local) = root_local_for_place(place) {
             return match param_index_by_local.get(&root_local).copied() {
                 Some(param_index) => FunctionReturnAliasSummary::AliasParams(vec![param_index]),
-                None => FunctionReturnAliasSummary::Unknown,
+                None => FunctionReturnAliasSummary::Fresh,
             };
         }
 
-        return FunctionReturnAliasSummary::Unknown;
+        return FunctionReturnAliasSummary::Fresh;
     }
 
-    if expression_has_any_load(expression) {
+    if expression_has_param_load(expression, param_index_by_local) {
         FunctionReturnAliasSummary::Unknown
     } else {
         FunctionReturnAliasSummary::Fresh
     }
 }
 
-fn expression_has_any_load(expression: &HirExpression) -> bool {
-    // A load anywhere in a return expression means the value may alias
-    // existing storage rather than being provably fresh.
+fn expression_has_param_load(
+    expression: &HirExpression,
+    param_index_by_local: &FxHashMap<LocalId, usize>,
+) -> bool {
     match &expression.kind {
-        HirExpressionKind::Load(_) => true,
+        HirExpressionKind::Load(place) => root_local_for_place(place)
+            .map(|local| param_index_by_local.contains_key(&local))
+            .unwrap_or(false),
         HirExpressionKind::BinOp { left, right, .. } => {
-            expression_has_any_load(left) || expression_has_any_load(right)
+            expression_has_param_load(left, param_index_by_local)
+                || expression_has_param_load(right, param_index_by_local)
         }
-        HirExpressionKind::UnaryOp { operand, .. } => expression_has_any_load(operand),
+        HirExpressionKind::UnaryOp { operand, .. } => {
+            expression_has_param_load(operand, param_index_by_local)
+        }
         HirExpressionKind::StructConstruct { fields, .. } => fields
             .iter()
-            .any(|(_, value)| expression_has_any_load(value)),
+            .any(|(_, value)| expression_has_param_load(value, param_index_by_local)),
         HirExpressionKind::Collection(elements)
-        | HirExpressionKind::TupleConstruct { elements } => {
-            elements.iter().any(expression_has_any_load)
-        }
+        | HirExpressionKind::TupleConstruct { elements } => elements
+            .iter()
+            .any(|element| expression_has_param_load(element, param_index_by_local)),
         HirExpressionKind::Range { start, end } => {
-            expression_has_any_load(start) || expression_has_any_load(end)
+            expression_has_param_load(start, param_index_by_local)
+                || expression_has_param_load(end, param_index_by_local)
         }
         HirExpressionKind::OptionConstruct { value, .. } => value
             .as_ref()
-            .map(|value| expression_has_any_load(value))
+            .map(|value| expression_has_param_load(value, param_index_by_local))
             .unwrap_or(false),
-        HirExpressionKind::ResultConstruct { value, .. } => expression_has_any_load(value),
+        HirExpressionKind::ResultConstruct { value, .. } => {
+            expression_has_param_load(value, param_index_by_local)
+        }
         HirExpressionKind::Int(_)
         | HirExpressionKind::Float(_)
         | HirExpressionKind::Bool(_)
@@ -691,6 +933,119 @@ fn root_local_for_place(place: &HirPlace) -> Option<LocalId> {
     match place {
         HirPlace::Local(local) => Some(*local),
         HirPlace::Field { base, .. } | HirPlace::Index { base, .. } => root_local_for_place(base),
+    }
+}
+
+fn collect_statement_loaded_locals(statement: &HirStatement, visitor: &mut impl FnMut(LocalId)) {
+    match &statement.kind {
+        HirStatementKind::Assign { target, value } => {
+            collect_place_index_loaded_locals(target, visitor);
+            collect_expression_loaded_locals(value, visitor);
+        }
+        HirStatementKind::Call { args, .. } => {
+            for arg in args {
+                collect_expression_loaded_locals(arg, visitor);
+            }
+        }
+        HirStatementKind::Expr(expression) => {
+            collect_expression_loaded_locals(expression, visitor);
+        }
+        HirStatementKind::Drop(local) => visitor(*local),
+    }
+}
+
+fn collect_place_index_loaded_locals(place: &HirPlace, visitor: &mut impl FnMut(LocalId)) {
+    match place {
+        HirPlace::Local(_) => {}
+        HirPlace::Field { base, .. } => collect_place_index_loaded_locals(base, visitor),
+        HirPlace::Index { base, index } => {
+            collect_place_index_loaded_locals(base, visitor);
+            collect_expression_loaded_locals(index, visitor);
+        }
+    }
+}
+
+fn collect_terminator_loaded_locals(terminator: &HirTerminator, visitor: &mut impl FnMut(LocalId)) {
+    match terminator {
+        // Jump argument passing is CFG plumbing, not a semantic value use.
+        HirTerminator::Jump { .. } => {}
+        HirTerminator::If { condition, .. } => {
+            collect_expression_loaded_locals(condition, visitor);
+        }
+        HirTerminator::Match { scrutinee, arms } => {
+            collect_expression_loaded_locals(scrutinee, visitor);
+            for arm in arms {
+                if let HirPattern::Literal(expression) = &arm.pattern {
+                    collect_expression_loaded_locals(expression, visitor);
+                }
+                if let Some(guard) = &arm.guard {
+                    collect_expression_loaded_locals(guard, visitor);
+                }
+            }
+        }
+        HirTerminator::Return(value) => {
+            collect_expression_loaded_locals(value, visitor);
+        }
+        HirTerminator::Panic { message } => {
+            if let Some(message) = message {
+                collect_expression_loaded_locals(message, visitor);
+            }
+        }
+        HirTerminator::Loop { .. }
+        | HirTerminator::Break { .. }
+        | HirTerminator::Continue { .. } => {}
+    }
+}
+
+fn collect_expression_loaded_locals(expression: &HirExpression, visitor: &mut impl FnMut(LocalId)) {
+    match &expression.kind {
+        HirExpressionKind::Load(place) => collect_place_loaded_locals(place, visitor),
+        HirExpressionKind::BinOp { left, right, .. } => {
+            collect_expression_loaded_locals(left, visitor);
+            collect_expression_loaded_locals(right, visitor);
+        }
+        HirExpressionKind::UnaryOp { operand, .. } => {
+            collect_expression_loaded_locals(operand, visitor);
+        }
+        HirExpressionKind::StructConstruct { fields, .. } => {
+            for (_, value) in fields {
+                collect_expression_loaded_locals(value, visitor);
+            }
+        }
+        HirExpressionKind::Collection(elements)
+        | HirExpressionKind::TupleConstruct { elements } => {
+            for element in elements {
+                collect_expression_loaded_locals(element, visitor);
+            }
+        }
+        HirExpressionKind::Range { start, end } => {
+            collect_expression_loaded_locals(start, visitor);
+            collect_expression_loaded_locals(end, visitor);
+        }
+        HirExpressionKind::OptionConstruct { value, .. } => {
+            if let Some(value) = value {
+                collect_expression_loaded_locals(value, visitor);
+            }
+        }
+        HirExpressionKind::ResultConstruct { value, .. } => {
+            collect_expression_loaded_locals(value, visitor);
+        }
+        HirExpressionKind::Int(_)
+        | HirExpressionKind::Float(_)
+        | HirExpressionKind::Bool(_)
+        | HirExpressionKind::Char(_)
+        | HirExpressionKind::StringLiteral(_) => {}
+    }
+}
+
+fn collect_place_loaded_locals(place: &HirPlace, visitor: &mut impl FnMut(LocalId)) {
+    match place {
+        HirPlace::Local(local) => visitor(*local),
+        HirPlace::Field { base, .. } => collect_place_loaded_locals(base, visitor),
+        HirPlace::Index { base, index } => {
+            collect_place_loaded_locals(base, visitor);
+            collect_expression_loaded_locals(index, visitor);
+        }
     }
 }
 
