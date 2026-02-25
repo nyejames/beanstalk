@@ -1,16 +1,22 @@
+//! Command-line entrypoints for the Beanstalk toolchain.
+//!
+//! This module parses CLI commands and dispatches them into build, dev-server, scaffolding, and
+//! compiler test workflows.
+
 use crate::build_system::build;
 use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::display_messages::print_compiler_messages;
 use crate::compiler_tests::integration_test_runner::run_all_test_cases;
+use crate::projects::dev_server::{self, DevServerOptions};
 use crate::projects::html_project::html_project_builder::HtmlProjectBuilder;
 use crate::projects::html_project::new_html_project;
-use crate::projects::old_dev_server;
 use saying::say;
 use std::{
     env,
     io::{self, Write},
 };
 
+#[derive(Debug, PartialEq, Eq)]
 enum Command {
     NewHTMLProject(String), // Creates a new HTML project template
 
@@ -20,7 +26,10 @@ enum Command {
 
     // Runs a hot reloading dev server that can be accessed in the browser
     // Will only support HTML projects for now
-    Dev(String),
+    Dev {
+        path: String,
+        options: DevServerOptions,
+    },
 
     Help,
     CompilerTests, // Runs all the compiler_frontend integration tests for Beanstalk compiler_frontend development
@@ -85,9 +94,13 @@ pub fn start_cli() {
         //         build::build_project_files(&path, false, &flags, Some(BuildTarget::Interpreter));
         //     print_compiler_messages(messages);
         // }
-        Command::Dev(path) => {
+        Command::Dev { path, options } => {
             say!("\nStarting dev server...");
-            old_dev_server::start_dev_server(&path, &flags);
+            let html_project_builder = Box::new(HtmlProjectBuilder::new());
+            match dev_server::run_dev_server(html_project_builder, &path, &flags, options) {
+                Ok(_) => {}
+                Err(messages) => print_compiler_messages(messages),
+            }
         }
 
         Command::CompilerTests => {
@@ -140,16 +153,7 @@ fn get_command(args: &[String]) -> Result<Command, String> {
         //     }
         //     _ => Ok(Command::Run("")),
         // },
-        Some("dev") => match args.get(1) {
-            Some(path) => {
-                if path.is_empty() {
-                    Ok(Command::Dev(String::from("")))
-                } else {
-                    Ok(Command::Dev(path.to_owned()))
-                }
-            }
-            None => Ok(Command::Dev(String::from(""))),
-        },
+        Some("dev") => parse_dev_command(args),
 
         Some("tests") => Ok(Command::CompilerTests),
 
@@ -170,6 +174,86 @@ fn get_flags(args: &[String]) -> Vec<Flag> {
     }
 
     flags
+}
+
+fn parse_dev_command(args: &[String]) -> Result<Command, String> {
+    let mut path = String::new();
+    let mut options = DevServerOptions::default();
+    let mut index = 1usize;
+
+    while let Some(arg) = args.get(index) {
+        match arg.as_str() {
+            "--host" => {
+                let Some(host) = args.get(index + 1) else {
+                    return Err(String::from("Missing value for --host"));
+                };
+                if host.starts_with("--") {
+                    return Err(String::from("Missing value for --host"));
+                }
+                options.host = host.to_owned();
+                index += 2;
+            }
+            "--port" => {
+                let Some(port_value) = args.get(index + 1) else {
+                    return Err(String::from("Missing value for --port"));
+                };
+                if port_value.starts_with("--") {
+                    return Err(String::from("Missing value for --port"));
+                }
+                options.port = match port_value.parse::<u16>() {
+                    Ok(port) => port,
+                    Err(_) => {
+                        return Err(format!(
+                            "Invalid --port value: '{port_value}'. Port must be a number from 0 to 65535."
+                        ));
+                    }
+                };
+                index += 2;
+            }
+            "--poll-interval-ms" => {
+                let Some(interval_value) = args.get(index + 1) else {
+                    return Err(String::from("Missing value for --poll-interval-ms"));
+                };
+                if interval_value.starts_with("--") {
+                    return Err(String::from("Missing value for --poll-interval-ms"));
+                }
+                options.poll_interval_ms = match interval_value.parse::<u64>() {
+                    Ok(interval) if interval > 0 => interval,
+                    Ok(_) => {
+                        return Err(String::from(
+                            "Invalid --poll-interval-ms value: '0'. It must be greater than zero.",
+                        ));
+                    }
+                    Err(_) => {
+                        return Err(format!(
+                            "Invalid --poll-interval-ms value: '{interval_value}'. It must be a positive integer."
+                        ));
+                    }
+                };
+                index += 2;
+            }
+            "--release" | "--hide-warnings" | "--hide-timers" | "--show-warnings" => {
+                index += 1;
+            }
+            _ if arg.starts_with("--") => {
+                return Err(format!(
+                    "Unknown dev flag: '{arg}'. Supported dev flags are --host, --port, --poll-interval-ms."
+                ));
+            }
+            _ => {
+                if path.is_empty() {
+                    path = arg.to_owned();
+                    index += 1;
+                } else {
+                    return Err(String::from(
+                        "Dev command accepts at most one path argument.",
+                    ));
+                }
+            }
+        }
+    }
+
+    Ok(Command::Dev { path, options })
 }
 
 fn prompt_user_for_input(msg: &str) -> Vec<String> {
@@ -196,6 +280,7 @@ fn print_help(commands_only: bool) {
     //say!("  build <path>         - Builds a file");
     say!("  run <path>        - JITs a file");
     say!("  build <path>      - Builds a project");
+    say!("  dev <path>        - Runs the hot reloading dev server");
     say!("  tests             - Runs the test suite");
 
     say!(Green Bold "\nFlags:");
@@ -203,4 +288,12 @@ fn print_help(commands_only: bool) {
     say!("  --hide-warnings");
     say!("  --hide-timers");
     say!("  --show-warnings");
+    say!("\nDev command options:");
+    say!("  --host <host>            (default: 127.0.0.1)");
+    say!("  --port <port>            (default: 6342)");
+    say!("  --poll-interval-ms <ms>  (default: 300)");
 }
+
+#[cfg(test)]
+#[path = "tests/cli_tests.rs"]
+mod tests;
