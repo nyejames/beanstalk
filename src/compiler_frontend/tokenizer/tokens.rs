@@ -262,6 +262,7 @@ impl FileTokens {
             match self.current_token_kind() {
                 TokenKind::End => scopes_closed += 1,
                 TokenKind::Colon => scopes_opened += 1,
+                TokenKind::Eof => break,
                 _ => {}
             }
             self.advance();

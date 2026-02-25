@@ -350,6 +350,17 @@ fn create_header(
                         body.push(token_stream.current_token());
                     }
 
+                    TokenKind::Eof => {
+                        return_rule_error!(
+                            "Unexpected end of file while parsing function body. Missing ';' to close this scope.",
+                            token_stream.current_location().to_error_location(string_table),
+                            {
+                                PrimarySuggestion => "Close the function body with ';'",
+                                SuggestedInsertion => ";",
+                            }
+                        )
+                    }
+
                     TokenKind::Symbol(name_id) => {
                         if let Some(path) = file_imports.iter().find(|f| f.name() == Some(*name_id))
                         {
@@ -469,6 +480,17 @@ fn create_top_level_const_template(
                 if scopes_opened > scopes_closed {
                     body.push(token_stream.current_token());
                 }
+            }
+
+            TokenKind::Eof => {
+                return_rule_error!(
+                    "Unexpected end of file while parsing top-level const template. Missing ']' to close the template.",
+                    token_stream.current_location().to_error_location(string_table),
+                    {
+                        PrimarySuggestion => "Close the template with ']'",
+                        SuggestedInsertion => "]",
+                    }
+                )
             }
 
             TokenKind::Symbol(name_id) => {

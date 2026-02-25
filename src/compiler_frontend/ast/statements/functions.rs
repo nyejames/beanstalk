@@ -30,9 +30,10 @@ impl FunctionSignature {
         token_stream.advance();
 
         let parameters = parse_parameters(token_stream, &mut true, string_table, false)?;
+        token_stream.advance();
 
-        // create_struct_definition already advances past the closing |,
-        // So we're now at the Arrow or Colon token
+        // parse_parameters leaves us on the closing `|`,
+        // so we're now at the Arrow or Colon token
         match token_stream.current_token_kind() {
             TokenKind::Arrow => {}
 

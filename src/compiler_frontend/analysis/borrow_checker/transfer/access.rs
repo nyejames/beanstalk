@@ -153,6 +153,7 @@ pub(super) fn transfer_statement(
                             layout,
                             state,
                             &mutable_roots,
+                            false,
                             None,
                             &mut tracker,
                             argument_location,
@@ -452,6 +453,7 @@ fn transfer_assign_target(
                 layout,
                 state,
                 &write_roots,
+                true,
                 Some(local_index),
                 tracker,
                 location.clone(),
@@ -494,7 +496,7 @@ fn transfer_assign_target(
         _ => {
             let roots = roots_for_place(layout, state, target, location.clone())?;
             check_mutable_access(
-                context, layout, state, &roots, None, tracker, location, stats,
+                context, layout, state, &roots, true, None, tracker, location, stats,
             )?;
         }
     }
@@ -554,6 +556,7 @@ fn check_mutable_access(
     layout: &FunctionLayout,
     state: &BorrowState,
     roots: &RootSet,
+    allow_prior_shared: bool,
     actor_index_hint: Option<usize>,
     tracker: &mut StatementAccessTracker,
     location: ErrorLocation,
@@ -563,6 +566,11 @@ fn check_mutable_access(
         stats.conflicts_checked += 1;
 
         if let Some(existing) = tracker.conflict(root_index, AccessKind::Mutable) {
+            if allow_prior_shared && existing == AccessKind::Shared {
+                tracker.record(root_index, AccessKind::Mutable);
+                continue;
+            }
+
             let root_name = context.diagnostics.local_name(layout.local_ids[root_index]);
 
             return_borrow_checker_error!(
