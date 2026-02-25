@@ -36,7 +36,8 @@ pub fn run_all_test_cases(show_warnings: bool) {
     // Test files that should succeed
     if success_dir.exists() {
         say!(Cyan "Testing files that should succeed:");
-        println!("{}", "-".repeat(SEPARATOR_LINE_LENGTH));
+        say!(Dark White "=".repeat(SEPARATOR_LINE_LENGTH));
+
         if let Ok(entries) = fs::read_dir(&success_dir) {
             for entry in entries.flatten() {
                 let path = entry.path();
@@ -44,7 +45,6 @@ pub fn run_all_test_cases(show_warnings: bool) {
                     total_tests += 1;
                     let file_name = path.file_name().unwrap().to_string_lossy();
 
-                    // println!("\n------------------------------------------");
                     println!("  {}", file_name);
 
                     let html_project_builder = HtmlProjectBuilder::new();
@@ -87,7 +87,8 @@ pub fn run_all_test_cases(show_warnings: bool) {
     // Test files that should fail
     if failure_dir.exists() {
         say!(Cyan "Testing files that should fail:");
-        println!("{}", "-".repeat(SEPARATOR_LINE_LENGTH));
+        say!(Dark White "=".repeat(SEPARATOR_LINE_LENGTH));
+
         if let Ok(entries) = fs::read_dir(&failure_dir) {
             for entry in entries.flatten() {
                 let path = entry.path();
@@ -95,7 +96,6 @@ pub fn run_all_test_cases(show_warnings: bool) {
                     total_tests += 1;
                     let file_name = path.file_name().unwrap().to_string_lossy();
 
-                    // println!("\n------------------------------------------");
                     println!("  {}", file_name);
                     let html_project_builder = HtmlProjectBuilder::new();
                     let path_string = path.to_string_lossy().to_string();
@@ -135,7 +135,7 @@ pub fn run_all_test_cases(show_warnings: bool) {
                         }
                     }
                 }
-                println!("{}", "-".repeat(SEPARATOR_LINE_LENGTH));
+                say!(Dark White "-".repeat(SEPARATOR_LINE_LENGTH));
             }
         }
     }
@@ -143,23 +143,23 @@ pub fn run_all_test_cases(show_warnings: bool) {
     println!();
 
     // Print summary
-    println!("\n{}", "=".repeat(SEPARATOR_LINE_LENGTH));
+    say!(Dark White "=".repeat(SEPARATOR_LINE_LENGTH));
+
     print!("Test Results Summary. Took: ");
     say!(Green #timer.elapsed());
-    say!("  Total tests: ", Yellow total_tests);
+
+    say!("\n  Total tests:           ", Yellow total_tests);
     say!("  Successful compilations: ", Blue passed_tests);
-    say!("  Failed compilations: ", Blue failed_tests);
-    say!("  Expected failures: ", Blue expected_failures);
-    say!("  Unexpected successes: ", Blue unexpected_successes);
+    say!("  Failed compilations:     ", Blue failed_tests);
+    say!("  Expected failures:       ", Blue expected_failures);
+    say!("  Unexpected successes:    ", Blue unexpected_successes);
 
     let correct_results = passed_tests + expected_failures;
     let incorrect_results = failed_tests + unexpected_successes;
 
-    println!("\n  Correct results: {} / {}", correct_results, total_tests);
-    println!(
-        "  Incorrect results: {} / {}",
-        incorrect_results, total_tests
-    );
+    say!();
+    say!("  Correct results:   ", Green Bold correct_results, Dark White " / ", total_tests);
+    say!("  Incorrect results: ", Red Bold incorrect_results, Dark White " / ", total_tests);
 
     if incorrect_results == 0 {
         say!("\n🎉 All tests behaved as expected!");
@@ -168,5 +168,5 @@ pub fn run_all_test_cases(show_warnings: bool) {
         say!(Yellow "\n⚠ ", Bright Yellow format!("{:.1}", percentage), " %", Reset " of tests behaved as expected");
     }
 
-    println!("{}", "=".repeat(SEPARATOR_LINE_LENGTH));
+    say!(Dark White "=".repeat(SEPARATOR_LINE_LENGTH));
 }

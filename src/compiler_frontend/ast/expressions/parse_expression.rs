@@ -11,7 +11,7 @@ use crate::compiler_frontend::ast::templates::template::TemplateType;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::string_interning::StringTable;
-use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TextLocation, TokenKind};
+use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TextLocation, Token, TokenKind};
 use crate::compiler_frontend::traits::ContainsReferences;
 use crate::{
     ast_log, new_template_context, return_compiler_error, return_rule_error, return_syntax_error,
@@ -760,6 +760,130 @@ pub fn create_expression(
         ownership,
         string_table,
     )
+}
+
+/// Parse an expression until one of the provided stop tokens is reached.
+/// The stop token is not consumed from the original stream.
+pub(crate) fn create_expression_until(
+    token_stream: &mut FileTokens,
+    context: &ScopeContext,
+    data_type: &mut DataType,
+    ownership: &Ownership,
+    stop_tokens: &[TokenKind],
+    string_table: &mut StringTable,
+) -> Result<Expression, CompilerError> {
+    if stop_tokens.is_empty() {
+        return create_expression(
+            token_stream,
+            context,
+            data_type,
+            ownership,
+            false,
+            string_table,
+        );
+    }
+
+    let start_index = token_stream.index;
+    let mut end_index = token_stream.index;
+    let mut parenthesis_depth: i32 = 0;
+
+    while end_index < token_stream.length {
+        let token_kind = &token_stream.tokens[end_index].kind;
+
+        match token_kind {
+            TokenKind::OpenParenthesis => parenthesis_depth += 1,
+            TokenKind::CloseParenthesis if parenthesis_depth > 0 => parenthesis_depth -= 1,
+            _ => {}
+        }
+
+        // Delimiters only terminate at top-level depth so nested subexpressions remain intact.
+        if parenthesis_depth == 0 && stop_tokens.iter().any(|stop| token_kind == stop) {
+            break;
+        }
+
+        if matches!(token_kind, TokenKind::Eof) {
+            break;
+        }
+
+        end_index += 1;
+    }
+
+    if end_index >= token_stream.length {
+        let expected_tokens = stop_tokens
+            .iter()
+            .map(|token| format!("{token:?}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+
+        return_syntax_error!(
+            format!(
+                "Expected one of [{}] to end this expression, but reached end of file",
+                expected_tokens
+            ),
+            token_stream.current_location().to_error_location(string_table),
+            {
+                CompilationStage => "Expression Parsing",
+                PrimarySuggestion => "Complete the expression and add the required delimiter token",
+            }
+        )
+    }
+
+    if end_index == start_index {
+        return_syntax_error!(
+            "Expected an expression before this delimiter",
+            token_stream.tokens[end_index]
+                .location
+                .to_error_location(string_table),
+            {
+                CompilationStage => "Expression Parsing",
+                PrimarySuggestion => "Add a valid expression before this token",
+            }
+        )
+    }
+
+    if !stop_tokens
+        .iter()
+        .any(|stop| token_stream.tokens[end_index].kind == *stop)
+    {
+        let expected_tokens = stop_tokens
+            .iter()
+            .map(|token| format!("{token:?}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+
+        return_syntax_error!(
+            format!(
+                "Expected one of [{}] to end this expression",
+                expected_tokens
+            ),
+            token_stream.tokens[end_index]
+                .location
+                .to_error_location(string_table),
+            {
+                CompilationStage => "Expression Parsing",
+                PrimarySuggestion => "Add the required delimiter token after this expression",
+            }
+        )
+    }
+
+    let mut expression_tokens = token_stream.tokens[start_index..end_index].to_vec();
+    expression_tokens.push(Token::new(
+        TokenKind::Eof,
+        token_stream.tokens[end_index].location.clone(),
+    ));
+
+    let mut scoped_stream = FileTokens::new(token_stream.src_path.clone(), expression_tokens);
+    let expression = create_expression(
+        &mut scoped_stream,
+        context,
+        data_type,
+        ownership,
+        false,
+        string_table,
+    )?;
+
+    token_stream.index = end_index;
+    Ok(expression)
 }
 
 // pub fn create_args_from_types(data_types: &[DataType]) -> Vec<Arg> {

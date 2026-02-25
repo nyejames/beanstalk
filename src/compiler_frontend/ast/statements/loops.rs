@@ -1,9 +1,9 @@
 use crate::compiler_frontend::ast::ast::ScopeContext;
-use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
-use crate::compiler_frontend::ast::expressions::expression::{
-    Expression, ExpressionKind, Operator,
+use crate::compiler_frontend::ast::ast_nodes::{
+    AstNode, Declaration, ForLoopRange, NodeKind, RangeEndKind,
 };
-use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
+use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
+use crate::compiler_frontend::ast::expressions::parse_expression::create_expression_until;
 use crate::compiler_frontend::ast::function_body_to_ast::function_body_to_ast;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
@@ -13,272 +13,328 @@ use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::compiler_frontend::traits::ContainsReferences;
 use crate::{ast_log, return_syntax_error};
 
-// Returns a ForLoop node or WhileLoop Node (or error if there's invalid syntax)
-// TODO: Loop invariance analysis.
-// I reckon this is possible to do at this stage through keeping a list of invariants.
-// Pushing to a list of possible invariant calculations that could be moved to a header.
-// This would require tracking whether a mutable var inside the loop that is used in an expression changes during any possible loop branch.
-// If it does, then it can be left alone, otherwise it can be marked as invariant.
-// Anything marked as invariant when parsing the AST to a lower IR can be hoisted up to the loop header.
 pub fn create_loop(
     token_stream: &mut FileTokens,
-    mut context: ScopeContext,
+    context: ScopeContext,
     warnings: &mut Vec<CompilerWarning>,
     string_table: &mut StringTable,
 ) -> Result<AstNode, CompilerError> {
     ast_log!("Creating a Loop");
 
-    // First check if the loop has a declaration or just an expression
-    // If the first item is NOT a reference, then it is the item for the loop
-    match token_stream.current_token_kind().to_owned() {
-        TokenKind::Symbol(name, ..) => {
-            // -----------------------------
-            //          WHILE LOOP
-            //  (existing variable found)
-            // -----------------------------
+    // `loop <symbol> in ...` is the only iteration header shape for now.
+    // Every other header is parsed as a boolean conditional loop.
+    if let TokenKind::Symbol(name) = token_stream.current_token_kind().to_owned()
+        && token_stream.peek_next_token() == Some(&TokenKind::In)
+    {
+        return create_iteration_loop(token_stream, context, warnings, string_table, name);
+    }
 
-            if let Some(arg) = context.get_reference(&name) {
-                let mut data_type = arg.value.data_type.to_owned();
-                let ownership = &arg.value.ownership;
-                let condition = create_expression(
-                    token_stream,
-                    &context,
-                    &mut data_type,
-                    ownership,
-                    false,
-                    string_table,
-                )?;
+    create_conditional_loop(token_stream, context, warnings, string_table)
+}
 
-                // Make sure this condition is a boolean expression
-                return match data_type {
-                    DataType::Bool => {
-                        // Make sure there is a colon after the condition
-                        if token_stream.current_token_kind() != &TokenKind::Colon {
-                            return_syntax_error!(
-                                "A loop must have a colon after the condition",
-                                token_stream.current_location().to_error_location(string_table),
-                                {
-                                    CompilationStage => "Loop Parsing",
-                                    PrimarySuggestion => "Add ':' after the loop condition to open the loop body",
-                                    SuggestedInsertion => ":",
-                                }
-                            );
-                        }
+fn create_conditional_loop(
+    token_stream: &mut FileTokens,
+    context: ScopeContext,
+    warnings: &mut Vec<CompilerWarning>,
+    string_table: &mut StringTable,
+) -> Result<AstNode, CompilerError> {
+    let location = token_stream.current_location();
+    let scope = context.scope.clone();
 
-                        token_stream.advance();
-                        let scope = context.scope.clone();
+    let mut condition_type = DataType::Bool;
+    let condition = create_expression_until(
+        token_stream,
+        &context,
+        &mut condition_type,
+        &Ownership::ImmutableOwned,
+        &[TokenKind::Colon],
+        string_table,
+    )?;
 
-                        // create while loop
-                        Ok(AstNode {
-                            kind: NodeKind::WhileLoop(
-                                condition,
-                                function_body_to_ast(
-                                    token_stream,
-                                    context,
-                                    warnings,
-                                    string_table,
-                                )?,
-                            ),
-                            location: token_stream.current_location(),
-                            scope,
-                        })
-                    }
-
-                    _ => {
-                        let type_str: &'static str =
-                            Box::leak(data_type.to_string().into_boxed_str());
-                        return_syntax_error!(
-                            format!(
-                                "A loop condition using an existing variable must be a boolean expression (true or false). Found a {} expression",
-                                data_type.to_string()
-                            ),
-                            token_stream.current_location().to_error_location(string_table),
-                            {
-                                FoundType => type_str,
-                                ExpectedType => "Bool",
-                                CompilationStage => "Loop Parsing",
-                                PrimarySuggestion => "Use a boolean expression for the while loop condition",
-                            }
-                        );
-                    }
-                };
+    if !is_boolean_expression(&condition) {
+        let found_type: &'static str = Box::leak(
+            condition
+                .data_type
+                .display_with_table(string_table)
+                .into_boxed_str(),
+        );
+        return_syntax_error!(
+            format!(
+                "Loop condition must be a boolean expression. Found '{}'",
+                condition.data_type.display_with_table(string_table)
+            ),
+            token_stream.current_location().to_error_location(string_table),
+            {
+                FoundType => found_type,
+                ExpectedType => "Bool",
+                CompilationStage => "Loop Parsing",
+                PrimarySuggestion => "Use a boolean expression after 'loop', e.g. loop is_ready():",
             }
+        );
+    }
 
-            // -----------------------------
-            //          FOR LOOP
-            //     (new variable found)
-            // -----------------------------
-
-            // TODO: might need to check for additional optional stuff like a type declaration or something here
-            token_stream.advance();
-
-            // Make sure there is an 'in' keyword after the variable
-            if token_stream.current_token_kind() != &TokenKind::In {
-                return_syntax_error!(
-                    format!("A loop must have an 'in' keyword after the variable: {}", string_table.resolve(name)),
-                    token_stream.current_location().to_error_location(string_table),
-                    {
-                        CompilationStage => "Loop Parsing",
-                        PrimarySuggestion => "Add 'in' keyword after the loop variable",
-                        SuggestedInsertion => "in",
-                    }
-                );
+    if token_stream.current_token_kind() != &TokenKind::Colon {
+        return_syntax_error!(
+            "A loop must have ':' after the loop header",
+            token_stream.current_location().to_error_location(string_table),
+            {
+                CompilationStage => "Loop Parsing",
+                PrimarySuggestion => "Add ':' after the loop condition",
+                SuggestedInsertion => ":",
             }
+        );
+    }
 
-            token_stream.advance();
+    token_stream.advance();
 
-            // TODO: need to check for mutable reference syntax
-            // Is just defaulting to immutable reference for now
-            let mut iterable_type = DataType::Inferred;
-            let iterated_item = create_expression(
-                token_stream,
-                &context,
-                &mut iterable_type,
-                &Ownership::ImmutableReference,
-                false,
-                string_table,
-            )?;
+    Ok(AstNode {
+        kind: NodeKind::WhileLoop(
+            condition,
+            function_body_to_ast(token_stream, context, warnings, string_table)?,
+        ),
+        location,
+        scope,
+    })
+}
 
-            if !is_range_iteration_expression(&iterated_item) {
-                let type_str: &'static str = Box::leak(
-                    iterated_item
-                        .data_type
-                        .display_with_table(string_table)
-                        .into_boxed_str(),
-                );
+fn create_iteration_loop(
+    token_stream: &mut FileTokens,
+    mut context: ScopeContext,
+    warnings: &mut Vec<CompilerWarning>,
+    string_table: &mut StringTable,
+    binder_name: crate::compiler_frontend::string_interning::StringId,
+) -> Result<AstNode, CompilerError> {
+    let location = token_stream.current_location();
 
-                return_syntax_error!(
-                    format!(
-                        "For-loop lowering currently supports only range iteration. Found '{}'",
-                        iterated_item.data_type.display_with_table(string_table)
-                    ),
-                    token_stream.current_location().to_error_location(string_table),
-                    {
-                        FoundType => type_str,
-                        ExpectedType => "Range",
-                        CompilationStage => "Loop Parsing",
-                        PrimarySuggestion => "Use a range expression like 'start to end' for now",
-                        AlternativeSuggestion => "Collection/string for-loop lowering has not been implemented in this HIR phase yet",
-                    }
-                );
+    if context.get_reference(&binder_name).is_some() {
+        return_syntax_error!(
+            format!(
+                "Loop binder '{}' is already declared in this scope",
+                string_table.resolve(binder_name)
+            ),
+            token_stream.current_location().to_error_location(string_table),
+            {
+                CompilationStage => "Loop Parsing",
+                PrimarySuggestion => "Use a new binder name for the loop item",
             }
+        );
+    }
 
-            // For this phase we only accept ranges with numeric bounds so the loop binding has a
-            // stable numeric type before HIR lowering.
-            if !matches!(
-                infer_range_binding_type(&iterated_item),
-                Some(DataType::Int) | Some(DataType::Float)
-            ) {
-                return_syntax_error!(
-                    "For-loop range bounds must currently be numeric (Int or Float)",
-                    token_stream.current_location().to_error_location(string_table),
-                    {
-                        CompilationStage => "Loop Parsing",
-                        PrimarySuggestion => "Use numeric range bounds such as '0 to 10'",
-                    }
-                );
+    token_stream.advance();
+    if token_stream.current_token_kind() != &TokenKind::In {
+        return_syntax_error!(
+            "Iteration loops must include 'in' after the binder name",
+            token_stream.current_location().to_error_location(string_table),
+            {
+                CompilationStage => "Loop Parsing",
+                PrimarySuggestion => "Use syntax like: loop i in 0 to 10:",
+                SuggestedInsertion => "in",
             }
+        );
+    }
 
-            // Make sure there is a colon
-            if token_stream.current_token_kind() != &TokenKind::Colon {
-                return_syntax_error!(
-                    "A loop must have a colon after the condition",
-                    token_stream.current_location().to_error_location(string_table),
-                    {
-                        CompilationStage => "Loop Parsing",
-                        PrimarySuggestion => "Add ':' after the loop condition to open the loop body",
-                        SuggestedInsertion => ":",
-                    }
-                );
-            }
+    token_stream.advance();
 
-            token_stream.advance();
+    // Parse header as: `start (to|upto) end [by step] :`
+    let mut start_type = DataType::Inferred;
+    let start = create_expression_until(
+        token_stream,
+        &context,
+        &mut start_type,
+        &Ownership::ImmutableReference,
+        &[
+            TokenKind::ExclusiveRange,
+            TokenKind::InclusiveRange,
+            TokenKind::Colon,
+        ],
+        string_table,
+    )?;
 
-            let binding_type = infer_range_binding_type(&iterated_item).unwrap_or(DataType::Int);
-
-            // The thing being iterated over
-            let loop_arg = Declaration {
-                id: context.scope.append(name),
-                value: Expression::new(
-                    iterated_item.kind.to_owned(),
-                    token_stream.current_location(),
-                    binding_type,
-                    iterated_item.ownership.to_owned(),
-                ),
-            };
-
-            context.declarations.push(loop_arg.to_owned());
-
-            Ok(AstNode {
-                scope: context.scope.to_owned(),
-                kind: NodeKind::ForLoop(
-                    Box::new(loop_arg),
-                    iterated_item,
-                    function_body_to_ast(token_stream, context, warnings, string_table)?,
-                ),
-                location: token_stream.current_location(),
-            })
-        }
-
-        _ => {
+    let end_kind = match token_stream.current_token_kind() {
+        TokenKind::ExclusiveRange => RangeEndKind::Exclusive,
+        TokenKind::InclusiveRange => RangeEndKind::Inclusive,
+        TokenKind::Colon => {
             return_syntax_error!(
-                "Loops must have a variable declaration or an expression",
+                "Collection iteration is not implemented yet; use a range loop with 'to' or 'upto'",
                 token_stream.current_location().to_error_location(string_table),
                 {
                     CompilationStage => "Loop Parsing",
-                    PrimarySuggestion => "Start the loop with a variable name for 'for' loops or a boolean expression for 'while' loops",
+                    PrimarySuggestion => "Use range syntax like: loop i in 0 to 10:",
                 }
             );
         }
+        _ => {
+            return_syntax_error!(
+                "Range loops must include 'to' or 'upto' between bounds",
+                token_stream.current_location().to_error_location(string_table),
+                {
+                    CompilationStage => "Loop Parsing",
+                    PrimarySuggestion => "Use syntax like: loop i in start to end:",
+                    AlternativeSuggestion => "Use 'upto' for inclusive end bounds",
+                }
+            );
+        }
+    };
+
+    token_stream.advance();
+
+    let mut end_type = DataType::Inferred;
+    let end = create_expression_until(
+        token_stream,
+        &context,
+        &mut end_type,
+        &Ownership::ImmutableReference,
+        &[TokenKind::By, TokenKind::Colon],
+        string_table,
+    )?;
+
+    let step = if token_stream.current_token_kind() == &TokenKind::By {
+        token_stream.advance();
+
+        let mut step_type = DataType::Inferred;
+        Some(create_expression_until(
+            token_stream,
+            &context,
+            &mut step_type,
+            &Ownership::ImmutableReference,
+            &[TokenKind::Colon],
+            string_table,
+        )?)
+    } else {
+        None
+    };
+
+    let start_numeric = numeric_type_for_expression(&start).ok_or_else(|| {
+        CompilerError::new_syntax_error(
+            "Range start must be numeric (Int or Float)",
+            token_stream
+                .current_location()
+                .to_error_location(string_table),
+        )
+    })?;
+    let end_numeric = numeric_type_for_expression(&end).ok_or_else(|| {
+        CompilerError::new_syntax_error(
+            "Range end must be numeric (Int or Float)",
+            token_stream
+                .current_location()
+                .to_error_location(string_table),
+        )
+    })?;
+
+    let step_numeric = if let Some(step_expr) = &step {
+        Some(numeric_type_for_expression(step_expr).ok_or_else(|| {
+            CompilerError::new_syntax_error(
+                "Range step must be numeric (Int or Float)",
+                token_stream
+                    .current_location()
+                    .to_error_location(string_table),
+            )
+        })?)
+    } else {
+        None
+    };
+
+    let uses_float = matches!(start_numeric, DataType::Float)
+        || matches!(end_numeric, DataType::Float)
+        || matches!(step_numeric, Some(DataType::Float));
+
+    // Float ranges require explicit step to avoid accidental non-terminating loops.
+    if uses_float && step.is_none() {
+        return_syntax_error!(
+            "Float ranges require an explicit 'by' step",
+            token_stream.current_location().to_error_location(string_table),
+            {
+                CompilationStage => "Loop Parsing",
+                PrimarySuggestion => "Add an explicit step, e.g. loop t in 0.0 to 1.0 by 0.1:",
+            }
+        );
+    }
+
+    if let Some(step_expr) = &step
+        && is_zero_numeric_literal(step_expr)
+    {
+        return_syntax_error!(
+            "Range step cannot be zero",
+            token_stream.current_location().to_error_location(string_table),
+            {
+                CompilationStage => "Loop Parsing",
+                PrimarySuggestion => "Use a non-zero step value after 'by'",
+            }
+        );
+    }
+
+    if token_stream.current_token_kind() != &TokenKind::Colon {
+        return_syntax_error!(
+            "A loop must have ':' after the loop header",
+            token_stream.current_location().to_error_location(string_table),
+            {
+                CompilationStage => "Loop Parsing",
+                PrimarySuggestion => "Add ':' after the loop header",
+                SuggestedInsertion => ":",
+            }
+        );
+    }
+
+    let binding_type = if uses_float {
+        DataType::Float
+    } else {
+        DataType::Int
+    };
+
+    let loop_binding = Declaration {
+        id: context.scope.append(binder_name),
+        value: Expression::new(
+            ExpressionKind::None,
+            location.clone(),
+            binding_type,
+            Ownership::ImmutableOwned,
+        ),
+    };
+    context.declarations.push(loop_binding.to_owned());
+
+    token_stream.advance();
+
+    Ok(AstNode {
+        scope: context.scope.to_owned(),
+        kind: NodeKind::ForLoop(
+            Box::new(loop_binding),
+            ForLoopRange {
+                start,
+                end,
+                end_kind,
+                step,
+            },
+            function_body_to_ast(token_stream, context, warnings, string_table)?,
+        ),
+        location,
+    })
+}
+
+fn is_boolean_expression(expression: &Expression) -> bool {
+    match &expression.data_type {
+        DataType::Bool => true,
+        DataType::Reference(inner) => matches!(inner.as_ref(), DataType::Bool),
+        _ => false,
     }
 }
 
-fn is_range_iteration_expression(expression: &Expression) -> bool {
-    match &expression.kind {
-        ExpressionKind::Range(_, _) => true,
-        ExpressionKind::Runtime(nodes) => nodes
-            .iter()
-            .any(|node| matches!(node.kind, NodeKind::Operator(Operator::Range))),
-        _ => matches!(expression.data_type, DataType::Range),
-    }
+fn numeric_type_for_expression(expression: &Expression) -> Option<DataType> {
+    numeric_type_from_datatype(&expression.data_type)
 }
 
-fn infer_range_binding_type(expression: &Expression) -> Option<DataType> {
-    match &expression.kind {
-        ExpressionKind::Range(start, end) => {
-            if matches!(start.data_type, DataType::Float)
-                || matches!(end.data_type, DataType::Float)
-            {
-                Some(DataType::Float)
-            } else if matches!(start.data_type, DataType::Int | DataType::Bool)
-                && matches!(end.data_type, DataType::Int | DataType::Bool)
-            {
-                Some(DataType::Int)
-            } else {
-                None
-            }
-        }
-
-        ExpressionKind::Runtime(nodes) => {
-            let range_uses_float = nodes.iter().any(|node| {
-                matches!(
-                    node.kind,
-                    NodeKind::Rvalue(Expression {
-                        kind: ExpressionKind::Float(_),
-                        ..
-                    })
-                )
-            });
-
-            if range_uses_float {
-                Some(DataType::Float)
-            } else if is_range_iteration_expression(expression) {
-                Some(DataType::Int)
-            } else {
-                None
-            }
-        }
-
+fn numeric_type_from_datatype(data_type: &DataType) -> Option<DataType> {
+    match data_type {
+        DataType::Int => Some(DataType::Int),
+        DataType::Float => Some(DataType::Float),
+        DataType::Reference(inner) => numeric_type_from_datatype(inner),
         _ => None,
+    }
+}
+
+fn is_zero_numeric_literal(expression: &Expression) -> bool {
+    match expression.kind {
+        ExpressionKind::Int(value) => value == 0,
+        ExpressionKind::Float(value) => value == 0.0,
+        _ => false,
     }
 }

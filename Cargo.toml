@@ -18,8 +18,7 @@ name = "bst"
 path = "src/main.rs"
 
 [dependencies]
-wasmparser = "0.245.0"
-wasm-encoder = "0.245.0"
+oxc_minifier = "0.115.0"
 rustc-hash = "2.1.1"
 saying = "0.1.7"
 

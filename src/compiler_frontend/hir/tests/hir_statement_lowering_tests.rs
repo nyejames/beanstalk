@@ -1,7 +1,9 @@
 #![cfg(test)]
 
 use crate::compiler_frontend::ast::ast::{Ast, ModuleExport};
-use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind, TextLocation};
+use crate::compiler_frontend::ast::ast_nodes::{
+    AstNode, Declaration, ForLoopRange, NodeKind, RangeEndKind, TextLocation,
+};
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::statements::branching::MatchArm;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
@@ -10,7 +12,7 @@ use crate::compiler_frontend::compiler_errors::{CompilerMessages, ErrorType};
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::hir::hir_nodes::{
-    HirExpressionKind, HirModule, HirPattern, HirStatementKind, HirTerminator,
+    HirBinOp, HirExpressionKind, HirModule, HirPattern, HirStatementKind, HirTerminator,
 };
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
@@ -72,6 +74,20 @@ fn runtime_template_expression(location: TextLocation, content: Vec<Expression>)
     }
 
     Expression::template(template, Ownership::ImmutableOwned)
+}
+
+fn range_loop(
+    start: Expression,
+    end: Expression,
+    end_kind: RangeEndKind,
+    step: Option<Expression>,
+) -> ForLoopRange {
+    ForLoopRange {
+        start,
+        end,
+        end_kind,
+        step,
+    }
 }
 
 fn build_ast(nodes: Vec<AstNode>, entry_path: InternedPath) -> Ast {
@@ -917,11 +933,11 @@ fn continue_in_for_targets_step_block() {
                     Ownership::ImmutableOwned,
                 ),
             )),
-            Expression::range(
+            range_loop(
                 Expression::int(0, test_location(30), Ownership::ImmutableOwned),
                 Expression::int(2, test_location(30), Ownership::ImmutableOwned),
-                test_location(30),
-                Ownership::ImmutableOwned,
+                RangeEndKind::Exclusive,
+                None,
             ),
             vec![node(NodeKind::Continue, test_location(31))],
         ),
@@ -943,18 +959,34 @@ fn continue_in_for_targets_step_block() {
 
     let start = &module.functions[module.start_function.0 as usize];
     let entry_block = &module.blocks[start.entry.0 as usize];
-    let header_block = match entry_block.terminator {
+    let step_zero_check_block = match entry_block.terminator {
         HirTerminator::Jump { target, .. } => target,
-        _ => panic!("expected entry jump to for header"),
+        _ => panic!("expected entry jump to step-zero-check"),
     };
 
-    let (body_block, _exit_block) = match module.blocks[header_block.0 as usize].terminator {
-        HirTerminator::If {
-            then_block,
-            else_block,
-            ..
-        } => (then_block, else_block),
-        _ => panic!("expected for header conditional terminator"),
+    let step_abs_check_block = match module.blocks[step_zero_check_block.0 as usize].terminator {
+        HirTerminator::If { else_block, .. } => else_block,
+        _ => panic!("expected zero-check to branch"),
+    };
+
+    let direction_check_block = match module.blocks[step_abs_check_block.0 as usize].terminator {
+        HirTerminator::If { else_block, .. } => else_block,
+        _ => panic!("expected abs-check to branch"),
+    };
+
+    let header_selector_block = match module.blocks[direction_check_block.0 as usize].terminator {
+        HirTerminator::If { then_block, .. } => then_block,
+        _ => panic!("expected direction-check to branch"),
+    };
+
+    let header_ascending_block = match module.blocks[header_selector_block.0 as usize].terminator {
+        HirTerminator::If { then_block, .. } => then_block,
+        _ => panic!("expected header selector to branch"),
+    };
+
+    let body_block = match module.blocks[header_ascending_block.0 as usize].terminator {
+        HirTerminator::If { then_block, .. } => then_block,
+        _ => panic!("expected ascending header branch"),
     };
 
     let step_block = match module.blocks[body_block.0 as usize].terminator {
@@ -964,7 +996,7 @@ fn continue_in_for_targets_step_block() {
 
     assert!(matches!(
         module.blocks[step_block.0 as usize].terminator,
-        HirTerminator::Jump { target, .. } if target == header_block
+        HirTerminator::Jump { target, .. } if target == header_selector_block
     ));
 }
 
@@ -1173,11 +1205,11 @@ fn for_loop_lowers_to_header_body_step_exit_shape() {
                     Ownership::ImmutableOwned,
                 ),
             )),
-            Expression::range(
+            range_loop(
                 Expression::int(0, test_location(2), Ownership::ImmutableOwned),
                 Expression::int(3, test_location(2), Ownership::ImmutableOwned),
-                test_location(2),
-                Ownership::ImmutableOwned,
+                RangeEndKind::Exclusive,
+                None,
             ),
             vec![],
         ),
@@ -1199,18 +1231,39 @@ fn for_loop_lowers_to_header_body_step_exit_shape() {
 
     let start = &module.functions[module.start_function.0 as usize];
     let entry_block = &module.blocks[start.entry.0 as usize];
-    let header_block = match entry_block.terminator {
+    let step_zero_check_block = match entry_block.terminator {
         HirTerminator::Jump { target, .. } => target,
-        _ => panic!("expected entry jump to for header"),
+        _ => panic!("expected entry jump to for step-zero-check"),
     };
 
-    let (body_block, exit_block) = match module.blocks[header_block.0 as usize].terminator {
+    let step_abs_check_block = match module.blocks[step_zero_check_block.0 as usize].terminator {
+        HirTerminator::If { else_block, .. } => else_block,
+        _ => panic!("expected zero-check branch"),
+    };
+
+    let direction_check_block = match module.blocks[step_abs_check_block.0 as usize].terminator {
+        HirTerminator::If { else_block, .. } => else_block,
+        _ => panic!("expected abs-check branch"),
+    };
+
+    let header_selector_block = match module.blocks[direction_check_block.0 as usize].terminator {
+        HirTerminator::If { then_block, .. } => then_block,
+        _ => panic!("expected direction-check branch"),
+    };
+
+    let header_ascending_block = match module.blocks[header_selector_block.0 as usize].terminator {
+        HirTerminator::If { then_block, .. } => then_block,
+        _ => panic!("expected header-selector branch"),
+    };
+
+    let (body_block, exit_block) = match module.blocks[header_ascending_block.0 as usize].terminator
+    {
         HirTerminator::If {
             then_block,
             else_block,
             ..
         } => (then_block, else_block),
-        _ => panic!("expected for header to lower to conditional terminator"),
+        _ => panic!("expected ascending header conditional"),
     };
 
     let step_block = match module.blocks[body_block.0 as usize].terminator {
@@ -1220,13 +1273,168 @@ fn for_loop_lowers_to_header_body_step_exit_shape() {
 
     assert!(matches!(
         module.blocks[step_block.0 as usize].terminator,
-        HirTerminator::Jump { target, .. } if target == header_block
+        HirTerminator::Jump { target, .. } if target == header_selector_block
     ));
     assert!(matches!(
         module.blocks[exit_block.0 as usize].terminator,
         HirTerminator::Return(_)
     ));
     assert_no_placeholder_terminators(&module);
+}
+
+#[test]
+fn inclusive_range_header_uses_less_equal_comparison() {
+    let mut string_table = StringTable::new();
+    let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
+    let i = symbol("i", &mut string_table);
+
+    let for_loop = node(
+        NodeKind::ForLoop(
+            Box::new(var(
+                i,
+                Expression::new(
+                    ExpressionKind::None,
+                    test_location(2),
+                    DataType::Int,
+                    Ownership::ImmutableOwned,
+                ),
+            )),
+            range_loop(
+                Expression::int(0, test_location(2), Ownership::ImmutableOwned),
+                Expression::int(3, test_location(2), Ownership::ImmutableOwned),
+                RangeEndKind::Inclusive,
+                None,
+            ),
+            vec![],
+        ),
+        test_location(2),
+    );
+
+    let start_fn = function_node(
+        start_name,
+        FunctionSignature {
+            parameters: vec![],
+            returns: vec![],
+        },
+        vec![for_loop],
+        test_location(1),
+    );
+
+    let ast = build_ast(vec![start_fn], entry_path);
+    let module = lower_ast(ast, &mut string_table).expect("for-loop lowering should succeed");
+
+    let start = &module.functions[module.start_function.0 as usize];
+    let entry_block = &module.blocks[start.entry.0 as usize];
+    let step_zero_check_block = match entry_block.terminator {
+        HirTerminator::Jump { target, .. } => target,
+        _ => panic!("expected entry jump"),
+    };
+    let step_abs_check_block = match module.blocks[step_zero_check_block.0 as usize].terminator {
+        HirTerminator::If { else_block, .. } => else_block,
+        _ => panic!("expected zero-check branch"),
+    };
+    let direction_check_block = match module.blocks[step_abs_check_block.0 as usize].terminator {
+        HirTerminator::If { else_block, .. } => else_block,
+        _ => panic!("expected abs-check branch"),
+    };
+    let header_selector_block = match module.blocks[direction_check_block.0 as usize].terminator {
+        HirTerminator::If { then_block, .. } => then_block,
+        _ => panic!("expected direction branch"),
+    };
+    let header_ascending_block = match module.blocks[header_selector_block.0 as usize].terminator {
+        HirTerminator::If { then_block, .. } => then_block,
+        _ => panic!("expected selector branch"),
+    };
+
+    let condition = match &module.blocks[header_ascending_block.0 as usize].terminator {
+        HirTerminator::If { condition, .. } => condition,
+        _ => panic!("expected ascending header if"),
+    };
+    assert!(matches!(
+        condition.kind,
+        HirExpressionKind::BinOp { op, .. } if matches!(op, HirBinOp::Le)
+    ));
+}
+
+#[test]
+fn descending_range_with_positive_step_normalizes_to_negative_delta() {
+    let mut string_table = StringTable::new();
+    let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
+    let i = symbol("i", &mut string_table);
+
+    let for_loop = node(
+        NodeKind::ForLoop(
+            Box::new(var(
+                i,
+                Expression::new(
+                    ExpressionKind::None,
+                    test_location(2),
+                    DataType::Int,
+                    Ownership::ImmutableOwned,
+                ),
+            )),
+            range_loop(
+                Expression::int(10, test_location(2), Ownership::ImmutableOwned),
+                Expression::int(0, test_location(2), Ownership::ImmutableOwned),
+                RangeEndKind::Inclusive,
+                Some(Expression::int(
+                    2,
+                    test_location(2),
+                    Ownership::ImmutableOwned,
+                )),
+            ),
+            vec![],
+        ),
+        test_location(2),
+    );
+
+    let start_fn = function_node(
+        start_name,
+        FunctionSignature {
+            parameters: vec![],
+            returns: vec![],
+        },
+        vec![for_loop],
+        test_location(1),
+    );
+
+    let ast = build_ast(vec![start_fn], entry_path);
+    let module = lower_ast(ast, &mut string_table).expect("for-loop lowering should succeed");
+
+    let start = &module.functions[module.start_function.0 as usize];
+    let entry_block = &module.blocks[start.entry.0 as usize];
+    let step_zero_check_block = match entry_block.terminator {
+        HirTerminator::Jump { target, .. } => target,
+        _ => panic!("expected entry jump"),
+    };
+    let step_abs_check_block = match module.blocks[step_zero_check_block.0 as usize].terminator {
+        HirTerminator::If { else_block, .. } => else_block,
+        _ => panic!("expected zero-check branch"),
+    };
+    let direction_check_block = match module.blocks[step_abs_check_block.0 as usize].terminator {
+        HirTerminator::If { else_block, .. } => else_block,
+        _ => panic!("expected abs-check branch"),
+    };
+    let descending_negate_block = match module.blocks[direction_check_block.0 as usize].terminator {
+        HirTerminator::If { else_block, .. } => else_block,
+        _ => panic!("expected direction branch"),
+    };
+
+    let has_negating_assign = module.blocks[descending_negate_block.0 as usize]
+        .statements
+        .iter()
+        .any(|statement| {
+            matches!(
+                statement.kind,
+                HirStatementKind::Assign { value: ref assigned_value, .. }
+                if matches!(assigned_value.kind, HirExpressionKind::BinOp { op: HirBinOp::Sub, .. })
+            )
+        });
+
+    assert!(
+        has_negating_assign,
+        "descending path should negate step before loop header"
+    );
 }
 
 #[test]

@@ -23,6 +23,20 @@ pub struct AstNode {
     pub scope: InternedPath,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RangeEndKind {
+    Exclusive,
+    Inclusive,
+}
+
+#[derive(Debug, Clone)]
+pub struct ForLoopRange {
+    pub start: Expression,
+    pub end: Expression,
+    pub end_kind: RangeEndKind,
+    pub step: Option<Expression>,
+}
+
 #[derive(Debug, Clone)]
 pub enum NodeKind {
     // Warning Message
@@ -42,8 +56,8 @@ pub enum NodeKind {
         Option<Vec<AstNode>>, // for the wildcard/else case
     ),
 
-    ForLoop(Box<Declaration>, Expression, Vec<AstNode>), // Item, Collection, Body,
-    WhileLoop(Expression, Vec<AstNode>),                 // Condition, Body,
+    ForLoop(Box<Declaration>, ForLoopRange, Vec<AstNode>), // Item, Range, Body,
+    WhileLoop(Expression, Vec<AstNode>),                   // Condition, Body,
     Break,
     Continue,
 

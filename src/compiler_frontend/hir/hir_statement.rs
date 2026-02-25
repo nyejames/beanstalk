@@ -5,8 +5,10 @@
 
 use crate::backends::function_registry::CallTarget;
 use crate::compiler_frontend::ast::ast::Ast;
-use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind, TextLocation};
-use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
+use crate::compiler_frontend::ast::ast_nodes::{
+    AstNode, Declaration, ForLoopRange, NodeKind, TextLocation,
+};
+use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::statements::branching::MatchArm;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::compiler_errors::CompilerError;
@@ -24,6 +26,8 @@ use crate::projects::settings::{IMPLICIT_START_FUNC_NAME, TOP_LEVEL_TEMPLATE_NAM
 use crate::return_hir_transformation_error;
 
 use crate::hir_log;
+
+mod for_loop_lowering;
 
 impl<'a> HirBuilder<'a> {
     pub(crate) fn prepare_hir_declarations(&mut self, ast: &Ast) -> Result<(), CompilerError> {
@@ -154,8 +158,8 @@ impl<'a> HirBuilder<'a> {
                 self.lower_match_statement(scrutinee, arms, default.as_deref(), &node.location)
             }
 
-            NodeKind::ForLoop(binding, iterable, body) => {
-                self.lower_for_statement(binding, iterable, body, &node.location)
+            NodeKind::ForLoop(binding, range, body) => {
+                self.lower_for_statement(binding, range, body, &node.location)
             }
 
             NodeKind::Warning(_)
@@ -678,189 +682,13 @@ impl<'a> HirBuilder<'a> {
     fn lower_for_statement(
         &mut self,
         binding: &Declaration,
-        iterable: &Expression,
+        range: &ForLoopRange,
         body: &[AstNode],
         location: &TextLocation,
     ) -> Result<(), CompilerError> {
-        let (range_start, range_end) = match &iterable.kind {
-            ExpressionKind::Range(start, end) => (start.as_ref(), end.as_ref()),
-            _ => {
-                return_hir_transformation_error!(
-                    "For-loop lowering currently supports only explicit range expressions",
-                    self.hir_error_location(location)
-                );
-            }
-        };
-
-        let pre_header_block = self.current_block_id_or_error(location)?;
-        let parent_region = self.current_region_or_error(location)?;
-
-        let header_block = self.create_block(parent_region, location, "for-header")?;
-        let body_region = self.create_child_region(parent_region);
-        let body_block = self.create_block(body_region, location, "for-body")?;
-        let step_block = self.create_block(parent_region, location, "for-step")?;
-        let exit_block = self.create_block(parent_region, location, "for-exit")?;
-
-        let binding_type = self.lower_data_type(&binding.value.data_type, location)?;
-        let current_local = self.allocate_temp_local(binding_type, Some(location.clone()))?;
-        let end_local = self.allocate_temp_local(binding_type, Some(location.clone()))?;
-
-        let lowered_start = self.lower_expression(range_start)?;
-        for prelude in lowered_start.prelude {
-            self.emit_statement_to_current_block(prelude, location)?;
-        }
-        self.emit_statement_kind(
-            HirStatementKind::Assign {
-                target: crate::compiler_frontend::hir::hir_nodes::HirPlace::Local(current_local),
-                value: lowered_start.value,
-            },
-            location,
-        )?;
-
-        let lowered_end = self.lower_expression(range_end)?;
-        for prelude in lowered_end.prelude {
-            self.emit_statement_to_current_block(prelude, location)?;
-        }
-        self.emit_statement_kind(
-            HirStatementKind::Assign {
-                target: crate::compiler_frontend::hir::hir_nodes::HirPlace::Local(end_local),
-                value: lowered_end.value,
-            },
-            location,
-        )?;
-
-        self.emit_jump_to(pre_header_block, header_block, location, "for.enter")?;
-
-        self.set_current_block(header_block, location)?;
-        let header_region = self.current_region_or_error(location)?;
-        let current_value = self.make_expression(
-            location,
-            HirExpressionKind::Load(crate::compiler_frontend::hir::hir_nodes::HirPlace::Local(
-                current_local,
-            )),
-            binding_type,
-            ValueKind::Place,
-            header_region,
-        );
-        let end_value = self.make_expression(
-            location,
-            HirExpressionKind::Load(crate::compiler_frontend::hir::hir_nodes::HirPlace::Local(
-                end_local,
-            )),
-            binding_type,
-            ValueKind::Place,
-            header_region,
-        );
-        let bool_ty = self.intern_type_kind(HirTypeKind::Bool);
-        let condition = self.make_expression(
-            location,
-            HirExpressionKind::BinOp {
-                left: Box::new(current_value),
-                op: HirBinOp::Le,
-                right: Box::new(end_value),
-            },
-            bool_ty,
-            ValueKind::RValue,
-            header_region,
-        );
-
-        self.emit_terminator(
-            header_block,
-            HirTerminator::If {
-                condition,
-                then_block: body_block,
-                else_block: exit_block,
-            },
-            location,
-        )?;
-
-        self.log_control_flow_edge(header_block, body_block, "for.true");
-        self.log_control_flow_edge(header_block, exit_block, "for.false");
-
-        self.set_current_block(body_block, location)?;
-        let binding_local = self.allocate_named_local(
-            binding.id.clone(),
-            binding_type,
-            true,
-            Some(location.clone()),
-        )?;
-        let body_region_id = self.current_region_or_error(location)?;
-        let body_current_value = self.make_expression(
-            location,
-            HirExpressionKind::Load(crate::compiler_frontend::hir::hir_nodes::HirPlace::Local(
-                current_local,
-            )),
-            binding_type,
-            ValueKind::Place,
-            body_region_id,
-        );
-        self.emit_statement_kind(
-            HirStatementKind::Assign {
-                target: crate::compiler_frontend::hir::hir_nodes::HirPlace::Local(binding_local),
-                value: body_current_value,
-            },
-            location,
-        )?;
-
-        self.push_loop_targets(exit_block, step_block);
-        self.lower_statement_sequence(body)?;
-        self.pop_loop_targets();
-
-        if !self.block_has_explicit_terminator(body_block, location)? {
-            self.emit_jump_to(body_block, step_block, location, "for.body.step")?;
-        }
-
-        self.set_current_block(step_block, location)?;
-        let step_region = self.current_region_or_error(location)?;
-        let one = if matches!(self.type_context.get(binding_type).kind, HirTypeKind::Float) {
-            self.make_expression(
-                location,
-                HirExpressionKind::Float(1.0),
-                binding_type,
-                ValueKind::Const,
-                step_region,
-            )
-        } else {
-            self.make_expression(
-                location,
-                HirExpressionKind::Int(1),
-                binding_type,
-                ValueKind::Const,
-                step_region,
-            )
-        };
-
-        let step_current = self.make_expression(
-            location,
-            HirExpressionKind::Load(crate::compiler_frontend::hir::hir_nodes::HirPlace::Local(
-                current_local,
-            )),
-            binding_type,
-            ValueKind::Place,
-            step_region,
-        );
-        let stepped = self.make_expression(
-            location,
-            HirExpressionKind::BinOp {
-                left: Box::new(step_current),
-                op: HirBinOp::Add,
-                right: Box::new(one),
-            },
-            binding_type,
-            ValueKind::RValue,
-            step_region,
-        );
-
-        self.emit_statement_kind(
-            HirStatementKind::Assign {
-                target: crate::compiler_frontend::hir::hir_nodes::HirPlace::Local(current_local),
-                value: stepped,
-            },
-            location,
-        )?;
-        self.emit_jump_to(step_block, header_block, location, "for.backedge")?;
-
-        self.set_current_block(exit_block, location)
+        // For-loop lowering is intentionally split into a dedicated submodule to keep this file
+        // focused on statement dispatch and shared lowering helpers.
+        self.lower_for_statement_impl(binding, range, body, location)
     }
 
     fn lower_while_statement(
