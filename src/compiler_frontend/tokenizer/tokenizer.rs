@@ -584,7 +584,7 @@ pub(crate) fn keyword_or_variable(
             "in" => return_token!(TokenKind::In, stream),
             "to" => return_token!(TokenKind::ExclusiveRange, stream),
             "upto" => return_token!(TokenKind::InclusiveRange, stream),
-            "by" => return_token!(TokenKind::InclusiveRange, stream),
+            "by" => return_token!(TokenKind::By, stream),
             "break" => return_token!(TokenKind::Break, stream),
             "continue" => return_token!(TokenKind::Continue, stream),
 

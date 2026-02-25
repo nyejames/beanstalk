@@ -1,4 +1,4 @@
-@(libs/html/Basic)
+@(libs/html/basic)
 @(styles/Docs)
 @(./components)
 [Basic.page:
