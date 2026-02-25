@@ -132,7 +132,7 @@ impl HostFunctionDef {
         match self.return_type {
             HostAbiType::I32 => DataType::Int,
             HostAbiType::F64 => DataType::Float,
-            HostAbiType::Utf8Str => DataType::String,
+            HostAbiType::Utf8Str => DataType::StringSlice,
             HostAbiType::OpaquePtr => DataType::Int,
             HostAbiType::Void => DataType::None,
         }
@@ -182,7 +182,7 @@ impl HostRegistry {
         let io_function = HostFunctionDef {
             name: IO_FUNC_NAME,
             parameters: vec![HostParameter {
-                language_type: DataType::String,
+                language_type: DataType::CoerceToString,
                 abi_type: HostAbiType::Utf8Str,
                 access_kind: HostAccessKind::Shared,
             }],

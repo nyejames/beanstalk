@@ -27,54 +27,71 @@ pub fn create_multiple_expressions(
     string_table: &mut StringTable,
 ) -> Result<Vec<Expression>, CompilerError> {
     let mut expressions: Vec<Expression> = Vec::new();
-    let mut type_index = 0;
-
-    while token_stream.index < token_stream.length && type_index < context.returns.len() {
-        let mut expected_arg = context.returns[type_index].to_owned();
-
-        // This should type check here
+    for (type_index, expected_type) in context.returns.iter().enumerate() {
+        let mut expected_arg = expected_type.to_owned();
         let expression = create_expression(
             token_stream,
             context,
             &mut expected_arg,
             &Ownership::ImmutableOwned,
-            consume_closing_parenthesis,
+            false,
             string_table,
         )?;
 
         expressions.push(expression);
-        type_index += 1;
 
-        // Check for tokens breaking out of the expression chain
-        match token_stream.current_token_kind() {
-            &TokenKind::Comma => {
-                if type_index >= context.returns.len() {
-                    return_type_error!(
-                        format!("Too many arguments provided. Expected: {}. Provided: {}.", context.returns.len(), expressions.len()),
-                        token_stream.current_location().to_error_location(&string_table),
-                        {
-                            CompilationStage => "Expression Parsing",
-                            PrimarySuggestion => "Remove extra arguments to match the expected count",
-                        }
-                    )
-                }
-
-                token_stream.advance(); // Skip the comma
+        if type_index + 1 < context.returns.len() {
+            if token_stream.current_token_kind() != &TokenKind::Comma {
+                return_type_error!(
+                    format!(
+                        "Too few arguments provided. Expected: {}. Provided: {}.",
+                        context.returns.len(),
+                        expressions.len()
+                    ),
+                    token_stream.current_location().to_error_location(&string_table),
+                    {
+                        CompilationStage => "Expression Parsing",
+                        PrimarySuggestion => "Add missing arguments to match the expected count",
+                    }
+                )
             }
 
-            _ => {
-                if type_index < context.returns.len() {
-                    return_type_error!(
-                        format!("Too few arguments provided. Expected: {}. Provided: {}.", context.returns.len(), expressions.len()),
-                        token_stream.current_location().to_error_location(&string_table),
-                        {
-                            CompilationStage => "Expression Parsing",
-                            PrimarySuggestion => "Add missing arguments to match the expected count",
-                        }
-                    )
-                }
-            }
+            token_stream.advance();
         }
+    }
+
+    if token_stream.current_token_kind() == &TokenKind::Comma {
+        return_type_error!(
+            format!(
+                "Too many arguments provided. Expected: {}. Provided: {}.",
+                context.returns.len(),
+                expressions.len() + 1
+            ),
+            token_stream.current_location().to_error_location(&string_table),
+            {
+                CompilationStage => "Expression Parsing",
+                PrimarySuggestion => "Remove extra arguments to match the expected count",
+            }
+        )
+    }
+
+    if consume_closing_parenthesis {
+        if token_stream.current_token_kind() != &TokenKind::CloseParenthesis {
+            return_syntax_error!(
+                format!(
+                    "Expected closing parenthesis after arguments, found '{:?}'",
+                    token_stream.current_token_kind()
+                ),
+                token_stream.current_location().to_error_location(&string_table),
+                {
+                    CompilationStage => "Expression Parsing",
+                    PrimarySuggestion => "Add ')' after the final argument",
+                    SuggestedInsertion => ")",
+                }
+            );
+        }
+
+        token_stream.advance();
     }
 
     Ok(expressions)
@@ -141,6 +158,10 @@ pub fn create_expression(
                     location: token_stream.current_location(),
                     scope: context.scope.clone(),
                 });
+
+                // create_expression(..., consume_closing_parenthesis = true) already advanced
+                // past the closing parenthesis, so do not advance again in this loop iteration.
+                continue;
             }
 
             // COLLECTION
@@ -255,7 +276,7 @@ pub fn create_expression(
                             // This is a function call - parse it using the function call parser
                             let function_call_node = parse_function_call(
                                 token_stream,
-                                &full_name,
+                                &arg.id,
                                 context,
                                 &signature,
                                 string_table,
@@ -282,6 +303,60 @@ pub fn create_expression(
                             }
                         }
 
+                        DataType::Struct(fields, struct_ownership) => {
+                            if token_stream.peek_next_token() == Some(&TokenKind::OpenParenthesis)
+                            {
+                                let constructor_location = token_stream.current_location();
+
+                                // Move to '(' then to first argument.
+                                token_stream.advance();
+                                token_stream.advance();
+
+                                let required_field_types = fields
+                                    .iter()
+                                    .map(|field| field.value.data_type.to_owned())
+                                    .collect::<Vec<_>>();
+                                let constructor_context =
+                                    context.new_child_expression(required_field_types);
+                                let args = create_multiple_expressions(
+                                    token_stream,
+                                    &constructor_context,
+                                    true,
+                                    string_table,
+                                )?;
+
+                                let mut struct_fields = Vec::with_capacity(fields.len());
+                                for (field, value) in fields.iter().zip(args.into_iter()) {
+                                    struct_fields.push(crate::compiler_frontend::ast::ast_nodes::Declaration {
+                                        id: field.id.to_owned(),
+                                        value,
+                                    });
+                                }
+
+                                expression.push(AstNode {
+                                    kind: NodeKind::Rvalue(Expression::struct_instance(
+                                        struct_fields,
+                                        constructor_location,
+                                        struct_ownership.get_owned(),
+                                    )),
+                                    location: token_stream.current_location(),
+                                    scope: context.scope.clone(),
+                                });
+
+                                continue;
+                            }
+
+                            // Fall through to normal reference behavior for non-constructor uses.
+                            expression.push(create_reference(
+                                token_stream,
+                                arg,
+                                context,
+                                string_table,
+                            )?);
+
+                            continue;
+                        }
+
                         // --------------------------
                         // VARIABLE INSIDE EXPRESSION
                         // --------------------------
@@ -291,31 +366,13 @@ pub fn create_expression(
                             // TODO: is_constant currently does word size types, but may be extended to everything in the future
                             // This means a check needs to be done for whether this should be copied or not (to avoid bloated binary size)
                             // The copy should only happen in those cases if this is a coerse to string expression or word sized type
-                            if arg.value.is_constant() {
-                                let copied_value = Expression::new(
-                                    arg.value.kind.clone(),
-                                    token_stream.current_location(),
-                                    arg.value.data_type.clone(),
-                                    Ownership::ImmutableOwned,
-                                );
-
-                                expression.push(AstNode {
-                                    kind: NodeKind::Rvalue(copied_value),
-                                    location: token_stream.current_location(),
-                                    scope: context.scope.clone(),
-                                });
-
-                                token_stream.advance();
-                            } else {
-                                // Otherwise we are referencing the value
-                                // This means that this expression can't be folded anymore
-                                expression.push(create_reference(
-                                    token_stream,
-                                    arg,
-                                    context,
-                                    string_table,
-                                )?);
-                            }
+                            // Referencing preserves aliasing semantics for borrow checking.
+                            expression.push(create_reference(
+                                token_stream,
+                                arg,
+                                context,
+                                string_table,
+                            )?);
 
                             continue; // Will have moved onto the next token already
                         }
@@ -574,15 +631,15 @@ pub fn create_expression(
                 // Check if the next token is a "not" or the start of a match statement
                 match token_stream.peek_next_token() {
 
-                    // // IS NOT
-                    // Some(TokenKind::Not) => {
-                    //     token_stream.advance();
-                    //     expression.push(AstNode {
-                    //         kind: NodeKind::Operator(Operator::NotEqual),
-                    //         location: token_stream.current_location(),
-                    //         scope: context.scope_name.to_owned(),
-                    //     });
-                    // }
+                    // IS NOT
+                    Some(TokenKind::Not) => {
+                        token_stream.advance();
+                        expression.push(AstNode {
+                            kind: NodeKind::Operator(Operator::NotEqual),
+                            location: token_stream.current_location(),
+                            scope: context.scope.clone(),
+                        });
+                    }
 
                     // MATCH STATEMENTS
                     Some(TokenKind::Colon) => {

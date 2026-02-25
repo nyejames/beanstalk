@@ -112,7 +112,7 @@ impl Expression {
     }
     pub fn string_slice(value: StringId, location: TextLocation, ownership: Ownership) -> Self {
         Self {
-            data_type: DataType::String,
+            data_type: DataType::StringSlice,
             kind: ExpressionKind::StringSlice(value),
             location,
             ownership,
@@ -218,8 +218,14 @@ impl Expression {
         returns: Vec<DataType>,
         location: TextLocation,
     ) -> Self {
+        let return_type = if returns.len() == 1 {
+            returns[0].to_owned()
+        } else {
+            DataType::Returns(returns)
+        };
+
         Self {
-            data_type: DataType::Returns(returns),
+            data_type: return_type,
             kind: ExpressionKind::FunctionCall(name, args),
             location,
             // TODO: Need to set the ownership based on the return signature
@@ -233,8 +239,14 @@ impl Expression {
         returns: Vec<DataType>,
         location: TextLocation,
     ) -> Self {
+        let return_type = if returns.len() == 1 {
+            returns[0].to_owned()
+        } else {
+            DataType::Returns(returns)
+        };
+
         Self {
-            data_type: DataType::Returns(returns),
+            data_type: return_type,
             kind: ExpressionKind::HostFunctionCall(name, args),
             location,
             ownership: Ownership::MutableOwned,
@@ -246,8 +258,13 @@ impl Expression {
         location: TextLocation,
         ownership: Ownership,
     ) -> Self {
+        let inner_type = items
+            .first()
+            .map(|item| item.data_type.to_owned())
+            .unwrap_or(DataType::Int);
+
         Self {
-            data_type: DataType::Inferred,
+            data_type: DataType::Collection(Box::new(inner_type), ownership.to_owned()),
             kind: ExpressionKind::Collection(items),
             location,
             ownership,
@@ -258,8 +275,9 @@ impl Expression {
         location: TextLocation,
         ownership: Ownership,
     ) -> Self {
+        let struct_type = DataType::Struct(args.to_owned(), ownership.to_owned());
         Self {
-            data_type: DataType::Inferred,
+            data_type: struct_type,
             kind: ExpressionKind::StructInstance(args),
             location,
             ownership,
@@ -413,6 +431,7 @@ pub enum Operator {
     LessThan,
     LessThanOrEqual,
     Equality,
+    NotEqual,
     Not,
 
     // Special
@@ -436,7 +455,8 @@ impl Operator {
             | Operator::LessThan
             | Operator::LessThanOrEqual
             | Operator::Range
-            | Operator::Equality => 2,
+            | Operator::Equality
+            | Operator::NotEqual => 2,
 
             // Not is a unary operator
             _ => 1,
@@ -458,6 +478,7 @@ impl Operator {
             Operator::LessThan => "<",
             Operator::LessThanOrEqual => "<=",
             Operator::Equality => "is",
+            Operator::NotEqual => "is not",
             Operator::Not => "not",
             Operator::Range => "..",
         }

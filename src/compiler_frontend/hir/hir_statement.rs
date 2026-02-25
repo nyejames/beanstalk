@@ -1225,7 +1225,7 @@ impl<'a> HirBuilder<'a> {
         location: &TextLocation,
     ) -> Result<(), CompilerError> {
         let accumulator_local = self.resolve_local_id_or_error(&variable.id, location)?;
-        let accumulator_type = self.lower_data_type(&DataType::String, location)?;
+        let accumulator_type = self.lower_data_type(&DataType::StringSlice, location)?;
         let region = self.current_region_or_error(location)?;
         let lowered = self.lower_expression(&variable.value)?;
 

@@ -1,6 +1,6 @@
 use crate::compiler_frontend::ast::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::ast::ast_nodes::AstNode;
-use crate::compiler_frontend::ast::expressions::expression::Expression;
+use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::field_access::parse_field_access;
 use crate::compiler_frontend::ast::function_body_to_ast::function_body_to_ast;
 use crate::compiler_frontend::ast::statements::functions::{
@@ -15,6 +15,7 @@ use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
+use crate::compiler_frontend::traits::ContainsReferences;
 use crate::{ast_log, return_compiler_error, return_rule_error, return_syntax_error};
 
 pub fn create_reference(
@@ -121,7 +122,7 @@ pub fn new_declaration(
         TokenKind::DatatypeInt => data_type = DataType::Int,
         TokenKind::DatatypeFloat => data_type = DataType::Float,
         TokenKind::DatatypeBool => data_type = DataType::Bool,
-        TokenKind::DatatypeString => data_type = DataType::String,
+        TokenKind::DatatypeString => data_type = DataType::StringSlice,
 
         // Collection Type Declaration
         TokenKind::OpenCurly => {
@@ -157,7 +158,19 @@ pub fn new_declaration(
 
         // Referencing a struct (or eventually a type alias)
         TokenKind::Symbol(name) => {
-            todo!("Structs and type aliases as type declarations")
+            let declared_type = context.get_reference(name).ok_or_else(|| {
+                CompilerError::new_rule_error(
+                    format!(
+                        "Unknown type '{}'. Type names must be declared before use.",
+                        string_table.resolve(*name)
+                    ),
+                    token_stream
+                        .current_location()
+                        .to_error_location(string_table),
+                )
+            })?;
+
+            data_type = declared_type.value.data_type.to_owned();
         }
 
         // SYNTAX ERRORS
@@ -247,19 +260,7 @@ pub fn new_declaration(
 
     // Check if this whole expression is nested in brackets.
     // This is just so we don't wastefully call create_expression recursively right away
-    let parsed_expr = match token_stream.current_token_kind() {
-        TokenKind::OpenParenthesis => {
-            token_stream.advance();
-            create_expression(
-                token_stream,
-                context,
-                &mut data_type,
-                &ownership,
-                true,
-                string_table,
-            )?
-        }
-
+    let mut parsed_expr = match token_stream.current_token_kind() {
         // Struct Definition
         TokenKind::TypeParameterBracket => {
             let params = create_struct_definition(token_stream, string_table)?;
@@ -280,6 +281,10 @@ pub fn new_declaration(
             string_table,
         )?,
     };
+    // Declaration mutability is determined by the left-hand marker (`~=`) for direct references.
+    if matches!(parsed_expr.kind, ExpressionKind::Reference(_)) {
+        parsed_expr.ownership = ownership.to_owned();
+    }
 
     ast_log!("Created new ", Cyan #ownership, " ", data_type);
 

@@ -82,13 +82,17 @@ pub enum DataType {
     False,
 
     // Strings
-    String, // UTF-8
+    StringSlice, // UTF-8 read-only string slice
     Char,
 
     // Any type can be used in the expression and will be coerced to a string (for scenes only).
     // Mathematical operations will still work and take priority, but strings can be used in these expressions.
     // All types will finally be coerced to strings after everything is evaluated.
     CoerceToString,
+
+    // Mutable owned strings
+    // Can also become string building functions at runtime if they are not folded
+    Template,
 
     // Numbers
     Float,
@@ -105,11 +109,6 @@ pub enum DataType {
 
     // Return Parameters
     Returns(Vec<DataType>),
-
-    // Special Beanstalk Types
-    // Template types may have more static structure to them in the future
-    // They are basically functions that accept a style and return a string
-    Template,
 
     Function(Box<Option<DataType>>, FunctionSignature), // Receiver, signature
 
@@ -155,7 +154,7 @@ impl DataType {
                         | DataType::Float
                         | DataType::Int
                         | DataType::Decimal
-                        | DataType::String
+                        | DataType::StringSlice
                 )
             }
 
@@ -180,7 +179,7 @@ impl DataType {
             DataType::Float => DataType::Option(Box::new(DataType::Float)),
             DataType::Int => DataType::Option(Box::new(DataType::Int)),
             DataType::Decimal => DataType::Option(Box::new(DataType::Decimal)),
-            DataType::String => DataType::Option(Box::new(DataType::String)),
+            DataType::StringSlice => DataType::Option(Box::new(DataType::StringSlice)),
             DataType::Char => DataType::Option(Box::new(DataType::Char)),
             DataType::Collection(inner_type, ownership) => {
                 DataType::Option(Box::new(DataType::Collection(inner_type, ownership)))
@@ -218,7 +217,7 @@ impl DataType {
             DataType::Range => true,
             DataType::Collection(..) => true,
             DataType::Parameters(_) => true,
-            DataType::String => true,
+            DataType::StringSlice => true,
             DataType::Float => true,
             DataType::Int => true,
             DataType::Decimal => true,
@@ -244,7 +243,7 @@ impl DataType {
             DataType::Inferred => "Inferred".to_string(),
             DataType::CoerceToString => "CoerceToString".to_string(),
             DataType::Bool => "Bool".to_string(),
-            DataType::String => "String".to_string(),
+            DataType::StringSlice => "String".to_string(),
             DataType::Char => "Char".to_string(),
             DataType::Float => "Float".to_string(),
             DataType::Int => "Int".to_string(),
@@ -336,7 +335,7 @@ impl PartialEq for DataType {
             (DataType::None, DataType::None) => true,
             (DataType::True, DataType::True) => true,
             (DataType::False, DataType::False) => true,
-            (DataType::String, DataType::String) => true,
+            (DataType::StringSlice, DataType::StringSlice) => true,
             (DataType::CoerceToString, DataType::CoerceToString) => true,
             (DataType::Float, DataType::Float) => true,
             (DataType::Int, DataType::Int) => true,
@@ -395,7 +394,7 @@ impl Display for DataType {
                 write!(f, "CoerceToString")
             }
             DataType::Bool => write!(f, "Bool"),
-            DataType::String => {
+            DataType::StringSlice => {
                 write!(f, "String")
             }
             DataType::Char => {

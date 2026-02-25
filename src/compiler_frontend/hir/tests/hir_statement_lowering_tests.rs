@@ -244,7 +244,7 @@ fn start_function_with_no_template_declaration_returns_empty_string() {
         start_name,
         FunctionSignature {
             parameters: vec![],
-            returns: vec![DataType::String],
+            returns: vec![DataType::StringSlice],
         },
         vec![node(
             NodeKind::Return(vec![Expression::reference(
@@ -312,7 +312,7 @@ fn start_function_accumulates_multiple_top_level_templates_in_source_order() {
         start_name,
         FunctionSignature {
             parameters: vec![],
-            returns: vec![DataType::String],
+            returns: vec![DataType::StringSlice],
         },
         vec![
             node(
@@ -385,7 +385,7 @@ fn top_level_template_declarations_do_not_redeclare_accumulator_local() {
         start_name,
         FunctionSignature {
             parameters: vec![],
-            returns: vec![DataType::String],
+            returns: vec![DataType::StringSlice],
         },
         vec![
             node(

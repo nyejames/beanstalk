@@ -24,6 +24,10 @@ pub fn handle_mutation(
 
     // Check if the variable is mutable
     let ownership = &variable_arg.value.ownership;
+    let target_type = match &node.kind {
+        NodeKind::FieldAccess { data_type, .. } => data_type.to_owned(),
+        _ => variable_arg.value.data_type.to_owned(),
+    };
     ast_log!(
         "Handling mutation for ",
         #ownership, " ",
@@ -48,7 +52,7 @@ pub fn handle_mutation(
             // Simple mutation: variable = new_value
             token_stream.advance();
 
-            let mut expected_type = variable_arg.value.data_type.clone();
+            let mut expected_type = target_type.to_owned();
 
             create_expression(
                 token_stream,
@@ -64,7 +68,7 @@ pub fn handle_mutation(
             // Compound assignment: variable += value
             token_stream.advance();
 
-            let mut expected_type = variable_arg.value.data_type.clone();
+            let mut expected_type = target_type.to_owned();
             let add_value = create_expression(
                 token_stream,
                 context,
@@ -103,7 +107,7 @@ pub fn handle_mutation(
             // Compound assignment: variable -= value
             token_stream.advance();
 
-            let mut expected_type = variable_arg.value.data_type.clone();
+            let mut expected_type = target_type.to_owned();
             let subtract_value = create_expression(
                 token_stream,
                 context,
@@ -142,7 +146,7 @@ pub fn handle_mutation(
             // Compound assignment: variable *= value
             token_stream.advance();
 
-            let mut expected_type = variable_arg.value.data_type.clone();
+            let mut expected_type = target_type.to_owned();
             let multiply_value = create_expression(
                 token_stream,
                 context,
@@ -181,7 +185,7 @@ pub fn handle_mutation(
             // Compound assignment: variable /= value
             token_stream.advance();
 
-            let mut expected_type = variable_arg.value.data_type.clone();
+            let mut expected_type = target_type.to_owned();
             let divide_value = create_expression(
                 token_stream,
                 context,

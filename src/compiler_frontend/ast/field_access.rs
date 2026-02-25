@@ -20,16 +20,22 @@ pub fn parse_field_access(
     context: &ScopeContext,
     string_table: &mut StringTable,
 ) -> Result<AstNode, CompilerError> {
+    let base_location = if token_stream.index > 0 {
+        token_stream.tokens[token_stream.index - 1].location.clone()
+    } else {
+        token_stream.current_location()
+    };
+
     // Start with the base variable
     let mut current_node = AstNode {
         kind: NodeKind::Rvalue(Expression::reference(
             base_arg.id.clone(),
             base_arg.value.data_type.clone(),
-            base_arg.value.location.clone(),
+            base_location.clone(),
             base_arg.value.ownership.clone(),
         )),
-        scope: base_arg.value.location.scope.to_owned(),
-        location: base_arg.value.location.to_owned(),
+        scope: context.scope.to_owned(),
+        location: base_location,
     };
 
     // let built_in_methods = get_builtin_methods(current_type, string_table);

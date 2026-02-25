@@ -576,7 +576,7 @@ pub(crate) fn keyword_or_variable(
             "return" => return_token!(TokenKind::Return, stream),
             "yield" => return_token!(TokenKind::Yield, stream),
             "else" => return_token!(TokenKind::Else, stream),
-            "for" => return_token!(TokenKind::For, stream),
+            "loop" => return_token!(TokenKind::Loop, stream),
             "break" => return_token!(TokenKind::Break, stream),
             "continue" => return_token!(TokenKind::Continue, stream),
             "defer" => return_token!(TokenKind::Defer, stream),

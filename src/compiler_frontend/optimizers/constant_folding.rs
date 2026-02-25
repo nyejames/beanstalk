@@ -29,7 +29,7 @@ use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, Operator,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::datatypes::Ownership;
+use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::{return_rule_error, return_syntax_error};
 
@@ -57,6 +57,17 @@ pub fn constant_fold(
     output_stack: &[AstNode],
     string_table: &mut StringTable,
 ) -> Result<Vec<AstNode>, CompilerError> {
+    // If any operand is runtime-dependent, keep the original RPN intact.
+    // Partial folding can invalidate operand/operator ordering for chained runtime expressions.
+    if output_stack.iter().any(|node| {
+        matches!(
+            &node.kind,
+            NodeKind::Rvalue(expr) if !expr.kind.is_foldable()
+        ) || !matches!(&node.kind, NodeKind::Rvalue(_) | NodeKind::Operator(_))
+    }) {
+        return Ok(output_stack.to_vec());
+    }
+
     let mut stack: Vec<AstNode> = Vec::with_capacity(output_stack.len());
 
     for node in output_stack {
@@ -91,17 +102,20 @@ pub fn constant_fold(
                 let rhs = stack.pop().unwrap();
                 let lhs = stack.pop().unwrap();
 
-                let lhs_expr = lhs.get_expr()?;
-                let rhs_expr = rhs.get_expr()?;
-
-                // // We can fold if they're both literals
-                // if !lhs_expr.is_foldable() || !rhs_expr.is_foldable() {
-                //     // Not foldable at compile time, push back to stack as runtime expression
-                //     stack.push(lhs);
-                //     stack.push(rhs);
-                //     stack.push(node.to_owned());
-                //     continue;
-                // }
+                let (lhs_expr, rhs_expr) = match (&lhs.kind, &rhs.kind) {
+                    (NodeKind::Rvalue(lhs_expr), NodeKind::Rvalue(rhs_expr))
+                        if lhs_expr.kind.is_foldable() && rhs_expr.kind.is_foldable() =>
+                    {
+                        (lhs_expr, rhs_expr)
+                    }
+                    _ => {
+                        // Preserve runtime RPN when either side is not foldable.
+                        stack.push(lhs);
+                        stack.push(rhs);
+                        stack.push(node.to_owned());
+                        continue;
+                    }
+                };
 
                 // Try to evaluate the operation
                 if let Some(result) = lhs_expr.evaluate_operator(&rhs_expr, op, string_table)? {
@@ -153,6 +167,7 @@ impl Expression {
 
                     // Logical operations with float operands
                     Operator::Equality => ExpressionKind::Bool(lhs_val == rhs_val),
+                    Operator::NotEqual => ExpressionKind::Bool(lhs_val != rhs_val),
                     Operator::GreaterThan => ExpressionKind::Bool(lhs_val > rhs_val),
                     Operator::GreaterThanOrEqual => ExpressionKind::Bool(lhs_val >= rhs_val),
                     Operator::LessThan => ExpressionKind::Bool(lhs_val < rhs_val),
@@ -208,6 +223,7 @@ impl Expression {
 
                     // Logical operations with integer operands
                     Operator::Equality => ExpressionKind::Bool(lhs_val == rhs_val),
+                    Operator::NotEqual => ExpressionKind::Bool(lhs_val != rhs_val),
                     Operator::GreaterThan => ExpressionKind::Bool(lhs_val > rhs_val),
                     Operator::GreaterThanOrEqual => ExpressionKind::Bool(lhs_val >= rhs_val),
                     Operator::LessThan => ExpressionKind::Bool(lhs_val < rhs_val),
@@ -238,6 +254,7 @@ impl Expression {
                 Operator::And => ExpressionKind::Bool(*lhs_val && *rhs_val),
                 Operator::Or => ExpressionKind::Bool(*lhs_val || *rhs_val),
                 Operator::Equality => ExpressionKind::Bool(lhs_val == rhs_val),
+                Operator::NotEqual => ExpressionKind::Bool(lhs_val != rhs_val),
 
                 _ => return_rule_error!(
                     format!("Can't perform operation {} on booleans", op.to_str()),
@@ -257,6 +274,7 @@ impl Expression {
                         ExpressionKind::StringSlice(interned_result)
                     }
                     Operator::Equality => ExpressionKind::Bool(lhs_val == rhs_val),
+                    Operator::NotEqual => ExpressionKind::Bool(lhs_val != rhs_val),
                     _ => return_rule_error!(
                         format!("Can't perform operation {} on strings", op.to_str()),
                         self.location.to_owned().to_error_location(string_table)
@@ -273,10 +291,19 @@ impl Expression {
             Ownership::ImmutableOwned
         };
 
+        let result_type = match &kind {
+            ExpressionKind::Int(_) => DataType::Int,
+            ExpressionKind::Float(_) => DataType::Float,
+            ExpressionKind::Bool(_) => DataType::Bool,
+            ExpressionKind::StringSlice(_) => DataType::StringSlice,
+            ExpressionKind::Range(_, _) => DataType::Range,
+            _ => self.data_type.to_owned(),
+        };
+
         Ok(Some(Expression::new(
             kind,
             self.location.to_owned(),
-            self.data_type.to_owned(),
+            result_type,
             ownership,
         )))
     }

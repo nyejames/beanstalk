@@ -116,7 +116,7 @@ pub fn evaluate_expression(
                     );
                 }
 
-                if let DataType::CoerceToString | DataType::String = current_type {
+                if let DataType::CoerceToString | DataType::Template = current_type {
                     simplified_expression.push(node.to_owned());
                     continue 'outer;
                 }
@@ -134,7 +134,7 @@ pub fn evaluate_expression(
                     *current_type = data_type.to_owned();
                 }
 
-                if let DataType::CoerceToString | DataType::String = current_type {
+                if let DataType::CoerceToString | DataType::Template = current_type {
                     simplified_expression.push(node.to_owned());
                     continue 'outer;
                 }
@@ -149,9 +149,8 @@ pub fn evaluate_expression(
 
             NodeKind::Operator(op) => {
                 match current_type {
-                    DataType::String | DataType::Template => {
+                    DataType::Template => {
                         let found_type_static: &'static str = match current_type {
-                            DataType::String => "String",
                             DataType::Template => "Template",
                             _ => "Unknown",
                         };
@@ -168,8 +167,22 @@ pub fn evaluate_expression(
                     }
 
                     DataType::CoerceToString => {
-                        simplified_expression.push(node);
-                        continue 'outer;
+                        if matches!(
+                            op,
+                            crate::compiler_frontend::ast::expressions::expression::Operator::Add
+                        ) {
+                            // '+' is just a separator in CoerceToString expressions.
+                            continue 'outer;
+                        }
+
+                        return_syntax_error!(
+                            format!("Unsupported operator '{:?}' in a CoerceToString expression", op),
+                            node.location.to_error_location(string_table),
+                            {
+                                CompilationStage => "Expression Evaluation",
+                                PrimarySuggestion => "Use '+' to concatenate values for CoerceToString arguments",
+                            }
+                        )
                     }
 
                     _ => {}
@@ -216,9 +229,7 @@ pub fn evaluate_expression(
     let ownership = ownership.get_owned();
 
     match current_type {
-        DataType::Template | DataType::String => {
-            concat_template(&mut simplified_expression, ownership.get_owned())
-        }
+        DataType::Template => concat_template(&mut simplified_expression, ownership.get_owned()),
 
         DataType::CoerceToString => {
             let mut new_string = String::new();

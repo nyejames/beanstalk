@@ -440,7 +440,7 @@ pub enum TokenKind {
     If,
     Else,
     ElseIf,
-    For,
+    Loop,
     In,
     Break,
     Continue,
@@ -486,7 +486,7 @@ impl TokenKind {
             TokenKind::DatatypeInt => Some(DataType::Int),
             TokenKind::DatatypeFloat => Some(DataType::Float),
             TokenKind::DatatypeBool => Some(DataType::Bool),
-            TokenKind::DatatypeString => Some(DataType::String),
+            TokenKind::DatatypeString => Some(DataType::StringSlice),
             _ => None,
         }
     }

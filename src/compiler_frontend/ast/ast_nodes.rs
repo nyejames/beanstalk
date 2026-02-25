@@ -234,6 +234,7 @@ impl AstNode {
                 Operator::GreaterThan => 2,
                 Operator::GreaterThanOrEqual => 2,
                 Operator::Equality => 2,
+                Operator::NotEqual => 2,
 
                 // Logical AND
                 Operator::And => 1,

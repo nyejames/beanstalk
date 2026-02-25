@@ -297,7 +297,7 @@ impl<'a> HirBuilder<'a> {
         self.lower_call_expression(
             CallTarget::UserFunction(template_function),
             &chunks,
-            &[DataType::String],
+            &[DataType::StringSlice],
             location,
         )
     }
@@ -940,7 +940,9 @@ impl<'a> HirBuilder<'a> {
             DataType::Float => HirTypeKind::Float,
             DataType::Decimal => HirTypeKind::Decimal,
             DataType::Char => HirTypeKind::Char,
-            DataType::String | DataType::CoerceToString | DataType::Template => HirTypeKind::String,
+            DataType::StringSlice | DataType::CoerceToString | DataType::Template => {
+                HirTypeKind::String
+            }
             DataType::Range => HirTypeKind::Range,
             DataType::None => HirTypeKind::Unit,
 
@@ -1385,6 +1387,7 @@ impl<'a> HirBuilder<'a> {
             Operator::LessThan => Ok(HirBinOp::Lt),
             Operator::LessThanOrEqual => Ok(HirBinOp::Le),
             Operator::Equality => Ok(HirBinOp::Eq),
+            Operator::NotEqual => Ok(HirBinOp::Ne),
             Operator::Not => {
                 return_hir_transformation_error!(
                     "'not' cannot be lowered as a binary operator",

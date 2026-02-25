@@ -1,7 +1,7 @@
 use crate::ast_log;
 use crate::compiler_frontend::ast::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
-use crate::compiler_frontend::ast::expressions::expression::Expression;
+use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
@@ -184,7 +184,7 @@ pub fn new_parameter(
         TokenKind::DatatypeInt => data_type = DataType::Int,
         TokenKind::DatatypeFloat => data_type = DataType::Float,
         TokenKind::DatatypeBool => data_type = DataType::Bool,
-        TokenKind::DatatypeString => data_type = DataType::String,
+        TokenKind::DatatypeString => data_type = DataType::StringSlice,
 
         // Collection Type Declaration
         TokenKind::OpenCurly => {
@@ -254,7 +254,12 @@ pub fn new_parameter(
             ast_log!("Created new parameter of type: {}", data_type);
             return Ok(Declaration {
                 id: full_name,
-                value: Expression::none(),
+                value: Expression::new(
+                    ExpressionKind::None,
+                    token_stream.current_location(),
+                    data_type,
+                    ownership,
+                ),
             });
         }
 
@@ -279,27 +284,14 @@ pub fn new_parameter(
     // This is just so we don't wastefully call create_expression recursively right away
     let parameter_context = ScopeContext::new_constant(token_stream.src_path.to_owned());
 
-    let parsed_expr = match token_stream.current_token_kind() {
-        TokenKind::OpenParenthesis => {
-            token_stream.advance();
-            create_expression(
-                token_stream,
-                &parameter_context,
-                &mut data_type,
-                &ownership,
-                true,
-                string_table,
-            )?
-        }
-        _ => create_expression(
-            token_stream,
-            &parameter_context,
-            &mut data_type,
-            &ownership,
-            false,
-            string_table,
-        )?,
-    };
+    let parsed_expr = create_expression(
+        token_stream,
+        &parameter_context,
+        &mut data_type,
+        &ownership,
+        false,
+        string_table,
+    )?;
 
     ast_log!(
         "Created new ",

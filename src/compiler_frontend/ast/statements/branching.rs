@@ -41,7 +41,7 @@ pub fn create_branch(
 ) -> Result<Vec<AstNode>, CompilerError> {
     let then_condition = create_expression(
         token_stream,
-        &context.new_child_control_flow(ContextKind::Condition),
+        &context.new_child_control_flow(ContextKind::Condition, string_table),
         &mut DataType::Bool,
         &Ownership::ImmutableOwned,
         false,
@@ -79,16 +79,21 @@ pub fn create_branch(
     }
 
     token_stream.advance(); // Consume ':'
-    let if_context = context.new_child_control_flow(ContextKind::Branch);
-    let then_block =
-        function_body_to_ast(token_stream, if_context.to_owned(), warnings, string_table)?;
+    let then_context = context.new_child_control_flow(ContextKind::Branch, string_table);
+    let then_block = function_body_to_ast(
+        token_stream,
+        then_context.to_owned(),
+        warnings,
+        string_table,
+    )?;
 
     // Check for else condition
     let else_block = if token_stream.current_token_kind() == &TokenKind::Else {
         token_stream.advance();
+        let else_context = context.new_child_control_flow(ContextKind::Branch, string_table);
         Some(function_body_to_ast(
             token_stream,
-            if_context.to_owned(),
+            else_context,
             warnings,
             string_table,
         )?)
@@ -96,27 +101,10 @@ pub fn create_branch(
         None
     };
 
-    // Fold evaluated if statements.
-    // If the "then" condition isn't runtime,
-    // The statement can be removed completely.
-    if then_condition.kind.is_foldable() {
-        let mut flattened_statement = then_block;
-        if else_block.is_some() {
-            flattened_statement.push(AstNode {
-                kind: NodeKind::Warning(String::from(
-                    "This else block is never reached due to the if condition always being true.",
-                )),
-                location: token_stream.current_location(),
-                scope: if_context.scope,
-            })
-        }
-        return Ok(flattened_statement);
-    }
-
     Ok(vec![AstNode {
         kind: NodeKind::If(then_condition, then_block, else_block),
         location: token_stream.current_location(),
-        scope: if_context.scope,
+        scope: then_context.scope,
     }])
 }
 
@@ -145,7 +133,7 @@ fn create_match_node(
     }
 
     token_stream.advance(); // Consume ':'
-    let match_context = context.new_child_control_flow(ContextKind::Branch);
+    let match_context = context.new_child_control_flow(ContextKind::Branch, string_table);
 
     // SYNTAX EXAMPLE
     // Each branch MUST have an open and closed block
@@ -156,95 +144,128 @@ fn create_match_node(
     //     else: host_io_functions("Choice is 2");
     // ;
 
-    // Parse each arm
     let mut arms: Vec<MatchArm> = Vec::new();
     let mut else_block = None;
+    let mut seen_else = false;
+
     loop {
-        // Check for else condition
-        if token_stream.current_token_kind() == &TokenKind::Else {
-            if arms.is_empty() {
-                return_rule_error!(
-                    "Should be at least one condition in the match statement before the 'else' arm",
-                    token_stream.current_location().to_error_location(string_table),
-                    {
-                        CompilationStage => "Match Statement Parsing",
-                        PrimarySuggestion => "Add at least one match arm before the 'else' arm",
-                    }
-                )
+        token_stream.skip_newlines();
+
+        match token_stream.current_token_kind() {
+            TokenKind::End => {
+                token_stream.advance();
+                break;
             }
-
-            if token_stream.current_token_kind() != &TokenKind::Colon {
-                return_rule_error!(
-                    format!(
-                        "Expected ':' after the else arm to open a new scope, found '{:?}' instead",
-                        token_stream.current_token_kind()
-                    ),
-                    token_stream.current_location().to_error_location(string_table),
-                    {
-                        CompilationStage => "Match Statement Parsing",
-                        PrimarySuggestion => "Add ':' after 'else' to open the else body",
-                        SuggestedInsertion => ":",
-                    }
-                )
-            }
-
-            // Move past the colon
-            token_stream.advance();
-
-            else_block = Some(function_body_to_ast(
-                token_stream,
-                match_context.to_owned(),
-                warnings,
-                string_table,
-            )?);
-
-            continue;
-        }
-
-        let condition = create_expression(
-            token_stream,
-            &match_context.new_child_control_flow(ContextKind::Condition),
-            &mut DataType::Int,
-            &Ownership::ImmutableOwned,
-            false,
-            string_table,
-        )?;
-
-        if token_stream.current_token_kind() != &TokenKind::Colon {
-            return_rule_error!(
-                format!(
-                    "Expected ':' after the match condition to open a new scope, found '{:?}' instead",
-                    token_stream.current_token_kind()
-                ),
-                token_stream.current_location().to_error_location(&string_table),
-                {
-                    CompilationStage => "Match Statement Parsing",
-                    PrimarySuggestion => "Add ':' after the match arm condition to open the arm body",
-                    SuggestedInsertion => ":",
+            TokenKind::Else => {
+                if arms.is_empty() {
+                    return_rule_error!(
+                        "Should be at least one condition in the match statement before the 'else' arm",
+                        token_stream.current_location().to_error_location(string_table),
+                        {
+                            CompilationStage => "Match Statement Parsing",
+                            PrimarySuggestion => "Add at least one match arm before the 'else' arm",
+                        }
+                    )
                 }
-            )
-        }
 
-        // Move past the colon
-        token_stream.advance();
+                if seen_else {
+                    return_rule_error!(
+                        "Match statement can only have one 'else' arm",
+                        token_stream.current_location().to_error_location(string_table),
+                        {
+                            CompilationStage => "Match Statement Parsing",
+                            PrimarySuggestion => "Remove duplicate else arms",
+                        }
+                    )
+                }
+                seen_else = true;
 
-        let block = function_body_to_ast(
-            token_stream,
-            match_context.to_owned(),
-            warnings,
-            string_table,
-        )?;
+                token_stream.advance();
+                if token_stream.current_token_kind() != &TokenKind::Colon {
+                    return_rule_error!(
+                        format!(
+                            "Expected ':' after the else arm to open a new scope, found '{:?}' instead",
+                            token_stream.current_token_kind()
+                        ),
+                        token_stream.current_location().to_error_location(string_table),
+                        {
+                            CompilationStage => "Match Statement Parsing",
+                            PrimarySuggestion => "Add ':' after 'else' to open the else body",
+                            SuggestedInsertion => ":",
+                        }
+                    )
+                }
 
-        arms.push(MatchArm {
-            condition,
-            body: block,
-        });
+                token_stream.advance();
 
-        // Check for double semicolon to close this match statement
-        if token_stream.current_token_kind() != &TokenKind::End {
-            // Move past the end token
-            token_stream.advance();
-            break;
+                else_block = Some(function_body_to_ast(
+                    token_stream,
+                    match_context.new_child_control_flow(ContextKind::Branch, string_table),
+                    warnings,
+                    string_table,
+                )?);
+            }
+            TokenKind::Eof => {
+                return_rule_error!(
+                    "Unexpected end of file in match statement",
+                    token_stream.current_location().to_error_location(string_table),
+                    {
+                        CompilationStage => "Match Statement Parsing",
+                        PrimarySuggestion => "Terminate this match statement with ';'",
+                        SuggestedInsertion => ";",
+                    }
+                )
+            }
+            _ => {
+                if seen_else {
+                    return_rule_error!(
+                        "Match arms cannot appear after an 'else' arm",
+                        token_stream.current_location().to_error_location(string_table),
+                        {
+                            CompilationStage => "Match Statement Parsing",
+                            PrimarySuggestion => "Move this arm before the else arm",
+                        }
+                    )
+                }
+
+                let condition = create_expression(
+                    token_stream,
+                    &match_context.new_child_control_flow(ContextKind::Condition, string_table),
+                    &mut DataType::Int,
+                    &Ownership::ImmutableOwned,
+                    false,
+                    string_table,
+                )?;
+
+                if token_stream.current_token_kind() != &TokenKind::Colon {
+                    return_rule_error!(
+                        format!(
+                            "Expected ':' after the match condition to open a new scope, found '{:?}' instead",
+                            token_stream.current_token_kind()
+                        ),
+                        token_stream.current_location().to_error_location(&string_table),
+                        {
+                            CompilationStage => "Match Statement Parsing",
+                            PrimarySuggestion => "Add ':' after the match arm condition to open the arm body",
+                            SuggestedInsertion => ":",
+                        }
+                    )
+                }
+
+                token_stream.advance();
+
+                let block = function_body_to_ast(
+                    token_stream,
+                    match_context.new_child_control_flow(ContextKind::Branch, string_table),
+                    warnings,
+                    string_table,
+                )?;
+
+                arms.push(MatchArm {
+                    condition,
+                    body: block,
+                });
+            }
         }
     }
 

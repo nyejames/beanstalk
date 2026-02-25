@@ -139,7 +139,7 @@ impl FunctionSignature {
                             }
                         )
                     }
-                    returns.push(DataType::String);
+                    returns.push(DataType::StringSlice);
                 }
 
                 TokenKind::Symbol(name) => {
@@ -375,7 +375,7 @@ impl FunctionSignature {
 /// For full type information with resolved strings, use DataType::display_with_table().
 fn format_type_for_error(data_type: &DataType) -> String {
     match data_type {
-        DataType::String => "String".to_string(),
+        DataType::StringSlice => "String".to_string(),
         DataType::Int => "Int".to_string(),
         DataType::Float => "Float".to_string(),
         DataType::Bool => "Bool".to_string(),
@@ -410,16 +410,16 @@ fn format_type_for_error(data_type: &DataType) -> String {
 /// Provide helpful hints for type conversion
 fn get_type_conversion_hint(from_type: &DataType, to_type: &DataType) -> String {
     match (from_type, to_type) {
-        (DataType::Int, DataType::String) => {
+        (DataType::Int, DataType::StringSlice) => {
             "Try converting the integer to a string first".to_string()
         }
-        (DataType::Float, DataType::String) => {
+        (DataType::Float, DataType::StringSlice) => {
             "Try converting the float to a string first".to_string()
         }
-        (DataType::Bool, DataType::String) => {
+        (DataType::Bool, DataType::StringSlice) => {
             "Try converting the boolean to a string first".to_string()
         }
-        (DataType::String, DataType::Int) => {
+        (DataType::StringSlice, DataType::Int) => {
             "Try parsing the string as an integer first".to_string()
         }
         _ => "Check the function documentation for the expected argument types".to_string(),
@@ -436,7 +436,7 @@ fn types_compatible(arg_type: &DataType, param_type: &DataType) -> bool {
         (_, DataType::CoerceToString) => true,
 
         // Exact type matches
-        (DataType::String, DataType::String) => true,
+        (DataType::StringSlice, DataType::StringSlice) => true,
         (DataType::Int, DataType::Int) => true,
         (DataType::Float, DataType::Float) => true,
         (DataType::Bool, DataType::Bool) => true,

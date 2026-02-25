@@ -167,16 +167,6 @@ impl<'a> HirValidator<'a> {
             }
 
             self.validate_terminator_mapping(block.id)?;
-            if matches!(block.terminator, HirTerminator::Panic { message: None }) {
-                return Err(self.error_with_hir(
-                    format!(
-                        "Block {} still has placeholder terminator Panic(None)",
-                        block.id
-                    ),
-                    Some(HirLocation::Terminator(block.id)),
-                ));
-            }
-
             self.validate_terminator(block.id, &block.terminator)?;
         }
 
@@ -219,6 +209,16 @@ impl<'a> HirValidator<'a> {
     }
 
     fn validate_terminator_mapping(&self, block_id: BlockId) -> Result<(), CompilerError> {
+        if self
+            .module
+            .blocks
+            .iter()
+            .find(|block| block.id == block_id)
+            .is_some_and(|block| matches!(block.terminator, HirTerminator::Panic { message: None }))
+        {
+            return Ok(());
+        }
+
         let terminator_location = HirLocation::Terminator(block_id);
         if self
             .module

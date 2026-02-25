@@ -1,6 +1,6 @@
 use crate::backends::function_registry::HostRegistry;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
-use crate::compiler_frontend::ast::expressions::expression::Expression;
+use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::function_body_to_ast::function_body_to_ast;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::ast::statements::structs::create_struct_definition;
@@ -13,6 +13,9 @@ use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::FileTokens;
 use crate::projects::settings::{self, IMPLICIT_START_FUNC_NAME, TOP_LEVEL_TEMPLATE_NAME};
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+static CONTROL_FLOW_SCOPE_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
 pub struct ModuleExport {
     pub id: StringId,
@@ -48,16 +51,77 @@ impl Ast {
         let mut const_template_tokens: Vec<(usize, FileTokens)> =
             Vec::with_capacity(const_template_count);
 
-        // Collect all function signatures and struct definitions to register them in scope
-        let declarations: Vec<Declaration> = Vec::new();
+        // Collect module-level declarations first so all function/start bodies can resolve symbols.
+        let mut declarations: Vec<Declaration> = Vec::new();
+        for header in &sorted_headers {
+            match &header.kind {
+                HeaderKind::Function { signature } => declarations.push(Declaration {
+                    id: header.tokens.src_path.to_owned(),
+                    value: Expression::new(
+                        ExpressionKind::None,
+                        header.name_location.to_owned(),
+                        DataType::Function(Box::new(None), signature.to_owned()),
+                        Ownership::ImmutableReference,
+                    ),
+                }),
+                HeaderKind::Struct => {
+                    let mut struct_tokens = header.tokens.to_owned();
+                    let fields = match create_struct_definition(&mut struct_tokens, string_table) {
+                        Ok(fields) => fields,
+                        Err(e) => {
+                            return Err(CompilerMessages {
+                                errors: vec![e],
+                                warnings,
+                            });
+                        }
+                    };
+
+                    declarations.push(Declaration {
+                        id: header.tokens.src_path.to_owned(),
+                        value: Expression::new(
+                            ExpressionKind::None,
+                            header.name_location.to_owned(),
+                            DataType::Struct(fields, Ownership::MutableOwned),
+                            Ownership::ImmutableReference,
+                        ),
+                    });
+                }
+                HeaderKind::StartFunction => {
+                    let start_name = header
+                        .tokens
+                        .src_path
+                        .join_str(IMPLICIT_START_FUNC_NAME, string_table);
+                    declarations.push(Declaration {
+                        id: start_name,
+                        value: Expression::new(
+                            ExpressionKind::None,
+                            header.name_location.to_owned(),
+                            DataType::Function(
+                                Box::new(None),
+                                FunctionSignature {
+                                    parameters: vec![],
+                                    returns: vec![DataType::StringSlice],
+                                },
+                            ),
+                            Ownership::ImmutableReference,
+                        ),
+                    });
+                }
+                _ => {}
+            }
+        }
+
         for mut header in sorted_headers {
             match header.kind {
                 HeaderKind::Function { signature } => {
+                    let mut function_declarations = declarations.to_owned();
+                    function_declarations.extend(signature.parameters.to_owned());
+
                     // Function parameters should be available in the function body scope
                     let context = ScopeContext::new(
                         ContextKind::Function,
                         header.tokens.src_path.to_owned(),
-                        &signature.parameters,
+                        &function_declarations,
                         host_registry.clone(),
                         signature.returns.clone(),
                     );
@@ -138,7 +202,7 @@ impl Ast {
 
                     let main_signature = FunctionSignature {
                         parameters: vec![],
-                        returns: vec![DataType::String],
+                        returns: vec![DataType::StringSlice],
                     };
 
                     ast.push(AstNode {
@@ -280,14 +344,22 @@ impl ScopeContext {
         }
     }
 
-    pub fn new_child_control_flow(&self, kind: ContextKind) -> ScopeContext {
+    pub fn new_child_control_flow(
+        &self,
+        kind: ContextKind,
+        string_table: &mut StringTable,
+    ) -> ScopeContext {
         let mut new_context = self.to_owned();
         new_context.kind = kind;
         if matches!(new_context.kind, ContextKind::Loop) {
             new_context.loop_depth += 1;
         }
 
-        // For now, add the lifetime ID to the scope.
+        let scope_id = CONTROL_FLOW_SCOPE_COUNTER.fetch_add(1, Ordering::Relaxed);
+        new_context.scope = self
+            .scope
+            .join_str(&format!("__scope_{}", scope_id), string_table);
+
         new_context
     }
 
@@ -305,7 +377,8 @@ impl ScopeContext {
         new_context.scope = self.scope.append(id);
         new_context.loop_depth = 0;
 
-        new_context.declarations = signature.parameters;
+        new_context.declarations = self.declarations.to_owned();
+        new_context.declarations.extend(signature.parameters);
 
         new_context
     }

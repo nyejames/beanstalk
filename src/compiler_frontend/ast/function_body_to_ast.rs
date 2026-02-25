@@ -66,7 +66,8 @@ pub fn function_body_to_ast(
                         | TokenKind::MultiplyAssign
                         | TokenKind::DivideAssign
                         | TokenKind::ExponentAssign
-                        | TokenKind::RootAssign => {
+                        | TokenKind::RootAssign
+                        | TokenKind::Dot => {
                             // So this seems to be the only case where we have a reference as an L-value.
                             // I think this means field access ONLY happens here if it happens at this stage,
                             // expression parsing will need to do its own thing separately
@@ -125,7 +126,7 @@ pub fn function_body_to_ast(
 
                                 ast.push(parse_function_call(
                                     token_stream,
-                                    &full_path,
+                                    &arg.id,
                                     &context,
                                     signature,
                                     string_table,
@@ -218,12 +219,12 @@ pub fn function_body_to_ast(
             }
 
             // Control Flow
-            TokenKind::For => {
+            TokenKind::Loop => {
                 token_stream.advance();
 
                 ast.push(create_loop(
                     token_stream,
-                    context.new_child_control_flow(ContextKind::Loop),
+                    context.new_child_control_flow(ContextKind::Loop, string_table),
                     warnings,
                     string_table,
                 )?);
@@ -235,7 +236,7 @@ pub fn function_body_to_ast(
                 // This is extending as it might get folded into a vec of nodes
                 ast.extend(create_branch(
                     token_stream,
-                    &mut context.new_child_control_flow(ContextKind::Branch),
+                    &mut context.new_child_control_flow(ContextKind::Branch, string_table),
                     warnings,
                     string_table,
                 )?);
@@ -263,7 +264,7 @@ pub fn function_body_to_ast(
             }
 
             TokenKind::Return => {
-                if !matches!(context.kind, ContextKind::Function) {
+                if context.returns.is_empty() && !matches!(context.kind, ContextKind::Function) {
                     return_rule_error!(
                         "Return statements can only be used inside functions",
                         token_stream
