@@ -70,7 +70,6 @@ pub enum Flag {
     Release, // Dev mode is default
     DisableWarnings,
     DisableTimers,
-    NoOutputFiles,
 }
 
 pub struct CompilerFrontend<'a> {

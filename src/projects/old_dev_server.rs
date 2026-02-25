@@ -164,13 +164,23 @@ fn handle_connection(
 
                 if has_been_modified || global_file_modified {
                     say!(Blue "Changes detected for ", #parsed_url);
-                    let messages = build::build_project(builder, path, &flags);
+                    let build_result = match build::build_project(builder.as_ref(), path, flags) {
+                        Ok(result) => result,
+                        Err(messages) => return Err(messages),
+                    };
 
-                    if messages.errors.is_empty() {
-                        status_line = "HTTP/1.1 205 Reset Content";
-                    } else {
-                        return Err(messages);
+                    if let Err(mut write_messages) = build::write_project_outputs(
+                        &build_result.project,
+                        &build::WriteOptions {
+                            output_root: config.entry_dir.join(&config.dev_folder),
+                        },
+                    ) {
+                        write_messages.warnings.extend(build_result.warnings);
+                        return Err(write_messages);
                     }
+
+                    messages.warnings.extend(build_result.warnings);
+                    status_line = "HTTP/1.1 205 Reset Content";
                 } else {
                     status_line = "HTTP/1.1 200 OK";
                 }

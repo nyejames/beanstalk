@@ -42,7 +42,7 @@ impl Default for DevServerOptions {
 }
 
 pub fn run_dev_server(
-    builder: Box<dyn ProjectBuilder + Send + Sync>,
+    builder: Box<dyn ProjectBuilder + Send>,
     entry_path: &str,
     flags: &[Flag],
     options: DevServerOptions,
@@ -55,11 +55,10 @@ pub fn run_dev_server(
     let output_dir = watch_root.join("dev");
 
     let state = Arc::new(DevServerState::new(output_dir.clone()));
-    let executor =
-        Arc::new(ProjectBuildExecutor::new(builder)) as Arc<dyn build_loop::DevBuildExecutor>;
+    let mut executor = ProjectBuildExecutor::new(builder);
 
     let initial_build_report =
-        build_loop::run_single_build_cycle(&state, executor.as_ref(), &entry_file, flags);
+        build_loop::run_single_build_cycle(&state, &mut executor, &entry_file, flags);
     if initial_build_report.build_ok {
         say!(
             Green "Initial dev build succeeded. Reload broadcast to ",
@@ -96,7 +95,7 @@ pub fn run_dev_server(
     );
 
     let watch_state = Arc::clone(&state);
-    let watch_executor = Arc::clone(&executor);
+    let watch_executor = Box::new(executor) as Box<dyn build_loop::DevBuildExecutor>;
     let watch_entry_file = entry_file.clone();
     let watch_flags = flags.to_vec();
     let watch_root_clone = watch_root.clone();

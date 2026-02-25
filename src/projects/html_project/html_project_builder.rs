@@ -93,8 +93,15 @@ fn compile_js_module(
 
     let js_module = lower_hir_to_js(hir_module, string_table, js_lowering_config)?;
 
+    // Emit an explicit artifact path so the core writer can place this output under any root.
+    let output_file_name = entry_point
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .filter(|stem| !stem.is_empty())
+        .unwrap_or("main");
+
     output_files.push(OutputFile::new(
-        entry_point.to_path_buf(),
+        std::path::PathBuf::from(format!("{output_file_name}.js")),
         FileKind::Js(js_module.source),
     ));
 

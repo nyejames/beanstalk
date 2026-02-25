@@ -25,11 +25,7 @@ pub fn run_all_test_cases(show_warnings: bool) {
     let failure_dir = test_cases_dir.join("failure");
 
     // Flags set for all the integration tests
-    let flags = vec![
-        Flag::DisableTimers,
-        Flag::DisableWarnings,
-        Flag::NoOutputFiles,
-    ];
+    let flags = vec![Flag::DisableTimers, Flag::DisableWarnings];
 
     let mut total_tests = 0;
     let mut passed_tests = 0;
@@ -51,27 +47,32 @@ pub fn run_all_test_cases(show_warnings: bool) {
                     // println!("\n------------------------------------------");
                     println!("  {}", file_name);
 
-                    let html_project_builder = Box::new(HtmlProjectBuilder::new());
+                    let html_project_builder = HtmlProjectBuilder::new();
+                    let path_string = path.to_string_lossy().to_string();
 
-                    let messages =
-                        build_project(html_project_builder, INTEGRATION_TESTS_PATH, &flags);
-
-                    if messages.errors.is_empty() {
-                        say!(Green "✓ PASS");
-                        if !messages.warnings.is_empty() {
-                            say!(Yellow "With ", messages.warnings.len().to_string(), " warnings");
-                            if show_warnings {
-                                for warning in messages.warnings {
-                                    print_formatted_warning(warning);
+                    match build_project(&html_project_builder, &path_string, &flags) {
+                        Ok(build_result) => {
+                            say!(Green "✓ PASS");
+                            if !build_result.warnings.is_empty() {
+                                say!(
+                                    Yellow "With ",
+                                    build_result.warnings.len().to_string(),
+                                    " warnings"
+                                );
+                                if show_warnings {
+                                    for warning in build_result.warnings {
+                                        print_formatted_warning(warning);
+                                    }
                                 }
                             }
+                            passed_tests += 1;
                         }
-                        passed_tests += 1;
-                    } else {
-                        say!(Red "✗ FAIL");
-                        failed_tests += 1;
-                        for error in messages.errors {
-                            print_formatted_error(error);
+                        Err(messages) => {
+                            say!(Red "✗ FAIL");
+                            failed_tests += 1;
+                            for error in messages.errors {
+                                print_formatted_error(error);
+                            }
                         }
                     }
                 }
@@ -96,34 +97,39 @@ pub fn run_all_test_cases(show_warnings: bool) {
 
                     // println!("\n------------------------------------------");
                     println!("  {}", file_name);
-                    let html_project_builder = Box::new(HtmlProjectBuilder::new());
+                    let html_project_builder = HtmlProjectBuilder::new();
+                    let path_string = path.to_string_lossy().to_string();
 
-                    let messages =
-                        build_project(html_project_builder, INTEGRATION_TESTS_PATH, &flags);
-
-                    if messages.errors.is_empty() {
-                        say!(Yellow "✗ UNEXPECTED SUCCESS");
-                        unexpected_successes += 1;
-                        if !messages.warnings.is_empty() {
-                            say!(Yellow "With ", messages.warnings.len().to_string(), " warnings");
-                            if show_warnings {
-                                for warning in messages.warnings {
-                                    print_formatted_warning(warning);
+                    match build_project(&html_project_builder, &path_string, &flags) {
+                        Ok(build_result) => {
+                            say!(Yellow "✗ UNEXPECTED SUCCESS");
+                            unexpected_successes += 1;
+                            if !build_result.warnings.is_empty() {
+                                say!(
+                                    Yellow "With ",
+                                    build_result.warnings.len().to_string(),
+                                    " warnings"
+                                );
+                                if show_warnings {
+                                    for warning in build_result.warnings {
+                                        print_formatted_warning(warning);
+                                    }
                                 }
                             }
                         }
-                    } else {
-                        say!(Green "✓ EXPECTED FAILURE");
-                        expected_failures += 1;
-                        for error in messages.errors {
-                            say!(Yellow error_type_to_str(&error.error_type));
-                            // print_formatted_error(error);
-                        }
-                        if !messages.warnings.is_empty() {
-                            say!("With ", messages.warnings.len().to_string(), " warnings");
-                            if show_warnings {
-                                for warning in messages.warnings {
-                                    print_formatted_warning(warning);
+                        Err(messages) => {
+                            say!(Green "✓ EXPECTED FAILURE");
+                            expected_failures += 1;
+                            for error in messages.errors {
+                                say!(Yellow error_type_to_str(&error.error_type));
+                                // print_formatted_error(error);
+                            }
+                            if !messages.warnings.is_empty() {
+                                say!("With ", messages.warnings.len().to_string(), " warnings");
+                                if show_warnings {
+                                    for warning in messages.warnings {
+                                        print_formatted_warning(warning);
+                                    }
                                 }
                             }
                         }

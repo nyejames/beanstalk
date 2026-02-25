@@ -1,3 +1,9 @@
+//! Core build orchestration and output writing for Beanstalk projects.
+//!
+//! This module provides the canonical project build flow (`build_project`) and a dedicated output
+//! writer (`write_project_outputs`). Build tools can compile once and choose where artifacts are
+//! written without reimplementing frontend/backend orchestration.
+
 use crate::build_system::create_project_modules::{ExternalImport, compile_project_frontend};
 use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::analysis::borrow_checker::BorrowCheckReport;
@@ -7,10 +13,9 @@ use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::hir::hir_nodes::HirModule;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::projects::settings::Config;
-use crate::return_messages_with_err;
 use saying::say;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Component, Path, PathBuf};
 use std::time::Instant;
 
 pub struct Module {
@@ -44,7 +49,7 @@ pub struct InputFile {
 }
 
 pub struct OutputFile {
-    pub full_file_path: PathBuf,
+    relative_output_path: PathBuf,
     file_kind: FileKind,
 }
 
@@ -60,188 +65,226 @@ pub enum FileKind {
 }
 
 impl OutputFile {
-    pub fn new(full_file_path: PathBuf, file_kind: FileKind) -> Self {
+    /// Create an output artifact with an explicit relative path under the chosen output root.
+    pub fn new(relative_output_path: PathBuf, file_kind: FileKind) -> Self {
         Self {
-            full_file_path,
+            relative_output_path,
             file_kind,
         }
+    }
+
+    /// Relative output path including any desired extension.
+    pub fn relative_output_path(&self) -> &Path {
+        &self.relative_output_path
     }
 
     pub(crate) fn file_kind(&self) -> &FileKind {
         &self.file_kind
     }
 }
+
 pub struct Project {
     pub output_files: Vec<OutputFile>,
     pub warnings: Vec<CompilerWarning>,
 }
 
-/// Build a Beanstalk project with an explicit target specification
+/// Result of a successful core build orchestration run.
+pub struct BuildResult {
+    pub project: Project,
+    pub config: Config,
+    pub warnings: Vec<CompilerWarning>,
+}
+
+/// Options for writing a compiled project to disk.
+pub struct WriteOptions {
+    pub output_root: PathBuf,
+}
+
+/// Build a Beanstalk project by running path validation, frontend compilation, and backend build.
 ///
-/// Extended version of [`build_project`] that allows overriding the automatic
-/// target detection with a specific build target. This is useful for:
-/// - Cross-compilation scenarios
-/// - Testing different target configurations
-/// - Build system integration with explicit target control
-///
-/// ## Parameters
-///
-/// - `entry_path`: Path to the main source file or project directory
-/// - `release_build`: Whether to enable release optimizations
-/// - `flags`: Compilation flags for debugging and feature control
-/// - `target_override`: Optional explicit target specification
-///
-/// ## Target Override
-///
-/// When `target_override` is provided, it bypasses automatic target detection:
-/// - `Some(BuildTarget::HtmlProject)`: Force HTML/WASM output
-/// - `Some(BuildTarget::Native { .. })`: Force native WASM output
-/// - `None`: Use automatic target detection based on project structure
+/// This function intentionally does not write output files so callers can decide where artifacts
+/// should be emitted.
 pub fn build_project(
-    project_builder: Box<dyn ProjectBuilder>,
+    project_builder: &dyn ProjectBuilder,
     entry_path: &str,
     flags: &[Flag],
-) -> CompilerMessages {
-    let _time = Instant::now();
-
-    // For early returns before using the compiler_frontend messages from the actual compiler_frontend pipeline later
-    let mut messages = CompilerMessages::new();
-
-    let valid_path = match check_if_valid_path(entry_path) {
-        Ok(path) => path,
-        Err(e) => {
-            return_messages_with_err!(messages, e);
-        }
-    };
-
-    let current_dir = match std::env::current_dir() {
-        Ok(dir) => dir,
-        Err(e) => {
-            let err =
-                CompilerError::compiler_error(format!("Could not get the current directory: {e}"));
-            return_messages_with_err!(messages, err);
-        }
-    };
+) -> Result<BuildResult, CompilerMessages> {
+    let valid_path = check_if_valid_path(entry_path).map_err(compiler_messages_from_error)?;
 
     say!("\nCompiling Project");
+
     // --------------------------------------------
     //   PERFORM THE CORE COMPILER FRONTEND BUILD
     // --------------------------------------------
-    // This discovers all the modules, parses the config
-    // and compiles each module to an HirModule for the backend to use
+    // This discovers all the modules, parses the config,
+    // and compiles each module to HIR for backend lowering.
     let mut config = Config::new(valid_path);
-    let modules = match compile_project_frontend(&mut config, flags) {
-        Ok(modules) => modules,
-        Err(e) => return e,
-    };
+    let modules = compile_project_frontend(&mut config, flags)?;
+    let mut warnings = collect_frontend_warnings(&modules);
 
     // --------------------------------------------
     // BUILD PROJECT USING THE APPROPRIATE BUILDER
     // --------------------------------------------
     let start = Instant::now();
-    let output_files = match project_builder.build_backend(modules, &config, flags) {
+    let project = match project_builder.build_backend(modules, &config, flags) {
         Ok(project) => {
             let duration = start.elapsed();
-
-            // Show build results
             say!(
                 "\nBuilt ",
                 Blue project.output_files.len(),
                 Reset " files successfully in: ",
                 Green Bold #duration
             );
-
-            project.output_files
+            project
         }
-
-        Err(compiler_messages) => return compiler_messages,
+        Err(compiler_messages) => return Err(compiler_messages),
     };
 
-    // If the NoOutputFiles flag is set, don't write any files
-    if flags.contains(&Flag::NoOutputFiles) {
-        return messages;
-    }
+    warnings.extend(project.warnings.iter().cloned());
 
-    // Now write the output files returned from the builder
-    for output_file in output_files {
-        // A safety check to make sure the file name has been set
-        // This is to avoid accidentally overwriting things by mistake
-        if output_file.full_file_path == PathBuf::new() {
-            let err = CompilerError::compiler_error("File did not have a name or path set");
-            return_messages_with_err!(messages, err);
-        }
-
-        let full_file_path = current_dir.clone().join(output_file.full_file_path);
-
-        // TODO: need to think more about guards and check for where these files are being written
-        // And prevent build systems from writing things to weird places or doing unexpected things.
-        // TODO: For this the full file path needs to be sanitised
-        // The places a project builder can build to should be sandboxed and not allowed to write to any parent of the current as a minimum
-
-        // Otherwise create the file and fill it with the code
-        if let Err(e) = match output_file.file_kind {
-            FileKind::NotBuilt => continue,
-            FileKind::Js(content) => {
-                let file = full_file_path.with_extension("js");
-                fs::write(file, content)
-            }
-            FileKind::Wasm(content) => {
-                let file = full_file_path.with_extension("wasm");
-                fs::write(file, content)
-            }
-            FileKind::Directory => fs::create_dir_all(&full_file_path),
-            FileKind::Html(content) => {
-                let file = full_file_path.with_extension("html");
-                fs::write(file, content)
-            }
-        } {
-            let err = CompilerError::compiler_error(format!("Error writing file: {e}"));
-            return_messages_with_err!(messages, err);
-        };
-    }
-
-    messages
+    Ok(BuildResult {
+        project,
+        config,
+        warnings,
+    })
 }
 
-// fn remove_old_files(output_dir: &Path) -> Result<(), Vec<CompileError>> {
-//     // Any HTML files in the output dir not on the list of files to compile should be deleted
-//     let output_dir = match release_build {
-//         true => PathBuf::from(&entry_dir).join(&project_config.release_folder),
-//         false => PathBuf::from(&entry_dir).join(&project_config.dev_folder),
-//     };
-//
-//     let dir_files = match fs::read_dir(&output_dir) {
-//         Ok(dir) => dir,
-//         Err(e) => return_file_error!(output_dir, "Error reading output_dir directory: {:?}", e),
-//     };
-//
-//     for file in dir_files {
-//         let file = match file {
-//             Ok(f) => f,
-//             Err(e) => return_file_error!(
-//                 output_dir,
-//                 "Error reading file in when trying to delete old files: {:?}",
-//                 e
-//             ),
-//         };
-//
-//         let file_path = file.path();
-//
-//         if (
-//             // These checks are mostly here for safety to avoid accidentally deleting files
-//             (  file_path.extension() == Some("html".as_ref())
-//                 || file_path.extension() == Some("wasm".as_ref()))
-//                 || file_path.extension() == Some("js".as_ref())  )
-//
-//             // If the file is not in the source code to parse, it's unnecessary
-//             && !tokenised_modules.iter().any(|f| f.output_path.with_extension("") == file_path.with_extension(""))
-//         {
-//             match fs::remove_file(&file_path) {
-//                 Ok(_) => {
-//                     blue_ln!("Deleted unused file: {:?}", file_path.file_name());
-//                 }
-//                 Err(e) => return_file_error!(file_path, "Error deleting file: {:?}", e),
-//             }
-//         }
-//     }
-// }
+/// Write built project artifacts to the provided output root.
+///
+/// Artifact paths are explicit and must already include any desired extension.
+pub fn write_project_outputs(
+    project: &Project,
+    options: &WriteOptions,
+) -> Result<(), CompilerMessages> {
+    fs::create_dir_all(&options.output_root).map_err(|error| {
+        compiler_messages_from_error(CompilerError::file_error(
+            &options.output_root,
+            format!(
+                "Failed to create output root '{}': {error}",
+                options.output_root.display()
+            ),
+        ))
+    })?;
+
+    for output_file in &project.output_files {
+        if matches!(output_file.file_kind(), FileKind::NotBuilt) {
+            continue;
+        }
+
+        validate_relative_output_path(output_file.relative_output_path())?;
+
+        let destination = options.output_root.join(output_file.relative_output_path());
+
+        match output_file.file_kind() {
+            FileKind::NotBuilt => {}
+            FileKind::Directory => {
+                fs::create_dir_all(&destination).map_err(|error| {
+                    compiler_messages_from_error(CompilerError::file_error(
+                        &destination,
+                        format!(
+                            "Failed to create output directory '{}': {error}",
+                            destination.display()
+                        ),
+                    ))
+                })?;
+            }
+            FileKind::Js(content) | FileKind::Html(content) => {
+                create_parent_dir_if_needed(&destination)?;
+                fs::write(&destination, content).map_err(|error| {
+                    compiler_messages_from_error(CompilerError::file_error(
+                        &destination,
+                        format!(
+                            "Failed to write output file '{}': {error}",
+                            destination.display()
+                        ),
+                    ))
+                })?;
+            }
+            FileKind::Wasm(bytes) => {
+                create_parent_dir_if_needed(&destination)?;
+                fs::write(&destination, bytes).map_err(|error| {
+                    compiler_messages_from_error(CompilerError::file_error(
+                        &destination,
+                        format!(
+                            "Failed to write output file '{}': {error}",
+                            destination.display()
+                        ),
+                    ))
+                })?;
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn collect_frontend_warnings(modules: &[Module]) -> Vec<CompilerWarning> {
+    let mut warnings = Vec::new();
+    for module in modules {
+        warnings.extend(module.warnings.iter().cloned());
+    }
+    warnings
+}
+
+fn create_parent_dir_if_needed(path: &Path) -> Result<(), CompilerMessages> {
+    let Some(parent) = path.parent() else {
+        return Ok(());
+    };
+
+    fs::create_dir_all(parent).map_err(|error| {
+        compiler_messages_from_error(CompilerError::file_error(
+            parent,
+            format!(
+                "Failed to create parent directory '{}': {error}",
+                parent.display()
+            ),
+        ))
+    })
+}
+
+fn validate_relative_output_path(relative_output_path: &Path) -> Result<(), CompilerMessages> {
+    if relative_output_path.as_os_str().is_empty() {
+        return Err(compiler_messages_from_error(CompilerError::file_error(
+            relative_output_path,
+            "Output path cannot be empty for built artifacts.",
+        )));
+    }
+
+    if relative_output_path.is_absolute() {
+        return Err(compiler_messages_from_error(CompilerError::file_error(
+            relative_output_path,
+            "Output path must be relative, not absolute.",
+        )));
+    }
+
+    for component in relative_output_path.components() {
+        match component {
+            Component::Normal(_) => {}
+            Component::ParentDir => {
+                return Err(compiler_messages_from_error(CompilerError::file_error(
+                    relative_output_path,
+                    "Output path cannot contain '..' traversal components.",
+                )));
+            }
+            Component::CurDir | Component::RootDir | Component::Prefix(_) => {
+                return Err(compiler_messages_from_error(CompilerError::file_error(
+                    relative_output_path,
+                    "Output path must only contain normal path components.",
+                )));
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn compiler_messages_from_error(error: CompilerError) -> CompilerMessages {
+    CompilerMessages {
+        errors: vec![error],
+        warnings: Vec::new(),
+    }
+}
+
+#[cfg(test)]
+#[path = "build_tests.rs"]
+mod tests;

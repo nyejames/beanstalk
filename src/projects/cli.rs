@@ -5,6 +5,7 @@
 
 use crate::build_system::build;
 use crate::compiler_frontend::Flag;
+use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::display_messages::print_compiler_messages;
 use crate::compiler_tests::integration_test_runner::run_all_test_cases;
 use crate::projects::dev_server::{self, DevServerOptions};
@@ -84,9 +85,42 @@ pub fn start_cli() {
         }
 
         Command::Build(path) => {
-            let html_project_builder = Box::new(HtmlProjectBuilder::new());
-            let messages = build::build_project(html_project_builder, &path, &flags);
-            print_compiler_messages(messages);
+            let html_project_builder = HtmlProjectBuilder::new();
+            match build::build_project(&html_project_builder, &path, &flags) {
+                Ok(build_result) => {
+                    let output_root = match std::env::current_dir() {
+                        Ok(path) => path,
+                        Err(error) => {
+                            print_compiler_messages(CompilerMessages {
+                                errors: vec![CompilerError::compiler_error(format!(
+                                    "Could not resolve current directory for build outputs: {error}"
+                                ))],
+                                warnings: build_result.warnings,
+                            });
+                            return;
+                        }
+                    };
+
+                    let write_result = build::write_project_outputs(
+                        &build_result.project,
+                        &build::WriteOptions { output_root },
+                    );
+
+                    match write_result {
+                        Ok(()) => {
+                            print_compiler_messages(CompilerMessages {
+                                errors: Vec::new(),
+                                warnings: build_result.warnings,
+                            });
+                        }
+                        Err(mut messages) => {
+                            messages.warnings.extend(build_result.warnings);
+                            print_compiler_messages(messages);
+                        }
+                    }
+                }
+                Err(messages) => print_compiler_messages(messages),
+            }
         }
 
         // Command::Run(path) => {

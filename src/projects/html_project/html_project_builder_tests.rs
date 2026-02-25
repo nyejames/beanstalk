@@ -78,7 +78,10 @@ fn build_backend_emits_single_js_output_file() {
         .expect("build_backend should succeed");
 
     assert_eq!(project.output_files.len(), 1);
-    assert_eq!(project.output_files[0].full_file_path, entry_path);
+    assert_eq!(
+        project.output_files[0].relative_output_path(),
+        PathBuf::from("main.js")
+    );
 }
 
 #[test]

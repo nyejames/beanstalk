@@ -1,10 +1,9 @@
 //! Build execution and watch-triggered rebuild coordination for the dev server.
 //!
-//! This module connects the shared compiler pipeline to the dev server state, writes build
-//! artifacts into the dev output directory, and broadcasts reload events after each build attempt.
+//! This module delegates compilation and artifact writing to the core build APIs, then translates
+//! build outcomes into dev-server state updates and SSE reload broadcasts.
 
-use crate::build_system::build::{FileKind, OutputFile, Project, ProjectBuilder};
-use crate::build_system::create_project_modules::compile_project_frontend;
+use crate::build_system::build::{self, BuildResult, ProjectBuilder, WriteOptions};
 use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::compiler_errors::{
     CompilerError, CompilerMessages, ErrorType, error_type_to_str,
@@ -15,11 +14,8 @@ use crate::projects::dev_server::error_page::{
 use crate::projects::dev_server::sse;
 use crate::projects::dev_server::state::DevServerState;
 use crate::projects::dev_server::watch;
-use crate::projects::settings::Config;
 use saying::say;
 use std::collections::HashMap;
-use std::ffi::OsStr;
-use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -39,40 +35,58 @@ struct BuildOutcome {
     error_title: Option<String>,
 }
 
-pub trait DevBuildExecutor: Send + Sync {
-    fn build_project(&self, entry_file: &Path, flags: &[Flag])
-    -> Result<Project, CompilerMessages>;
+/// Adapter for build execution used by the dev loop.
+///
+/// Keeping this contract small makes the watch/build coordination testable while still delegating
+/// real work to the core build APIs.
+pub trait DevBuildExecutor: Send {
+    fn build_and_write(
+        &mut self,
+        entry_file: &Path,
+        flags: &[Flag],
+        output_dir: &Path,
+    ) -> Result<BuildResult, CompilerMessages>;
 }
 
 pub struct ProjectBuildExecutor {
-    builder: Box<dyn ProjectBuilder + Send + Sync>,
+    builder: Box<dyn ProjectBuilder + Send>,
 }
 
 impl ProjectBuildExecutor {
-    pub fn new(builder: Box<dyn ProjectBuilder + Send + Sync>) -> Self {
+    pub fn new(builder: Box<dyn ProjectBuilder + Send>) -> Self {
         Self { builder }
     }
 }
 
 impl DevBuildExecutor for ProjectBuildExecutor {
-    fn build_project(
-        &self,
+    fn build_and_write(
+        &mut self,
         entry_file: &Path,
         flags: &[Flag],
-    ) -> Result<Project, CompilerMessages> {
-        let mut config = Config::new(entry_file.to_path_buf());
-        let modules = compile_project_frontend(&mut config, flags)?;
-        self.builder.build_backend(modules, &config, flags)
-    }
-}
+        output_dir: &Path,
+    ) -> Result<BuildResult, CompilerMessages> {
+        let entry_path = entry_file.to_str().ok_or_else(|| {
+            dev_server_error_messages(
+                entry_file,
+                "Dev server entry path contains invalid UTF-8 and cannot be compiled.",
+            )
+        })?;
 
-struct WriteOutputResult {
-    html_entries: Vec<PathBuf>,
+        let build_result = build::build_project(self.builder.as_ref(), entry_path, flags)?;
+        build::write_project_outputs(
+            &build_result.project,
+            &WriteOptions {
+                output_root: output_dir.to_path_buf(),
+            },
+        )?;
+
+        Ok(build_result)
+    }
 }
 
 pub fn run_single_build_cycle(
     state: &Arc<DevServerState>,
-    executor: &dyn DevBuildExecutor,
+    executor: &mut dyn DevBuildExecutor,
     entry_file: &Path,
     flags: &[Flag],
 ) -> BuildCycleReport {
@@ -120,7 +134,7 @@ pub fn run_single_build_cycle(
 
 pub fn run_builds_until_stable(
     state: &Arc<DevServerState>,
-    executor: &dyn DevBuildExecutor,
+    executor: &mut dyn DevBuildExecutor,
     entry_file: &Path,
     flags: &[Flag],
     watch_root: &Path,
@@ -167,7 +181,7 @@ pub fn run_builds_until_stable(
 
 pub fn run_watch_build_loop(
     state: Arc<DevServerState>,
-    executor: Arc<dyn DevBuildExecutor>,
+    mut executor: Box<dyn DevBuildExecutor>,
     entry_file: PathBuf,
     flags: Vec<Flag>,
     watch_root: PathBuf,
@@ -217,7 +231,7 @@ pub fn run_watch_build_loop(
 
         if let Err(error) = run_builds_until_stable(
             &state,
-            executor.as_ref(),
+            executor.as_mut(),
             &entry_file,
             &flags,
             &watch_root,
@@ -235,138 +249,74 @@ pub fn run_watch_build_loop(
 }
 
 fn build_once(
-    executor: &dyn DevBuildExecutor,
+    executor: &mut dyn DevBuildExecutor,
     entry_file: &Path,
     flags: &[Flag],
     output_dir: &Path,
 ) -> BuildOutcome {
-    let project = match executor.build_project(entry_file, flags) {
-        Ok(project) => project,
+    let build_result = match executor.build_and_write(entry_file, flags, output_dir) {
+        Ok(build_result) => build_result,
         Err(messages) => {
-            let summary = format_compiler_messages(&messages);
             return BuildOutcome {
                 build_succeeded: false,
                 entry_page_rel: None,
-                diagnostics_summary: summary,
+                diagnostics_summary: format_compiler_messages(&messages),
                 error_title: Some(String::from("Build Failed")),
             };
         }
     };
 
-    let warnings_summary = project
+    let warnings_summary = build_result
         .warnings
         .iter()
         .map(|warning| warning.msg.clone())
         .collect::<Vec<String>>()
         .join("\n");
 
-    match write_output_files(&project.output_files, output_dir) {
-        Ok(write_result) => {
-            if write_result.html_entries.len() == 1 {
-                let diagnostics_summary = if warnings_summary.is_empty() {
-                    String::from("Build succeeded.")
-                } else {
-                    format!("Build succeeded with warnings:\n{warnings_summary}")
-                };
+    let html_entries = collect_html_entries(&build_result);
+    if html_entries.len() == 1 {
+        let diagnostics_summary = if warnings_summary.is_empty() {
+            String::from("Build succeeded.")
+        } else {
+            format!("Build succeeded with warnings:\n{warnings_summary}")
+        };
 
-                BuildOutcome {
-                    build_succeeded: true,
-                    entry_page_rel: write_result.html_entries.first().cloned(),
-                    diagnostics_summary,
-                    error_title: None,
-                }
-            } else if write_result.html_entries.is_empty() {
-                // Phase-1 serves a single HTML page at `/`, so this is a runtime dev-server failure.
-                let details = "Build completed, but no HTML entry was emitted. \
-                               Single-file dev mode currently requires exactly one HTML output."
-                    .to_string();
-                BuildOutcome {
-                    build_succeeded: false,
-                    entry_page_rel: None,
-                    diagnostics_summary: details,
-                    error_title: Some(String::from("Missing HTML Entry")),
-                }
-            } else {
-                let details = format!(
-                    "Build emitted {} HTML files, but single-file dev mode requires exactly one HTML entry.",
-                    write_result.html_entries.len()
-                );
-                BuildOutcome {
-                    build_succeeded: false,
-                    entry_page_rel: None,
-                    diagnostics_summary: details,
-                    error_title: Some(String::from("Multiple HTML Entries")),
-                }
-            }
+        BuildOutcome {
+            build_succeeded: true,
+            entry_page_rel: html_entries.first().cloned(),
+            diagnostics_summary,
+            error_title: None,
         }
-        Err(error) => {
-            let details = error.to_string();
-            BuildOutcome {
-                build_succeeded: false,
-                entry_page_rel: None,
-                diagnostics_summary: details,
-                error_title: Some(String::from("Output Write Failed")),
-            }
+    } else if html_entries.is_empty() {
+        BuildOutcome {
+            build_succeeded: false,
+            entry_page_rel: None,
+            diagnostics_summary: String::from(
+                "Build completed, but no HTML entry was emitted. Single-file dev mode currently requires exactly one HTML output.",
+            ),
+            error_title: Some(String::from("Missing HTML Entry")),
         }
-    }
-}
-
-fn write_output_files(
-    output_files: &[OutputFile],
-    output_dir: &Path,
-) -> io::Result<WriteOutputResult> {
-    fs::create_dir_all(output_dir)?;
-    let mut html_entries = Vec::new();
-
-    for output_file in output_files {
-        let stem = safe_output_stem(&output_file.full_file_path);
-
-        match output_file.file_kind() {
-            FileKind::NotBuilt => {}
-            FileKind::Directory => {
-                fs::create_dir_all(output_dir.join(stem))?;
-            }
-            FileKind::Js(source) => {
-                fs::write(output_dir.join(format!("{stem}.js")), source)?;
-            }
-            FileKind::Wasm(bytes) => {
-                fs::write(output_dir.join(format!("{stem}.wasm")), bytes)?;
-            }
-            FileKind::Html(markup) => {
-                let relative_path = PathBuf::from(format!("{stem}.html"));
-                fs::write(output_dir.join(&relative_path), markup)?;
-                html_entries.push(relative_path);
-            }
-        }
-    }
-
-    Ok(WriteOutputResult { html_entries })
-}
-
-fn safe_output_stem(path: &Path) -> String {
-    let raw_stem = path
-        .file_stem()
-        .and_then(OsStr::to_str)
-        .filter(|stem| !stem.is_empty())
-        .unwrap_or("output");
-
-    // Keep generated filenames predictable and filesystem-safe across platforms.
-    let sanitized: String = raw_stem
-        .chars()
-        .map(|ch| {
-            if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' {
-                ch
-            } else {
-                '_'
-            }
-        })
-        .collect();
-
-    if sanitized.is_empty() {
-        String::from("output")
     } else {
-        sanitized
+        BuildOutcome {
+            build_succeeded: false,
+            entry_page_rel: None,
+            diagnostics_summary: format!(
+                "Build emitted {} HTML files, but single-file dev mode requires exactly one HTML entry.",
+                html_entries.len()
+            ),
+            error_title: Some(String::from("Multiple HTML Entries")),
+        }
     }
+}
+
+fn collect_html_entries(build_result: &BuildResult) -> Vec<PathBuf> {
+    let mut html_entries = Vec::new();
+    for output_file in &build_result.project.output_files {
+        if matches!(output_file.file_kind(), build::FileKind::Html(_)) {
+            html_entries.push(output_file.relative_output_path().to_path_buf());
+        }
+    }
+    html_entries
 }
 
 pub fn dev_server_error_messages(path: &Path, msg: impl Into<String>) -> CompilerMessages {
