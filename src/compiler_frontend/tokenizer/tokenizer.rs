@@ -576,14 +576,17 @@ pub(crate) fn keyword_or_variable(
             "return" => return_token!(TokenKind::Return, stream),
             "yield" => return_token!(TokenKind::Yield, stream),
             "else" => return_token!(TokenKind::Else, stream),
-            "loop" => return_token!(TokenKind::Loop, stream),
-            "break" => return_token!(TokenKind::Break, stream),
-            "continue" => return_token!(TokenKind::Continue, stream),
-            "defer" => return_token!(TokenKind::Defer, stream),
-            "in" => return_token!(TokenKind::In, stream),
             "as" => return_token!(TokenKind::As, stream),
             "copy" => return_token!(TokenKind::Copy, stream),
-            "to" => return_token!(TokenKind::Range, stream),
+
+            // Loops
+            "loop" => return_token!(TokenKind::Loop, stream),
+            "in" => return_token!(TokenKind::In, stream),
+            "to" => return_token!(TokenKind::ExclusiveRange, stream),
+            "upto" => return_token!(TokenKind::InclusiveRange, stream),
+            "by" => return_token!(TokenKind::InclusiveRange, stream),
+            "break" => return_token!(TokenKind::Break, stream),
+            "continue" => return_token!(TokenKind::Continue, stream),
 
             // Logical
             "is" => return_token!(TokenKind::Is, stream),

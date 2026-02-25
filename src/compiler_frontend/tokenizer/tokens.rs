@@ -440,16 +440,19 @@ pub enum TokenKind {
     If,
     Else,
     ElseIf,
+    Return,
+
+    // Loops
     Loop,
     In,
+    By,
     Break,
     Continue,
-    Return,
-    Defer,
+    ExclusiveRange, // to
+    InclusiveRange, // upto
 
     // Pattern matching
     Wildcard, // _
-    Range,    // to
 
     // Memory Management
     Copy,

@@ -727,7 +727,7 @@ pub fn create_expression(
                 });
             }
 
-            TokenKind::Range => expression.push(AstNode {
+            TokenKind::ExclusiveRange => expression.push(AstNode {
                 kind: NodeKind::Operator(Operator::Range),
                 location: token_stream.current_location(),
                 scope: context.scope.clone(),
