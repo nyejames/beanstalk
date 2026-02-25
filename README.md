@@ -3,13 +3,13 @@
 # Beanstalk
 
 <p><em>
-  A high level language that prioritises safety, simplicity and string building.
+  A high level language that prioritises safety, readability and scalability.
 </em></p>
 
 # 🌱
 
 <p>⚠️ This is a work in progress compiler ⚠️</p> 
-<p>The compiler backend is still under active development and evolving rapidly. See CONTRIBUTING.md and get in touch if you're inspired to help out</p>
+<p>The compiler backend is still under active development and evolving rapidly. See CONTRIBUTING.md if you're inspired to help out!</p>
 </div>
 <br>
 <br>
@@ -19,10 +19,8 @@
 ## First Class Template Syntax
 
 </div>
-<p>Beanstalk is designed for the web. It originated with the desire to never have to use TypeScript, web frameworks or bloated web ecosystems again.</p>
+<p>Beanstalk is designed first for the web. It originated with the desire to never have to use TypeScript, web frameworks or bloated web ecosystems again.</p>
 <p>Beanstalk is an attempt to make something fresh and carefully designed from the ground up.</p>
-<br>
-<strong>An ambitious language for the future</strong>
 <br>
 <br>
 
@@ -74,14 +72,13 @@ post = PostGenerator.create_post(date, [:
 
 </div>
 
-- String templates that can double up as a tiny compile time HTML/markup engine or anything else you want
-- A stable JS backend/build system for static page generation and JS output. Wasm remains the long-term primary target for portability and web integration
-- Minimal and coherent syntax for maximum readability
+- String templates that can double up as a tiny compile time HTML/markup engine or anything else you want. Perfect for UI generation and string formatting.
+- Readability-first syntax. As modern, minimal, coherent and consistent as possible.
 - A modular compiler with Fast compile times for snappy tooling and fast development builds
 - An integrated build system for web projects and beyond
 - Simple, static and strong type system
 - Clean and deterministic error handling
-- A memory model that can allow for future static optimizations – to the point of completely eliding the GC in the future when desired.
+- A memory model that can allow for future static optimizations – to the point of completely eliding the GC when desired.
 
 <div align="center">
 
@@ -90,19 +87,19 @@ post = PostGenerator.create_post(date, [:
 </div>
 <strong>
 <li>
-<a href="https://github.com/nyejames/beanstalk/blob/main/docs/Beanstalk%20Language%20Overview.md">The language overview</a>
+<a href="https://github.com/nyejames/beanstalk/blob/main/docs/Beanstalk%20Language%20Overview.md">The language</a>
 </li>
 <br>
 <li>
-<a href="https://github.com/nyejames/beanstalk/blob/main/docs/Beanstalk%20Compiler%20Design%20Overview.md">An Oveview of the Compiler</a>
-</li>
-<br>
-<li>
-<a href="https://github.com/nyejames/beanstalk/blob/main/docs/Beanstalk%20Compiler%20Codebase%20Style%20Guide.md">Codebase Style Guide</a>
+<a href="https://github.com/nyejames/beanstalk/blob/main/docs/Beanstalk%20Compiler%20Design%20Overview.md">An Overview of the Compiler</a>
 </li>
 <br>
 <li>
 <a href="https://github.com/nyejames/beanstalk/blob/main/docs/Beanstalk%20Memory%20Management.md">A breakdown of the memory management strategy</a>
+</li>
+<br>
+<li>
+<a href="https://github.com/nyejames/beanstalk/blob/main/docs/Beanstalk%20Compiler%20Codebase%20Style%20Guide.md">Codebase Style Guide</a>
 </li>
 </strong>
 
@@ -120,7 +117,7 @@ post = PostGenerator.create_post(date, [:
 
 </div>
 
-A full backend refactor of the compiler is underway.
-Current focus: stabilising the JS backend/build system for static page generation and JS output; syntax and some constructs (e.g., closures, interfaces, async) are still evolving before full pipeline support.
+Current focus: stabilising the JS backend/build system for static page generation and JS output.
+The syntax and some constructs (e.g., closures, interfaces, async) are still evolving in their design before full pipeline support.
 
 <br>
