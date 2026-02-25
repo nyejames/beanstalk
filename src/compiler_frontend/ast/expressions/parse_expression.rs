@@ -246,7 +246,7 @@ pub fn create_expression(
             TokenKind::Symbol(ref id, ..) => {
                 let full_name = context.scope.to_owned().append(*id);
 
-                if let Some(arg) = context.get_reference(&id) {
+                if let Some(arg) = context.get_reference(id) {
                     match &arg.value.data_type {
                         DataType::Function(_, signature) => {
                             // Advance past the function name to position at the opening parenthesis

@@ -215,7 +215,7 @@ pub fn parse_headers_in_file(
 
             // @(libraries/math/{round, sqrt})
             TokenKind::Path(paths) => {
-                encountered_symbols.extend(paths.iter().map(|p| p.name().unwrap().clone()));
+                encountered_symbols.extend(paths.iter().map(|p| p.name().unwrap()));
                 file_imports.extend(paths);
             }
 
@@ -291,7 +291,7 @@ fn create_header(
                     TokenKind::End => {
                         scopes_closed += 1;
                         if scopes_opened > scopes_closed {
-                            body.push(token_stream.tokens[token_stream.index].to_owned());
+                            body.push(token_stream.current_token());
                         }
                     }
 
@@ -302,13 +302,13 @@ fn create_header(
                     // but it's better from a language design POV for colons to only mean one thing as much as possible anyway.
                     TokenKind::Colon => {
                         scopes_opened += 1;
-                        body.push(token_stream.tokens[token_stream.index].to_owned());
+                        body.push(token_stream.current_token());
                     }
 
                     // Double colons need to be closed with semicolons also
                     TokenKind::DoubleColon => {
                         scopes_opened += 1;
-                        body.push(token_stream.tokens[token_stream.index].to_owned());
+                        body.push(token_stream.current_token());
                     }
 
                     TokenKind::Symbol(name_id) => {
@@ -316,10 +316,10 @@ fn create_header(
                         {
                             dependencies.insert(path.to_owned());
                         }
-                        body.push(token_stream.tokens[token_stream.index].to_owned());
+                        body.push(token_stream.current_token());
                     }
                     _ => {
-                        body.push(token_stream.tokens[token_stream.index].to_owned());
+                        body.push(token_stream.current_token());
                     }
                 }
 
@@ -333,22 +333,38 @@ fn create_header(
         TokenKind::Assign => {
             // Type parameter bracket is a new struct
             if let Some(TokenKind::TypeParameterBracket) = token_stream.peek_next_token() {
-                // Move past the parameter bracket, parse the struct.
-                // TODO: This currently won't support referencing other constants in its default arguments
-                // If structs should support constant references being used in the default parameters in future (which it should)
-                // Then this needs to follow the same path as the regular constant declarations, and be parsed at the AST stage always.
-                // This just means structs will need to start carrying with them a set of constant dependencies.
                 token_stream.advance();
+
+                loop {
+                    body.push(token_stream.current_token());
+
+                    match token_stream.current_token_kind() {
+                        TokenKind::TypeParameterBracket => {
+                            token_stream.advance();
+                            break;
+                        }
+
+                        TokenKind::Symbol(name_id) => {
+                            if let Some(path) =
+                                file_imports.iter().find(|f| f.name() == Some(*name_id))
+                            {
+                                dependencies.insert(path.to_owned());
+                            }
+                        }
+                        _ => {}
+                    }
+
+                    token_stream.advance();
+                }
 
                 kind = HeaderKind::Struct;
             } else if exported {
                 // CONSTANT!
-                // Since this is being exported, it's a variable forced to be a constant
-                // We can't parse it now, because it can still depend on other constants from any other file.
-                // Similar to the struct above, we could parse a version that doesn't depend on constants for now if we want
-                // TODO: add this to the dependency list
+                // This will be more complex to parse
+                // This will have to be parsed like a normal declaration with the symbol / type resolutions skipped
+                // kind = HeaderKind::Constant;
 
-                kind = HeaderKind::Constant;
+                todo!("constants as headers");
             }
 
             // Anything else just goes into the start function
@@ -357,8 +373,8 @@ fn create_header(
         // Should be a choice declaration
         // Choice :: Option1, Option2, Option3;
         TokenKind::DoubleColon => {
+            todo!("Choice declarations are not yet implemented in the language");
             // Make sure to skip the semicolon at the end of the choice declaration
-            token_stream.advance();
         }
 
         // Ignored, going into the start function

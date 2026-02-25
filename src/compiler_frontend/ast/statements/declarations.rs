@@ -6,6 +6,7 @@ use crate::compiler_frontend::ast::function_body_to_ast::function_body_to_ast;
 use crate::compiler_frontend::ast::statements::functions::{
     FunctionSignature, parse_function_call,
 };
+use crate::compiler_frontend::ast::statements::structs::create_struct_definition;
 use crate::compiler_frontend::ast::{
     ast_nodes::Declaration, expressions::parse_expression::create_expression,
 };
@@ -14,7 +15,7 @@ use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
-use crate::{ast_log, return_rule_error, return_syntax_error};
+use crate::{ast_log, return_compiler_error, return_rule_error, return_syntax_error};
 
 pub fn create_reference(
     token_stream: &mut FileTokens,
@@ -209,10 +210,7 @@ pub fn new_declaration(
         // it will be possible to statically ensure there is an assignment on all future branches.
 
         // Struct bracket should only be hit here in the context of the end of some parameters
-        TokenKind::Comma
-        | TokenKind::Eof
-        | TokenKind::Newline
-        | TokenKind::TypeParameterBracket => {
+        TokenKind::Comma | TokenKind::Eof | TokenKind::Newline => {
             let var_name = string_table.resolve(id);
             return_rule_error!(
                 format!("Variable '{}' must be initialized with a value", var_name),
@@ -222,6 +220,13 @@ pub fn new_declaration(
                     PrimarySuggestion => "Add '= value' after the variable declaration",
                 }
             )
+        }
+
+        // This is a function definition,
+        // But the compiler should have caught this already.
+        // Compiler error for now
+        TokenKind::TypeParameterBracket => {
+            return_compiler_error!("Unexpected function definition in variable declaration")
         }
 
         _ => {
@@ -243,10 +248,6 @@ pub fn new_declaration(
     // Check if this whole expression is nested in brackets.
     // This is just so we don't wastefully call create_expression recursively right away
     let parsed_expr = match token_stream.current_token_kind() {
-        // Struct Definition
-        // TokenKind::TypeParameterBracket => {
-        //     // TODO
-        // }
         TokenKind::OpenParenthesis => {
             token_stream.advance();
             create_expression(
@@ -259,6 +260,17 @@ pub fn new_declaration(
             )?
         }
 
+        // Struct Definition
+        TokenKind::TypeParameterBracket => {
+            let params = create_struct_definition(token_stream, string_table)?;
+
+            Expression::struct_definition(
+                params,
+                token_stream.current_location(),
+                ownership.to_owned(),
+            )
+        }
+
         _ => create_expression(
             token_stream,
             context,
@@ -269,7 +281,7 @@ pub fn new_declaration(
         )?,
     };
 
-    ast_log!("Created new ", #ownership, " ", data_type);
+    ast_log!("Created new ", Cyan #ownership, " ", data_type);
 
     Ok(Declaration {
         id: full_name,
