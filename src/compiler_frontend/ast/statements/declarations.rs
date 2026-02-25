@@ -43,7 +43,7 @@ pub fn create_reference(
     }
 }
 
-pub fn new_var(
+pub fn new_declaration(
     token_stream: &mut FileTokens,
     id: StringId,
     context: &ScopeContext,
@@ -60,7 +60,7 @@ pub fn new_var(
     if token_stream.current_token_kind() == &TokenKind::Mutable {
         token_stream.advance();
         ownership = Ownership::MutableOwned;
-        
+
         // Make sure this ISN'T a constant
         if context.kind == ContextKind::Constant {
             return_rule_error!(
@@ -152,16 +152,12 @@ pub fn new_var(
         }
 
         TokenKind::Colon => {
-            let struct_def = create_struct_definition(token_stream, string_table, &full_name)?;
+            todo!("Labeled scope")
+        }
 
-            return Ok(Var {
-                id: full_name,
-                value: Expression::struct_definition(
-                    struct_def,
-                    token_stream.current_location(),
-                    ownership,
-                ),
-            });
+        // Referencing a struct (or eventually a type alias)
+        TokenKind::Symbol(name) => {
+            todo!("Structs and type aliases as type declarations")
         }
 
         // SYNTAX ERRORS

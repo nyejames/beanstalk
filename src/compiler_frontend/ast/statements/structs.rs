@@ -10,8 +10,16 @@ use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::return_syntax_error;
 
-// Currently only ever called from build_ast
-// Since structs can only exist in function bodies or at the top level of a file.as
+// TODO: struct parsing needs to be separated into two phases:
+
+// 1. Parse the shape of the struct if there are references to other structs, put in symbol placeholders and list them in its dependencies.
+// This stage does not need to resolve the existence of other structs yet, or what type their default values are.
+// This happens at the Header stage, but at the AST stage this happens immediately before the second stage anyway.
+
+// 2. Fully parse the struct at the AST stage with symbol resolution and type checking of the default values.
+// Both these stages should probably be kept as the ONLY way to parse structs (since the AST stage could just use a single amalgamated version)
+// Just to avoid diverging and duplicating logic for how to parse structs.
+
 pub fn create_struct_definition(
     token_stream: &mut FileTokens,
     string_table: &mut StringTable,
@@ -21,6 +29,7 @@ pub fn create_struct_definition(
     // Need to skip it,
     token_stream.advance();
 
+    // Also used by functions, so broken out here
     let arguments = parse_parameters(token_stream, &mut true, string_table, full_name, true)?;
 
     // Skip the Parameters token
@@ -29,6 +38,8 @@ pub fn create_struct_definition(
     Ok(arguments)
 }
 
+// Used by both functions and structs.
+// Function parameter syntax is exactly the same as struct field syntax by design.
 pub fn parse_parameters(
     token_stream: &mut FileTokens,
     pure: &mut bool,

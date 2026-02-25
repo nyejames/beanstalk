@@ -9,9 +9,9 @@ use crate::compiler_frontend::datatypes::{DataType, Ownership};
 
 use crate::compiler_frontend::ast::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::ast::statements::branching::create_branch;
+use crate::compiler_frontend::ast::statements::declarations::new_declaration;
 use crate::compiler_frontend::ast::statements::functions::parse_function_call;
 use crate::compiler_frontend::ast::statements::loops::create_loop;
-use crate::compiler_frontend::ast::statements::variables::new_var;
 use crate::compiler_frontend::ast::templates::create_template_node::Template;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
@@ -169,7 +169,7 @@ pub fn function_body_to_ast(
                 //   New Function or Variable declaration
                 // -----------------------------------------
                 } else {
-                    let arg = new_var(token_stream, id, &context, warnings, string_table)?;
+                    let arg = new_declaration(token_stream, id, &context, warnings, string_table)?;
 
                     // -----------------------------
                     //    NEW STRUCT DECLARATIONS

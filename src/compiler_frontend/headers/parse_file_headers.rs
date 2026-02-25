@@ -1,16 +1,18 @@
 use crate::backends::function_registry::HostRegistry;
+use crate::compiler_frontend::ast::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::Var;
+use crate::compiler_frontend::ast::statements::declarations::new_declaration;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
-use crate::compiler_frontend::compiler_errors::CompilerError;
+use crate::compiler_frontend::ast::statements::structs::create_struct_definition;
+use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::compiler_warnings::{CompilerWarning, WarningKind};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TextLocation, Token, TokenKind};
+use crate::return_rule_error;
 use std::collections::HashSet;
 use std::fmt::Display;
 use std::path::Path;
-use crate::compiler_frontend::ast::statements::structs::create_struct_definition;
-use crate::return_rule_error;
 
 #[derive(Clone, Debug)]
 pub enum HeaderKind {
@@ -143,11 +145,8 @@ pub fn parse_headers_in_file(
                     .get_function(&string_table.resolve(name_id))
                     .is_none()
                 {
-
-
                     // Reference to an existing symbol
                     if encountered_symbols.contains(&name_id) {
-
                         // If there was a hash before this, then error out as this is shadowing a constant
                         if next_statement_exported {
                             return_rule_error!(
@@ -262,7 +261,6 @@ pub fn parse_headers_in_file(
     Ok(headers)
 }
 
-
 // This should probably be just creating a HeaderKind instead,
 // Lots of stuff is just being passed straight through, but who cares tbh
 fn create_header(
@@ -349,13 +347,27 @@ fn create_header(
                 // Then this needs to follow the same path as the regular constant declarations, and be parsed at the AST stage always.
                 // This just means structs will need to start carrying with them a set of constant dependencies.
                 token_stream.advance();
-                kind = HeaderKind::Struct(create_struct_definition(token_stream, string_table, &full_name)?);
+                kind = HeaderKind::Struct(create_struct_definition(
+                    token_stream,
+                    string_table,
+                    &full_name,
+                )?);
             } else if exported {
                 // CONSTANT!
                 // Since this is being exported, it's a variable forced to be a constant
                 // We can't parse it now, because it can still depend on other constants from any other file.
                 // Similar to the struct above, we could parse a version that doesn't depend on constants for now if we want
                 // TODO: add this to the dependency list
+                kind = HeaderKind::Constant(new_declaration(
+                    token_stream,
+                    match full_name.name() {
+                        Some(n) => n,
+                        None => unreachable!(),
+                    },
+                    &ScopeContext::new_constant(full_name.to_owned()),
+                    &mut vec![], // Todo: dAmnit, gonna have to change the headers signature to be messages instead of just errors
+                    string_table,
+                )?);
             }
 
             // Anything else just goes into the start function

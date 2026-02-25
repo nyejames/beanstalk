@@ -11,10 +11,10 @@ pub(crate) mod expressions {
 pub(crate) mod statements {
     pub(crate) mod branching;
     pub(crate) mod collections;
+    pub(crate) mod declarations;
     pub(crate) mod functions;
     pub(crate) mod loops;
     pub(crate) mod structs;
-    pub(crate) mod variables;
 }
 pub(crate) mod field_access;
 pub(crate) mod templates {
