@@ -6,6 +6,8 @@ io("Test complete")
 
 y = 42 * 20
 
+added_refereces = x_is_cool + y + 2
+
 io([y])
 
 [: This should become some HTML in the HTML build system hopefully soon]

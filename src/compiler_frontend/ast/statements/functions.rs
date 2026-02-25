@@ -52,7 +52,7 @@ impl FunctionSignature {
                         "Expected an arrow operator or colon after function arguments. Found {:?} instead.",
                         token_stream.current_token_kind()
                     ),
-                    token_stream.current_location().to_error_location(&string_table),
+                    token_stream.current_location().to_error_location(string_table),
                     {
                         CompilationStage => "Function Signature Parsing",
                         PrimarySuggestion => "Use '->' for functions with return values or ':' for functions without return values",

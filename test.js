@@ -2,6 +2,7 @@ function test_bst_start() {
     let _template;
     let x_is_cool;
     let y;
+    let added_refereces;
     let __hir_tmp_0;
     let __hir_tmp_1;
     
@@ -10,6 +11,7 @@ function test_bst_start() {
     x_is_cool = 42;
     console.log("Test complete");
     y = 840;
+    added_refereces = 884;
     console.log("840");
     __hir_tmp_0 = test_bst_start___template_fn_0(" This should become some HTML in the HTML build system hopefully soon");
     __hir_tmp_1 = (_template + __hir_tmp_0);
