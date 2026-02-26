@@ -1,13 +1,8 @@
--- Simple test for JavaScript backend output
-io("Hello from JavaScript backend!")
+-- Simple test of HTML project builder
+io("Hello from JavaScript!")
 
-x_is_cool = 42
-io("Test complete")
+number = 42
 
-y = 42 * 20
+#[: Here is a compile time template inserted into the HTML. ]
 
-added_refereces = x_is_cool + y + 2
-
-io([y])
-
-[: This should become some HTML in the HTML build system hopefully soon]
+[: This should all become some HTML in the HTML build system from the runtime. With this number: [number]]
