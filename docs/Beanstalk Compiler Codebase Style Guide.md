@@ -1,5 +1,7 @@
 # Beanstalk Compiler Development Guide
 This guide covers the structure, goals and best practices for Beanstalk's compiler development.
+New and refactored code should ALWAYS follow these guidelines.
+Always run `cargo check`, `cargo test` (unit tests) and `cargo run tests` (integration tests) to check for regressions.
 
 Beanstalk makes deliberate tradeoffs for compilation speed:
 - **Early constant folding** at AST stage eliminates optimisation passes
@@ -85,12 +87,13 @@ for node in ast_nodes {
 - Use the default Rust formatter
 
 ### Comments:
-Avoid over commenting code. Stick to concise and brief descriptions. 
+Stick to concise and brief descriptions. Add doc comments at the top of new files.
+Always add short comments of WHAT something does and WHY it is done that way.
 
 Good places to add comments: 
-- Short summaries before important / complex functions 
+- Short summaries before important / complex functions and control flow
 - Labelling parts of the control flow (branches) to clarify what each branch is doing
-- TODOs for unimplemented features
+- TODOs for unimplemented features or guards for unimplemented features
 - Comments referencing an unusual or unclear bit of code and why it is written the way it is. Particularly when something has been changed to fix a subtle bug.
 
 ### Returning Errors
@@ -172,52 +175,22 @@ mut_ref ~= data         -- mut_ref gets mutable access to data
 -- ERROR: mut_ref conflicts with existing shared references (ref1, ref2)
 ```
 
-### Correct Usage Patterns
-```beanstalk
--- Pattern 1: Sequential usage (no conflicts)
-data = "hello"
-ref1 = data             -- shared reference
-use(ref1)               -- use the reference
--- ref1's last use - compiler can "kill" it
-mut_ref ~= data         -- now mutable access is OK
-
--- Pattern 2: Disjoint field access
-person = Person { name: "Alice", age: 30 }
-name_ref = person.name      -- reference just the name field
-age_ref ~= person.age       -- mutable access to age field - OK (different fields)
-
--- Pattern 3: Compiler-determined ownership transfer
-data = "hello"
-ref1 = data
-use(ref1)               -- last use of ref1
-moved ~= data           -- Compiler determines: ownership transfer (data's last use)
--- OR: moved gets mutable reference (if data used later)
-```
-
-### Key Differences from Rust
-| Aspect | Rust | Beanstalk |
-|--------|------|-----------|
-| Borrow syntax | `&x`, `&mut x` | `x` (shared), `x ~=` (mut) |
-| Default semantics | Move | Borrow |
-| Explicit operations | Borrow | Mutability/Move |
-| Copy behavior | Implicit for Copy types | Always explicit |
-
 ## Development Commands and Feature Flags
 
 ### Basic Development Commands
 
 ```bash
-# Compile and run a single file
-cargo run -- run test.bst
+# Compile and build a single file
+cargo run -- build test.bst
 
 # Compile and run with debugging output
-cargo run --features "show_ast,show_hir,detailed_timers" -- run test.bst
+cargo run --features "show_ast,show_hir,detailed_timers" -- build test.bst
 
 # Run integration test suite
-cargo run -- run tests
+cargo run -- tests
 
 # Run specific test case
-cargo run -- run tests/cases/success/basic_print.bst
+cargo run -- build tests/cases/success/basic_print.bst
 ```
 
 ### Feature Flags for Debugging

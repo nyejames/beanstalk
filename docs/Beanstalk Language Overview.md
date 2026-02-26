@@ -424,3 +424,11 @@ They are the ONLY way to create mutable strings in Beanstalk. "" are only for st
 Templates unlock the full power of Beanstalk's HTML / CSS generation capabilities.
 You can use slots and special Style structs to determine how the templates are constructed.
 They can be used to build complex HTML pages with minimal boilerplate.
+
+## Key Differences from Rust
+| Aspect | Rust | Beanstalk |
+|--------|------|-----------|
+| Borrow syntax | `&x`, `&mut x` | `x` (shared), `x ~=` (mut) |
+| Default semantics | Move | Borrow |
+| Explicit operations | Borrow | Mutability/Move |
+| Copy behavior | Implicit for Copy types | Always explicit |
