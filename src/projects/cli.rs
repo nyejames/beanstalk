@@ -100,6 +100,20 @@ pub fn start_cli() {
                             return;
                         }
                     };
+                    let output_root = if build_result.config.entry_dir.is_dir() {
+                        if build_result.config.release_folder.is_absolute() {
+                            build_result.config.release_folder.clone()
+                        } else if build_result.config.release_folder.as_os_str().is_empty() {
+                            build_result.config.entry_dir.clone()
+                        } else {
+                            build_result
+                                .config
+                                .entry_dir
+                                .join(&build_result.config.release_folder)
+                        }
+                    } else {
+                        output_root
+                    };
 
                     let write_result = build::write_project_outputs(
                         &build_result.project,

@@ -9,6 +9,7 @@ use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages}
 use crate::compiler_frontend::hir::hir_nodes::{HirModule, StartFragment};
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::projects::settings::Config;
+use std::collections::HashSet;
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
@@ -36,42 +37,51 @@ impl ProjectBuilder for HtmlProjectBuilder {
             });
         }
 
-        // TODO: support multiple module projects.
-        if modules.len() != 1 {
+        if modules.is_empty() {
             return Err(CompilerMessages {
                 errors: vec![CompilerError::compiler_error(format!(
-                    "HTML builder currently supports exactly one module at a time, but got {} modules.",
-                    modules.len()
+                    "HTML builder expected at least one compiled module but got {}.",
+                    modules.len(),
                 ))],
                 warnings: Vec::new(),
             });
         }
 
-        let module = modules.into_iter().next().ok_or_else(|| CompilerMessages {
-            errors: vec![CompilerError::compiler_error(
-                "HTML builder expected one module but received none.",
-            )],
-            warnings: Vec::new(),
-        })?;
-
         let release_build = flags.contains(&Flag::Release);
-        match compile_html_module(
-            &module.hir,
-            &module.string_table,
-            &module.entry_point,
-            release_build,
-        ) {
-            Ok(output_file) => {
-                return Ok(Project {
-                    output_files: vec![output_file],
-                    warnings: compiler_messages.warnings,
-                });
-            }
-            Err(error) => {
-                compiler_messages.errors.push(error);
-                return Err(compiler_messages);
+        let mut output_files = Vec::with_capacity(modules.len());
+        let mut output_paths = HashSet::with_capacity(modules.len());
+
+        for module in modules {
+            match compile_html_module(
+                &module.hir,
+                &module.string_table,
+                &module.entry_point,
+                release_build,
+            ) {
+                Ok(output_file) => {
+                    let output_path = output_file.relative_output_path().to_path_buf();
+                    if !output_paths.insert(output_path.clone()) {
+                        return Err(CompilerMessages {
+                            errors: vec![CompilerError::compiler_error(format!(
+                                "HTML builder produced duplicate output path '{}'. Ensure each '#*.bst' entry maps to a unique page output.",
+                                output_path.display(),
+                            ))],
+                            warnings: Vec::new(),
+                        });
+                    }
+                    output_files.push(output_file);
+                }
+                Err(error) => {
+                    compiler_messages.errors.push(error);
+                    return Err(compiler_messages);
+                }
             }
         }
+
+        Ok(Project {
+            output_files,
+            warnings: compiler_messages.warnings,
+        })
     }
 
     fn validate_project_config(&self, _config: &Config) -> Result<(), CompilerError> {
@@ -120,7 +130,8 @@ fn html_output_path(entry_point: &Path) -> PathBuf {
     if file_stem == "#page" {
         PathBuf::from("index.html")
     } else {
-        PathBuf::from(format!("{file_stem}.html"))
+        let route_name = file_stem.strip_prefix('#').unwrap_or(file_stem);
+        PathBuf::from(format!("{route_name}.html"))
     }
 }
 

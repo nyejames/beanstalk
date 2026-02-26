@@ -2,7 +2,9 @@ use super::eval_expression::evaluate_expression;
 use crate::compiler_frontend::ast::ast::ContextKind;
 use crate::compiler_frontend::ast::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
-use crate::compiler_frontend::ast::expressions::expression::{Expression, Operator};
+use crate::compiler_frontend::ast::expressions::expression::{
+    Expression, ExpressionKind, Operator,
+};
 use crate::compiler_frontend::ast::statements::collections::new_collection;
 use crate::compiler_frontend::ast::statements::declarations::create_reference;
 use crate::compiler_frontend::ast::statements::functions::parse_function_call;
@@ -217,6 +219,7 @@ pub fn create_expression(
             | TokenKind::Eof
             | TokenKind::TemplateClose
             | TokenKind::Arrow
+            | TokenKind::EndTemplateHead
             | TokenKind::Colon
             | TokenKind::End => {
                 ast_log!("Breaking out of expression");
@@ -268,6 +271,32 @@ pub fn create_expression(
                 let full_name = context.scope.to_owned().append(*id);
 
                 if let Some(arg) = context.get_reference(id) {
+                    if context.kind == ContextKind::Constant {
+                        if !arg.value.is_compile_time_constant() {
+                            return_rule_error!(
+                                format!(
+                                    "Constants can only reference other constants. '{}' resolves to a non-constant value.",
+                                    string_table.resolve(*id)
+                                ),
+                                token_stream.current_location().to_error_location(&string_table),
+                                {
+                                    CompilationStage => "Expression Parsing",
+                                    PrimarySuggestion => "Only reference constants in constant declarations and const templates",
+                                }
+                            );
+                        }
+
+                        let mut inlined_expression = arg.value.to_owned();
+                        inlined_expression.ownership = Ownership::ImmutableOwned;
+                        expression.push(AstNode {
+                            kind: NodeKind::Rvalue(inlined_expression),
+                            location: token_stream.current_location(),
+                            scope: context.scope.clone(),
+                        });
+                        token_stream.advance();
+                        continue;
+                    }
+
                     match &arg.value.data_type {
                         DataType::Function(_, signature) => {
                             // Advance past the function name to position at the opening parenthesis
@@ -311,6 +340,42 @@ pub fn create_expression(
                                 // Move to '(' then to first argument.
                                 token_stream.advance();
                                 token_stream.advance();
+
+                                if token_stream.current_token_kind() == &TokenKind::CloseParenthesis {
+                                    let missing_required = fields
+                                        .iter()
+                                        .filter(|field| {
+                                            matches!(field.value.kind, ExpressionKind::None)
+                                        })
+                                        .count();
+
+                                    if missing_required > 0 {
+                                        return_syntax_error!(
+                                            format!(
+                                                "Struct constructor requires {missing_required} field argument(s) without defaults, but no arguments were provided.",
+                                            ),
+                                            token_stream.current_location().to_error_location(string_table),
+                                            {
+                                                CompilationStage => "Expression Parsing",
+                                                PrimarySuggestion => "Provide required struct field arguments or define defaults for them",
+                                            }
+                                        );
+                                    }
+
+                                    token_stream.advance();
+
+                                    expression.push(AstNode {
+                                        kind: NodeKind::Rvalue(Expression::struct_instance(
+                                            fields.to_owned(),
+                                            constructor_location,
+                                            struct_ownership.get_owned(),
+                                        )),
+                                        location: token_stream.current_location(),
+                                        scope: context.scope.clone(),
+                                    });
+
+                                    continue;
+                                }
 
                                 let required_field_types = fields
                                     .iter()
@@ -383,6 +448,19 @@ pub fn create_expression(
                 // HOST FUNCTION CALL INSIDE EXPRESSION
                 // ------------------------------------
                 if let Some(host_func_def) = context.host_registry.get_function(string_table.resolve(*id)) {
+                    if context.kind == ContextKind::Constant {
+                        return_rule_error!(
+                            format!(
+                                "Constants cannot call host functions. '{}' is a runtime host call.",
+                                string_table.resolve(*id)
+                            ),
+                            token_stream.current_location().to_error_location(&string_table),
+                            {
+                                CompilationStage => "Expression Parsing",
+                                PrimarySuggestion => "Use only compile-time constant values inside constants and const templates",
+                            }
+                        );
+                    }
 
                     // Convert return types to Arg format
                     let signature = host_func_def.params_to_signature(string_table);
@@ -491,6 +569,16 @@ pub fn create_expression(
 
                 match template.kind {
                     TemplateType::StringFunction => {
+                        if context.kind == ContextKind::Constant {
+                            return_rule_error!(
+                                "Constants and const templates require compile-time template folding. This template is runtime.",
+                                token_stream.current_location().to_error_location(&string_table),
+                                {
+                                    CompilationStage => "Expression Parsing",
+                                    PrimarySuggestion => "Remove runtime values from this template so it can fold at compile time",
+                                }
+                            );
+                        }
                         // Check if we need to consume a closing parenthesis after the template
                         if consume_closing_parenthesis && token_stream.current_token_kind() == &TokenKind::CloseParenthesis {
                             token_stream.advance();
@@ -525,6 +613,19 @@ pub fn create_expression(
                             "Slots are not supported in templates at the moment. They might be removed completely in the future."
                         );
                     }
+                }
+            }
+
+            TokenKind::Hash => {
+                if token_stream.peek_next_token() != Some(&TokenKind::TemplateHead) {
+                    return_type_error!(
+                        "Unexpected '#' in expression. '#' is only valid before a template head.",
+                        token_stream.current_location().to_error_location(&string_table),
+                        {
+                            CompilationStage => "Expression Parsing",
+                            PrimarySuggestion => "Remove '#' or place it directly before a template expression",
+                        }
+                    );
                 }
             }
 

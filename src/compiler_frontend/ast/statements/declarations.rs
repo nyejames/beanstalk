@@ -3,6 +3,9 @@ use crate::compiler_frontend::ast::ast_nodes::AstNode;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::field_access::parse_field_access;
 use crate::compiler_frontend::ast::function_body_to_ast::function_body_to_ast;
+use crate::compiler_frontend::ast::statements::declaration_syntax::{
+    DeclarationSyntax, parse_declaration_syntax,
+};
 use crate::compiler_frontend::ast::statements::functions::{
     FunctionSignature, parse_function_call,
 };
@@ -12,11 +15,12 @@ use crate::compiler_frontend::ast::{
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
-use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::datatypes::Ownership;
+use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
-use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
+use crate::compiler_frontend::tokenizer::tokens::{FileTokens, Token, TokenKind};
 use crate::compiler_frontend::traits::ContainsReferences;
-use crate::{ast_log, return_compiler_error, return_rule_error, return_syntax_error};
+use crate::{ast_log, return_rule_error};
 
 pub fn create_reference(
     token_stream: &mut FileTokens,
@@ -29,13 +33,15 @@ pub fn create_reference(
 
     match reference_arg.value.data_type {
         // Function Call
-        DataType::Function(_, ref signature) => parse_function_call(
-            token_stream,
-            &reference_arg.id,
-            context,
-            signature,
-            string_table,
-        ),
+        crate::compiler_frontend::datatypes::DataType::Function(_, ref signature) => {
+            parse_function_call(
+                token_stream,
+                &reference_arg.id,
+                context,
+                signature,
+                string_table,
+            )
+        }
 
         _ => {
             // This either becomes a reference or field access
@@ -56,224 +62,94 @@ pub fn new_declaration(
 
     let full_name = context.scope.to_owned().append(id);
 
-    let mut ownership = Ownership::ImmutableOwned;
+    // Function declarations are parsed eagerly here because they use
+    // a dedicated signature/body syntax that does not fit value declarations.
+    if token_stream.current_token_kind() == &TokenKind::TypeParameterBracket {
+        let func_sig = FunctionSignature::new(token_stream, string_table, &full_name)?;
+        let func_context = context.new_child_function(id, func_sig.to_owned(), string_table);
 
-    if token_stream.current_token_kind() == &TokenKind::Mutable {
-        token_stream.advance();
-        ownership = Ownership::MutableOwned;
+        let function_body = function_body_to_ast(
+            token_stream,
+            func_context.to_owned(),
+            warnings,
+            string_table,
+        )?;
 
-        // Make sure this ISN'T a constant
+        return Ok(Declaration {
+            id: full_name,
+            value: Expression::function(
+                None,
+                func_sig,
+                function_body,
+                token_stream.current_location(),
+            ),
+        });
+    }
+
+    let declaration_syntax = parse_declaration_syntax(token_stream, id, string_table)?;
+    resolve_declaration_syntax(declaration_syntax, full_name, context, string_table)
+}
+
+pub fn resolve_declaration_syntax(
+    declaration_syntax: DeclarationSyntax,
+    full_name: InternedPath,
+    context: &ScopeContext,
+    string_table: &mut StringTable,
+) -> Result<Declaration, CompilerError> {
+    let ownership = if declaration_syntax.mutable_marker {
         if context.kind == ContextKind::Constant {
             return_rule_error!(
                 "Constants can't be mutable!",
-                token_stream.current_location().to_error_location(string_table), {
+                declaration_syntax.location.to_error_location(string_table), {
                     CompilationStage => "Variable Declaration",
                     PrimarySuggestion => "Remove the '~' symbol from the variable declaration",
                 }
             )
         }
+        Ownership::MutableOwned
+    } else {
+        Ownership::ImmutableOwned
     };
 
-    let mut data_type: DataType;
+    let mut data_type = declaration_syntax.to_data_type(&ownership);
 
-    match token_stream.current_token_kind() {
-        // Go straight to the assignment
-        TokenKind::Assign => {
-            // Cringe Code
-            // This whole function can be reworked to avoid this go_back() later.
-            // For now, it's easy to read and parse this way while working on the specifics of the syntax
-            token_stream.go_back();
-            data_type = DataType::Inferred;
-        }
-
-        TokenKind::TypeParameterBracket => {
-            let func_sig = FunctionSignature::new(token_stream, string_table, &full_name)?;
-            let func_context = context.new_child_function(id, func_sig.to_owned(), string_table);
-
-            // TODO: fast check for function without signature
-            // let context = context.new_child_function(name, &[]);
-            // return Ok(Arg {
-            //     name: name.to_owned(),
-            //     value: Expression::function_without_signature(
-            //         new_ast(token_stream, context, false)?.ast,
-            //         token_stream.current_location(),
-            //     ),
-            // });
-
-            let function_body = function_body_to_ast(
-                token_stream,
-                func_context.to_owned(),
-                warnings,
-                string_table,
-            )?;
-
-            return Ok(Declaration {
-                id: full_name,
-                value: Expression::function(
-                    None,
-                    func_sig,
-                    function_body,
-                    token_stream.current_location(),
-                ),
-            });
-        }
-
-        // Has a type declaration
-        TokenKind::DatatypeInt => data_type = DataType::Int,
-        TokenKind::DatatypeFloat => data_type = DataType::Float,
-        TokenKind::DatatypeBool => data_type = DataType::Bool,
-        TokenKind::DatatypeString => data_type = DataType::StringSlice,
-
-        // Collection Type Declaration
-        TokenKind::OpenCurly => {
-            token_stream.advance();
-
-            // Check if there is a type inside the curly braces
-            data_type = match token_stream.current_token_kind().to_datatype() {
-                Some(data_type) => DataType::Collection(Box::new(data_type), ownership.to_owned()),
-                _ => DataType::Collection(Box::new(DataType::Inferred), Ownership::MutableOwned),
-            };
-
-            // Make sure there is a closing curly brace
-            if token_stream.current_token_kind() != &TokenKind::CloseCurly {
-                return_syntax_error!(
-                    "Missing closing curly brace for collection type declaration",
-                    token_stream.current_location().to_error_location(string_table), {
-                        CompilationStage => "Variable Declaration",
-                        PrimarySuggestion => "Add '}' to close the collection type declaration",
-                        SuggestedInsertion => "}",
-                    }
-                )
-            }
-        }
-
-        TokenKind::Newline => {
-            data_type = DataType::Inferred;
-            // Ignore
-        }
-
-        TokenKind::Colon => {
-            todo!("Labeled scope")
-        }
-
-        // Referencing a struct (or eventually a type alias)
-        TokenKind::Symbol(name) => {
-            let declared_type = context.get_reference(name).ok_or_else(|| {
-                CompilerError::new_rule_error(
-                    format!(
-                        "Unknown type '{}'. Type names must be declared before use.",
-                        string_table.resolve(*name)
-                    ),
-                    token_stream
-                        .current_location()
-                        .to_error_location(string_table),
-                )
-            })?;
-
-            data_type = declared_type.value.data_type.to_owned();
-        }
-
-        // SYNTAX ERRORS
-        // Probably a missing reference or import
-        TokenKind::Dot
-        | TokenKind::AddAssign
-        | TokenKind::SubtractAssign
-        | TokenKind::DivideAssign
-        | TokenKind::MultiplyAssign => {
-            return_syntax_error!(
+    if let Some(type_name) = declaration_syntax.explicit_named_type {
+        let declared_type = context.get_reference(&type_name).ok_or_else(|| {
+            CompilerError::new_rule_error(
                 format!(
-                    "{} is undefined. Can't use {:?} after an undefined variable. Either define this variable first, import it or make sure its in scope.",
-                    string_table.resolve(id),
-                    token_stream.tokens[token_stream.index].kind
+                    "Unknown type '{}'. Type names must be declared before use.",
+                    string_table.resolve(type_name)
                 ),
-                token_stream.current_location().to_error_location(string_table), {
-                    CompilationStage => "Variable Declaration",
-                    PrimarySuggestion => "Make sure to import or define this variable before using it.",
-                }
+                declaration_syntax.location.to_error_location(string_table),
             )
-        }
+        })?;
 
-        // Other kinds of syntax errors
-        _ => {
-            return_syntax_error!(
-                format!(
-                    "Invalid token: {:?} after new variable declaration. Expect a type or assignment operator.",
-                    token_stream.tokens[token_stream.index].kind
-                ),
-                token_stream.current_location().to_error_location(string_table), {
-                    CompilationStage => "Variable Declaration",
-                    PrimarySuggestion => "Use a type declaration (Int, String, etc.) or assignment operator '='",
-                }
-            )
-        }
-    };
-
-    // Check for the assignment operator next
-    // If this is parameters or a struct, then we can instead break out with a comma or struct close bracket
-    token_stream.advance();
-
-    match token_stream.current_token_kind() {
-        TokenKind::Assign => {
-            token_stream.advance();
-        }
-
-        // If end of statement, then it's unassigned.
-        // For the time being, this is a syntax error.
-        // When the compiler_frontend becomes more sophisticated,
-        // it will be possible to statically ensure there is an assignment on all future branches.
-
-        // Struct bracket should only be hit here in the context of the end of some parameters
-        TokenKind::Comma | TokenKind::Eof | TokenKind::Newline => {
-            let var_name = string_table.resolve(id);
-            return_rule_error!(
-                format!("Variable '{}' must be initialized with a value", var_name),
-                token_stream.current_location().to_error_location(string_table), {
-                    // VariableName => var_name,
-                    CompilationStage => "Variable Declaration",
-                    PrimarySuggestion => "Add '= value' after the variable declaration",
-                }
-            )
-        }
-
-        // This is a function definition,
-        // But the compiler should have caught this already.
-        // Compiler error for now
-        TokenKind::TypeParameterBracket => {
-            return_compiler_error!("Unexpected function definition in variable declaration")
-        }
-
-        _ => {
-            return_syntax_error!(
-                format!(
-                    "Unexpected Token: {:?}. Are you trying to reference a variable that doesn't exist yet?",
-                    token_stream.current_token_kind()
-                ),
-                token_stream.current_location().to_error_location(string_table), {
-                    CompilationStage => "Variable Declaration",
-                    PrimarySuggestion => "Check that all referenced variables are declared before use",
-                }
-            )
-        }
+        data_type = declared_type.value.data_type.to_owned();
     }
 
-    // The current token should be whatever is after the assignment operator
+    let mut initializer_tokens = declaration_syntax.initializer_tokens;
+    initializer_tokens.push(Token::new(
+        TokenKind::Eof,
+        declaration_syntax.location.to_owned(),
+    ));
+    let mut initializer_stream = FileTokens::new(full_name.to_owned(), initializer_tokens);
 
     // Check if this whole expression is nested in brackets.
-    // This is just so we don't wastefully call create_expression recursively right away
-    let mut parsed_expr = match token_stream.current_token_kind() {
+    // This is just so we don't wastefully call create_expression recursively right away.
+    let mut parsed_expr = match initializer_stream.current_token_kind() {
         // Struct Definition
         TokenKind::TypeParameterBracket => {
-            let params = create_struct_definition(token_stream, string_table)?;
+            let params = create_struct_definition(&mut initializer_stream, string_table)?;
 
             Expression::struct_definition(
                 params,
-                token_stream.current_location(),
+                initializer_stream.current_location(),
                 ownership.to_owned(),
             )
         }
 
         _ => create_expression(
-            token_stream,
+            &mut initializer_stream,
             context,
             &mut data_type,
             &ownership,
@@ -281,6 +157,7 @@ pub fn new_declaration(
             string_table,
         )?,
     };
+
     // Declaration mutability is determined by the left-hand marker (`~=`) for direct references.
     if matches!(parsed_expr.kind, ExpressionKind::Reference(_)) {
         parsed_expr.ownership = ownership.to_owned();

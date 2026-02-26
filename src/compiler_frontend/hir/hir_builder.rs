@@ -75,6 +75,7 @@ pub struct HirBuilder<'a> {
     pub(super) next_function_id: u32,
     pub(super) next_struct_id: u32,
     pub(super) next_field_id: u32,
+    pub(super) next_const_id: u32,
     pub(super) temp_local_counter: u32,
     pub(super) template_function_counter: u32,
 
@@ -123,6 +124,7 @@ impl<'a> HirBuilder<'a> {
             next_function_id: 0,
             next_struct_id: 0,
             next_field_id: 0,
+            next_const_id: 0,
             temp_local_counter: 0,
             template_function_counter: 0,
 
@@ -155,6 +157,13 @@ impl<'a> HirBuilder<'a> {
         self.module.warnings = ast.warnings.clone();
 
         if let Err(error) = self.prepare_hir_declarations(&ast) {
+            return Err(CompilerMessages {
+                errors: vec![error],
+                warnings: self.module.warnings.clone(),
+            });
+        }
+
+        if let Err(error) = self.lower_module_constants(&ast) {
             return Err(CompilerMessages {
                 errors: vec![error],
                 warnings: self.module.warnings.clone(),
@@ -256,6 +265,12 @@ impl<'a> HirBuilder<'a> {
     pub(crate) fn allocate_field_id(&mut self) -> FieldId {
         let id = FieldId(self.next_field_id);
         self.next_field_id += 1;
+        id
+    }
+
+    pub(crate) fn allocate_const_id(&mut self) -> HirConstId {
+        let id = HirConstId(self.next_const_id);
+        self.next_const_id += 1;
         id
     }
 

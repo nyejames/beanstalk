@@ -536,6 +536,29 @@ pub fn create_function_call_arguments(
 
     token_stream.advance();
 
+    if token_stream.current_token_kind() == &TokenKind::CloseParenthesis {
+        let missing_required = required_arguments
+            .iter()
+            .filter(|argument| matches!(argument.value.kind, ExpressionKind::None))
+            .count();
+
+        if missing_required > 0 {
+            return_syntax_error!(
+                format!(
+                    "This function requires {missing_required} argument(s) without defaults, but none were provided.",
+                ),
+                token_stream.current_location().to_error_location(string_table),
+                {
+                    CompilationStage => "Function Call Parsing",
+                    PrimarySuggestion => "Provide the required arguments or add defaults in the declaration",
+                }
+            )
+        }
+
+        token_stream.advance();
+        return Ok(Vec::new());
+    }
+
     if required_arguments.is_empty() {
         // Make sure there is a closing parenthesis
         if token_stream.current_token_kind() != &TokenKind::CloseParenthesis {

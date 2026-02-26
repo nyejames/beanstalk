@@ -2,9 +2,11 @@ use crate::backends::function_registry::HostRegistry;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::function_body_to_ast::function_body_to_ast;
+use crate::compiler_frontend::ast::statements::declarations::resolve_declaration_syntax;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::ast::statements::structs::create_struct_definition;
 use crate::compiler_frontend::ast::templates::create_template_node::Template;
+use crate::compiler_frontend::ast::templates::template::TemplateType;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
@@ -40,6 +42,7 @@ pub enum AstStartTemplateItem {
 
 pub struct Ast {
     pub nodes: Vec<AstNode>,
+    pub module_constants: Vec<Declaration>,
 
     // The path to the original entry point file
     pub entry_path: InternedPath,
@@ -66,6 +69,7 @@ impl Ast {
         let external_exports: Vec<ModuleExport> = Vec::new();
         let mut warnings: Vec<CompilerWarning> = Vec::new();
         let mut const_templates_by_path: FxHashMap<InternedPath, StringId> = FxHashMap::default();
+        let mut module_constants: Vec<Declaration> = Vec::new();
 
         // Collect module-level declarations first so all function/start bodies can resolve symbols.
         let mut declarations: Vec<Declaration> = Vec::new();
@@ -124,6 +128,30 @@ impl Ast {
                     });
                 }
                 _ => {}
+            }
+        }
+
+        // Parse exported constant headers into declarations before lowering other bodies.
+        // This keeps constants visible module-wide just like function/struct declarations.
+        for header in &sorted_headers {
+            if matches!(header.kind, HeaderKind::Constant { .. }) {
+                let declaration = match parse_constant_header_declaration(
+                    header,
+                    &declarations,
+                    host_registry,
+                    string_table,
+                ) {
+                    Ok(declaration) => declaration,
+                    Err(error) => {
+                        return Err(CompilerMessages {
+                            errors: vec![error],
+                            warnings,
+                        });
+                    }
+                };
+
+                declarations.push(declaration.clone());
+                module_constants.push(declaration);
             }
         }
 
@@ -246,9 +274,8 @@ impl Ast {
                     });
                 }
 
-                HeaderKind::Constant => {
-                    // TODO: Implement constant handling
-                    todo!()
+                HeaderKind::Constant { .. } => {
+                    // Constant headers are parsed into declarations in the prepass above.
                 }
 
                 HeaderKind::Choice => {
@@ -277,13 +304,15 @@ impl Ast {
                             }
                         };
 
-                    if !matches!(
-                        template.kind,
-                        crate::compiler_frontend::ast::templates::template::TemplateType::String
-                    ) {
+                    if !matches!(template.kind, TemplateType::String) {
+                        let error_message = if matches!(template.kind, TemplateType::Slot) {
+                            "Top-level const templates can use slots only when they resolve fully at compile time. This slot remained unresolved."
+                        } else {
+                            "Top-level const templates must be fully foldable at compile time."
+                        };
                         return Err(CompilerMessages {
                             errors: vec![CompilerError::new_rule_error(
-                                "Top-level const templates must be fully foldable at compile time.",
+                                error_message,
                                 template.location.to_error_location(string_table),
                             )],
                             warnings,
@@ -322,12 +351,53 @@ impl Ast {
 
         Ok(Ast {
             nodes: ast,
+            module_constants,
             entry_path: entry_dir,
             external_exports,
             start_template_items,
             warnings,
         })
     }
+}
+
+fn parse_constant_header_declaration(
+    header: &Header,
+    declarations: &[Declaration],
+    host_registry: &HostRegistry,
+    string_table: &mut StringTable,
+) -> Result<Declaration, CompilerError> {
+    let HeaderKind::Constant { metadata } = &header.kind else {
+        return Err(CompilerError::compiler_error(
+            "Constant header resolver called for a non-constant header.",
+        ));
+    };
+
+    let context = ScopeContext::new(
+        ContextKind::Constant,
+        header.tokens.src_path.to_owned(),
+        declarations,
+        host_registry.clone(),
+        vec![],
+    );
+
+    let declaration = resolve_declaration_syntax(
+        metadata.declaration_syntax.clone(),
+        header.tokens.src_path.to_owned(),
+        &context,
+        string_table,
+    )?;
+
+    if !declaration.value.is_compile_time_constant() {
+        return Err(CompilerError::new_rule_error(
+            format!(
+                "Constant '{}' is not compile-time resolvable. Constants may only contain compile-time values and constant references.",
+                declaration.id.to_string(string_table)
+            ),
+            header.name_location.to_error_location(string_table),
+        ));
+    }
+
+    Ok(declaration)
 }
 
 #[derive(Clone)]

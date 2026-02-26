@@ -8,9 +8,9 @@ use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorLocation, Er
 use crate::compiler_frontend::hir::hir_datatypes::{HirTypeKind, TypeId};
 use crate::compiler_frontend::hir::hir_display::HirLocation;
 use crate::compiler_frontend::hir::hir_nodes::{
-    BlockId, FieldId, FunctionId, HirExpression, HirExpressionKind, HirMatchArm, HirModule,
-    HirPattern, HirPlace, HirStatement, HirStatementKind, HirTerminator, LocalId, RegionId,
-    StartFragment, StructId, ValueKind,
+    BlockId, FieldId, FunctionId, HirConstValue, HirExpression, HirExpressionKind, HirMatchArm,
+    HirModule, HirPattern, HirPlace, HirStatement, HirStatementKind, HirTerminator, LocalId,
+    RegionId, StartFragment, StructId, ValueKind,
 };
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::TextLocation;
@@ -59,6 +59,7 @@ impl<'a> HirValidator<'a> {
         self.collect_definition_ids()?;
         self.validate_start_function()?;
         self.validate_start_fragments()?;
+        self.validate_module_constants()?;
         self.validate_functions()?;
         self.validate_blocks()?;
         Ok(())
@@ -165,6 +166,57 @@ impl<'a> HirValidator<'a> {
                     }
                 }
             }
+        }
+
+        Ok(())
+    }
+
+    fn validate_module_constants(&self) -> Result<(), CompilerError> {
+        for module_constant in &self.module.module_constants {
+            if module_constant.name.trim().is_empty() {
+                return Err(self.error_with_hir(
+                    format!(
+                        "Module constant {:?} has an empty constant name",
+                        module_constant.id
+                    ),
+                    None,
+                ));
+            }
+
+            self.require_type_id(module_constant.ty, None)?;
+            self.validate_module_const_value(&module_constant.value)?;
+        }
+
+        Ok(())
+    }
+
+    fn validate_module_const_value(&self, value: &HirConstValue) -> Result<(), CompilerError> {
+        match value {
+            HirConstValue::Collection(values) => {
+                for value in values {
+                    self.validate_module_const_value(value)?;
+                }
+            }
+            HirConstValue::Record(fields) => {
+                for field in fields {
+                    if field.name.trim().is_empty() {
+                        return Err(self.error_with_hir(
+                            "Module constant record contains an empty field name",
+                            None,
+                        ));
+                    }
+                    self.validate_module_const_value(&field.value)?;
+                }
+            }
+            HirConstValue::Range(start, end) => {
+                self.validate_module_const_value(start)?;
+                self.validate_module_const_value(end)?;
+            }
+            HirConstValue::Int(_)
+            | HirConstValue::Float(_)
+            | HirConstValue::Bool(_)
+            | HirConstValue::Char(_)
+            | HirConstValue::String(_) => {}
         }
 
         Ok(())

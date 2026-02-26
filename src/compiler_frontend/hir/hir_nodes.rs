@@ -81,9 +81,38 @@ pub struct RegionId(pub u32);
 pub struct ConstStringId(pub u32);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct HirConstId(pub u32);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum StartFragment {
     ConstString(ConstStringId),
     RuntimeStringFn(FunctionId),
+}
+
+#[derive(Debug, Clone)]
+pub struct HirConstField {
+    pub name: String,
+    pub value: HirConstValue,
+}
+
+#[derive(Debug, Clone)]
+pub enum HirConstValue {
+    Int(i64),
+    Float(f64),
+    Bool(bool),
+    Char(char),
+    String(String),
+    Collection(Vec<HirConstValue>),
+    Record(Vec<HirConstField>),
+    Range(Box<HirConstValue>, Box<HirConstValue>),
+}
+
+#[derive(Debug, Clone)]
+pub struct HirModuleConst {
+    pub id: HirConstId,
+    pub name: String,
+    pub ty: TypeId,
+    pub value: HirConstValue,
 }
 
 // ============================================================
@@ -103,6 +132,7 @@ pub struct HirModule {
     /// Ordered start-fragment stream consumed by project builders.
     pub start_fragments: Vec<StartFragment>,
     pub const_string_pool: Vec<String>,
+    pub module_constants: Vec<HirModuleConst>,
 
     /// Region tree
     pub regions: Vec<HirRegion>,
@@ -122,6 +152,7 @@ impl HirModule {
             start_function: FunctionId(0),
             start_fragments: vec![],
             const_string_pool: vec![],
+            module_constants: vec![],
             regions: vec![],
             warnings: vec![],
         }

@@ -48,7 +48,7 @@ use crate::compiler_frontend::tokenizer::tokenizer::tokenize;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenizeMode};
 use crate::projects::settings::Config;
 use std::collections::HashSet;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 pub struct OutputModule {
     pub(crate) imports: HashSet<PathBuf>,
@@ -128,12 +128,13 @@ impl<'a> CompilerFrontend<'a> {
         &mut self,
         files: Vec<FileTokens>,
         warnings: &mut Vec<CompilerWarning>,
+        entry_file_path: &Path,
     ) -> Result<Headers, Vec<CompilerError>> {
         parse_headers(
             files,
             &self.host_function_registry,
             warnings,
-            &self.project_config.entry_dir,
+            entry_file_path,
             &mut self.string_table,
         )
     }
@@ -164,9 +165,10 @@ impl<'a> CompilerFrontend<'a> {
         &mut self,
         headers: Vec<Header>,
         top_level_template_items: Vec<TopLevelTemplateItem>,
+        entry_file_path: &Path,
     ) -> Result<Ast, CompilerMessages> {
         let interned_entry_dir =
-            InternedPath::from_path_buf(&self.project_config.entry_dir, &mut self.string_table);
+            InternedPath::from_path_buf(entry_file_path, &mut self.string_table);
 
         Ast::new(
             headers,

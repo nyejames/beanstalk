@@ -1,4 +1,4 @@
-use crate::compiler_frontend::ast::ast::ScopeContext;
+use crate::compiler_frontend::ast::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
 use crate::compiler_frontend::ast::templates::template::{
@@ -444,6 +444,12 @@ pub fn parse_template_head(
 
         // Make sure there is a comma before the next token
         if !comma_separator {
+            if token == TokenKind::Slot {
+                template.kind = TemplateType::Slot;
+                token_stream.advance();
+                continue;
+            }
+
             if token != TokenKind::Comma {
                 return_syntax_error!(
                     format!(
@@ -477,6 +483,19 @@ pub fn parse_template_head(
                 // This has to be done eagerly here as any previous scene or style passed into the scene head will add to this
                 match template.style.unlocked_templates.to_owned().get(&name) {
                     Some(ExpressionKind::Template(inserted_template)) => {
+                        if context.kind == ContextKind::Constant
+                            && !matches!(inserted_template.kind, TemplateType::String)
+                        {
+                            return_syntax_error!(
+                                format!(
+                                    "Const templates can only capture compile-time templates. '{}' resolves to a runtime template.",
+                                    name
+                                ),
+                                token_stream
+                                    .current_location()
+                                    .to_error_location(&string_table)
+                            );
+                        }
                         template.insert_template_into_head(
                             inserted_template,
                             foldable,
@@ -502,16 +521,25 @@ pub fn parse_template_head(
                     match &arg.value.kind {
                         // Reference to another string template
                         ExpressionKind::Template(inserted_template) => {
+                            if context.kind == ContextKind::Constant
+                                && !matches!(inserted_template.kind, TemplateType::String)
+                            {
+                                return_syntax_error!(
+                                    format!(
+                                        "Const templates can only reference compile-time templates. '{}' is runtime.",
+                                        name
+                                    ),
+                                    token_stream
+                                        .current_location()
+                                        .to_error_location(&string_table)
+                                );
+                            }
                             template.insert_template_into_head(
                                 inserted_template,
                                 foldable,
                                 string_table,
                             )?;
                         }
-
-                        // TODO: Special stuff for Types (structs)
-                        // In the future, Types can implement a Style interface to do cool stuff
-                        ExpressionKind::StructInstance(_args) => {}
 
                         // Otherwise this is a reference to some other variable
                         // String, Number, Bool, etc. References
@@ -525,8 +553,22 @@ pub fn parse_template_head(
                                 string_table,
                             )?;
 
+                            if context.kind == ContextKind::Constant
+                                && !expr.is_compile_time_constant()
+                            {
+                                return_syntax_error!(
+                                    format!(
+                                        "Const templates can only capture constants. '{}' resolves to a non-constant value.",
+                                        name
+                                    ),
+                                    token_stream
+                                        .current_location()
+                                        .to_error_location(&string_table)
+                                );
+                            }
+
                             // Any non-constant expression can't be folded
-                            if !expr.kind.is_foldable() {
+                            if !expr.kind.is_foldable() && !expr.is_compile_time_constant() {
                                 ast_log!("Template is no longer foldable due to reference");
                                 *foldable = false;
                             }
@@ -562,6 +604,26 @@ pub fn parse_template_head(
                 template.content.before.push(expr);
             }
 
+            TokenKind::Path(paths) => {
+                if paths.is_empty() {
+                    return_syntax_error!(
+                        "Path token in template head cannot be empty.",
+                        token_stream
+                            .current_location()
+                            .to_error_location(&string_table)
+                    );
+                }
+
+                for path in paths {
+                    let interned_path = string_table.get_or_intern(path.to_string(string_table));
+                    template.content.before.push(Expression::string_slice(
+                        interned_path,
+                        token_stream.current_location(),
+                        Ownership::ImmutableOwned,
+                    ));
+                }
+            }
+
             TokenKind::OpenParenthesis => {
                 let expr = create_expression(
                     token_stream,
@@ -572,7 +634,16 @@ pub fn parse_template_head(
                     string_table,
                 )?;
 
-                if !expr.kind.is_foldable() {
+                if context.kind == ContextKind::Constant && !expr.is_compile_time_constant() {
+                    return_syntax_error!(
+                        "Const templates require compile-time expressions in the template head.",
+                        token_stream
+                            .current_location()
+                            .to_error_location(&string_table)
+                    );
+                }
+
+                if !expr.kind.is_foldable() && !expr.is_compile_time_constant() {
                     ast_log!("Template is no longer foldable");
                     *foldable = false;
                 }
@@ -590,9 +661,14 @@ pub fn parse_template_head(
                 )
             }
 
+            TokenKind::Slot => {
+                template.kind = TemplateType::Slot;
+            }
+
             // Newlines / empty things in the scene head are ignored
             TokenKind::Newline | TokenKind::Empty => {
                 token_stream.advance();
+                continue;
             }
 
             _ => {
@@ -608,7 +684,20 @@ pub fn parse_template_head(
             }
         }
 
+        if token_stream.current_token_kind() == &TokenKind::EndTemplateHead {
+            token_stream.advance();
+            return Ok(());
+        }
+
+        if matches!(
+            token_stream.current_token_kind(),
+            TokenKind::TemplateClose | TokenKind::Eof
+        ) {
+            return Ok(());
+        }
+
         comma_separator = false;
+        token_stream.advance();
     }
 
     Ok(())

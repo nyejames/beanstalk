@@ -1,6 +1,7 @@
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration};
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::ast::templates::create_template_node::Template;
+use crate::compiler_frontend::ast::templates::template::TemplateType;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
@@ -338,6 +339,40 @@ impl Expression {
 
     pub fn is_constant(&self) -> bool {
         !self.ownership.is_mutable() && self.kind.is_foldable()
+    }
+
+    pub fn is_compile_time_constant(&self) -> bool {
+        match &self.kind {
+            ExpressionKind::Int(_)
+            | ExpressionKind::Float(_)
+            | ExpressionKind::StringSlice(_)
+            | ExpressionKind::Bool(_)
+            | ExpressionKind::Char(_) => true,
+            ExpressionKind::Collection(items) => {
+                items.iter().all(Expression::is_compile_time_constant)
+            }
+            ExpressionKind::StructInstance(fields) => fields
+                .iter()
+                .all(|field| field.value.is_compile_time_constant()),
+            ExpressionKind::Range(start, end) => {
+                start.is_compile_time_constant() && end.is_compile_time_constant()
+            }
+            ExpressionKind::Template(template) => {
+                matches!(template.kind, TemplateType::String)
+                    && template
+                        .content
+                        .flatten()
+                        .iter()
+                        .all(|expression| expression.is_compile_time_constant())
+            }
+            ExpressionKind::Reference(_)
+            | ExpressionKind::Runtime(_)
+            | ExpressionKind::Function(..)
+            | ExpressionKind::FunctionCall(..)
+            | ExpressionKind::HostFunctionCall(..)
+            | ExpressionKind::StructDefinition(..)
+            | ExpressionKind::None => false,
+        }
     }
 }
 #[derive(Clone, Debug)]

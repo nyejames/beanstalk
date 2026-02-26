@@ -8,7 +8,7 @@ use crate::compiler_frontend::ast::ast::Ast;
 use crate::compiler_frontend::ast::ast_nodes::{
     AstNode, Declaration, ForLoopRange, NodeKind, TextLocation,
 };
-use crate::compiler_frontend::ast::expressions::expression::Expression;
+use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::statements::branching::MatchArm;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::compiler_errors::CompilerError;
@@ -16,9 +16,9 @@ use crate::compiler_frontend::hir::hir_builder::{HirBuilder, LoopTargets};
 use crate::compiler_frontend::hir::hir_datatypes::HirTypeKind;
 use crate::compiler_frontend::hir::hir_display::HirLocation;
 use crate::compiler_frontend::hir::hir_nodes::{
-    BlockId, FunctionId, HirBinOp, HirBlock, HirExpression, HirExpressionKind, HirField,
-    HirFunction, HirLocal, HirMatchArm, HirPattern, HirRegion, HirStatement, HirStatementKind,
-    HirStruct, HirTerminator, LocalId, ValueKind,
+    BlockId, FunctionId, HirBinOp, HirBlock, HirConstField, HirConstValue, HirExpression,
+    HirExpressionKind, HirField, HirFunction, HirLocal, HirMatchArm, HirModuleConst, HirPattern,
+    HirRegion, HirStatement, HirStatementKind, HirStruct, HirTerminator, LocalId, ValueKind,
 };
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::projects::settings::IMPLICIT_START_FUNC_NAME;
@@ -43,6 +43,70 @@ impl<'a> HirBuilder<'a> {
         }
 
         self.resolve_start_function(ast)
+    }
+
+    pub(crate) fn lower_module_constants(&mut self, ast: &Ast) -> Result<(), CompilerError> {
+        self.module.module_constants.clear();
+
+        for declaration in &ast.module_constants {
+            let location = declaration.value.location.to_owned();
+            let const_id = self.allocate_const_id();
+            let const_type = self.lower_data_type(&declaration.value.data_type, &location)?;
+            let const_value = self.lower_const_value(&declaration.value, &location)?;
+
+            self.module.module_constants.push(HirModuleConst {
+                id: const_id,
+                name: declaration.id.to_string(self.string_table),
+                ty: const_type,
+                value: const_value,
+            });
+        }
+
+        Ok(())
+    }
+
+    fn lower_const_value(
+        &mut self,
+        expression: &Expression,
+        location: &TextLocation,
+    ) -> Result<HirConstValue, CompilerError> {
+        match &expression.kind {
+            ExpressionKind::Int(value) => Ok(HirConstValue::Int(*value)),
+            ExpressionKind::Float(value) => Ok(HirConstValue::Float(*value)),
+            ExpressionKind::Bool(value) => Ok(HirConstValue::Bool(*value)),
+            ExpressionKind::Char(value) => Ok(HirConstValue::Char(*value)),
+            ExpressionKind::StringSlice(value) => Ok(HirConstValue::String(
+                self.string_table.resolve(*value).to_string(),
+            )),
+            ExpressionKind::Collection(items) => {
+                let mut lowered_items = Vec::with_capacity(items.len());
+                for item in items {
+                    lowered_items.push(self.lower_const_value(item, location)?);
+                }
+                Ok(HirConstValue::Collection(lowered_items))
+            }
+            ExpressionKind::StructInstance(fields) => {
+                let mut lowered_fields = Vec::with_capacity(fields.len());
+                for field in fields {
+                    lowered_fields.push(HirConstField {
+                        name: field.id.to_string(self.string_table),
+                        value: self.lower_const_value(&field.value, location)?,
+                    });
+                }
+                Ok(HirConstValue::Record(lowered_fields))
+            }
+            ExpressionKind::Range(start, end) => Ok(HirConstValue::Range(
+                Box::new(self.lower_const_value(start, location)?),
+                Box::new(self.lower_const_value(end, location)?),
+            )),
+            _ => return_hir_transformation_error!(
+                format!(
+                    "Unsupported constant expression during HIR lowering: {:?}",
+                    expression.kind
+                ),
+                self.hir_error_location(location)
+            ),
+        }
     }
 
     pub(crate) fn lower_top_level_node(&mut self, node: &AstNode) -> Result<(), CompilerError> {

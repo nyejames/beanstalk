@@ -110,3 +110,23 @@ fn top_level_const_template_outside_entry_file_errors() {
         "const templates outside the entry file should error"
     );
 }
+
+#[test]
+fn start_function_local_references_do_not_create_module_dependencies() {
+    let headers = parse_single_file_headers(
+        "value = 1\n\
+         another = value + 1\n\
+         io(another)\n",
+    );
+
+    let start_header = headers
+        .headers
+        .iter()
+        .find(|header| matches!(header.kind, HeaderKind::StartFunction))
+        .expect("expected start function header");
+
+    assert!(
+        start_header.dependencies.is_empty(),
+        "local start-function symbols must not be tracked as inter-header/module dependencies"
+    );
+}

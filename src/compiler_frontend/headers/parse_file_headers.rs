@@ -1,10 +1,13 @@
 use crate::backends::function_registry::HostRegistry;
+use crate::compiler_frontend::ast::statements::declaration_syntax::{
+    DeclarationSyntax, parse_declaration_syntax,
+};
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::{CompilerWarning, WarningKind};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
-use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TextLocation, TokenKind};
+use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TextLocation, Token, TokenKind};
 use crate::projects::settings::{
     MINIMUM_LIKELY_DECLARATIONS, TOKEN_TO_DECLARATION_RATIO, TOKEN_TO_HEADER_RATIO,
     TOP_LEVEL_CONST_TEMPLATE_NAME,
@@ -36,7 +39,7 @@ pub enum TopLevelTemplateKind {
 pub enum HeaderKind {
     Function { signature: FunctionSignature },
 
-    Constant,
+    Constant { metadata: ConstantHeaderMetadata },
     Struct,
     Choice, // Tagged unions. Not yet implemented in the language
 
@@ -50,6 +53,13 @@ pub enum HeaderKind {
     // and are not visible to the host from the final wasm module.
     // The build system will know which start function is the main function based on which file is the entry point of the module.
     StartFunction,
+}
+
+#[derive(Clone, Debug)]
+pub struct ConstantHeaderMetadata {
+    pub declaration_syntax: DeclarationSyntax,
+    pub file_constant_order: usize,
+    pub import_dependencies: HashSet<InternedPath>,
 }
 
 #[derive(Clone, Debug)]
@@ -160,6 +170,7 @@ pub fn parse_headers_in_file(
     // We parse and track imports as we go,
     // so we can check if the headers depend on those imports.
     let mut file_imports: HashSet<InternedPath> = HashSet::new();
+    let mut file_constant_order = 0usize;
 
     loop {
         let current_token = token_stream.current_token();
@@ -189,10 +200,13 @@ pub fn parse_headers_in_file(
                         // This is a reference, so it goes into the implicit main function
                         main_function_body.push(current_token);
 
-                        // We also store the path in dependencies and check if it's a header in scope already.
-                        // Conflicts of naming between variables in the implicit main and other headers must be caught at this stage for the implicit main
-                        // Create a path from the current file plus the symbol name
-                        main_function_dependencies.insert(token_stream.src_path.append(name_id));
+                        // Only imported symbols create inter-header dependency edges here.
+                        // Local variables declared in the start function are resolved in AST scope order
+                        // and should never be treated as module-level import dependencies.
+                        if let Some(path) = file_imports.iter().find(|f| f.name() == Some(name_id))
+                        {
+                            main_function_dependencies.insert(path.to_owned());
+                        }
 
                     // New symbol declaration
                     } else {
@@ -208,6 +222,7 @@ pub fn parse_headers_in_file(
                             // We don't want to add any imports from the header's scope to the global imports.
                             // We also don't use encountered_symbols since headers don't capture variables from the surrounding scope
                             &file_imports,
+                            &mut file_constant_order,
                             host_function_registry,
                             string_table,
                         )?;
@@ -250,12 +265,10 @@ pub fn parse_headers_in_file(
             }
 
             TokenKind::Import => {
-                // Make sure the next token is a path
-                token_stream.advance();
-
                 if let TokenKind::Path(paths) = token_stream.current_token_kind() {
                     encountered_symbols.extend(paths.iter().map(|p| p.name().unwrap()));
                     file_imports.extend(paths.to_owned());
+                    token_stream.advance();
                 } else {
                     return_rule_error!(
                         "Expected a path after the 'import' keyword",
@@ -278,6 +291,15 @@ pub fn parse_headers_in_file(
 
             TokenKind::TemplateHead => {
                 if next_statement_exported {
+                    if !is_entry_file {
+                        return_rule_error!(
+                            "Top-level const templates are currently only supported in the module entry file.",
+                            current_location.to_error_location(string_table), {
+                                CompilationStage => "Header Parsing",
+                                PrimarySuggestion => "Move this '#[...]' template to the entry file or remove the export marker",
+                            }
+                        );
+                    }
                     // Top-level const template
                     // An 'exported' top-level template that must be evaluated at compile time
                     let header = create_top_level_const_template(
@@ -359,6 +381,7 @@ fn create_header(
     token_stream: &mut FileTokens,
     name_location: TextLocation,
     file_imports: &HashSet<InternedPath>,
+    file_constant_order: &mut usize,
     _host_registry: &HostRegistry,
     string_table: &mut StringTable,
 ) -> Result<Header, CompilerError> {
@@ -488,12 +511,35 @@ fn create_header(
 
                 kind = HeaderKind::Struct;
             } else if exported {
-                // CONSTANT!
-                // This will be more complex to parse
-                // This will have to be parsed like a normal declaration with the symbol / type resolutions skipped
-                // kind = HeaderKind::Constant;
+                let declaration_syntax = parse_declaration_syntax(
+                    token_stream,
+                    full_name.name().unwrap(),
+                    string_table,
+                )?;
 
-                todo!("constants as headers");
+                let mut declaration_tokens = declaration_syntax.to_tokens();
+                declaration_tokens
+                    .push(Token::new(TokenKind::Eof, token_stream.current_location()));
+
+                for token in &declaration_tokens {
+                    if let TokenKind::Symbol(name_id) = token.kind
+                        && let Some(path) = file_imports
+                            .iter()
+                            .find(|import| import.name() == Some(name_id))
+                    {
+                        dependencies.insert(path.to_owned());
+                    }
+                }
+
+                let import_dependencies = dependencies.clone();
+                let metadata = ConstantHeaderMetadata {
+                    declaration_syntax,
+                    file_constant_order: *file_constant_order,
+                    import_dependencies,
+                };
+                *file_constant_order += 1;
+                body = declaration_tokens;
+                kind = HeaderKind::Constant { metadata };
             }
 
             // Anything else just goes into the start function
@@ -657,3 +703,7 @@ fn push_runtime_template_tokens_to_start_function(
 
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "tests/parse_file_headers_tests.rs"]
+mod parse_file_headers_tests;

@@ -43,8 +43,25 @@ pub fn parse_field_access(
     let mut current_type = base_arg.value.data_type.clone();
 
     // Process each dot access in sequence
-    while token_stream.current_token_kind() == &TokenKind::Dot {
+    while token_stream.index < token_stream.length
+        && token_stream.current_token_kind() == &TokenKind::Dot
+    {
         token_stream.advance();
+
+        if token_stream.index >= token_stream.length {
+            let fallback_location = token_stream
+                .tokens
+                .last()
+                .map(|token| token.location.to_error_location(string_table))
+                .unwrap_or_else(crate::compiler_frontend::compiler_errors::ErrorLocation::default);
+            return_rule_error!(
+                "Expected property or method name after '.', but reached the end of input.",
+                fallback_location, {
+                    CompilationStage => "AST Construction",
+                    PrimarySuggestion => "Add a property or method name after the dot",
+                }
+            );
+        }
 
         // Get the field/method name or index
         let field_id = match token_stream.current_token_kind() {
