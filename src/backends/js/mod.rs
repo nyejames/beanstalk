@@ -38,6 +38,7 @@ pub struct JsLoweringConfig {
 pub struct JsModule {
     /// Complete JS source code.
     pub source: String,
+    pub function_name_by_id: HashMap<FunctionId, String>,
 }
 
 pub fn lower_hir_to_js(
@@ -131,6 +132,7 @@ impl<'hir> JsEmitter<'hir> {
 
         Ok(JsModule {
             source: self.out.clone(),
+            function_name_by_id: self.function_name_by_id.clone(),
         })
     }
 

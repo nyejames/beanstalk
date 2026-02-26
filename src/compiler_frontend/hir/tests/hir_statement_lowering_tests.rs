@@ -1,6 +1,6 @@
 #![cfg(test)]
 
-use crate::compiler_frontend::ast::ast::{Ast, ModuleExport};
+use crate::compiler_frontend::ast::ast::{Ast, AstStartTemplateItem, ModuleExport};
 use crate::compiler_frontend::ast::ast_nodes::{
     AstNode, Declaration, ForLoopRange, NodeKind, RangeEndKind, TextLocation,
 };
@@ -13,6 +13,7 @@ use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::hir::hir_nodes::{
     HirBinOp, HirExpressionKind, HirModule, HirPattern, HirStatementKind, HirTerminator,
+    StartFragment,
 };
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
@@ -95,6 +96,7 @@ fn build_ast(nodes: Vec<AstNode>, entry_path: InternedPath) -> Ast {
         nodes,
         entry_path,
         external_exports: Vec::<ModuleExport>::new(),
+        start_template_items: vec![],
         warnings: vec![],
     }
 }
@@ -169,6 +171,75 @@ fn registers_declarations_and_resolves_start_function() {
             .cloned(),
         Some(start_name)
     );
+}
+
+#[test]
+fn lowers_ast_start_template_items_into_ordered_hir_fragments() {
+    let mut string_table = StringTable::new();
+    let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
+    let fragment_name = entry_path.join_str("__bst_frag_0", &mut string_table);
+    let const_string = string_table.intern("<meta charset=\"utf-8\">");
+
+    let fragment_fn = function_node(
+        fragment_name.clone(),
+        FunctionSignature {
+            parameters: vec![],
+            returns: vec![DataType::StringSlice],
+        },
+        vec![node(
+            NodeKind::Return(vec![Expression::string_slice(
+                const_string,
+                test_location(2),
+                Ownership::ImmutableOwned,
+            )]),
+            test_location(2),
+        )],
+        test_location(2),
+    );
+
+    let start_function = function_node(
+        start_name,
+        FunctionSignature {
+            parameters: vec![],
+            returns: vec![DataType::StringSlice],
+        },
+        vec![node(
+            NodeKind::Return(vec![Expression::string_slice(
+                const_string,
+                test_location(3),
+                Ownership::ImmutableOwned,
+            )]),
+            test_location(3),
+        )],
+        test_location(1),
+    );
+
+    let mut ast = build_ast(vec![fragment_fn, start_function], entry_path);
+    ast.start_template_items = vec![
+        AstStartTemplateItem::ConstString {
+            value: const_string,
+            location: test_location(10),
+        },
+        AstStartTemplateItem::RuntimeStringFunction {
+            function: fragment_name,
+            location: test_location(11),
+        },
+    ];
+
+    let module = lower_ast(ast, &mut string_table).expect("HIR lowering should succeed");
+    assert_eq!(
+        module.const_string_pool,
+        vec![String::from("<meta charset=\"utf-8\">")]
+    );
+    assert_eq!(module.start_fragments.len(), 2);
+    assert!(matches!(
+        module.start_fragments[0],
+        StartFragment::ConstString(id) if id.0 == 0
+    ));
+    assert!(matches!(
+        module.start_fragments[1],
+        StartFragment::RuntimeStringFn(_)
+    ));
 }
 
 #[test]
@@ -254,7 +325,7 @@ fn variable_declaration_emits_local_and_assign_statement() {
 fn start_function_with_no_template_declaration_returns_empty_string() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
-    let template_name = symbol(TOP_LEVEL_TEMPLATE_NAME, &mut string_table);
+    let empty = string_table.intern("");
 
     let start_function = function_node(
         start_name,
@@ -263,11 +334,10 @@ fn start_function_with_no_template_declaration_returns_empty_string() {
             returns: vec![DataType::StringSlice],
         },
         vec![node(
-            NodeKind::Return(vec![Expression::reference(
-                template_name,
-                DataType::Template,
+            NodeKind::Return(vec![Expression::string_slice(
+                empty,
                 test_location(2),
-                Ownership::ImmutableReference,
+                Ownership::ImmutableOwned,
             )]),
             test_location(2),
         )],
@@ -279,27 +349,16 @@ fn start_function_with_no_template_declaration_returns_empty_string() {
 
     let start_fn = &module.functions[module.start_function.0 as usize];
     let entry_block = &module.blocks[start_fn.entry.0 as usize];
-    assert_eq!(entry_block.locals.len(), 1);
-    assert_eq!(
-        module
-            .side_table
-            .resolve_local_name(entry_block.locals[0].id, &string_table),
-        Some(TOP_LEVEL_TEMPLATE_NAME)
-    );
-
-    assert!(matches!(
-        entry_block.statements.first().map(|statement| &statement.kind),
-        Some(HirStatementKind::Assign { value, .. })
-            if matches!(&value.kind, HirExpressionKind::StringLiteral(value) if value.is_empty())
-    ));
+    assert_eq!(entry_block.locals.len(), 0);
     assert!(matches!(
         &entry_block.terminator,
-        HirTerminator::Return(value) if matches!(&value.kind, HirExpressionKind::Load(_))
+        HirTerminator::Return(value)
+            if matches!(&value.kind, HirExpressionKind::StringLiteral(value) if value.is_empty())
     ));
 }
 
 #[test]
-fn start_function_accumulates_multiple_top_level_templates_in_source_order() {
+fn start_function_rejects_duplicate_top_level_template_symbol_declarations() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
     let template_name = symbol(TOP_LEVEL_TEMPLATE_NAME, &mut string_table);
@@ -353,44 +412,15 @@ fn start_function_accumulates_multiple_top_level_templates_in_source_order() {
     );
 
     let ast = build_ast(vec![start_function], entry_path);
-    let module = lower_ast(ast, &mut string_table).expect("HIR lowering should succeed");
-
-    let start_fn = &module.functions[module.start_function.0 as usize];
-    let entry_block = &module.blocks[start_fn.entry.0 as usize];
-    let template_locals = entry_block
-        .locals
-        .iter()
-        .filter(|local| {
-            module
-                .side_table
-                .resolve_local_name(local.id, &string_table)
-                .is_some_and(|name| name == TOP_LEVEL_TEMPLATE_NAME)
-        })
-        .count();
-    assert_eq!(template_locals, 1);
-    assert_eq!(entry_block.statements.len(), 7);
-
-    let template_calls = entry_block
-        .statements
-        .iter()
-        .filter_map(|statement| match &statement.kind {
-            HirStatementKind::Call { args, .. } => Some(args),
-            _ => None,
-        })
-        .collect::<Vec<_>>();
-    assert_eq!(template_calls.len(), 2);
-    assert!(matches!(
-        template_calls[0][0].kind,
-        HirExpressionKind::StringLiteral(ref value) if value == "First"
-    ));
-    assert!(matches!(
-        template_calls[1][0].kind,
-        HirExpressionKind::StringLiteral(ref value) if value == "Second"
-    ));
+    let error = lower_ast(ast, &mut string_table).expect_err("duplicate symbol should fail");
+    assert!(error.errors.iter().any(|item| {
+        item.msg
+            .contains("Local '#template' is already declared in this function scope")
+    }));
 }
 
 #[test]
-fn top_level_template_declarations_do_not_redeclare_accumulator_local() {
+fn top_level_template_declarations_require_unique_symbols() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
     let template_name = symbol(TOP_LEVEL_TEMPLATE_NAME, &mut string_table);
@@ -446,23 +476,11 @@ fn top_level_template_declarations_do_not_redeclare_accumulator_local() {
     );
 
     let ast = build_ast(vec![start_function], entry_path);
-    let module = lower_ast(ast, &mut string_table).expect("HIR lowering should succeed");
-
-    let start_fn = &module.functions[module.start_function.0 as usize];
-    let entry_block = &module.blocks[start_fn.entry.0 as usize];
-
-    let template_locals = entry_block
-        .locals
-        .iter()
-        .filter(|local| {
-            module
-                .side_table
-                .resolve_local_name(local.id, &string_table)
-                .is_some_and(|name| name == TOP_LEVEL_TEMPLATE_NAME)
-        })
-        .count();
-
-    assert_eq!(template_locals, 1);
+    let error = lower_ast(ast, &mut string_table).expect_err("duplicate symbol should fail");
+    assert!(error.errors.iter().any(|item| {
+        item.msg
+            .contains("Local '#template' is already declared in this function scope")
+    }));
 }
 
 #[test]

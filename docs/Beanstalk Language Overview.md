@@ -381,14 +381,20 @@ Basic = | defaults String |
 
 `values` has type `#Basic` and is data-only.
 
-### Compile-time templates and the builder interface
+### Start fragments and the builder interface
 
-Project builders are only aware of:
+Project builders are aware of:
 
-* `start() -> String`
-* top-level compile-time templates (`#[ ... ]` and labeled variants)
+* `start() -> String` (entrypoint lifecycle function)
+* an ordered `start_fragments` stream
+* backend output (for example JS bundle)
 
-Builders **do not** consume arbitrary exports directly, they know about the string returned from the start function at runtime and top-level constant templates.
+`start_fragments` interleave:
+
+* compile-time strings (`ConstString`)
+* runtime fragment functions (`RuntimeStringFn`)
+
+Builders **do not** consume arbitrary exports directly. They consume the ordered fragments and decide how to materialize output for their target.
 
 Exported constants exist so that **templates can reference them** and remain guaranteed-foldable.
 They are also useful for constant data that wants to be shared module wide.

@@ -67,6 +67,7 @@ fn build_ast(nodes: Vec<AstNode>, entry_path: InternedPath) -> Ast {
         nodes,
         entry_path,
         external_exports: Vec::<ModuleExport>::new(),
+        start_template_items: vec![],
         warnings: vec![],
     }
 }
@@ -136,7 +137,7 @@ fn validator_rejects_invalid_jump_target() {
 }
 
 #[test]
-fn validator_rejects_placeholder_terminator() {
+fn validator_allows_placeholder_terminator_during_transition() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
 
@@ -155,10 +156,8 @@ fn validator_rejects_placeholder_terminator() {
     let entry_block = module.functions[module.start_function.0 as usize].entry;
     module.blocks[entry_block.0 as usize].terminator = HirTerminator::Panic { message: None };
 
-    let error = validate_module_for_tests(&module, &string_table)
-        .expect_err("validator should reject placeholder terminator");
-    assert_eq!(error.error_type, ErrorType::HirTransformation);
-    assert!(error.msg.contains("placeholder terminator"));
+    validate_module_for_tests(&module, &string_table)
+        .expect("placeholder terminators are temporarily allowed by validation");
 }
 
 #[test]

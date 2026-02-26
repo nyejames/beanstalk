@@ -10,7 +10,7 @@ use crate::compiler_frontend::hir::hir_display::HirLocation;
 use crate::compiler_frontend::hir::hir_nodes::{
     BlockId, FieldId, FunctionId, HirExpression, HirExpressionKind, HirMatchArm, HirModule,
     HirPattern, HirPlace, HirStatement, HirStatementKind, HirTerminator, LocalId, RegionId,
-    StructId, ValueKind,
+    StartFragment, StructId, ValueKind,
 };
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::TextLocation;
@@ -58,6 +58,7 @@ impl<'a> HirValidator<'a> {
     fn validate(&mut self) -> Result<(), CompilerError> {
         self.collect_definition_ids()?;
         self.validate_start_function()?;
+        self.validate_start_fragments()?;
         self.validate_functions()?;
         self.validate_blocks()?;
         Ok(())
@@ -136,6 +137,39 @@ impl<'a> HirValidator<'a> {
         Ok(())
     }
 
+    fn validate_start_fragments(&self) -> Result<(), CompilerError> {
+        for (index, fragment) in self.module.start_fragments.iter().enumerate() {
+            match fragment {
+                StartFragment::ConstString(const_string_id) => {
+                    let pool_index = const_string_id.0 as usize;
+                    if pool_index >= self.module.const_string_pool.len() {
+                        return Err(self.error_with_hir(
+                            format!(
+                                "Start fragment #{index} references missing const_string_pool entry {}",
+                                const_string_id.0
+                            ),
+                            None,
+                        ));
+                    }
+                }
+
+                StartFragment::RuntimeStringFn(function_id) => {
+                    if !self.function_ids.contains(function_id) {
+                        return Err(self.error_with_hir(
+                            format!(
+                                "Start fragment #{index} references missing runtime function {:?}",
+                                function_id
+                            ),
+                            Some(HirLocation::Function(*function_id)),
+                        ));
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     fn validate_functions(&self) -> Result<(), CompilerError> {
         for function in &self.module.functions {
             self.require_block_id(function.entry, Some(HirLocation::Function(function.id)))?;
@@ -209,6 +243,8 @@ impl<'a> HirValidator<'a> {
     }
 
     fn validate_terminator_mapping(&self, block_id: BlockId) -> Result<(), CompilerError> {
+        // TODO: Require side-table mappings for placeholder terminators once lowering no longer
+        // emits `Panic { message: None }` as an intermediate sentinel.
         if self
             .module
             .blocks

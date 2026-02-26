@@ -283,16 +283,20 @@ pub fn compile_module(module: Vec<InputFile>, config: &Config) -> Result<Module,
             &mut compiler.string_table,
         ),
         external_exports: Vec::new(),
+        start_template_items: Vec::new(),
         warnings: Vec::new(),
     };
 
     // Combine all the headers into one AST
-    match compiler.headers_to_ast(sorted_modules, module_headers.const_template_count) {
+    match compiler.headers_to_ast(sorted_modules, module_headers.top_level_template_items) {
         Ok(parser_output) => {
             module_ast.nodes.extend(parser_output.nodes);
             module_ast
                 .external_exports
                 .extend(parser_output.external_exports);
+            module_ast
+                .start_template_items
+                .extend(parser_output.start_template_items);
             // Extends the compiler_frontend messages with warnings and errors from the parser
             compiler_messages.warnings.extend(parser_output.warnings);
         }

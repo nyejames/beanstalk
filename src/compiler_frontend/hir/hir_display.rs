@@ -520,6 +520,12 @@ impl<'a> HirDisplayContext<'a> {
             "  start_function: {}",
             self.function_label(module.start_function)
         );
+        let _ = writeln!(out, "  start_fragments: {}", module.start_fragments.len());
+        let _ = writeln!(
+            out,
+            "  const_string_pool: {}",
+            module.const_string_pool.len()
+        );
 
         let _ = writeln!(out, "  regions: {}", module.regions.len());
 

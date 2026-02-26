@@ -6,11 +6,11 @@ use crate::backends::js::{JsLoweringConfig, lower_hir_to_js};
 use crate::build_system::build::{FileKind, Module, OutputFile, Project, ProjectBuilder};
 use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
-use crate::compiler_frontend::hir::hir_nodes::HirModule;
+use crate::compiler_frontend::hir::hir_nodes::{HirModule, StartFragment};
 use crate::compiler_frontend::string_interning::StringTable;
-use crate::projects::settings::BEANSTALK_FILE_EXTENSION;
 use crate::projects::settings::Config;
-use std::path::Path;
+use std::fmt::Write as _;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug)]
 pub struct HtmlProjectBuilder {}
@@ -25,45 +25,53 @@ impl ProjectBuilder for HtmlProjectBuilder {
     fn build_backend(
         &self,
         modules: Vec<Module>,
-        config: &Config,
+        _config: &Config,
         flags: &[Flag],
     ) -> Result<Project, CompilerMessages> {
         let mut compiler_messages = CompilerMessages::new();
-        // Validate the config has everything needed for an HTML project
-        if let Err(e) = self.validate_project_config(config) {
+        if let Err(error) = self.validate_project_config(_config) {
             return Err(CompilerMessages {
-                errors: vec![e],
+                errors: vec![error],
                 warnings: Vec::new(),
             });
         }
 
-        let mut output_files = Vec::with_capacity(1);
-        for module in modules {
-            // -----------------------------
-            //      BACKEND COMPILATION
-            // -----------------------------
-            let auto_invoke_start = should_auto_invoke_start(config, &module.entry_point);
-
-            match compile_js_module(
-                &module.hir,
-                &module.string_table,
-                &module.entry_point,
-                &mut output_files,
-                flags.contains(&Flag::Release),
-                auto_invoke_start,
-            ) {
-                Ok(()) => {}
-                Err(e) => {
-                    compiler_messages.errors.push(e);
-                    return Err(compiler_messages);
-                }
-            }
+        // TODO: support multiple module projects.
+        if modules.len() != 1 {
+            return Err(CompilerMessages {
+                errors: vec![CompilerError::compiler_error(format!(
+                    "HTML builder currently supports exactly one module at a time, but got {} modules.",
+                    modules.len()
+                ))],
+                warnings: Vec::new(),
+            });
         }
 
-        Ok(Project {
-            output_files,
-            warnings: compiler_messages.warnings,
-        })
+        let module = modules.into_iter().next().ok_or_else(|| CompilerMessages {
+            errors: vec![CompilerError::compiler_error(
+                "HTML builder expected one module but received none.",
+            )],
+            warnings: Vec::new(),
+        })?;
+
+        let release_build = flags.contains(&Flag::Release);
+        match compile_html_module(
+            &module.hir,
+            &module.string_table,
+            &module.entry_point,
+            release_build,
+        ) {
+            Ok(output_file) => {
+                return Ok(Project {
+                    output_files: vec![output_file],
+                    warnings: compiler_messages.warnings,
+                });
+            }
+            Err(error) => {
+                compiler_messages.errors.push(error);
+                return Err(compiler_messages);
+            }
+        }
     }
 
     fn validate_project_config(&self, _config: &Config) -> Result<(), CompilerError> {
@@ -77,52 +85,119 @@ impl ProjectBuilder for HtmlProjectBuilder {
     }
 }
 
-fn compile_js_module(
+fn compile_html_module(
     hir_module: &HirModule,
     string_table: &StringTable,
     entry_point: &Path,
-    output_files: &mut Vec<OutputFile>,
     release_build: bool,
-    auto_invoke_start: bool,
-) -> Result<(), CompilerError> {
+) -> Result<OutputFile, CompilerError> {
     let js_lowering_config = JsLoweringConfig {
         pretty: !release_build,
         emit_locations: false,
-        auto_invoke_start,
+        auto_invoke_start: false,
     };
 
     let js_module = lower_hir_to_js(hir_module, string_table, js_lowering_config)?;
+    let html = render_html_document(
+        hir_module,
+        &js_module.source,
+        &js_module.function_name_by_id,
+    )?;
 
-    // Emit an explicit artifact path so the core writer can place this output under any root.
-    let output_file_name = entry_point
+    Ok(OutputFile::new(
+        html_output_path(entry_point),
+        FileKind::Html(html),
+    ))
+}
+
+fn html_output_path(entry_point: &Path) -> PathBuf {
+    let file_stem = entry_point
         .file_stem()
         .and_then(|stem| stem.to_str())
         .filter(|stem| !stem.is_empty())
         .unwrap_or("main");
 
-    output_files.push(OutputFile::new(
-        std::path::PathBuf::from(format!("{output_file_name}.js")),
-        FileKind::Js(js_module.source),
-    ));
-
-    Ok(())
+    if file_stem == "#page" {
+        PathBuf::from("index.html")
+    } else {
+        PathBuf::from(format!("{file_stem}.html"))
+    }
 }
 
-fn should_auto_invoke_start(config: &Config, module_entry_point: &Path) -> bool {
-    let is_page_entry = module_entry_point
-        .file_stem()
-        .and_then(|stem| stem.to_str())
-        .is_some_and(|stem| stem == "#page");
+fn render_html_document(
+    hir_module: &HirModule,
+    js_bundle: &str,
+    function_names: &std::collections::HashMap<
+        crate::compiler_frontend::hir::hir_nodes::FunctionId,
+        String,
+    >,
+) -> Result<String, CompilerError> {
+    let mut html = String::new();
+    let mut runtime_slots = Vec::new();
+    let mut runtime_index = 0usize;
 
-    let is_single_file_project = config
-        .entry_dir
-        .extension()
-        .and_then(|extension| extension.to_str())
-        .is_some_and(|extension| extension == BEANSTALK_FILE_EXTENSION);
+    for fragment in &hir_module.start_fragments {
+        match fragment {
+            StartFragment::ConstString(const_string_id) => {
+                let string_index = const_string_id.0 as usize;
+                let Some(const_string) = hir_module.const_string_pool.get(string_index) else {
+                    return Err(CompilerError::compiler_error(format!(
+                        "HTML builder could not resolve const fragment {}",
+                        const_string_id.0
+                    )));
+                };
+                // The HTML builder interprets const fragment strings as raw HTML.
+                html.push_str(const_string);
+                html.push('\n');
+            }
 
-    let is_project_entry_module = module_entry_point == config.entry_dir;
+            StartFragment::RuntimeStringFn(function_id) => {
+                let Some(function_name) = function_names.get(function_id) else {
+                    return Err(CompilerError::compiler_error(format!(
+                        "HTML builder could not resolve runtime fragment function {:?}",
+                        function_id
+                    )));
+                };
+                let slot_id = format!("bst-slot-{runtime_index}");
+                runtime_index += 1;
+                html.push_str(&format!("<div id=\"{slot_id}\"></div>\n"));
+                runtime_slots.push((slot_id, function_name.clone()));
+            }
+        }
+    }
 
-    is_page_entry || (is_single_file_project && is_project_entry_module)
+    html.push_str("<script>\n");
+    html.push_str(js_bundle);
+    html.push_str("\n</script>\n");
+    html.push_str("<script>\n");
+    html.push_str("(function () {\n");
+    html.push_str("  const slots = [\n");
+    for (slot_id, function_name) in &runtime_slots {
+        let _ = writeln!(html, "    [\"{slot_id}\", {function_name}],");
+    }
+    html.push_str("  ];\n\n");
+    // Hydrate runtime fragments in source order before running start().
+    html.push_str("  for (const [id, fn] of slots) {\n");
+    html.push_str("    const el = document.getElementById(id);\n");
+    html.push_str("    if (!el) throw new Error(\"Missing runtime mount slot: \" + id);\n");
+    html.push_str("    el.insertAdjacentHTML(\"beforeend\", fn());\n");
+    html.push_str("  }\n\n");
+
+    let Some(start_function_name) = function_names.get(&hir_module.start_function) else {
+        return Err(CompilerError::compiler_error(format!(
+            "HTML builder could not resolve start function {:?}",
+            hir_module.start_function
+        )));
+    };
+
+    let _ = writeln!(
+        html,
+        "  // start() remains the lifecycle entrypoint and runs after fragment hydration.\n  if (typeof {start_function_name} === \"function\") {start_function_name}();"
+    );
+    html.push_str("})();\n");
+    html.push_str("</script>\n");
+
+    Ok(html)
 }
 
 #[allow(dead_code)]

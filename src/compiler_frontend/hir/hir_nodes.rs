@@ -77,6 +77,15 @@ pub struct FunctionId(pub u32);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct RegionId(pub u32);
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ConstStringId(pub u32);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum StartFragment {
+    ConstString(ConstStringId),
+    RuntimeStringFn(FunctionId),
+}
+
 // ============================================================
 // Module
 // ============================================================
@@ -90,6 +99,10 @@ pub struct HirModule {
 
     /// Entry point for execution.
     pub start_function: FunctionId,
+
+    /// Ordered start-fragment stream consumed by project builders.
+    pub start_fragments: Vec<StartFragment>,
+    pub const_string_pool: Vec<String>,
 
     /// Region tree
     pub regions: Vec<HirRegion>,
@@ -107,6 +120,8 @@ impl HirModule {
             type_context: TypeContext::default(),
             side_table: HirSideTable::default(),
             start_function: FunctionId(0),
+            start_fragments: vec![],
+            const_string_pool: vec![],
             regions: vec![],
             warnings: vec![],
         }

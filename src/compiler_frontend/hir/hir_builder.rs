@@ -16,6 +16,7 @@
 //! Those occur in later compilation phases.
 
 use crate::compiler_frontend::ast::ast::Ast;
+use crate::compiler_frontend::ast::ast::AstStartTemplateItem;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, TextLocation};
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::hir::hir_display::HirSideTable;
@@ -160,6 +161,13 @@ impl<'a> HirBuilder<'a> {
             });
         }
 
+        if let Err(error) = self.resolve_start_fragments(&ast) {
+            return Err(CompilerMessages {
+                errors: vec![error],
+                warnings: self.module.warnings.clone(),
+            });
+        }
+
         for node in &ast.nodes {
             if let Err(error) = self.process_ast_node(node) {
                 return Err(CompilerMessages {
@@ -180,6 +188,34 @@ impl<'a> HirBuilder<'a> {
         }
 
         Ok(self.module)
+    }
+
+    fn resolve_start_fragments(&mut self, ast: &Ast) -> Result<(), CompilerError> {
+        self.module.start_fragments.clear();
+        self.module.const_string_pool.clear();
+
+        for template_item in &ast.start_template_items {
+            match template_item {
+                AstStartTemplateItem::ConstString { value, .. } => {
+                    let const_string_id = ConstStringId(self.module.const_string_pool.len() as u32);
+                    self.module
+                        .const_string_pool
+                        .push(self.string_table.resolve(*value).to_owned());
+                    self.module
+                        .start_fragments
+                        .push(StartFragment::ConstString(const_string_id));
+                }
+
+                AstStartTemplateItem::RuntimeStringFunction { function, location } => {
+                    let function_id = self.resolve_function_id_or_error(function, location)?;
+                    self.module
+                        .start_fragments
+                        .push(StartFragment::RuntimeStringFn(function_id));
+                }
+            }
+        }
+
+        Ok(())
     }
 
     /// Processes a single AST node and generates corresponding HIR.

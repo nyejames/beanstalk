@@ -16,7 +16,20 @@ use std::path::Path;
 
 pub struct Headers {
     pub headers: Vec<Header>,
-    pub const_template_count: usize,
+    pub top_level_template_items: Vec<TopLevelTemplateItem>,
+}
+
+#[derive(Clone, Debug)]
+pub struct TopLevelTemplateItem {
+    pub file_order: usize,
+    pub location: TextLocation,
+    pub kind: TopLevelTemplateKind,
+}
+
+#[derive(Clone, Debug)]
+pub enum TopLevelTemplateKind {
+    ConstTemplate { header_path: InternedPath },
+    RuntimeTemplate,
 }
 
 #[derive(Clone, Debug)]
@@ -79,6 +92,8 @@ pub fn parse_headers(
     let mut headers: Vec<Header> = Vec::new();
     let mut errors: Vec<CompilerError> = Vec::new();
     let mut const_template_count = 0;
+    let mut top_level_template_items = Vec::new();
+    let mut top_level_template_order = 0usize;
 
     for mut file in tokenized_files {
         let is_entry_file = file.src_path.to_path_buf(string_table) == entry_file_path;
@@ -93,6 +108,8 @@ pub fn parse_headers(
             is_entry_file,
             string_table,
             &mut const_template_count,
+            &mut top_level_template_order,
+            &mut top_level_template_items,
         );
 
         match headers_from_file {
@@ -111,7 +128,7 @@ pub fn parse_headers(
 
     Ok(Headers {
         headers,
-        const_template_count,
+        top_level_template_items,
     })
 }
 
@@ -125,6 +142,8 @@ pub fn parse_headers_in_file(
     is_entry_file: bool,
     string_table: &mut StringTable,
     const_template_number: &mut usize,
+    top_level_template_order: &mut usize,
+    top_level_template_items: &mut Vec<TopLevelTemplateItem>,
 ) -> Result<Vec<Header>, CompilerError> {
     let mut headers = Vec::with_capacity(token_stream.length / TOKEN_TO_HEADER_RATIO);
     let mut encountered_symbols: HashSet<StringId> = HashSet::with_capacity(
@@ -251,6 +270,7 @@ pub fn parse_headers_in_file(
                     // An 'exported' top-level template that must be evaluated at compile time
                     let header = create_top_level_const_template(
                         token_stream.src_path.to_owned(),
+                        current_token,
                         *const_template_number,
                         &file_imports,
                         token_stream,
@@ -258,10 +278,36 @@ pub fn parse_headers_in_file(
                     )?;
 
                     *const_template_number += 1;
+                    if is_entry_file {
+                        top_level_template_items.push(TopLevelTemplateItem {
+                            file_order: *top_level_template_order,
+                            location: header.name_location.clone(),
+                            kind: TopLevelTemplateKind::ConstTemplate {
+                                header_path: header.tokens.src_path.clone(),
+                            },
+                        });
+                        *top_level_template_order += 1;
+                    }
                     headers.push(header);
+                    next_statement_exported = false;
                 } else {
                     // Regular top-level templates just go into the start function
-                    main_function_body.push(current_token);
+                    if is_entry_file {
+                        top_level_template_items.push(TopLevelTemplateItem {
+                            file_order: *top_level_template_order,
+                            location: current_location.clone(),
+                            kind: TopLevelTemplateKind::RuntimeTemplate,
+                        });
+                        *top_level_template_order += 1;
+                    }
+                    push_runtime_template_tokens_to_start_function(
+                        current_token,
+                        token_stream,
+                        &file_imports,
+                        &mut main_function_dependencies,
+                        &mut main_function_body,
+                        string_table,
+                    )?;
                 }
             }
 
@@ -463,6 +509,7 @@ fn create_header(
 
 fn create_top_level_const_template(
     scope: InternedPath,
+    opening_template_token: crate::compiler_frontend::tokenizer::tokens::Token,
     const_template_number: usize,
     file_imports: &HashSet<InternedPath>,
     token_stream: &mut FileTokens,
@@ -473,22 +520,17 @@ fn create_top_level_const_template(
     ));
     let mut dependencies: HashSet<InternedPath> = HashSet::new();
 
-    // This 10 comes straight out of my ass
+    // Keep the full token stream (including the template opener) so AST template parsing
+    // can treat const templates the same way as other templates.
     let mut body = Vec::with_capacity(10);
+    body.push(opening_template_token);
 
     let start_location = token_stream.current_location();
-
-    // Skip the opening template head token
-    token_stream.advance();
-
-    // Starts at the first token after the declaration symbol
-    let current_token = token_stream.current_token_kind().to_owned();
 
     let mut scopes_opened = 1;
     let mut scopes_closed = 0;
 
-    // FunctionSignature::new leaves us at the first token of the function body
-    // Don't advance before the first iteration
+    // The caller has already consumed the opening token.
     while scopes_opened > scopes_closed {
         match token_stream.current_token_kind() {
             TokenKind::TemplateHead => {
@@ -545,4 +587,61 @@ fn create_top_level_const_template(
         name_location,
         tokens: FileTokens::new(full_name, body),
     })
+}
+
+fn push_runtime_template_tokens_to_start_function(
+    opening_template_token: crate::compiler_frontend::tokenizer::tokens::Token,
+    token_stream: &mut FileTokens,
+    file_imports: &HashSet<InternedPath>,
+    main_function_dependencies: &mut HashSet<InternedPath>,
+    main_function_body: &mut Vec<crate::compiler_frontend::tokenizer::tokens::Token>,
+    string_table: &StringTable,
+) -> Result<(), CompilerError> {
+    main_function_body.push(opening_template_token);
+
+    let mut scopes_opened = 1usize;
+    let mut scopes_closed = 0usize;
+
+    while scopes_opened > scopes_closed {
+        match token_stream.current_token_kind() {
+            TokenKind::TemplateHead => {
+                scopes_opened += 1;
+                main_function_body.push(token_stream.current_token());
+            }
+
+            TokenKind::TemplateClose => {
+                scopes_closed += 1;
+                main_function_body.push(token_stream.current_token());
+            }
+
+            TokenKind::Eof => {
+                return_rule_error!(
+                    "Unexpected end of file while parsing top-level runtime template. Missing ']' to close the template.",
+                    token_stream.current_location().to_error_location(string_table),
+                    {
+                        PrimarySuggestion => "Close the template with ']'",
+                        SuggestedInsertion => "]",
+                    }
+                )
+            }
+
+            TokenKind::Symbol(name_id) => {
+                if let Some(path) = file_imports
+                    .iter()
+                    .find(|path| path.name() == Some(*name_id))
+                {
+                    main_function_dependencies.insert(path.to_owned());
+                }
+                main_function_body.push(token_stream.current_token());
+            }
+
+            _ => {
+                main_function_body.push(token_stream.current_token());
+            }
+        }
+
+        token_stream.advance();
+    }
+
+    Ok(())
 }

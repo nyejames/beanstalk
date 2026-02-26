@@ -79,7 +79,7 @@ fn build_project_returns_result_without_writing_files() {
 
     assert!(!result.project.output_files.is_empty());
     assert!(
-        !root.join("main.js").exists(),
+        !root.join("main.html").exists(),
         "build_project should not write files to disk"
     );
 
@@ -190,6 +190,78 @@ fn build_project_preserves_builder_warnings_in_build_result() {
             .iter()
             .any(|warning| warning.msg == "builder warning"),
         "build result should include backend warnings"
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
+fn build_project_emits_runtime_fragment_with_captured_start_local() {
+    let root = temp_dir("runtime_fragment_capture");
+    fs::create_dir_all(&root).expect("should create temp root");
+    fs::write(
+        root.join("main.bst"),
+        "get_name|| -> String:\n    return \"Beanstalk\"\n;\nname = get_name()\n[:Hello [name]]\n",
+    )
+    .expect("should write source file");
+    let _cwd_guard = CurrentDirGuard::set_to(&root);
+
+    let builder = HtmlProjectBuilder::new();
+    let build_result = build_project(&builder, "main.bst", &[]).expect("build should succeed");
+
+    let html = match build_result.project.output_files[0].file_kind() {
+        FileKind::Html(content) => content,
+        other => panic!(
+            "expected HTML output, got {:?}",
+            std::mem::discriminant(other)
+        ),
+    };
+
+    assert!(html.contains("<div id=\"bst-slot-0\"></div>"));
+    assert!(
+        html.contains("__bst_frag_0"),
+        "runtime fragment function should be emitted and bootstrapped"
+    );
+    assert!(
+        html.contains("Beanstalk"),
+        "captured start-local value should be preserved in generated fragment code"
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
+fn build_project_preserves_const_and_runtime_fragment_order() {
+    let root = temp_dir("fragment_order");
+    fs::create_dir_all(&root).expect("should create temp root");
+    fs::write(
+        root.join("main.bst"),
+        "#[:<meta charset=\"utf-8\">]\nname = \"Beanstalk\"\n[:<title>[name]</title>]\n",
+    )
+    .expect("should write source file");
+    let _cwd_guard = CurrentDirGuard::set_to(&root);
+
+    let builder = HtmlProjectBuilder::new();
+    let build_result = build_project(&builder, "main.bst", &[]).expect("build should succeed");
+
+    let html = match build_result.project.output_files[0].file_kind() {
+        FileKind::Html(content) => content,
+        other => panic!(
+            "expected HTML output, got {:?}",
+            std::mem::discriminant(other)
+        ),
+    };
+
+    let const_index = html
+        .find("<meta charset=\"utf-8\">")
+        .expect("const fragment should be inlined");
+    let slot_index = html
+        .find("<div id=\"bst-slot-0\"></div>")
+        .expect("runtime fragment slot should be emitted");
+
+    assert!(
+        const_index < slot_index,
+        "const fragment should appear before runtime slot in source order"
     );
 
     fs::remove_dir_all(&root).expect("should remove temp dir");

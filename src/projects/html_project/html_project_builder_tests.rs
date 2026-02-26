@@ -2,8 +2,8 @@ use super::*;
 use crate::compiler_frontend::analysis::borrow_checker::BorrowCheckReport;
 use crate::compiler_frontend::hir::hir_datatypes::{HirType, HirTypeKind, TypeContext};
 use crate::compiler_frontend::hir::hir_nodes::{
-    BlockId, FunctionId, HirBlock, HirExpression, HirExpressionKind, HirFunction, HirModule,
-    HirRegion, HirTerminator, RegionId, ValueKind,
+    BlockId, ConstStringId, FunctionId, HirBlock, HirExpression, HirExpressionKind, HirFunction,
+    HirModule, HirRegion, HirTerminator, RegionId, StartFragment, ValueKind,
 };
 use crate::projects::settings::Config;
 use std::path::PathBuf;
@@ -67,7 +67,7 @@ fn create_test_module(entry_point: PathBuf) -> Module {
 }
 
 #[test]
-fn build_backend_emits_single_js_output_file() {
+fn build_backend_emits_single_html_output_file() {
     let builder = HtmlProjectBuilder::new();
     let entry_path = PathBuf::from("main.bst");
     let module = create_test_module(entry_path.clone());
@@ -80,8 +80,12 @@ fn build_backend_emits_single_js_output_file() {
     assert_eq!(project.output_files.len(), 1);
     assert_eq!(
         project.output_files[0].relative_output_path(),
-        PathBuf::from("main.js")
+        PathBuf::from("main.html")
     );
+    assert!(matches!(
+        project.output_files[0].file_kind(),
+        FileKind::Html(_)
+    ));
 }
 
 #[test]
@@ -105,43 +109,69 @@ fn build_backend_respects_release_pretty_toggle() {
         )
         .expect("release build should succeed");
 
-    let dev_js = match dev_project.output_files[0].file_kind() {
-        FileKind::Js(content) => content,
-        _ => panic!("expected JS output for dev build"),
+    let dev_html = match dev_project.output_files[0].file_kind() {
+        FileKind::Html(content) => content,
+        _ => panic!("expected HTML output for dev build"),
     };
 
-    let release_js = match release_project.output_files[0].file_kind() {
-        FileKind::Js(content) => content,
-        _ => panic!("expected JS output for release build"),
+    let release_html = match release_project.output_files[0].file_kind() {
+        FileKind::Html(content) => content,
+        _ => panic!("expected HTML output for release build"),
     };
 
     assert!(
-        dev_js.contains("    return;"),
+        dev_html.contains("    return;"),
         "dev build should include pretty indentation for statements"
     );
     assert!(
-        release_js.contains("return;"),
+        release_html.contains("return;"),
         "release build should still emit valid JS statements"
     );
     assert!(
-        !release_js.contains("    return;"),
+        !release_html.contains("    return;"),
         "release build should avoid pretty indentation"
     );
 }
 
 #[test]
-fn auto_invoke_start_policy_matches_entrypoint_rules() {
-    let single_file_config = Config::new(PathBuf::from("main.bst"));
-    let single_file_entry = PathBuf::from("main.bst");
-    assert!(should_auto_invoke_start(
-        &single_file_config,
-        &single_file_entry
-    ));
+fn page_entry_outputs_index_html() {
+    let builder = HtmlProjectBuilder::new();
+    let entry_path = PathBuf::from("#page.bst");
+    let module = create_test_module(entry_path.clone());
+    let config = Config::new(entry_path);
 
-    let page_config = Config::new(PathBuf::from("website"));
-    let page_entry = PathBuf::from("website/#page.bst");
-    assert!(should_auto_invoke_start(&page_config, &page_entry));
+    let project = builder
+        .build_backend(vec![module], &config, &[])
+        .expect("build_backend should succeed");
+    assert_eq!(
+        project.output_files[0].relative_output_path(),
+        PathBuf::from("index.html")
+    );
+}
 
-    let imported_entry = PathBuf::from("website/helper.bst");
-    assert!(!should_auto_invoke_start(&page_config, &imported_entry));
+#[test]
+fn emits_runtime_slots_and_bootstrap_calls_start() {
+    let builder = HtmlProjectBuilder::new();
+    let entry_path = PathBuf::from("main.bst");
+    let mut module = create_test_module(entry_path.clone());
+
+    module.hir.start_fragments = vec![
+        StartFragment::ConstString(ConstStringId(0)),
+        StartFragment::RuntimeStringFn(FunctionId(0)),
+    ];
+    module.hir.const_string_pool = vec![String::from("<meta charset=\"utf-8\">")];
+
+    let project = builder
+        .build_backend(vec![module], &Config::new(entry_path), &[])
+        .expect("build_backend should succeed");
+
+    let html = match project.output_files[0].file_kind() {
+        FileKind::Html(content) => content,
+        _ => panic!("expected HTML output"),
+    };
+
+    assert!(html.contains("<meta charset=\"utf-8\">"));
+    assert!(html.contains("<div id=\"bst-slot-0\"></div>"));
+    assert!(html.contains("insertAdjacentHTML(\"beforeend\", fn());"));
+    assert!(html.contains("if (typeof main === \"function\") main();"));
 }

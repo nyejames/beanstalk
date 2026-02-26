@@ -199,6 +199,13 @@ fn lower_hir_smoke_test() {
 
     assert!(output.source.contains("function main()"));
     assert!(output.source.contains("return;"));
+    assert_eq!(
+        output
+            .function_name_by_id
+            .get(&FunctionId(0))
+            .map(String::as_str),
+        Some("main")
+    );
 }
 
 #[test]
@@ -559,6 +566,82 @@ fn auto_invokes_start_function_when_enabled() {
     .expect("JS lowering should succeed");
 
     assert!(output.source.contains("start_main();"));
+}
+
+#[test]
+fn exposes_function_name_map_for_runtime_fragments() {
+    let mut string_table = StringTable::new();
+    let (type_context, types) = build_type_context();
+
+    let block0 = HirBlock {
+        id: BlockId(0),
+        region: RegionId(0),
+        locals: vec![],
+        statements: vec![],
+        terminator: HirTerminator::Return(unit_expression(0, types.unit, RegionId(0))),
+    };
+
+    let block1 = HirBlock {
+        id: BlockId(1),
+        region: RegionId(0),
+        locals: vec![],
+        statements: vec![],
+        terminator: HirTerminator::Return(unit_expression(1, types.unit, RegionId(0))),
+    };
+
+    let mut module = HirModule::new();
+    module.blocks = vec![block0, block1];
+    module.start_function = FunctionId(0);
+    module.functions = vec![
+        HirFunction {
+            id: FunctionId(0),
+            entry: BlockId(0),
+            params: vec![],
+            return_type: types.unit,
+        },
+        HirFunction {
+            id: FunctionId(1),
+            entry: BlockId(1),
+            params: vec![],
+            return_type: types.unit,
+        },
+    ];
+    module.type_context = type_context;
+    module.regions = vec![HirRegion::lexical(RegionId(0), None)];
+    module.side_table.bind_function_name(
+        FunctionId(0),
+        InternedPath::from_single_str("start", &mut string_table),
+    );
+    module.side_table.bind_function_name(
+        FunctionId(1),
+        InternedPath::from_single_str("__bst_frag_0", &mut string_table),
+    );
+
+    let output = lower_hir_to_js(
+        &module,
+        &string_table,
+        JsLoweringConfig {
+            pretty: true,
+            emit_locations: false,
+            auto_invoke_start: false,
+        },
+    )
+    .expect("JS lowering should succeed");
+
+    assert_eq!(
+        output
+            .function_name_by_id
+            .get(&FunctionId(0))
+            .map(String::as_str),
+        Some("start")
+    );
+    assert_eq!(
+        output
+            .function_name_by_id
+            .get(&FunctionId(1))
+            .map(String::as_str),
+        Some("__bst_frag_0")
+    );
 }
 
 #[test]

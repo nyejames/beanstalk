@@ -125,7 +125,7 @@ This stage of the compiler is stable and currently can represent almost all the 
 - **Import Resolution**: Processes import declarations
 - **Dependency Analysis**: Builds import graph and detects circular dependencies
 - **Collect Constants**: Collect exported const bindings and dependencies
-- **Preserve Top-Level Const Template Order**: Each top level const template should have an explicit order to be reconstructed in at later stages of compilation.
+- **Preserve Top-Level Template Order**: Entry-file top-level templates are tracked in source order as ordered template items (`ConstTemplate` / `RuntimeTemplate`) for later fragment lowering.
 
 **Development Notes**:
 Use `show_headers` feature flag to inspect parsed headers.
@@ -188,6 +188,7 @@ Variables store their full path including their parents in their name, the last 
 - Templates fully resolved at the AST stage become string literals before HIR.
 - Templates requiring runtime evaluation are lowered into **explicit template functions**.
 - Top-level const templates are fully folded (or throw an error).
+- Entry-file top-level templates become ordered `start_template_items` so HIR can build canonical start fragments.
 
 **Runtime Expressions**: When expressions cannot be folded at compile time:
 - Variables, function calls or complex operations become `ExpressionKind::Runtime(Vec<AstNode>)`
@@ -224,6 +225,11 @@ HIR intentionally avoids full place-based tracking in the initial implementation
 **Linear Control Flow**
 - HIR contains no nested expressions or implicit scopes
 - All control-flow is explicit via blocks, jumps and terminators
+
+**Start Fragment Stream**
+- HIR exposes `start_fragments` for project builders.
+- `StartFragment::ConstString` references folded compile-time strings in `const_string_pool`.
+- `StartFragment::RuntimeStringFn` references generated runtime fragment functions in source order.
 
 **Last-Use–Oriented Semantics**
 - HIR does not model exact lifetimes

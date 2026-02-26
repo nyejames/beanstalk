@@ -36,7 +36,9 @@ use crate::compiler_frontend::analysis::borrow_checker::{
 use crate::compiler_frontend::ast::ast::Ast;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
-use crate::compiler_frontend::headers::parse_file_headers::{Header, Headers, parse_headers};
+use crate::compiler_frontend::headers::parse_file_headers::{
+    Header, Headers, TopLevelTemplateItem, parse_headers,
+};
 use crate::compiler_frontend::hir::hir_builder::lower_module;
 use crate::compiler_frontend::hir::hir_nodes::HirModule;
 use crate::compiler_frontend::interned_path::InternedPath;
@@ -161,14 +163,14 @@ impl<'a> CompilerFrontend<'a> {
     pub fn headers_to_ast(
         &mut self,
         headers: Vec<Header>,
-        const_template_count: usize,
+        top_level_template_items: Vec<TopLevelTemplateItem>,
     ) -> Result<Ast, CompilerMessages> {
         let interned_entry_dir =
             InternedPath::from_path_buf(&self.project_config.entry_dir, &mut self.string_table);
 
         Ast::new(
             headers,
-            const_template_count,
+            top_level_template_items,
             &self.host_function_registry,
             &mut self.string_table,
             interned_entry_dir,
