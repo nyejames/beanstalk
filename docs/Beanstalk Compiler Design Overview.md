@@ -67,7 +67,7 @@ The Beanstalk compiler frontend and build system processes modules through these
 1. **Tokenization** – Convert source text to tokens
 2. **Header Parsing** – Extract headers and identify the entry point. Separates function definitions, structs and constants from top-level code. Processes import statements so dependencies can be sorted after.
 3. **Dependency Sorting** – Order headers by import dependencies (including constant dependencies)
-4. **AST Construction** – Name resolution, type checking, constant resolution/folding, and template lowering
+4. **AST Construction** – Name resolution, type checking, constant resolution/folding and template lowering
 5. **HIR Generation** – Semantic lowering with explicit control flow and possible drop points inserted
 6. **Borrow Validation** – An analysis pass to verify memory safety
 
@@ -76,8 +76,6 @@ Project builders then perform:
     - JS Backend (current stabilisation target): HIR → JavaScript (GC-only)
     - Wasm Backend (long-term primary target): HIR → LIR → Wasm (GC-first, ownership-eliding over time)
     - Other build systems: reuse the shared pipeline through HIR (and borrow checking) and apply custom codegen while keeping Beanstalk semantics identical across targets
-
-The core build system then assembles the output files from the project builder's output.
 
 ### Stage 0: Project Structure (`src/build_system/create_project_modules.rs`)
 **Purpose**: Determine the boundaries of each module in the project and the config for the project.
@@ -95,7 +93,6 @@ The core build system then assembles the output files from the project builder's
 - Always located at the project root
 - Parsed using normal Beanstalk declaration syntax
 - Stage 0 reads top-level constants from it for build settings (`#src`, `#output_folder`, `#libraries`, project metadata, and custom keys)
-- Legacy shorthand like `#project "html"` is invalid; use `#project = "html"`
 - Provides a unified configuration map for all build systems
 
 **`#*` Files and Modules**
@@ -110,7 +107,7 @@ The core build system then assembles the output files from the project builder's
 **Key Features**:
 - Precise source location tracking for error reporting
 - Recognition of Beanstalk-specific syntax
-- Context switching for delimiter handling (`[]` vs `""`)
+- Context switching for delimiter handling templates / strings (`[]` vs `""`)
 
 **Development Notes**:
 This stage of the compiler is stable and currently can represent almost all the tokens Beanstalk will need to represent.
@@ -128,7 +125,6 @@ This stage of the compiler is stable and currently can represent almost all the 
 - **Dependency Analysis**: Builds import graph and detects circular dependencies
 - **Collect Constants**: Collect exported constants as declaration syntax plus dependency metadata
 - **Preserve Top-Level Template Order**: Entry-file top-level templates are tracked in source order as ordered template items (`ConstTemplate` / `RuntimeTemplate`) for later fragment lowering.
-- **Const-Template Scope Enforcement**: Top-level const templates outside the entry file are compile errors.
 
 **Development Notes**:
 Use `show_headers` feature flag to inspect parsed headers.
@@ -159,7 +155,8 @@ pub struct ConstantHeaderMetadata {
 ---
 
 ### Stage 3: Dependency Sorting (`src/compiler_frontend/module_dependencies.rs`)
-**Purpose**: Order headers topologically to ensure the proper compilation sequence so the AST for the whole module can be created in one pass. This enables the AST to perform full type checking.
+**Purpose**: Order headers topologically to ensure the proper compilation sequence so the AST for the whole module can be created in one pass. 
+This enables the AST to perform full type checking.
 
 **Key Features**:
 - Topological sort of import dependencies
@@ -199,7 +196,7 @@ Variables store their full path including their parents in their name, the last 
 #### Templates
 - Templates fully resolved at the AST stage become string literals before HIR.
 - Templates requiring runtime evaluation are lowered into **explicit template functions**.
-- Top-level const templates are fully folded (or throw a compile error).
+- Top-level const templates are fully folded (or throw a rule error).
 - Entry-file top-level templates become ordered `start_template_items` so HIR can build canonical start fragments.
 
 **Runtime Expressions**: When expressions cannot be folded at compile time:
@@ -223,8 +220,6 @@ HIR (High-Level IR) is Beanstalk’s semantic lowering stage.
 It converts the fully typed AST into a linear, control-flow-explicit representation suitable for last-use analysis and ownership reasoning. HIR never performs template parsing or folding.
 
 HIR is the first stage where resource lifetime semantics are made explicit, but ownership is not fully resolved yet.
-
-HIR intentionally avoids full place-based tracking in the initial implementation to reduce complexity and enable incremental evolution of the memory model.
 
 ### Purpose
 - Linearize control flow
