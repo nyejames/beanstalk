@@ -1,5 +1,5 @@
 -- Helper file for multi-file module test
-export greet |name String| -> Void:
+#greet |name String| -> Void:
     io([: Hello, name!])
 ;
 

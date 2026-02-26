@@ -56,44 +56,46 @@ Since compile speed is a goal of the compiler, complex optimisations are left to
 
 **Entry Point Semantics**:
 - Each file has an **implicit start function** containing its top-level code
-- Every file in the module's implicit start function becomes `HeaderKind::StartFunction`
-- Imported files' implicit start functions are callable but don't execute automatically
-- Only one entry point is allowed per module, 
-this is the `HeaderKind::Main` and is implicit start function of the entry file
-- The entry file can optionally have a top level const template that is given to the build system
+- Header parsing represents each file's top-level code as `HeaderKind::StartFunction`
+- Imported files' implicit start functions are callable but do not execute automatically
+- Exactly one file is chosen as the module entry file; that file's start function is the module start function in HIR
+- The entry file can optionally contain top-level const templates that are consumed by project builders
 
 ## Pipeline Stages
 The Beanstalk compiler frontend and build system processes modules through these stages:
 0. **Project Structure** – Parses the config file and determines the boundaries of each module in the project
 1. **Tokenization** – Convert source text to tokens
 2. **Header Parsing** – Extract headers and identify the entry point. Separates function definitions, structs and constants from top-level code. Processes import statements so dependencies can be sorted after.
-5. **Dependency Sorting** – Order headers by import dependencies
-6. **AST Construction** – Name resolution, type checking and constant folding
-7. **HIR Generation** – Semantic lowering with explicit control flow and possible drop points inserted
-8. **Borrow Validation** – An analysis pass to verify memory safety
+3. **Dependency Sorting** – Order headers by import dependencies (including constant dependencies)
+4. **AST Construction** – Name resolution, type checking, constant resolution/folding, and template lowering
+5. **HIR Generation** – Semantic lowering with explicit control flow and possible drop points inserted
+6. **Borrow Validation** – An analysis pass to verify memory safety
 
 Project builders then perform:
-9. **Backend Lowering**
+7. **Backend Lowering**
     - JS Backend (current stabilisation target): HIR → JavaScript (GC-only)
     - Wasm Backend (long-term primary target): HIR → LIR → Wasm (GC-first, ownership-eliding over time)
     - Other build systems: reuse the shared pipeline through HIR (and borrow checking) and apply custom codegen while keeping Beanstalk semantics identical across targets
 
 The core build system then assembles the output files from the project builder's output.
 
-### Stage 0: Project Structure (`src/build_system/build.rs`)
+### Stage 0: Project Structure (`src/build_system/create_project_modules.rs`)
 **Purpose**: Determine the boundaries of each module in the project and the config for the project.
 
 **key Features**:
 - Provides a canonical opinionated project structure
-- Discovers all the modules in the project
-- Parses and validates the config
+- Discovers module entry files (`#*.bst`, excluding `#config.bst`)
+- Expands each module to reachable `.bst` files via recursive import resolution
+- Parses and validates project config constants
 - Determines what libraries are available for import
 - Provides the project builder with the file name and path to each module's entry point file
 
-**`#config`**
+**`#config.bst`**
 - A project-level configuration file
 - Always located at the project root
-- Parsed and validated by the compiler
+- Parsed using normal Beanstalk declaration syntax
+- Stage 0 reads top-level constants from it for build settings (`#src`, `#output_folder`, `#libraries`, project metadata, and custom keys)
+- Legacy shorthand like `#project "html"` is invalid; use `#project = "html"`
 - Provides a unified configuration map for all build systems
 
 **`#*` Files and Modules**
@@ -120,12 +122,13 @@ This stage of the compiler is stable and currently can represent almost all the 
 
 **Key Features**:
 - **Header Extraction**: Separates declarations from top-level code
-- **Implicit Start Function**: Top level code that does not fit into the other header catagories is placed into a  `HeaderKind::StartFunction` header that becomes a public "start" function.
-- **Entry Point Detection**: Identifies the entry file and converts its start function to `HeaderKind::Main`
+- **Implicit Start Function**: Top-level code that does not fit other header categories is collected into a `HeaderKind::StartFunction` header.
+- **Entry Path Tracking**: Entry-file status is tracked separately and used in later stages.
 - **Import Resolution**: Processes import declarations
 - **Dependency Analysis**: Builds import graph and detects circular dependencies
-- **Collect Constants**: Collect exported const bindings and dependencies
+- **Collect Constants**: Collect exported constants as declaration syntax plus dependency metadata
 - **Preserve Top-Level Template Order**: Entry-file top-level templates are tracked in source order as ordered template items (`ConstTemplate` / `RuntimeTemplate`) for later fragment lowering.
+- **Const-Template Scope Enforcement**: Top-level const templates outside the entry file are compile errors.
 
 **Development Notes**:
 Use `show_headers` feature flag to inspect parsed headers.
@@ -134,50 +137,59 @@ Use `show_headers` feature flag to inspect parsed headers.
 pub enum HeaderKind {
     Function {
         signature: FunctionSignature,
-        body: Vec<Token>,
     },
-    Struct(Vec<Var>),
-    Choice(Vec<Var>), // Tagged unions
-    Constant(Var),
-
+    Constant {
+        metadata: ConstantHeaderMetadata,
+    },
+    Struct,
+    Choice,
     ConstTemplate {
-        content: Vec<Token>,
         file_order: usize,
     },
+    StartFunction,
+}
 
-    // The top-level scope of regular files.
-    // Any other logic in the top level scope implicitly becomes a "start" function.
-    // This only runs when explicitly called from an import.
-    // Each .bst file can see and use these like normal functions.
-    // Start functions have no arguments or return values
-    // and are not visible to the host from the final wasm module.
-    // The build system will know which start function is the main function based on which file is the entry point of the module.
-    StartFunction(Vec<Token>),
+pub struct ConstantHeaderMetadata {
+    pub declaration_syntax: DeclarationSyntax,
+    pub file_constant_order: usize,
+    pub import_dependencies: HashSet<InternedPath>,
 }
 ```
 
 ---
 
-### Stage 3: Dependency Sorting (`src/compiler_frontend/headers/parse_file_headers.rs`)
+### Stage 3: Dependency Sorting (`src/compiler_frontend/module_dependencies.rs`)
 **Purpose**: Order headers topologically to ensure the proper compilation sequence so the AST for the whole module can be created in one pass. This enables the AST to perform full type checking.
 
 **Key Features**:
 - Topological sort of import dependencies
+- Constant dependency ordering across files
+- Source-order stability for constants declared in the same file
 - Circular dependency detection
-- Entry point validation (single entry per module)
+- Missing dependency diagnostics
 
 ---
 
-### Stage 4: AST Construction (`src/compiler_frontend/parsers/ast.rs`)
+### Stage 4: AST Construction (`src/compiler_frontend/ast/ast.rs`)
 **Purpose**: Transform headers into Abstract Syntax Tree with compile-time optimizations.
 
 **Key Features**:
 - **Header Integration**: Convert headers to AST nodes
-- **Entry Point Handling**: StartFunction and Main headers are parsed into normal functions and given a reserved name. Only the main function is exposed to the host.
+- **Entry Point Handling**: The entry file path selects which start function is exposed as the module start function.
+- **Constant Resolution Pass**: Constants are resolved in dependency order before general body lowering.
 - **Constant Folding**: Immediate evaluation of compile-time expressions
 - **Namespace Resolution**: Makes sure that variables exist and are unique to the entire module.
 Variables store their full path including their parents in their name, the last part of the path is the variable name.
 - **Type Checking**: Early type resolution and validation
+
+**Constant rules enforced by AST**:
+- Constant declarations share declaration syntax with normal variables
+- Constants cannot be mutable
+- Constants must be initialized
+- Constant initializers may only reference constants
+- Constants must be fully foldable at compile time
+- Top-level const templates are entry-file only and must fully fold
+- Slots are supported in const templates if they resolve to constant values
 
 **Compile-Time Folding**: The AST stage performs aggressive constant folding in `src/compiler_frontend/optimizers/constant_folding.rs`:
 - Pure literal expressions (e.g., `2 + 3`) are evaluated immediately
@@ -187,7 +199,7 @@ Variables store their full path including their parents in their name, the last 
 #### Templates
 - Templates fully resolved at the AST stage become string literals before HIR.
 - Templates requiring runtime evaluation are lowered into **explicit template functions**.
-- Top-level const templates are fully folded (or throw an error).
+- Top-level const templates are fully folded (or throw a compile error).
 - Entry-file top-level templates become ordered `start_template_items` so HIR can build canonical start fragments.
 
 **Runtime Expressions**: When expressions cannot be folded at compile time:
@@ -199,6 +211,7 @@ Variables store their full path including their parents in their name, the last 
 - Type checking occurs during AST construction
 - `DataType` information is attached to all expressions
 - Type mismatches are caught early in the pipeline
+- Module constants are stored in AST constant metadata, not emitted as top-level runtime declaration statements
 
 **Development Notes**:
 - Use `show_ast` feature flag to inspect generated AST
@@ -230,6 +243,11 @@ HIR intentionally avoids full place-based tracking in the initial implementation
 - HIR exposes `start_fragments` for project builders.
 - `StartFragment::ConstString` references folded compile-time strings in `const_string_pool`.
 - `StartFragment::RuntimeStringFn` references generated runtime fragment functions in source order.
+
+**Module Constant Pool**
+- HIR exposes `module_constants` as compile-time metadata.
+- Module constants are not lowered as runtime top-level statements.
+- Backends/builders can consume `module_constants` for tooling or codegen decisions.
 
 **Last-Use–Oriented Semantics**
 - HIR does not model exact lifetimes

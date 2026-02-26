@@ -1,7 +1,7 @@
 -- Configuration module with implicit main
 database_url ~= ""
 
-export get_database_url || -> String:
+#get_database_url || -> String:
     return database_url
 ;
 

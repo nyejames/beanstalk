@@ -65,6 +65,7 @@ fn symbol(name: &str, string_table: &mut StringTable) -> InternedPath {
 fn build_ast(nodes: Vec<AstNode>, entry_path: InternedPath) -> Ast {
     Ast {
         nodes,
+        module_constants: vec![],
         entry_path,
         external_exports: Vec::<ModuleExport>::new(),
         start_template_items: vec![],

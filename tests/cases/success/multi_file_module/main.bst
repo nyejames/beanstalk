@@ -1,5 +1,5 @@
 -- Entry file for multi-file module test
-#import @helper
+import @(helper)
 
 io("Starting main")
 helper.greet("World")

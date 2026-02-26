@@ -29,6 +29,35 @@ fn parse_single_file_headers(source: &str) -> Headers {
     .expect("headers should parse")
 }
 
+fn parse_single_file_headers_with_entry(
+    source: &str,
+    file_path: &str,
+    entry_file_path: &str,
+) -> Result<Headers, Vec<crate::compiler_frontend::compiler_errors::CompilerError>> {
+    let mut string_table = StringTable::new();
+    let file_path = PathBuf::from(file_path);
+    let entry_file_path = PathBuf::from(entry_file_path);
+    let interned_path = InternedPath::from_path_buf(&file_path, &mut string_table);
+    let file_tokens = tokenize(
+        source,
+        &interned_path,
+        TokenizeMode::Normal,
+        &mut string_table,
+    )
+    .expect("tokenization should succeed");
+
+    let host_registry = HostRegistry::new(&mut string_table);
+    let mut warnings = Vec::new();
+
+    parse_headers(
+        vec![file_tokens],
+        &host_registry,
+        &mut warnings,
+        &entry_file_path,
+        &mut string_table,
+    )
+}
+
 #[test]
 fn import_paths_are_captured_for_start_function_dependencies() {
     let headers = parse_single_file_headers("import @(libs/html/basic)\n[basic]\n");
@@ -51,7 +80,7 @@ fn exported_constant_headers_are_parsed() {
         headers
             .headers
             .iter()
-            .any(|header| matches!(header.kind, HeaderKind::Constant)),
+            .any(|header| matches!(header.kind, HeaderKind::Constant { .. })),
         "expected exported constant header"
     );
 }
@@ -62,8 +91,22 @@ fn exported_constant_dependency_tracks_imported_symbol() {
     let constant_header = headers
         .headers
         .iter()
-        .find(|header| matches!(header.kind, HeaderKind::Constant))
+        .find(|header| matches!(header.kind, HeaderKind::Constant { .. }))
         .expect("expected constant header");
 
     assert_eq!(constant_header.dependencies.len(), 1);
+}
+
+#[test]
+fn top_level_const_template_outside_entry_file_errors() {
+    let result = parse_single_file_headers_with_entry(
+        "#[html.head: [\"x\"]]\n",
+        "src/lib.bst",
+        "src/#page.bst",
+    );
+
+    assert!(
+        result.is_err(),
+        "const templates outside the entry file should error"
+    );
 }

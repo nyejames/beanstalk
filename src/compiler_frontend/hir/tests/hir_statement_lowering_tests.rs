@@ -12,8 +12,8 @@ use crate::compiler_frontend::compiler_errors::{CompilerMessages, ErrorType};
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::hir::hir_nodes::{
-    HirBinOp, HirExpressionKind, HirModule, HirPattern, HirStatementKind, HirTerminator,
-    StartFragment,
+    HirBinOp, HirConstValue, HirExpressionKind, HirModule, HirPattern, HirStatementKind,
+    HirTerminator, StartFragment,
 };
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
@@ -94,6 +94,7 @@ fn range_loop(
 fn build_ast(nodes: Vec<AstNode>, entry_path: InternedPath) -> Ast {
     Ast {
         nodes,
+        module_constants: vec![],
         entry_path,
         external_exports: Vec::<ModuleExport>::new(),
         start_template_items: vec![],
@@ -171,6 +172,43 @@ fn registers_declarations_and_resolves_start_function() {
             .cloned(),
         Some(start_name)
     );
+}
+
+#[test]
+fn lowers_module_constants_into_hir_const_pool() {
+    let mut string_table = StringTable::new();
+    let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
+
+    let start_function = function_node(
+        start_name,
+        FunctionSignature {
+            parameters: vec![],
+            returns: vec![],
+        },
+        vec![],
+        test_location(1),
+    );
+
+    let mut ast = build_ast(vec![start_function], entry_path);
+    let const_name = symbol("SITE_NAME", &mut string_table);
+    ast.module_constants.push(var(
+        const_name,
+        Expression::string_slice(
+            string_table.intern("Beanstalk"),
+            test_location(1),
+            Ownership::ImmutableOwned,
+        ),
+    ));
+
+    let module = lower_ast(ast, &mut string_table).expect("HIR lowering should succeed");
+    assert_eq!(module.module_constants.len(), 1);
+
+    let constant = &module.module_constants[0];
+    assert_eq!(constant.name, "SITE_NAME");
+    assert!(matches!(
+        constant.value,
+        HirConstValue::String(ref value) if value == "Beanstalk"
+    ));
 }
 
 #[test]

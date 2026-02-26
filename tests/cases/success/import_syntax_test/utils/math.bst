@@ -1,9 +1,9 @@
 -- Math utility functions
-export add |a Int, b Int| -> Int:
+#add |a Int, b Int| -> Int:
     return a + b
 ;
 
-export multiply |a Int, b Int| -> Int:
+#multiply |a Int, b Int| -> Int:
     return a * b
 ;
 

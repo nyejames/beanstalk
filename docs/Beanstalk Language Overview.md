@@ -311,7 +311,17 @@ A module is multiple Beanstalk files compiled together into a single output. Eac
 
 A project is one or more of these modules together with libraries and sometimes other file types that is all compiled together into a more complex output.
 
-At the root of every project is a #config.bst file.
+At the root of every project is a `#config.bst` file.
+`#config.bst` uses normal Beanstalk declaration syntax. Stage 0 reads top-level constant declarations from it.
+Legacy shorthand config declarations like `#project "html"` are invalid.
+
+Example:
+```beanstalk
+#project = "html"
+#src = "src"
+#output_folder = "dist"
+#libraries = {"src/libs"}
+```
 
 **Import syntax:**
 ```beanstalk
@@ -321,8 +331,8 @@ import @(path/to/file)
 
 **Entry files and implicit main functions:**
 - Every Beanstalk file has an **implicit start function** containing all top-level code
-- The **entry file** (specified during compilation) has its implicit start become the module's entry point (the main function). Only the entry file's top-level code executes automatically
-- Imported files' implicit mains are callable but don't execute automatically.
+- The **entry file** selected for a module (for example `#page.bst`) has its implicit start chosen as that module's entry start function. Only that file's top-level code executes automatically
+- Imported files' implicit start functions are callable but do not execute automatically
 
 **File execution semantics:**
 ```beanstalk
@@ -337,42 +347,58 @@ helper.another_func() -- Call another top level function from the file
 ```
 
 **Import resolution rules:**
-- Paths are relative to the root of the module, defined by the directory the entry point file is in or a config file
+- Relative imports (`@(./x)` / `@(..)`) resolve from the importing file's directory
+- Non-relative imports resolve from the configured module source root first, then configured library roots
+- Grouped imports are expanded into individual dependency edges
 - Circular imports are detected and cause compilation errors
 
-### Exports, const coercion, and compile-time folding
+### Hash (`#`) semantics
 
-`#` **at the top level** means **exported from the module**.
-Non-`#` top-level declarations are private. 
-By design, only **functions** and **struct/type declarations** are allowed as runtime exports.
-Regular runtime variables are **not exportable**. 
-Top-level runtime temporaries are treated as part of `start()`.
+At top level, `#` changes behavior by declaration kind:
+- Variable declaration: exported constant declaration (compile-time only)
+- Function declaration: exported function (visibility only)
+- Struct or choice declaration: exported type/symbol (visibility only)
+- Template head (`#[...]`): top-level const template declaration
 
-There are two kinds of exported symbols:
-- Exported constant binding (const coercion + export)
-- Exported runtime symbols (visibility only)
+Non-`#` top-level declarations are module-private.
 
 ```beanstalk
--- Constant binding
+-- Exported constants
 #name = "Beanstalk"
 #pi = 0.1 + 0.2
 
--- Runtime function exports
+-- Exported function
 #foo |...| -> T: 
     ... 
 ;
 
--- Struct Export
+-- Exported struct/type
 #MyStruct = | ... |
-
 ```
 
-Constants can't capture variables, and must fully fold down to a single known value or the compiler will throw a compile error.
+### Constants and compile-time folding
 
-**Struct instance coerced to const record**
+Constants use the same declaration syntax as regular variables, including optional explicit type annotations.
+The difference is semantic: top-level `#` variable declarations are module constants.
 
-Structs can be coersed into const records when assigned to a constant. 
-When creating the instance of the record, all the parameters must also be constants.
+Constant rules:
+- Must be initialized
+- Cannot be mutable
+- May only reference constants (non-constant references are compile errors)
+- Must fully fold at compile time (runtime expressions are compile errors)
+- Same-file constant evaluation follows source order
+- Cross-file constant dependencies are resolved in dependency order so constants can reference constants from imported files
+
+```beanstalk
+#site_name String = "Beanstalk"
+#major_version Int = 1
+#full_name = [: [site_name] v[major_version]]
+```
+
+### Struct instances in constants (const records)
+
+Struct instances can be coerced into compile-time records when assigned to a constant.
+All constructor arguments must also be constant-foldable values.
 
 ```beanstalk
 Basic = | defaults String |
@@ -385,9 +411,10 @@ Basic = | defaults String |
 
 Project builders are aware of:
 
-* `start() -> String` (entrypoint lifecycle function)
-* an ordered `start_fragments` stream
-* backend output (for example JS bundle)
+- the entry start function
+- an ordered `start_fragments` stream
+- `module_constants` metadata in HIR
+- backend output (for example JS bundle)
 
 `start_fragments` interleave:
 
@@ -406,8 +433,11 @@ Example:
   <meta charset="UTF-8">
 ]
 
--- Only the outer (top level) template can have a `#` to indicate this is a compile time only template.
--- Anything passed into the template head, or any child templates must also be const.
+-- `#[...]` is a top-level const template.
+-- Top-level const templates are entry-file only.
+-- They must fully fold at compile time.
+-- Captures must be constant-only.
+-- Slots are allowed if their resolved content is constant.
 #[html.head: [head_defaults]]
 ```
 

@@ -1,5 +1,5 @@
 -- Test calling imported file's implicit main function
-#import @config
+import @(config)
 
 io("Before config initialization")
 config()  -- Call config's implicit main

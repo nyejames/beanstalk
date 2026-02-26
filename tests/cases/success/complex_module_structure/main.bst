@@ -1,7 +1,7 @@
 -- Complex multi-file module test with various features
-#import @utils/logger
-#import @utils/calculator
-#import @data/storage
+import @(utils/logger)
+import @(utils/calculator)
+import @(data/storage)
 
 io("Starting complex module test")
 
