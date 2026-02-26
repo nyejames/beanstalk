@@ -456,7 +456,6 @@ pub fn get_token_kind(
 
     // Path
     if current_char == '@' {
-        stream.next();
         return parse_file_path(stream, string_table);
     }
 

@@ -150,6 +150,74 @@ fn page_entry_outputs_index_html() {
 }
 
 #[test]
+fn hash_prefixed_route_name_strips_hash_from_output() {
+    let builder = HtmlProjectBuilder::new();
+    let entry_path = PathBuf::from("#404.bst");
+    let module = create_test_module(entry_path.clone());
+    let config = Config::new(entry_path);
+
+    let project = builder
+        .build_backend(vec![module], &config, &[])
+        .expect("build_backend should succeed");
+
+    assert_eq!(
+        project.output_files[0].relative_output_path(),
+        PathBuf::from("404.html")
+    );
+}
+
+#[test]
+fn build_backend_emits_html_for_multiple_modules() {
+    let builder = HtmlProjectBuilder::new();
+    let config = Config::new(PathBuf::from("docs"));
+
+    let project = builder
+        .build_backend(
+            vec![
+                create_test_module(PathBuf::from("#page.bst")),
+                create_test_module(PathBuf::from("#404.bst")),
+            ],
+            &config,
+            &[],
+        )
+        .expect("build_backend should succeed");
+
+    let output_paths = project
+        .output_files
+        .iter()
+        .map(|file| file.relative_output_path().to_path_buf())
+        .collect::<Vec<_>>();
+
+    assert_eq!(project.output_files.len(), 2);
+    assert!(output_paths.contains(&PathBuf::from("index.html")));
+    assert!(output_paths.contains(&PathBuf::from("404.html")));
+}
+
+#[test]
+fn duplicate_output_paths_are_rejected() {
+    let builder = HtmlProjectBuilder::new();
+    let config = Config::new(PathBuf::from("docs"));
+
+    let result = builder.build_backend(
+        vec![
+            create_test_module(PathBuf::from("#page.bst")),
+            create_test_module(PathBuf::from("index.bst")),
+        ],
+        &config,
+        &[],
+    );
+
+    assert!(result.is_err(), "duplicate output paths should fail");
+    let err = result.err().expect("expected duplicate output path error");
+    assert!(
+        err.errors
+            .iter()
+            .any(|error| error.msg.contains("duplicate output path")),
+        "expected duplicate output path error message"
+    );
+}
+
+#[test]
 fn emits_runtime_slots_and_bootstrap_calls_start() {
     let builder = HtmlProjectBuilder::new();
     let entry_path = PathBuf::from("main.bst");

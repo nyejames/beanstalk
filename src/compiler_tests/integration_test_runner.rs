@@ -7,7 +7,7 @@ use crate::compiler_frontend::display_messages::print_formatted_error;
 use crate::projects::html_project::html_project_builder::HtmlProjectBuilder;
 use saying::say;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 const INTEGRATION_TESTS_PATH: &str = "tests/cases";
 const SEPARATOR_LINE_LENGTH: usize = 37;
@@ -38,47 +38,45 @@ pub fn run_all_test_cases(show_warnings: bool) {
         say!(Cyan "Testing files that should succeed:");
         say!(Dark White "=".repeat(SEPARATOR_LINE_LENGTH));
 
-        if let Ok(entries) = fs::read_dir(&success_dir) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.extension().is_some_and(|ext| ext == "bst") {
-                    total_tests += 1;
-                    let file_name = path.file_name().unwrap().to_string_lossy();
+        for path in collect_bst_files_recursive(&success_dir) {
+            total_tests += 1;
+            let file_name = path
+                .strip_prefix(&success_dir)
+                .unwrap_or(&path)
+                .to_string_lossy();
 
-                    println!("  {}", file_name);
+            println!("  {}", file_name);
 
-                    let html_project_builder = HtmlProjectBuilder::new();
-                    let path_string = path.to_string_lossy().to_string();
+            let html_project_builder = HtmlProjectBuilder::new();
+            let path_string = path.to_string_lossy().to_string();
 
-                    match build_project(&html_project_builder, &path_string, &flags) {
-                        Ok(build_result) => {
-                            say!(Green "✓ PASS");
-                            if !build_result.warnings.is_empty() {
-                                say!(
-                                    Yellow "With ",
-                                    build_result.warnings.len().to_string(),
-                                    " warnings"
-                                );
-                                if show_warnings {
-                                    for warning in build_result.warnings {
-                                        print_formatted_warning(warning);
-                                    }
-                                }
-                            }
-                            passed_tests += 1;
-                        }
-                        Err(messages) => {
-                            say!(Red "✗ FAIL");
-                            failed_tests += 1;
-                            for error in messages.errors {
-                                print_formatted_error(error);
+            match build_project(&html_project_builder, &path_string, &flags) {
+                Ok(build_result) => {
+                    say!(Green "✓ PASS");
+                    if !build_result.warnings.is_empty() {
+                        say!(
+                            Yellow "With ",
+                            build_result.warnings.len().to_string(),
+                            " warnings"
+                        );
+                        if show_warnings {
+                            for warning in build_result.warnings {
+                                print_formatted_warning(warning);
                             }
                         }
                     }
+                    passed_tests += 1;
                 }
-
-                println!("{}", "-".repeat(SEPARATOR_LINE_LENGTH));
+                Err(messages) => {
+                    say!(Red "✗ FAIL");
+                    failed_tests += 1;
+                    for error in messages.errors {
+                        print_formatted_error(error);
+                    }
+                }
             }
+
+            println!("{}", "-".repeat(SEPARATOR_LINE_LENGTH));
         }
     }
 
@@ -89,54 +87,52 @@ pub fn run_all_test_cases(show_warnings: bool) {
         say!(Cyan "Testing files that should fail:");
         say!(Dark White "=".repeat(SEPARATOR_LINE_LENGTH));
 
-        if let Ok(entries) = fs::read_dir(&failure_dir) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.extension().is_some_and(|ext| ext == "bst") {
-                    total_tests += 1;
-                    let file_name = path.file_name().unwrap().to_string_lossy();
+        for path in collect_bst_files_recursive(&failure_dir) {
+            total_tests += 1;
+            let file_name = path
+                .strip_prefix(&failure_dir)
+                .unwrap_or(&path)
+                .to_string_lossy();
 
-                    println!("  {}", file_name);
-                    let html_project_builder = HtmlProjectBuilder::new();
-                    let path_string = path.to_string_lossy().to_string();
+            println!("  {}", file_name);
+            let html_project_builder = HtmlProjectBuilder::new();
+            let path_string = path.to_string_lossy().to_string();
 
-                    match build_project(&html_project_builder, &path_string, &flags) {
-                        Ok(build_result) => {
-                            say!(Yellow "✗ UNEXPECTED SUCCESS");
-                            unexpected_successes += 1;
-                            if !build_result.warnings.is_empty() {
-                                say!(
-                                    Yellow "With ",
-                                    build_result.warnings.len().to_string(),
-                                    " warnings"
-                                );
-                                if show_warnings {
-                                    for warning in build_result.warnings {
-                                        print_formatted_warning(warning);
-                                    }
-                                }
-                            }
-                        }
-                        Err(messages) => {
-                            say!(Green "✓ EXPECTED FAILURE");
-                            expected_failures += 1;
-                            for error in messages.errors {
-                                say!(Yellow error_type_to_str(&error.error_type));
-                                // print_formatted_error(error);
-                            }
-                            if !messages.warnings.is_empty() {
-                                say!("With ", messages.warnings.len().to_string(), " warnings");
-                                if show_warnings {
-                                    for warning in messages.warnings {
-                                        print_formatted_warning(warning);
-                                    }
-                                }
+            match build_project(&html_project_builder, &path_string, &flags) {
+                Ok(build_result) => {
+                    say!(Yellow "✗ UNEXPECTED SUCCESS");
+                    unexpected_successes += 1;
+                    if !build_result.warnings.is_empty() {
+                        say!(
+                            Yellow "With ",
+                            build_result.warnings.len().to_string(),
+                            " warnings"
+                        );
+                        if show_warnings {
+                            for warning in build_result.warnings {
+                                print_formatted_warning(warning);
                             }
                         }
                     }
                 }
-                say!(Dark White "-".repeat(SEPARATOR_LINE_LENGTH));
+                Err(messages) => {
+                    say!(Green "✓ EXPECTED FAILURE");
+                    expected_failures += 1;
+                    for error in messages.errors {
+                        say!(Yellow error_type_to_str(&error.error_type));
+                        // print_formatted_error(error);
+                    }
+                    if !messages.warnings.is_empty() {
+                        say!("With ", messages.warnings.len().to_string(), " warnings");
+                        if show_warnings {
+                            for warning in messages.warnings {
+                                print_formatted_warning(warning);
+                            }
+                        }
+                    }
+                }
             }
+            say!(Dark White "-".repeat(SEPARATOR_LINE_LENGTH));
         }
     }
 
@@ -169,4 +165,30 @@ pub fn run_all_test_cases(show_warnings: bool) {
     }
 
     say!(Dark White "=".repeat(SEPARATOR_LINE_LENGTH));
+}
+
+fn collect_bst_files_recursive(root: &Path) -> Vec<PathBuf> {
+    let mut discovered = Vec::new();
+    let mut queue = vec![root.to_path_buf()];
+
+    while let Some(directory) = queue.pop() {
+        let Ok(entries) = fs::read_dir(&directory) else {
+            continue;
+        };
+
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                queue.push(path);
+                continue;
+            }
+
+            if path.extension().is_some_and(|ext| ext == "bst") {
+                discovered.push(path);
+            }
+        }
+    }
+
+    discovered.sort();
+    discovered
 }

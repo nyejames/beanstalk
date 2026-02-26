@@ -266,3 +266,56 @@ fn build_project_preserves_const_and_runtime_fragment_order() {
 
     fs::remove_dir_all(&root).expect("should remove temp dir");
 }
+
+#[test]
+fn build_directory_project_emits_dist_index_and_404_and_ignores_unreachable_files() {
+    let root = temp_dir("docs_like_project");
+    let src = root.join("src");
+    fs::create_dir_all(src.join("docs")).expect("should create docs folder");
+    fs::create_dir_all(&src).expect("should create source folder");
+
+    fs::write(
+        root.join("#config.bst"),
+        "#src = \"src\"\n#output_folder = \"dist\"\n",
+    )
+    .expect("should write config");
+    fs::write(src.join("#page.bst"), "#[:<h1>Home</h1>]\n").expect("should write #page");
+    fs::write(src.join("#404.bst"), "#[:<h1>404</h1>]\n").expect("should write #404");
+    fs::write(
+        src.join("docs/outdated.bst"),
+        "this is invalid and should not compile",
+    )
+    .expect("should write unreachable invalid file");
+
+    let builder = HtmlProjectBuilder::new();
+    let build_result = build_project(
+        &builder,
+        root.to_str().expect("root path should be valid UTF-8"),
+        &[],
+    )
+    .expect("docs-like directory build should succeed");
+
+    let output_root = if build_result.config.release_folder.is_absolute() {
+        build_result.config.release_folder.clone()
+    } else if build_result.config.release_folder.as_os_str().is_empty() {
+        build_result.config.entry_dir.clone()
+    } else {
+        build_result
+            .config
+            .entry_dir
+            .join(&build_result.config.release_folder)
+    };
+
+    write_project_outputs(
+        &build_result.project,
+        &WriteOptions {
+            output_root: output_root.clone(),
+        },
+    )
+    .expect("should write project outputs");
+
+    assert!(output_root.join("index.html").exists());
+    assert!(output_root.join("404.html").exists());
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
