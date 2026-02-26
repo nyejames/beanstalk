@@ -105,6 +105,8 @@ impl Template {
                             let expr =
                                 Expression::template(nested_template, Ownership::ImmutableOwned);
                             template.content.add(expr, is_after_slot);
+                            // Nested template parsing already positioned the stream correctly.
+                            continue;
                         }
 
                         TemplateType::Slot => {
@@ -112,6 +114,8 @@ impl Template {
                             // If this template is unpacked from a template head into another template,
                             // then its content can be placed before and after the template its being unpacked into.
                             is_after_slot = true;
+                            // Nested template parsing already positioned the stream correctly.
+                            continue;
                         }
 
                         // Ignore everything else for now
