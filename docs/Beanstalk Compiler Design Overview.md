@@ -282,7 +282,7 @@ Project builders and debug builds can skip optional post-borrow analyses to avoi
 but mandatory borrow validation itself is not optional.
 
 **Possible Drop Insertion**
-- Conditional possible_drop(x) locations can be revealed by this analysis:
+- This analysis can reveal conditional possible_drop(x) locations:
     1. At block exits
     2. On return
     3. On break from ownership-bearing scopes

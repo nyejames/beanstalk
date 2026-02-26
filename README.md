@@ -58,6 +58,10 @@ post = create_post(date, [:
     I have absolutely nothing interesting to say, and never will.
 ])
 
+-- Compile time generated HTML
+#[basic.prelude, basic.title: Pointless Blog!!!]
+
+-- Runtime generated HTML
 [basic.page:
     [basic.pad(3), post]
 ]
