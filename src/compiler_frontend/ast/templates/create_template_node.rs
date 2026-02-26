@@ -329,7 +329,7 @@ impl Template {
             }
         }
 
-        ast_log!("Folded template into: {:?}", final_string);
+        ast_log!("Folded template into: ", final_string);
 
         Ok(string_table.intern(&final_string))
     }
@@ -393,7 +393,7 @@ pub fn parse_template_head(
             return Ok(());
         }
 
-        if token == TokenKind::EndTemplateHead {
+        if token == TokenKind::StartTemplateBody {
             token_stream.advance();
             return Ok(());
         }
@@ -644,7 +644,7 @@ pub fn parse_template_head(
             }
         }
 
-        if token_stream.current_token_kind() == &TokenKind::EndTemplateHead {
+        if token_stream.current_token_kind() == &TokenKind::StartTemplateBody {
             token_stream.advance();
             return Ok(());
         }

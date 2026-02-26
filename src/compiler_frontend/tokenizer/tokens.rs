@@ -366,7 +366,7 @@ pub enum TokenKind {
     // Structure of Syntax
     Newline,
     End,
-    EndTemplateHead,
+    StartTemplateBody,
 
     // Basic Grammar
     Comma,

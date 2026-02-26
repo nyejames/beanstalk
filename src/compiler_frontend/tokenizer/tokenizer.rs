@@ -204,7 +204,7 @@ pub fn get_token_kind(
         if stream.mode == TokenizeMode::TemplateHead {
             stream.mode = TokenizeMode::TemplateBody;
 
-            return_token!(TokenKind::EndTemplateHead, stream);
+            return_token!(TokenKind::StartTemplateBody, stream);
         }
 
         // ::

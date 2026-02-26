@@ -111,7 +111,6 @@ pub fn create_expression(
     string_table: &mut StringTable,
 ) -> Result<Expression, CompilerError> {
     let mut expression: Vec<AstNode> = Vec::new();
-    // let mut number_union = get_any_number_datatype(false);
 
     ast_log!(
         "Parsing ",
@@ -126,9 +125,38 @@ pub fn create_expression(
     let mut next_number_negative = false;
     while token_stream.index < token_stream.length {
         let token = token_stream.current_token_kind().to_owned();
-        ast_log!("Parsing token (expression): ", #token);
+        ast_log!("Parsing expression: ", #token);
 
         match token {
+            // ------------------------
+            // SOME CLOSING CONDITIONS
+            // ------------------------
+            TokenKind::CloseCurly
+            | TokenKind::Comma
+            | TokenKind::Eof
+            | TokenKind::TemplateClose
+            | TokenKind::Arrow
+            | TokenKind::StartTemplateBody
+            | TokenKind::Colon
+            | TokenKind::End => {
+                ast_log!("Breaking out of expression");
+
+                if consume_closing_parenthesis {
+                    return_syntax_error!(
+                        format!("Unexpected token: '{:?}'. Seems to be missing a closing parenthesis at the end of this expression.", token),
+                        token_stream.current_location().to_error_location(&string_table),
+                        {
+                            CompilationStage => "Expression Parsing",
+                            PrimarySuggestion => "Add a closing parenthesis ')' at the end of the expression",
+                            SuggestedInsertion => ")",
+                        }
+                    )
+                }
+
+                // This token needs to be preserved and not skipped for the parser above it
+                break;
+            }
+
             TokenKind::CloseParenthesis => {
                 if consume_closing_parenthesis {
                     token_stream.advance();
@@ -219,31 +247,6 @@ pub fn create_expression(
                 };
             }
 
-            TokenKind::CloseCurly
-            | TokenKind::Comma
-            | TokenKind::Eof
-            | TokenKind::TemplateClose
-            | TokenKind::Arrow
-            | TokenKind::EndTemplateHead
-            | TokenKind::Colon
-            | TokenKind::End => {
-                ast_log!("Breaking out of expression");
-
-                if consume_closing_parenthesis {
-                    return_syntax_error!(
-                        format!("Unexpected token: '{:?}'. Seems to be missing a closing parenthesis at the end of this expression.", token),
-                        token_stream.current_location().to_error_location(&string_table),
-                        {
-                            CompilationStage => "Expression Parsing",
-                            PrimarySuggestion => "Add a closing parenthesis ')' at the end of the expression",
-                            SuggestedInsertion => ")",
-                        }
-                    )
-                }
-
-                break;
-            }
-
             TokenKind::Newline => {
                 // Fine if inside parenthesis (not closed yet)
                 // Or the previous token continues the expression
@@ -300,6 +303,7 @@ pub fn create_expression(
                             location: token_stream.current_location(),
                             scope: context.scope.clone(),
                         });
+
                         token_stream.advance();
                         continue;
                     }
@@ -437,12 +441,6 @@ pub fn create_expression(
                         // VARIABLE INSIDE EXPRESSION
                         // --------------------------
                         _ => {
-                            // If this is a constant,
-                            // just copy the value even if its a reference
-                            // TODO: is_constant currently does word size types, but may be extended to everything in the future
-                            // This means a check needs to be done for whether this should be copied or not (to avoid bloated binary size)
-                            // The copy should only happen in those cases if this is a coerse to string expression or word sized type
-                            // Referencing preserves aliasing semantics for borrow checking.
                             expression.push(create_reference(
                                 token_stream,
                                 arg,
@@ -611,6 +609,8 @@ pub fn create_expression(
                         let interned = folded_string;
 
                         // Check if we need to consume a closing parenthesis after the template
+                        // TODO: CURRENTLY CAUSING A PANIC IN A TEST (see test.bst)
+                        // References in a template head followed by a double template consumes too many tokens
                         if consume_closing_parenthesis
                             && token_stream.current_token_kind() == &TokenKind::CloseParenthesis
                         {

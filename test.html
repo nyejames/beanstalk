@@ -1,0 +1,29 @@
+<script>
+function test_bst_fn() {
+    let ref;
+    
+    ref = 1;
+    return " test1";
+}
+
+function test_bst_start() {
+    
+    return "";
+}
+
+</script>
+<script>
+(function () {
+  const slots = [
+  ];
+
+  for (const [id, fn] of slots) {
+    const el = document.getElementById(id);
+    if (!el) throw new Error("Missing runtime mount slot: " + id);
+    el.insertAdjacentHTML("beforeend", fn());
+  }
+
+  // start() remains the lifecycle entrypoint and runs after fragment hydration.
+  if (typeof test_bst_start === "function") test_bst_start();
+})();
+</script>
