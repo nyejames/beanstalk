@@ -1,7 +1,7 @@
 import @(libs/html/basic)
 import @(styles/docs/ {footer, navbar})
 
-[basic.body:
+#[basic.body:
 
 [navbar]
 [basic.page:
@@ -20,4 +20,4 @@ More documentation to be added soon!
 
 ]]
 
-[footer]
+#[footer]
