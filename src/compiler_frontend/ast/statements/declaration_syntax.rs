@@ -1,8 +1,13 @@
+use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TextLocation, Token, TokenKind};
 use crate::{return_rule_error, return_syntax_error};
 
+// All the component parts of a declaration before it is resolved / parsed
+// The compiler used to just completely parse / resolve / type check new declarations at the AST stage fully,
+// But this meant that constants would need completely separate parsing code for their syntax
+// because they can't be FULLY resolved / type checked before dependency resolution, but they must be a separated header.
 #[derive(Clone, Debug)]
 pub struct DeclarationSyntax {
     pub name: StringId,
@@ -63,7 +68,7 @@ pub fn parse_declaration_syntax(
     token_stream: &mut FileTokens,
     name: StringId,
     string_table: &mut StringTable,
-) -> Result<DeclarationSyntax, crate::compiler_frontend::compiler_errors::CompilerError> {
+) -> Result<DeclarationSyntax, CompilerError> {
     let declaration_location = token_stream.current_location();
 
     let mut mutable_marker = false;
@@ -239,6 +244,9 @@ fn append_explicit_type_tokens(
     }
 }
 
+// Parses up to the end of the expression for the new declaration
+// This is in part so that const declarations can be at least parsed to the end of their tokens earlier than normal AST declarations.
+// Beanstalk doesn't have an explicit terminator for statements like this, it just parses until where it figures out the end of the expression must be
 fn collect_initializer_tokens(token_stream: &mut FileTokens) -> Vec<Token> {
     let mut collected = Vec::new();
     let mut paren_depth = 0usize;

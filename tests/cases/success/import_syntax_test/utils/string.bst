@@ -1,6 +1,6 @@
 -- String utility functions
 #format_number |num Int| -> String:
-    return "Number: " + num
+    return [:Number: [num]]
 ;
 
 -- String module initialization  

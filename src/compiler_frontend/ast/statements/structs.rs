@@ -251,7 +251,7 @@ pub fn new_parameter(
         | TokenKind::Eof
         | TokenKind::Newline
         | TokenKind::TypeParameterBracket => {
-            ast_log!("Created new parameter of type: {}", data_type);
+            ast_log!("Created new parameter of type: ", data_type);
             return Ok(Declaration {
                 id: full_name,
                 value: Expression::new(

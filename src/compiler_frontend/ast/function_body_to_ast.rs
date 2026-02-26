@@ -374,7 +374,6 @@ pub fn function_body_to_ast(
 
                 // TODO: check for existing top level template declaration,
                 // If it already exists in this context, then concat it rather than creating a new one
-
                 let template = Template::new(token_stream, &context, None, string_table)?;
                 let expr = Expression::template(template, Ownership::MutableOwned);
 
@@ -406,93 +405,3 @@ pub fn function_body_to_ast(
 
     Ok(ast)
 }
-
-// fn check_for_dot_access(
-//     token_stream: &mut FileTokens,
-//     arg: &Arg,
-//     context: &ScopeContext,
-//     ast: &mut Vec<AstNode>,
-//     string_table: &mut StringTable,
-// ) -> Result<(), CompilerError> {
-//     // Name of variable, with any accesses added to the path
-//     let mut scope = context.scope.clone();
-//
-//     // We will need to keep pushing nodes if there are accesses after method calls
-//     while token_stream.current_token_kind() == &TokenKind::Dot {
-//         // Move past the dot
-//         token_stream.advance();
-//
-//         // Currently, there is no just integer access.
-//         // Only properties or methods are accessed on structs and collections.
-//         // Collections have a .get() method for accessing elements, no [] syntax.
-//         if let TokenKind::Symbol(id) = token_stream.current_token_kind().to_owned() {
-//             let members = match &arg.value.data_type {
-//                 DataType::Parameters(inner_args) => inner_args,
-//                 DataType::Function(_, sig) => &sig.returns,
-//                 _ => &get_builtin_methods(&arg.value.data_type, string_table),
-//             };
-//
-//             // Nothing to access error
-//             if members.is_empty() {
-//                 let var_name_static: &'static str =
-//                     Box::leak(string_table.resolve(id).to_string().into_boxed_str());
-//                 return_rule_error!(
-//                     format!("'{}' has no methods or properties to access 😞", string_table.resolve(id)),
-//                     token_stream.current_location().to_error_location(&string_table), {
-//                         VariableName => var_name_static,
-//                         CompilationStage => "AST Construction",
-//                         PrimarySuggestion => "This type doesn't support property or method access",
-//                     }
-//                 )
-//             }
-//
-//             // No access with that name exists error
-//             let access = match members.iter().find(|member| member.id == id) {
-//                 Some(access) => access,
-//                 None => {
-//                     let property_name_static: &'static str =
-//                         Box::leak(string_table.resolve(id).to_string().into_boxed_str());
-//                     let var_name_static: &'static str =
-//                         Box::leak(string_table.resolve(arg.id).to_string().into_boxed_str());
-//                     return_rule_error!(
-//                         format!("Can't find property or method '{}' inside '{}'", string_table.resolve(id), string_table.resolve(arg.id)),
-//                         token_stream.current_location().to_error_location(&string_table), {
-//                             VariableName => property_name_static,
-//                             CompilationStage => "AST Construction",
-//                             PrimarySuggestion => "Check the available methods and properties for this type",
-//                         }
-//                     )
-//                 }
-//             };
-//
-//             // Add the name to the scope
-//             scope.push(access.id);
-//
-//             // Move past the name
-//             token_stream.advance();
-//
-//             // ----------------------------
-//             //        METHOD CALLS
-//             // ----------------------------
-//             if let DataType::Function(_, signature) = &access.value.data_type {
-//                 ast.push(parse_function_call(
-//                     token_stream,
-//                     &id,
-//                     context,
-//                     signature,
-//                     string_table,
-//                 )?)
-//             }
-//         } else {
-//             return_rule_error!(
-//                 format!("Expected the name of a property or method after the dot (accessing a member of the variable such as a method or property). Found '{:?}' instead.", token_stream.current_token_kind()),
-//                 token_stream.current_location().to_error_location(&string_table), {
-//                     CompilationStage => "AST Construction",
-//                     PrimarySuggestion => "Use a valid property or method name after the dot",
-//                 }
-//             )
-//         }
-//     }
-//
-//     Ok(())
-// }

@@ -7,7 +7,7 @@ use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::{CompilerWarning, WarningKind};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
-use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TextLocation, Token, TokenKind};
+use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TextLocation, TokenKind};
 use crate::projects::settings::{
     MINIMUM_LIKELY_DECLARATIONS, TOKEN_TO_DECLARATION_RATIO, TOKEN_TO_HEADER_RATIO,
     TOP_LEVEL_CONST_TEMPLATE_NAME,
@@ -107,9 +107,6 @@ pub fn parse_headers(
 
     for mut file in tokenized_files {
         let is_entry_file = file.src_path.to_path_buf(string_table) == entry_file_path;
-
-        //println!("\n\nfile src path: {:?}", file.src_path.to_path_buf(string_table));
-        //println!("entry_file_path: {:?}\n\n", entry_file_path);
 
         let headers_from_file = parse_headers_in_file(
             &mut file,
@@ -517,9 +514,7 @@ fn create_header(
                     string_table,
                 )?;
 
-                let mut declaration_tokens = declaration_syntax.to_tokens();
-                declaration_tokens
-                    .push(Token::new(TokenKind::Eof, token_stream.current_location()));
+                let declaration_tokens = declaration_syntax.to_tokens();
 
                 for token in &declaration_tokens {
                     if let TokenKind::Symbol(name_id) = token.kind

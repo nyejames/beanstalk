@@ -2,7 +2,7 @@
 import @(config)
 
 io("Before config initialization")
-config()  -- Call config's implicit main
+config.start() -- Call config's implicit main
 io("After config initialization")
 
 database_url = config.get_database_url()

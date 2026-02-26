@@ -48,37 +48,6 @@ impl Template {
             string_table,
         )?;
 
-        // TODO: Also parse (remove from the final output) ignored scenes
-        // TokenKind::Ignore => {
-        //     // Should also clear any styles or tags in the scene
-        //     *template_style = Style::default();
-        //
-        //     // Keep track of how many scene opens there are
-        //     // This is to make sure the scene close is at the correct place
-        //     let mut extra_template_opens = 1;
-        //     while token_stream.index < token_stream.length {
-        //         match token_stream.current_token_kind() {
-        //             TokenKind::TemplateClose => {
-        //                 extra_template_opens -= 1;
-        //                 if extra_template_opens == 0 {
-        //                     token_stream.advance(); // Skip the closing scene close
-        //                     break;
-        //                 }
-        //             }
-        //             TokenKind::TemplateOpen => {
-        //                 extra_template_opens += 1;
-        //             }
-        //             TokenKind::Eof => {
-        //                 break;
-        //             }
-        //             _ => {}
-        //         }
-        //         token_stream.advance();
-        //     }
-        //
-        //     return Ok(Template::comment(token_stream.current_location()));
-        // }
-
         let mut is_after_slot = false;
 
         // ---------------------
@@ -161,19 +130,6 @@ impl Template {
                     );
                 }
 
-                // TODO: remove this, or just use label syntax in the future?
-                // For templating values in scene heads in the body of scenes
-                // TokenKind::EmptyTemplate(spaces) => {
-                //
-                //     // ADD SOMETHING HERE
-                //
-                //     for _ in 0..*spaces {
-                //         template.content.add(Expression::string(
-                //             " ".to_string(),
-                //             token_stream.current_location(),
-                //         ), after_slot);
-                //     }
-                // }
                 TokenKind::Newline => {
                     let newline_id = string_table.intern("\n");
                     template.content.add(
@@ -422,7 +378,7 @@ pub fn parse_template_head(
     while token_stream.index < token_stream.length {
         let token = token_stream.current_token_kind().to_owned();
 
-        ast_log!("Parsing template head token: ", #token);
+        ast_log!("Parsing template head: ", #token);
 
         // We are doing something similar to new_ast()
         // But with the specific scene head syntax,
@@ -578,9 +534,13 @@ pub fn parse_template_head(
                     }
                 } else {
                     return_syntax_error!(
-                        format!("Cannot declare new variables inside of a template head. Variable '{}' is not declared.
-                        \n Here are all the variables in scope: {:#?}", name, context.declarations),
-                        token_stream.current_location().to_error_location(&string_table)
+                        format!(
+                            "Cannot declare new variables inside of a template head. Variable '{}' is not declared.",
+                            string_table.resolve(name)
+                        ),
+                        token_stream
+                            .current_location()
+                            .to_error_location(&string_table)
                     )
                 };
             }

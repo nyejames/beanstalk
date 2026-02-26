@@ -153,7 +153,14 @@ pub fn create_expression(
                 // Removed this at one point for a test caused a wonderful infinite loop
                 token_stream.advance();
 
-                let value = create_expression(token_stream, context, data_type, ownership, true, string_table)?;
+                let value = create_expression(
+                    token_stream,
+                    context,
+                    data_type,
+                    ownership,
+                    true,
+                    string_table,
+                )?;
 
                 expression.push(AstNode {
                     kind: NodeKind::Rvalue(value),
@@ -213,8 +220,6 @@ pub fn create_expression(
             }
 
             TokenKind::CloseCurly
-            // No longer supporting struct literals this way
-            // | TokenKind::StructBracket
             | TokenKind::Comma
             | TokenKind::Eof
             | TokenKind::TemplateClose
@@ -243,7 +248,9 @@ pub fn create_expression(
                 // Fine if inside parenthesis (not closed yet)
                 // Or the previous token continues the expression
                 // Otherwise break out of the expression
-                if consume_closing_parenthesis || token_stream.previous_token().continues_expression() {
+                if consume_closing_parenthesis
+                    || token_stream.previous_token().continues_expression()
+                {
                     token_stream.skip_newlines();
                     continue;
                 }
@@ -314,13 +321,15 @@ pub fn create_expression(
                             // -------------------------------
                             // FUNCTION CALL INSIDE EXPRESSION
                             // -------------------------------
-                            if let NodeKind::FunctionCall { name, args, returns, location } = function_call_node.kind {
-                                let func_call_expr = Expression::function_call(
-                                    name,
-                                    args,
-                                    returns,
-                                    location,
-                                );
+                            if let NodeKind::FunctionCall {
+                                name,
+                                args,
+                                returns,
+                                location,
+                            } = function_call_node.kind
+                            {
+                                let func_call_expr =
+                                    Expression::function_call(name, args, returns, location);
 
                                 expression.push(AstNode {
                                     kind: NodeKind::Rvalue(func_call_expr),
@@ -333,15 +342,15 @@ pub fn create_expression(
                         }
 
                         DataType::Struct(fields, struct_ownership) => {
-                            if token_stream.peek_next_token() == Some(&TokenKind::OpenParenthesis)
-                            {
+                            if token_stream.peek_next_token() == Some(&TokenKind::OpenParenthesis) {
                                 let constructor_location = token_stream.current_location();
 
                                 // Move to '(' then to first argument.
                                 token_stream.advance();
                                 token_stream.advance();
 
-                                if token_stream.current_token_kind() == &TokenKind::CloseParenthesis {
+                                if token_stream.current_token_kind() == &TokenKind::CloseParenthesis
+                                {
                                     let missing_required = fields
                                         .iter()
                                         .filter(|field| {
@@ -392,10 +401,12 @@ pub fn create_expression(
 
                                 let mut struct_fields = Vec::with_capacity(fields.len());
                                 for (field, value) in fields.iter().zip(args.into_iter()) {
-                                    struct_fields.push(crate::compiler_frontend::ast::ast_nodes::Declaration {
-                                        id: field.id.to_owned(),
-                                        value,
-                                    });
+                                    struct_fields.push(
+                                        crate::compiler_frontend::ast::ast_nodes::Declaration {
+                                            id: field.id.to_owned(),
+                                            value,
+                                        },
+                                    );
                                 }
 
                                 expression.push(AstNode {
@@ -447,7 +458,10 @@ pub fn create_expression(
                 // ------------------------------------
                 // HOST FUNCTION CALL INSIDE EXPRESSION
                 // ------------------------------------
-                if let Some(host_func_def) = context.host_registry.get_function(string_table.resolve(*id)) {
+                if let Some(host_func_def) = context
+                    .host_registry
+                    .get_function(string_table.resolve(*id))
+                {
                     if context.kind == ContextKind::Constant {
                         return_rule_error!(
                             format!(
@@ -474,7 +488,13 @@ pub fn create_expression(
                         string_table,
                     )?;
 
-                    if let NodeKind::HostFunctionCall { name: host_function_id, args, returns, location } = function_call_node.kind {
+                    if let NodeKind::HostFunctionCall {
+                        name: host_function_id,
+                        args,
+                        returns,
+                        location,
+                    } = function_call_node.kind
+                    {
                         let func_call_expr = Expression::host_function_call(
                             host_function_id,
                             args.to_owned(),
@@ -492,7 +512,8 @@ pub fn create_expression(
                     }
                 }
 
-                let var_name_static: &'static str = Box::leak(string_table.resolve(*id).to_string().into_boxed_str());
+                let var_name_static: &'static str =
+                    Box::leak(string_table.resolve(*id).to_string().into_boxed_str());
                 return_rule_error!(
                     format!("Undefined variable '{}'. Variable must be declared before use.", var_name_static),
                     token_stream.current_location().to_error_location(&string_table),
@@ -513,11 +534,8 @@ pub fn create_expression(
 
                 let location = token_stream.current_location();
 
-                let float_expr = Expression::float(
-                    float,
-                    location.to_owned(),
-                    ownership.to_owned(),
-                );
+                let float_expr =
+                    Expression::float(float, location.to_owned(), ownership.to_owned());
 
                 expression.push(AstNode {
                     kind: NodeKind::Rvalue(float_expr),
@@ -534,11 +552,7 @@ pub fn create_expression(
 
                 let location = token_stream.current_location();
 
-                let int_expr = Expression::int(
-                    int,
-                    location.to_owned(),
-                    ownership.to_owned(),
-                );
+                let int_expr = Expression::int(int, location.to_owned(), ownership.to_owned());
 
                 expression.push(AstNode {
                     kind: NodeKind::Rvalue(int_expr),
@@ -550,11 +564,8 @@ pub fn create_expression(
             TokenKind::StringSliceLiteral(ref string) => {
                 let location = token_stream.current_location();
 
-                let string_expr = Expression::string_slice(
-                    *string,
-                    location.to_owned(),
-                    ownership.to_owned(),
-                );
+                let string_expr =
+                    Expression::string_slice(*string, location.to_owned(), ownership.to_owned());
 
                 expression.push(AstNode {
                     kind: NodeKind::Rvalue(string_expr),
@@ -564,8 +575,12 @@ pub fn create_expression(
             }
 
             TokenKind::TemplateHead => {
-                let template =
-                    Template::new(token_stream, new_template_context!(context), None, string_table)?;
+                let template = Template::new(
+                    token_stream,
+                    new_template_context!(context),
+                    None,
+                    string_table,
+                )?;
 
                 match template.kind {
                     TemplateType::StringFunction => {
@@ -579,8 +594,11 @@ pub fn create_expression(
                                 }
                             );
                         }
+
                         // Check if we need to consume a closing parenthesis after the template
-                        if consume_closing_parenthesis && token_stream.current_token_kind() == &TokenKind::CloseParenthesis {
+                        if consume_closing_parenthesis
+                            && token_stream.current_token_kind() == &TokenKind::CloseParenthesis
+                        {
                             token_stream.advance();
                         }
                         return Ok(Expression::template(template, ownership.to_owned()));
@@ -593,7 +611,9 @@ pub fn create_expression(
                         let interned = folded_string;
 
                         // Check if we need to consume a closing parenthesis after the template
-                        if consume_closing_parenthesis && token_stream.current_token_kind() == &TokenKind::CloseParenthesis {
+                        if consume_closing_parenthesis
+                            && token_stream.current_token_kind() == &TokenKind::CloseParenthesis
+                        {
                             token_stream.advance();
                         }
 
@@ -632,11 +652,7 @@ pub fn create_expression(
             TokenKind::BoolLiteral(value) => {
                 let location = token_stream.current_location();
 
-                let bool_expr = Expression::bool(
-                    value,
-                    location.to_owned(),
-                    ownership.to_owned(),
-                );
+                let bool_expr = Expression::bool(value, location.to_owned(), ownership.to_owned());
 
                 expression.push(AstNode {
                     kind: NodeKind::Rvalue(bool_expr),
@@ -648,11 +664,7 @@ pub fn create_expression(
             TokenKind::CharLiteral(value) => {
                 let location = token_stream.current_location();
 
-                let char_expr = Expression::char(
-                    value,
-                    location.to_owned(),
-                    ownership.to_owned(),
-                );
+                let char_expr = Expression::char(value, location.to_owned(), ownership.to_owned());
 
                 expression.push(AstNode {
                     kind: NodeKind::Rvalue(char_expr),
@@ -731,7 +743,6 @@ pub fn create_expression(
             TokenKind::Is => {
                 // Check if the next token is a "not" or the start of a match statement
                 match token_stream.peek_next_token() {
-
                     // IS NOT
                     Some(TokenKind::Not) => {
                         token_stream.advance();
@@ -768,13 +779,11 @@ pub fn create_expression(
                     }
 
                     // IS
-                    _ => {
-                        expression.push(AstNode {
-                            kind: NodeKind::Operator(Operator::Equality),
-                            location: token_stream.current_location(),
-                            scope: context.scope.clone(),
-                        })
-                    }
+                    _ => expression.push(AstNode {
+                        kind: NodeKind::Operator(Operator::Equality),
+                        location: token_stream.current_location(),
+                        scope: context.scope.clone(),
+                    }),
                 }
             }
 
@@ -851,8 +860,6 @@ pub fn create_expression(
 
         token_stream.advance();
     }
-
-    // ast_log!("Finished parsing expression : {:#?}", expression);
 
     evaluate_expression(
         &context.scope,

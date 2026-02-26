@@ -1,10 +1,10 @@
 -- Logger utility module
 #log |message String| -> Void:
-    io([: [LOG] message])
+    io([message])
 ;
 
 #debug |message String| -> Void:
-    io([: [DEBUG] message])
+    io([message])
 ;
 
 -- Logger module initialization
