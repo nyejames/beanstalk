@@ -249,10 +249,22 @@ pub fn parse_headers_in_file(
                 }
             }
 
-            // @(libraries/math/{round, sqrt})
-            TokenKind::Path(paths) => {
-                encountered_symbols.extend(paths.iter().map(|p| p.name().unwrap()));
-                file_imports.extend(paths);
+            TokenKind::Import => {
+                // Make sure the next token is a path
+                token_stream.advance();
+
+                if let TokenKind::Path(paths) = token_stream.current_token_kind() {
+                    encountered_symbols.extend(paths.iter().map(|p| p.name().unwrap()));
+                    file_imports.extend(paths.to_owned());
+                } else {
+                    return_rule_error!(
+                        "Expected a path after the 'import' keyword",
+                        token_stream.current_location().to_error_location(string_table),
+                        {
+                            PrimarySuggestion => "Add a path after the 'import' keyword"
+                        }
+                    )
+                }
             }
 
             TokenKind::Eof => {

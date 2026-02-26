@@ -11,7 +11,7 @@ The design principles are:
 - Strict, statically typed and opinionated about doing things in as few ways as possible as cleanly as possible
 
 ```beanstalk
-@(html/Basic)
+import @(html/Basic)
 
 -- Create a new blog post
 create_post |title String, date Int, content String| -> String:
@@ -36,8 +36,8 @@ create_post |title String, date Int, content String| -> String:
 
 The HTML build system will generate an HTML page from this code:
 ```beanstalk
-@(PostGenerator)
-@(html/Basic)
+import @(PostGenerator)
+import @(html/Basic)
 
 date = 2025
 post = PostGenerator.create_post(date, [:
@@ -316,7 +316,7 @@ At the root of every project is a #config.bst file.
 **Import syntax:**
 ```beanstalk
 -- Import another file in the same module
-@(path/to/file)
+import @(path/to/file)
 ```
 
 **Entry files and implicit main functions:**
@@ -327,7 +327,7 @@ At the root of every project is a #config.bst file.
 **File execution semantics:**
 ```beanstalk
 -- main.bst (entry file)
-@(utils/helper)
+import @(utils/helper)
 
 -- This executes automatically when the module starts
 io("Starting main")

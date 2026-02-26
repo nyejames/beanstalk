@@ -1,8 +1,8 @@
 use crate::compiler_frontend::basic_utility_functions::is_valid_var_char;
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::headers::imports::parse_file_path;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::tokenizer::paths::parse_file_path;
 use crate::compiler_frontend::tokenizer::tokens::{
     FileTokens, TextLocation, Token, TokenKind, TokenStream, TokenizeMode,
 };
@@ -454,22 +454,9 @@ pub fn get_token_kind(
         return_token!(TokenKind::Hash, stream);
     }
 
-    // Used for imports at the top level
+    // Path
     if current_char == '@' {
-        // if stream.mode == TokenizeMode::TemplateHead {
-        //     while let Some(&next_char) = stream.peek() {
-        //         if next_char.is_alphanumeric() || next_char == '_' {
-        //             token_value.push(stream.next().unwrap());
-        //             continue;
-        //         }
-        //         break;
-        //     }
-        //     let interned = string_table.intern(&token_value);
-        //     return_token!(TokenKind::Id(interned), stream);
-        // }
-
         stream.next();
-
         return parse_file_path(stream, string_table);
     }
 
@@ -570,6 +557,8 @@ pub(crate) fn keyword_or_variable(
         // First check if there is a match to a keyword
         // Otherwise break out and check it is a valid variable name
         match token_value.as_str() {
+            "import" => return_token!(TokenKind::Import, stream),
+
             // Control Flow
             // END_KEYWORD => return_token!(TokenKind::End, stream),
             "if" => return_token!(TokenKind::If, stream),

@@ -331,8 +331,8 @@ Tests are located in `src/compiler_tests/`:
 
 Run tests with:
 ```bash
-cargo test --lib wasm_codegen_tests
-cargo test --lib wasm_integration_tests
+cargo test --libs wasm_codegen_tests
+cargo test --libs wasm_integration_tests
 ```
 
 ## References

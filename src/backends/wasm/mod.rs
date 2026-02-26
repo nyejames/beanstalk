@@ -189,7 +189,7 @@
 //! - Memory operation correctness
 //! - Module validation
 //!
-//! Run tests with: `cargo test --lib wasm_codegen_tests`
+//! Run tests with: `cargo test --libs wasm_codegen_tests`
 
 use crate::backends::lir;
 use crate::backends::lir::lower_hir_to_lir;

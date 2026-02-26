@@ -16,7 +16,7 @@
 
 <div align="center">
 
-## First Class Template Syntax
+## First Class String Template Syntax
 
 </div>
 <p>Beanstalk is designed first for the web. It originated with the desire to never have to use TypeScript, web frameworks or bloated web ecosystems again.</p>
@@ -25,10 +25,10 @@
 <br>
 
 ```haskell
-@(html/basic)
+import @(html/basic)
 
 -- Create a new blog post
-create_post |title String, date Int, content String| -> String:
+#create_post |title String, date Int, content String| -> String:
     
     io("Creating a blog post!")
 
@@ -50,11 +50,11 @@ create_post |title String, date Int, content String| -> String:
 
 The HTML build system will generate an HTML page from this code:
 ```haskell
-@(PostGenerator)
-@(html/basic)
+import @(generators/create_post)
+import @(html/basic)
 
 date = 2025
-post = PostGenerator.create_post(date, [:
+post = create_post(date, [:
     I have absolutely nothing interesting to say, and never will.
 ])
 
