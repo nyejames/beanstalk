@@ -212,6 +212,88 @@ fn lowers_module_constants_into_hir_const_pool() {
 }
 
 #[test]
+fn lowers_struct_module_constant_into_record_with_ordered_fields() {
+    let mut string_table = StringTable::new();
+    let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
+    let struct_name = symbol("Point", &mut string_table);
+    let x_field = struct_name.append(string_table.intern("x"));
+    let y_field = struct_name.append(string_table.intern("y"));
+
+    let struct_node = node(
+        NodeKind::StructDefinition(
+            struct_name,
+            vec![
+                var(
+                    x_field.clone(),
+                    Expression::new(
+                        ExpressionKind::None,
+                        test_location(1),
+                        DataType::Int,
+                        Ownership::ImmutableOwned,
+                    ),
+                ),
+                var(
+                    y_field.clone(),
+                    Expression::new(
+                        ExpressionKind::None,
+                        test_location(1),
+                        DataType::Int,
+                        Ownership::ImmutableOwned,
+                    ),
+                ),
+            ],
+        ),
+        test_location(1),
+    );
+
+    let start_function = function_node(
+        start_name,
+        FunctionSignature {
+            parameters: vec![],
+            returns: vec![],
+        },
+        vec![],
+        test_location(2),
+    );
+
+    let mut ast = build_ast(vec![struct_node, start_function], entry_path);
+    let const_name = symbol("POINT", &mut string_table);
+
+    ast.module_constants.push(var(
+        const_name,
+        Expression::struct_instance(
+            vec![
+                var(
+                    x_field,
+                    Expression::int(5, test_location(2), Ownership::ImmutableOwned),
+                ),
+                var(
+                    y_field,
+                    Expression::int(99, test_location(2), Ownership::ImmutableOwned),
+                ),
+            ],
+            test_location(2),
+            Ownership::ImmutableOwned,
+        ),
+    ));
+
+    let module = lower_ast(ast, &mut string_table).expect("HIR lowering should succeed");
+    assert_eq!(module.module_constants.len(), 1);
+
+    let constant = &module.module_constants[0];
+    match &constant.value {
+        HirConstValue::Record(fields) => {
+            assert_eq!(fields.len(), 2);
+            assert!(fields[0].name.ends_with("/x"));
+            assert!(matches!(fields[0].value, HirConstValue::Int(5)));
+            assert!(fields[1].name.ends_with("/y"));
+            assert!(matches!(fields[1].value, HirConstValue::Int(99)));
+        }
+        other => panic!("expected record constant, got {:?}", other),
+    }
+}
+
+#[test]
 fn lowers_ast_start_template_items_into_ordered_hir_fragments() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);

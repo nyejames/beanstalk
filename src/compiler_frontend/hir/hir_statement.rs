@@ -93,6 +93,8 @@ impl<'a> HirBuilder<'a> {
                         value: self.lower_const_value(&field.value, location)?,
                     });
                 }
+                // Const-eligible struct constructors in top-level '#' constants are coerced
+                // in AST to data-only struct instances, and land here as HIR const records.
                 Ok(HirConstValue::Record(lowered_fields))
             }
             ExpressionKind::Range(start, end) => Ok(HirConstValue::Range(

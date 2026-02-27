@@ -360,3 +360,176 @@ fn build_directory_project_emits_dist_index_and_404_and_ignores_unreachable_file
 
     fs::remove_dir_all(&root).expect("should remove temp dir");
 }
+
+#[test]
+fn build_project_allows_const_record_coercion_with_all_defaults() {
+    let root = temp_dir("const_record_all_defaults");
+    fs::create_dir_all(&root).expect("should create temp root");
+    fs::write(
+        root.join("main.bst"),
+        "Basic = |\n    body String = \"ok\",\n|\n#basic = Basic()\n",
+    )
+    .expect("should write source file");
+    let _cwd_guard = CurrentDirGuard::set_to(&root);
+
+    let builder = HtmlProjectBuilder::new();
+    let result = build_project(&builder, "main.bst", &[]);
+    assert!(
+        result.is_ok(),
+        "const struct coercion with defaults should compile"
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
+fn build_project_allows_const_record_coercion_with_constant_arguments() {
+    let root = temp_dir("const_record_constant_args");
+    fs::create_dir_all(&root).expect("should create temp root");
+    fs::write(
+        root.join("main.bst"),
+        "Basic = |\n    body String = \"default\",\n    color String = \"red\",\n|\n#label = \"Docs\"\n#basic = Basic(label, \"green\")\n",
+    )
+    .expect("should write source file");
+    let _cwd_guard = CurrentDirGuard::set_to(&root);
+
+    let builder = HtmlProjectBuilder::new();
+    let result = build_project(&builder, "main.bst", &[]);
+    assert!(
+        result.is_ok(),
+        "const struct coercion with constant arguments should compile"
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
+fn build_project_runtime_struct_constructor_supports_partial_defaults() {
+    let root = temp_dir("runtime_struct_partial_defaults");
+    fs::create_dir_all(&root).expect("should create temp root");
+    fs::write(
+        root.join("main.bst"),
+        "Point = |\n    x Int,\n    y Int = 99,\n|\npoint = Point(5)\nio([: point.y])\n",
+    )
+    .expect("should write source file");
+    let _cwd_guard = CurrentDirGuard::set_to(&root);
+
+    let builder = HtmlProjectBuilder::new();
+    let build_result = build_project(&builder, "main.bst", &[])
+        .expect("runtime struct constructor with defaults should compile");
+
+    let html = match build_result.project.output_files[0].file_kind() {
+        FileKind::Html(content) => content,
+        other => panic!(
+            "expected HTML output, got {:?}",
+            std::mem::discriminant(other)
+        ),
+    };
+    assert!(
+        html.contains("y: 99"),
+        "runtime constructor should fill missing trailing struct fields from defaults"
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
+fn build_project_rejects_const_record_with_non_constant_argument() {
+    let root = temp_dir("const_record_non_constant_arg");
+    fs::create_dir_all(&root).expect("should create temp root");
+    fs::write(
+        root.join("main.bst"),
+        "Basic = |\n    body String = \"ok\",\n|\nget_value || -> String:\n    return \"dynamic\"\n;\n#basic = Basic(get_value())\n",
+    )
+    .expect("should write source file");
+    let _cwd_guard = CurrentDirGuard::set_to(&root);
+
+    let builder = HtmlProjectBuilder::new();
+    let result = build_project(&builder, "main.bst", &[]);
+    assert!(
+        result.is_err(),
+        "non-constant struct constructor argument in '#'-constant should fail"
+    );
+    let messages = match result {
+        Err(messages) => messages,
+        Ok(_) => unreachable!("assert above guarantees this is an error"),
+    };
+
+    assert!(
+        messages
+            .errors
+            .iter()
+            .any(|error| {
+                error.msg.contains("get_value") && error.msg.contains("non-constant value")
+            }),
+        "expected a targeted error describing the non-constant argument"
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
+fn build_project_rejects_const_record_when_required_fields_are_missing() {
+    let root = temp_dir("const_record_missing_required");
+    fs::create_dir_all(&root).expect("should create temp root");
+    fs::write(
+        root.join("main.bst"),
+        "Basic = |\n    body String,\n    color String = \"blue\",\n|\n#basic = Basic()\n",
+    )
+    .expect("should write source file");
+    let _cwd_guard = CurrentDirGuard::set_to(&root);
+
+    let builder = HtmlProjectBuilder::new();
+    let result = build_project(&builder, "main.bst", &[]);
+    assert!(
+        result.is_err(),
+        "missing required fields in const record constructor should fail"
+    );
+    let messages = match result {
+        Err(messages) => messages,
+        Ok(_) => unreachable!("assert above guarantees this is an error"),
+    };
+
+    assert!(
+        messages
+            .errors
+            .iter()
+            .any(|error| error.msg.contains("missing 1 required field argument")),
+        "expected a missing-required-fields constructor diagnostic"
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
+fn build_project_rejects_struct_constructor_with_too_many_arguments() {
+    let root = temp_dir("struct_constructor_too_many_args");
+    fs::create_dir_all(&root).expect("should create temp root");
+    fs::write(
+        root.join("main.bst"),
+        "Point = |\n    x Int,\n    y Int = 1,\n|\n#point = Point(1, 2, 3)\n",
+    )
+    .expect("should write source file");
+    let _cwd_guard = CurrentDirGuard::set_to(&root);
+
+    let builder = HtmlProjectBuilder::new();
+    let result = build_project(&builder, "main.bst", &[]);
+    assert!(
+        result.is_err(),
+        "too many struct constructor arguments should fail"
+    );
+    let messages = match result {
+        Err(messages) => messages,
+        Ok(_) => unreachable!("assert above guarantees this is an error"),
+    };
+
+    assert!(
+        messages
+            .errors
+            .iter()
+            .any(|error| error.msg.contains("received too many arguments")),
+        "expected a too-many-arguments constructor diagnostic"
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
