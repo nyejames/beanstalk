@@ -290,7 +290,7 @@ fn create_iteration_loop(
             Ownership::ImmutableOwned,
         ),
     };
-    context.declarations.push(loop_binding.to_owned());
+    context.add_var(loop_binding.to_owned());
 
     token_stream.advance();
 

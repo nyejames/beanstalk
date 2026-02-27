@@ -2,42 +2,34 @@ use crate::backends::function_registry::HostRegistry;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::function_body_to_ast::function_body_to_ast;
-use crate::compiler_frontend::ast::statements::declarations::resolve_declaration_syntax;
+use crate::compiler_frontend::ast::import_bindings::{
+    parse_constant_header_declaration, resolve_file_import_bindings,
+};
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::ast::statements::structs::create_struct_definition;
 use crate::compiler_frontend::ast::templates::create_template_node::Template;
 use crate::compiler_frontend::ast::templates::template::TemplateType;
+use crate::compiler_frontend::ast::top_level_templates::synthesize_start_template_items;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::headers::parse_file_headers::{
-    Header, HeaderKind, TopLevelTemplateItem, TopLevelTemplateKind,
+    FileImport, Header, HeaderKind, TopLevelTemplateItem,
 };
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
-use crate::compiler_frontend::tokenizer::tokens::TextLocation;
-use crate::projects::settings::{self, IMPLICIT_START_FUNC_NAME, TOP_LEVEL_TEMPLATE_NAME};
+use crate::projects::settings::{self, IMPLICIT_START_FUNC_NAME};
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::sync::atomic::{AtomicUsize, Ordering};
+
+pub use crate::compiler_frontend::ast::top_level_templates::AstStartTemplateItem;
 
 static CONTROL_FLOW_SCOPE_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
 pub struct ModuleExport {
     pub id: StringId,
     pub signature: FunctionSignature,
-}
-
-#[derive(Clone, Debug)]
-pub enum AstStartTemplateItem {
-    ConstString {
-        value: StringId,
-        location: TextLocation,
-    },
-    RuntimeStringFunction {
-        function: InternedPath,
-        location: TextLocation,
-    },
 }
 
 pub struct Ast {
@@ -70,20 +62,49 @@ impl Ast {
         let mut warnings: Vec<CompilerWarning> = Vec::new();
         let mut const_templates_by_path: FxHashMap<InternedPath, StringId> = FxHashMap::default();
         let mut module_constants: Vec<Declaration> = Vec::new();
+        let mut importable_symbol_exported: FxHashMap<InternedPath, bool> = FxHashMap::default();
+        let mut file_imports_by_source: FxHashMap<InternedPath, Vec<FileImport>> =
+            FxHashMap::default();
+        let mut declared_paths_by_file: FxHashMap<InternedPath, FxHashSet<InternedPath>> =
+            FxHashMap::default();
+        let mut declared_names_by_file: FxHashMap<InternedPath, FxHashSet<StringId>> =
+            FxHashMap::default();
+        let mut module_file_paths: FxHashSet<InternedPath> = FxHashSet::default();
 
-        // Collect module-level declarations first so all function/start bodies can resolve symbols.
+        // Collect every module declaration once.
+        // WHY: Resolution stores fully qualified symbol paths; each file context later
+        // applies its own visibility filter instead of rebuilding declaration tables.
         let mut declarations: Vec<Declaration> = Vec::new();
         for header in &sorted_headers {
+            module_file_paths.insert(header.source_file.to_owned());
+            file_imports_by_source
+                .entry(header.source_file.to_owned())
+                .or_insert_with(|| header.file_imports.to_owned());
+
             match &header.kind {
-                HeaderKind::Function { signature } => declarations.push(Declaration {
-                    id: header.tokens.src_path.to_owned(),
-                    value: Expression::new(
-                        ExpressionKind::None,
-                        header.name_location.to_owned(),
-                        DataType::Function(Box::new(None), signature.to_owned()),
-                        Ownership::ImmutableReference,
-                    ),
-                }),
+                HeaderKind::Function { signature } => {
+                    declarations.push(Declaration {
+                        id: header.tokens.src_path.to_owned(),
+                        value: Expression::new(
+                            ExpressionKind::None,
+                            header.name_location.to_owned(),
+                            DataType::Function(Box::new(None), signature.to_owned()),
+                            Ownership::ImmutableReference,
+                        ),
+                    });
+                    importable_symbol_exported
+                        .insert(header.tokens.src_path.to_owned(), header.exported);
+                    declared_paths_by_file
+                        .entry(header.source_file.to_owned())
+                        .or_default()
+                        .insert(header.tokens.src_path.to_owned());
+                    if let Some(name) = header.tokens.src_path.name() {
+                        declared_names_by_file
+                            .entry(header.source_file.to_owned())
+                            .or_default()
+                            .insert(name);
+                    }
+                }
                 HeaderKind::Struct => {
                     let mut struct_tokens = header.tokens.to_owned();
                     let fields = match create_struct_definition(&mut struct_tokens, string_table) {
@@ -105,14 +126,25 @@ impl Ast {
                             Ownership::ImmutableReference,
                         ),
                     });
+                    importable_symbol_exported
+                        .insert(header.tokens.src_path.to_owned(), header.exported);
+                    declared_paths_by_file
+                        .entry(header.source_file.to_owned())
+                        .or_default()
+                        .insert(header.tokens.src_path.to_owned());
+                    if let Some(name) = header.tokens.src_path.name() {
+                        declared_names_by_file
+                            .entry(header.source_file.to_owned())
+                            .or_default()
+                            .insert(name);
+                    }
                 }
                 HeaderKind::StartFunction => {
                     let start_name = header
-                        .tokens
-                        .src_path
+                        .source_file
                         .join_str(IMPLICIT_START_FUNC_NAME, string_table);
                     declarations.push(Declaration {
-                        id: start_name,
+                        id: start_name.to_owned(),
                         value: Expression::new(
                             ExpressionKind::None,
                             header.name_location.to_owned(),
@@ -126,18 +158,68 @@ impl Ast {
                             Ownership::ImmutableReference,
                         ),
                     });
+                    declared_paths_by_file
+                        .entry(header.source_file.to_owned())
+                        .or_default()
+                        .insert(start_name.to_owned());
+                    if let Some(name) = start_name.name() {
+                        declared_names_by_file
+                            .entry(header.source_file.to_owned())
+                            .or_default()
+                            .insert(name);
+                    }
+                }
+                HeaderKind::Constant { .. } => {
+                    importable_symbol_exported
+                        .insert(header.tokens.src_path.to_owned(), header.exported);
+                    declared_paths_by_file
+                        .entry(header.source_file.to_owned())
+                        .or_default()
+                        .insert(header.tokens.src_path.to_owned());
+                    if let Some(name) = header.tokens.src_path.name() {
+                        declared_names_by_file
+                            .entry(header.source_file.to_owned())
+                            .or_default()
+                            .insert(name);
+                    }
                 }
                 _ => {}
             }
         }
 
+        // Build per-source-file import visibility and start-function aliases.
+        // WHY: imports are file-scoped rules, but declarations are module-scoped identities.
+        let file_import_bindings = match resolve_file_import_bindings(
+            &file_imports_by_source,
+            &module_file_paths,
+            &importable_symbol_exported,
+            &declared_paths_by_file,
+            &declared_names_by_file,
+            host_registry,
+            string_table,
+        ) {
+            Ok(bindings) => bindings,
+            Err(error) => {
+                return Err(CompilerMessages {
+                    errors: vec![error],
+                    warnings,
+                });
+            }
+        };
+
         // Parse exported constant headers into declarations before lowering other bodies.
         // This keeps constants visible module-wide just like function/struct declarations.
         for header in &sorted_headers {
             if matches!(header.kind, HeaderKind::Constant { .. }) {
+                let bindings = file_import_bindings
+                    .get(&header.source_file)
+                    .cloned()
+                    .unwrap_or_default();
                 let declaration = match parse_constant_header_declaration(
                     header,
                     &declarations,
+                    &bindings.visible_symbol_paths,
+                    &bindings.start_aliases,
                     host_registry,
                     string_table,
                 ) {
@@ -156,10 +238,19 @@ impl Ast {
         }
 
         for mut header in sorted_headers {
+            let bindings = file_import_bindings
+                .get(&header.source_file)
+                .cloned()
+                .unwrap_or_default();
+
             match header.kind {
                 HeaderKind::Function { signature } => {
                     let mut function_declarations = declarations.to_owned();
                     function_declarations.extend(signature.parameters.to_owned());
+                    let mut visible_declarations = bindings.visible_symbol_paths.to_owned();
+                    for parameter in &signature.parameters {
+                        visible_declarations.insert(parameter.id.to_owned());
+                    }
 
                     // Function parameters should be available in the function body scope
                     let context = ScopeContext::new(
@@ -168,7 +259,9 @@ impl Ast {
                         &function_declarations,
                         host_registry.clone(),
                         signature.returns.clone(),
-                    );
+                    )
+                    .with_visible_declarations(visible_declarations)
+                    .with_start_import_aliases(bindings.start_aliases.to_owned());
 
                     let mut token_stream = header.tokens;
 
@@ -208,7 +301,9 @@ impl Ast {
                         &declarations,
                         host_registry.clone(),
                         vec![],
-                    );
+                    )
+                    .with_visible_declarations(bindings.visible_symbol_paths.to_owned())
+                    .with_start_import_aliases(bindings.start_aliases.to_owned());
 
                     let mut token_stream = header.tokens;
 
@@ -291,7 +386,9 @@ impl Ast {
                         &declarations,
                         host_registry.clone(),
                         vec![],
-                    );
+                    )
+                    .with_visible_declarations(bindings.visible_symbol_paths.to_owned())
+                    .with_start_import_aliases(bindings.start_aliases.to_owned());
 
                     let template =
                         match Template::new(&mut template_tokens, &context, None, string_table) {
@@ -360,559 +457,18 @@ impl Ast {
     }
 }
 
-fn parse_constant_header_declaration(
-    header: &Header,
-    declarations: &[Declaration],
-    host_registry: &HostRegistry,
-    string_table: &mut StringTable,
-) -> Result<Declaration, CompilerError> {
-    let HeaderKind::Constant { metadata } = &header.kind else {
-        return Err(CompilerError::compiler_error(
-            "Constant header resolver called for a non-constant header.",
-        ));
-    };
-
-    let context = ScopeContext::new(
-        ContextKind::Constant,
-        header.tokens.src_path.to_owned(),
-        declarations,
-        host_registry.clone(),
-        vec![],
-    );
-
-    let declaration = resolve_declaration_syntax(
-        metadata.declaration_syntax.clone(),
-        header.tokens.src_path.to_owned(),
-        &context,
-        string_table,
-    )?;
-
-    if !declaration.value.is_compile_time_constant() {
-        return Err(CompilerError::new_rule_error(
-            format!(
-                "Constant '{}' is not compile-time resolvable. Constants may only contain compile-time values and constant references.",
-                declaration.id.to_string(string_table)
-            ),
-            header.name_location.to_error_location(string_table),
-        ));
-    }
-
-    Ok(declaration)
-}
-
-#[derive(Clone)]
-struct RuntimeTemplateCandidate {
-    declaration: Declaration,
-    location: TextLocation,
-    scope: InternedPath,
-    preceding_statements: Vec<AstNode>,
-}
-
-fn synthesize_start_template_items(
-    ast_nodes: &mut Vec<AstNode>,
-    entry_dir: &InternedPath,
-    top_level_template_items: &[TopLevelTemplateItem],
-    const_templates_by_path: &FxHashMap<InternedPath, StringId>,
-    string_table: &mut StringTable,
-) -> Result<Vec<AstStartTemplateItem>, CompilerError> {
-    let entry_start_function_name = entry_dir.join_str(IMPLICIT_START_FUNC_NAME, string_table);
-    let Some(entry_start_index) = ast_nodes.iter().position(|node| {
-        matches!(
-            &node.kind,
-            NodeKind::Function(name, _, _) if *name == entry_start_function_name
-        )
-    }) else {
-        return Err(CompilerError::compiler_error(format!(
-            "Failed to find entry start function '{}' while synthesizing start fragments.",
-            entry_start_function_name.to_string(string_table)
-        )));
-    };
-
-    let (runtime_candidates, entry_scope) =
-        extract_runtime_template_candidates(ast_nodes, entry_start_index, string_table)?;
-
-    let mut ordered_items = top_level_template_items.to_owned();
-    ordered_items.sort_by_key(|item| item.file_order);
-
-    let mut next_fragment_index = 0usize;
-    let mut ordered_fragment_sources: Vec<OrderedFragmentSource> =
-        Vec::with_capacity(ordered_items.len() + runtime_candidates.len());
-
-    for template_item in ordered_items {
-        if let TopLevelTemplateKind::ConstTemplate { header_path } = template_item.kind {
-            let Some(value) = const_templates_by_path.get(&header_path).copied() else {
-                return Err(CompilerError::compiler_error(format!(
-                    "Missing const template value for '{}'",
-                    header_path.to_string(string_table)
-                )));
-            };
-
-            ordered_fragment_sources.push(OrderedFragmentSource::Const {
-                value,
-                location: template_item.location,
-            });
-        }
-    }
-
-    // Runtime fragment ordering comes from extracted top-level template declarations.
-    // This avoids treating template expressions inside assignments/calls as start fragments.
-    for candidate in runtime_candidates {
-        ordered_fragment_sources.push(OrderedFragmentSource::Runtime(candidate));
-    }
-
-    ordered_fragment_sources.sort_by(compare_fragment_locations);
-
-    let mut start_template_items = Vec::with_capacity(ordered_fragment_sources.len());
-    for source in ordered_fragment_sources {
-        match source {
-            OrderedFragmentSource::Const { value, location } => {
-                start_template_items.push(AstStartTemplateItem::ConstString { value, location });
-            }
-
-            OrderedFragmentSource::Runtime(candidate) => {
-                let ExpressionKind::Template(template) = &candidate.declaration.value.kind else {
-                    return Err(CompilerError::compiler_error(
-                        "Top-level runtime template candidate was not parsed as a template expression.",
-                    ));
-                };
-
-                if matches!(
-                    template.kind,
-                    crate::compiler_frontend::ast::templates::template::TemplateType::String
-                ) {
-                    let folded = template.fold(&None, string_table)?;
-                    start_template_items.push(AstStartTemplateItem::ConstString {
-                        value: folded,
-                        location: candidate.location,
-                    });
-                    continue;
-                }
-
-                let fragment_name =
-                    entry_dir.join_str(&format!("__bst_frag_{next_fragment_index}"), string_table);
-                next_fragment_index += 1;
-
-                let mut fragment_body = build_runtime_fragment_body(&candidate, string_table)?;
-                fragment_body.push(AstNode {
-                    kind: NodeKind::Return(vec![candidate.declaration.value.clone()]),
-                    location: candidate.location.clone(),
-                    scope: candidate.scope.clone(),
-                });
-
-                ast_nodes.push(AstNode {
-                    kind: NodeKind::Function(
-                        fragment_name.clone(),
-                        FunctionSignature {
-                            parameters: vec![],
-                            returns: vec![DataType::StringSlice],
-                        },
-                        fragment_body,
-                    ),
-                    location: candidate.location.clone(),
-                    scope: entry_scope.clone(),
-                });
-
-                start_template_items.push(AstStartTemplateItem::RuntimeStringFunction {
-                    function: fragment_name,
-                    location: candidate.location,
-                });
-            }
-        }
-    }
-
-    Ok(start_template_items)
-}
-
-#[derive(Clone)]
-enum OrderedFragmentSource {
-    Const {
-        value: StringId,
-        location: TextLocation,
-    },
-    Runtime(RuntimeTemplateCandidate),
-}
-
-fn compare_fragment_locations(
-    lhs: &OrderedFragmentSource,
-    rhs: &OrderedFragmentSource,
-) -> std::cmp::Ordering {
-    let lhs_location = match lhs {
-        OrderedFragmentSource::Const { location, .. } => location,
-        OrderedFragmentSource::Runtime(candidate) => &candidate.location,
-    };
-    let rhs_location = match rhs {
-        OrderedFragmentSource::Const { location, .. } => location,
-        OrderedFragmentSource::Runtime(candidate) => &candidate.location,
-    };
-
-    lhs_location
-        .start_pos
-        .line_number
-        .cmp(&rhs_location.start_pos.line_number)
-        .then(
-            lhs_location
-                .start_pos
-                .char_column
-                .cmp(&rhs_location.start_pos.char_column),
-        )
-}
-
-fn extract_runtime_template_candidates(
-    ast_nodes: &mut [AstNode],
-    entry_start_index: usize,
-    string_table: &StringTable,
-) -> Result<(Vec<RuntimeTemplateCandidate>, InternedPath), CompilerError> {
-    let Some(entry_start_node) = ast_nodes.get_mut(entry_start_index) else {
-        return Err(CompilerError::compiler_error(
-            "Entry start function index is out of bounds while extracting runtime templates.",
-        ));
-    };
-
-    let entry_scope = entry_start_node.scope.clone();
-    let NodeKind::Function(_, _, body) = &mut entry_start_node.kind else {
-        return Err(CompilerError::compiler_error(
-            "Entry start function node is not a function while extracting runtime templates.",
-        ));
-    };
-
-    let original_body = body.clone();
-    let mut runtime_candidates = Vec::new();
-    let mut filtered_body = Vec::with_capacity(original_body.len());
-
-    for (index, node) in original_body.iter().enumerate() {
-        if let Some(declaration) = as_top_level_template_declaration(node, string_table) {
-            runtime_candidates.push(RuntimeTemplateCandidate {
-                declaration: declaration.clone(),
-                location: node.location.clone(),
-                scope: node.scope.clone(),
-                preceding_statements: original_body[..index]
-                    .iter()
-                    .filter(|statement| {
-                        as_top_level_template_declaration(statement, string_table).is_none()
-                    })
-                    .cloned()
-                    .collect(),
-            });
-            continue;
-        }
-
-        filtered_body.push(node.clone());
-    }
-
-    *body = filtered_body;
-    Ok((runtime_candidates, entry_scope))
-}
-
-fn as_top_level_template_declaration<'a>(
-    node: &'a AstNode,
-    string_table: &StringTable,
-) -> Option<&'a Declaration> {
-    let NodeKind::VariableDeclaration(declaration) = &node.kind else {
-        return None;
-    };
-
-    let is_template_name = declaration
-        .id
-        .name_str(string_table)
-        .is_some_and(|name| name == TOP_LEVEL_TEMPLATE_NAME);
-
-    if !is_template_name {
-        return None;
-    }
-
-    if !matches!(declaration.value.kind, ExpressionKind::Template(_)) {
-        return None;
-    }
-
-    Some(declaration)
-}
-
-fn build_runtime_fragment_body(
-    candidate: &RuntimeTemplateCandidate,
-    string_table: &StringTable,
-) -> Result<Vec<AstNode>, CompilerError> {
-    let mut required_symbols = FxHashSet::default();
-    collect_references_from_expression(&candidate.declaration.value, &mut required_symbols);
-
-    let declaration_lookup = candidate
-        .preceding_statements
-        .iter()
-        .enumerate()
-        .filter_map(|(index, node)| {
-            let NodeKind::VariableDeclaration(declaration) = &node.kind else {
-                return None;
-            };
-
-            Some((declaration.id.clone(), (index, declaration)))
-        })
-        .collect::<FxHashMap<_, _>>();
-
-    let mut included_declarations = FxHashSet::default();
-    let mut visiting = FxHashSet::default();
-    for symbol in required_symbols {
-        include_declaration_dependencies(
-            &symbol,
-            &declaration_lookup,
-            &mut included_declarations,
-            &mut visiting,
-        )?;
-    }
-
-    let included_symbols = included_declarations
-        .iter()
-        .filter_map(|index| {
-            let NodeKind::VariableDeclaration(declaration) =
-                &candidate.preceding_statements.get(*index)?.kind
-            else {
-                return None;
-            };
-            Some(declaration.id.clone())
-        })
-        .collect::<FxHashSet<_>>();
-
-    for statement in &candidate.preceding_statements {
-        let NodeKind::Assignment { target, .. } = &statement.kind else {
-            continue;
-        };
-
-        let mut assignment_targets = FxHashSet::default();
-        collect_references_from_ast_node(target, &mut assignment_targets);
-
-        if assignment_targets
-            .into_iter()
-            .any(|symbol| included_symbols.contains(&symbol))
-        {
-            return Err(CompilerError::new_rule_error(
-                "Runtime start-fragment captures currently do not support mutable reassignments before template evaluation.",
-                statement.location.to_error_location(string_table),
-            ));
-        }
-    }
-
-    let mut ordered_indices = included_declarations.into_iter().collect::<Vec<_>>();
-    ordered_indices.sort_unstable();
-
-    let mut fragment_body = Vec::with_capacity(ordered_indices.len());
-    for index in ordered_indices {
-        let Some(statement) = candidate.preceding_statements.get(index).cloned() else {
-            return Err(CompilerError::compiler_error(
-                "Fragment dependency index was out of bounds.",
-            ));
-        };
-        fragment_body.push(statement);
-    }
-
-    Ok(fragment_body)
-}
-
-fn include_declaration_dependencies(
-    symbol: &InternedPath,
-    declaration_lookup: &FxHashMap<InternedPath, (usize, &Declaration)>,
-    included_declarations: &mut FxHashSet<usize>,
-    visiting: &mut FxHashSet<InternedPath>,
-) -> Result<(), CompilerError> {
-    let Some((index, declaration)) = declaration_lookup.get(symbol) else {
-        return Ok(());
-    };
-
-    if included_declarations.contains(index) {
-        return Ok(());
-    }
-
-    if !visiting.insert(symbol.clone()) {
-        return Err(CompilerError::compiler_error(
-            "Cyclic declaration capture detected while synthesizing runtime fragment.",
-        ));
-    }
-
-    let mut nested_symbols = FxHashSet::default();
-    collect_references_from_expression(&declaration.value, &mut nested_symbols);
-    for dependency in nested_symbols {
-        if dependency != *symbol {
-            include_declaration_dependencies(
-                &dependency,
-                declaration_lookup,
-                included_declarations,
-                visiting,
-            )?;
-        }
-    }
-
-    visiting.remove(symbol);
-    included_declarations.insert(*index);
-    Ok(())
-}
-
-fn collect_references_from_expression(
-    expression: &Expression,
-    references: &mut FxHashSet<InternedPath>,
-) {
-    match &expression.kind {
-        ExpressionKind::Reference(name) => {
-            references.insert(name.clone());
-        }
-
-        ExpressionKind::Runtime(nodes) => {
-            for node in nodes {
-                collect_references_from_ast_node(node, references);
-            }
-        }
-
-        ExpressionKind::FunctionCall(_, args)
-        | ExpressionKind::HostFunctionCall(_, args)
-        | ExpressionKind::Collection(args) => {
-            for argument in args {
-                collect_references_from_expression(argument, references);
-            }
-        }
-
-        ExpressionKind::Template(template) => {
-            for value in template.content.flatten() {
-                collect_references_from_expression(value, references);
-            }
-        }
-
-        ExpressionKind::StructDefinition(arguments) | ExpressionKind::StructInstance(arguments) => {
-            for argument in arguments {
-                collect_references_from_expression(&argument.value, references);
-            }
-        }
-
-        ExpressionKind::Range(lower, upper) => {
-            collect_references_from_expression(lower, references);
-            collect_references_from_expression(upper, references);
-        }
-
-        ExpressionKind::Function(_, body) => {
-            for node in body {
-                collect_references_from_ast_node(node, references);
-            }
-        }
-
-        ExpressionKind::None
-        | ExpressionKind::Int(_)
-        | ExpressionKind::Float(_)
-        | ExpressionKind::StringSlice(_)
-        | ExpressionKind::Bool(_)
-        | ExpressionKind::Char(_) => {}
-    }
-}
-
-fn collect_references_from_ast_node(node: &AstNode, references: &mut FxHashSet<InternedPath>) {
-    match &node.kind {
-        NodeKind::VariableDeclaration(declaration) => {
-            collect_references_from_expression(&declaration.value, references);
-        }
-
-        NodeKind::Assignment { target, value } => {
-            collect_references_from_ast_node(target, references);
-            collect_references_from_expression(value, references);
-        }
-
-        NodeKind::FieldAccess { base, .. } => {
-            collect_references_from_ast_node(base, references);
-        }
-
-        NodeKind::MethodCall { base, args, .. } => {
-            collect_references_from_ast_node(base, references);
-            for argument in args {
-                collect_references_from_ast_node(argument, references);
-            }
-        }
-
-        NodeKind::FunctionCall { args, .. } | NodeKind::HostFunctionCall { args, .. } => {
-            for argument in args {
-                collect_references_from_expression(argument, references);
-            }
-        }
-
-        NodeKind::StructDefinition(_, fields) => {
-            for field in fields {
-                collect_references_from_expression(&field.value, references);
-            }
-        }
-
-        NodeKind::Function(_, _, body) => {
-            for statement in body {
-                collect_references_from_ast_node(statement, references);
-            }
-        }
-
-        NodeKind::Rvalue(expression)
-        | NodeKind::Template(expression)
-        | NodeKind::TopLevelTemplate(expression) => {
-            collect_references_from_expression(expression, references);
-        }
-
-        NodeKind::Return(values) => {
-            for value in values {
-                collect_references_from_expression(value, references);
-            }
-        }
-
-        NodeKind::If(condition, then_body, else_body) => {
-            collect_references_from_expression(condition, references);
-            for statement in then_body {
-                collect_references_from_ast_node(statement, references);
-            }
-            if let Some(else_body) = else_body {
-                for statement in else_body {
-                    collect_references_from_ast_node(statement, references);
-                }
-            }
-        }
-
-        NodeKind::Match(scrutinee, arms, default) => {
-            collect_references_from_expression(scrutinee, references);
-            for arm in arms {
-                collect_references_from_expression(&arm.condition, references);
-                for statement in &arm.body {
-                    collect_references_from_ast_node(statement, references);
-                }
-            }
-            if let Some(default_body) = default {
-                for statement in default_body {
-                    collect_references_from_ast_node(statement, references);
-                }
-            }
-        }
-
-        NodeKind::ForLoop(binding, range, body) => {
-            collect_references_from_expression(&binding.value, references);
-            collect_references_from_expression(&range.start, references);
-            collect_references_from_expression(&range.end, references);
-            if let Some(step) = &range.step {
-                collect_references_from_expression(step, references);
-            }
-            for statement in body {
-                collect_references_from_ast_node(statement, references);
-            }
-        }
-
-        NodeKind::WhileLoop(condition, body) => {
-            collect_references_from_expression(condition, references);
-            for statement in body {
-                collect_references_from_ast_node(statement, references);
-            }
-        }
-
-        NodeKind::Warning(_)
-        | NodeKind::Config(_)
-        | NodeKind::Break
-        | NodeKind::Continue
-        | NodeKind::Slot
-        | NodeKind::Empty
-        | NodeKind::Operator(_)
-        | NodeKind::Newline
-        | NodeKind::Spaces(_) => {}
-    }
-}
-
 #[derive(Clone)]
 pub struct ScopeContext {
     pub kind: ContextKind,
     pub scope: InternedPath,
+    // Full declaration table for path-identity lookup and type/context metadata.
+    // This stays module-wide so resolution always uses stable unique IDs.
     pub declarations: Vec<Declaration>,
+    // Optional file-local visibility gate over `declarations`.
+    // When present, references must be in this set, which enforces import boundaries.
+    pub visible_declaration_ids: Option<FxHashSet<InternedPath>>,
+    // Bare file imports (`@(path/to/file)`) bind alias -> imported file start function path.
+    pub start_import_aliases: FxHashMap<StringId, InternedPath>,
     pub returns: Vec<DataType>,
     pub host_registry: HostRegistry,
     pub loop_depth: usize,
@@ -941,6 +497,8 @@ impl ScopeContext {
             kind,
             scope,
             declarations: declarations.to_owned(),
+            visible_declaration_ids: None,
+            start_import_aliases: FxHashMap::default(),
             returns,
             host_registry,
             loop_depth: 0,
@@ -999,13 +557,39 @@ impl ScopeContext {
             kind: ContextKind::Constant,
             scope,
             declarations: Vec::new(),
+            visible_declaration_ids: None,
+            start_import_aliases: FxHashMap::default(),
             returns: Vec::new(),
             host_registry: HostRegistry::default(),
             loop_depth: 0,
         }
     }
 
+    pub fn with_visible_declarations(mut self, visible: FxHashSet<InternedPath>) -> ScopeContext {
+        // A context without this gate can resolve any declaration in the module.
+        // File/start contexts set this to enforce import semantics.
+        self.visible_declaration_ids = Some(visible);
+        self
+    }
+
+    pub fn with_start_import_aliases(
+        mut self,
+        aliases: FxHashMap<StringId, InternedPath>,
+    ) -> ScopeContext {
+        self.start_import_aliases = aliases;
+        self
+    }
+
+    pub fn resolve_start_import(&self, name: &StringId) -> Option<&InternedPath> {
+        self.start_import_aliases.get(name)
+    }
+
     pub fn add_var(&mut self, arg: Declaration) {
+        // Keep declaration table and visibility gate in sync for locals declared in-body.
+        // Otherwise a newly declared local could exist in `declarations` but be invisible.
+        if let Some(visible) = self.visible_declaration_ids.as_mut() {
+            visible.insert(arg.id.to_owned());
+        }
         self.declarations.push(arg);
     }
 
@@ -1025,6 +609,8 @@ macro_rules! new_template_context {
             kind: ContextKind::Template,
             scope: $context.scope.clone(),
             declarations: $context.declarations.to_owned(),
+            visible_declaration_ids: $context.visible_declaration_ids.clone(),
+            start_import_aliases: $context.start_import_aliases.clone(),
             returns: vec![],
             host_registry: $context.host_registry.clone(),
             loop_depth: $context.loop_depth,
@@ -1044,6 +630,8 @@ macro_rules! new_config_context {
             kind: ContextKind::Template,
             scope,
             declarations: $args,
+            visible_declaration_ids: None,
+            start_import_aliases: rustc_hash::FxHashMap::default(),
             returns: vec![],
             host_registry: $registry,
             loop_depth: 0,
@@ -1063,6 +651,8 @@ macro_rules! new_condition_context {
             kind: ContextKind::Condition,
             scope,
             declarations: $args,
+            visible_declaration_ids: None,
+            start_import_aliases: rustc_hash::FxHashMap::default(),
             returns: vec![], //Empty because conditions are always booleans
             host_registry: $registry,
             loop_depth: 0,

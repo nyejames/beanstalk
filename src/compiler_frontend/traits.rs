@@ -19,13 +19,22 @@ impl ContainsReferences for Vec<Declaration> {
 
 impl ContainsReferences for ScopeContext {
     fn get_reference(&self, name: &StringId) -> Option<&Declaration> {
-        self.declarations
-            .iter()
-            .rfind(|arg| arg.id.name() == Some(*name))
+        self.declarations.iter().rfind(|declaration| {
+            declaration.id.name() == Some(*name)
+                && match self.visible_declaration_ids.as_ref() {
+                    Some(visible) => visible.contains(&declaration.id),
+                    None => true,
+                }
+        })
     }
     fn get_reference_mut(&mut self, name: &StringId) -> Option<&mut Declaration> {
-        self.declarations
-            .iter_mut()
-            .rfind(|arg| arg.id.name() == Some(*name))
+        let visible = self.visible_declaration_ids.clone();
+        self.declarations.iter_mut().rfind(|declaration| {
+            declaration.id.name() == Some(*name)
+                && match visible.as_ref() {
+                    Some(allowed) => allowed.contains(&declaration.id),
+                    None => true,
+                }
+        })
     }
 }

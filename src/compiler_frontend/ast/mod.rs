@@ -1,6 +1,8 @@
 pub(crate) mod ast;
 pub(crate) mod ast_nodes;
 pub(crate) mod function_body_to_ast;
+pub(crate) mod import_bindings;
+pub(crate) mod top_level_templates;
 pub(crate) mod expressions {
     pub(crate) mod eval_expression;
     pub(crate) mod expression;

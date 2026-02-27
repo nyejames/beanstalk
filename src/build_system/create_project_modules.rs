@@ -106,17 +106,46 @@ pub fn compile_project_frontend(
     if let Some(extension) = config.entry_dir.extension() {
         match extension.to_str().unwrap_or_default() {
             BEANSTALK_FILE_EXTENSION => {
-                let code = match extract_source_code(&config.entry_dir) {
-                    Ok(code) => code,
+                let entry_path = match fs::canonicalize(&config.entry_dir) {
+                    Ok(path) => path,
+                    Err(error) => {
+                        let file_error = CompilerError::file_error(
+                            &config.entry_dir,
+                            format!("Failed to resolve entry file path: {error}"),
+                        );
+                        return_err_as_messages!(file_error);
+                    }
+                };
+
+                let source_root = match entry_path.parent() {
+                    Some(parent) => parent.to_path_buf(),
+                    None => PathBuf::from("."),
+                };
+                let library_roots = resolve_library_roots(config, &source_root);
+                let reachable_files = match discover_reachable_files(
+                    &entry_path,
+                    &source_root,
+                    &library_roots,
+                    &source_root,
+                ) {
+                    Ok(files) => files,
                     Err(error) => return_err_as_messages!(error),
                 };
 
-                let input_file = InputFile {
-                    source_code: code,
-                    source_path: config.entry_dir.clone(),
-                };
+                let mut input_files = Vec::with_capacity(reachable_files.len());
+                for source_path in reachable_files {
+                    let source_code = match extract_source_code(&source_path) {
+                        Ok(code) => code,
+                        Err(error) => return_err_as_messages!(error),
+                    };
 
-                let module = compile_module(vec![input_file], config, &config.entry_dir)?;
+                    input_files.push(InputFile {
+                        source_code,
+                        source_path,
+                    });
+                }
+
+                let module = compile_module(input_files, config, &entry_path)?;
                 return Ok(vec![module]);
             }
 

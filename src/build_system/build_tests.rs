@@ -104,8 +104,11 @@ fn build_single_file_project_includes_reachable_import_files() {
     let root = temp_dir("single_file_reachable_imports");
     fs::create_dir_all(&root).expect("should create temp root");
     fs::create_dir_all(root.join("utils")).expect("should create utils directory");
-    fs::write(root.join("main.bst"), "import @(utils/helper/greet)\ngreet()\n")
-        .expect("should write main file");
+    fs::write(
+        root.join("main.bst"),
+        "import @(utils/helper/greet)\ngreet()\n",
+    )
+    .expect("should write main file");
     fs::write(
         root.join("utils/helper.bst"),
         "#greet|| -> Void:\n    io(\"hello\")\n;\n",

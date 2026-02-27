@@ -77,6 +77,8 @@ pub struct Header {
     // It will also (MAYBE) have a special extension to indicate it's a header and not a file or directory
     // Might not bother with this idea tho
     pub tokens: FileTokens,
+    pub source_file: InternedPath,
+    pub file_imports: Vec<FileImport>,
 }
 
 impl Display for Header {
@@ -85,9 +87,10 @@ impl Display for Header {
     }
 }
 
+#[derive(Clone, Debug)]
 pub struct FileImport {
-    pub alias: Option<StringId>,
     pub header_path: InternedPath,
+    pub location: TextLocation,
 }
 
 // This takes all the files in the module
@@ -166,7 +169,8 @@ pub fn parse_headers_in_file(
 
     // We parse and track imports as we go,
     // so we can check if the headers depend on those imports.
-    let mut file_imports: HashSet<InternedPath> = HashSet::new();
+    let mut file_import_paths: HashSet<InternedPath> = HashSet::new();
+    let mut file_imports: Vec<FileImport> = Vec::new();
     let mut file_constant_order = 0usize;
 
     loop {
@@ -200,7 +204,8 @@ pub fn parse_headers_in_file(
                         // Only imported symbols create inter-header dependency edges here.
                         // Local variables declared in the start function are resolved in AST scope order
                         // and should never be treated as module-level import dependencies.
-                        if let Some(path) = file_imports.iter().find(|f| f.name() == Some(name_id))
+                        if let Some(path) =
+                            file_import_paths.iter().find(|f| f.name() == Some(name_id))
                         {
                             main_function_dependencies.insert(path.to_owned());
                         }
@@ -210,14 +215,17 @@ pub fn parse_headers_in_file(
                         // Every time we encounter a new symbol,
                         // we check if it fits into one of the Header categories.
                         // If not, it goes into the implicit main function.
+                        let source_file = token_stream.src_path.to_owned();
                         let header = create_header(
                             token_stream.src_path.append(name_id),
+                            &source_file,
                             next_statement_exported,
                             token_stream,
                             current_location,
                             // Since this is a new scope,
                             // We don't want to add any imports from the header's scope to the global imports.
                             // We also don't use encountered_symbols since headers don't capture variables from the surrounding scope
+                            &file_import_paths,
                             &file_imports,
                             &mut file_constant_order,
                             host_function_registry,
@@ -228,7 +236,7 @@ pub fn parse_headers_in_file(
                             HeaderKind::StartFunction => {
                                 main_function_body.push(current_token);
                                 if let Some(path) =
-                                    file_imports.iter().find(|f| f.name() == Some(name_id))
+                                    file_import_paths.iter().find(|f| f.name() == Some(name_id))
                                 {
                                     main_function_dependencies.insert(path.to_owned());
                                 }
@@ -263,8 +271,18 @@ pub fn parse_headers_in_file(
 
             TokenKind::Import => {
                 if let TokenKind::Path(paths) = token_stream.current_token_kind() {
-                    encountered_symbols.extend(paths.iter().map(|p| p.name().unwrap()));
-                    file_imports.extend(paths.to_owned());
+                    for path in paths {
+                        if let Some(name) = path.name() {
+                            encountered_symbols.insert(name);
+                        }
+
+                        if file_import_paths.insert(path.to_owned()) {
+                            file_imports.push(FileImport {
+                                header_path: path.to_owned(),
+                                location: token_stream.current_location(),
+                            });
+                        }
+                    }
                     token_stream.advance();
                 } else {
                     return_rule_error!(
@@ -299,10 +317,13 @@ pub fn parse_headers_in_file(
                     }
                     // Top-level const template
                     // An 'exported' top-level template that must be evaluated at compile time
+                    let source_file = token_stream.src_path.to_owned();
                     let header = create_top_level_const_template(
                         token_stream.src_path.to_owned(),
                         current_token,
                         *const_template_number,
+                        &source_file,
+                        &file_import_paths,
                         &file_imports,
                         token_stream,
                         string_table,
@@ -334,7 +355,7 @@ pub fn parse_headers_in_file(
                     push_runtime_template_tokens_to_start_function(
                         current_token,
                         token_stream,
-                        &file_imports,
+                        &file_import_paths,
                         &mut main_function_dependencies,
                         &mut main_function_body,
                         string_table,
@@ -365,6 +386,8 @@ pub fn parse_headers_in_file(
         dependencies: main_function_dependencies,
         name_location: TextLocation::default(),
         tokens: FileTokens::new(token_stream.src_path.to_owned(), main_function_body),
+        source_file: token_stream.src_path.to_owned(),
+        file_imports,
     });
 
     Ok(headers)
@@ -374,10 +397,12 @@ pub fn parse_headers_in_file(
 // Lots of stuff is just being passed straight through, but who cares tbh
 fn create_header(
     full_name: InternedPath,
+    source_file: &InternedPath,
     exported: bool,
     token_stream: &mut FileTokens,
     name_location: TextLocation,
     file_imports: &HashSet<InternedPath>,
+    file_import_entries: &[FileImport],
     file_constant_order: &mut usize,
     _host_registry: &HostRegistry,
     string_table: &mut StringTable,
@@ -557,6 +582,8 @@ fn create_header(
         dependencies,
         name_location,
         tokens: FileTokens::new(full_name, body),
+        source_file: source_file.to_owned(),
+        file_imports: file_import_entries.to_vec(),
     })
 }
 
@@ -564,7 +591,9 @@ fn create_top_level_const_template(
     scope: InternedPath,
     opening_template_token: crate::compiler_frontend::tokenizer::tokens::Token,
     const_template_number: usize,
+    source_file: &InternedPath,
     file_imports: &HashSet<InternedPath>,
+    file_import_entries: &[FileImport],
     token_stream: &mut FileTokens,
     string_table: &mut StringTable,
 ) -> Result<Header, CompilerError> {
@@ -639,6 +668,8 @@ fn create_top_level_const_template(
         dependencies,
         name_location,
         tokens: FileTokens::new(full_name, body),
+        source_file: source_file.to_owned(),
+        file_imports: file_import_entries.to_vec(),
     })
 }
 

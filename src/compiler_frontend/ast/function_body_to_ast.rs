@@ -10,7 +10,9 @@ use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::ast::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::ast::statements::branching::create_branch;
 use crate::compiler_frontend::ast::statements::declarations::new_declaration;
-use crate::compiler_frontend::ast::statements::functions::parse_function_call;
+use crate::compiler_frontend::ast::statements::functions::{
+    FunctionSignature, parse_function_call,
+};
 use crate::compiler_frontend::ast::statements::loops::create_loop;
 use crate::compiler_frontend::ast::templates::create_template_node::Template;
 use crate::compiler_frontend::interned_path::InternedPath;
@@ -44,6 +46,54 @@ pub fn function_body_to_ast(
 
             TokenKind::Symbol(id) => {
                 let full_path = context.scope.append(id);
+
+                if let Some(start_target) = context.resolve_start_import(&id) {
+                    token_stream.advance();
+
+                    match token_stream.current_token_kind() {
+                        TokenKind::OpenParenthesis => {
+                            ast.push(parse_function_call(
+                                token_stream,
+                                start_target,
+                                &context,
+                                &FunctionSignature {
+                                    parameters: vec![],
+                                    returns: vec![DataType::StringSlice],
+                                },
+                                string_table,
+                            )?);
+                            continue;
+                        }
+
+                        TokenKind::Dot => {
+                            return_rule_error!(
+                                format!(
+                                    "Imported file '{}' is callable only as '{}()'. File-struct member access is no longer supported.",
+                                    string_table.resolve(id),
+                                    string_table.resolve(id),
+                                ),
+                                token_stream.current_location().to_error_location(string_table), {
+                                    CompilationStage => "AST Construction",
+                                    PrimarySuggestion => "Import exports directly with '@(path/to/file/symbol)' or '@(path/to/file/{a, b})'",
+                                }
+                            );
+                        }
+
+                        _ => {
+                            return_rule_error!(
+                                format!(
+                                    "Imported file '{}' can only be used as a callable start import ('{}()').",
+                                    string_table.resolve(id),
+                                    string_table.resolve(id),
+                                ),
+                                token_stream.current_location().to_error_location(string_table), {
+                                    CompilationStage => "AST Construction",
+                                    PrimarySuggestion => "Call the file start function with 'file()' or import specific exports directly",
+                                }
+                            );
+                        }
+                    }
+                }
 
                 // Check if this has already been declared (is a reference)
                 if let Some(arg) = context.get_reference(&id) {

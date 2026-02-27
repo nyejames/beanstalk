@@ -7,7 +7,9 @@ use crate::compiler_frontend::ast::expressions::expression::{
 };
 use crate::compiler_frontend::ast::statements::collections::new_collection;
 use crate::compiler_frontend::ast::statements::declarations::create_reference;
-use crate::compiler_frontend::ast::statements::functions::parse_function_call;
+use crate::compiler_frontend::ast::statements::functions::{
+    FunctionSignature, parse_function_call,
+};
 use crate::compiler_frontend::ast::templates::create_template_node::Template;
 use crate::compiler_frontend::ast::templates::template::TemplateType;
 use crate::compiler_frontend::compiler_errors::CompilerError;
@@ -449,6 +451,76 @@ pub fn create_expression(
                             )?);
 
                             continue; // Will have moved onto the next token already
+                        }
+                    }
+                }
+
+                if let Some(start_target) = context.resolve_start_import(id) {
+                    token_stream.advance();
+
+                    match token_stream.current_token_kind() {
+                        TokenKind::OpenParenthesis => {
+                            let function_call_node = parse_function_call(
+                                token_stream,
+                                start_target,
+                                context,
+                                &FunctionSignature {
+                                    parameters: vec![],
+                                    returns: vec![DataType::StringSlice],
+                                },
+                                string_table,
+                            )?;
+
+                            if let NodeKind::FunctionCall {
+                                name,
+                                args,
+                                returns,
+                                location,
+                            } = function_call_node.kind
+                            {
+                                expression.push(AstNode {
+                                    kind: NodeKind::Rvalue(Expression::function_call(
+                                        name, args, returns, location,
+                                    )),
+                                    location: function_call_node.location,
+                                    scope: context.scope.clone(),
+                                });
+                                continue;
+                            }
+
+                            return_compiler_error!(
+                                "Expected a function call node for imported file start alias"
+                            );
+                        }
+
+                        TokenKind::Dot => {
+                            return_rule_error!(
+                                format!(
+                                    "Imported file '{}' is callable only as '{}()'. File-struct member access is no longer supported.",
+                                    string_table.resolve(*id),
+                                    string_table.resolve(*id),
+                                ),
+                                token_stream.current_location().to_error_location(&string_table),
+                                {
+                                    CompilationStage => "Expression Parsing",
+                                    PrimarySuggestion => "Import exports directly with '@(path/to/file/symbol)' or '@(path/to/file/{a, b})'",
+                                }
+                            );
+                        }
+
+                        _ => {
+                            return_rule_error!(
+                                format!(
+                                    "Imported file '{}' can only be used as a callable start import ('{}()').",
+                                    string_table.resolve(*id),
+                                    string_table.resolve(*id),
+                                ),
+                                token_stream.current_location().to_error_location(&string_table),
+                                {
+                                    CompilationStage => "Expression Parsing",
+                                    PrimarySuggestion => "Call the file start function with 'file()' or import specific exports directly",
+                                }
+                            );
                         }
                     }
                 }
