@@ -15,6 +15,7 @@ use super::BorrowTransferContext;
 #[derive(Debug, Clone)]
 pub(super) struct CallSemantics {
     pub(super) arg_mutability: Vec<bool>,
+    pub(super) arg_requires_declared_mutability: Vec<bool>,
     pub(super) return_alias: CallResultAlias,
 }
 
@@ -86,6 +87,7 @@ pub(super) fn resolve_call_semantics(
 
             Ok(CallSemantics {
                 arg_mutability: param_mutability.clone(),
+                arg_requires_declared_mutability: vec![false; arg_len],
                 return_alias,
             })
         }
@@ -113,6 +115,11 @@ pub(super) fn resolve_call_semantics(
                 .iter()
                 .map(|param| matches!(param.access_kind, HostAccessKind::Mutable))
                 .collect::<Vec<_>>();
+            let arg_requires_declared_mutability = host_def
+                .parameters
+                .iter()
+                .map(|param| matches!(param.access_kind, HostAccessKind::Mutable))
+                .collect::<Vec<_>>();
 
             let return_alias = match host_def.return_alias {
                 HostReturnAlias::Fresh => CallResultAlias::Fresh,
@@ -130,6 +137,7 @@ pub(super) fn resolve_call_semantics(
 
             Ok(CallSemantics {
                 arg_mutability,
+                arg_requires_declared_mutability,
                 return_alias,
             })
         }

@@ -157,7 +157,7 @@ pub(super) fn transfer_statement(
                             &mutable_roots,
                             false,
                             None,
-                            false,
+                            semantics.arg_requires_declared_mutability[arg_index],
                             argument_location.start_pos.line_number,
                             false,
                             &mut tracker,
@@ -878,12 +878,14 @@ fn active_mutable_alias_for_root(
             continue;
         }
 
-        if layout.local_is_expired(candidate_index, current_line) {
+        let candidate_state = state.local_state(candidate_index);
+        if !candidate_state.mode.contains(LocalMode::ALIAS) {
             continue;
         }
 
-        let candidate_state = state.local_state(candidate_index);
-        if !candidate_state.mode.contains(LocalMode::ALIAS) {
+        if layout.local_is_expired(candidate_index, current_line)
+            && !local_alias_never_read(layout, state, candidate_index)
+        {
             continue;
         }
 
@@ -948,7 +950,21 @@ fn is_local_active_for_alias_conflict(
 ) -> bool {
     let last_use = layout.local_last_use_line[local_index];
     if last_use >= 0 {
-        return last_use >= current_line;
+        if last_use >= current_line {
+            return true;
+        }
+
+        let local_state = state.local_state(local_index);
+        if !local_state.mode.contains(LocalMode::ALIAS) {
+            return false;
+        }
+
+        if strict_move_exclusivity {
+            return local_state.direct_alias_roots.contains(root_index)
+                || layout.local_mutable[local_index];
+        }
+
+        return false;
     }
 
     let local_state = state.local_state(local_index);
@@ -963,6 +979,21 @@ fn is_local_active_for_alias_conflict(
 
     // Unused mutable aliases remain active until the end of the scope.
     layout.local_mutable[local_index]
+}
+
+fn local_alias_never_read(
+    layout: &FunctionLayout,
+    state: &BorrowState,
+    local_index: usize,
+) -> bool {
+    let local_state = state.local_state(local_index);
+    if !local_state.mode.contains(LocalMode::ALIAS) {
+        return false;
+    }
+
+    let first_write = layout.local_first_write_line[local_index];
+    let last_use = layout.local_last_use_line[local_index];
+    first_write >= 0 && first_write == last_use
 }
 
 fn place_root_local_index(layout: &FunctionLayout, place: &HirPlace) -> Option<usize> {

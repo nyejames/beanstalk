@@ -211,14 +211,19 @@ impl<'a> BorrowChecker<'a> {
         let mut summary = FunctionReturnAliasSummary::Fresh;
         let mut saw_return = false;
 
-        for block_id in reachable_blocks {
+        for &block_id in &reachable_blocks {
             let block = self.block_by_id_or_error(block_id, function.id)?;
             let HirTerminator::Return(value) = &block.terminator else {
                 continue;
             };
 
             saw_return = true;
-            let return_summary = classify_return_expression(value, &param_index_by_local);
+            let return_summary = self.classify_return_expression(
+                function,
+                &reachable_blocks,
+                value,
+                &param_index_by_local,
+            )?;
             summary = merge_return_alias(summary, return_summary);
 
             if matches!(summary, FunctionReturnAliasSummary::Unknown) {
@@ -232,6 +237,115 @@ impl<'a> BorrowChecker<'a> {
         }
 
         Ok(summary)
+    }
+
+    fn classify_return_expression(
+        &self,
+        function: &HirFunction,
+        reachable_blocks: &[BlockId],
+        expression: &HirExpression,
+        param_index_by_local: &FxHashMap<LocalId, usize>,
+    ) -> Result<FunctionReturnAliasSummary, CompilerError> {
+        // Direct `return load(param_root)` is a precise alias.
+        // For non-parameter roots, inspect local assignment shape:
+        // - direct-load chains from params => AliasParams
+        // - pure expression writes => Fresh
+        // - mixed/unknown writes (for example call results) => Unknown
+        if let HirExpressionKind::Load(place) = &expression.kind {
+            let Some(root_local) = root_local_for_place(place) else {
+                return Ok(FunctionReturnAliasSummary::Unknown);
+            };
+
+            if let Some(param_index) = param_index_by_local.get(&root_local).copied() {
+                return Ok(FunctionReturnAliasSummary::AliasParams(vec![param_index]));
+            }
+
+            let mut alias_param_indices = Vec::new();
+            let mut saw_fresh_write = false;
+            let mut saw_unknown_write = false;
+            let mut saw_any_write = false;
+
+            let mut queue = VecDeque::new();
+            let mut visited = FxHashSet::default();
+            queue.push_back(root_local);
+            visited.insert(root_local);
+
+            while let Some(local_to_scan) = queue.pop_front() {
+                for block_id in reachable_blocks {
+                    let block = self.block_by_id_or_error(*block_id, function.id)?;
+
+                    for statement in &block.statements {
+                        match &statement.kind {
+                            HirStatementKind::Assign { target, value } => {
+                                let HirPlace::Local(target_local) = target else {
+                                    continue;
+                                };
+                                if *target_local != local_to_scan {
+                                    continue;
+                                }
+
+                                saw_any_write = true;
+
+                                if let HirExpressionKind::Load(source_place) = &value.kind {
+                                    let Some(source_root_local) =
+                                        root_local_for_place(source_place)
+                                    else {
+                                        saw_unknown_write = true;
+                                        continue;
+                                    };
+
+                                    if let Some(param_index) =
+                                        param_index_by_local.get(&source_root_local).copied()
+                                    {
+                                        alias_param_indices.push(param_index);
+                                        continue;
+                                    }
+
+                                    if visited.insert(source_root_local) {
+                                        queue.push_back(source_root_local);
+                                    }
+                                } else {
+                                    saw_fresh_write = true;
+                                }
+                            }
+                            HirStatementKind::Call {
+                                result: Some(result_local),
+                                ..
+                            } => {
+                                if *result_local == local_to_scan {
+                                    saw_any_write = true;
+                                    saw_fresh_write = true;
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+
+            if !alias_param_indices.is_empty() {
+                alias_param_indices.sort_unstable();
+                alias_param_indices.dedup();
+
+                return Ok(if saw_fresh_write || saw_unknown_write {
+                    FunctionReturnAliasSummary::Unknown
+                } else {
+                    FunctionReturnAliasSummary::AliasParams(alias_param_indices)
+                });
+            }
+
+            if saw_unknown_write {
+                return Ok(FunctionReturnAliasSummary::Unknown);
+            }
+
+            if saw_fresh_write || saw_any_write {
+                return Ok(FunctionReturnAliasSummary::Fresh);
+            }
+
+            return Ok(FunctionReturnAliasSummary::Unknown);
+        }
+
+        Ok(FunctionReturnAliasSummary::Fresh)
     }
 
     fn analyze_function(
@@ -484,6 +598,7 @@ impl<'a> BorrowChecker<'a> {
         }
 
         let reachable_block_set = reachable_blocks.iter().copied().collect::<FxHashSet<_>>();
+        let mut local_first_write_line = vec![-1; local_ids.len()];
         let mut local_last_use_line = vec![-1; local_ids.len()];
         let mut block_successors = FxHashMap::default();
         let mut block_local_max_use_line = FxHashMap::default();
@@ -494,6 +609,17 @@ impl<'a> BorrowChecker<'a> {
 
             for statement in &block.statements {
                 let line = statement.location.start_pos.line_number;
+                collect_statement_written_locals(statement, &mut |local_id| {
+                    if let Some(index) = local_index_by_id.get(&local_id).copied() {
+                        let first_write = &mut local_first_write_line[index];
+                        if *first_write < 0 || line < *first_write {
+                            *first_write = line;
+                        }
+
+                        local_last_use_line[index] = local_last_use_line[index].max(line);
+                        max_use_line[index] = max_use_line[index].max(line);
+                    }
+                });
                 collect_statement_loaded_locals(statement, &mut |local_id| {
                     if let Some(index) = local_index_by_id.get(&local_id).copied() {
                         local_last_use_line[index] = local_last_use_line[index].max(line);
@@ -542,6 +668,7 @@ impl<'a> BorrowChecker<'a> {
             local_ids,
             local_mutable,
             local_regions,
+            local_first_write_line,
             local_last_use_line,
             block_successors,
             block_local_max_use_line,
@@ -864,71 +991,6 @@ fn merge_return_alias(
     }
 }
 
-fn classify_return_expression(
-    expression: &HirExpression,
-    param_index_by_local: &FxHashMap<LocalId, usize>,
-) -> FunctionReturnAliasSummary {
-    // Direct `return load(param_root)` is a precise alias.
-    // Loads of non-parameter locals are considered fresh values from the callee frame.
-    if let HirExpressionKind::Load(place) = &expression.kind {
-        if let Some(root_local) = root_local_for_place(place) {
-            return match param_index_by_local.get(&root_local).copied() {
-                Some(param_index) => FunctionReturnAliasSummary::AliasParams(vec![param_index]),
-                None => FunctionReturnAliasSummary::Fresh,
-            };
-        }
-
-        return FunctionReturnAliasSummary::Fresh;
-    }
-
-    if expression_has_param_load(expression, param_index_by_local) {
-        FunctionReturnAliasSummary::Unknown
-    } else {
-        FunctionReturnAliasSummary::Fresh
-    }
-}
-
-fn expression_has_param_load(
-    expression: &HirExpression,
-    param_index_by_local: &FxHashMap<LocalId, usize>,
-) -> bool {
-    match &expression.kind {
-        HirExpressionKind::Load(place) => root_local_for_place(place)
-            .map(|local| param_index_by_local.contains_key(&local))
-            .unwrap_or(false),
-        HirExpressionKind::BinOp { left, right, .. } => {
-            expression_has_param_load(left, param_index_by_local)
-                || expression_has_param_load(right, param_index_by_local)
-        }
-        HirExpressionKind::UnaryOp { operand, .. } => {
-            expression_has_param_load(operand, param_index_by_local)
-        }
-        HirExpressionKind::StructConstruct { fields, .. } => fields
-            .iter()
-            .any(|(_, value)| expression_has_param_load(value, param_index_by_local)),
-        HirExpressionKind::Collection(elements)
-        | HirExpressionKind::TupleConstruct { elements } => elements
-            .iter()
-            .any(|element| expression_has_param_load(element, param_index_by_local)),
-        HirExpressionKind::Range { start, end } => {
-            expression_has_param_load(start, param_index_by_local)
-                || expression_has_param_load(end, param_index_by_local)
-        }
-        HirExpressionKind::OptionConstruct { value, .. } => value
-            .as_ref()
-            .map(|value| expression_has_param_load(value, param_index_by_local))
-            .unwrap_or(false),
-        HirExpressionKind::ResultConstruct { value, .. } => {
-            expression_has_param_load(value, param_index_by_local)
-        }
-        HirExpressionKind::Int(_)
-        | HirExpressionKind::Float(_)
-        | HirExpressionKind::Bool(_)
-        | HirExpressionKind::Char(_)
-        | HirExpressionKind::StringLiteral(_) => false,
-    }
-}
-
 fn root_local_for_place(place: &HirPlace) -> Option<LocalId> {
     match place {
         HirPlace::Local(local) => Some(*local),
@@ -951,6 +1013,28 @@ fn collect_statement_loaded_locals(statement: &HirStatement, visitor: &mut impl 
             collect_expression_loaded_locals(expression, visitor);
         }
         HirStatementKind::Drop(local) => visitor(*local),
+    }
+}
+
+fn collect_statement_written_locals(statement: &HirStatement, visitor: &mut impl FnMut(LocalId)) {
+    match &statement.kind {
+        HirStatementKind::Assign { target, .. } => collect_place_written_local(target, visitor),
+        HirStatementKind::Call {
+            result: Some(local),
+            ..
+        } => visitor(*local),
+        HirStatementKind::Call { result: None, .. }
+        | HirStatementKind::Expr(_)
+        | HirStatementKind::Drop(_) => {}
+    }
+}
+
+fn collect_place_written_local(place: &HirPlace, visitor: &mut impl FnMut(LocalId)) {
+    match place {
+        HirPlace::Local(local) => visitor(*local),
+        HirPlace::Field { base, .. } | HirPlace::Index { base, .. } => {
+            collect_place_written_local(base, visitor)
+        }
     }
 }
 
