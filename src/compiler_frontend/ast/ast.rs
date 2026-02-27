@@ -72,8 +72,8 @@ impl Ast {
         let mut module_file_paths: FxHashSet<InternedPath> = FxHashSet::default();
 
         // Collect every module declaration once.
-        // WHY: Resolution stores fully qualified symbol paths; each file context later
-        // applies its own visibility filter instead of rebuilding declaration tables.
+        // WHY: Resolution stores fully qualified symbol paths.
+        // Each file context later applies its own visibility filter instead of rebuilding declaration tables.
         let mut declarations: Vec<Declaration> = Vec::new();
         for header in &sorted_headers {
             module_file_paths.insert(header.source_file.to_owned());
@@ -585,8 +585,8 @@ impl ScopeContext {
     }
 
     pub fn add_var(&mut self, arg: Declaration) {
-        // Keep declaration table and visibility gate in sync for locals declared in-body.
-        // Otherwise a newly declared local could exist in `declarations` but be invisible.
+        // Keep the declaration table and visibility gate in sync for locals declared in-body.
+        // Otherwise, a newly declared local could exist in `declarations` but be invisible.
         if let Some(visible) = self.visible_declaration_ids.as_mut() {
             visible.insert(arg.id.to_owned());
         }

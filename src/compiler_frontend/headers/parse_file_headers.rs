@@ -7,7 +7,7 @@ use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::{CompilerWarning, WarningKind};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
-use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TextLocation, TokenKind};
+use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TextLocation, Token, TokenKind};
 use crate::projects::settings::{
     MINIMUM_LIKELY_DECLARATIONS, TOKEN_TO_DECLARATION_RATIO, TOKEN_TO_HEADER_RATIO,
     TOP_LEVEL_CONST_TEMPLATE_NAME,
@@ -674,11 +674,11 @@ fn create_top_level_const_template(
 }
 
 fn push_runtime_template_tokens_to_start_function(
-    opening_template_token: crate::compiler_frontend::tokenizer::tokens::Token,
+    opening_template_token: Token,
     token_stream: &mut FileTokens,
     file_imports: &HashSet<InternedPath>,
     main_function_dependencies: &mut HashSet<InternedPath>,
-    main_function_body: &mut Vec<crate::compiler_frontend::tokenizer::tokens::Token>,
+    main_function_body: &mut Vec<Token>,
     string_table: &StringTable,
 ) -> Result<(), CompilerError> {
     main_function_body.push(opening_template_token);
