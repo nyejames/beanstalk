@@ -1,53 +1,12 @@
 # Beanstalk Language Design Guide
-Beanstalk is a programming language and build system with minimal syntax and a simple type system.
-
-It is designed primarily for use building UIs and text-heavy content for the Web and other host environments.
+Beanstalk is a programming language and build system designed for modern UI driven apps and webpages.
 
 The design principles are:
-- Very powerful and flexible string templates for rendering content or describing UI
-- Very minimal and consistent syntax. Simple to learn and reason about
+- Powerful and flexible string templates for rendering content or describing UI
+- Minimal and consistent syntax. Simple to learn and reason about
 - Fast compile times for hot reloading dev builds that can give quick feedback for UI heavy projects
 - Memory Safe with fallback GC that can eventally be statically optimised out with borrow checker rules
-- Strict, statically typed and opinionated about doing things in as few ways as possible as cleanly as possible
-
-```beanstalk
-import @(html/Basic)
-
--- Create a new blog post
-create_post |title String, date Int, content String| -> String:
-    
-    io("Creating a blog post!")
-
-    formatted_blog = [Basic.section:
-        [Basic.small, date]
-        [Basic.center: 
-            # [title]
-            ## The worst blog on the internet
-        ]
-
-        [Basic.divider]
-
-        [content]
-    ]
-
-    return formatted_blog
-;
-```
-
-The HTML build system will generate an HTML page from this code:
-```beanstalk
-import @(PostGenerator)
-import @(html/Basic)
-
-date = 2025
-post = PostGenerator.create_post(date, [:
-    I have absolutely nothing interesting to say, and never will.
-])
-
-[Basic.page:
-    [Basic.pad(3), post]
-]
-```
+- Strict, statically typed and opinionated about doing things in as few ways as possible as concisely as possible
 
 ## Syntax Summary
 For developers coming from most other languages, 
@@ -66,7 +25,7 @@ This comes before the type if there is an explicit type declaration.
 - Parameters and struct definitions use vertical pipes | 
 - Result types are created with the '!' symbol. Options use '?'.
 
-**Naming conventions (strictly enforced):**
+**Naming conventions:**
 - Types/Objects/Choices: `PascalCase`
 - Variables/functions: `regular_snake_case`
 
@@ -140,7 +99,6 @@ There is no square or curly brackets notation.
 There may not be a function call under the hood when using collection methods, 
 as the compiler abstracts these to be direct accesses in many cases.
 
-
 **Output and printing:**
 ```beanstalk
 -- Print to stdout using io() function
@@ -160,9 +118,23 @@ greet |name String|:
 ;
 ```
 
+## String Template System
+**Templates use `[]` exclusively** - never confuse with collections `{}`.
+
+Templates are either folded to strings at compile time, or become functions that return strings at runtime. 
+They are the ONLY way to create mutable strings in Beanstalk. "" are only for string slices.
+
+**Template structure:**
+- Head and body separated by `:`
+- Variable capture from the surrounding scope
+
+Templates unlock the full power of Beanstalk's HTML / CSS generation capabilities.
+You can use slots and special Style structs to determine how the templates are constructed.
+They can be used to build complex HTML pages with minimal boilerplate.
+
 **Control flow patterns:**
 
-There is no 'else if', you use pattern matching instead for more than two branches. Pattern matching is exhaustive, if statements are not.
+There is no 'else if', you use pattern matching instead for more than two branches. Pattern matching is exhaustive, if-statements are not.
 ```beanstalk
 -- Conditional (use 'is', never ==)
 if value is not 0:
@@ -313,7 +285,6 @@ A project is one or more of these modules together with libraries and sometimes 
 
 At the root of every project is a `#config.bst` file.
 `#config.bst` uses normal Beanstalk declaration syntax. Stage 0 reads top-level constant declarations from it.
-Legacy shorthand config declarations like `#project "html"` are invalid.
 
 Example:
 ```beanstalk
@@ -335,10 +306,10 @@ import @(path/to/file/symbol)
 import @(path/to/file/{symbol_a, symbol_b})
 ```
 
-**Entry files and implicit main functions:**
+**Entry files and implicit start functions:**
 - Every Beanstalk file has an **implicit start function** containing all top-level code
 - The **entry file** selected for a module (for example `#page.bst`) has its implicit start chosen as that module's entry start function. Only that file's top-level code executes automatically
-- Imported files' implicit start functions are callable but do not execute automatically
+- Imported files' implicit start functions are callable but don't execute automatically.
 
 **File execution semantics:**
 ```beanstalk
@@ -421,7 +392,7 @@ Project builders are aware of:
 - the entry start function
 - an ordered `start_fragments` stream
 - `module_constants` metadata in HIR
-- backend output (for example JS bundle)
+- backend output (for example JS or Wasm bundle)
 
 `start_fragments` interleave:
 
@@ -447,20 +418,6 @@ Example:
 -- Slots are allowed if their resolved content is constant.
 #[html.head: [head_defaults]]
 ```
-
-## Template System
-**Templates use `[]` exclusively** - never confuse with collections `{}`.
-
-Templates are either folded to strings at compile time, or become functions that return strings at runtime. 
-They are the ONLY way to create mutable strings in Beanstalk. "" are only for string slices.
-
-**Template structure:**
-- Head and body separated by `:`
-- Variable capture from the surrounding scope
-
-Templates unlock the full power of Beanstalk's HTML / CSS generation capabilities.
-You can use slots and special Style structs to determine how the templates are constructed.
-They can be used to build complex HTML pages with minimal boilerplate.
 
 ## Key Differences from Rust
 | Aspect | Rust | Beanstalk |
