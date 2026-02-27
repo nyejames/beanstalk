@@ -22,6 +22,7 @@ fn frontend_check_borrows_propagates_failures() {
 
     let x = symbol("x", &mut string_table);
     let y = symbol("y", &mut string_table);
+    let z = symbol("z", &mut string_table);
 
     let start_fn = function_node(
         start_name,
@@ -40,15 +41,20 @@ fn frontend_check_borrows_propagates_failures() {
             node(
                 NodeKind::VariableDeclaration(var(
                     y,
-                    reference_expr(x.clone(), DataType::Int, location(2)),
+                    Expression::reference(
+                        x.clone(),
+                        DataType::Int,
+                        location(2),
+                        Ownership::MutableReference,
+                    ),
                 )),
                 location(2),
             ),
             node(
-                NodeKind::Assignment {
-                    target: Box::new(assignment_target(x, DataType::Int, location(3))),
-                    value: Expression::int(2, location(3), Ownership::ImmutableOwned),
-                },
+                NodeKind::VariableDeclaration(var(
+                    z,
+                    reference_expr(x, DataType::Int, location(3)),
+                )),
                 location(3),
             ),
         ],

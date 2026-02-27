@@ -11,6 +11,7 @@ use crate::projects::html_project::html_project_builder::HtmlProjectBuilder;
 use crate::projects::settings::Config;
 use std::fs;
 use std::path::PathBuf;
+use std::sync::{Mutex, MutexGuard, OnceLock};
 use std::time::SystemTime;
 
 fn temp_dir(prefix: &str) -> PathBuf {
@@ -22,14 +23,21 @@ fn temp_dir(prefix: &str) -> PathBuf {
 }
 
 struct CurrentDirGuard {
+    _lock: MutexGuard<'static, ()>,
     previous: PathBuf,
 }
 
 impl CurrentDirGuard {
     fn set_to(path: &PathBuf) -> Self {
+        let lock = current_dir_test_lock()
+            .lock()
+            .expect("current-dir test lock should not be poisoned");
         let previous = std::env::current_dir().expect("current dir should resolve");
         std::env::set_current_dir(path).expect("should change current directory for test");
-        Self { previous }
+        Self {
+            _lock: lock,
+            previous,
+        }
     }
 }
 
@@ -37,6 +45,11 @@ impl Drop for CurrentDirGuard {
     fn drop(&mut self) {
         let _ = std::env::set_current_dir(&self.previous);
     }
+}
+
+fn current_dir_test_lock() -> &'static Mutex<()> {
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| Mutex::new(()))
 }
 
 struct WarningBuilder;
@@ -81,6 +94,31 @@ fn build_project_returns_result_without_writing_files() {
     assert!(
         !root.join("main.html").exists(),
         "build_project should not write files to disk"
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
+fn build_single_file_project_includes_reachable_import_files() {
+    let root = temp_dir("single_file_reachable_imports");
+    fs::create_dir_all(&root).expect("should create temp root");
+    fs::create_dir_all(root.join("utils")).expect("should create utils directory");
+    fs::write(root.join("main.bst"), "import @(utils/helper/greet)\ngreet()\n")
+        .expect("should write main file");
+    fs::write(
+        root.join("utils/helper.bst"),
+        "#greet|| -> Void:\n    io(\"hello\")\n;\n",
+    )
+    .expect("should write helper file");
+    let _cwd_guard = CurrentDirGuard::set_to(&root);
+
+    let builder = HtmlProjectBuilder::new();
+    let result = build_project(&builder, "main.bst", &[]).expect("build should succeed");
+
+    assert!(
+        !result.project.output_files.is_empty(),
+        "single-file build should compile reachable imported files"
     );
 
     fs::remove_dir_all(&root).expect("should remove temp dir");

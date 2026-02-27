@@ -427,6 +427,8 @@ pub fn parse_template_head(
             continue;
         };
 
+        let mut defer_separator_token = false;
+
         match token {
             // This is a declaration of the ID by using the export prefix followed by a variable name
             // This doesn't follow regular declaration rules.
@@ -534,6 +536,7 @@ pub fn parse_template_head(
                             }
 
                             template.content.before.push(expr);
+                            defer_separator_token = true;
                         }
                     }
                 } else {
@@ -566,6 +569,7 @@ pub fn parse_template_head(
                 )?;
 
                 template.content.before.push(expr);
+                defer_separator_token = true;
             }
 
             TokenKind::Path(paths) => {
@@ -613,6 +617,7 @@ pub fn parse_template_head(
                 }
 
                 template.content.before.push(expr);
+                defer_separator_token = true;
             }
 
             TokenKind::Comma => {
@@ -661,7 +666,9 @@ pub fn parse_template_head(
         }
 
         comma_separator = false;
-        token_stream.advance();
+        if !defer_separator_token {
+            token_stream.advance();
+        }
     }
 
     Ok(())

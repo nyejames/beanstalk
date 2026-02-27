@@ -325,8 +325,14 @@ Example:
 
 **Import syntax:**
 ```beanstalk
--- Import another file in the same module
+-- Import a file start function as a callable alias:
 import @(path/to/file)
+
+-- Import one exported symbol:
+import @(path/to/file/symbol)
+
+-- Import multiple exported symbols:
+import @(path/to/file/{symbol_a, symbol_b})
 ```
 
 **Entry files and implicit main functions:**
@@ -338,12 +344,13 @@ import @(path/to/file)
 ```beanstalk
 -- main.bst (entry file)
 import @(utils/helper)
+import @(utils/helper/another_func)
 
 -- This executes automatically when the module starts
 io("Starting main")
-helper.start()  -- Call imported file's implicit start function
+helper()  -- Call imported file's implicit start function
 
-helper.another_func() -- Call another top level function from the file
+another_func() -- Call imported exported symbol directly
 ```
 
 **Import resolution rules:**
