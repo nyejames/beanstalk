@@ -1,4 +1,4 @@
-use crate::compiler_frontend::ast::ast::{ContextKind, ScopeContext};
+use crate::compiler_frontend::ast::ast::ScopeContext;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
 use crate::compiler_frontend::ast::templates::template::{
@@ -445,7 +445,7 @@ pub fn parse_template_head(
                 // This has to be done eagerly here as any previous scene or style passed into the scene head will add to this
                 match template.style.unlocked_templates.to_owned().get(&name) {
                     Some(ExpressionKind::Template(inserted_template)) => {
-                        if context.kind == ContextKind::Constant
+                        if context.kind.is_constant_context()
                             && !matches!(inserted_template.kind, TemplateType::String)
                         {
                             return_syntax_error!(
@@ -483,7 +483,7 @@ pub fn parse_template_head(
                     match &arg.value.kind {
                         // Reference to another string template
                         ExpressionKind::Template(inserted_template) => {
-                            if context.kind == ContextKind::Constant
+                            if context.kind.is_constant_context()
                                 && !matches!(inserted_template.kind, TemplateType::String)
                             {
                                 return_syntax_error!(
@@ -515,7 +515,7 @@ pub fn parse_template_head(
                                 string_table,
                             )?;
 
-                            if context.kind == ContextKind::Constant
+                            if context.kind.is_constant_context()
                                 && !expr.is_compile_time_constant()
                             {
                                 return_syntax_error!(
@@ -602,7 +602,7 @@ pub fn parse_template_head(
                     string_table,
                 )?;
 
-                if context.kind == ContextKind::Constant && !expr.is_compile_time_constant() {
+                if context.kind.is_constant_context() && !expr.is_compile_time_constant() {
                     return_syntax_error!(
                         "Const templates require compile-time expressions in the template head.",
                         token_stream

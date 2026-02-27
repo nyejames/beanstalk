@@ -1,4 +1,4 @@
-use crate::compiler_frontend::ast::ast::{ContextKind, ScopeContext};
+use crate::compiler_frontend::ast::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::AstNode;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::field_access::parse_field_access;
@@ -97,7 +97,7 @@ pub fn resolve_declaration_syntax(
     string_table: &mut StringTable,
 ) -> Result<Declaration, CompilerError> {
     let ownership = if declaration_syntax.mutable_marker {
-        if context.kind == ContextKind::Constant {
+        if context.kind.is_constant_context() {
             return_rule_error!(
                 "Constants can't be mutable!",
                 declaration_syntax.location.to_error_location(string_table), {

@@ -224,7 +224,7 @@ pub(crate) fn parse_constant_header_declaration(
     };
 
     let context = ScopeContext::new(
-        ContextKind::Constant,
+        ContextKind::ConstantHeader,
         header.tokens.src_path.to_owned(),
         declarations,
         host_registry.clone(),

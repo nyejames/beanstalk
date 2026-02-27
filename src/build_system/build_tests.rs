@@ -456,12 +456,9 @@ fn build_project_rejects_const_record_with_non_constant_argument() {
     };
 
     assert!(
-        messages
-            .errors
-            .iter()
-            .any(|error| {
-                error.msg.contains("get_value") && error.msg.contains("non-constant value")
-            }),
+        messages.errors.iter().any(|error| {
+            error.msg.contains("get_value") && error.msg.contains("non-constant value")
+        }),
         "expected a targeted error describing the non-constant argument"
     );
 

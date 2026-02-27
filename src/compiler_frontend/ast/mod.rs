@@ -9,6 +9,7 @@ pub(crate) mod expressions {
     pub(crate) mod function_call_inline;
     pub(crate) mod mutation;
     pub(crate) mod parse_expression;
+    pub(crate) mod struct_instance;
 }
 pub(crate) mod statements {
     pub(crate) mod branching;

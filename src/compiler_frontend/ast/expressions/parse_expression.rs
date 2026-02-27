@@ -2,9 +2,8 @@ use super::eval_expression::evaluate_expression;
 use crate::compiler_frontend::ast::ast::ContextKind;
 use crate::compiler_frontend::ast::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
-use crate::compiler_frontend::ast::expressions::expression::{
-    Expression, ExpressionKind, Operator,
-};
+use crate::compiler_frontend::ast::expressions::expression::{Expression, Operator};
+use crate::compiler_frontend::ast::expressions::struct_instance::parse_struct_constructor_expression;
 use crate::compiler_frontend::ast::statements::collections::new_collection;
 use crate::compiler_frontend::ast::statements::declarations::create_reference;
 use crate::compiler_frontend::ast::statements::functions::{
@@ -283,7 +282,32 @@ pub fn create_expression(
                 let full_name = context.scope.to_owned().append(*id);
 
                 if let Some(arg) = context.get_reference(id) {
-                    if context.kind == ContextKind::Constant {
+                    if let DataType::Struct(fields, struct_ownership) = &arg.value.data_type
+                        && token_stream.peek_next_token() == Some(&TokenKind::OpenParenthesis)
+                    {
+                        // Struct constructors are parsed before constant-reference checks.
+                        // This keeps `#x = MyStruct(...)` on the constructor path so const
+                        // record coercion can validate field values instead of rejecting the
+                        // struct symbol itself as a non-constant reference.
+                        let struct_instance = parse_struct_constructor_expression(
+                            token_stream,
+                            *id,
+                            fields,
+                            struct_ownership,
+                            context,
+                            string_table,
+                        )?;
+
+                        expression.push(AstNode {
+                            kind: NodeKind::Rvalue(struct_instance),
+                            location: token_stream.current_location(),
+                            scope: context.scope.clone(),
+                        });
+
+                        continue;
+                    }
+
+                    if context.kind.is_constant_context() {
                         if !arg.value.is_compile_time_constant() {
                             return_rule_error!(
                                 format!(
@@ -347,87 +371,7 @@ pub fn create_expression(
                             }
                         }
 
-                        DataType::Struct(fields, struct_ownership) => {
-                            if token_stream.peek_next_token() == Some(&TokenKind::OpenParenthesis) {
-                                let constructor_location = token_stream.current_location();
-
-                                // Move to '(' then to first argument.
-                                token_stream.advance();
-                                token_stream.advance();
-
-                                if token_stream.current_token_kind() == &TokenKind::CloseParenthesis
-                                {
-                                    let missing_required = fields
-                                        .iter()
-                                        .filter(|field| {
-                                            matches!(field.value.kind, ExpressionKind::None)
-                                        })
-                                        .count();
-
-                                    if missing_required > 0 {
-                                        return_syntax_error!(
-                                            format!(
-                                                "Struct constructor requires {missing_required} field argument(s) without defaults, but no arguments were provided.",
-                                            ),
-                                            token_stream.current_location().to_error_location(string_table),
-                                            {
-                                                CompilationStage => "Expression Parsing",
-                                                PrimarySuggestion => "Provide required struct field arguments or define defaults for them",
-                                            }
-                                        );
-                                    }
-
-                                    token_stream.advance();
-
-                                    expression.push(AstNode {
-                                        kind: NodeKind::Rvalue(Expression::struct_instance(
-                                            fields.to_owned(),
-                                            constructor_location,
-                                            struct_ownership.get_owned(),
-                                        )),
-                                        location: token_stream.current_location(),
-                                        scope: context.scope.clone(),
-                                    });
-
-                                    continue;
-                                }
-
-                                let required_field_types = fields
-                                    .iter()
-                                    .map(|field| field.value.data_type.to_owned())
-                                    .collect::<Vec<_>>();
-                                let constructor_context =
-                                    context.new_child_expression(required_field_types);
-                                let args = create_multiple_expressions(
-                                    token_stream,
-                                    &constructor_context,
-                                    true,
-                                    string_table,
-                                )?;
-
-                                let mut struct_fields = Vec::with_capacity(fields.len());
-                                for (field, value) in fields.iter().zip(args.into_iter()) {
-                                    struct_fields.push(
-                                        crate::compiler_frontend::ast::ast_nodes::Declaration {
-                                            id: field.id.to_owned(),
-                                            value,
-                                        },
-                                    );
-                                }
-
-                                expression.push(AstNode {
-                                    kind: NodeKind::Rvalue(Expression::struct_instance(
-                                        struct_fields,
-                                        constructor_location,
-                                        struct_ownership.get_owned(),
-                                    )),
-                                    location: token_stream.current_location(),
-                                    scope: context.scope.clone(),
-                                });
-
-                                continue;
-                            }
-
+                        DataType::Struct(..) => {
                             // Fall through to normal reference behavior for non-constructor uses.
                             expression.push(create_reference(
                                 token_stream,
@@ -532,7 +476,7 @@ pub fn create_expression(
                     .host_registry
                     .get_function(string_table.resolve(*id))
                 {
-                    if context.kind == ContextKind::Constant {
+                    if context.kind.is_constant_context() {
                         return_rule_error!(
                             format!(
                                 "Constants cannot call host functions. '{}' is a runtime host call.",
@@ -654,7 +598,7 @@ pub fn create_expression(
 
                 match template.kind {
                     TemplateType::StringFunction => {
-                        if context.kind == ContextKind::Constant {
+                        if context.kind.is_constant_context() {
                             return_rule_error!(
                                 "Constants and const templates require compile-time template folding. This template is runtime.",
                                 token_stream.current_location().to_error_location(&string_table),

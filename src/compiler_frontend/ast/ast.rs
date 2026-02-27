@@ -478,11 +478,22 @@ pub enum ContextKind {
     Module, // The top-level scope of each file in the module
     Expression,
     Constant, // An expression that is enforced to be evaluated at compile time and can't contain non-constant references
+    ConstantHeader, // Top-level exported constant declaration context (#name = ...)
     Function,
     Condition, // For loops and if statements
     Loop,
     Branch,
     Template,
+}
+
+impl ContextKind {
+    pub fn is_constant_context(&self) -> bool {
+        matches!(self, ContextKind::Constant | ContextKind::ConstantHeader)
+    }
+
+    pub fn allows_const_record_coercion(&self) -> bool {
+        matches!(self, ContextKind::ConstantHeader)
+    }
 }
 
 impl ScopeContext {
