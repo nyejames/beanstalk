@@ -120,6 +120,28 @@ impl<'a> HirBuilder<'a> {
                 })
             }
 
+            // Currently just concatenates the wrapped into a single string,
+            // This seems like correct behaviour if it gets to this stage.
+            ExpressionKind::WrapperTemplate(value1, value2) => {
+                let region = self.current_region_or_error(&expr.location)?;
+                let ty = self.lower_data_type(&expr.data_type, &expr.location)?;
+
+                Ok(LoweredExpression {
+                    prelude: vec![],
+                    value: self.make_expression(
+                        &expr.location,
+                        HirExpressionKind::StringLiteral(format!(
+                            "{}{}",
+                            self.string_table.resolve(*value1),
+                            self.string_table.resolve(*value1)
+                        )),
+                        ty,
+                        ValueKind::Const,
+                        region,
+                    ),
+                })
+            }
+
             ExpressionKind::Reference(name) => {
                 let region = self.current_region_or_error(&expr.location)?;
                 let local_id = self.resolve_local_id_or_error(name, &expr.location)?;
@@ -282,16 +304,9 @@ impl<'a> HirBuilder<'a> {
         template: &Template,
         location: &TextLocation,
     ) -> Result<LoweredExpression, CompilerError> {
-        let chunks = template
-            .content
-            .flatten()
-            .into_iter()
-            .cloned()
-            .collect::<Vec<_>>();
-        let chunk_types = chunks
-            .iter()
-            .map(|chunk| chunk.data_type.clone())
-            .collect::<Vec<_>>();
+        let chunks: Vec<Expression> = template.content.flatten().into_iter().collect();
+        let chunk_types: Vec<DataType> =
+            chunks.iter().map(|chunk| chunk.data_type.clone()).collect();
         let template_function = self.create_runtime_template_function(&chunk_types, location)?;
 
         self.lower_call_expression(
@@ -940,9 +955,10 @@ impl<'a> HirBuilder<'a> {
             DataType::Float => HirTypeKind::Float,
             DataType::Decimal => HirTypeKind::Decimal,
             DataType::Char => HirTypeKind::Char,
-            DataType::StringSlice | DataType::CoerceToString | DataType::Template => {
-                HirTypeKind::String
-            }
+            DataType::StringSlice
+            | DataType::CoerceToString
+            | DataType::Template
+            | DataType::TemplateWrapper => HirTypeKind::String,
             DataType::Range => HirTypeKind::Range,
             DataType::None => HirTypeKind::Unit,
 

@@ -416,7 +416,7 @@ impl Ast {
                         });
                     }
 
-                    let html = match template.fold(&None, string_table) {
+                    let html = match template.fold_into_stringid(&None, string_table) {
                         Ok(value) => value,
                         Err(error) => {
                             return Err(CompilerMessages {

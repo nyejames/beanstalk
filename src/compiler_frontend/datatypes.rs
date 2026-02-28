@@ -94,6 +94,9 @@ pub enum DataType {
     // Can also become string building functions at runtime if they are not folded
     Template,
 
+    // Foldable template with a slot (becomes two string slices)
+    TemplateWrapper,
+
     // Numbers
     Float,
     Int,
@@ -193,6 +196,7 @@ impl DataType {
                 DataType::Option(Box::new(DataType::Function(reciever, signature)))
             }
             DataType::Template => DataType::Option(Box::new(DataType::Template)),
+            DataType::TemplateWrapper => DataType::Option(Box::new(DataType::TemplateWrapper)),
             DataType::Inferred => DataType::Option(Box::new(DataType::Inferred)),
             DataType::CoerceToString => DataType::Option(Box::new(DataType::CoerceToString)),
             DataType::True => DataType::Option(Box::new(DataType::True)),
@@ -244,6 +248,7 @@ impl DataType {
             DataType::CoerceToString => "CoerceToString".to_string(),
             DataType::Bool => "Bool".to_string(),
             DataType::StringSlice => "String".to_string(),
+            DataType::TemplateWrapper => "String".to_string(),
             DataType::Char => "Char".to_string(),
             DataType::Float => "Float".to_string(),
             DataType::Int => "Int".to_string(),
@@ -395,6 +400,9 @@ impl Display for DataType {
             }
             DataType::Bool => write!(f, "Bool"),
             DataType::StringSlice => {
+                write!(f, "String")
+            }
+            DataType::TemplateWrapper => {
                 write!(f, "String")
             }
             DataType::Char => {

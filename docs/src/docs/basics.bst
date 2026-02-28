@@ -1,10 +1,10 @@
-@(libs/html/Basic)
-@(styles/Docs)
-@(./components)
-[Basic.page:
+import @(libs/html/Basic)
+import @(styles/docs)
+import @(components)
+[basic.page:
 
-[Docs.navbar]
-[Docs.header, Basic.center:
+[docs.navbar]
+[docs.header, Basic.center:
     [Basic.title: LANGUAGE BASICS]
 ]
 
@@ -209,4 +209,4 @@ The "and / or" keywords are used for logical and / or and 'not' is used to inver
     [: `-`]        [: Subtraction]          [: 2]
 ```
 
-[Docs.footer]
+[docs.footer]

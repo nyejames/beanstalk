@@ -1,4 +1,6 @@
 use crate::compiler_frontend::ast::expressions::expression::Expression;
+use crate::compiler_frontend::compiler_errors::ErrorLocation;
+use crate::compiler_frontend::datatypes::Ownership;
 use crate::{
     compiler_frontend::{
         ast::{
@@ -27,18 +29,27 @@ pub fn parse_field_access(
     };
 
     // Start with the base variable
-    let mut current_node = AstNode {
-        kind: NodeKind::Rvalue(Expression::reference(
-            base_arg.id.clone(),
-            base_arg.value.data_type.clone(),
-            base_location.clone(),
-            base_arg.value.ownership.clone(),
-        )),
-        scope: context.scope.to_owned(),
-        location: base_location,
+    // Inline it the value it's a constant
+    let mut current_node = if context.kind.is_constant_context() {
+        let mut inlined_expression = base_arg.value.to_owned();
+        inlined_expression.ownership = Ownership::ImmutableOwned;
+        AstNode {
+            kind: NodeKind::Rvalue(inlined_expression),
+            location: token_stream.current_location(),
+            scope: context.scope.clone(),
+        }
+    } else {
+        AstNode {
+            kind: NodeKind::Rvalue(Expression::reference(
+                base_arg.id.clone(),
+                base_arg.value.data_type.clone(),
+                base_location.clone(),
+                base_arg.value.ownership.clone(),
+            )),
+            scope: context.scope.to_owned(),
+            location: base_location,
+        }
     };
-
-    // let built_in_methods = get_builtin_methods(current_type, string_table);
 
     let mut current_type = base_arg.value.data_type.clone();
 
@@ -53,7 +64,7 @@ pub fn parse_field_access(
                 .tokens
                 .last()
                 .map(|token| token.location.to_error_location(string_table))
-                .unwrap_or_else(crate::compiler_frontend::compiler_errors::ErrorLocation::default);
+                .unwrap_or_else(ErrorLocation::default);
             return_rule_error!(
                 "Expected property or method name after '.', but reached the end of input.",
                 fallback_location, {
@@ -124,28 +135,43 @@ pub fn parse_field_access(
             }
         };
 
+        // Note: Inside a constant expression, it shouldn't be possible from this point onwards
+        // for any kind of container to have a non-constant inside.
+        // So no need to check each access
+
         let field_location = token_stream.current_location();
         token_stream.advance();
 
         // Decide if this is a method call or field access
         current_node = if let DataType::Function(_, signature) = &member.value.data_type {
             // It's a method call
-            parse_function_call(token_stream, &member.id, context, &signature, string_table)?
+            parse_function_call(token_stream, &member.id, context, signature, string_table)?
         } else {
-            // It's a property access.
-            AstNode {
-                kind: NodeKind::FieldAccess {
-                    base: Box::new(current_node),
-                    field: field_id,
-                    data_type: member.value.data_type.to_owned(),
-                    ownership: member.value.ownership.to_owned(),
-                },
-                scope: context.scope.to_owned(),
-                location: field_location,
+            // It's field access.
+            // If it's a known value, inline the value of the field instead
+            if member.value.is_constant() {
+                let mut inlined_expression = member.value.to_owned();
+                inlined_expression.ownership = Ownership::ImmutableOwned;
+                AstNode {
+                    kind: NodeKind::Rvalue(inlined_expression),
+                    location: token_stream.current_location(),
+                    scope: context.scope.clone(),
+                }
+            } else {
+                AstNode {
+                    kind: NodeKind::FieldAccess {
+                        base: Box::new(current_node),
+                        field: field_id,
+                        data_type: member.value.data_type.to_owned(),
+                        ownership: member.value.ownership.to_owned(),
+                    },
+                    scope: context.scope.to_owned(),
+                    location: field_location,
+                }
             }
         };
 
-        // Update current type for next iteration
+        // Update the current type for the next iteration
         current_type = member.value.data_type;
     }
 

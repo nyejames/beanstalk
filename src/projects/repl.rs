@@ -112,7 +112,7 @@ fn compile_beanstalk_to_string(
     // TODO: INSTEAD OF ALL THIS WAIT UNTIL RUST INTERPRETER IS DONE
 
     // This is super gross as we are interning then resolving immediately
-    let template_string = template.fold(&None, &mut string_table)?;
+    let template_string = template.fold_into_stringid(&None, &mut string_table)?;
 
     Ok(string_table.resolve(template_string).to_string())
 }

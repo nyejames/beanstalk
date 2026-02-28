@@ -307,31 +307,18 @@ pub fn create_expression(
                         continue;
                     }
 
-                    if context.kind.is_constant_context() {
-                        if !arg.value.is_compile_time_constant() {
-                            return_rule_error!(
-                                format!(
-                                    "Constants can only reference other constants. '{}' resolves to a non-constant value.",
-                                    string_table.resolve(*id)
-                                ),
-                                token_stream.current_location().to_error_location(&string_table),
-                                {
-                                    CompilationStage => "Expression Parsing",
-                                    PrimarySuggestion => "Only reference constants in constant declarations and const templates",
-                                }
-                            );
-                        }
-
-                        let mut inlined_expression = arg.value.to_owned();
-                        inlined_expression.ownership = Ownership::ImmutableOwned;
-                        expression.push(AstNode {
-                            kind: NodeKind::Rvalue(inlined_expression),
-                            location: token_stream.current_location(),
-                            scope: context.scope.clone(),
-                        });
-
-                        token_stream.advance();
-                        continue;
+                    if context.kind.is_constant_context() && !arg.value.is_compile_time_constant() {
+                        return_rule_error!(
+                            format!(
+                                "Constants can only reference other constants. '{}' resolves to a non-constant value.",
+                                string_table.resolve(*id)
+                            ),
+                            token_stream.current_location().to_error_location(string_table),
+                            {
+                                CompilationStage => "Expression Parsing",
+                                PrimarySuggestion => "Only reference constants in constant declarations and const templates",
+                            }
+                        );
                     }
 
                     match &arg.value.data_type {
@@ -344,7 +331,7 @@ pub fn create_expression(
                                 token_stream,
                                 &arg.id,
                                 context,
-                                &signature,
+                                signature,
                                 string_table,
                             )?;
 
@@ -372,7 +359,7 @@ pub fn create_expression(
                         }
 
                         DataType::Struct(..) => {
-                            // Fall through to normal reference behavior for non-constructor uses.
+                            // Fall through to normal reference behaviour for non-constructor uses.
                             expression.push(create_reference(
                                 token_stream,
                                 arg,
@@ -618,15 +605,12 @@ pub fn create_expression(
                         return Ok(Expression::template(template, ownership.to_owned()));
                     }
 
+                    // Completely foldable string, no slots
                     TemplateType::String => {
-                        ast_log!("Template is foldable. Folding...");
+                        ast_log!("Template is foldable now. Folding...");
 
-                        let folded_string = template.fold(&None, string_table)?;
-                        let interned = folded_string;
+                        let folded_string = template.fold_into_stringid(&None, string_table)?;
 
-                        // Check if we need to consume a closing parenthesis after the template
-                        // TODO: CURRENTLY CAUSING A PANIC IN A TEST (see test.bst)
-                        // References in a template head followed by a double template consumes too many tokens
                         if consume_closing_parenthesis
                             && token_stream.current_token_kind() == &TokenKind::CloseParenthesis
                         {
@@ -634,7 +618,26 @@ pub fn create_expression(
                         }
 
                         return Ok(Expression::string_slice(
-                            interned,
+                            folded_string,
+                            token_stream.current_location(),
+                            ownership.get_owned(),
+                        ));
+                    }
+
+                    TemplateType::StringWithSlot => {
+                        ast_log!("Template is foldable into a wrapper. Folding...");
+
+                        let (string1, string2) = template.fold_into_wrapper(&None, string_table)?;
+
+                        if consume_closing_parenthesis
+                            && token_stream.current_token_kind() == &TokenKind::CloseParenthesis
+                        {
+                            token_stream.advance();
+                        }
+
+                        return Ok(Expression::template_wrapper(
+                            string1,
+                            string2,
                             token_stream.current_location(),
                             ownership.get_owned(),
                         ));
@@ -645,8 +648,12 @@ pub fn create_expression(
 
                     // Error for anything else for now
                     TemplateType::Slot => {
-                        return_compiler_error!(
-                            "Slots are not supported in templates at the moment. They might be removed completely in the future."
+                        return_rule_error!(
+                            "Slot used outside of a template body. ",
+                            token_stream.current_location().to_error_location(&string_table), {
+                                CompilationStage => "Expression Parsing",
+                                PrimarySuggestion => "Place the slot inside a template body, or use an empty template if you want an empty string",
+                            }
                         );
                     }
                 }

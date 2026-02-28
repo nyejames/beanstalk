@@ -77,15 +77,17 @@ impl Template {
 
                     match nested_template.kind {
                         TemplateType::String => {
-                            ast_log!("Found a compile time template inside a template. Folding...");
+                            ast_log!(
+                                "Found a compile time foldable template inside a template. Folding into a string slice..."
+                            );
                             let inherited_style = template
                                 .style
                                 .child_default
                                 .as_ref()
                                 .map(|style| *style.to_owned());
 
-                            let interned_child =
-                                nested_template.fold(&inherited_style, string_table)?;
+                            let interned_child = nested_template
+                                .fold_into_stringid(&inherited_style, string_table)?;
 
                             template.content.add(
                                 Expression::string_slice(
@@ -99,6 +101,7 @@ impl Template {
                             continue;
                         }
 
+                        // Uses runtime stuff, not foldable
                         TemplateType::StringFunction => {
                             foldable = false;
                             // Insert it into the template
@@ -108,6 +111,10 @@ impl Template {
                             // Nested template parsing already positioned the stream correctly.
                             continue;
                         }
+
+                        // Can still be folded, but needs to be represented as two string slices,
+                        // since it can be used to wrap other strings.
+                        TemplateType::StringWithSlot => {}
 
                         TemplateType::Slot => {
                             // Now body content goes after the slot.
@@ -210,7 +217,7 @@ impl Template {
                     self.location.to_owned().to_error_location(&string_table)
                 )
             }
-            TemplateType::String => {
+            TemplateType::String | TemplateType::StringWithSlot => {
                 // All good, keep going
             }
         }
@@ -240,102 +247,39 @@ impl Template {
         Ok(())
     }
 
-    pub fn fold(
+    pub fn fold_into_stringid(
         &self,
         inherited_style: &Option<Style>,
         string_table: &mut StringTable,
     ) -> Result<StringId, CompilerError> {
-        // Now we start combining everything into one string
-        let mut final_string = String::with_capacity(3);
-        let mut formatter: Option<Formatter> = self.style.formatter.to_owned();
+        fold_side(
+            &self.content.flatten(),
+            inherited_style,
+            &self.style,
+            string_table,
+        )
+    }
 
-        // Format. How will the content be parsed at compile time?
-        if let Some(style) = inherited_style {
-            // Each format has a different precedence, using the highest precedence.
-            // But children with a lower precedence than the parent should reset their format to None.
-            // This is because the parent will already parse that formatting over all its children.
-            if style.formatter_precedence > self.style.formatter_precedence {
-                formatter = None;
+    pub fn fold_into_wrapper(
+        &self,
+        inherited_style: &Option<Style>,
+        string_table: &mut StringTable,
+    ) -> Result<(StringId, StringId), CompilerError> {
+        let left = fold_side(
+            &self.content.before,
+            inherited_style,
+            &self.style,
+            string_table,
+        )?;
 
-            // If the child has a higher precedence format that the parent,
-            // Then it inserts special characters around it that indicate to the parent that any formatting should be skipped here.
-            // And this template will run its own format parsing.
-            // This is only inserted when there is a parent style that will parse the content
-            // because the formatters will remove this character when parsing.
-            } else {
-                final_string.push(TEMPLATE_SPECIAL_IGNORE_CHAR);
-            }
-        };
+        let right = fold_side(
+            &self.content.after,
+            inherited_style,
+            &self.style,
+            string_table,
+        )?;
 
-        // Compatibility
-        // More restrictive compatibility takes precedence over less restrictive ones
-        // match style.compatibility {
-        //     TemplateCompatibility::None => {
-        //         if final_style.compatibility != TemplateCompatibility::None {
-        //             final_style.compatibility = TemplateCompatibility::None;
-        //         }
-        //     }
-        //     // TODO: check compatibility of templates
-        //     _ => {}
-        // }
-
-        // Inlining rule
-        // TODO: what the hell is this?
-        // Something to do with how surrounding templates are parsed with this one.
-        // final_style.neighbour_rule = style.neighbour_rule.to_owned();
-
-        // Everything inserted into the body
-        // This needs to be done now
-        // so Markdown will parse any added literals correctly
-
-        // template content
-        for value in self.content.flatten() {
-            match &value.kind {
-                ExpressionKind::StringSlice(string) => {
-                    final_string.push_str(string_table.resolve(*string));
-                }
-
-                ExpressionKind::Float(float) => {
-                    final_string.push_str(&float.to_string());
-                }
-
-                ExpressionKind::Int(int) => {
-                    final_string.push_str(&int.to_string());
-                }
-
-                // Add the string representation of the bool
-                ExpressionKind::Bool(value) => {
-                    final_string.push_str(&value.to_string());
-                }
-
-                // Anything else can't be folded and should not get to this stage.
-                // This is a compiler_frontend error
-                _ => {
-                    return_compiler_error!(
-                        "Invalid Expression Used Inside template when trying to fold into a string.\
-                         The compiler_frontend should not be trying to fold this template."
-                    )
-                }
-            }
-        }
-
-        // The style will be 'None' if the parent has the same style format
-        // But if this child has a different format with a higher precedence,
-        // then it will insert a special character that will be removed by the parent.
-        // This character indicates to the parent that it should skip formatting this content.
-
-        // Otherwise, we parse the content if there is a compile time formatter
-        if let Some(formatter) = &formatter {
-            formatter.formatter.format(&mut final_string);
-
-            if inherited_style.is_some() {
-                final_string.push(TEMPLATE_SPECIAL_IGNORE_CHAR);
-            }
-        }
-
-        ast_log!("Folded template into: ", final_string);
-
-        Ok(string_table.intern(&final_string))
+        Ok((left, right))
     }
 }
 
@@ -672,4 +616,82 @@ pub fn parse_template_head(
     }
 
     Ok(())
+}
+
+fn fold_side(
+    side: &[Expression],
+    inherited_style: &Option<Style>,
+    style: &Style,
+    string_table: &mut StringTable,
+) -> Result<StringId, CompilerError> {
+    // Now we start combining everything into one string
+    let mut final_string = String::with_capacity(3);
+    let mut formatter: Option<Formatter> = style.formatter.to_owned();
+
+    // Format. How will the content be parsed at compile time?
+    if let Some(inherited_style) = inherited_style {
+        // Each format has a different precedence, using the highest precedence.
+        // But children with a lower precedence than the parent should reset their format to None.
+        // This is because the parent will already parse that formatting over all its children.
+        if inherited_style.formatter_precedence > style.formatter_precedence {
+            formatter = None;
+
+        // If the child has a higher precedence format that the parent,
+        // Then it inserts special characters around it that indicate to the parent that any formatting should be skipped here.
+        // And this template will run its own format parsing.
+        // This is only inserted when there is a parent style that will parse the content
+        // because the formatters will remove this character when parsing.
+        } else {
+            final_string.push(TEMPLATE_SPECIAL_IGNORE_CHAR);
+        }
+    };
+
+    // template content
+    for value in side {
+        match value.kind {
+            ExpressionKind::StringSlice(string) => {
+                final_string.push_str(string_table.resolve(string));
+            }
+
+            ExpressionKind::Float(float) => {
+                final_string.push_str(&float.to_string());
+            }
+
+            ExpressionKind::Int(int) => {
+                final_string.push_str(&int.to_string());
+            }
+
+            // Add the string representation of the bool
+            ExpressionKind::Bool(value) => {
+                final_string.push_str(&value.to_string());
+            }
+
+            // Anything else can't be folded and should not get to this stage.
+            // This is a compiler_frontend error
+            _ => {
+                return_compiler_error!(
+                    "Invalid Expression Used Inside template when trying to fold into a string.\
+                         The compiler_frontend should not be trying to fold this template."
+                )
+            }
+        }
+    }
+
+    // The style will be 'None' if the parent has the same style format
+    // But if this child has a different format with a higher precedence,
+    // then it will insert a special character that will be removed by the parent.
+    // This character indicates to the parent that it should skip formatting this content.
+
+    // Otherwise, we parse the content if there is a compile time formatter
+    if let Some(formatter) = &formatter {
+        formatter.formatter.format(&mut final_string);
+
+        if inherited_style.is_some() {
+            final_string.push(TEMPLATE_SPECIAL_IGNORE_CHAR);
+        }
+    }
+
+    ast_log!("Folded template into: ", final_string);
+
+    Ok(string_table.intern(&final_string))
 }

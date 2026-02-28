@@ -15,7 +15,7 @@ use crate::compiler_frontend::ast::{
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
-use crate::compiler_frontend::datatypes::Ownership;
+use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, Token, TokenKind};
@@ -33,15 +33,13 @@ pub fn create_reference(
 
     match reference_arg.value.data_type {
         // Function Call
-        crate::compiler_frontend::datatypes::DataType::Function(_, ref signature) => {
-            parse_function_call(
-                token_stream,
-                &reference_arg.id,
-                context,
-                signature,
-                string_table,
-            )
-        }
+        DataType::Function(_, ref signature) => parse_function_call(
+            token_stream,
+            &reference_arg.id,
+            context,
+            signature,
+            string_table,
+        ),
 
         _ => {
             // This either becomes a reference or field access

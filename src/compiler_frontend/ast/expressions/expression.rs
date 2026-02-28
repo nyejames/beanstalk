@@ -32,6 +32,13 @@ impl Expression {
             ExpressionKind::Char(char) => char.to_string(),
             ExpressionKind::Reference(interned_name) => interned_name.to_string(string_table),
             ExpressionKind::Template(..) => String::new(),
+            ExpressionKind::WrapperTemplate(string1, string2) => {
+                format!(
+                    "{}{}",
+                    string_table.resolve(*string1),
+                    string_table.resolve(*string2)
+                )
+            }
             ExpressionKind::Collection(items, ..) => {
                 let mut all_items = String::new();
                 for item in items {
@@ -230,6 +237,8 @@ impl Expression {
             kind: ExpressionKind::FunctionCall(name, args),
             location,
             // TODO: Need to set the ownership based on the return signature
+            // If the return signature is a reference (the name of a parameter passed in)
+            // Then this is a reference to that parameter
             ownership: Ownership::MutableOwned,
         }
     }
@@ -305,6 +314,20 @@ impl Expression {
         }
     }
 
+    pub fn template_wrapper(
+        value1: StringId,
+        value2: StringId,
+        location: TextLocation,
+        ownership: Ownership,
+    ) -> Self {
+        Self {
+            data_type: DataType::StringSlice,
+            kind: ExpressionKind::WrapperTemplate(value1, value2),
+            location,
+            ownership,
+        }
+    }
+
     pub fn range(
         lower: Expression,
         upper: Expression,
@@ -365,6 +388,7 @@ impl Expression {
                         .iter()
                         .all(|expression| expression.is_compile_time_constant())
             }
+            ExpressionKind::WrapperTemplate(_, _) => true,
             ExpressionKind::Reference(_)
             | ExpressionKind::Runtime(_)
             | ExpressionKind::Function(..)
@@ -404,7 +428,8 @@ pub enum ExpressionKind {
     HostFunctionCall(InternedPath, Vec<Expression>),
 
     // Also equivalent to a String if it folds into a string
-    Template(Box<Template>), // Template Body, Styles, ID
+    Template(Box<Template>),             // Template Body, Styles, ID
+    WrapperTemplate(StringId, StringId), // Folded template that can wrap other strings
 
     Collection(Vec<Expression>),
 
@@ -413,8 +438,8 @@ pub enum ExpressionKind {
 
     // This is a special case for the range operator
     // This implementation will probably change in the future to be a more general operator
-    // Upper and lower bounds are inclusive,
-    // Instead of making this a function; it has its own special case to make constant folding easier
+    // Upper and lower bounds are inclusive.
+    // Instead of making this a function, it has its own special case to make constant folding easier
     Range(Box<Expression>, Box<Expression>),
 }
 
@@ -433,17 +458,18 @@ impl ExpressionKind {
                 | ExpressionKind::Float(_)
                 | ExpressionKind::Bool(_)
                 | ExpressionKind::StringSlice(_)
+                | ExpressionKind::Char(_)
         )
     }
 
     pub fn is_iterable(&self) -> bool {
-        match self {
-            ExpressionKind::Collection(..) => true,
-            ExpressionKind::Int(_) => true,
-            ExpressionKind::Float(_) => true,
-            ExpressionKind::StringSlice(_) => true,
-            _ => false,
-        }
+        matches!(
+            self,
+            ExpressionKind::Collection(..)
+                | ExpressionKind::Int(_)
+                | ExpressionKind::Float(_)
+                | ExpressionKind::StringSlice(_)
+        )
     }
 }
 

@@ -217,159 +217,6 @@ impl FunctionSignature {
     }
 }
 
-// For Function Calls or new instances of a predefined struct type (basically like a struct)
-// Unpacks references into their values and returns them
-// Give back list of args for a function call in the correct order
-// Replace names with their correct index order
-// Makes sure they are the correct type
-// TODO: check if any of this actually works
-// pub fn create_func_call_args(
-//     args_passed_in: &[Arg],
-//     args_required: &[Arg],
-//     token_position: &TextLocation,
-// ) -> Result<Vec<ExpressionKind>, CompileError> {
-//     // Create a vec of the required args values (arg.value)
-//     let mut indexes_filled: Vec<usize> = Vec::with_capacity(args_required.len());
-//     let mut sorted_values: Vec<ExpressionKind> = args_required
-//         .iter()
-//         .map(|arg| arg.value.to_owned())
-//         .collect();
-//
-//     if args_passed_in.is_empty() || args_passed_in[0].value == ExpressionKind::None {
-//         for arg in args_required {
-//             // Make sure there are no required arguments left
-//             if arg.value != ExpressionKind::None {
-//                 return Err(CompileError {
-//                     msg: format!(
-//                         "Missed at least one required argument for struct or function call: {} (type: {:?})",
-//                         arg.name, arg.data_type
-//                     ),
-//                     start_pos: token_position.to_owned(),
-//                     end_pos: TextLocation {
-//                         line_number: token_position.line_number,
-//                         char_column: token_position.char_column + 1,
-//                     },
-//                     error_type: ErrorType::Syntax,
-//                 });
-//             }
-//         }
-//
-//         // Since all sorted args have values, they can just be passed back
-//         // As the default values
-//         return Ok(sorted_values);
-//     }
-//
-//     // Should just be a literal value (one arg passed in)
-//     // Probably won't allow names or anything here so can just type check it with the sorted args
-//     // And return the value
-//     if sorted_values.is_empty() {
-//         return Err(CompileError {
-//             msg: format!(
-//                 "Function call does not accept any arguments. Value passed in: {:?}",
-//                 args_passed_in
-//             ),
-//             start_pos: token_position.to_owned(),
-//             end_pos: TextLocation {
-//                 line_number: token_position.line_number,
-//                 char_column: token_position.char_column + 1,
-//             },
-//             error_type: ErrorType::Syntax,
-//         });
-//     }
-//
-//     // First, we want to make sure we fill all the named arguments first.
-//     // Then we can fill in the unnamed arguments
-//     // To do this, we can just sort the args passed in
-//     let args_in_sorted = sort_unnamed_args_last(args_passed_in);
-//
-//     'outer: for mut arg in args_in_sorted {
-//         // If the argument is unnamed, find the smallest index that hasn't been filled
-//         if arg.name.is_empty() {
-//             let min_available = find_first_missing(&indexes_filled);
-//
-//             // Make sure the type is correct
-//             if args_required[min_available]
-//                 .data_type
-//                 .is_valid_type(&mut arg.data_type)
-//             {
-//                 return Err(CompileError {
-//                     msg: format!(
-//                         "Argument '{}' is of type {:?}, but used in an argument of type: {:?}",
-//                         arg.name, arg.data_type, args_required[min_available].data_type
-//                     ),
-//                     start_pos: token_position.to_owned(),
-//                     end_pos: TextLocation {
-//                         line_number: token_position.line_number,
-//                         char_column: token_position.char_column + 1,
-//                     },
-//                     error_type: ErrorType::Syntax,
-//                 });
-//             }
-//
-//             if sorted_values.len() <= min_available {
-//                 return Err(CompileError {
-//                     msg: format!(
-//                         "Too many arguments passed into function call. Expected: {:?}, Passed in: {:?}",
-//                         args_required, args_passed_in
-//                     ),
-//                     start_pos: token_position.to_owned(),
-//                     end_pos: TextLocation {
-//                         line_number: token_position.line_number,
-//                         char_column: token_position.char_column + 1,
-//                     },
-//                     error_type: ErrorType::Syntax,
-//                 });
-//             }
-//
-//             sorted_values[min_available] = arg.value.to_owned();
-//             indexes_filled.push(min_available);
-//             continue;
-//         }
-//
-//         for (j, arg_required) in args_required.iter().enumerate() {
-//             if arg_required.name == arg.name {
-//                 sorted_values[j] = arg.value.to_owned();
-//                 indexes_filled.push(j);
-//                 continue 'outer;
-//             }
-//         }
-//
-//         return Err(CompileError {
-//             msg: format!(
-//                 "Argument '{}' not found in function call. Expected: {:?}, Passed in: {:?}",
-//                 arg.name, args_required, arg
-//             ),
-//             start_pos: token_position.to_owned(),
-//             end_pos: TextLocation {
-//                 line_number: token_position.line_number,
-//                 char_column: token_position.char_column + 1,
-//             },
-//             error_type: ErrorType::Syntax,
-//         });
-//     }
-//
-//     // Check if the sorted args contains any None values
-//     // If it does, there are missing arguments (error)
-//     for (i, value) in sorted_values.iter().enumerate() {
-//         if value == &ExpressionKind::None {
-//             return Err(CompileError {
-//                 msg: format!(
-//                     "Required argument missing from struct/function call: {:?} (type: {:?})",
-//                     args_required[i].name, args_required[i].data_type
-//                 ),
-//                 start_pos: token_position.to_owned(),
-//                 end_pos: TextLocation {
-//                     line_number: token_position.line_number,
-//                     char_column: token_position.char_column + 1,
-//                 },
-//                 error_type: ErrorType::Syntax,
-//             });
-//         }
-//     }
-//
-//     Ok(sorted_values)
-// }
-
 /// Format a DataType for user-friendly error messages
 /// Note: This function provides basic type names without resolving interned strings.
 /// For full type information with resolved strings, use DataType::display_with_table().
@@ -380,7 +227,7 @@ fn format_type_for_error(data_type: &DataType) -> String {
         DataType::Float => "Float".to_string(),
         DataType::Bool => "Bool".to_string(),
         DataType::Char => "Char".to_string(),
-        DataType::Template => "Template".to_string(),
+        DataType::Template | DataType::TemplateWrapper => "Template".to_string(),
         DataType::Function(..) => "Function".to_string(),
         DataType::Parameters(..) => "Args".to_string(),
         DataType::Returns(..) => "Returns".to_string(),
@@ -637,7 +484,7 @@ fn coerce_to_string_at_compile_time(
         // Template literals: evaluate to string at compile time if possible
         ExpressionKind::Template(template) => {
             // Try to fold the template to a string
-            if let Ok(folded_string) = template.fold(&None, string_table) {
+            if let Ok(folded_string) = template.fold_into_stringid(&None, string_table) {
                 Ok(Expression::string_slice(
                     folded_string,
                     expr.location.clone(),

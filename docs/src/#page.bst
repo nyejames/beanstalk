@@ -1,9 +1,9 @@
 import @(libs/html/basic)
-import @(styles/docs/ {footer, navbar})
+import @(styles/docs)
 
 #[basic.body:
 
-[navbar]
+[docs.navbar]
 [basic.page:
 
 # What is Beanstalk?
@@ -14,10 +14,10 @@ This website was created using Beanstalk!
     *Only a small amount of documentation is written so far.*
 ]
 
-- [@(./docs/basics): Basic Language Syntax ]
+- [basic.link(./docs/basics): Basic Language Syntax ]
 
 More documentation to be added soon!
 
 ]]
 
-#[footer]
+#[docs.footer]

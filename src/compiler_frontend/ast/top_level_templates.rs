@@ -18,6 +18,7 @@ use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::TextLocation;
 use crate::projects::settings::{IMPLICIT_START_FUNC_NAME, TOP_LEVEL_TEMPLATE_NAME};
 use rustc_hash::{FxHashMap, FxHashSet};
+use crate::compiler_frontend::ast::templates::template::TemplateType;
 
 #[derive(Clone, Debug)]
 pub enum AstStartTemplateItem {
@@ -111,9 +112,9 @@ pub(crate) fn synthesize_start_template_items(
                 // Keep them as const fragments to avoid generating unnecessary wrapper functions.
                 if matches!(
                     template.kind,
-                    crate::compiler_frontend::ast::templates::template::TemplateType::String
+                    TemplateType::String
                 ) {
-                    let folded = template.fold(&None, string_table)?;
+                    let folded = template.fold_into_stringid(&None, string_table)?;
                     start_template_items.push(AstStartTemplateItem::ConstString {
                         value: folded,
                         location: candidate.location,
@@ -403,7 +404,7 @@ fn collect_references_from_expression(
 
         ExpressionKind::Template(template) => {
             for value in template.content.flatten() {
-                collect_references_from_expression(value, references);
+                collect_references_from_expression(&value, references);
             }
         }
 
@@ -428,6 +429,7 @@ fn collect_references_from_expression(
         | ExpressionKind::Int(_)
         | ExpressionKind::Float(_)
         | ExpressionKind::StringSlice(_)
+        | ExpressionKind::WrapperTemplate(..)
         | ExpressionKind::Bool(_)
         | ExpressionKind::Char(_) => {}
     }

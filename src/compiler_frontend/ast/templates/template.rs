@@ -5,8 +5,9 @@ use std::collections::HashMap;
 #[derive(Clone, Debug, PartialEq)]
 pub enum TemplateType {
     StringFunction,
-    String,
-    Slot,
+    String,         // Fully foldable string that can be used at compile time
+    StringWithSlot, // Still foldable, but has a slot so needs to become two string slices can can wrap another string
+    Slot,           // These go inside template bodies to determine where to put content around it
     Comment,
 }
 #[derive(Clone, Debug)]
@@ -35,12 +36,12 @@ impl TemplateContent {
             self.before.push(content);
         }
     }
-    pub fn flatten(&self) -> Vec<&Expression> {
+    pub fn flatten(&self) -> Vec<Expression> {
         let total_len = self.before.len() + self.after.len();
         let mut flattened = Vec::with_capacity(total_len);
 
-        flattened.extend(&self.before);
-        flattened.extend(&self.after);
+        flattened.extend(self.before.to_owned());
+        flattened.extend(self.after.to_owned());
 
         flattened
     }

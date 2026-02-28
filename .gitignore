@@ -13,4 +13,8 @@ test_output/
 !.gitignore
 !.gitattributes
 !.github/**
+
+# These are created by compiler test files, and can be ignored
 /dev
+test.html
+main.html
