@@ -24,7 +24,7 @@ fn first_path_token_values(source: &str) -> Vec<String> {
             Some(
                 paths
                     .iter()
-                    .map(|path| path.to_string(&string_table))
+                    .map(|path| path.to_portable_string(&string_table))
                     .collect::<Vec<_>>(),
             )
         })
@@ -47,6 +47,12 @@ fn parse_file_path_grouped_imports_expand_all_symbols() {
             "styles/docs/navbar".to_string(),
         ]
     );
+}
+
+#[test]
+fn parse_file_path_accepts_backslash_separator() {
+    let paths = first_path_token_values("import @(styles\\docs\\footer)\n");
+    assert_eq!(paths, vec!["styles/docs/footer".to_string()]);
 }
 
 #[test]

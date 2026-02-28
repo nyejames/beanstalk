@@ -210,6 +210,73 @@ fn lowers_reference_to_registered_local() {
 }
 
 #[test]
+fn lowers_reference_to_module_constant_when_local_is_missing() {
+    let mut string_table = StringTable::new();
+    let third_const = symbol("third_const", &mut string_table);
+    let location = TextLocation::new_just_line(3);
+    let mut builder = setup_builder(&mut string_table);
+
+    builder.test_register_module_constant(
+        third_const.clone(),
+        Expression::int(3, location.clone(), Ownership::ImmutableOwned),
+    );
+
+    let expr = Expression::reference(
+        third_const,
+        DataType::Int,
+        location.clone(),
+        Ownership::ImmutableReference,
+    );
+    let lowered = builder
+        .lower_expression(&expr)
+        .expect("module constant reference lowering should succeed");
+
+    assert!(lowered.prelude.is_empty());
+    assert_eq!(lowered.value.value_kind, ValueKind::Const);
+    assert!(matches!(lowered.value.kind, HirExpressionKind::Int(3)));
+}
+
+#[test]
+fn rejects_cyclic_module_constant_dependencies() {
+    let mut string_table = StringTable::new();
+    let const_a = symbol("const_a", &mut string_table);
+    let const_b = symbol("const_b", &mut string_table);
+    let location = TextLocation::new_just_line(4);
+    let mut builder = setup_builder(&mut string_table);
+
+    builder.test_register_module_constant(
+        const_a.clone(),
+        Expression::reference(
+            const_b.clone(),
+            DataType::Int,
+            location.clone(),
+            Ownership::ImmutableReference,
+        ),
+    );
+    builder.test_register_module_constant(
+        const_b.clone(),
+        Expression::reference(
+            const_a.clone(),
+            DataType::Int,
+            location.clone(),
+            Ownership::ImmutableReference,
+        ),
+    );
+
+    let err = builder
+        .lower_expression(&Expression::reference(
+            const_a,
+            DataType::Int,
+            location.clone(),
+            Ownership::ImmutableReference,
+        ))
+        .expect_err("cyclic module constants should fail during HIR lowering");
+
+    assert_eq!(err.error_type, ErrorType::HirTransformation);
+    assert!(err.msg.contains("Cyclic module constant dependency"));
+}
+
+#[test]
 fn lowers_runtime_rpn_arithmetic_stack_correctly() {
     let mut string_table = StringTable::new();
     let x = symbol("x", &mut string_table);

@@ -143,20 +143,7 @@ impl<'a> HirBuilder<'a> {
             }
 
             ExpressionKind::Reference(name) => {
-                let region = self.current_region_or_error(&expr.location)?;
-                let local_id = self.resolve_local_id_or_error(name, &expr.location)?;
-                let ty = self.lower_data_type(&expr.data_type, &expr.location)?;
-
-                Ok(LoweredExpression {
-                    prelude: vec![],
-                    value: self.make_expression(
-                        &expr.location,
-                        HirExpressionKind::Load(HirPlace::Local(local_id)),
-                        ty,
-                        ValueKind::Place,
-                        region,
-                    ),
-                })
+                self.lower_reference_expression(name, &expr.data_type, &expr.location)
             }
 
             ExpressionKind::Runtime(nodes) => {
@@ -1111,6 +1098,87 @@ impl<'a> HirBuilder<'a> {
         };
 
         Ok(region)
+    }
+
+    fn lower_reference_expression(
+        &mut self,
+        name: &InternedPath,
+        data_type: &DataType,
+        location: &TextLocation,
+    ) -> Result<LoweredExpression, CompilerError> {
+        let region = self.current_region_or_error(location)?;
+        let ty = self.lower_data_type(data_type, location)?;
+
+        if let Some(local_id) = self.locals_by_name.get(name).copied() {
+            return Ok(LoweredExpression {
+                prelude: vec![],
+                value: self.make_expression(
+                    location,
+                    HirExpressionKind::Load(HirPlace::Local(local_id)),
+                    ty,
+                    ValueKind::Place,
+                    region,
+                ),
+            });
+        }
+
+        if let Some(mut constant_value) =
+            self.try_lower_module_constant_reference(name, location)?
+        {
+            // Preserve the type expected by the AST reference expression while reusing
+            // the constant's lowered value shape.
+            constant_value.ty = ty;
+            constant_value.region = region;
+
+            return Ok(LoweredExpression {
+                prelude: vec![],
+                value: constant_value,
+            });
+        }
+
+        return_hir_transformation_error!(
+            format!(
+                "Unresolved local '{}' during HIR expression lowering",
+                self.symbol_name_for_diagnostics(name)
+            ),
+            self.hir_error_location(location)
+        )
+    }
+
+    fn try_lower_module_constant_reference(
+        &mut self,
+        name: &InternedPath,
+        location: &TextLocation,
+    ) -> Result<Option<HirExpression>, CompilerError> {
+        let Some(constant_declaration) = self.module_constants_by_name.get(name).cloned() else {
+            return Ok(None);
+        };
+
+        if !self.currently_lowering_constants.insert(name.to_owned()) {
+            return_hir_transformation_error!(
+                format!(
+                    "Cyclic module constant dependency detected while lowering '{}'",
+                    self.symbol_name_for_diagnostics(name)
+                ),
+                self.hir_error_location(location)
+            );
+        }
+
+        let lowered_constant = self.lower_expression(&constant_declaration.value);
+        self.currently_lowering_constants.remove(name);
+        let lowered_constant = lowered_constant?;
+
+        if !lowered_constant.prelude.is_empty() {
+            return_hir_transformation_error!(
+                format!(
+                    "Module constant '{}' unexpectedly emitted runtime statements during HIR lowering",
+                    self.symbol_name_for_diagnostics(name)
+                ),
+                self.hir_error_location(location)
+            );
+        }
+
+        Ok(Some(lowered_constant.value))
     }
 
     // AST enforces module-wide unique InternedPath symbols and disallows shadowing.

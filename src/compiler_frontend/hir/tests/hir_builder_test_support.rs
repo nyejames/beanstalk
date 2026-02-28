@@ -1,4 +1,5 @@
-use crate::compiler_frontend::ast::ast_nodes::TextLocation;
+use crate::compiler_frontend::ast::ast_nodes::{Declaration, TextLocation};
+use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::hir::hir_nodes::{
@@ -97,5 +98,10 @@ impl<'a> HirBuilder<'a> {
         if struct_id.0 >= self.next_struct_id {
             self.next_struct_id = struct_id.0 + 1;
         }
+    }
+
+    pub(crate) fn test_register_module_constant(&mut self, name: InternedPath, value: Expression) {
+        self.module_constants_by_name
+            .insert(name.to_owned(), Declaration { id: name, value });
     }
 }

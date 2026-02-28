@@ -212,6 +212,52 @@ fn lowers_module_constants_into_hir_const_pool() {
 }
 
 #[test]
+fn start_function_can_reference_module_constant() {
+    let mut string_table = StringTable::new();
+    let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
+    let third_const = symbol("third_const", &mut string_table);
+
+    let start_function = function_node(
+        start_name,
+        FunctionSignature {
+            parameters: vec![],
+            returns: vec![],
+        },
+        vec![node(
+            NodeKind::Rvalue(Expression::reference(
+                third_const.clone(),
+                DataType::Int,
+                test_location(2),
+                Ownership::ImmutableReference,
+            )),
+            test_location(2),
+        )],
+        test_location(1),
+    );
+
+    let mut ast = build_ast(vec![start_function], entry_path);
+    ast.module_constants.push(var(
+        third_const,
+        Expression::int(3, test_location(1), Ownership::ImmutableOwned),
+    ));
+
+    let module = lower_ast(ast, &mut string_table)
+        .expect("start function should lower when referencing a module constant");
+
+    let start_fn = &module.functions[module.start_function.0 as usize];
+    let entry_block = &module.blocks[start_fn.entry.0 as usize];
+
+    assert!(
+        entry_block.statements.iter().any(|statement| matches!(
+            statement.kind,
+            HirStatementKind::Expr(ref value)
+                if matches!(value.kind, HirExpressionKind::Int(3))
+        )),
+        "expected constant reference to lower into a usable expression in start body"
+    );
+}
+
+#[test]
 fn lowers_struct_module_constant_into_record_with_ordered_fields() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
@@ -284,9 +330,19 @@ fn lowers_struct_module_constant_into_record_with_ordered_fields() {
     match &constant.value {
         HirConstValue::Record(fields) => {
             assert_eq!(fields.len(), 2);
-            assert!(fields[0].name.ends_with("/x"));
+            let first_field_name = fields[0]
+                .name
+                .rsplit(['/', '\\'])
+                .next()
+                .unwrap_or(fields[0].name.as_str());
+            assert_eq!(first_field_name, "x");
             assert!(matches!(fields[0].value, HirConstValue::Int(5)));
-            assert!(fields[1].name.ends_with("/y"));
+            let second_field_name = fields[1]
+                .name
+                .rsplit(['/', '\\'])
+                .next()
+                .unwrap_or(fields[1].name.as_str());
+            assert_eq!(second_field_name, "y");
             assert!(matches!(fields[1].value, HirConstValue::Int(99)));
         }
         other => panic!("expected record constant, got {:?}", other),

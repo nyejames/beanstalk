@@ -44,8 +44,8 @@ pub(crate) fn resolve_file_import_bindings(
     let mut bindings_by_file = FxHashMap::default();
     let mut sorted_files = module_file_paths.iter().cloned().collect::<Vec<_>>();
     sorted_files.sort_by(|left, right| {
-        left.to_string(string_table)
-            .cmp(&right.to_string(string_table))
+        left.to_portable_string(string_table)
+            .cmp(&right.to_portable_string(string_table))
     });
 
     let importable_symbol_paths = importable_symbol_exported
@@ -117,7 +117,7 @@ pub(crate) fn resolve_file_import_bindings(
                     return Err(CompilerError::new_rule_error(
                         format!(
                             "Ambiguous import target '{}'. Use a more specific path.",
-                            import.header_path.to_string(string_table)
+                            import.header_path.to_portable_string(string_table)
                         ),
                         import.location.to_error_location(string_table),
                     ));
@@ -141,7 +141,7 @@ pub(crate) fn resolve_file_import_bindings(
                         return Err(CompilerError::new_rule_error(
                             format!(
                                 "Cannot import '{}' because it is not exported. Add '#' to export it from its source file.",
-                                symbol_path.to_string(string_table)
+                                symbol_path.to_portable_string(string_table)
                             ),
                             import.location.to_error_location(string_table),
                         ));
@@ -186,7 +186,7 @@ pub(crate) fn resolve_file_import_bindings(
                     return Err(CompilerError::new_rule_error(
                         format!(
                             "Ambiguous import target '{}'. Use a more specific path.",
-                            import.header_path.to_string(string_table)
+                            import.header_path.to_portable_string(string_table)
                         ),
                         import.location.to_error_location(string_table),
                     ));
@@ -195,7 +195,7 @@ pub(crate) fn resolve_file_import_bindings(
                     return Err(CompilerError::new_rule_error(
                         format!(
                             "Missing import target '{}'. Could not resolve this dependency in the current module.",
-                            import.header_path.to_string(string_table)
+                            import.header_path.to_portable_string(string_table)
                         ),
                         import.location.to_error_location(string_table),
                     ));
@@ -246,7 +246,7 @@ pub(crate) fn parse_constant_header_declaration(
         return Err(CompilerError::new_rule_error(
             format!(
                 "Constant '{}' is not compile-time resolvable. Constants may only contain compile-time values and constant references.",
-                declaration.id.to_string(string_table)
+                declaration.id.to_portable_string(string_table)
             ),
             header.name_location.to_error_location(string_table),
         ));

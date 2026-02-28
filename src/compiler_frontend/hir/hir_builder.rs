@@ -17,7 +17,7 @@
 
 use crate::compiler_frontend::ast::ast::Ast;
 use crate::compiler_frontend::ast::ast::AstStartTemplateItem;
-use crate::compiler_frontend::ast::ast_nodes::{AstNode, TextLocation};
+use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, TextLocation};
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::hir::hir_display::HirSideTable;
 use crate::compiler_frontend::hir::hir_validation::validate_hir_module;
@@ -25,7 +25,7 @@ use crate::compiler_frontend::hir::{hir_datatypes::*, hir_nodes::*};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::return_hir_transformation_error;
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 // -----------
 // Entry Point
@@ -93,6 +93,8 @@ pub struct HirBuilder<'a> {
     pub(super) functions_by_name: FxHashMap<InternedPath, FunctionId>,
     pub(super) structs_by_name: FxHashMap<InternedPath, StructId>,
     pub(super) fields_by_struct_and_name: FxHashMap<(StructId, InternedPath), FieldId>,
+    pub(super) module_constants_by_name: FxHashMap<InternedPath, Declaration>,
+    pub(super) currently_lowering_constants: FxHashSet<InternedPath>,
 
     // === Fast ID -> arena index maps ===
     pub(super) block_index_by_id: FxHashMap<BlockId, usize>,
@@ -136,6 +138,8 @@ impl<'a> HirBuilder<'a> {
             functions_by_name: FxHashMap::default(),
             structs_by_name: FxHashMap::default(),
             fields_by_struct_and_name: FxHashMap::default(),
+            module_constants_by_name: FxHashMap::default(),
+            currently_lowering_constants: FxHashSet::default(),
 
             block_index_by_id: FxHashMap::default(),
             function_index_by_id: FxHashMap::default(),

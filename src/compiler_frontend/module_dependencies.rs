@@ -91,7 +91,7 @@ fn visit_node(
         return_rule_error!(
             format!(
                 "Missing import target '{}'. Could not resolve this dependency in the current module.",
-                node_path.to_string(string_table)
+                node_path.to_portable_string(string_table)
             ),
             ErrorLocation::default(),
             {
@@ -103,8 +103,11 @@ fn visit_node(
 
     // cycle?
     if tracker.temp_mark.contains(&resolved_path) {
-        let path_str: &'static str =
-            Box::leak(resolved_path.to_string(string_table).into_boxed_str());
+        let path_str: &'static str = Box::leak(
+            resolved_path
+                .to_portable_string(string_table)
+                .into_boxed_str(),
+        );
         return_rule_error!(
             format!("Circular dependency detected at {}", path_str),
             ErrorLocation::default(),
@@ -136,8 +139,8 @@ fn visit_node(
                 .unwrap_or(usize::MAX);
 
             left_order.cmp(&right_order).then_with(|| {
-                left.to_string(string_table)
-                    .cmp(&right.to_string(string_table))
+                left.to_portable_string(string_table)
+                    .cmp(&right.to_portable_string(string_table))
             })
         });
 

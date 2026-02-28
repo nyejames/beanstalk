@@ -1,7 +1,39 @@
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages, ErrorType};
 use crate::compiler_frontend::compiler_warnings::print_formatted_warning;
 use saying::say;
+use std::path::{Path, PathBuf};
 use std::{env, fs};
+
+fn normalize_display_path(path: &Path) -> PathBuf {
+    let path_string = path.to_string_lossy();
+    if let Some(stripped) = path_string.strip_prefix(r"\\?\") {
+        return PathBuf::from(stripped);
+    }
+
+    path.to_path_buf()
+}
+
+fn relative_display_path(scope: &Path) -> String {
+    let normalized_scope = normalize_display_path(scope);
+
+    match env::current_dir() {
+        Ok(dir) => {
+            let normalized_dir = normalize_display_path(&dir);
+            normalized_scope
+                .strip_prefix(&normalized_dir)
+                .unwrap_or(&normalized_scope)
+                .to_string_lossy()
+                .to_string()
+        }
+        Err(err) => {
+            say!(Red
+                "Compiler failed to find the file to give you the snippet. Another compiler_frontend developer skill issue. ",
+                err
+            );
+            normalized_scope.to_string_lossy().to_string()
+        }
+    }
+}
 
 pub fn print_compiler_messages(messages: CompilerMessages) {
     // Format and print out the messages:
@@ -15,29 +47,15 @@ pub fn print_compiler_messages(messages: CompilerMessages) {
 }
 
 pub fn print_formatted_error(e: CompilerError) {
-    // Walk back through the file path until it's the current directory
-    let relative_dir = match env::current_dir() {
-        Ok(dir) => {
-            // Strip the path to the current directory from the front
-            match e.location.scope.strip_prefix(dir) {
-                Ok(path) => path.to_string_lossy().to_string(),
-                Err(_) => e.location.scope.to_string_lossy().to_string(),
-            }
-        }
-        Err(err) => {
-            say!(Red
-                "Compiler failed to find the file to give you the snippet. Another compiler_frontend developer skill issue. ",
-                err
-            );
-            e.location.scope.to_string_lossy().to_string()
-        }
-    };
+    // Walk back through the file path until it's the current directory.
+    // Normalize windows extended paths first (e.g. \\?\C:\...) for readable output.
+    let relative_dir = relative_display_path(&e.location.scope);
 
     let line_number = e.location.start_pos.line_number as usize;
 
     // Read the file and get the actual line as a string from the code
     // Strip the actual header at the end of the path (.header extension)
-    let mut actual_file = e.location.scope;
+    let mut actual_file = normalize_display_path(&e.location.scope);
     if actual_file.ends_with(".header") {
         actual_file = match actual_file.ancestors().nth(1) {
             Some(p) => p.to_path_buf(),

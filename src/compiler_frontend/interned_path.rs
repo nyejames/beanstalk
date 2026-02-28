@@ -205,8 +205,20 @@ impl InternedPath {
         self_path == other
     }
 
-    pub fn to_string(&self, string_table: &StringTable) -> String {
+    /// Render with the platform-native path separator.
+    /// Use this only for diagnostics and filesystem-adjacent display.
+    pub fn to_native_string(&self, string_table: &StringTable) -> String {
         self.to_path_buf(string_table).to_string_lossy().to_string()
+    }
+
+    /// Render with forward slashes so string output is deterministic across OSes.
+    /// This is the preferred renderer for compiler logic, snapshots, and tests.
+    pub fn to_portable_string(&self, string_table: &StringTable) -> String {
+        self.to_native_string(string_table).replace('\\', "/")
+    }
+
+    pub fn to_string(&self, string_table: &StringTable) -> String {
+        self.to_portable_string(string_table)
     }
 
     pub fn to_interned_string(&self, string_table: &mut StringTable) -> StringId {
@@ -241,5 +253,31 @@ impl InternedPath {
 impl Default for InternedPath {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn to_portable_string_normalizes_windows_separator() {
+        let mut string_table = StringTable::new();
+        let path = InternedPath::from_components(vec![
+            string_table.intern("styles"),
+            string_table.intern("docs"),
+            string_table.intern("navbar"),
+        ]);
+
+        assert_eq!(path.to_portable_string(&string_table), "styles/docs/navbar");
+    }
+
+    #[test]
+    fn from_path_buf_round_trips_current_directory() {
+        let mut string_table = StringTable::new();
+        let current_dir = std::env::current_dir().expect("current dir should be available");
+        let path = InternedPath::from_path_buf(&current_dir, &mut string_table);
+
+        assert_eq!(path.to_path_buf(&string_table), current_dir);
     }
 }

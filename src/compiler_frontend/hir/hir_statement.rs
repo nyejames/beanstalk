@@ -47,8 +47,12 @@ impl<'a> HirBuilder<'a> {
 
     pub(crate) fn lower_module_constants(&mut self, ast: &Ast) -> Result<(), CompilerError> {
         self.module.module_constants.clear();
+        self.module_constants_by_name.clear();
 
         for declaration in &ast.module_constants {
+            self.module_constants_by_name
+                .insert(declaration.id.to_owned(), declaration.to_owned());
+
             let location = declaration.value.location.to_owned();
             let const_id = self.allocate_const_id();
             let const_type = self.lower_data_type(&declaration.value.data_type, &location)?;
