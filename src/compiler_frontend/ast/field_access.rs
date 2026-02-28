@@ -148,8 +148,8 @@ pub fn parse_field_access(
             parse_function_call(token_stream, &member.id, context, signature, string_table)?
         } else {
             // It's field access.
-            // If it's a known value, inline the value of the field instead
-            if member.value.is_constant() {
+            // If this is a constant expression, can just replace it with the value directly instead of doing a field access
+            if member.value.is_constant() && context.kind.is_constant_context() {
                 let mut inlined_expression = member.value.to_owned();
                 inlined_expression.ownership = Ownership::ImmutableOwned;
                 AstNode {
