@@ -9,7 +9,7 @@ use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::ast::statements::structs::create_struct_definition;
 use crate::compiler_frontend::ast::templates::create_template_node::Template;
 use crate::compiler_frontend::ast::templates::template::TemplateType;
-use crate::compiler_frontend::ast::top_level_templates::synthesize_start_template_items;
+use crate::compiler_frontend::ast::templates::top_level_templates::synthesize_start_template_items;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
@@ -23,7 +23,7 @@ use crate::projects::settings::{self, IMPLICIT_START_FUNC_NAME};
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-pub use crate::compiler_frontend::ast::top_level_templates::AstStartTemplateItem;
+pub use crate::compiler_frontend::ast::templates::top_level_templates::AstStartTemplateItem;
 
 static CONTROL_FLOW_SCOPE_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
