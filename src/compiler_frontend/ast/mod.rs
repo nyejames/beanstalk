@@ -20,7 +20,7 @@ pub(crate) mod statements {
 }
 pub(crate) mod field_access;
 pub(crate) mod templates {
-    pub(crate) mod top_level_templates;
     pub(crate) mod create_template_node;
     pub(crate) mod template;
+    pub(crate) mod top_level_templates;
 }

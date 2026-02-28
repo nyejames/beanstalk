@@ -8,6 +8,7 @@
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
+use crate::compiler_frontend::ast::templates::template::TemplateType;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::headers::parse_file_headers::{
@@ -18,7 +19,6 @@ use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::TextLocation;
 use crate::projects::settings::{IMPLICIT_START_FUNC_NAME, TOP_LEVEL_TEMPLATE_NAME};
 use rustc_hash::{FxHashMap, FxHashSet};
-use crate::compiler_frontend::ast::templates::template::TemplateType;
 
 #[derive(Clone, Debug)]
 pub enum AstStartTemplateItem {
@@ -47,6 +47,8 @@ pub(crate) fn synthesize_start_template_items(
     const_templates_by_path: &FxHashMap<InternedPath, StringId>,
     string_table: &mut StringTable,
 ) -> Result<Vec<AstStartTemplateItem>, CompilerError> {
+    // Phase 1: locate the entry start function and extract runtime `#template`
+    // declarations so they can be lowered into start fragments.
     let entry_start_function_name = entry_dir.join_str(IMPLICIT_START_FUNC_NAME, string_table);
     let Some(entry_start_index) = ast_nodes.iter().position(|node| {
         matches!(
@@ -63,14 +65,15 @@ pub(crate) fn synthesize_start_template_items(
     let (runtime_candidates, entry_scope) =
         extract_runtime_template_candidates(ast_nodes, entry_start_index, string_table)?;
 
-    let mut ordered_items = top_level_template_items.to_owned();
-    ordered_items.sort_by_key(|item| item.file_order);
+    // Phase 2: collect const/runtime fragment sources and order them by source location.
+    let mut ordered_header_items = top_level_template_items.to_owned();
+    ordered_header_items.sort_by_key(|item| item.file_order);
 
     let mut next_fragment_index = 0usize;
     let mut ordered_fragment_sources: Vec<OrderedFragmentSource> =
-        Vec::with_capacity(ordered_items.len() + runtime_candidates.len());
+        Vec::with_capacity(ordered_header_items.len() + runtime_candidates.len());
 
-    for template_item in ordered_items {
+    for template_item in ordered_header_items {
         if let TopLevelTemplateKind::ConstTemplate { header_path } = template_item.kind {
             let Some(value) = const_templates_by_path.get(&header_path).copied() else {
                 return Err(CompilerError::compiler_error(format!(
@@ -81,7 +84,7 @@ pub(crate) fn synthesize_start_template_items(
 
             ordered_fragment_sources.push(OrderedFragmentSource::Const {
                 value,
-                location: template_item.location,
+                location: template_item.location.to_owned(),
             });
         }
     }
@@ -110,14 +113,11 @@ pub(crate) fn synthesize_start_template_items(
 
                 // Runtime template expressions can still fold to constants after AST folding.
                 // Keep them as const fragments to avoid generating unnecessary wrapper functions.
-                if matches!(
-                    template.kind,
-                    TemplateType::String
-                ) {
+                if matches!(template.kind, TemplateType::String) {
                     let folded = template.fold_into_stringid(&None, string_table)?;
                     start_template_items.push(AstStartTemplateItem::ConstString {
                         value: folded,
-                        location: candidate.location,
+                        location: candidate.location.to_owned(),
                     });
                     continue;
                 }
@@ -128,22 +128,22 @@ pub(crate) fn synthesize_start_template_items(
 
                 let mut fragment_body = build_runtime_fragment_body(&candidate, string_table)?;
                 fragment_body.push(AstNode {
-                    kind: NodeKind::Return(vec![candidate.declaration.value.clone()]),
-                    location: candidate.location.clone(),
-                    scope: candidate.scope.clone(),
+                    kind: NodeKind::Return(vec![candidate.declaration.value.to_owned()]),
+                    location: candidate.location.to_owned(),
+                    scope: candidate.scope.to_owned(),
                 });
 
                 ast_nodes.push(AstNode {
                     kind: NodeKind::Function(
-                        fragment_name.clone(),
+                        fragment_name.to_owned(),
                         FunctionSignature {
                             parameters: vec![],
                             returns: vec![DataType::StringSlice],
                         },
                         fragment_body,
                     ),
-                    location: candidate.location.clone(),
-                    scope: entry_scope.clone(),
+                    location: candidate.location.to_owned(),
+                    scope: entry_scope.to_owned(),
                 });
 
                 start_template_items.push(AstStartTemplateItem::RuntimeStringFunction {
@@ -170,14 +170,8 @@ fn compare_fragment_locations(
     lhs: &OrderedFragmentSource,
     rhs: &OrderedFragmentSource,
 ) -> std::cmp::Ordering {
-    let lhs_location = match lhs {
-        OrderedFragmentSource::Const { location, .. } => location,
-        OrderedFragmentSource::Runtime(candidate) => &candidate.location,
-    };
-    let rhs_location = match rhs {
-        OrderedFragmentSource::Const { location, .. } => location,
-        OrderedFragmentSource::Runtime(candidate) => &candidate.location,
-    };
+    let lhs_location = fragment_source_location(lhs);
+    let rhs_location = fragment_source_location(rhs);
 
     lhs_location
         .start_pos
@@ -191,6 +185,13 @@ fn compare_fragment_locations(
         )
 }
 
+fn fragment_source_location(source: &OrderedFragmentSource) -> &TextLocation {
+    match source {
+        OrderedFragmentSource::Const { location, .. } => location,
+        OrderedFragmentSource::Runtime(candidate) => &candidate.location,
+    }
+}
+
 fn extract_runtime_template_candidates(
     ast_nodes: &mut [AstNode],
     entry_start_index: usize,
@@ -202,35 +203,36 @@ fn extract_runtime_template_candidates(
         ));
     };
 
-    let entry_scope = entry_start_node.scope.clone();
+    let entry_scope = entry_start_node.scope.to_owned();
     let NodeKind::Function(_, _, body) = &mut entry_start_node.kind else {
         return Err(CompilerError::compiler_error(
             "Entry start function node is not a function while extracting runtime templates.",
         ));
     };
 
-    let original_body = body.clone();
+    // Work on a snapshot so extraction is independent of in-place mutation.
+    let original_body = body.to_owned();
     let mut runtime_candidates = Vec::new();
     let mut filtered_body = Vec::with_capacity(original_body.len());
 
     for (index, node) in original_body.iter().enumerate() {
         if let Some(declaration) = as_top_level_template_declaration(node, string_table) {
             runtime_candidates.push(RuntimeTemplateCandidate {
-                declaration: declaration.clone(),
-                location: node.location.clone(),
-                scope: node.scope.clone(),
+                declaration: declaration.to_owned(),
+                location: node.location.to_owned(),
+                scope: node.scope.to_owned(),
                 preceding_statements: original_body[..index]
                     .iter()
                     .filter(|statement| {
                         as_top_level_template_declaration(statement, string_table).is_none()
                     })
-                    .cloned()
+                    .map(std::borrow::ToOwned::to_owned)
                     .collect(),
             });
             continue;
         }
 
-        filtered_body.push(node.clone());
+        filtered_body.push(node.to_owned());
     }
 
     *body = filtered_body;
@@ -265,6 +267,8 @@ fn build_runtime_fragment_body(
     candidate: &RuntimeTemplateCandidate,
     string_table: &StringTable,
 ) -> Result<Vec<AstNode>, CompilerError> {
+    // 1) Collect all referenced symbols in the template expression.
+    // 2) Pull in only the declaration statements needed to evaluate that expression.
     let mut required_symbols = FxHashSet::default();
     collect_references_from_expression(&candidate.declaration.value, &mut required_symbols);
 
@@ -277,7 +281,7 @@ fn build_runtime_fragment_body(
                 return None;
             };
 
-            Some((declaration.id.clone(), (index, declaration)))
+            Some((declaration.id.to_owned(), (index, declaration)))
         })
         .collect::<FxHashMap<_, _>>();
 
@@ -300,10 +304,12 @@ fn build_runtime_fragment_body(
             else {
                 return None;
             };
-            Some(declaration.id.clone())
+            Some(declaration.id.to_owned())
         })
         .collect::<FxHashSet<_>>();
 
+    // Reassignments to captured symbols would require mutable capture semantics.
+    // Keep this strict until the runtime fragment model supports mutable state capture.
     for statement in &candidate.preceding_statements {
         let NodeKind::Assignment { target, .. } = &statement.kind else {
             continue;
@@ -330,7 +336,11 @@ fn build_runtime_fragment_body(
 
     let mut fragment_body = Vec::with_capacity(ordered_indices.len());
     for index in ordered_indices {
-        let Some(statement) = candidate.preceding_statements.get(index).cloned() else {
+        let Some(statement) = candidate
+            .preceding_statements
+            .get(index)
+            .map(ToOwned::to_owned)
+        else {
             return Err(CompilerError::compiler_error(
                 "Fragment dependency index was out of bounds.",
             ));
@@ -355,7 +365,7 @@ fn include_declaration_dependencies(
         return Ok(());
     }
 
-    if !visiting.insert(symbol.clone()) {
+    if !visiting.insert(symbol.to_owned()) {
         return Err(CompilerError::compiler_error(
             "Cyclic declaration capture detected while synthesizing runtime fragment.",
         ));
@@ -385,7 +395,7 @@ fn collect_references_from_expression(
 ) {
     match &expression.kind {
         ExpressionKind::Reference(name) => {
-            references.insert(name.clone());
+            references.insert(name.to_owned());
         }
 
         ExpressionKind::Runtime(nodes) => {
@@ -544,3 +554,7 @@ fn collect_references_from_ast_node(node: &AstNode, references: &mut FxHashSet<I
         | NodeKind::Spaces(_) => {}
     }
 }
+
+#[cfg(test)]
+#[path = "template_tests.rs"]
+mod template_tests;
