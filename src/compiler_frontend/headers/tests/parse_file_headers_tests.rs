@@ -112,6 +112,50 @@ fn top_level_const_template_outside_entry_file_errors() {
 }
 
 #[test]
+fn top_level_const_template_tokens_keep_close_and_eof_for_ast_parser() {
+    let headers = parse_single_file_headers("#[3]\n");
+
+    let const_template_header = headers
+        .headers
+        .iter()
+        .find(|header| matches!(header.kind, HeaderKind::ConstTemplate { .. }))
+        .expect("expected top-level const template header");
+
+    assert!(
+        matches!(
+            const_template_header
+                .tokens
+                .tokens
+                .first()
+                .map(|token| &token.kind),
+            Some(TokenKind::TemplateHead)
+        ),
+        "const template token stream should start with template opener"
+    );
+
+    assert!(
+        const_template_header
+            .tokens
+            .tokens
+            .iter()
+            .any(|token| matches!(token.kind, TokenKind::TemplateClose)),
+        "const template token stream should preserve template close token"
+    );
+
+    assert!(
+        matches!(
+            const_template_header
+                .tokens
+                .tokens
+                .last()
+                .map(|token| &token.kind),
+            Some(TokenKind::Eof)
+        ),
+        "const template token stream should end with EOF sentinel"
+    );
+}
+
+#[test]
 fn start_function_local_references_do_not_create_module_dependencies() {
     let headers = parse_single_file_headers(
         "value = 1\n\

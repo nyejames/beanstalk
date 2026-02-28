@@ -597,6 +597,13 @@ pub fn parse_template_head(
             }
         }
 
+        // Guard against malformed or truncated synthetic token streams.
+        // Valid streams should include a close/eof boundary, but avoid panicking
+        // if expression parsing advanced exactly to the stream end.
+        if token_stream.index >= token_stream.length {
+            return Ok(());
+        }
+
         if token_stream.current_token_kind() == &TokenKind::StartTemplateBody {
             token_stream.advance();
             return Ok(());
@@ -695,3 +702,7 @@ fn fold_side(
 
     Ok(string_table.intern(&final_string))
 }
+
+#[cfg(test)]
+#[path = "create_template_node_tests.rs"]
+mod create_template_node_tests;

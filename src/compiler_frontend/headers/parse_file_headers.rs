@@ -602,8 +602,8 @@ fn create_top_level_const_template(
     ));
     let mut dependencies: HashSet<InternedPath> = HashSet::new();
 
-    // Keep the full token stream (including the template opener) so AST template parsing
-    // can treat const templates the same way as other templates.
+    // Keep the full template token stream (including open/close) so AST template parsing
+    // can treat const templates exactly like regular templates.
     let mut body = Vec::with_capacity(10);
     body.push(opening_template_token);
 
@@ -622,9 +622,9 @@ fn create_top_level_const_template(
 
             TokenKind::TemplateClose => {
                 scopes_closed += 1;
-                if scopes_opened > scopes_closed {
-                    body.push(token_stream.current_token());
-                }
+                // Preserve the closing token for the outermost template too.
+                // Template parsing relies on seeing a close/eof boundary token.
+                body.push(token_stream.current_token());
             }
 
             TokenKind::Eof => {
@@ -652,6 +652,13 @@ fn create_top_level_const_template(
 
         token_stream.advance();
     }
+
+    // Add an EOF sentinel so downstream parsers can safely terminate even if
+    // expression parsing consumed to the end of this synthetic token stream.
+    body.push(Token {
+        kind: TokenKind::Eof,
+        location: token_stream.current_location(),
+    });
 
     let full_name = scope.append(const_template_name);
     let name_location = TextLocation {
