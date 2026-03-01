@@ -4,6 +4,7 @@
 // for different HTML pages and including JavaScript bindings for DOM interaction.
 use crate::backends::js::{JsLoweringConfig, lower_hir_to_js};
 use crate::build_system::build::{FileKind, Module, OutputFile, Project, ProjectBuilder};
+use crate::build_system::create_project_modules::resolve_project_entry_root;
 use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::hir::hir_nodes::{HirModule, StartFragment};
@@ -11,6 +12,7 @@ use crate::compiler_frontend::string_interning::StringTable;
 use crate::projects::settings::Config;
 use std::collections::HashSet;
 use std::fmt::Write as _;
+use std::fs;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug)]
@@ -26,11 +28,11 @@ impl ProjectBuilder for HtmlProjectBuilder {
     fn build_backend(
         &self,
         modules: Vec<Module>,
-        _config: &Config,
+        config: &Config,
         flags: &[Flag],
     ) -> Result<Project, CompilerMessages> {
         let mut compiler_messages = CompilerMessages::new();
-        if let Err(error) = self.validate_project_config(_config) {
+        if let Err(error) = self.validate_project_config(config) {
             return Err(CompilerMessages {
                 errors: vec![error],
                 warnings: Vec::new(),
@@ -50,16 +52,48 @@ impl ProjectBuilder for HtmlProjectBuilder {
         let release_build = flags.contains(&Flag::Release);
         let mut output_files = Vec::with_capacity(modules.len());
         let mut output_paths = HashSet::with_capacity(modules.len());
+        let is_directory_build = config.entry_dir.is_dir();
+        let resolved_entry_root = if is_directory_build {
+            Some(
+                fs::canonicalize(resolve_project_entry_root(config)).map_err(|error| {
+                    CompilerMessages {
+                        errors: vec![CompilerError::file_error(
+                            &config.entry_dir,
+                            format!(
+                                "Failed to resolve configured HTML entry root '{}': {error}",
+                                resolve_project_entry_root(config).display()
+                            ),
+                        )],
+                        warnings: Vec::new(),
+                    }
+                })?,
+            )
+        } else {
+            None
+        };
+        let expected_homepage_entry = resolved_entry_root
+            .as_ref()
+            .map(|entry_root| entry_root.join("#page.bst"));
+        let mut entry_page_rel = None;
+        let mut has_directory_homepage = false;
 
         for module in modules {
+            let output_path =
+                match html_output_path(&module.entry_point, resolved_entry_root.as_deref()) {
+                    Ok(path) => path,
+                    Err(error) => {
+                        compiler_messages.errors.push(error);
+                        return Err(compiler_messages);
+                    }
+                };
+
             match compile_html_module(
                 &module.hir,
                 &module.string_table,
-                &module.entry_point,
+                output_path.clone(),
                 release_build,
             ) {
                 Ok(output_file) => {
-                    let output_path = output_file.relative_output_path().to_path_buf();
                     if !output_paths.insert(output_path.clone()) {
                         return Err(CompilerMessages {
                             errors: vec![CompilerError::compiler_error(format!(
@@ -69,6 +103,16 @@ impl ProjectBuilder for HtmlProjectBuilder {
                             warnings: Vec::new(),
                         });
                     }
+
+                    if let Some(homepage_entry) = expected_homepage_entry.as_ref() {
+                        if module.entry_point == *homepage_entry {
+                            has_directory_homepage = true;
+                            entry_page_rel = Some(output_path.clone());
+                        }
+                    } else if entry_page_rel.is_none() {
+                        entry_page_rel = Some(output_path.clone());
+                    }
+
                     output_files.push(output_file);
                 }
                 Err(error) => {
@@ -78,8 +122,22 @@ impl ProjectBuilder for HtmlProjectBuilder {
             }
         }
 
+        if is_directory_build && !has_directory_homepage {
+            let entry_root = resolved_entry_root
+                .as_deref()
+                .unwrap_or_else(|| Path::new("."));
+            return Err(CompilerMessages {
+                errors: vec![CompilerError::compiler_error(format!(
+                    "HTML project builds require a '#page.bst' homepage at the root of the configured entry root '{}'.",
+                    entry_root.display(),
+                ))],
+                warnings: Vec::new(),
+            });
+        }
+
         Ok(Project {
             output_files,
+            entry_page_rel,
             warnings: compiler_messages.warnings,
         })
     }
@@ -98,7 +156,7 @@ impl ProjectBuilder for HtmlProjectBuilder {
 fn compile_html_module(
     hir_module: &HirModule,
     string_table: &StringTable,
-    entry_point: &Path,
+    output_path: PathBuf,
     release_build: bool,
 ) -> Result<OutputFile, CompilerError> {
     let js_lowering_config = JsLoweringConfig {
@@ -114,13 +172,17 @@ fn compile_html_module(
         &js_module.function_name_by_id,
     )?;
 
-    Ok(OutputFile::new(
-        html_output_path(entry_point),
-        FileKind::Html(html),
-    ))
+    Ok(OutputFile::new(output_path, FileKind::Html(html)))
 }
 
-fn html_output_path(entry_point: &Path) -> PathBuf {
+fn html_output_path(
+    entry_point: &Path,
+    entry_root: Option<&Path>,
+) -> Result<PathBuf, CompilerError> {
+    if let Some(entry_root) = entry_root {
+        return html_output_path_from_entry_root(entry_point, entry_root);
+    }
+
     let file_stem = entry_point
         .file_stem()
         .and_then(|stem| stem.to_str())
@@ -128,11 +190,58 @@ fn html_output_path(entry_point: &Path) -> PathBuf {
         .unwrap_or("main");
 
     if file_stem == "#page" {
-        PathBuf::from("index.html")
+        Ok(PathBuf::from("index.html"))
     } else {
         let route_name = file_stem.strip_prefix('#').unwrap_or(file_stem);
-        PathBuf::from(format!("{route_name}.html"))
+        Ok(PathBuf::from(format!("{route_name}.html")))
     }
+}
+
+fn html_output_path_from_entry_root(
+    entry_point: &Path,
+    entry_root: &Path,
+) -> Result<PathBuf, CompilerError> {
+    let relative_entry = entry_point.strip_prefix(entry_root).map_err(|_| {
+        CompilerError::file_error(
+            entry_point,
+            format!(
+                "HTML entry '{}' is not inside the configured entry root '{}'.",
+                entry_point.display(),
+                entry_root.display(),
+            ),
+        )
+    })?;
+    let file_stem = relative_entry
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .filter(|stem| !stem.is_empty())
+        .ok_or_else(|| {
+            CompilerError::file_error(
+                entry_point,
+                format!(
+                    "HTML entry '{}' is missing a valid file stem.",
+                    entry_point.display(),
+                ),
+            )
+        })?;
+    let parent = relative_entry.parent().unwrap_or_else(|| Path::new(""));
+
+    if file_stem == "#page" {
+        if parent.as_os_str().is_empty() {
+            return Ok(PathBuf::from("index.html"));
+        }
+
+        return Ok(parent.with_extension("html"));
+    }
+
+    let route_name = file_stem.strip_prefix('#').unwrap_or(file_stem);
+    let mut output_path = if parent.as_os_str().is_empty() {
+        PathBuf::new()
+    } else {
+        parent.to_path_buf()
+    };
+    output_path.push(format!("{route_name}.html"));
+    Ok(output_path)
 }
 
 fn render_html_document(

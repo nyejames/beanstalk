@@ -1,11 +1,10 @@
-import @(libs/html/Basic)
-import @(styles/docs)
-import @(components)
+import @(libs/html/basic)
+import @(styles/docs/{navbar, footer, title})
 [basic.page:
 
-[docs.navbar]
-[docs.header, Basic.center:
-    [Basic.title: LANGUAGE BASICS]
+[navbar]
+[basic.center:
+    [title: LANGUAGE BASICS]
 ]
 
 Every project needing to be split into multiple Wasm modules must have a config.bst file.
@@ -164,7 +163,7 @@ But new statements must start after a newline.
 All data type keywords contain methods from the standard library for common manipulation of types.
 
 ## Numerical Types
-[Basic.table(3):
+[basic.table(3):
     [: Type] [: Description]
 
     [: float ] [: 64 bit floating point number]
@@ -180,7 +179,7 @@ These are all different ways to create strings.
 
     [: string slice ] [: UTF-8]
 
-    [: template ] [: The string templating syntax of Beanstalk for creating strings. See [@./templates: Templates] for more info!]
+    [: template ] [: The string templating syntax of Beanstalk for creating strings. ]
 ```
 
 # Strings and String slices
@@ -191,7 +190,7 @@ Double quotes are automatically string slices.
 
 Backticks are used for RAW strings. To escape a backtick it must be preceded with a backslash \.
 
-Scenes are used instead of format strings. See [@./templates: Scenes] for more information.
+Scenes are used instead of format strings.
 
 # Logical Operators
 The 'is' keyword is used to check equality, not '==''. 
@@ -208,5 +207,7 @@ The "and / or" keywords are used for logical and / or and 'not' is used to inver
     [: +]          [: Sum]                  [: 2]
     [: `-`]        [: Subtraction]          [: 2]
 ```
+]
 
-[docs.footer]
+[footer]
+

@@ -380,17 +380,17 @@ pub fn compile_module(
 fn discover_all_modules_in_project(
     config: &Config,
 ) -> Result<Vec<DiscoveredModule>, CompilerError> {
-    let source_root = resolve_project_source_root(config);
+    let source_root = resolve_project_entry_root(config);
     if !source_root.exists() {
         return_file_error!(
             &source_root,
             format!(
-                "Configured source root '{}' does not exist",
+                "Configured entry root '{}' does not exist",
                 source_root.display()
             ),
             {
                 CompilationStage => "Project Structure",
-                PrimarySuggestion => "Set '#src' in #config.bst to an existing directory",
+                PrimarySuggestion => "Set '#entry_root' in #config.bst to an existing directory",
             }
         );
     }
@@ -399,10 +399,10 @@ fn discover_all_modules_in_project(
     if entry_points.is_empty() {
         return_file_error!(
             &source_root,
-            "No root module entries were found. Expected at least one '#*.bst' file under the source directory.",
+            "No root module entries were found. Expected at least one '#*.bst' file under the configured entry root.",
             {
                 CompilationStage => "Project Structure",
-                PrimarySuggestion => "Add at least one entry file like '#page.bst' under the configured source directory",
+                PrimarySuggestion => "Add at least one entry file like '#page.bst' under the configured entry root",
             }
         );
     }
@@ -435,15 +435,15 @@ fn discover_all_modules_in_project(
     Ok(modules)
 }
 
-fn resolve_project_source_root(config: &Config) -> PathBuf {
-    if config.src.as_os_str().is_empty() {
+pub(crate) fn resolve_project_entry_root(config: &Config) -> PathBuf {
+    if config.entry_root.as_os_str().is_empty() {
         return config.entry_dir.clone();
     }
 
-    if config.src.is_absolute() {
-        config.src.clone()
+    if config.entry_root.is_absolute() {
+        config.entry_root.clone()
     } else {
-        config.entry_dir.join(&config.src)
+        config.entry_dir.join(&config.entry_root)
     }
 }
 
@@ -530,7 +530,7 @@ fn discover_reachable_files(
     let source_root = fs::canonicalize(source_root).map_err(|error| {
         CompilerError::file_error(
             source_root,
-            format!("Failed to canonicalize configured source root: {error}"),
+            format!("Failed to canonicalize configured entry root: {error}"),
         )
     })?;
 
@@ -688,7 +688,7 @@ fn resolve_import_to_file(
     Err(CompilerError::file_error(
         importer_file,
         format!(
-            "Could not resolve import '{}'. Tried source root '{}' and configured library roots.",
+            "Could not resolve import '{}'. Tried entry root '{}' and configured library roots.",
             import_path.display,
             source_root
                 .strip_prefix(project_root)
@@ -978,7 +978,7 @@ fn parse_config_scalar_value(kind: &TokenKind, string_table: &StringTable) -> Op
 
 fn apply_config_entry(config: &mut Config, key: &str, value: &str) {
     match key {
-        "src" => config.src = PathBuf::from(value),
+        "entry_root" => config.entry_root = PathBuf::from(value),
         "output_folder" => config.release_folder = PathBuf::from(value),
         "dev_folder" => config.dev_folder = PathBuf::from(value),
         "project" => {

@@ -1,7 +1,7 @@
 //! Dev server v2 entry point and orchestration.
 //!
 //! This module validates CLI input, runs the initial dev build, starts the watcher/build loop,
-//! and serves HTTP/SSE traffic for hot reload in phase-1 single-file mode.
+//! and serves HTTP/SSE traffic for hot reload for both single-file and project-directory builds.
 
 mod build_loop;
 mod error_page;
@@ -47,18 +47,22 @@ pub fn run_dev_server(
     flags: &[Flag],
     options: DevServerOptions,
 ) -> Result<(), CompilerMessages> {
-    let entry_file = validate_dev_entry_path(entry_path)?;
-    let watch_root = entry_file
-        .parent()
-        .map(Path::to_path_buf)
-        .unwrap_or_else(|| PathBuf::from("."));
+    let entry_target = validate_dev_entry_path(entry_path)?;
+    let watch_root = if entry_target.is_dir() {
+        entry_target.clone()
+    } else {
+        entry_target
+            .parent()
+            .map(Path::to_path_buf)
+            .unwrap_or_else(|| PathBuf::from("."))
+    };
     let output_dir = watch_root.join("dev");
 
     let state = Arc::new(DevServerState::new(output_dir.clone()));
     let mut executor = ProjectBuildExecutor::new(builder);
 
     let initial_build_report =
-        build_loop::run_single_build_cycle(&state, &mut executor, &entry_file, flags);
+        build_loop::run_single_build_cycle(&state, &mut executor, &entry_target, flags);
     if initial_build_report.build_ok {
         say!(
             Green "Initial dev build succeeded. Reload broadcast to ",
@@ -76,7 +80,7 @@ pub fn run_dev_server(
     let bind_addr = format!("{}:{}", options.host, options.port);
     let listener = TcpListener::bind(&bind_addr).map_err(|error| {
         dev_server_error_messages(
-            &entry_file,
+            &entry_target,
             format!("Failed to start dev server on {bind_addr}: {error}"),
         )
     })?;
@@ -96,7 +100,7 @@ pub fn run_dev_server(
 
     let watch_state = Arc::clone(&state);
     let watch_executor = Box::new(executor) as Box<dyn build_loop::DevBuildExecutor>;
-    let watch_entry_file = entry_file.clone();
+    let watch_entry_file = entry_target.clone();
     let watch_flags = flags.to_vec();
     let watch_root_clone = watch_root.clone();
     let poll_interval = Duration::from_millis(options.poll_interval_ms);
@@ -155,17 +159,25 @@ fn validate_dev_entry_path(entry_path: &str) -> Result<PathBuf, CompilerMessages
     };
 
     if resolved_path.is_dir() {
-        return Err(dev_server_error_messages(
-            &resolved_path,
-            "Project directory mode is deferred in Dev Server v2 phase 1. \
-             Please run `bst dev <file.bst>` for now.",
-        ));
+        return match resolved_path.canonicalize() {
+            Ok(canonical_path) => Ok(canonical_path),
+            Err(error) => Err(CompilerMessages {
+                errors: vec![
+                    CompilerError::file_error(
+                        &resolved_path,
+                        format!("Failed to canonicalize dev entry path: {error}"),
+                    )
+                    .with_error_type(ErrorType::DevServer),
+                ],
+                warnings: Vec::new(),
+            }),
+        };
     }
 
     if !resolved_path.is_file() {
         return Err(dev_server_error_messages(
             &resolved_path,
-            "Dev server entry path must resolve to a .bst file.",
+            "Dev server entry path must resolve to either a project directory or a .bst file.",
         ));
     }
 

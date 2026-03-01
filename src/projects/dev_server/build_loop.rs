@@ -273,8 +273,7 @@ fn build_once(
         .collect::<Vec<String>>()
         .join("\n");
 
-    let html_entries = collect_html_entries(&build_result);
-    if html_entries.len() == 1 {
+    if let Some(entry_page_rel) = build_result.project.entry_page_rel.clone() {
         let diagnostics_summary = if warnings_summary.is_empty() {
             String::from("Build succeeded.")
         } else {
@@ -283,40 +282,20 @@ fn build_once(
 
         BuildOutcome {
             build_succeeded: true,
-            entry_page_rel: html_entries.first().cloned(),
+            entry_page_rel: Some(entry_page_rel),
             diagnostics_summary,
             error_title: None,
-        }
-    } else if html_entries.is_empty() {
-        BuildOutcome {
-            build_succeeded: false,
-            entry_page_rel: None,
-            diagnostics_summary: String::from(
-                "Build completed, but no HTML entry was emitted. Single-file dev mode currently requires exactly one HTML output.",
-            ),
-            error_title: Some(String::from("Missing HTML Entry")),
         }
     } else {
         BuildOutcome {
             build_succeeded: false,
             entry_page_rel: None,
-            diagnostics_summary: format!(
-                "Build emitted {} HTML files, but single-file dev mode requires exactly one HTML entry.",
-                html_entries.len()
+            diagnostics_summary: String::from(
+                "Build completed, but the project builder did not declare a dev entry page.",
             ),
-            error_title: Some(String::from("Multiple HTML Entries")),
+            error_title: Some(String::from("Missing Dev Entry")),
         }
     }
-}
-
-fn collect_html_entries(build_result: &BuildResult) -> Vec<PathBuf> {
-    let mut html_entries = Vec::new();
-    for output_file in &build_result.project.output_files {
-        if matches!(output_file.file_kind(), build::FileKind::Html(_)) {
-            html_entries.push(output_file.relative_output_path().to_path_buf());
-        }
-    }
-    html_entries
 }
 
 pub fn dev_server_error_messages(path: &Path, msg: impl Into<String>) -> CompilerMessages {

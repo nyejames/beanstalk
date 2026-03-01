@@ -1,12 +1,11 @@
 use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::basic_utility_functions::check_if_valid_path;
-use crate::projects::settings::Config;
 use std::{env, fs};
 
 pub fn create_html_project_template(
     user_project_path: String,
     project_name: &str,
-    flags: Vec<Flag>,
+    _flags: Vec<Flag>,
 ) -> Result<(), String> {
     // Get the current directory
     let current_dir = env::current_dir().map_err(|e| e.to_string())?;
@@ -29,22 +28,17 @@ pub fn create_html_project_template(
     // Create a user-specified path
     fs::create_dir_all(&full_path).map_err(|e| e.to_string())?;
 
-    // Create the default config file
-    let mut config = Config::new(full_path.clone());
-
-    config.project_name = String::from(name);
     let config_content = format!(
-        "#project_name {name}\n
-         #src \"src\"\n
-         #output_folder \"dist\"\n
-         #name \"html_project\"\n
-         #version \"0.1.0\"\n
-         #author \"\"\n
-         #license \"MIT\"\n
-         #libraries {{
-             @(core/html),
-         }}\n
-        "
+        "#project_name = \"{name}\"\n\
+         #entry_root = \"src\"\n\
+         #output_folder = \"dist\"\n\
+         #name = \"html_project\"\n\
+         #version = \"0.1.0\"\n\
+         #author = \"\"\n\
+         #license = \"MIT\"\n\
+         #libraries = {{\n\
+             @(core/html),\n\
+         }}\n"
     );
     fs::write(full_path.join("#config.bst"), config_content).map_err(|e| e.to_string())?;
 

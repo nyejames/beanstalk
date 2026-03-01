@@ -31,7 +31,7 @@ pub const MINIMUM_LIKELY_DECLARATIONS: usize = 10; // (Maybe) How many symbols t
 pub struct Config {
     pub project_name: String,
     pub entry_dir: PathBuf,
-    pub src: PathBuf,
+    pub entry_root: PathBuf,
     pub dev_folder: PathBuf,
     pub release_folder: PathBuf,
     pub libraries: Vec<PathBuf>, // All folders that any file in this project can import from
@@ -46,7 +46,7 @@ impl Config {
         Config {
             entry_dir: user_specified_path,
             // These Default to the same directory as the project
-            src: PathBuf::from(""),
+            entry_root: PathBuf::from(""),
             dev_folder: PathBuf::from(""),
             release_folder: PathBuf::from(""),
 
@@ -66,7 +66,7 @@ impl Default for Config {
     fn default() -> Self {
         Config {
             entry_dir: PathBuf::new(),
-            src: PathBuf::from(".."),
+            entry_root: PathBuf::from("src"),
             dev_folder: PathBuf::from("dev"),
             release_folder: PathBuf::from("release"),
             libraries: Vec::new(),

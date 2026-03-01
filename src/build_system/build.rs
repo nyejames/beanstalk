@@ -85,6 +85,7 @@ impl OutputFile {
 
 pub struct Project {
     pub output_files: Vec<OutputFile>,
+    pub entry_page_rel: Option<PathBuf>,
     pub warnings: Vec<CompilerWarning>,
 }
 
