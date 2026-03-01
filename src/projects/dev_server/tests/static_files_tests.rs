@@ -54,3 +54,11 @@ fn root_uses_entry_page_when_available() {
         .expect("root should resolve to entry page");
     assert_eq!(resolved, output_dir.join("index.html"));
 }
+
+#[test]
+fn nested_routes_resolve_under_output_dir() {
+    let output_dir = Path::new("/tmp/project/dev");
+    let resolved = resolve_request_path("/docs/basics.html", output_dir, None)
+        .expect("nested route should resolve");
+    assert_eq!(resolved, output_dir.join("docs/basics.html"));
+}

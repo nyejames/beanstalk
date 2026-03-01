@@ -66,6 +66,7 @@ impl ProjectBuilder for WarningBuilder {
                 PathBuf::from("generated.js"),
                 FileKind::Js(String::from("console.log('ok');")),
             )],
+            entry_page_rel: None,
             warnings: vec![CompilerWarning::new(
                 "builder warning",
                 ErrorLocation::default(),
@@ -146,6 +147,7 @@ fn write_project_outputs_writes_all_supported_artifacts_and_skips_not_built() {
             OutputFile::new(PathBuf::from("bin/app.wasm"), FileKind::Wasm(vec![0, 1, 2])),
             OutputFile::new(PathBuf::new(), FileKind::NotBuilt),
         ],
+        entry_page_rel: Some(PathBuf::from("index.html")),
         warnings: vec![],
     };
 
@@ -185,6 +187,7 @@ fn write_project_outputs_rejects_invalid_paths() {
                 PathBuf::from("/tmp/absolute.js"),
                 FileKind::Js(String::from("x")),
             )],
+            entry_page_rel: None,
             warnings: vec![],
         },
         Project {
@@ -192,6 +195,7 @@ fn write_project_outputs_rejects_invalid_paths() {
                 PathBuf::from("../escape.js"),
                 FileKind::Js(String::from("x")),
             )],
+            entry_page_rel: None,
             warnings: vec![],
         },
         Project {
@@ -199,6 +203,7 @@ fn write_project_outputs_rejects_invalid_paths() {
                 PathBuf::new(),
                 FileKind::Js(String::from("x")),
             )],
+            entry_page_rel: None,
             warnings: vec![],
         },
     ];
@@ -312,16 +317,24 @@ fn build_project_preserves_const_and_runtime_fragment_order() {
 fn build_directory_project_emits_dist_index_and_404_and_ignores_unreachable_files() {
     let root = temp_dir("docs_like_project");
     let src = root.join("src");
-    fs::create_dir_all(src.join("docs")).expect("should create docs folder");
+    fs::create_dir_all(src.join("about")).expect("should create about folder");
+    fs::create_dir_all(src.join("docs/basics")).expect("should create docs folder");
     fs::create_dir_all(&src).expect("should create source folder");
 
     fs::write(
         root.join("#config.bst"),
-        "#src = \"src\"\n#output_folder = \"dist\"\n",
+        "#entry_root = \"src\"\n#output_folder = \"dist\"\n",
     )
     .expect("should write config");
     fs::write(src.join("#page.bst"), "#[:<h1>Home</h1>]\n").expect("should write #page");
     fs::write(src.join("#404.bst"), "#[:<h1>404</h1>]\n").expect("should write #404");
+    fs::write(src.join("about").join("#page.bst"), "#[:<h1>About</h1>]\n")
+        .expect("should write about");
+    fs::write(
+        src.join("docs").join("basics").join("#page.bst"),
+        "#[:<h1>Docs Basics</h1>]\n",
+    )
+    .expect("should write docs basics");
     fs::write(
         src.join("docs/outdated.bst"),
         "this is invalid and should not compile",
@@ -335,6 +348,10 @@ fn build_directory_project_emits_dist_index_and_404_and_ignores_unreachable_file
         &[],
     )
     .expect("docs-like directory build should succeed");
+    assert_eq!(
+        build_result.project.entry_page_rel,
+        Some(PathBuf::from("index.html"))
+    );
 
     let output_root = if build_result.config.release_folder.is_absolute() {
         build_result.config.release_folder.clone()
@@ -357,6 +374,83 @@ fn build_directory_project_emits_dist_index_and_404_and_ignores_unreachable_file
 
     assert!(output_root.join("index.html").exists());
     assert!(output_root.join("404.html").exists());
+    assert!(output_root.join("about.html").exists());
+    assert!(output_root.join("docs/basics.html").exists());
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
+fn build_directory_project_respects_custom_entry_root() {
+    let root = temp_dir("custom_entry_root");
+    let pages = root.join("pages");
+    fs::create_dir_all(pages.join("docs")).expect("should create docs folder");
+
+    fs::write(
+        root.join("#config.bst"),
+        "#entry_root = \"pages\"\n#output_folder = \"dist\"\n",
+    )
+    .expect("should write config");
+    fs::write(pages.join("#page.bst"), "#[:<h1>Home</h1>]\n").expect("should write home");
+    fs::write(pages.join("docs").join("#page.bst"), "#[:<h1>Docs</h1>]\n")
+        .expect("should write docs");
+
+    let builder = HtmlProjectBuilder::new();
+    let build_result = build_project(
+        &builder,
+        root.to_str().expect("root path should be valid UTF-8"),
+        &[],
+    )
+    .expect("directory build should succeed");
+
+    let output_root = build_result
+        .config
+        .entry_dir
+        .join(&build_result.config.release_folder);
+    write_project_outputs(
+        &build_result.project,
+        &WriteOptions {
+            output_root: output_root.clone(),
+        },
+    )
+    .expect("should write project outputs");
+
+    assert!(output_root.join("index.html").exists());
+    assert!(output_root.join("docs.html").exists());
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
+fn build_directory_project_requires_root_page_in_configured_entry_root() {
+    let root = temp_dir("missing_homepage");
+    let src = root.join("src");
+    fs::create_dir_all(src.join("about")).expect("should create about folder");
+
+    fs::write(
+        root.join("#config.bst"),
+        "#entry_root = \"src\"\n#output_folder = \"dist\"\n",
+    )
+    .expect("should write config");
+    fs::write(src.join("about").join("#page.bst"), "#[:<h1>About</h1>]\n")
+        .expect("should write about");
+
+    let builder = HtmlProjectBuilder::new();
+    let result = build_project(
+        &builder,
+        root.to_str().expect("root path should be valid UTF-8"),
+        &[],
+    );
+
+    assert!(result.is_err(), "missing root homepage should fail");
+    let messages = result.err().expect("expected missing homepage error");
+    assert!(
+        messages
+            .errors
+            .iter()
+            .any(|error| error.msg.contains("require a '#page.bst' homepage")),
+        "expected homepage error message"
+    );
 
     fs::remove_dir_all(&root).expect("should remove temp dir");
 }

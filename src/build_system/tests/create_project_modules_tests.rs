@@ -20,14 +20,14 @@ fn parses_config_constant_declarations() {
 
     fs::write(
         &config_path,
-        "#src = \"src\"\n#output_folder = \"dist\"\n#name = \"docs\"\n#version = \"1.2.3\"\n#project = \"html\"\n#libraries = { @(libs), \"vendor\" }\n#custom_key = \"custom_value\"\n",
+        "#entry_root = \"src\"\n#output_folder = \"dist\"\n#name = \"docs\"\n#version = \"1.2.3\"\n#project = \"html\"\n#libraries = { @(libs), \"vendor\" }\n#custom_key = \"custom_value\"\n",
     )
     .expect("should write config");
 
     let mut config = Config::new(root.clone());
     parse_project_config_file(&mut config, &config_path).expect("config should parse");
 
-    assert_eq!(config.src, PathBuf::from("src"));
+    assert_eq!(config.entry_root, PathBuf::from("src"));
     assert_eq!(config.release_folder, PathBuf::from("dist"));
     assert_eq!(config.project_name, "docs");
     assert_eq!(config.version, "1.2.3");
@@ -68,6 +68,27 @@ fn rejects_legacy_config_assignment_syntax() {
 }
 
 #[test]
+fn rejects_deprecated_src_config_key() {
+    let root = temp_dir("config_src_rename");
+    fs::create_dir_all(&root).expect("should create root dir");
+    let config_path = root.join(settings::CONFIG_FILE_NAME);
+
+    fs::write(&config_path, "#src = \"src\"\n").expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let error =
+        parse_project_config_file(&mut config, &config_path).expect_err("config should fail");
+
+    assert!(
+        error.msg.contains("#entry_root"),
+        "unexpected error message: {}",
+        error.msg
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
 fn discover_modules_uses_reachable_files_only() {
     let root = temp_dir("reachable_only");
     let src = root.join("src");
@@ -75,8 +96,11 @@ fn discover_modules_uses_reachable_files_only() {
     fs::create_dir_all(src.join("styles")).expect("should create styles folder");
     fs::create_dir_all(src.join("docs")).expect("should create docs folder");
 
-    fs::write(root.join(settings::CONFIG_FILE_NAME), "#src = \"src\"\n")
-        .expect("should write config");
+    fs::write(
+        root.join(settings::CONFIG_FILE_NAME),
+        "#entry_root = \"src\"\n",
+    )
+    .expect("should write config");
     fs::write(src.join("#page.bst"), "import @(libs/html/basic)\n#[:ok]\n")
         .expect("should write entry");
     fs::write(src.join("#404.bst"), "#[:404]\n").expect("should write 404");

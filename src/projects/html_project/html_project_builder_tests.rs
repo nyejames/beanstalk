@@ -6,7 +6,17 @@ use crate::compiler_frontend::hir::hir_nodes::{
     HirModule, HirRegion, HirTerminator, RegionId, StartFragment, ValueKind,
 };
 use crate::projects::settings::Config;
+use std::fs;
 use std::path::PathBuf;
+use std::time::SystemTime;
+
+fn temp_dir(prefix: &str) -> PathBuf {
+    let unique = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .expect("time should be after unix epoch")
+        .as_nanos();
+    std::env::temp_dir().join(format!("beanstalk_html_builder_{prefix}_{unique}"))
+}
 
 fn create_test_hir_module() -> HirModule {
     let mut module = HirModule::new();
@@ -82,6 +92,7 @@ fn build_backend_emits_single_html_output_file() {
         project.output_files[0].relative_output_path(),
         PathBuf::from("main.html")
     );
+    assert_eq!(project.entry_page_rel, Some(PathBuf::from("main.html")));
     assert!(matches!(
         project.output_files[0].file_kind(),
         FileKind::Html(_)
@@ -147,6 +158,7 @@ fn page_entry_outputs_index_html() {
         project.output_files[0].relative_output_path(),
         PathBuf::from("index.html")
     );
+    assert_eq!(project.entry_page_rel, Some(PathBuf::from("index.html")));
 }
 
 #[test]
@@ -169,7 +181,7 @@ fn hash_prefixed_route_name_strips_hash_from_output() {
 #[test]
 fn build_backend_emits_html_for_multiple_modules() {
     let builder = HtmlProjectBuilder::new();
-    let config = Config::new(PathBuf::from("docs"));
+    let config = Config::new(PathBuf::from("docs.bst"));
 
     let project = builder
         .build_backend(
@@ -191,12 +203,13 @@ fn build_backend_emits_html_for_multiple_modules() {
     assert_eq!(project.output_files.len(), 2);
     assert!(output_paths.contains(&PathBuf::from("index.html")));
     assert!(output_paths.contains(&PathBuf::from("404.html")));
+    assert_eq!(project.entry_page_rel, Some(PathBuf::from("index.html")));
 }
 
 #[test]
 fn duplicate_output_paths_are_rejected() {
     let builder = HtmlProjectBuilder::new();
-    let config = Config::new(PathBuf::from("docs"));
+    let config = Config::new(PathBuf::from("docs.bst"));
 
     let result = builder.build_backend(
         vec![
@@ -242,4 +255,108 @@ fn emits_runtime_slots_and_bootstrap_calls_start() {
     assert!(html.contains("<div id=\"bst-slot-0\"></div>"));
     assert!(html.contains("insertAdjacentHTML(\"beforeend\", fn());"));
     assert!(html.contains("if (typeof main === \"function\") main();"));
+}
+
+#[test]
+fn directory_build_maps_routes_relative_to_entry_root() {
+    let root = temp_dir("directory_routes");
+    fs::create_dir_all(root.join("src/about")).expect("should create about dir");
+    fs::create_dir_all(root.join("src/docs/basics")).expect("should create docs dir");
+    fs::create_dir_all(root.join("src/blog")).expect("should create blog dir");
+    let entry_root = fs::canonicalize(root.join("src")).expect("entry root should resolve");
+
+    let builder = HtmlProjectBuilder::new();
+    let mut config = Config::new(root.clone());
+    config.entry_root = PathBuf::from("src");
+
+    let project = builder
+        .build_backend(
+            vec![
+                create_test_module(entry_root.join("#page.bst")),
+                create_test_module(entry_root.join("about").join("#page.bst")),
+                create_test_module(entry_root.join("docs").join("basics").join("#page.bst")),
+                create_test_module(entry_root.join("blog").join("#404.bst")),
+            ],
+            &config,
+            &[],
+        )
+        .expect("directory build should succeed");
+
+    let output_paths = project
+        .output_files
+        .iter()
+        .map(|file| file.relative_output_path().to_path_buf())
+        .collect::<Vec<_>>();
+
+    assert!(output_paths.contains(&PathBuf::from("index.html")));
+    assert!(output_paths.contains(&PathBuf::from("about.html")));
+    assert!(output_paths.contains(&PathBuf::from("docs/basics.html")));
+    assert!(output_paths.contains(&PathBuf::from("blog/404.html")));
+    assert_eq!(project.entry_page_rel, Some(PathBuf::from("index.html")));
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
+fn directory_build_supports_custom_entry_root_names() {
+    let root = temp_dir("custom_entry_root");
+    fs::create_dir_all(root.join("pages/docs")).expect("should create pages dir");
+    let entry_root = fs::canonicalize(root.join("pages")).expect("entry root should resolve");
+
+    let builder = HtmlProjectBuilder::new();
+    let mut config = Config::new(root.clone());
+    config.entry_root = PathBuf::from("pages");
+
+    let project = builder
+        .build_backend(
+            vec![
+                create_test_module(entry_root.join("#page.bst")),
+                create_test_module(entry_root.join("docs").join("#page.bst")),
+            ],
+            &config,
+            &[],
+        )
+        .expect("directory build should succeed");
+
+    let output_paths = project
+        .output_files
+        .iter()
+        .map(|file| file.relative_output_path().to_path_buf())
+        .collect::<Vec<_>>();
+
+    assert!(output_paths.contains(&PathBuf::from("index.html")));
+    assert!(output_paths.contains(&PathBuf::from("docs.html")));
+    assert_eq!(project.entry_page_rel, Some(PathBuf::from("index.html")));
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
+fn directory_build_requires_homepage_at_entry_root() {
+    let root = temp_dir("missing_homepage");
+    fs::create_dir_all(root.join("src/about")).expect("should create about dir");
+    let entry_root = fs::canonicalize(root.join("src")).expect("entry root should resolve");
+
+    let builder = HtmlProjectBuilder::new();
+    let mut config = Config::new(root.clone());
+    config.entry_root = PathBuf::from("src");
+
+    let result = builder.build_backend(
+        vec![create_test_module(
+            entry_root.join("about").join("#page.bst"),
+        )],
+        &config,
+        &[],
+    );
+
+    assert!(result.is_err(), "missing homepage should fail");
+    let err = result.err().expect("expected missing homepage error");
+    assert!(
+        err.errors
+            .iter()
+            .any(|error| error.msg.contains("require a '#page.bst' homepage")),
+        "expected homepage error message"
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
 }

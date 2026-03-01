@@ -1,6 +1,7 @@
 -- This is a library of basic HTML components and styles
 Basic = |
     body String = [:<body>[..]</body>],
+    page String = [:<section>[..]</section>],
 
     -- Colors
     red String = [:<span style="color: red;">[..]</span>],

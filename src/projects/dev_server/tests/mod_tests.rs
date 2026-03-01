@@ -3,6 +3,7 @@
 use super::{DevServerOptions, validate_dev_entry_path};
 use std::fs;
 use std::path::PathBuf;
+use std::sync::{Mutex, MutexGuard, OnceLock};
 use std::time::SystemTime;
 
 fn temp_dir(prefix: &str) -> PathBuf {
@@ -11,6 +12,36 @@ fn temp_dir(prefix: &str) -> PathBuf {
         .expect("time should be after unix epoch")
         .as_nanos();
     std::env::temp_dir().join(format!("beanstalk_dev_server_mod_{prefix}_{unique}"))
+}
+
+struct CurrentDirGuard {
+    _lock: MutexGuard<'static, ()>,
+    previous: PathBuf,
+}
+
+impl CurrentDirGuard {
+    fn set_to(path: &PathBuf) -> Self {
+        let lock = current_dir_test_lock()
+            .lock()
+            .expect("current-dir test lock should not be poisoned");
+        let previous = std::env::current_dir().expect("current dir should resolve");
+        std::env::set_current_dir(path).expect("should change current directory for test");
+        Self {
+            _lock: lock,
+            previous,
+        }
+    }
+}
+
+impl Drop for CurrentDirGuard {
+    fn drop(&mut self) {
+        let _ = std::env::set_current_dir(&self.previous);
+    }
+}
+
+fn current_dir_test_lock() -> &'static Mutex<()> {
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| Mutex::new(()))
 }
 
 #[test]
@@ -39,16 +70,34 @@ fn entry_path_validation_accepts_bst_files() {
 }
 
 #[test]
-fn entry_path_validation_rejects_directories() {
+fn entry_path_validation_accepts_directories() {
     let root = temp_dir("entry_dir");
     fs::create_dir_all(&root).expect("should create temp root");
-    let error = validate_dev_entry_path(
+    let validated = validate_dev_entry_path(
         root.to_str()
             .expect("temp path should be valid utf-8 for this test"),
     )
-    .expect_err("directories should be rejected in phase 1");
+    .expect("directories should be accepted");
 
-    assert_eq!(error.errors.len(), 1);
-    assert!(error.errors[0].msg.contains("deferred"));
+    assert_eq!(
+        validated,
+        root.canonicalize().expect("temp dir should canonicalize")
+    );
+    fs::remove_dir_all(&root).expect("should clean up temp dir");
+}
+
+#[test]
+fn empty_entry_path_uses_current_directory() {
+    let root = temp_dir("current_dir");
+    fs::create_dir_all(&root).expect("should create temp root");
+    let _cwd_guard = CurrentDirGuard::set_to(&root);
+
+    let validated = validate_dev_entry_path("").expect("empty path should use current directory");
+
+    assert_eq!(
+        validated,
+        root.canonicalize().expect("temp dir should canonicalize")
+    );
+    drop(_cwd_guard);
     fs::remove_dir_all(&root).expect("should clean up temp dir");
 }

@@ -30,6 +30,43 @@ fn html_build_result() -> BuildResult {
                 PathBuf::from("index.html"),
                 FileKind::Html(String::from("<html><body>Hello</body></html>")),
             )],
+            entry_page_rel: Some(PathBuf::from("index.html")),
+            warnings: vec![],
+        },
+        config: Config::new(PathBuf::from("main.bst")),
+        warnings: vec![],
+    }
+}
+
+fn multi_page_html_build_result() -> BuildResult {
+    BuildResult {
+        project: Project {
+            output_files: vec![
+                OutputFile::new(
+                    PathBuf::from("index.html"),
+                    FileKind::Html(String::from("<html><body>Home</body></html>")),
+                ),
+                OutputFile::new(
+                    PathBuf::from("docs/basics.html"),
+                    FileKind::Html(String::from("<html><body>Docs</body></html>")),
+                ),
+            ],
+            entry_page_rel: Some(PathBuf::from("index.html")),
+            warnings: vec![],
+        },
+        config: Config::new(PathBuf::from("project")),
+        warnings: vec![],
+    }
+}
+
+fn html_build_result_without_entry_page() -> BuildResult {
+    BuildResult {
+        project: Project {
+            output_files: vec![OutputFile::new(
+                PathBuf::from("index.html"),
+                FileKind::Html(String::from("<html><body>Hello</body></html>")),
+            )],
+            entry_page_rel: None,
             warnings: vec![],
         },
         config: Config::new(PathBuf::from("main.bst")),
@@ -147,6 +184,54 @@ fn failed_build_marks_state_and_stores_error_page() {
         .expect("build state should not be poisoned");
     assert!(!build_state.last_build_ok);
     assert!(build_state.last_error_html.is_some());
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
+fn successful_multi_page_build_uses_declared_entry_page() {
+    let root = temp_dir("multi_page");
+    fs::create_dir_all(&root).expect("should create temp root");
+    let output_dir = root.join("dev");
+    let state = Arc::new(DevServerState::new(output_dir.clone()));
+    let mut executor = FakeExecutor::new(vec![Ok(multi_page_html_build_result())]);
+
+    let report = run_single_build_cycle(&state, &mut executor, &root, &Vec::new());
+    assert!(report.build_ok);
+
+    let build_state = state
+        .build_state
+        .lock()
+        .expect("build state should not be poisoned");
+    assert_eq!(
+        build_state.entry_page_rel,
+        Some(PathBuf::from("index.html"))
+    );
+    assert!(output_dir.join("docs/basics.html").exists());
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
+fn build_without_declared_entry_page_is_treated_as_failure() {
+    let root = temp_dir("missing_entry_page");
+    fs::create_dir_all(&root).expect("should create temp root");
+    let state = Arc::new(DevServerState::new(root.join("dev")));
+    let mut executor = FakeExecutor::new(vec![Ok(html_build_result_without_entry_page())]);
+
+    let report = run_single_build_cycle(&state, &mut executor, &root, &Vec::new());
+    assert!(!report.build_ok);
+
+    let build_state = state
+        .build_state
+        .lock()
+        .expect("build state should not be poisoned");
+    assert!(!build_state.last_build_ok);
+    assert!(
+        build_state
+            .last_build_messages_summary
+            .contains("did not declare a dev entry page")
+    );
 
     fs::remove_dir_all(&root).expect("should remove temp dir");
 }
