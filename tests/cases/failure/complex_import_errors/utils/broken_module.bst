@@ -1,5 +1,5 @@
 -- Broken module with syntax errors
-export broken_function |param| -> Void  -- Missing type
+export broken_function |param|:  -- Missing type
     ["This has syntax errors"]
 ;  -- Missing closing parenthesis
 

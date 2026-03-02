@@ -13,7 +13,7 @@ use crate::compiler_frontend::analysis::borrow_checker::types::{
 use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorLocation};
 use crate::compiler_frontend::hir::hir_nodes::{
     BlockId, HirExpression, HirExpressionKind, HirMatchArm, HirPattern, HirPlace, HirStatement,
-    HirStatementKind, HirTerminator, OptionVariant,
+    HirStatementKind, HirTerminator, OptionVariant, ValueKind,
 };
 use crate::return_borrow_checker_error;
 
@@ -391,7 +391,7 @@ fn transfer_assign_target(
     context: &BorrowTransferContext<'_>,
     layout: &FunctionLayout,
     state: &mut BorrowState,
-    block_id: BlockId,
+    _block_id: BlockId,
     target: &HirPlace,
     value: &HirExpression,
     tracker: &mut StatementAccessTracker,
@@ -424,41 +424,8 @@ fn transfer_assign_target(
             if local_state.mode.is_definitely_uninit() {
                 match rhs_alias_roots {
                     Some(rhs_roots) => {
-                        let move_decision =
-                            classify_move_decision(layout, block_id, &rhs_roots, current_line);
                         let target_is_mutable = layout.local_mutable[local_index];
-                        let source_has_mutable_root = rhs_roots
-                            .iter_ones()
-                            .any(|root_index| layout.local_mutable[root_index]);
-                        let effective_decision = if target_is_mutable {
-                            move_decision
-                        } else {
-                            match move_decision {
-                                MoveDecision::Move if source_has_mutable_root => MoveDecision::Move,
-                                _ => MoveDecision::Borrow,
-                            }
-                        };
-
-                        if let MoveDecision::Inconsistent(root_index) = effective_decision {
-                            let root_name =
-                                context.diagnostics.local_name(layout.local_ids[root_index]);
-                            return_borrow_checker_error!(
-                                format!(
-                                    "Inconsistent ownership outcome for '{}' across control-flow paths",
-                                    root_name
-                                ),
-                                location.clone(),
-                                {
-                                    CompilationStage => "Borrow Checking",
-                                    LifetimeHint => "This access may move on one path and borrow on another",
-                                    PrimarySuggestion => "Make later uses of this value consistent across all branches",
-                                }
-                            );
-                        }
-
-                        let requires_exclusive =
-                            target_is_mutable || matches!(effective_decision, MoveDecision::Move);
-                        if requires_exclusive && !rhs_roots.is_empty() {
+                        if target_is_mutable && !rhs_roots.is_empty() {
                             check_mutable_access(
                                 context,
                                 layout,
@@ -468,33 +435,19 @@ fn transfer_assign_target(
                                 Some(local_index),
                                 false,
                                 current_line,
-                                matches!(effective_decision, MoveDecision::Move)
-                                    && !target_is_mutable,
+                                false,
                                 tracker,
                                 location.clone(),
                                 stats,
                             )?;
                         }
 
-                        match effective_decision {
-                            MoveDecision::Move => {
-                                for root_index in rhs_roots.iter_ones() {
-                                    state.invalidate_root(root_index);
-                                }
-                                state.update_local_state(
-                                    local_index,
-                                    LocalState::slot(layout.local_count()),
-                                );
-                            }
-                            MoveDecision::Borrow | MoveDecision::Inconsistent(_) => {
-                                let direct_roots = rhs_direct_alias_roots
-                                    .unwrap_or_else(|| RootSet::empty(layout.local_count()));
-                                state.update_local_state(
-                                    local_index,
-                                    LocalState::alias_with_direct(rhs_roots, direct_roots),
-                                );
-                            }
-                        }
+                        let direct_roots = rhs_direct_alias_roots
+                            .unwrap_or_else(|| RootSet::empty(layout.local_count()));
+                        state.update_local_state(
+                            local_index,
+                            LocalState::alias_with_direct(rhs_roots, direct_roots),
+                        );
                     }
                     None => {
                         state.update_local_state(
@@ -1026,7 +979,21 @@ fn direct_place_roots_from_expression(
     expression: &HirExpression,
     location: ErrorLocation,
 ) -> Result<Option<RootSet>, CompilerError> {
-    if let HirExpressionKind::Load(place) = &expression.kind {
+    let HirExpressionKind::Load(place) = &expression.kind else {
+        return Ok(None);
+    };
+
+    if expression.value_kind == ValueKind::Place {
+        return Ok(Some(roots_for_place(layout, state, place, location)?));
+    }
+
+    if let HirPlace::Local(local_id) = place
+        && let Some(local_index) = layout.index_of(*local_id)
+        && state
+            .local_state(local_index)
+            .mode
+            .contains(LocalMode::ALIAS)
+    {
         return Ok(Some(roots_for_place(layout, state, place, location)?));
     }
 
@@ -1040,6 +1007,10 @@ fn direct_root_aliases_from_expression(
     rhs_roots: &RootSet,
 ) -> RootSet {
     let mut direct_roots = RootSet::empty(layout.local_count());
+
+    if expression.value_kind != ValueKind::Place {
+        return direct_roots;
+    }
 
     let HirExpressionKind::Load(place) = &expression.kind else {
         return direct_roots;
@@ -1203,6 +1174,39 @@ fn record_shared_reads_in_expression(
             )?;
         }
 
+        HirExpressionKind::Copy(place) => {
+            let value_location = context
+                .diagnostics
+                .value_error_location(expression.id, location.clone());
+            record_shared_reads_in_place_indices(
+                context,
+                layout,
+                state,
+                place,
+                tracker,
+                value_location.clone(),
+                stats,
+                value_fact_buffer,
+            )?;
+
+            let roots = roots_for_place(layout, state, place, value_location.clone())?;
+            let actor_index_hint = place_root_local_index(layout, place);
+            check_shared_access(
+                context,
+                layout,
+                state,
+                &roots,
+                actor_index_hint,
+                location.start_pos.line_number,
+                tracker,
+                value_location.clone(),
+                stats,
+            )?;
+
+            value_fact_buffer.record(expression.id, ValueAccessClassification::SharedRead, &roots);
+            return Ok(());
+        }
+
         HirExpressionKind::BinOp { left, right, .. } => {
             record_shared_reads_in_expression(
                 context,
@@ -1356,6 +1360,12 @@ fn collect_expression_roots(
             let roots = roots_for_place(layout, state, place, location.clone())?;
             out.union_with(&roots);
 
+            if let HirPlace::Index { index, .. } = place {
+                collect_expression_roots(layout, state, index, out, location)?;
+            }
+        }
+
+        HirExpressionKind::Copy(place) => {
             if let HirPlace::Index { index, .. } = place {
                 collect_expression_roots(layout, state, index, out, location)?;
             }

@@ -11,7 +11,7 @@ use crate::compiler_frontend::ast::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::ast::statements::branching::create_branch;
 use crate::compiler_frontend::ast::statements::declarations::new_declaration;
 use crate::compiler_frontend::ast::statements::functions::{
-    FunctionSignature, parse_function_call,
+    FunctionReturn, FunctionSignature, parse_function_call,
 };
 use crate::compiler_frontend::ast::statements::loops::create_loop;
 use crate::compiler_frontend::ast::templates::create_template_node::Template;
@@ -58,7 +58,7 @@ pub fn function_body_to_ast(
                                 &context,
                                 &FunctionSignature {
                                     parameters: vec![],
-                                    returns: vec![DataType::StringSlice],
+                                    returns: vec![FunctionReturn::Value(DataType::StringSlice)],
                                 },
                                 string_table,
                             )?);
@@ -314,7 +314,9 @@ pub fn function_body_to_ast(
             }
 
             TokenKind::Return => {
-                if context.returns.is_empty() && !matches!(context.kind, ContextKind::Function) {
+                if context.expected_result_types.is_empty()
+                    && !matches!(context.kind, ContextKind::Function)
+                {
                     return_rule_error!(
                         "Return statements can only be used inside functions",
                         token_stream

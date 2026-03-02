@@ -8,10 +8,17 @@ use crate::compiler_frontend::analysis::borrow_checker::tests::test_support::{
 };
 use crate::compiler_frontend::ast::ast_nodes::NodeKind;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
-use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
+use crate::compiler_frontend::ast::statements::functions::{FunctionReturn, FunctionSignature};
 use crate::compiler_frontend::compiler_errors::ErrorType;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::string_interning::StringTable;
+
+fn fresh_returns(result_types: Vec<DataType>) -> Vec<FunctionReturn> {
+    result_types
+        .into_iter()
+        .map(FunctionReturn::Value)
+        .collect()
+}
 
 #[test]
 fn user_function_returning_param_aliases_caller_root() {
@@ -28,7 +35,10 @@ fn user_function_returning_param_aliases_caller_root() {
         alias_fn.clone(),
         FunctionSignature {
             parameters: vec![param(p.clone(), DataType::Int, false, location(1))],
-            returns: vec![DataType::Int],
+            returns: vec![FunctionReturn::AliasCandidates {
+                parameter_indices: vec![0],
+                data_type: DataType::Int,
+            }],
         },
         vec![node(
             NodeKind::Return(vec![reference_expr(p, DataType::Int, location(2))]),
@@ -99,7 +109,7 @@ fn fresh_user_return_does_not_alias_caller_roots() {
         fresh_fn.clone(),
         FunctionSignature {
             parameters: vec![param(p, DataType::Int, false, location(1))],
-            returns: vec![DataType::Int],
+            returns: fresh_returns(vec![DataType::Int]),
         },
         vec![node(
             NodeKind::Return(vec![Expression::int(
@@ -158,7 +168,7 @@ fn fresh_user_return_does_not_alias_caller_roots() {
 }
 
 #[test]
-fn unknown_user_return_is_conservatively_aliased() {
+fn default_user_returning_param_is_fresh_by_default() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = entry_and_start(&mut string_table);
     let host_registry = default_host_registry(&mut string_table);
@@ -173,7 +183,7 @@ fn unknown_user_return_is_conservatively_aliased() {
         unknown_fn.clone(),
         FunctionSignature {
             parameters: vec![param(p.clone(), DataType::Int, false, location(1))],
-            returns: vec![DataType::Int],
+            returns: fresh_returns(vec![DataType::Int]),
         },
         vec![
             node(
@@ -232,10 +242,8 @@ fn unknown_user_return_is_conservatively_aliased() {
         build_ast(vec![callee, caller], entry_path),
         &mut string_table,
     );
-    let error = run_borrow_checker(&hir, &host_registry, &string_table)
-        .expect_err("unknown return alias should conservatively alias call args");
-    assert_eq!(error.error_type, ErrorType::BorrowChecker);
-    assert!(error.msg.contains("may alias"));
+    run_borrow_checker(&hir, &host_registry, &string_table)
+        .expect("default user returns should be fresh unless explicitly declared as aliasing");
 }
 
 #[test]
@@ -276,7 +284,7 @@ fn mutable_user_argument_is_accepted_without_false_shared_conflict() {
                 NodeKind::FunctionCall {
                     name: mut_sink,
                     args: vec![reference_expr(x, DataType::Int, location(11))],
-                    returns: vec![],
+                    result_types: vec![],
                     location: location(11),
                 },
                 location(11),
@@ -327,7 +335,7 @@ fn host_mutable_parameter_requires_mutable_access() {
                 NodeKind::HostFunctionCall {
                     name: host_fn,
                     args: vec![reference_expr(x, DataType::Int, location(2))],
-                    returns: vec![],
+                    result_types: vec![],
                     location: location(2),
                 },
                 location(2),
@@ -377,7 +385,7 @@ fn host_mutable_parameter_accepts_mutable_local_argument() {
                 NodeKind::HostFunctionCall {
                     name: host_fn,
                     args: vec![reference_expr(x, DataType::Int, location(2))],
-                    returns: vec![],
+                    result_types: vec![],
                     location: location(2),
                 },
                 location(2),
@@ -425,7 +433,7 @@ fn host_shared_parameter_is_shared_only() {
                 NodeKind::HostFunctionCall {
                     name: host_fn,
                     args: vec![reference_expr(x, DataType::Int, location(2))],
-                    returns: vec![],
+                    result_types: vec![],
                     location: location(2),
                 },
                 location(2),
@@ -484,7 +492,7 @@ fn two_mutable_args_to_same_root_are_rejected() {
                         reference_expr(x.clone(), DataType::Int, location(11)),
                         reference_expr(x, DataType::Int, location(11)),
                     ],
-                    returns: vec![],
+                    result_types: vec![],
                     location: location(11),
                 },
                 location(11),
@@ -548,7 +556,7 @@ fn shared_then_mutable_args_to_same_root_are_rejected() {
                         reference_expr(x.clone(), DataType::Int, location(11)),
                         reference_expr(x, DataType::Int, location(11)),
                     ],
-                    returns: vec![],
+                    result_types: vec![],
                     location: location(11),
                 },
                 location(11),
@@ -593,7 +601,7 @@ fn unresolved_or_mismatched_host_signature_errors() {
             NodeKind::HostFunctionCall {
                 name: missing_host,
                 args: vec![],
-                returns: vec![],
+                result_types: vec![],
                 location: location(1),
             },
             location(1),
@@ -611,7 +619,7 @@ fn unresolved_or_mismatched_host_signature_errors() {
             NodeKind::HostFunctionCall {
                 name: one_arg,
                 args: vec![],
-                returns: vec![],
+                result_types: vec![],
                 location: location(2),
             },
             location(2),

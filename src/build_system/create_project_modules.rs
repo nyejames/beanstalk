@@ -872,6 +872,14 @@ fn apply_config_constants_from_headers(
             ));
         };
 
+        if key == "src" {
+            return Err(CompilerError::new(
+                "Config key '#src' is deprecated. Use '#entry_root' instead.",
+                header.name_location.to_error_location(string_table),
+                ErrorType::Config,
+            ));
+        }
+
         apply_config_entry(config, &key, &value);
     }
 

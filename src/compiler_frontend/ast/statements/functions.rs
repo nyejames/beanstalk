@@ -3,7 +3,9 @@ use crate::compiler_frontend::ast::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::expressions::parse_expression::create_multiple_expressions;
-use crate::compiler_frontend::ast::statements::structs::parse_parameters;
+use crate::compiler_frontend::ast::statements::structs::{
+    SignatureTypeContext, parse_explicit_signature_type, parse_parameters,
+};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::interned_path::InternedPath;
@@ -13,17 +15,57 @@ use crate::{ast_log, return_syntax_error, return_type_error};
 
 // Arg names and types are required
 // Can have default values
+#[derive(Clone, Debug, PartialEq)]
+pub enum FunctionReturn {
+    Value(DataType),
+    AliasCandidates {
+        parameter_indices: Vec<usize>,
+        data_type: DataType,
+    },
+}
+
+impl FunctionReturn {
+    pub fn data_type(&self) -> &DataType {
+        match self {
+            FunctionReturn::Value(data_type) => data_type,
+            FunctionReturn::AliasCandidates { data_type, .. } => data_type,
+        }
+    }
+
+    pub fn alias_candidates(&self) -> Option<&[usize]> {
+        match self {
+            FunctionReturn::Value(_) => None,
+            FunctionReturn::AliasCandidates {
+                parameter_indices, ..
+            } => Some(parameter_indices.as_slice()),
+        }
+    }
+
+    pub fn is_alias(&self) -> bool {
+        matches!(self, FunctionReturn::AliasCandidates { .. })
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct FunctionSignature {
     pub parameters: Vec<Declaration>,
-    pub returns: Vec<DataType>,
+    pub returns: Vec<FunctionReturn>,
+}
+
+impl Default for FunctionSignature {
+    fn default() -> Self {
+        Self {
+            parameters: Vec::new(),
+            returns: Vec::new(),
+        }
+    }
 }
 
 impl FunctionSignature {
     pub fn new(
         token_stream: &mut FileTokens,
         string_table: &mut StringTable,
-        scope: &InternedPath,
+        _scope: &InternedPath,
     ) -> Result<Self, CompilerError> {
         // Should start at the Colon
         // Need to skip it,
@@ -61,159 +103,253 @@ impl FunctionSignature {
             }
         }
 
-        // Parse return types
-        let mut returns: Vec<DataType> = Vec::new();
-        let mut next_in_list: bool = true;
-        // let mut mutable: bool = false;
+        let returns = parse_return_list(token_stream, &parameters, string_table)?;
 
-        loop {
-            token_stream.advance();
+        Ok(FunctionSignature {
+            parameters,
+            returns,
+        })
+    }
 
-            match token_stream.current_token_kind() {
-                // TokenKind::Mutable => {
-                //     if !next_in_list {
-                //         return_syntax_error!(
-                //             "Should have a comma to separate return types",
-                //             token_stream.current_location().to_error_location(&string_table),
-                //             {
-                //                 CompilationStage => "Function Signature Parsing",
-                //                 PrimarySuggestion => "Add ',' between return types",
-                //                 SuggestedInsertion => ",",
-                //             }
-                //         )
-                //     }
-                //
-                //     mutable = true;
-                // }
-                TokenKind::DatatypeInt => {
-                    if !next_in_list {
-                        return_syntax_error!(
-                            "Should have a comma to separate return types",
-                            token_stream.current_location().to_error_location(string_table),
-                            {
-                                CompilationStage => "Function Signature Parsing",
-                                PrimarySuggestion => "Add ',' between return types",
-                                SuggestedInsertion => ",",
-                            }
-                        )
+    pub fn return_data_types(&self) -> Vec<DataType> {
+        self.returns
+            .iter()
+            .map(|return_value| return_value.data_type().clone())
+            .collect()
+    }
+}
+
+fn parse_return_list(
+    token_stream: &mut FileTokens,
+    parameters: &[Declaration],
+    string_table: &StringTable,
+) -> Result<Vec<FunctionReturn>, CompilerError> {
+    let mut returns = Vec::new();
+
+    token_stream.advance();
+    if token_stream.current_token_kind() == &TokenKind::Colon {
+        return_syntax_error!(
+            "Functions without return values must omit the return signature",
+            token_stream.current_location().to_error_location(string_table),
+            {
+                CompilationStage => "Function Signature Parsing",
+                PrimarySuggestion => "Remove '->' and end the function signature with ':'",
+            }
+        );
+    }
+
+    loop {
+        returns.push(parse_single_return_item(
+            token_stream,
+            parameters,
+            string_table,
+        )?);
+
+        match token_stream.current_token_kind() {
+            TokenKind::Comma => {
+                token_stream.advance();
+            }
+            TokenKind::Colon => {
+                token_stream.advance();
+                return Ok(returns);
+            }
+            TokenKind::Eof => {
+                return_syntax_error!(
+                    "Unexpected end of function signature while parsing return declarations",
+                    token_stream.current_location().to_error_location(string_table),
+                    {
+                        CompilationStage => "Function Signature Parsing",
+                        PrimarySuggestion => "Terminate the function signature with ':'",
                     }
-                    returns.push(DataType::Int);
-                }
-                TokenKind::DatatypeFloat => {
-                    if !next_in_list {
-                        return_syntax_error!(
-                            "Should have a comma to separate return types",
-                            token_stream.current_location().to_error_location(string_table),
-                            {
-                                CompilationStage => "Function Signature Parsing",
-                                PrimarySuggestion => "Add ',' between return types",
-                                SuggestedInsertion => ",",
-                            }
-                        )
+                )
+            }
+            other => {
+                return_syntax_error!(
+                    format!(
+                        "Expected ',' or ':' after function return declaration, found '{other:?}'",
+                    ),
+                    token_stream.current_location().to_error_location(string_table),
+                    {
+                        CompilationStage => "Function Signature Parsing",
+                        PrimarySuggestion => "Separate return declarations with ',' and end the signature with ':'",
                     }
-                    returns.push(DataType::Float);
-                }
-                TokenKind::DatatypeBool => {
-                    if !next_in_list {
-                        return_syntax_error!(
-                            "Should have a comma to separate return types",
-                            token_stream.current_location().to_error_location(&string_table),
-                            {
-                                CompilationStage => "Function Signature Parsing",
-                                PrimarySuggestion => "Add ',' between return types",
-                                SuggestedInsertion => ",",
-                            }
-                        )
-                    }
-                    returns.push(DataType::Bool);
-                }
-                TokenKind::DatatypeString => {
-                    if !next_in_list {
-                        return_syntax_error!(
-                            "Should have a comma to separate return types",
-                            token_stream.current_location().to_error_location(&string_table),
-                            {
-                                CompilationStage => "Function Signature Parsing",
-                                PrimarySuggestion => "Add ',' between return types",
-                                SuggestedInsertion => ",",
-                            }
-                        )
-                    }
-                    returns.push(DataType::StringSlice);
-                }
-
-                TokenKind::Symbol(name) => {
-                    if !next_in_list {
-                        return_syntax_error!(
-                            "Should have a comma to separate return types",
-                            token_stream.current_location().to_error_location(&string_table),
-                            {
-                                CompilationStage => "Function Signature Parsing",
-                                PrimarySuggestion => "Add ',' between return types",
-                                SuggestedInsertion => ",",
-                            }
-                        )
-                    }
-
-                    // TODO: This needs to be updated to resolve interned strings
-                    // when string table integration is complete
-                    // For now, we'll skip this symbol resolution
-                    //
-                    // Search through declarations for any data types
-                    // Also search through the function parameters,
-                    // as the function can return references to those parameters.
-                    // if let Some(possible_type) = context.get_reference(name) {
-                    //     // Make sure this is actually a struct (Args)
-                    //     if matches!(possible_type.value.data_type, DataType::Parameters(..)) {
-                    //         returns.push(possible_type.to_owned());
-                    //     }
-                    // } else if let Some(reference_return) = parameters.get_reference(name) {
-                    //     returns.push(reference_return.to_owned());
-                    // }
-                }
-
-                TokenKind::Colon => {
-                    token_stream.advance();
-                    return Ok(FunctionSignature {
-                        parameters,
-                        returns,
-                    });
-                }
-
-                TokenKind::Comma => {
-                    if next_in_list {
-                        return_syntax_error!(
-                            "Should not have a comma at the end of the return types",
-                            token_stream.current_location().to_error_location(&string_table),
-                            {
-                                CompilationStage => "Function Signature Parsing",
-                                PrimarySuggestion => "Remove the trailing comma or add another return type",
-                            }
-                        )
-                    }
-
-                    next_in_list = true;
-                }
-
-                _ => {
-                    return_syntax_error!(
-                        "Expected a type keyword after the arrow operator",
-                        token_stream.current_location().to_error_location(&string_table),
-                        {
-                            CompilationStage => "Function Signature Parsing",
-                            PrimarySuggestion => "Use a valid type (Int, String, Float, Bool) for the return type",
-                        }
-                    )
-                }
+                )
             }
         }
     }
+}
 
-    pub fn default() -> Self {
-        Self {
-            parameters: Vec::new(),
-            returns: Vec::new(),
+fn parse_single_return_item(
+    token_stream: &mut FileTokens,
+    parameters: &[Declaration],
+    string_table: &StringTable,
+) -> Result<FunctionReturn, CompilerError> {
+    let current_location = token_stream.current_location();
+    if let Some(symbol) = parameter_alias_symbol(token_stream.current_token_kind()) {
+        if parameters
+            .iter()
+            .any(|parameter| parameter.id.name() == Some(symbol))
+        {
+            return parse_alias_return_item(
+                token_stream,
+                parameters,
+                string_table,
+                current_location,
+            );
         }
+
+        let symbol_name = string_table.resolve(symbol);
+        if symbol_name == "Void" {
+            return_syntax_error!(
+                "Void is not a valid function return declaration",
+                current_location.to_error_location(string_table),
+                {
+                    CompilationStage => "Function Signature Parsing",
+                    PrimarySuggestion => "Functions without return values should omit '->' entirely",
+                }
+            );
+        }
+
+        return_syntax_error!(
+            format!(
+                "Unknown return declaration '{}'. Function returns must use a concrete supported type or a parameter alias.",
+                symbol_name
+            ),
+            current_location.to_error_location(string_table),
+            {
+                CompilationStage => "Function Signature Parsing",
+                PrimarySuggestion => "Use a supported return type such as Int or a parameter alias such as 'arg' or 'arg or other_arg'",
+            }
+        );
+    }
+
+    parse_value_return_type(token_stream, string_table)
+}
+
+fn parse_value_return_type(
+    token_stream: &mut FileTokens,
+    string_table: &StringTable,
+) -> Result<FunctionReturn, CompilerError> {
+    let data_type = parse_explicit_signature_type(
+        token_stream,
+        string_table,
+        Ownership::ImmutableOwned,
+        SignatureTypeContext::Return,
+    )?;
+
+    Ok(FunctionReturn::Value(data_type))
+}
+
+fn parse_alias_return_item(
+    token_stream: &mut FileTokens,
+    parameters: &[Declaration],
+    string_table: &StringTable,
+    current_location: TextLocation,
+) -> Result<FunctionReturn, CompilerError> {
+    let mut parameter_indices = Vec::new();
+    let mut alias_type: Option<DataType> = None;
+
+    loop {
+        let Some(current_symbol) = parameter_alias_symbol(token_stream.current_token_kind()) else {
+            return_syntax_error!(
+                "Expected a parameter name in an alias return declaration",
+                token_stream.current_location().to_error_location(string_table),
+                {
+                    CompilationStage => "Function Signature Parsing",
+                    PrimarySuggestion => "Write alias returns like 'arg' or 'arg or other_arg'",
+                }
+            );
+        };
+
+        let Some((param_index, param)) = parameters
+            .iter()
+            .enumerate()
+            .find(|(_, parameter)| parameter.id.name() == Some(current_symbol))
+        else {
+            return_syntax_error!(
+                format!(
+                    "Unknown return alias '{}'. Alias returns must name a function parameter.",
+                    string_table.resolve(current_symbol)
+                ),
+                current_location.to_error_location(string_table),
+                {
+                    CompilationStage => "Function Signature Parsing",
+                    PrimarySuggestion => "Use a parameter name in the return list or a concrete return type such as Int",
+                }
+            );
+        };
+
+        let param_type = param.value.data_type.clone();
+        if let Some(existing_type) = &alias_type {
+            if existing_type != &param_type {
+                return_type_error!(
+                    "All alias candidates in a single return slot must have the same type",
+                    current_location.to_error_location(string_table),
+                    {
+                        CompilationStage => "Function Signature Parsing",
+                        PrimarySuggestion => "Only combine parameters of the same type with 'or'",
+                    }
+                );
+            }
+        } else {
+            alias_type = Some(param_type);
+        }
+
+        if parameter_indices.contains(&param_index) {
+            return_syntax_error!(
+                "Duplicate parameter used in the same alias return declaration",
+                token_stream.current_location().to_error_location(string_table),
+                {
+                    CompilationStage => "Function Signature Parsing",
+                    PrimarySuggestion => "List each parameter at most once in an alias return declaration",
+                }
+            );
+        }
+
+        parameter_indices.push(param_index);
+        token_stream.advance();
+
+        match token_stream.current_token_kind() {
+            TokenKind::Or => {
+                token_stream.advance();
+                if parameter_alias_symbol(token_stream.current_token_kind()).is_none() {
+                    return_syntax_error!(
+                        "Expected a parameter name after 'or' in an alias return declaration",
+                        token_stream.current_location().to_error_location(string_table),
+                        {
+                            CompilationStage => "Function Signature Parsing",
+                            PrimarySuggestion => "Write alias returns like 'arg or other_arg'",
+                        }
+                    );
+                }
+            }
+            _ => break,
+        }
+    }
+
+    let Some(data_type) = alias_type else {
+        return_syntax_error!(
+            "Alias return declarations must include at least one parameter name",
+            current_location.to_error_location(string_table),
+            {
+                CompilationStage => "Function Signature Parsing",
+                PrimarySuggestion => "Write alias returns like 'arg' or 'arg or other_arg'",
+            }
+        );
+    };
+
+    Ok(FunctionReturn::AliasCandidates {
+        parameter_indices,
+        data_type,
+    })
+}
+
+fn parameter_alias_symbol(
+    token_kind: &TokenKind,
+) -> Option<crate::compiler_frontend::string_interning::StringId> {
+    match token_kind {
+        TokenKind::Symbol(symbol) => Some(*symbol),
+        _ => None,
     }
 }
 
@@ -348,7 +484,7 @@ pub fn parse_function_call(
         kind: NodeKind::FunctionCall {
             name: id.to_owned(),
             args,
-            returns: signature.returns.to_owned(),
+            result_types: signature.return_data_types(),
             location: token_stream.current_location(),
         },
         location: token_stream.current_location(),
@@ -532,7 +668,7 @@ pub fn parse_host_function_call(
         kind: NodeKind::HostFunctionCall {
             name,
             args,
-            returns: vec![host_func.return_type_to_datatype()],
+            result_types: params_as_args.return_data_types(),
             location: location.clone(),
         },
         location,

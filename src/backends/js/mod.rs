@@ -11,6 +11,7 @@ mod js_statement;
 #[cfg(test)]
 mod tests;
 
+use crate::compiler_frontend::analysis::borrow_checker::BorrowCheckReport;
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
 use crate::compiler_frontend::hir::hir_nodes::{
     BlockId, FieldId, FunctionId, HirBlock, HirModule, HirTerminator, LocalId,
@@ -43,15 +44,17 @@ pub struct JsModule {
 
 pub fn lower_hir_to_js(
     hir: &HirModule,
+    borrow_analysis: &BorrowCheckReport,
     string_table: &StringTable,
     config: JsLoweringConfig,
 ) -> Result<JsModule, CompilerError> {
-    let mut emitter = JsEmitter::new(hir, string_table, config);
+    let mut emitter = JsEmitter::new(hir, borrow_analysis, string_table, config);
     emitter.lower_module()
 }
 
 pub(crate) struct JsEmitter<'hir> {
     pub(crate) hir: &'hir HirModule,
+    pub(crate) borrow_analysis: &'hir BorrowCheckReport,
     pub(crate) string_table: &'hir StringTable,
     pub(crate) config: JsLoweringConfig,
 
@@ -72,6 +75,7 @@ pub(crate) struct JsEmitter<'hir> {
 impl<'hir> JsEmitter<'hir> {
     pub(crate) fn new(
         hir: &'hir HirModule,
+        borrow_analysis: &'hir BorrowCheckReport,
         string_table: &'hir StringTable,
         config: JsLoweringConfig,
     ) -> Self {
@@ -83,6 +87,7 @@ impl<'hir> JsEmitter<'hir> {
 
         Self {
             hir,
+            borrow_analysis,
             string_table,
             config,
             out: String::new(),
@@ -99,6 +104,7 @@ impl<'hir> JsEmitter<'hir> {
 
     fn lower_module(&mut self) -> Result<JsModule, CompilerError> {
         self.build_symbol_maps();
+        self.emit_runtime_prelude();
 
         let mut functions = self.hir.functions.iter().collect::<Vec<_>>();
         functions.sort_by_key(|function| function.id.0);
@@ -134,6 +140,159 @@ impl<'hir> JsEmitter<'hir> {
             source: self.out.clone(),
             function_name_by_id: self.function_name_by_id.clone(),
         })
+    }
+
+    fn emit_runtime_prelude(&mut self) {
+        self.emit_line("function __bs_is_ref(value) {");
+        self.with_indent(|emitter| {
+            emitter.emit_line(
+                "return value !== null && typeof value === \"object\" && value.__bs_ref === true;",
+            );
+        });
+        self.emit_line("}");
+        self.emit_line("");
+
+        self.emit_line("function __bs_binding(value) {");
+        self.with_indent(|emitter| {
+            emitter.emit_line(
+                "return { __bs_ref: true, __bs_kind: \"binding\", __bs_mode: \"slot\", __bs_slot: { value }, __bs_target: null };",
+            );
+        });
+        self.emit_line("}");
+        self.emit_line("");
+
+        self.emit_line("function __bs_param_binding(value) {");
+        self.with_indent(|emitter| {
+            emitter.emit_line("if (!__bs_is_ref(value)) {");
+            emitter.with_indent(|em| em.emit_line("return __bs_binding(value);"));
+            emitter.emit_line("}");
+            emitter.emit_line("if (value.__bs_kind === \"binding\") {");
+            emitter.with_indent(|em| em.emit_line("return value;"));
+            emitter.emit_line("}");
+            emitter.emit_line("const binding = __bs_binding(undefined);");
+            emitter.emit_line("binding.__bs_mode = \"alias\";");
+            emitter.emit_line("binding.__bs_target = value;");
+            emitter.emit_line("return binding;");
+        });
+        self.emit_line("}");
+        self.emit_line("");
+
+        self.emit_line("function __bs_resolve(ref) {");
+        self.with_indent(|emitter| {
+            emitter.emit_line(
+                "while (ref.__bs_kind === \"binding\" && ref.__bs_mode === \"alias\") {",
+            );
+            emitter.with_indent(|em| em.emit_line("ref = ref.__bs_target;"));
+            emitter.emit_line("}");
+            emitter.emit_line("return ref;");
+        });
+        self.emit_line("}");
+        self.emit_line("");
+
+        self.emit_line("function __bs_read(ref) {");
+        self.with_indent(|emitter| {
+            emitter.emit_line("const resolved = __bs_resolve(ref);");
+            emitter.emit_line(
+                "return resolved.__bs_kind === \"binding\" ? resolved.__bs_slot.value : resolved.__bs_get();",
+            );
+        });
+        self.emit_line("}");
+        self.emit_line("");
+
+        self.emit_line("function __bs_write(ref, value) {");
+        self.with_indent(|emitter| {
+            emitter.emit_line("const resolved = __bs_resolve(ref);");
+            emitter.emit_line("if (resolved.__bs_kind === \"binding\") {");
+            emitter.with_indent(|em| em.emit_line("resolved.__bs_slot.value = value;"));
+            emitter.emit_line("} else {");
+            emitter.with_indent(|em| em.emit_line("resolved.__bs_set(value);"));
+            emitter.emit_line("}");
+            emitter.emit_line("return value;");
+        });
+        self.emit_line("}");
+        self.emit_line("");
+
+        self.emit_line("function __bs_assign_borrow(binding, ref) {");
+        self.with_indent(|emitter| {
+            emitter.emit_line("if (binding.__bs_mode === \"alias\") {");
+            emitter.with_indent(|em| em.emit_line("return __bs_write(binding, __bs_read(ref));"));
+            emitter.emit_line("}");
+            emitter.emit_line("binding.__bs_mode = \"alias\";");
+            emitter.emit_line("binding.__bs_target = ref;");
+            emitter.emit_line("return binding;");
+        });
+        self.emit_line("}");
+        self.emit_line("");
+
+        self.emit_line("function __bs_assign_value(binding, value) {");
+        self.with_indent(|emitter| {
+            emitter.emit_line("if (binding.__bs_mode === \"alias\") {");
+            emitter.with_indent(|em| em.emit_line("return __bs_write(binding, value);"));
+            emitter.emit_line("}");
+            emitter.emit_line("binding.__bs_mode = \"slot\";");
+            emitter.emit_line("binding.__bs_target = null;");
+            emitter.emit_line("binding.__bs_slot.value = value;");
+            emitter.emit_line("return binding;");
+        });
+        self.emit_line("}");
+        self.emit_line("");
+
+        self.emit_line("function __bs_field(baseRef, field) {");
+        self.with_indent(|emitter| {
+            emitter.emit_line("return {");
+            emitter.with_indent(|em| {
+                em.emit_line("__bs_ref: true,");
+                em.emit_line("__bs_kind: \"computed\",");
+                em.emit_line("__bs_get() {");
+                em.with_indent(|inner| inner.emit_line("return __bs_read(baseRef)[field];"));
+                em.emit_line("},");
+                em.emit_line("__bs_set(value) {");
+                em.with_indent(|inner| inner.emit_line("__bs_read(baseRef)[field] = value;"));
+                em.emit_line("}");
+            });
+            emitter.emit_line("};");
+        });
+        self.emit_line("}");
+        self.emit_line("");
+
+        self.emit_line("function __bs_index(baseRef, index) {");
+        self.with_indent(|emitter| {
+            emitter.emit_line("return {");
+            emitter.with_indent(|em| {
+                em.emit_line("__bs_ref: true,");
+                em.emit_line("__bs_kind: \"computed\",");
+                em.emit_line("__bs_get() {");
+                em.with_indent(|inner| inner.emit_line("return __bs_read(baseRef)[index];"));
+                em.emit_line("},");
+                em.emit_line("__bs_set(value) {");
+                em.with_indent(|inner| inner.emit_line("__bs_read(baseRef)[index] = value;"));
+                em.emit_line("}");
+            });
+            emitter.emit_line("};");
+        });
+        self.emit_line("}");
+        self.emit_line("");
+
+        self.emit_line("function __bs_clone_value(value) {");
+        self.with_indent(|emitter| {
+            emitter.emit_line("if (Array.isArray(value)) {");
+            emitter.with_indent(|em| em.emit_line("return value.map(__bs_clone_value);"));
+            emitter.emit_line("}");
+            emitter.emit_line("if (value !== null && typeof value === \"object\") {");
+            emitter.with_indent(|em| {
+                em.emit_line("const result = {};");
+                em.emit_line("for (const key of Object.keys(value)) {");
+                em.with_indent(|inner| {
+                    inner.emit_line("result[key] = __bs_clone_value(value[key]);");
+                });
+                em.emit_line("}");
+                em.emit_line("return result;");
+            });
+            emitter.emit_line("}");
+            emitter.emit_line("return value;");
+        });
+        self.emit_line("}");
+        self.emit_line("");
     }
 
     fn build_symbol_maps(&mut self) {

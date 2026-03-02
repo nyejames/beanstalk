@@ -1,5 +1,7 @@
 use super::*;
 use crate::backends::function_registry::HostRegistry;
+use crate::compiler_frontend::ast::statements::functions::{FunctionReturn, FunctionSignature};
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::tokenizer::tokenizer::tokenize;
 use crate::compiler_frontend::tokenizer::tokens::TokenizeMode;
 use std::path::PathBuf;
@@ -56,6 +58,17 @@ fn parse_single_file_headers_with_entry(
         &entry_file_path,
         &mut string_table,
     )
+}
+
+fn first_function_signature(headers: &Headers) -> &FunctionSignature {
+    headers
+        .headers
+        .iter()
+        .find_map(|header| match &header.kind {
+            HeaderKind::Function { signature } => Some(signature),
+            _ => None,
+        })
+        .expect("expected function header")
 }
 
 #[test]
@@ -173,4 +186,86 @@ fn start_function_local_references_do_not_create_module_dependencies() {
         start_header.dependencies.is_empty(),
         "local start-function symbols must not be tracked as inter-header/module dependencies"
     );
+}
+
+#[test]
+fn function_without_arrow_has_zero_return_slots() {
+    let headers = parse_single_file_headers("#f||:\n;\n");
+    let signature = first_function_signature(&headers);
+
+    assert!(signature.returns.is_empty());
+}
+
+#[test]
+fn function_value_return_is_parsed_into_canonical_return_slots() {
+    let headers = parse_single_file_headers("#f|| -> Int:\n;\n");
+    let signature = first_function_signature(&headers);
+
+    assert_eq!(
+        &signature.returns,
+        &vec![FunctionReturn::Value(DataType::Int)]
+    );
+}
+
+#[test]
+fn function_alias_return_is_parsed_into_canonical_return_slots() {
+    let headers = parse_single_file_headers("#f|x Int| -> x:\n;\n");
+    let signature = first_function_signature(&headers);
+
+    assert_eq!(
+        &signature.returns,
+        &vec![FunctionReturn::AliasCandidates {
+            parameter_indices: vec![0],
+            data_type: DataType::Int,
+        }]
+    );
+}
+
+#[test]
+fn function_signature_rejects_void_return_syntax() {
+    let source = format!("#f|| {}{}:\n;\n", "-> ", "Void");
+    let result = parse_single_file_headers_with_entry(&source, "src/#page.bst", "src/#page.bst");
+    assert!(result.is_err(), "void return syntax must be rejected");
+    let errors = result.err().expect("expected parse errors");
+
+    assert!(errors.iter().any(|error| {
+        error
+            .msg
+            .contains("Void is not a valid function return declaration")
+            || error.msg.contains("omit '->' entirely")
+    }));
+}
+
+#[test]
+fn function_signature_rejects_none_return_syntax() {
+    let source = format!("#f|| {}{}:\n;\n", "-> ", "None");
+    let result = parse_single_file_headers_with_entry(&source, "src/#page.bst", "src/#page.bst");
+    assert!(result.is_err(), "none return syntax must be rejected");
+    let errors = result.err().expect("expected parse errors");
+
+    assert!(errors.iter().any(|error| {
+        error
+            .msg
+            .contains("None is not a valid function return type")
+    }));
+}
+
+#[test]
+fn function_signature_rejects_unknown_symbolic_return_syntax() {
+    let result = parse_single_file_headers_with_entry(
+        "#f|| -> MissingType:\n;\n",
+        "src/#page.bst",
+        "src/#page.bst",
+    );
+    assert!(
+        result.is_err(),
+        "unknown symbolic return declarations must be rejected"
+    );
+    let errors = result.err().expect("expected parse errors");
+
+    assert!(errors.iter().any(|error| {
+        error
+            .msg
+            .contains("Unknown return declaration 'MissingType'")
+    }));
 }

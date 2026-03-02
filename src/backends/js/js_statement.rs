@@ -1,9 +1,11 @@
 use crate::backends::function_registry::CallTarget;
 use crate::backends::js::JsEmitter;
 use crate::backends::js::js_host_functions::resolve_host_function_path;
+use crate::compiler_frontend::analysis::borrow_checker::LocalMode;
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
 use crate::compiler_frontend::hir::hir_nodes::{
-    BlockId, HirFunction, HirMatchArm, HirPattern, HirStatement, HirStatementKind, HirTerminator,
+    BlockId, HirExpression, HirExpressionKind, HirFunction, HirMatchArm, HirPattern, HirPlace,
+    HirStatement, HirStatementKind, HirTerminator, LocalId,
 };
 
 impl<'hir> JsEmitter<'hir> {
@@ -23,9 +25,7 @@ impl<'hir> JsEmitter<'hir> {
 
         match &statement.kind {
             HirStatementKind::Assign { target, value } => {
-                let target = self.lower_place(target)?;
-                let value = self.lower_expr(value)?;
-                self.emit_line(&format!("{} = {};", target, value));
+                self.emit_assignment(statement, target, value)?;
             }
 
             HirStatementKind::Call {
@@ -33,17 +33,21 @@ impl<'hir> JsEmitter<'hir> {
                 args,
                 result,
             } => {
-                let target = self.lower_call_target(target)?;
+                let target_name = self.lower_call_target(target)?;
                 let args = args
                     .iter()
-                    .map(|arg| self.lower_expr(arg))
+                    .map(|arg| self.lower_call_argument(arg))
                     .collect::<Result<Vec<_>, _>>()?;
 
-                let call = format!("{}({})", target, args.join(", "));
+                let call = format!("{}({})", target_name, args.join(", "));
 
                 if let Some(result_local) = result {
                     let result_name = self.local_name(*result_local)?;
-                    self.emit_line(&format!("{} = {};", result_name, call));
+                    if self.call_returns_alias_reference(target) {
+                        self.emit_line(&format!("__bs_assign_borrow({}, {});", result_name, call));
+                    } else {
+                        self.emit_line(&format!("__bs_assign_value({}, {});", result_name, call));
+                    }
                 } else {
                     self.emit_line(&format!("{};", call));
                 }
@@ -78,6 +82,113 @@ impl<'hir> JsEmitter<'hir> {
         }
     }
 
+    fn emit_assignment(
+        &mut self,
+        statement: &HirStatement,
+        target: &HirPlace,
+        value: &HirExpression,
+    ) -> Result<(), CompilerError> {
+        match target {
+            HirPlace::Local(local_id) => self.emit_local_assignment(statement, *local_id, value),
+            _ => {
+                let target_ref = self.lower_place(target)?;
+                let emitted_value = match &value.kind {
+                    HirExpressionKind::Load(place) => {
+                        format!("__bs_read({})", self.lower_place(place)?)
+                    }
+                    HirExpressionKind::Copy(place) => {
+                        format!("__bs_clone_value(__bs_read({}))", self.lower_place(place)?)
+                    }
+                    _ => self.lower_expr(value)?,
+                };
+                self.emit_line(&format!("__bs_write({}, {});", target_ref, emitted_value));
+
+                Ok(())
+            }
+        }
+    }
+
+    fn emit_local_assignment(
+        &mut self,
+        statement: &HirStatement,
+        local_id: LocalId,
+        value: &HirExpression,
+    ) -> Result<(), CompilerError> {
+        let local_name = self.local_name(local_id)?.to_owned();
+        let alias_only = self.local_is_alias_only_before_statement(statement, local_id);
+
+        match &value.kind {
+            HirExpressionKind::Load(place) => {
+                let source = self.lower_place(place)?;
+                if alias_only {
+                    self.emit_line(&format!(
+                        "__bs_write({}, __bs_read({}));",
+                        local_name, source
+                    ));
+                } else {
+                    self.emit_line(&format!("__bs_assign_borrow({}, {});", local_name, source));
+                }
+            }
+            HirExpressionKind::Copy(place) => {
+                let copied = format!("__bs_clone_value(__bs_read({}))", self.lower_place(place)?);
+                if alias_only {
+                    self.emit_line(&format!("__bs_write({}, {});", local_name, copied));
+                } else {
+                    self.emit_line(&format!("__bs_assign_value({}, {});", local_name, copied));
+                }
+            }
+            _ => {
+                let lowered = self.lower_expr(value)?;
+                if alias_only {
+                    self.emit_line(&format!("__bs_write({}, {});", local_name, lowered));
+                } else {
+                    self.emit_line(&format!("__bs_assign_value({}, {});", local_name, lowered));
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    fn local_is_alias_only_before_statement(
+        &self,
+        statement: &HirStatement,
+        local_id: LocalId,
+    ) -> bool {
+        let Some(snapshot) = self
+            .borrow_analysis
+            .analysis
+            .statement_entry_states
+            .get(&statement.id)
+        else {
+            return false;
+        };
+
+        let Some(local_snapshot) = snapshot.locals.iter().find(|local| local.local == local_id)
+        else {
+            return false;
+        };
+
+        local_snapshot.mode.contains(LocalMode::ALIAS)
+            && !local_snapshot.mode.contains(LocalMode::SLOT)
+    }
+
+    fn call_returns_alias_reference(&self, target: &CallTarget) -> bool {
+        let CallTarget::UserFunction(path) = target else {
+            return false;
+        };
+
+        self.hir.functions.iter().any(|function| {
+            self.hir
+                .side_table
+                .function_name_path(function.id)
+                .map(|candidate| candidate == path)
+                .unwrap_or(false)
+                && function.return_aliases.len() == 1
+                && function.return_aliases[0].is_some()
+        })
+    }
+
     pub(crate) fn emit_return_terminator(
         &mut self,
         expression: &crate::compiler_frontend::hir::hir_nodes::HirExpression,
@@ -87,7 +198,7 @@ impl<'hir> JsEmitter<'hir> {
             return Ok(());
         }
 
-        let value = self.lower_expr(expression)?;
+        let value = self.lower_return_value_expression(expression)?;
         self.emit_line(&format!("return {};", value));
         Ok(())
     }

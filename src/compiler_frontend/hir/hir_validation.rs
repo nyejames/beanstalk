@@ -574,6 +574,10 @@ impl<'a> HirValidator<'a> {
                 let _ = self.validate_place(place, anchor)?;
             }
 
+            HirExpressionKind::Copy(place) => {
+                let _ = self.validate_place(place, anchor)?;
+            }
+
             HirExpressionKind::BinOp { left, right, .. } => {
                 self.validate_expression(left, anchor)?;
                 self.validate_expression(right, anchor)?;

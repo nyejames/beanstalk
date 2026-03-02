@@ -112,7 +112,7 @@ fn build_single_file_project_includes_reachable_import_files() {
     .expect("should write main file");
     fs::write(
         root.join("utils/helper.bst"),
-        "#greet|| -> Void:\n    io(\"hello\")\n;\n",
+        "#greet||:\n    io(\"hello\")\n;\n",
     )
     .expect("should write helper file");
     let _cwd_guard = CurrentDirGuard::set_to(&root);

@@ -6,7 +6,7 @@ use crate::compiler_frontend::ast::ast_nodes::{
 };
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::statements::branching::MatchArm;
-use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
+use crate::compiler_frontend::ast::statements::functions::{FunctionReturn, FunctionSignature};
 use crate::compiler_frontend::ast::templates::create_template_node::Template;
 use crate::compiler_frontend::compiler_errors::{CompilerMessages, ErrorType};
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
@@ -64,6 +64,13 @@ fn function_node(
 
 fn symbol(name: &str, string_table: &mut StringTable) -> InternedPath {
     InternedPath::from_single_str(name, string_table)
+}
+
+fn fresh_returns(result_types: Vec<DataType>) -> Vec<FunctionReturn> {
+    result_types
+        .into_iter()
+        .map(FunctionReturn::Value)
+        .collect()
 }
 
 fn runtime_template_expression(location: TextLocation, content: Vec<Expression>) -> Expression {
@@ -360,7 +367,7 @@ fn lowers_ast_start_template_items_into_ordered_hir_fragments() {
         fragment_name.clone(),
         FunctionSignature {
             parameters: vec![],
-            returns: vec![DataType::StringSlice],
+            returns: fresh_returns(vec![DataType::StringSlice]),
         },
         vec![node(
             NodeKind::Return(vec![Expression::string_slice(
@@ -377,7 +384,7 @@ fn lowers_ast_start_template_items_into_ordered_hir_fragments() {
         start_name,
         FunctionSignature {
             parameters: vec![],
-            returns: vec![DataType::StringSlice],
+            returns: fresh_returns(vec![DataType::StringSlice]),
         },
         vec![node(
             NodeKind::Return(vec![Expression::string_slice(
@@ -438,7 +445,7 @@ fn allocates_parameter_locals_and_binds_names() {
         start_name,
         FunctionSignature {
             parameters: vec![param(x, DataType::Int, false, test_location(2))],
-            returns: vec![DataType::Int],
+            returns: fresh_returns(vec![DataType::Int]),
         },
         body,
         test_location(2),
@@ -507,7 +514,7 @@ fn start_function_with_no_template_declaration_returns_empty_string() {
         start_name,
         FunctionSignature {
             parameters: vec![],
-            returns: vec![DataType::StringSlice],
+            returns: fresh_returns(vec![DataType::StringSlice]),
         },
         vec![node(
             NodeKind::Return(vec![Expression::string_slice(
@@ -563,7 +570,7 @@ fn start_function_rejects_duplicate_top_level_template_symbol_declarations() {
         start_name,
         FunctionSignature {
             parameters: vec![],
-            returns: vec![DataType::StringSlice],
+            returns: fresh_returns(vec![DataType::StringSlice]),
         },
         vec![
             node(
@@ -607,7 +614,7 @@ fn top_level_template_declarations_require_unique_symbols() {
         start_name,
         FunctionSignature {
             parameters: vec![],
-            returns: vec![DataType::StringSlice],
+            returns: fresh_returns(vec![DataType::StringSlice]),
         },
         vec![
             node(
@@ -670,7 +677,7 @@ fn assignment_lowers_value_prelude_before_assign() {
         helper.clone(),
         FunctionSignature {
             parameters: vec![],
-            returns: vec![DataType::Int],
+            returns: fresh_returns(vec![DataType::Int]),
         },
         vec![node(
             NodeKind::Return(vec![Expression::int(
@@ -741,7 +748,7 @@ fn call_statements_emit_without_result_binding() {
         callee.clone(),
         FunctionSignature {
             parameters: vec![],
-            returns: vec![DataType::Int],
+            returns: fresh_returns(vec![DataType::Int]),
         },
         vec![node(
             NodeKind::Return(vec![Expression::int(
@@ -765,7 +772,7 @@ fn call_statements_emit_without_result_binding() {
                 NodeKind::FunctionCall {
                     name: callee,
                     args: vec![],
-                    returns: vec![DataType::Int],
+                    result_types: vec![DataType::Int],
                     location: test_location(2),
                 },
                 test_location(2),
@@ -778,7 +785,7 @@ fn call_statements_emit_without_result_binding() {
                         test_location(3),
                         Ownership::ImmutableOwned,
                     )],
-                    returns: vec![DataType::Int],
+                    result_types: vec![DataType::Int],
                     location: test_location(3),
                 },
                 test_location(3),
@@ -826,7 +833,7 @@ fn return_lowering_handles_zero_one_and_many_values() {
         one_name,
         FunctionSignature {
             parameters: vec![],
-            returns: vec![DataType::Int],
+            returns: fresh_returns(vec![DataType::Int]),
         },
         vec![node(
             NodeKind::Return(vec![Expression::int(
@@ -843,7 +850,7 @@ fn return_lowering_handles_zero_one_and_many_values() {
         many_name,
         FunctionSignature {
             parameters: vec![],
-            returns: vec![DataType::Int, DataType::Bool],
+            returns: fresh_returns(vec![DataType::Int, DataType::Bool]),
         },
         vec![node(
             NodeKind::Return(vec![
@@ -960,7 +967,7 @@ fn non_unit_function_with_terminal_if_does_not_report_fallthrough() {
         chooser,
         FunctionSignature {
             parameters: vec![],
-            returns: vec![DataType::Int],
+            returns: fresh_returns(vec![DataType::Int]),
         },
         vec![node(
             NodeKind::If(
@@ -1205,7 +1212,7 @@ fn non_unit_function_with_terminal_match_default_does_not_report_fallthrough() {
         chooser,
         FunctionSignature {
             parameters: vec![param(x.clone(), DataType::Int, false, test_location(10))],
-            returns: vec![DataType::Int],
+            returns: fresh_returns(vec![DataType::Int]),
         },
         vec![node(
             NodeKind::Match(
@@ -1717,7 +1724,7 @@ fn enforces_non_unit_fallthrough_and_unit_implicit_return() {
         non_unit_name,
         FunctionSignature {
             parameters: vec![],
-            returns: vec![DataType::Int],
+            returns: fresh_returns(vec![DataType::Int]),
         },
         vec![],
         test_location(2),

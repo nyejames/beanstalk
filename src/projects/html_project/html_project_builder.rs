@@ -6,6 +6,7 @@ use crate::backends::js::{JsLoweringConfig, lower_hir_to_js};
 use crate::build_system::build::{FileKind, Module, OutputFile, Project, ProjectBuilder};
 use crate::build_system::create_project_modules::resolve_project_entry_root;
 use crate::compiler_frontend::Flag;
+use crate::compiler_frontend::analysis::borrow_checker::BorrowCheckReport;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::hir::hir_nodes::{HirModule, StartFragment};
 use crate::compiler_frontend::string_interning::StringTable;
@@ -89,6 +90,7 @@ impl ProjectBuilder for HtmlProjectBuilder {
 
             match compile_html_module(
                 &module.hir,
+                &module.borrow_analysis,
                 &module.string_table,
                 output_path.clone(),
                 release_build,
@@ -155,6 +157,7 @@ impl ProjectBuilder for HtmlProjectBuilder {
 
 fn compile_html_module(
     hir_module: &HirModule,
+    borrow_analysis: &BorrowCheckReport,
     string_table: &StringTable,
     output_path: PathBuf,
     release_build: bool,
@@ -165,7 +168,12 @@ fn compile_html_module(
         auto_invoke_start: false,
     };
 
-    let js_module = lower_hir_to_js(hir_module, string_table, js_lowering_config)?;
+    let js_module = lower_hir_to_js(
+        hir_module,
+        borrow_analysis,
+        string_table,
+        js_lowering_config,
+    )?;
     let html = render_html_document(
         hir_module,
         &js_module.source,

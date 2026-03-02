@@ -7,7 +7,7 @@ use crate::compiler_frontend::ast::expressions::struct_instance::parse_struct_co
 use crate::compiler_frontend::ast::statements::collections::new_collection;
 use crate::compiler_frontend::ast::statements::declarations::create_reference;
 use crate::compiler_frontend::ast::statements::functions::{
-    FunctionSignature, parse_function_call,
+    FunctionReturn, FunctionSignature, parse_function_call,
 };
 use crate::compiler_frontend::ast::templates::create_template_node::Template;
 use crate::compiler_frontend::ast::templates::template::TemplateType;
@@ -30,7 +30,7 @@ pub fn create_multiple_expressions(
     string_table: &mut StringTable,
 ) -> Result<Vec<Expression>, CompilerError> {
     let mut expressions: Vec<Expression> = Vec::new();
-    for (type_index, expected_type) in context.returns.iter().enumerate() {
+    for (type_index, expected_type) in context.expected_result_types.iter().enumerate() {
         let mut expected_arg = expected_type.to_owned();
         let expression = create_expression(
             token_stream,
@@ -43,12 +43,12 @@ pub fn create_multiple_expressions(
 
         expressions.push(expression);
 
-        if type_index + 1 < context.returns.len() {
+        if type_index + 1 < context.expected_result_types.len() {
             if token_stream.current_token_kind() != &TokenKind::Comma {
                 return_type_error!(
                     format!(
                         "Too few arguments provided. Expected: {}. Provided: {}.",
-                        context.returns.len(),
+                        context.expected_result_types.len(),
                         expressions.len()
                     ),
                     token_stream.current_location().to_error_location(&string_table),
@@ -67,7 +67,7 @@ pub fn create_multiple_expressions(
         return_type_error!(
             format!(
                 "Too many arguments provided. Expected: {}. Provided: {}.",
-                context.returns.len(),
+                context.expected_result_types.len(),
                 expressions.len() + 1
             ),
             token_stream.current_location().to_error_location(&string_table),
@@ -341,12 +341,12 @@ pub fn create_expression(
                             if let NodeKind::FunctionCall {
                                 name,
                                 args,
-                                returns,
+                                result_types,
                                 location,
                             } = function_call_node.kind
                             {
                                 let func_call_expr =
-                                    Expression::function_call(name, args, returns, location);
+                                    Expression::function_call(name, args, result_types, location);
 
                                 expression.push(AstNode {
                                     kind: NodeKind::Rvalue(func_call_expr),
@@ -397,7 +397,7 @@ pub fn create_expression(
                                 context,
                                 &FunctionSignature {
                                     parameters: vec![],
-                                    returns: vec![DataType::StringSlice],
+                                    returns: vec![FunctionReturn::Value(DataType::StringSlice)],
                                 },
                                 string_table,
                             )?;
@@ -405,13 +405,16 @@ pub fn create_expression(
                             if let NodeKind::FunctionCall {
                                 name,
                                 args,
-                                returns,
+                                result_types,
                                 location,
                             } = function_call_node.kind
                             {
                                 expression.push(AstNode {
                                     kind: NodeKind::Rvalue(Expression::function_call(
-                                        name, args, returns, location,
+                                        name,
+                                        args,
+                                        result_types,
+                                        location,
                                     )),
                                     location: function_call_node.location,
                                     scope: context.scope.clone(),
@@ -492,14 +495,14 @@ pub fn create_expression(
                     if let NodeKind::HostFunctionCall {
                         name: host_function_id,
                         args,
-                        returns,
+                        result_types,
                         location,
                     } = function_call_node.kind
                     {
                         let func_call_expr = Expression::host_function_call(
                             host_function_id,
                             args.to_owned(),
-                            signature.returns,
+                            result_types,
                             location,
                         );
 
@@ -657,6 +660,28 @@ pub fn create_expression(
                         );
                     }
                 }
+            }
+
+            TokenKind::Copy => {
+                let copy_location = token_stream.current_location();
+                token_stream.advance();
+
+                let copied_place =
+                    parse_copy_place_expression(token_stream, context, string_table)?;
+                let copied_type = copied_place.get_expr()?.data_type;
+
+                expression.push(AstNode {
+                    kind: NodeKind::Rvalue(Expression::copy(
+                        copied_place,
+                        copied_type,
+                        copy_location.clone(),
+                        ownership.to_owned(),
+                    )),
+                    location: copy_location,
+                    scope: context.scope.clone(),
+                });
+
+                continue;
             }
 
             TokenKind::Hash => {
@@ -891,6 +916,79 @@ pub fn create_expression(
         ownership,
         string_table,
     )
+}
+
+fn parse_copy_place_expression(
+    token_stream: &mut FileTokens,
+    context: &ScopeContext,
+    string_table: &mut StringTable,
+) -> Result<AstNode, CompilerError> {
+    match token_stream.current_token_kind() {
+        TokenKind::OpenParenthesis => {
+            let open_location = token_stream.current_location();
+            token_stream.advance();
+
+            let place = parse_copy_place_expression(token_stream, context, string_table)?;
+            if token_stream.current_token_kind() != &TokenKind::CloseParenthesis {
+                return_syntax_error!(
+                    "Expected ')' after copy operand",
+                    token_stream.current_location().to_error_location(string_table),
+                    {
+                        CompilationStage => "Expression Parsing",
+                        PrimarySuggestion => "Wrap only a single place expression in parentheses after 'copy'",
+                    }
+                );
+            }
+
+            token_stream.advance();
+            Ok(AstNode {
+                location: open_location,
+                ..place
+            })
+        }
+
+        TokenKind::Symbol(symbol) => {
+            let Some(reference_arg) = context.get_reference(symbol) else {
+                return_rule_error!(
+                    format!(
+                        "Undefined variable '{}'. Explicit copies require a declared place.",
+                        string_table.resolve(*symbol)
+                    ),
+                    token_stream.current_location().to_error_location(string_table),
+                    {
+                        CompilationStage => "Expression Parsing",
+                        PrimarySuggestion => "Declare the variable before using 'copy'",
+                    }
+                );
+            };
+
+            match &reference_arg.value.data_type {
+                DataType::Function(_, _) => {
+                    return_rule_error!(
+                        "The 'copy' keyword only accepts places, not function values or calls",
+                        token_stream.current_location().to_error_location(string_table),
+                        {
+                            CompilationStage => "Expression Parsing",
+                            PrimarySuggestion => "Copy a variable or field, not a function symbol",
+                        }
+                    );
+                }
+
+                _ => create_reference(token_stream, reference_arg, context, string_table),
+            }
+        }
+
+        _ => {
+            return_syntax_error!(
+                "The 'copy' keyword only accepts a place expression",
+                token_stream.current_location().to_error_location(string_table),
+                {
+                    CompilationStage => "Expression Parsing",
+                    PrimarySuggestion => "Use 'copy' before a variable or field access such as 'copy value' or 'copy user.name'",
+                }
+            )
+        }
+    }
 }
 
 /// Parse an expression until one of the provided stop tokens is reached.

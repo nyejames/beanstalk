@@ -10,7 +10,7 @@ mod transfer;
 mod types;
 
 #[allow(unused_imports)]
-pub(crate) use types::{BorrowAnalysis, BorrowCheckReport, BorrowCheckStats};
+pub(crate) use types::{BorrowAnalysis, BorrowCheckReport, BorrowCheckStats, LocalMode};
 
 use crate::backends::function_registry::HostRegistry;
 use crate::borrow_log;
@@ -186,9 +186,23 @@ impl<'a> BorrowChecker<'a> {
     }
 
     fn build_function_return_alias_summaries(&mut self) -> Result<(), CompilerError> {
-        // Conservative callee summaries are computed once and reused at each call site.
+        // Callee summaries are declared at the signature level and reused at each call site.
         for function in &self.module.functions {
-            let summary = self.classify_function_return_alias(function)?;
+            let mut alias_indices = function
+                .return_aliases
+                .iter()
+                .filter_map(|candidates| candidates.as_ref())
+                .flatten()
+                .copied()
+                .collect::<Vec<_>>();
+            alias_indices.sort_unstable();
+            alias_indices.dedup();
+
+            let summary = if alias_indices.is_empty() {
+                FunctionReturnAliasSummary::Fresh
+            } else {
+                FunctionReturnAliasSummary::AliasParams(alias_indices)
+            };
             self.function_return_alias.insert(function.id, summary);
         }
 
@@ -451,6 +465,12 @@ impl<'a> BorrowChecker<'a> {
             self.merge_block_stats(&mut report.stats, &block_stats);
             summary.mutable_call_sites += block_stats.mutable_call_sites;
 
+            for (statement_id, snapshot) in block_stats.statement_entry_states {
+                report
+                    .analysis
+                    .statement_entry_states
+                    .insert(statement_id, snapshot);
+            }
             for (statement_id, fact) in block_stats.statement_facts {
                 report.analysis.statement_facts.insert(statement_id, fact);
             }
@@ -1084,6 +1104,7 @@ fn collect_terminator_loaded_locals(terminator: &HirTerminator, visitor: &mut im
 fn collect_expression_loaded_locals(expression: &HirExpression, visitor: &mut impl FnMut(LocalId)) {
     match &expression.kind {
         HirExpressionKind::Load(place) => collect_place_loaded_locals(place, visitor),
+        HirExpressionKind::Copy(place) => collect_place_loaded_locals(place, visitor),
         HirExpressionKind::BinOp { left, right, .. } => {
             collect_expression_loaded_locals(left, visitor);
             collect_expression_loaded_locals(right, visitor);

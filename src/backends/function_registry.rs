@@ -1,6 +1,6 @@
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
-use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
+use crate::compiler_frontend::ast::statements::functions::{FunctionReturn, FunctionSignature};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::interned_path::InternedPath;
@@ -69,11 +69,10 @@ pub enum HostAccessKind {
     Mutable,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum HostReturnAlias {
     Fresh,
-    AliasAnyArg,
-    AliasMutableArgs,
+    AliasArgs(Vec<usize>),
 }
 
 // ======================================================
@@ -117,9 +116,19 @@ impl HostFunctionDef {
             })
             .collect();
 
-        let returns = match self.return_type {
-            HostAbiType::Void => vec![],
-            _ => vec![self.return_type_to_datatype()],
+        let returns = self
+            .return_type_to_datatype()
+            .into_iter()
+            .collect::<Vec<_>>();
+        let returns = match self.return_alias {
+            HostReturnAlias::Fresh => returns.iter().cloned().map(FunctionReturn::Value).collect(),
+            HostReturnAlias::AliasArgs(ref parameter_indices) if !returns.is_empty() => {
+                vec![FunctionReturn::AliasCandidates {
+                    parameter_indices: parameter_indices.clone(),
+                    data_type: returns[0].clone(),
+                }]
+            }
+            _ => Vec::new(),
         };
 
         FunctionSignature {
@@ -128,13 +137,13 @@ impl HostFunctionDef {
         }
     }
 
-    pub(crate) fn return_type_to_datatype(&self) -> DataType {
+    pub(crate) fn return_type_to_datatype(&self) -> Option<DataType> {
         match self.return_type {
-            HostAbiType::I32 => DataType::Int,
-            HostAbiType::F64 => DataType::Float,
-            HostAbiType::Utf8Str => DataType::StringSlice,
-            HostAbiType::OpaquePtr => DataType::Int,
-            HostAbiType::Void => DataType::None,
+            HostAbiType::I32 => Some(DataType::Int),
+            HostAbiType::F64 => Some(DataType::Float),
+            HostAbiType::Utf8Str => Some(DataType::StringSlice),
+            HostAbiType::OpaquePtr => Some(DataType::Int),
+            HostAbiType::Void => None,
         }
     }
 }

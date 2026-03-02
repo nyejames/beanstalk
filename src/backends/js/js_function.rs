@@ -36,6 +36,7 @@ impl<'hir> JsEmitter<'hir> {
 
         let reachable_blocks = self.collect_reachable_blocks(function.entry)?;
         self.emit_function_local_declarations(function, &reachable_blocks)?;
+        self.emit_parameter_binding_setup(function)?;
 
         let strategy = self.choose_control_flow_strategy(function, &reachable_blocks)?;
 
@@ -76,10 +77,29 @@ impl<'hir> JsEmitter<'hir> {
 
         for local_id in local_ids {
             let local_name = self.local_name(local_id)?;
-            self.emit_line(&format!("let {};", local_name));
+            self.emit_line(&format!("let {} = __bs_binding(undefined);", local_name));
         }
 
-        if !reachable_blocks.is_empty() {
+        if !reachable_blocks.is_empty() || !function.params.is_empty() {
+            self.emit_line("");
+        }
+
+        Ok(())
+    }
+
+    fn emit_parameter_binding_setup(
+        &mut self,
+        function: &HirFunction,
+    ) -> Result<(), CompilerError> {
+        for parameter_local in &function.params {
+            let parameter_name = self.local_name(*parameter_local)?;
+            self.emit_line(&format!(
+                "{} = __bs_param_binding({});",
+                parameter_name, parameter_name
+            ));
+        }
+
+        if !function.params.is_empty() {
             self.emit_line("");
         }
 

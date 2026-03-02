@@ -146,6 +146,23 @@ impl<'a> HirBuilder<'a> {
                 self.lower_reference_expression(name, &expr.data_type, &expr.location)
             }
 
+            ExpressionKind::Copy(place) => {
+                let region = self.current_region_or_error(&expr.location)?;
+                let (prelude, place) = self.lower_ast_node_to_place(place)?;
+                let ty = self.lower_data_type(&expr.data_type, &expr.location)?;
+
+                Ok(LoweredExpression {
+                    prelude,
+                    value: self.make_expression(
+                        &expr.location,
+                        HirExpressionKind::Copy(place),
+                        ty,
+                        ValueKind::RValue,
+                        region,
+                    ),
+                })
+            }
+
             ExpressionKind::Runtime(nodes) => {
                 self.lower_runtime_rpn_expression(nodes, &expr.location, &expr.data_type)
             }
@@ -353,6 +370,7 @@ impl<'a> HirBuilder<'a> {
             entry: entry_block_id,
             params: vec![],
             return_type: string_ty,
+            return_aliases: vec![None],
         };
 
         self.functions_by_name
@@ -541,13 +559,13 @@ impl<'a> HirBuilder<'a> {
                 NodeKind::FunctionCall {
                     name,
                     args,
-                    returns,
+                    result_types,
                     location,
                 } => {
                     let lowered = self.lower_call_expression(
                         CallTarget::UserFunction(name.clone()),
                         args,
-                        returns,
+                        result_types,
                         location,
                     )?;
                     prelude.extend(lowered.prelude);
@@ -558,13 +576,13 @@ impl<'a> HirBuilder<'a> {
                 NodeKind::HostFunctionCall {
                     name: host_function_id,
                     args,
-                    returns,
+                    result_types,
                     location,
                 } => {
                     let lowered = self.lower_call_expression(
                         CallTarget::HostFunction(host_function_id.clone()),
                         args,
-                        returns,
+                        result_types,
                         location,
                     )?;
                     prelude.extend(lowered.prelude);
@@ -710,24 +728,24 @@ impl<'a> HirBuilder<'a> {
             NodeKind::FunctionCall {
                 name,
                 args,
-                returns,
+                result_types,
                 location,
             } => self.lower_call_expression(
                 CallTarget::UserFunction(name.clone()),
                 args,
-                returns,
+                result_types,
                 location,
             ),
 
             NodeKind::HostFunctionCall {
                 name: host_function_id,
                 args,
-                returns,
+                result_types,
                 location,
             } => self.lower_call_expression(
                 CallTarget::HostFunction(host_function_id.clone()),
                 args,
-                returns,
+                result_types,
                 location,
             ),
 
@@ -783,13 +801,13 @@ impl<'a> HirBuilder<'a> {
             NodeKind::FunctionCall {
                 name,
                 args,
-                returns,
+                result_types,
                 location,
             } => {
                 let lowered = self.lower_call_expression(
                     CallTarget::UserFunction(name.clone()),
                     args,
-                    returns,
+                    result_types,
                     location,
                 )?;
                 let place = self.place_from_expression(&lowered.value, &node.location)?;
@@ -799,13 +817,13 @@ impl<'a> HirBuilder<'a> {
             NodeKind::HostFunctionCall {
                 name: host_function_id,
                 args,
-                returns,
+                result_types,
                 location,
             } => {
                 let lowered = self.lower_call_expression(
                     CallTarget::HostFunction(host_function_id.clone()),
                     args,
-                    returns,
+                    result_types,
                     location,
                 )?;
                 let place = self.place_from_expression(&lowered.value, &node.location)?;
@@ -842,7 +860,7 @@ impl<'a> HirBuilder<'a> {
         &mut self,
         target: CallTarget,
         args: &[Expression],
-        returns: &[DataType],
+        result_types: &[DataType],
         location: &TextLocation,
     ) -> Result<LoweredExpression, CompilerError> {
         if let CallTarget::UserFunction(name) = &target {
@@ -858,8 +876,7 @@ impl<'a> HirBuilder<'a> {
             lowered_args.push(lowered.value);
         }
 
-        let no_return =
-            returns.is_empty() || (returns.len() == 1 && matches!(returns[0], DataType::None));
+        let no_return = result_types.is_empty();
         let statement_id = self.allocate_node_id();
         let region = self.current_region_or_error(location)?;
 
@@ -882,10 +899,10 @@ impl<'a> HirBuilder<'a> {
             return Ok(LoweredExpression { prelude, value });
         }
 
-        let call_result_type = if returns.len() == 1 {
-            self.lower_data_type(&returns[0], location)?
+        let call_result_type = if result_types.len() == 1 {
+            self.lower_data_type(&result_types[0], location)?
         } else {
-            let field_types = returns
+            let field_types = result_types
                 .iter()
                 .map(|ret| self.lower_data_type(ret, location))
                 .collect::<Result<Vec<_>, _>>()?;
@@ -913,7 +930,7 @@ impl<'a> HirBuilder<'a> {
             location,
             HirExpressionKind::Load(HirPlace::Local(temp_local)),
             call_result_type,
-            ValueKind::Place,
+            ValueKind::RValue,
             region,
         );
 
@@ -983,7 +1000,7 @@ impl<'a> HirBuilder<'a> {
                 let returns = signature
                     .returns
                     .iter()
-                    .map(|ret| self.lower_data_type(ret, location))
+                    .map(|ret| self.lower_data_type(ret.data_type(), location))
                     .collect::<Result<Vec<_>, _>>()?;
 
                 HirTypeKind::Function {

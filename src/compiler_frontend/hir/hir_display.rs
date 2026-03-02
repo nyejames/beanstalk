@@ -836,6 +836,7 @@ impl<'a> HirDisplayContext<'a> {
                 format!("\"{}\"", value.escape_debug())
             }
             HirExpressionKind::Load(place) => self.render_place(place),
+            HirExpressionKind::Copy(place) => format!("copy {}", self.render_place(place)),
             HirExpressionKind::BinOp { left, op, right } => format!(
                 "({} {} {})",
                 self.render_expression(left),

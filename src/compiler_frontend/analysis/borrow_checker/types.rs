@@ -14,6 +14,7 @@ pub(crate) struct BorrowAnalysis {
     pub function_summaries: FxHashMap<FunctionId, FunctionBorrowSummary>,
     pub block_entry_states: FxHashMap<BlockId, BorrowStateSnapshot>,
     pub block_exit_states: FxHashMap<BlockId, BorrowStateSnapshot>,
+    pub statement_entry_states: FxHashMap<HirNodeId, BorrowStateSnapshot>,
     pub statement_facts: FxHashMap<HirNodeId, StatementBorrowFact>,
     pub terminator_facts: FxHashMap<BlockId, TerminatorBorrowFact>,
     pub value_facts: FxHashMap<HirValueId, ValueBorrowFact>,
@@ -21,7 +22,9 @@ pub(crate) struct BorrowAnalysis {
 
 impl BorrowAnalysis {
     pub(crate) fn total_state_snapshots(&self) -> usize {
-        self.block_entry_states.len() + self.block_exit_states.len()
+        self.block_entry_states.len()
+            + self.block_exit_states.len()
+            + self.statement_entry_states.len()
     }
 
     pub(crate) fn statement_fact(&self, id: HirNodeId) -> Option<&StatementBorrowFact> {

@@ -5,7 +5,7 @@ use crate::compiler_frontend::ast::function_body_to_ast::function_body_to_ast;
 use crate::compiler_frontend::ast::import_bindings::{
     parse_constant_header_declaration, resolve_file_import_bindings,
 };
-use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
+use crate::compiler_frontend::ast::statements::functions::{FunctionReturn, FunctionSignature};
 use crate::compiler_frontend::ast::statements::structs::create_struct_definition;
 use crate::compiler_frontend::ast::templates::create_template_node::Template;
 use crate::compiler_frontend::ast::templates::template::TemplateType;
@@ -152,7 +152,7 @@ impl Ast {
                                 Box::new(None),
                                 FunctionSignature {
                                     parameters: vec![],
-                                    returns: vec![DataType::StringSlice],
+                                    returns: vec![FunctionReturn::Value(DataType::StringSlice)],
                                 },
                             ),
                             Ownership::ImmutableReference,
@@ -258,7 +258,7 @@ impl Ast {
                         header.tokens.src_path.to_owned(),
                         &function_declarations,
                         host_registry.clone(),
-                        signature.returns.clone(),
+                        signature.return_data_types(),
                     )
                     .with_visible_declarations(visible_declarations)
                     .with_start_import_aliases(bindings.start_aliases.to_owned());
@@ -341,7 +341,7 @@ impl Ast {
 
                     let main_signature = FunctionSignature {
                         parameters: vec![],
-                        returns: vec![DataType::StringSlice],
+                        returns: vec![FunctionReturn::Value(DataType::StringSlice)],
                     };
 
                     ast.push(AstNode {
@@ -469,7 +469,7 @@ pub struct ScopeContext {
     pub visible_declaration_ids: Option<FxHashSet<InternedPath>>,
     // Bare file imports (`@(path/to/file)`) bind alias -> imported file start function path.
     pub start_import_aliases: FxHashMap<StringId, InternedPath>,
-    pub returns: Vec<DataType>,
+    pub expected_result_types: Vec<DataType>,
     pub host_registry: HostRegistry,
     pub loop_depth: usize,
 }
@@ -502,7 +502,7 @@ impl ScopeContext {
         scope: InternedPath,
         declarations: &[Declaration],
         host_registry: HostRegistry,
-        returns: Vec<DataType>,
+        expected_result_types: Vec<DataType>,
     ) -> ScopeContext {
         ScopeContext {
             kind,
@@ -510,7 +510,7 @@ impl ScopeContext {
             declarations: declarations.to_owned(),
             visible_declaration_ids: None,
             start_import_aliases: FxHashMap::default(),
-            returns,
+            expected_result_types,
             host_registry,
             loop_depth: 0,
         }
@@ -543,7 +543,7 @@ impl ScopeContext {
     ) -> ScopeContext {
         let mut new_context = self.to_owned();
         new_context.kind = ContextKind::Function;
-        new_context.returns = signature.returns.to_owned();
+        new_context.expected_result_types = signature.return_data_types();
 
         // Create a new scope path by joining the current scope with the function name
         new_context.scope = self.scope.append(id);
@@ -555,10 +555,10 @@ impl ScopeContext {
         new_context
     }
 
-    pub fn new_child_expression(&self, returns: Vec<DataType>) -> ScopeContext {
+    pub fn new_child_expression(&self, expected_result_types: Vec<DataType>) -> ScopeContext {
         let mut new_context = self.to_owned();
         new_context.kind = ContextKind::Expression;
-        new_context.returns = returns;
+        new_context.expected_result_types = expected_result_types;
         new_context
     }
 
@@ -570,7 +570,7 @@ impl ScopeContext {
             declarations: Vec::new(),
             visible_declaration_ids: None,
             start_import_aliases: FxHashMap::default(),
-            returns: Vec::new(),
+            expected_result_types: Vec::new(),
             host_registry: HostRegistry::default(),
             loop_depth: 0,
         }
@@ -622,7 +622,7 @@ macro_rules! new_template_context {
             declarations: $context.declarations.to_owned(),
             visible_declaration_ids: $context.visible_declaration_ids.clone(),
             start_import_aliases: $context.start_import_aliases.clone(),
-            returns: vec![],
+            expected_result_types: vec![],
             host_registry: $context.host_registry.clone(),
             loop_depth: $context.loop_depth,
         }
@@ -643,7 +643,7 @@ macro_rules! new_config_context {
             declarations: $args,
             visible_declaration_ids: None,
             start_import_aliases: rustc_hash::FxHashMap::default(),
-            returns: vec![],
+            expected_result_types: vec![],
             host_registry: $registry,
             loop_depth: 0,
         }
@@ -664,7 +664,7 @@ macro_rules! new_condition_context {
             declarations: $args,
             visible_declaration_ids: None,
             start_import_aliases: rustc_hash::FxHashMap::default(),
-            returns: vec![], //Empty because conditions are always booleans
+            expected_result_types: vec![], //Empty because conditions are always booleans
             host_registry: $registry,
             loop_depth: 0,
         }

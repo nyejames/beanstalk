@@ -302,7 +302,7 @@ impl DataType {
                 for return_type in &signature.returns {
                     returns_string.push_str(&format!(
                         "{}, ",
-                        return_type.display_with_table(string_table)
+                        return_type.data_type().display_with_table(string_table)
                     ));
                 }
                 format!("Function({} -> {})", arg_str, returns_string)
@@ -371,7 +371,7 @@ impl PartialEq for DataType {
                         .returns
                         .iter()
                         .zip(signature2.returns.iter())
-                        .all(|(return1, return2)| return1 == return2)
+                        .all(|(return1, return2)| return1.data_type() == return2.data_type())
             }
             (DataType::Choices(a), DataType::Choices(b)) => {
                 a.len() == b.len()
@@ -448,7 +448,7 @@ impl Display for DataType {
                     arg_str.push_str(&format!("{:?}: {}, ", arg.id, arg.value.data_type));
                 }
                 for return_type in &signature.returns {
-                    returns_string.push_str(&format!("{}, ", return_type.to_string()));
+                    returns_string.push_str(&format!("{}, ", return_type.data_type()));
                 }
 
                 write!(f, "Function({arg_str} -> {returns_string})")

@@ -175,6 +175,7 @@ fn lower_hir_smoke_test() {
         entry: BlockId(0),
         params: vec![],
         return_type: types.unit,
+        return_aliases: vec![],
     };
 
     let module = build_module(
@@ -188,6 +189,7 @@ fn lower_hir_smoke_test() {
 
     let output = lower_hir_to_js(
         &module,
+        &crate::compiler_frontend::analysis::borrow_checker::BorrowCheckReport::default(),
         &string_table,
         JsLoweringConfig {
             pretty: true,
@@ -277,6 +279,7 @@ fn emits_structured_if_without_dispatcher() {
         entry: BlockId(0),
         params: vec![],
         return_type: types.unit,
+        return_aliases: vec![],
     };
 
     let module = build_module(
@@ -290,6 +293,7 @@ fn emits_structured_if_without_dispatcher() {
 
     let output = lower_hir_to_js(
         &module,
+        &crate::compiler_frontend::analysis::borrow_checker::BorrowCheckReport::default(),
         &string_table,
         JsLoweringConfig {
             pretty: true,
@@ -363,6 +367,7 @@ fn falls_back_to_dispatcher_for_cfg_cycle() {
         entry: BlockId(0),
         params: vec![],
         return_type: types.unit,
+        return_aliases: vec![],
     };
 
     let module = build_module(
@@ -376,6 +381,7 @@ fn falls_back_to_dispatcher_for_cfg_cycle() {
 
     let output = lower_hir_to_js(
         &module,
+        &crate::compiler_frontend::analysis::borrow_checker::BorrowCheckReport::default(),
         &string_table,
         JsLoweringConfig {
             pretty: true,
@@ -443,6 +449,7 @@ fn lowers_break_and_continue_terminators_with_dispatcher() {
         entry: BlockId(0),
         params: vec![],
         return_type: types.unit,
+        return_aliases: vec![],
     };
 
     let module = build_module(
@@ -456,6 +463,7 @@ fn lowers_break_and_continue_terminators_with_dispatcher() {
 
     let output = lower_hir_to_js(
         &module,
+        &crate::compiler_frontend::analysis::borrow_checker::BorrowCheckReport::default(),
         &string_table,
         JsLoweringConfig {
             pretty: true,
@@ -500,6 +508,7 @@ fn lowers_host_io_call_to_console_log() {
         entry: BlockId(0),
         params: vec![],
         return_type: types.unit,
+        return_aliases: vec![],
     };
 
     let module = build_module(
@@ -513,6 +522,7 @@ fn lowers_host_io_call_to_console_log() {
 
     let output = lower_hir_to_js(
         &module,
+        &crate::compiler_frontend::analysis::borrow_checker::BorrowCheckReport::default(),
         &string_table,
         JsLoweringConfig {
             pretty: true,
@@ -543,6 +553,7 @@ fn auto_invokes_start_function_when_enabled() {
         entry: BlockId(0),
         params: vec![],
         return_type: types.unit,
+        return_aliases: vec![],
     };
 
     let module = build_module(
@@ -556,6 +567,7 @@ fn auto_invokes_start_function_when_enabled() {
 
     let output = lower_hir_to_js(
         &module,
+        &crate::compiler_frontend::analysis::borrow_checker::BorrowCheckReport::default(),
         &string_table,
         JsLoweringConfig {
             pretty: true,
@@ -598,12 +610,14 @@ fn exposes_function_name_map_for_runtime_fragments() {
             entry: BlockId(0),
             params: vec![],
             return_type: types.unit,
+            return_aliases: vec![],
         },
         HirFunction {
             id: FunctionId(1),
             entry: BlockId(1),
             params: vec![],
             return_type: types.unit,
+            return_aliases: vec![],
         },
     ];
     module.type_context = type_context;
@@ -619,6 +633,7 @@ fn exposes_function_name_map_for_runtime_fragments() {
 
     let output = lower_hir_to_js(
         &module,
+        &crate::compiler_frontend::analysis::borrow_checker::BorrowCheckReport::default(),
         &string_table,
         JsLoweringConfig {
             pretty: true,
@@ -675,6 +690,7 @@ fn returns_error_for_unsupported_option_construct() {
         entry: BlockId(0),
         params: vec![],
         return_type: types.unit,
+        return_aliases: vec![],
     };
 
     let module = build_module(
@@ -688,6 +704,7 @@ fn returns_error_for_unsupported_option_construct() {
 
     let error = lower_hir_to_js(
         &module,
+        &crate::compiler_frontend::analysis::borrow_checker::BorrowCheckReport::default(),
         &string_table,
         JsLoweringConfig {
             pretty: true,

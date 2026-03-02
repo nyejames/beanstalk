@@ -12,7 +12,8 @@ use crate::backends::function_registry::HostRegistry;
 use crate::compiler_frontend::analysis::borrow_checker::diagnostics::BorrowDiagnostics;
 use crate::compiler_frontend::analysis::borrow_checker::state::{BorrowState, FunctionLayout};
 use crate::compiler_frontend::analysis::borrow_checker::types::{
-    FunctionReturnAliasSummary, StatementBorrowFact, TerminatorBorrowFact, ValueBorrowFact,
+    BorrowStateSnapshot, FunctionReturnAliasSummary, StatementBorrowFact, TerminatorBorrowFact,
+    ValueBorrowFact,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::hir::hir_nodes::{BlockId, FunctionId, HirNodeId, HirValueId};
@@ -40,6 +41,7 @@ pub(super) struct BlockTransferStats {
     pub terminators_analyzed: usize,
     pub conflicts_checked: usize,
     pub mutable_call_sites: usize,
+    pub statement_entry_states: Vec<(HirNodeId, BorrowStateSnapshot)>,
     pub statement_facts: Vec<(HirNodeId, StatementBorrowFact)>,
     pub terminator_fact: Option<(BlockId, TerminatorBorrowFact)>,
     pub value_facts: Vec<(HirValueId, ValueBorrowFact)>,
@@ -59,6 +61,9 @@ pub(super) fn transfer_block(
     let mut value_fact_buffer = ValueFactBuffer::new(layout.local_count());
 
     for statement in &block.statements {
+        stats
+            .statement_entry_states
+            .push((statement.id, state.to_snapshot(&layout.local_ids)));
         transfer_statement(
             context,
             layout,

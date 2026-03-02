@@ -1,5 +1,5 @@
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration};
-use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
+use crate::compiler_frontend::ast::statements::functions::{FunctionReturn, FunctionSignature};
 use crate::compiler_frontend::ast::templates::create_template_node::Template;
 use crate::compiler_frontend::ast::templates::template::TemplateType;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
@@ -31,6 +31,7 @@ impl Expression {
             ExpressionKind::Bool(bool) => bool.to_string(),
             ExpressionKind::Char(char) => char.to_string(),
             ExpressionKind::Reference(interned_name) => interned_name.to_string(string_table),
+            ExpressionKind::Copy(..) => String::new(),
             ExpressionKind::Template(..) => String::new(),
             ExpressionKind::WrapperTemplate(string1, string2) => {
                 format!(
@@ -204,12 +205,15 @@ impl Expression {
     }
     pub fn function_without_args(
         body: Vec<AstNode>,
-        returns: Vec<DataType>,
+        result_types: Vec<DataType>,
         location: TextLocation,
     ) -> Self {
         let signature = FunctionSignature {
             parameters: vec![],
-            returns,
+            returns: result_types
+                .into_iter()
+                .map(FunctionReturn::Value)
+                .collect(),
         };
         Self {
             data_type: DataType::Inferred,
@@ -223,13 +227,13 @@ impl Expression {
     pub fn function_call(
         name: InternedPath,
         args: Vec<Expression>,
-        returns: Vec<DataType>,
+        result_types: Vec<DataType>,
         location: TextLocation,
     ) -> Self {
-        let return_type = if returns.len() == 1 {
-            returns[0].to_owned()
+        let return_type = if result_types.len() == 1 {
+            result_types[0].to_owned()
         } else {
-            DataType::Returns(returns)
+            DataType::Returns(result_types)
         };
 
         Self {
@@ -246,13 +250,13 @@ impl Expression {
     pub fn host_function_call(
         name: InternedPath,
         args: Vec<Expression>,
-        returns: Vec<DataType>,
+        result_types: Vec<DataType>,
         location: TextLocation,
     ) -> Self {
-        let return_type = if returns.len() == 1 {
-            returns[0].to_owned()
+        let return_type = if result_types.len() == 1 {
+            result_types[0].to_owned()
         } else {
-            DataType::Returns(returns)
+            DataType::Returns(result_types)
         };
 
         Self {
@@ -356,6 +360,20 @@ impl Expression {
         }
     }
 
+    pub fn copy(
+        place: AstNode,
+        data_type: DataType,
+        location: TextLocation,
+        ownership: Ownership,
+    ) -> Self {
+        Self {
+            data_type,
+            kind: ExpressionKind::Copy(Box::new(place)),
+            location,
+            ownership: ownership.get_owned(),
+        }
+    }
+
     pub fn is_none(&self) -> bool {
         matches!(self.kind, ExpressionKind::None)
     }
@@ -390,6 +408,7 @@ impl Expression {
             }
             ExpressionKind::WrapperTemplate(_, _) => true,
             ExpressionKind::Reference(_)
+            | ExpressionKind::Copy(_)
             | ExpressionKind::Runtime(_)
             | ExpressionKind::Function(..)
             | ExpressionKind::FunctionCall(..)
@@ -413,6 +432,9 @@ pub enum ExpressionKind {
 
     // Reference to a variable by name
     Reference(InternedPath),
+
+    // Explicitly materialize a fresh value from an aliasing place.
+    Copy(Box<AstNode>),
 
     // Because functions can all be values
     Function(

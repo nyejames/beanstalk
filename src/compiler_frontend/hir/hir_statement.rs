@@ -190,14 +190,14 @@ impl<'a> HirBuilder<'a> {
             NodeKind::FunctionCall {
                 name,
                 args,
-                returns: _,
+                result_types: _,
                 location,
             } => self.lower_call_statement(CallTarget::UserFunction(name.clone()), args, location),
 
             NodeKind::HostFunctionCall {
                 name: host_function_id,
                 args,
-                returns: _,
+                result_types: _,
                 location,
             } => self.lower_call_statement(
                 CallTarget::HostFunction(host_function_id.clone()),
@@ -368,7 +368,7 @@ impl<'a> HirBuilder<'a> {
 
         let function_id = self.allocate_function_id();
         let return_type = self.lower_data_type(
-            &crate::compiler_frontend::datatypes::DataType::Returns(signature.returns.clone()),
+            &crate::compiler_frontend::datatypes::DataType::Returns(signature.return_data_types()),
             location,
         )?;
 
@@ -392,6 +392,15 @@ impl<'a> HirBuilder<'a> {
             entry: entry_block_id,
             params: vec![],
             return_type,
+            return_aliases: signature
+                .returns
+                .iter()
+                .map(|return_value| {
+                    return_value
+                        .alias_candidates()
+                        .map(|indices| indices.to_vec())
+                })
+                .collect(),
         };
 
         self.functions_by_name.insert(name.clone(), function_id);
@@ -627,14 +636,48 @@ impl<'a> HirBuilder<'a> {
         values: &[Expression],
         location: &TextLocation,
     ) -> Result<(), CompilerError> {
+        let function_id = self.current_function_id_or_error(location)?;
+        let return_aliases = self
+            .function_by_id_or_error(function_id, location)?
+            .return_aliases
+            .clone();
         let mut lowered_values = Vec::with_capacity(values.len());
 
-        for value in values {
+        for (return_index, value) in values.iter().enumerate() {
             let lowered = self.lower_expression(value)?;
             for prelude in lowered.prelude {
                 self.emit_statement_to_current_block(prelude, location)?;
             }
-            lowered_values.push(lowered.value);
+
+            let should_alias = return_aliases
+                .get(return_index)
+                .and_then(|candidates| candidates.as_ref())
+                .is_some();
+
+            let lowered_value = if should_alias {
+                match lowered.value.kind {
+                    HirExpressionKind::Load(_) => lowered.value,
+                    _ => {
+                        return_hir_transformation_error!(
+                            "Explicit alias returns must return a place expression",
+                            self.hir_error_location(location)
+                        )
+                    }
+                }
+            } else {
+                match lowered.value.kind {
+                    HirExpressionKind::Load(place) => self.make_expression(
+                        location,
+                        HirExpressionKind::Copy(place),
+                        lowered.value.ty,
+                        ValueKind::RValue,
+                        lowered.value.region,
+                    ),
+                    _ => lowered.value,
+                }
+            };
+
+            lowered_values.push(lowered_value);
         }
 
         let return_value = self.expression_from_return_values(&lowered_values, location)?;

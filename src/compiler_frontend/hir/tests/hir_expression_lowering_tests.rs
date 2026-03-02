@@ -454,7 +454,7 @@ fn lowers_function_call_to_call_statement_and_temp_load() {
         HirExpressionKind::Load(crate::compiler_frontend::hir::hir_nodes::HirPlace::Local(local))
         if local == result_local
     ));
-    assert_eq!(lowered.value.value_kind, ValueKind::Place);
+    assert_eq!(lowered.value.value_kind, ValueKind::RValue);
 }
 
 #[test]

@@ -31,7 +31,13 @@ impl<'hir> JsEmitter<'hir> {
             HirExpressionKind::Char(value) => Ok(escape_js_char(*value)),
             HirExpressionKind::StringLiteral(value) => Ok(escape_js_string(value)),
 
-            HirExpressionKind::Load(place) => self.lower_place(place),
+            HirExpressionKind::Load(place) => {
+                Ok(format!("__bs_read({})", self.lower_place(place)?))
+            }
+            HirExpressionKind::Copy(place) => Ok(format!(
+                "__bs_clone_value(__bs_read({}))",
+                self.lower_place(place)?
+            )),
 
             HirExpressionKind::BinOp { left, op, right } => self.lower_bin_op(left, *op, right),
             HirExpressionKind::UnaryOp { op, operand } => self.lower_unary_op(*op, operand),
@@ -90,15 +96,50 @@ impl<'hir> JsEmitter<'hir> {
 
             HirPlace::Field { base, field } => {
                 let base = self.lower_place(base)?;
-                let field = self.field_name(*field)?;
-                Ok(format!("{}.{}", base, field))
+                let field = escape_js_string(self.field_name(*field)?);
+                Ok(format!("__bs_field({}, {})", base, field))
             }
 
             HirPlace::Index { base, index } => {
                 let base = self.lower_place(base)?;
                 let index = self.lower_expr(index)?;
-                Ok(format!("{}[{}]", base, index))
+                Ok(format!("__bs_index({}, {})", base, index))
             }
+        }
+    }
+
+    pub(crate) fn lower_return_value_expression(
+        &mut self,
+        expression: &HirExpression,
+    ) -> Result<String, CompilerError> {
+        match &expression.kind {
+            HirExpressionKind::Load(place) => self.lower_place(place),
+            HirExpressionKind::Copy(place) => Ok(format!(
+                "__bs_clone_value(__bs_read({}))",
+                self.lower_place(place)?
+            )),
+            HirExpressionKind::TupleConstruct { elements } => {
+                let lowered = elements
+                    .iter()
+                    .map(|element| self.lower_return_value_expression(element))
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok(format!("[{}]", lowered.join(", ")))
+            }
+            _ => self.lower_expr(expression),
+        }
+    }
+
+    pub(crate) fn lower_call_argument(
+        &mut self,
+        expression: &HirExpression,
+    ) -> Result<String, CompilerError> {
+        match &expression.kind {
+            HirExpressionKind::Load(place) => self.lower_place(place),
+            HirExpressionKind::Copy(place) => Ok(format!(
+                "__bs_binding(__bs_clone_value(__bs_read({})))",
+                self.lower_place(place)?
+            )),
+            _ => Ok(format!("__bs_binding({})", self.lower_expr(expression)?)),
         }
     }
 

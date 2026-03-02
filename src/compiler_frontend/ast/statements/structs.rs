@@ -10,6 +10,12 @@ use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::return_syntax_error;
 
+#[derive(Clone, Copy)]
+pub enum SignatureTypeContext {
+    Parameter,
+    Return,
+}
+
 // TODO: struct parsing needs to be separated into two phases:
 
 // 1. Parse the shape of the struct if there are references to other structs, put in symbol placeholders and list them in its dependencies.
@@ -158,6 +164,197 @@ pub fn parse_parameters(
     Ok(args)
 }
 
+pub fn parse_explicit_signature_type(
+    token_stream: &mut FileTokens,
+    string_table: &StringTable,
+    collection_ownership: Ownership,
+    context: SignatureTypeContext,
+) -> Result<DataType, CompilerError> {
+    match token_stream.current_token_kind() {
+        TokenKind::DatatypeInt => {
+            token_stream.advance();
+            Ok(DataType::Int)
+        }
+        TokenKind::DatatypeFloat => {
+            token_stream.advance();
+            Ok(DataType::Float)
+        }
+        TokenKind::DatatypeBool => {
+            token_stream.advance();
+            Ok(DataType::Bool)
+        }
+        TokenKind::DatatypeString => {
+            token_stream.advance();
+            Ok(DataType::StringSlice)
+        }
+        TokenKind::DatatypeNone => {
+            let (message, stage, suggestion) = match context {
+                SignatureTypeContext::Parameter => (
+                    "None is not a valid parameter type",
+                    "Parameter Type Parsing",
+                    "Use a concrete parameter type such as Int, String, Float, Bool, or a collection type",
+                ),
+                SignatureTypeContext::Return => (
+                    "None is not a valid function return type",
+                    "Function Signature Parsing",
+                    "Functions without return values should omit the return signature entirely",
+                ),
+            };
+
+            return_syntax_error!(
+                message,
+                token_stream.current_location().to_error_location(string_table),
+                {
+                    CompilationStage => stage,
+                    PrimarySuggestion => suggestion,
+                }
+            )
+        }
+        TokenKind::OpenCurly => {
+            let data_type = parse_collection_signature_type(
+                token_stream,
+                string_table,
+                collection_ownership,
+                context,
+            )?;
+            Ok(data_type)
+        }
+        _ => {
+            let (message, stage, suggestion) = match context {
+                SignatureTypeContext::Parameter => (
+                    "Expected a parameter type declaration",
+                    "Parameter Type Parsing",
+                    "Add a type declaration (Int, String, Float, Bool, or a collection type) after the parameter name",
+                ),
+                SignatureTypeContext::Return => (
+                    "Expected a concrete return type",
+                    "Function Signature Parsing",
+                    "Use a supported return type such as Int, String, Float, Bool, or a collection type",
+                ),
+            };
+
+            return_syntax_error!(
+                message,
+                token_stream.current_location().to_error_location(string_table),
+                {
+                    CompilationStage => stage,
+                    PrimarySuggestion => suggestion,
+                }
+            )
+        }
+    }
+}
+
+fn parse_collection_signature_type(
+    token_stream: &mut FileTokens,
+    string_table: &StringTable,
+    collection_ownership: Ownership,
+    context: SignatureTypeContext,
+) -> Result<DataType, CompilerError> {
+    token_stream.advance();
+
+    let inner_type = if token_stream.current_token_kind() == &TokenKind::CloseCurly {
+        DataType::Inferred
+    } else {
+        parse_collection_inner_signature_type(token_stream, string_table, context)?
+    };
+
+    if token_stream.current_token_kind() != &TokenKind::CloseCurly {
+        let stage = match context {
+            SignatureTypeContext::Parameter => "Parameter Type Parsing",
+            SignatureTypeContext::Return => "Function Signature Parsing",
+        };
+
+        return_syntax_error!(
+            "Missing closing curly brace for collection type declaration",
+            token_stream.current_location().to_error_location(string_table),
+            {
+                CompilationStage => stage,
+                PrimarySuggestion => "Add '}' to close the collection type declaration",
+                SuggestedInsertion => "}",
+            }
+        )
+    }
+
+    token_stream.advance();
+
+    Ok(DataType::Collection(
+        Box::new(inner_type),
+        collection_ownership,
+    ))
+}
+
+fn parse_collection_inner_signature_type(
+    token_stream: &mut FileTokens,
+    string_table: &StringTable,
+    context: SignatureTypeContext,
+) -> Result<DataType, CompilerError> {
+    match token_stream.current_token_kind() {
+        TokenKind::DatatypeInt => {
+            token_stream.advance();
+            Ok(DataType::Int)
+        }
+        TokenKind::DatatypeFloat => {
+            token_stream.advance();
+            Ok(DataType::Float)
+        }
+        TokenKind::DatatypeBool => {
+            token_stream.advance();
+            Ok(DataType::Bool)
+        }
+        TokenKind::DatatypeString => {
+            token_stream.advance();
+            Ok(DataType::StringSlice)
+        }
+        TokenKind::DatatypeNone => {
+            let (message, stage, suggestion) = match context {
+                SignatureTypeContext::Parameter => (
+                    "None is not a valid collection item type",
+                    "Parameter Type Parsing",
+                    "Use a concrete item type such as Int, String, Float, or Bool inside the collection type",
+                ),
+                SignatureTypeContext::Return => (
+                    "None is not a valid collection item type in a function return",
+                    "Function Signature Parsing",
+                    "Use a concrete item type inside the collection return type",
+                ),
+            };
+
+            return_syntax_error!(
+                message,
+                token_stream.current_location().to_error_location(string_table),
+                {
+                    CompilationStage => stage,
+                    PrimarySuggestion => suggestion,
+                }
+            )
+        }
+        _ => {
+            let (message, stage, suggestion) = match context {
+                SignatureTypeContext::Parameter => (
+                    "Expected a collection item type declaration",
+                    "Parameter Type Parsing",
+                    "Use a concrete item type such as Int, String, Float, or Bool inside the collection type",
+                ),
+                SignatureTypeContext::Return => (
+                    "Expected a collection item type in the function return",
+                    "Function Signature Parsing",
+                    "Use a concrete item type such as Int, String, Float, or Bool inside the collection return type",
+                ),
+            };
+
+            return_syntax_error!(
+                message,
+                token_stream.current_location().to_error_location(string_table),
+                {
+                    CompilationStage => stage,
+                    PrimarySuggestion => suggestion,
+                }
+            )
+        }
+    }
+}
+
 // The declaration syntax for parameters in function signatures or structs
 // Differences to regular Arg:
 // 1. They MUST have a type declaration
@@ -177,64 +374,19 @@ pub fn new_parameter(
         ownership = Ownership::MutableOwned;
     };
 
-    // Get the type declaration (REQUIRED FOR PARAMETERS)
-    let mut data_type: DataType;
-    match token_stream.current_token_kind() {
-        // Has a type declaration
-        TokenKind::DatatypeInt => data_type = DataType::Int,
-        TokenKind::DatatypeFloat => data_type = DataType::Float,
-        TokenKind::DatatypeBool => data_type = DataType::Bool,
-        TokenKind::DatatypeString => data_type = DataType::StringSlice,
+    while token_stream.current_token_kind() == &TokenKind::Newline {
+        token_stream.advance();
+    }
 
-        // Collection Type Declaration
-        TokenKind::OpenCurly => {
-            token_stream.advance();
-
-            // Check if there is a type inside the curly braces
-            data_type = match token_stream.current_token_kind().to_datatype() {
-                Some(data_type) => DataType::Collection(Box::new(data_type), ownership.to_owned()),
-                _ => DataType::Collection(Box::new(DataType::Inferred), Ownership::MutableOwned),
-            };
-
-            // Make sure there is a closing curly brace
-            if token_stream.current_token_kind() != &TokenKind::CloseCurly {
-                return_syntax_error!(
-                    "Missing closing curly brace for collection type declaration",
-                    token_stream.current_location().to_error_location(&string_table),
-                    {
-                        CompilationStage => "Parameter Type Parsing",
-                        PrimarySuggestion => "Add '}' to close the collection type declaration",
-                        SuggestedInsertion => "}",
-                    }
-                )
-            }
-        }
-
-        TokenKind::Newline => {
-            data_type = DataType::Inferred;
-            // Ignore
-        }
-
-        // Anything else is a syntax error
-        _ => {
-            return_syntax_error!(
-                format!(
-                    "Unexpected Token: {:?} after parameter name for {}. Expected a type declaration.",
-                    token_stream.tokens[token_stream.index].kind,
-                    full_name.to_string(string_table)
-                ),
-                token_stream.current_location().to_error_location(string_table),
-                {
-                    CompilationStage => "Parameter Type Parsing",
-                    PrimarySuggestion => "Add a type declaration (Int, String, Float, Bool) after the parameter name",
-                }
-            )
-        }
-    };
+    let mut data_type = parse_explicit_signature_type(
+        token_stream,
+        string_table,
+        ownership.to_owned(),
+        SignatureTypeContext::Parameter,
+    )?;
 
     // Check for the assignment operator next
     // If this is parameters or a struct, then we can instead break out with a comma or struct close bracket
-    token_stream.advance();
 
     match token_stream.current_token_kind() {
         TokenKind::Assign => {

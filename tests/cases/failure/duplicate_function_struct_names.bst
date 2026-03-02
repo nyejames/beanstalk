@@ -2,7 +2,7 @@
 
 MyType |value Int|
 
-MyType || -> Void:
+MyType ||:
     ["This is a function with the same name as the struct"]
 ;
 

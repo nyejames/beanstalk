@@ -1,7 +1,7 @@
 -- Helper that creates circular dependency
 #import @main
 
-export do_something || -> Void:
+export do_something ||:
     io("Helper doing something")
 ;
 

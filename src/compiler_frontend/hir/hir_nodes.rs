@@ -233,6 +233,7 @@ pub struct HirFunction {
     pub entry: BlockId,
     pub params: Vec<LocalId>,
     pub return_type: TypeId,
+    pub return_aliases: Vec<Option<Vec<usize>>>,
 }
 
 // ============================================================
@@ -389,6 +390,7 @@ pub enum HirExpressionKind {
     // Memory
     // --------------------------------------------------------
     Load(HirPlace),
+    Copy(HirPlace),
 
     // --------------------------------------------------------
     // Operations

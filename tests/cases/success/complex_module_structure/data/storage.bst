@@ -1,7 +1,7 @@
 -- Storage utility module
 storage_data ~= {}
 
-#save |key String, value Int| -> Void:
+#save |key String, value Int|:
     io([: Saving key = value])
     -- In a real implementation, this would store to the collection
 ;

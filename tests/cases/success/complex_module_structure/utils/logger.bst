@@ -1,9 +1,9 @@
 -- Logger utility module
-#log |message String| -> Void:
+#log |message String|:
     io([message])
 ;
 
-#debug |message String| -> Void:
+#debug |message String|:
     io([message])
 ;
 

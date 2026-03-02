@@ -7,7 +7,7 @@
 
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
-use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
+use crate::compiler_frontend::ast::statements::functions::{FunctionReturn, FunctionSignature};
 use crate::compiler_frontend::ast::templates::template::TemplateType;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
@@ -138,7 +138,7 @@ pub(crate) fn synthesize_start_template_items(
                         fragment_name.to_owned(),
                         FunctionSignature {
                             parameters: vec![],
-                            returns: vec![DataType::StringSlice],
+                            returns: vec![FunctionReturn::Value(DataType::StringSlice)],
                         },
                         fragment_body,
                     ),
@@ -396,6 +396,10 @@ fn collect_references_from_expression(
     match &expression.kind {
         ExpressionKind::Reference(name) => {
             references.insert(name.to_owned());
+        }
+
+        ExpressionKind::Copy(place) => {
+            collect_references_from_ast_node(place, references);
         }
 
         ExpressionKind::Runtime(nodes) => {

@@ -123,16 +123,9 @@ pub(super) fn resolve_call_semantics(
 
             let return_alias = match host_def.return_alias {
                 HostReturnAlias::Fresh => CallResultAlias::Fresh,
-                HostReturnAlias::AliasAnyArg => CallResultAlias::AliasArgs((0..arg_len).collect()),
-                HostReturnAlias::AliasMutableArgs => CallResultAlias::AliasArgs(
-                    arg_mutability
-                        .iter()
-                        .enumerate()
-                        .filter_map(
-                            |(index, is_mutable)| if *is_mutable { Some(index) } else { None },
-                        )
-                        .collect(),
-                ),
+                HostReturnAlias::AliasArgs(ref indices) => {
+                    CallResultAlias::AliasArgs(indices.clone())
+                }
             };
 
             Ok(CallSemantics {

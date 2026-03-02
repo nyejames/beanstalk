@@ -83,7 +83,7 @@ pub enum NodeKind {
     FunctionCall {
         name: InternedPath,
         args: Vec<Expression>,
-        returns: Vec<DataType>,
+        result_types: Vec<DataType>,
         location: TextLocation,
         // bool, // Function is pure
     },
@@ -92,7 +92,7 @@ pub enum NodeKind {
     HostFunctionCall {
         name: InternedPath,
         args: Vec<Expression>,
-        returns: Vec<DataType>,
+        result_types: Vec<DataType>,
         location: TextLocation,
     },
 
@@ -137,24 +137,24 @@ impl AstNode {
             NodeKind::FunctionCall {
                 name,
                 args: arguments,
-                returns,
+                result_types,
                 location,
             } => Ok(Expression::function_call(
                 name.to_owned(),
                 arguments.to_owned(),
-                returns.to_owned(),
+                result_types.to_owned(),
                 location.to_owned(),
             )),
 
             NodeKind::HostFunctionCall {
                 name,
                 args: arguments,
-                returns,
+                result_types,
                 location,
-            } => Ok(Expression::function_call(
+            } => Ok(Expression::host_function_call(
                 name.to_owned(),
                 arguments.to_owned(),
-                returns.to_owned(),
+                result_types.to_owned(),
                 location.to_owned(),
             )),
 

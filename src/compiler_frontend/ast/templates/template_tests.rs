@@ -3,7 +3,7 @@
 use super::*;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::Expression;
-use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
+use crate::compiler_frontend::ast::statements::functions::{FunctionReturn, FunctionSignature};
 use crate::compiler_frontend::ast::templates::create_template_node::Template;
 use crate::compiler_frontend::ast::templates::template::TemplateType;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
@@ -55,7 +55,7 @@ fn start_function_node(
             entry_dir.join_str(IMPLICIT_START_FUNC_NAME, string_table),
             FunctionSignature {
                 parameters: vec![],
-                returns: vec![DataType::StringSlice],
+                returns: vec![FunctionReturn::Value(DataType::StringSlice)],
             },
             body,
         ),
