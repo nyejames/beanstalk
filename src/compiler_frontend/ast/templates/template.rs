@@ -1,6 +1,5 @@
-use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
-use crate::compiler_frontend::string_interning::StringId;
-use std::collections::HashMap;
+use crate::compiler_frontend::ast::expressions::expression::Expression;
+use crate::compiler_frontend::ast::templates::create_template_node::Template;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum TemplateType {
@@ -91,19 +90,9 @@ pub struct Style {
     // Overrides any inherited styles that have a lower precedence
     pub override_precedence: i32,
 
-    // Passes a default style for any children to start with
+    // Passes templates into the head of every child template of this template
     // Wrappers can be overridden with parent overrides
-    // Or child wrappers that are higher precedence
-    pub child_default: Option<Box<Style>>,
-
-    // templates that this style will unlock
-    // Basically a bunch of template declarations that are captured by this template
-    // TODO: Styles and template unlocks as different things? Do full templates with styles being inherited suffice if they are empty?
-    pub unlocked_templates: HashMap<StringId, ExpressionKind>,
-
-    // If this is true, no unlocked styles will be inherited from the parent
-    pub unlocks_override: bool,
-    pub strict: bool, // MAYBE - enforces only strings to be used in the template head, no dynamic behaviour
+    pub child_templates: Vec<Template>,
 }
 
 impl Style {
@@ -113,15 +102,8 @@ impl Style {
             formatter: None,
             formatter_precedence: -1,
             override_precedence: -1,
-            child_default: None,
-            unlocked_templates: HashMap::new(),
-            unlocks_override: false,
-            strict: false,
+            child_templates: vec![],
         }
-    }
-
-    pub fn has_no_unlocked_templates(&self) -> bool {
-        self.unlocked_templates.is_empty()
     }
 }
 

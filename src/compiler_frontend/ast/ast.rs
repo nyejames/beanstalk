@@ -391,7 +391,7 @@ impl Ast {
                     .with_start_import_aliases(bindings.start_aliases.to_owned());
 
                     let template =
-                        match Template::new(&mut template_tokens, &context, None, string_table) {
+                        match Template::new(&mut template_tokens, &context, vec![], string_table) {
                             Ok(template) => template,
                             Err(error) => {
                                 return Err(CompilerMessages {

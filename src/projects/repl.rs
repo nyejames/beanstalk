@@ -107,7 +107,12 @@ fn compile_beanstalk_to_string(
     );
 
     // Build Template
-    let template = Template::new(&mut tokenizer_output, &ast_context, None, &mut string_table)?;
+    let template = Template::new(
+        &mut tokenizer_output,
+        &ast_context,
+        vec![],
+        &mut string_table,
+    )?;
 
     // TODO: INSTEAD OF ALL THIS WAIT UNTIL RUST INTERPRETER IS DONE
 

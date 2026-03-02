@@ -25,7 +25,7 @@ fn parse_template_head_handles_truncated_stream_without_panicking() {
         ],
     );
 
-    let result = Template::new(&mut token_stream, &context, None, &mut string_table);
+    let result = Template::new(&mut token_stream, &context, vec![], &mut string_table);
     assert!(
         result.is_ok(),
         "truncated template-head streams should not panic the parser"
@@ -48,7 +48,7 @@ fn single_item_template_head_with_close_is_foldable() {
         ],
     );
 
-    let template = Template::new(&mut token_stream, &context, None, &mut string_table)
+    let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("single-item head template should parse");
 
     assert!(matches!(template.kind, TemplateType::String));

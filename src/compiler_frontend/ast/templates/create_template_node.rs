@@ -28,11 +28,11 @@ impl Template {
     pub fn new(
         token_stream: &mut FileTokens,
         context: &ScopeContext,
-        inherited_style: Option<Box<Style>>,
+        templates_inherited: Vec<Template>,
         string_table: &mut StringTable,
     ) -> Result<Template, CompilerError> {
         // These are variables or special keywords passed into the template head
-        let mut template = Self::create_default(inherited_style);
+        let mut template = Self::create_default(templates_inherited);
 
         // Templates that call any functions or have children that call functions
         // Can't be folded at compile time (EVENTUALLY CAN FOLD THE CONST FUNCTIONS TOO).
@@ -71,7 +71,7 @@ impl Template {
                     let nested_template = Self::new(
                         token_stream,
                         context,
-                        template.style.child_default.to_owned(),
+                        template.style.child_templates.to_owned(),
                         string_table,
                     )?;
 
@@ -80,11 +80,14 @@ impl Template {
                             ast_log!(
                                 "Found a compile time foldable template inside a template. Folding into a string slice..."
                             );
+
+                            // Just uses the last inherited template atm
+                            // TODO: should this take the highest precedence template?
                             let inherited_style = template
                                 .style
-                                .child_default
-                                .as_ref()
-                                .map(|style| *style.to_owned());
+                                .child_templates
+                                .last()
+                                .map(|template| template.style.to_owned());
 
                             let interned_child = nested_template
                                 .fold_into_stringid(&inherited_style, string_table)?;
@@ -179,9 +182,9 @@ impl Template {
         Ok(template)
     }
 
-    pub fn create_default(style: Option<Box<Style>>) -> Template {
-        let style = match style {
-            Some(s) => *s,
+    pub fn create_default(templates: Vec<Template>) -> Template {
+        let style = match templates.last() {
+            Some(t) => t.style.clone(),
             None => Style::default(),
         };
 
@@ -223,21 +226,8 @@ impl Template {
         }
 
         // Override the current child_default if there is a new one coming in
-        if template_being_inserted.style.child_default.is_some() {
-            self.style.child_default = template_being_inserted.style.child_default.to_owned();
-        }
-
-        if template_being_inserted.style.unlocks_override {
-            self.style.unlocked_templates.clear();
-        }
-
-        // Insert this style's unlocked scenes into the unlocked scenes map
-        for (name, style) in template_being_inserted.style.unlocked_templates.iter() {
-            // Should this overwrite? Or skip if already unlocked?
-            // Which is less efficient?
-            self.style
-                .unlocked_templates
-                .insert(name.to_owned(), style.to_owned());
+        if !template_being_inserted.style.child_templates.is_empty() {
+            self.style.child_templates = template_being_inserted.style.child_templates.to_owned();
         }
 
         // Unpack this scene into this scene's body
@@ -382,46 +372,7 @@ pub fn parse_template_head(
 
             // If this is a template, we have to do some clever parsing here
             TokenKind::Symbol(name) => {
-                // TODO - sort out the final design for inherited styles / templates
-                // Should unlocked styles just be passed in as normal declarations?
-
-                // Check if this is an unlocked scene (inherited from an ancestor)
-                // This has to be done eagerly here as any previous scene or style passed into the scene head will add to this
-                match template.style.unlocked_templates.to_owned().get(&name) {
-                    Some(ExpressionKind::Template(inserted_template)) => {
-                        if context.kind.is_constant_context()
-                            && !matches!(inserted_template.kind, TemplateType::String)
-                        {
-                            return_syntax_error!(
-                                format!(
-                                    "Const templates can only capture compile-time templates. '{}' resolves to a runtime template.",
-                                    name
-                                ),
-                                token_stream
-                                    .current_location()
-                                    .to_error_location(&string_table)
-                            );
-                        }
-                        template.insert_template_into_head(
-                            inserted_template,
-                            foldable,
-                            string_table,
-                        )?;
-                    }
-
-                    // Constant inherited
-                    Some(ExpressionKind::StringSlice(string)) => {
-                        template.content.before.push(Expression::string_slice(
-                            *string,
-                            token_stream.current_location(),
-                            Ownership::ImmutableOwned,
-                        ));
-                    }
-
-                    _ => {}
-                }
-
-                // Otherwise, check if it's a regular scene or variable reference
+                // Check if it's a regular scene or variable reference
                 // If this is a reference to a function or variable
                 if let Some(arg) = context.get_reference(&name) {
                     match &arg.value.kind {

@@ -326,7 +326,7 @@ pub fn concat_template(
     simplified_expression: &mut Vec<AstNode>,
     ownership: Ownership,
 ) -> Result<Expression, CompilerError> {
-    let mut template: Template = Template::create_default(None);
+    let mut template: Template = Template::create_default(vec![]);
     let _location = extract_location(simplified_expression)?;
 
     for node in simplified_expression {
@@ -341,23 +341,11 @@ pub fn concat_template(
                     .after
                     .extend(template_to_concat.content.after);
 
-                if !template.style.unlocks_override {
-                    if template_to_concat.style.unlocks_override {
-                        template.style.unlocks_override = true;
-                        template.style.unlocked_templates =
-                            template_to_concat.style.unlocked_templates.to_owned();
-                    } else {
-                        template
-                            .style
-                            .unlocked_templates
-                            .extend(template_to_concat.style.unlocked_templates.to_owned());
-                    }
-                }
-
                 // TODO - scene style precedence
                 // Some styles will override others based on their precedence
                 template.style.formatter = template_to_concat.style.formatter.to_owned();
-                template.style.child_default = template_to_concat.style.child_default.to_owned();
+                template.style.child_templates =
+                    template_to_concat.style.child_templates.to_owned();
                 template.style.override_precedence =
                     template_to_concat.style.override_precedence.to_owned();
             }

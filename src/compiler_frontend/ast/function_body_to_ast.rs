@@ -424,7 +424,7 @@ pub fn function_body_to_ast(
 
                 // TODO: check for existing top level template declaration,
                 // If it already exists in this context, then concat it rather than creating a new one
-                let template = Template::new(token_stream, &context, None, string_table)?;
+                let template = Template::new(token_stream, &context, vec![], string_table)?;
                 let expr = Expression::template(template, Ownership::MutableOwned);
 
                 let template_var = Declaration {

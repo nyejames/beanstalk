@@ -30,7 +30,7 @@ fn top_level_template_declaration(
     location: TextLocation,
     string_table: &mut StringTable,
 ) -> Declaration {
-    let mut template = Template::create_default(None);
+    let mut template = Template::create_default(vec![]);
     template.kind = template_kind;
     template.location = location.to_owned();
 

@@ -67,7 +67,7 @@ fn symbol(name: &str, string_table: &mut StringTable) -> InternedPath {
 }
 
 fn runtime_template_expression(location: TextLocation, content: Vec<Expression>) -> Expression {
-    let mut template = Template::create_default(None);
+    let mut template = Template::create_default(vec![]);
     template.location = location.clone();
 
     for expression in content {

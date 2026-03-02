@@ -92,7 +92,7 @@ fn operator_node(op: Operator, location: TextLocation) -> AstNode {
 }
 
 fn runtime_template_expression(location: TextLocation, content: Vec<Expression>) -> Expression {
-    let mut template = Template::create_default(None);
+    let mut template = Template::create_default(vec![]);
     template.location = location.clone();
 
     for expr in content {

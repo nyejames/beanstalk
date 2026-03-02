@@ -579,7 +579,7 @@ pub fn create_expression(
                 let template = Template::new(
                     token_stream,
                     new_template_context!(context),
-                    None,
+                    vec![],
                     string_table,
                 )?;
 
