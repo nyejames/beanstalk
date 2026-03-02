@@ -3,7 +3,7 @@
 # Beanstalk
 
 <p><em>
-  A high level language that prioritises safety, readability and scalability.
+  A high level language that prioritises fast, confident development, safety and readability.
 </em></p>
 
 # 🌱
@@ -19,7 +19,8 @@
 ## First Class String Template Syntax
 
 </div>
-<p>Beanstalk is designed first for the web. It originated with the desire to never have to use TypeScript, web frameworks or bloated web ecosystems again.</p>
+<p>Beanstalk is designed first for the web, while being modular enough to be complete agnostic about the backend or platform. 
+It originated with the desire to never have to use TypeScript, web frameworks or bloated UI/web ecosystems again.</p>
 <p>Beanstalk is an attempt to make something fresh and carefully designed from the ground up.</p>
 <br>
 <br>
@@ -28,7 +29,7 @@
 import @(html/basic)
 
 -- Create a new blog post
-#create_post |title String, date Int, content String| -> String:
+# create_post |title String, date Int, content String| -> String:
     
     io("Creating a blog post!")
 
@@ -80,9 +81,8 @@ post = create_post(date, [:
 - Readability-first syntax. As modern, minimal, coherent and consistent as possible.
 - A modular compiler with Fast compile times for snappy tooling and fast development builds
 - An integrated build system for web projects and beyond
-- Simple, static and strong type system
-- Clean and deterministic error handling
-- A memory model that can allow for future static optimizations – to the point of completely eliding the GC when desired.
+- Simple, static and strong type system for confident development
+- A memory model that can allow for future static optimizations – to the point of completely eliding the GC for non-GC platforms if needed.
 
 <div align="center">
 
@@ -121,7 +121,8 @@ post = create_post(date, [:
 
 </div>
 
-Current focus: stabilising the JS backend/build system for static page generation and JS output.
-The syntax and some constructs (e.g., closures, interfaces, async) are still evolving in their design before full pipeline support.
+Current focus: stabilising the JS backend and HTML project build system for static page generation and JS output.
+
+The syntax and some constructs (e.g. closures, interfaces, async) are still evolving in their design before full pipeline support.
 
 <br>
