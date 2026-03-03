@@ -11,3 +11,5 @@ remainder = 15 % 4
 base ~= 10
 base = base + 5
 base = base * 2
+
+io("Arithmetic tests passed")
