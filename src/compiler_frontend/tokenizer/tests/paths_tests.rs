@@ -31,6 +31,24 @@ fn first_path_token_values(source: &str) -> Vec<String> {
         .expect("expected at least one path token")
 }
 
+fn collect_import_path_values(source: &str) -> Vec<String> {
+    let mut string_table = StringTable::new();
+    let source_path = InternedPath::from_single_str("test.bst", &mut string_table);
+    let file_tokens = tokenize(
+        source,
+        &source_path,
+        TokenizeMode::Normal,
+        &mut string_table,
+    )
+    .expect("tokenization should succeed");
+
+    collect_import_paths_from_tokens(&file_tokens.tokens, &string_table)
+        .expect("import collection should succeed")
+        .iter()
+        .map(|path| path.to_portable_string(&string_table))
+        .collect()
+}
+
 #[test]
 fn parse_file_path_preserves_final_segment() {
     let paths = first_path_token_values("import @(a/b/c)\n");
@@ -70,4 +88,26 @@ fn parse_file_path_rejects_malformed_grouped_imports() {
         malformed_double_comma.is_err(),
         "double commas in grouped imports should fail"
     );
+}
+
+#[test]
+fn collect_import_paths_from_tokens_supports_newline_after_import() {
+    let paths = collect_import_path_values("import\n@(styles/docs/footer)\n");
+    assert_eq!(paths, vec!["styles/docs/footer".to_string()]);
+}
+
+#[test]
+fn collect_import_paths_from_tokens_rejects_missing_path() {
+    let mut string_table = StringTable::new();
+    let source_path = InternedPath::from_single_str("test.bst", &mut string_table);
+    let file_tokens = tokenize(
+        "import\nfooter\n",
+        &source_path,
+        TokenizeMode::Normal,
+        &mut string_table,
+    )
+    .expect("tokenization should succeed");
+
+    let result = collect_import_paths_from_tokens(&file_tokens.tokens, &string_table);
+    assert!(result.is_err(), "import without a path token should fail");
 }

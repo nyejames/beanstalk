@@ -126,3 +126,14 @@ Current focus: stabilising the JS backend and HTML project build system for stat
 The syntax and some constructs (e.g. closures, interfaces, async) are still evolving in their design before full pipeline support.
 
 <br>
+
+<div align="center">
+
+## Testing
+
+</div>
+
+Run the compiler integration suite with `cargo run -- tests`.
+
+New integration fixtures should use the canonical `tests/cases/<case>/input + expect.toml` layout.
+An optional `tests/cases/manifest.toml` can define case ordering and tags during fixture migrations.

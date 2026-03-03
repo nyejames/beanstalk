@@ -45,9 +45,9 @@
 //! - `fn || -> Int, String!` → returns Result<(Int, String), Error>
 
 use super::hir_display::HirSideTable;
-use crate::backends::function_registry::CallTarget;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::hir::hir_datatypes::{TypeContext, TypeId};
+use crate::compiler_frontend::host_functions::CallTarget;
 use crate::compiler_frontend::tokenizer::tokens::TextLocation;
 
 // ============================================================

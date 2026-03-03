@@ -12,7 +12,6 @@ mod types;
 #[allow(unused_imports)]
 pub(crate) use types::{BorrowAnalysis, BorrowCheckReport, BorrowCheckStats, LocalMode};
 
-use crate::backends::function_registry::HostRegistry;
 use crate::borrow_log;
 use crate::compiler_frontend::analysis::borrow_checker::diagnostics::BorrowDiagnostics;
 use crate::compiler_frontend::analysis::borrow_checker::state::{
@@ -30,6 +29,7 @@ use crate::compiler_frontend::hir::hir_nodes::{
     BlockId, FunctionId, HirExpression, HirExpressionKind, HirFunction, HirModule, HirPattern,
     HirPlace, HirStatement, HirStatementKind, HirTerminator, LocalId, RegionId,
 };
+use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::return_borrow_checker_error;

@@ -1,0 +1,44 @@
+[[case]]
+id = "basic_page_output"
+path = "basic_page_output"
+tags = ["success", "html"]
+
+[[case]]
+id = "choice_rejected"
+path = "choice_rejected"
+tags = ["diagnostics", "headers"]
+
+[[case]]
+id = "config_src_rejected"
+path = "config_src_rejected"
+tags = ["config", "diagnostics"]
+
+[[case]]
+id = "float_literal_malformed"
+path = "float_literal_malformed"
+tags = ["diagnostics", "tokenizer"]
+
+[[case]]
+id = "html_duplicate_route_reports_config_error"
+path = "html_duplicate_route_reports_config_error"
+tags = ["config", "html"]
+
+[[case]]
+id = "html_missing_homepage_reports_config_error"
+path = "html_missing_homepage_reports_config_error"
+tags = ["config", "html"]
+
+[[case]]
+id = "integer_literal_overflow"
+path = "integer_literal_overflow"
+tags = ["diagnostics", "tokenizer"]
+
+[[case]]
+id = "labeled_scope_rejected"
+path = "labeled_scope_rejected"
+tags = ["diagnostics", "ast"]
+
+[[case]]
+id = "multi_file_fixture_only_counts_entry_case"
+path = "multi_file_fixture_only_counts_entry_case"
+tags = ["success", "imports", "multi-file"]

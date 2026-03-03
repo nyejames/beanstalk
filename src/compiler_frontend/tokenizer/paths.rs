@@ -202,6 +202,69 @@ pub fn parse_file_path(
     return_token!(TokenKind::Path(imports), stream)
 }
 
+pub fn parse_import_clause_tokens(
+    tokens: &[Token],
+    start_index: usize,
+    string_table: &StringTable,
+) -> Result<(Vec<InternedPath>, usize), CompilerError> {
+    let Some(import_token) = tokens.get(start_index) else {
+        return Err(CompilerError::compiler_error(
+            "Import clause parsing started past the end of the token stream.",
+        ));
+    };
+
+    if !matches!(import_token.kind, TokenKind::Import) {
+        return Err(CompilerError::compiler_error(
+            "Import clause parsing expected to start on an 'import' token.",
+        ));
+    }
+
+    let mut index = start_index + 1;
+    while tokens
+        .get(index)
+        .is_some_and(|token| matches!(token.kind, TokenKind::Newline))
+    {
+        index += 1;
+    }
+
+    let Some(path_token) = tokens.get(index) else {
+        return Err(CompilerError::new_syntax_error(
+            "Expected a path after the 'import' keyword",
+            import_token.location.to_error_location(string_table),
+        ));
+    };
+
+    let TokenKind::Path(paths) = &path_token.kind else {
+        return Err(CompilerError::new_syntax_error(
+            "Expected a path after the 'import' keyword",
+            path_token.location.to_error_location(string_table),
+        ));
+    };
+
+    Ok((paths.to_owned(), index + 1))
+}
+
+pub fn collect_import_paths_from_tokens(
+    tokens: &[Token],
+    string_table: &StringTable,
+) -> Result<Vec<InternedPath>, CompilerError> {
+    let mut imports = Vec::new();
+    let mut index = 0usize;
+
+    while index < tokens.len() {
+        if matches!(tokens[index].kind, TokenKind::Import) {
+            let (paths, next_index) = parse_import_clause_tokens(tokens, index, string_table)?;
+            imports.extend(paths);
+            index = next_index;
+            continue;
+        }
+
+        index += 1;
+    }
+
+    Ok(imports)
+}
+
 fn push_segment_if_non_empty(
     components: &mut Vec<crate::compiler_frontend::string_interning::StringId>,
     segment: &mut String,

@@ -2,11 +2,11 @@
 //!
 //! Maps call targets to per-argument mutability and result alias behavior.
 
-use crate::backends::function_registry::{
-    CallTarget, HostAccessKind, HostFunctionDef, HostReturnAlias,
-};
 use crate::compiler_frontend::analysis::borrow_checker::types::FunctionReturnAliasSummary;
 use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorLocation};
+use crate::compiler_frontend::host_functions::{
+    CallTarget, HostAccessKind, HostFunctionDef, HostReturnAlias,
+};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::return_borrow_checker_error;
 
@@ -149,10 +149,10 @@ fn resolve_host_definition<'a>(
         return Ok(definition);
     }
 
-    if let Some(name) = path.name_str(context.string_table) {
-        if let Some(definition) = context.host_registry.get_function(name) {
-            return Ok(definition);
-        }
+    if let Some(name) = path.name_str(context.string_table)
+        && let Some(definition) = context.host_registry.get_function(name)
+    {
+        return Ok(definition);
     }
 
     return_borrow_checker_error!(

@@ -389,7 +389,7 @@ impl RootSet {
     pub(super) fn full(bit_len: usize) -> Self {
         let word_len = bit_len.div_ceil(64);
         let mut words = vec![u64::MAX; word_len];
-        if bit_len % 64 != 0 {
+        if !bit_len.is_multiple_of(64) {
             let remainder = bit_len % 64;
             let mask = (1u64 << remainder) - 1;
             if let Some(last) = words.last_mut() {

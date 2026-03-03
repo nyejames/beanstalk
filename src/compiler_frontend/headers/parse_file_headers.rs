@@ -1,12 +1,13 @@
-use crate::backends::function_registry::HostRegistry;
 use crate::compiler_frontend::ast::statements::declaration_syntax::{
     DeclarationSyntax, parse_declaration_syntax,
 };
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::{CompilerWarning, WarningKind};
+use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
+use crate::compiler_frontend::tokenizer::paths::parse_import_clause_tokens;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TextLocation, Token, TokenKind};
 use crate::projects::settings::{
     MINIMUM_LIKELY_DECLARATIONS, TOKEN_TO_DECLARATION_RATIO, TOKEN_TO_HEADER_RATIO,
@@ -270,29 +271,24 @@ pub fn parse_headers_in_file(
             }
 
             TokenKind::Import => {
-                if let TokenKind::Path(paths) = token_stream.current_token_kind() {
-                    for path in paths {
-                        if let Some(name) = path.name() {
-                            encountered_symbols.insert(name);
-                        }
+                let import_index = token_stream.index.saturating_sub(1);
+                let (paths, next_index) =
+                    parse_import_clause_tokens(&token_stream.tokens, import_index, string_table)?;
 
-                        if file_import_paths.insert(path.to_owned()) {
-                            file_imports.push(FileImport {
-                                header_path: path.to_owned(),
-                                location: token_stream.current_location(),
-                            });
-                        }
+                for path in paths {
+                    if let Some(name) = path.name() {
+                        encountered_symbols.insert(name);
                     }
-                    token_stream.advance();
-                } else {
-                    return_rule_error!(
-                        "Expected a path after the 'import' keyword",
-                        token_stream.current_location().to_error_location(string_table),
-                        {
-                            PrimarySuggestion => "Add a path after the 'import' keyword"
-                        }
-                    )
+
+                    if file_import_paths.insert(path.to_owned()) {
+                        file_imports.push(FileImport {
+                            header_path: path,
+                            location: current_location.clone(),
+                        });
+                    }
                 }
+
+                token_stream.index = next_index;
             }
 
             TokenKind::Eof => {
@@ -568,8 +564,14 @@ fn create_header(
         // Should be a choice declaration
         // Choice :: Option1, Option2, Option3;
         TokenKind::DoubleColon => {
-            todo!("Choice declarations are not yet implemented in the language");
-            // Make sure to skip the semicolon at the end of the choice declaration
+            return_rule_error!(
+                "Choice declarations are not yet implemented in the language.",
+                token_stream.current_location().to_error_location(string_table),
+                {
+                    CompilationStage => "Header Parsing",
+                    PrimarySuggestion => "Remove the '::' declaration for now or rewrite this as supported syntax",
+                }
+            )
         }
 
         // Ignored, going into the start function

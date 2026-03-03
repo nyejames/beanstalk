@@ -1,8 +1,3 @@
-#![cfg(test)]
-
-use crate::backends::function_registry::{
-    HostAbiType, HostAccessKind, HostFunctionDef, HostParameter, HostRegistry, HostReturnAlias,
-};
 use crate::compiler_frontend::analysis::borrow_checker::{BorrowCheckReport, check_borrows};
 use crate::compiler_frontend::ast::ast::{Ast, ModuleExport};
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind, TextLocation};
@@ -11,6 +6,10 @@ use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
+use crate::compiler_frontend::host_functions::{
+    ErrorHandling, HostAbiType, HostAccessKind, HostFunctionDef, HostParameter, HostRegistry,
+    HostReturnAlias,
+};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::projects::settings::IMPLICIT_START_FUNC_NAME;
@@ -139,7 +138,7 @@ pub(crate) fn register_host_function(
             return_type,
             return_alias,
             ownership: Ownership::ImmutableReference,
-            error_handling: crate::backends::function_registry::ErrorHandling::None,
+            error_handling: ErrorHandling::None,
             description: format!("test host function {name}"),
         })
         .expect("host function registration should succeed");

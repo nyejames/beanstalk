@@ -36,29 +36,23 @@ impl CallTarget {
     }
 }
 
-// ======================================================
-//                    HOST ABI
-// ======================================================
-
-/// Backend-agnostic ABI values that cross the host boundary
+/// Backend-agnostic ABI values that cross the host boundary.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum HostAbiType {
     I32,
     F64,
     Utf8Str,
-    OpaquePtr, // Might want to turn this into ExternRef / Any at some point
+    OpaquePtr,
     Void,
 }
 
-/// A single host-call parameter definition
+/// A single host-call parameter definition.
 #[derive(Debug, Clone)]
 pub struct HostParameter {
-    /// What the Beanstalk language accepts
+    /// What the Beanstalk language accepts.
     pub language_type: DataType,
-
-    /// What crosses the ABI boundary
+    /// What crosses the ABI boundary.
     pub abi_type: HostAbiType,
-
     /// Borrow access mode required for this argument.
     pub access_kind: HostAccessKind,
 }
@@ -75,12 +69,9 @@ pub enum HostReturnAlias {
     AliasArgs(Vec<usize>),
 }
 
-// ======================================================
-//               HOST FUNCTION DEFINITION
-// ======================================================
 #[derive(Debug, Clone)]
 pub struct HostFunctionDef {
-    pub name: &'static str, // A unique name for each supported host function
+    pub name: &'static str,
     pub parameters: Vec<HostParameter>,
     pub return_type: HostAbiType,
     pub return_alias: HostReturnAlias,
@@ -94,22 +85,21 @@ impl HostFunctionDef {
         DataType::Function(Box::new(None), self.params_to_signature(string_table))
     }
 
-    /// Converts host function parameters into a Beanstalk FunctionSignature.
-    /// This allows host functions to be type-checked like regular Beanstalk functions.
+    /// Converts host function parameters into a Beanstalk `FunctionSignature`.
     pub(crate) fn params_to_signature(&self, string_table: &mut StringTable) -> FunctionSignature {
         let parameters = self
             .parameters
             .iter()
             .enumerate()
-            .map(|(i, p)| {
-                let name = PathBuf::from(self.name).join(format!("_arg{}", i));
+            .map(|(i, parameter)| {
+                let name = PathBuf::from(self.name).join(format!("_arg{i}"));
 
                 Declaration {
                     id: InternedPath::from_path_buf(&name, string_table),
                     value: Expression {
                         kind: ExpressionKind::None,
                         location: Default::default(),
-                        data_type: p.language_type.clone(),
+                        data_type: parameter.language_type.clone(),
                         ownership: Ownership::ImmutableReference,
                     },
                 }
@@ -148,13 +138,9 @@ impl HostFunctionDef {
     }
 }
 
-// ======================================================
-//                 BACKEND BINDINGS
-// ======================================================
-
 #[derive(Debug, Clone)]
 pub struct JsHostBinding {
-    pub js_path: String, // e.g. "console.log"
+    pub js_path: String,
 }
 
 #[derive(Debug, Clone)]
@@ -169,9 +155,6 @@ pub struct HostBindings {
     pub wasm: Option<WasmHostBinding>,
 }
 
-// ======================================================
-//                    REGISTRY
-// ======================================================
 #[derive(Clone, Default)]
 pub struct HostRegistry {
     functions: HashMap<&'static str, HostFunctionDef>,
@@ -182,12 +165,6 @@ impl HostRegistry {
     pub fn new(string_table: &mut StringTable) -> Self {
         let mut registry = HostRegistry::default();
 
-        // This function creates the built-in Beanstalk registry
-        // This must be the same for all projects regardless of the build system.
-        // So all new registries always start with the following
-        // ======================================================
-        //                   BUILTIN REGISTRY
-        // ======================================================
         let io_function = HostFunctionDef {
             name: IO_FUNC_NAME,
             parameters: vec![HostParameter {
@@ -203,7 +180,7 @@ impl HostRegistry {
         };
 
         registry.functions.insert(io_function.name, io_function);
-
+        let _ = string_table;
         registry
     }
 
@@ -232,9 +209,6 @@ impl HostRegistry {
         self.functions.values()
     }
 
-    // ======================================================
-    //                     VALIDATION
-    // ======================================================
     pub fn validate_required_hosts(&self, required: &[&'static str]) -> Result<(), CompilerError> {
         for id in required {
             if !self.functions.contains_key(id) {
@@ -246,7 +220,7 @@ impl HostRegistry {
     }
 
     pub fn validate_backend_bindings(&self, backend: BackendKind) -> Result<(), CompilerError> {
-        for (id, _) in &self.functions {
+        for id in self.functions.keys() {
             let bindings = self.bindings.get(id).ok_or_else(|| {
                 CompilerError::compiler_error(format!(
                     "Host function '{}' has no backend bindings registered.",
@@ -270,6 +244,7 @@ impl HostRegistry {
 
         Ok(())
     }
+
     pub fn validate_for_backend(
         &self,
         backend: BackendKind,
@@ -280,10 +255,6 @@ impl HostRegistry {
         Ok(())
     }
 }
-
-// ======================================================
-//                  ERROR HANDLING
-// ======================================================
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ErrorHandling {

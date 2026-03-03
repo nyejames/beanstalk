@@ -23,13 +23,12 @@ pub(crate) mod interned_path;
 pub(crate) mod string_interning;
 pub(crate) mod traits;
 
-pub(crate) mod host_functions {}
+pub(crate) mod host_functions;
 
 pub(crate) mod hir;
 
 pub(crate) mod analysis;
 
-use crate::backends::function_registry::HostRegistry;
 use crate::compiler_frontend::analysis::borrow_checker::{
     BorrowCheckReport, check_borrows as run_borrow_checker,
 };
@@ -41,6 +40,7 @@ use crate::compiler_frontend::headers::parse_file_headers::{
 };
 use crate::compiler_frontend::hir::hir_builder::lower_module;
 use crate::compiler_frontend::hir::hir_nodes::HirModule;
+use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::module_dependencies::resolve_module_dependencies;
 use crate::compiler_frontend::string_interning::StringTable;

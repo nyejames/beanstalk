@@ -1280,12 +1280,11 @@ macro_rules! return_wasm_generation_error {
 #[macro_export]
 macro_rules! return_thread_err {
     ($process:expr) => {
-        return Err(CompilerError {
-            msg: &format!("Thread panicked during {}", $process),
-            location: crate::compiler_frontend::parsers::tokenizer::tokens::TextLocation::default(),
-            error_type: crate::compiler_frontend::compiler_errors::ErrorType::Compiler,
-            file_path: std::path::PathBuf::new(),
-            suggestions: Vec::new(),
+        return Err($crate::compiler_frontend::compiler_errors::CompilerError {
+            msg: format!("Thread panicked during {}", $process),
+            location: $crate::compiler_frontend::compiler_errors::ErrorLocation::default(),
+            error_type: $crate::compiler_frontend::compiler_errors::ErrorType::Compiler,
+            metadata: std::collections::HashMap::new(),
         })
     };
 }
@@ -1302,7 +1301,7 @@ macro_rules! return_messages_with_err {
 macro_rules! return_err_as_messages {
     ($new_err:expr) => {
         return Err(
-            crate::compiler_frontend::compiler_messages::compiler_errors::CompilerMessages {
+            $crate::compiler_frontend::compiler_messages::compiler_errors::CompilerMessages {
                 errors: vec![$new_err],
                 warnings: Vec::new(),
             },

@@ -9,7 +9,6 @@ pub mod build_system;
 mod compiler_frontend;
 
 mod backends {
-    pub(crate) mod function_registry;
     pub(crate) mod js;
     // pub mod lir;
     // pub(crate) mod wasm;

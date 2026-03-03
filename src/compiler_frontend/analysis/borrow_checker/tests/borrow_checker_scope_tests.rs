@@ -1,5 +1,3 @@
-#![cfg(test)]
-
 use crate::compiler_frontend::analysis::borrow_checker::tests::test_support::{
     assignment_target, build_ast, default_host_registry, entry_and_start, function_node, location,
     lower_hir, node, reference_expr, run_borrow_checker, symbol, var,

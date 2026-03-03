@@ -1,7 +1,7 @@
 use super::*;
-use crate::backends::function_registry::HostRegistry;
 use crate::compiler_frontend::ast::statements::functions::{FunctionReturn, FunctionSignature};
 use crate::compiler_frontend::datatypes::DataType;
+use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::tokenizer::tokenizer::tokenize;
 use crate::compiler_frontend::tokenizer::tokens::TokenizeMode;
 use std::path::PathBuf;

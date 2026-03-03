@@ -1,5 +1,3 @@
-#![cfg(test)]
-
 use crate::compiler_frontend::ast::ast::{Ast, ModuleExport};
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind, TextLocation};
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};

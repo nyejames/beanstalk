@@ -1,5 +1,3 @@
-#![cfg(test)]
-
 use crate::compiler_frontend::ast::ast::{Ast, AstStartTemplateItem, ModuleExport};
 use crate::compiler_frontend::ast::ast_nodes::{
     AstNode, Declaration, ForLoopRange, NodeKind, RangeEndKind, TextLocation,

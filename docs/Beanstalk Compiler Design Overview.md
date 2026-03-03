@@ -92,7 +92,7 @@ Project builders then perform:
 - A project-level configuration file
 - Always located at the project root
 - Parsed using normal Beanstalk declaration syntax
-- Stage 0 reads top-level constants from it for build settings (`#src`, `#output_folder`, `#libraries`, project metadata, and custom keys)
+- Stage 0 reads top-level constants from it for build settings (`#entry_root`, `#output_folder`, `#libraries`, project metadata, and custom keys)
 - Provides a unified configuration map for all build systems
 
 **`#*` Files and Modules**

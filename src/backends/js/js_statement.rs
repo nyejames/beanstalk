@@ -1,4 +1,3 @@
-use crate::backends::function_registry::CallTarget;
 use crate::backends::js::JsEmitter;
 use crate::backends::js::js_host_functions::resolve_host_function_path;
 use crate::compiler_frontend::analysis::borrow_checker::LocalMode;
@@ -7,6 +6,7 @@ use crate::compiler_frontend::hir::hir_nodes::{
     BlockId, HirExpression, HirExpressionKind, HirFunction, HirMatchArm, HirPattern, HirPlace,
     HirStatement, HirStatementKind, HirTerminator, LocalId,
 };
+use crate::compiler_frontend::host_functions::CallTarget;
 
 impl<'hir> JsEmitter<'hir> {
     pub(crate) fn emit_block_statements(

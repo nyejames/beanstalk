@@ -231,18 +231,24 @@ This will provide a percentage pass rate for both expected and unexpected failur
 **Test Case Structure** (`tests/cases/`):
 ```
 tests/cases/
-├── success/
-│   ├── basic_print.bst           # Simple print statement
-│   ├── multi_file_module/        # Multi-file test
-│   │   ├── main.bst
-│   │   └── helper.bst
-│   └── import_syntax.bst         # Import resolution test
-└── failure/
-    ├── circular_import/          # Circular dependency test
-    │   ├── main.bst
-    │   └── helper.bst
-    └── missing_import.bst        # Missing import test
+├── manifest.toml                 # Optional explicit ordering / tags
+└── case_name/
+    ├── input/
+    │   ├── main.bst              # Entry file or fixture root
+    │   └── helper.bst            # Additional source files for the same case
+    ├── expect.toml               # Required outcome contract
+    └── golden/
+        └── index.html            # Optional exact output assertions
 ```
+
+Canonical integration cases should be self-contained directories that describe one scenario each.
+Multi-file fixtures should stay inside a single case folder so helper files are not counted as standalone tests.
+Failure cases should assert the intended `ErrorType` and, when practical, message fragments that prove the compiler failed for the right reason.
+Legacy `tests/cases/success/**` and `tests/cases/failure/**` fixtures may exist temporarily during migrations, but new tests should use the canonical case-folder layout.
+
+**No user-input panics**:
+- Active frontend stages must reject unsupported syntax and malformed input with structured diagnostics, not `panic!`, `todo!`, or user-data-driven `.unwrap()`.
+- Use panic paths only for proven internal invariants that indicate a compiler bug.
 
 **Running Integration Tests**:
 ```bash

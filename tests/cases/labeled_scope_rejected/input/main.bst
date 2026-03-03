@@ -1,0 +1,5 @@
+main ||:
+    label:
+        io("Hello")
+    ;
+;

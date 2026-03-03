@@ -1,13 +1,13 @@
 // HTML/JS project builder
 //
-// Builds Beanstalk projects for web deployment, generating separate WASM files
-// for different HTML pages and including JavaScript bindings for DOM interaction.
+// Builds Beanstalk projects for web deployment by lowering HIR to JavaScript,
+// then embedding the generated runtime into HTML output pages.
 use crate::backends::js::{JsLoweringConfig, lower_hir_to_js};
 use crate::build_system::build::{FileKind, Module, OutputFile, Project, ProjectBuilder};
 use crate::build_system::create_project_modules::resolve_project_entry_root;
 use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::analysis::borrow_checker::BorrowCheckReport;
-use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
+use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages, ErrorType};
 use crate::compiler_frontend::hir::hir_nodes::{HirModule, StartFragment};
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::projects::settings::Config;
@@ -98,10 +98,14 @@ impl ProjectBuilder for HtmlProjectBuilder {
                 Ok(output_file) => {
                     if !output_paths.insert(output_path.clone()) {
                         return Err(CompilerMessages {
-                            errors: vec![CompilerError::compiler_error(format!(
-                                "HTML builder produced duplicate output path '{}'. Ensure each '#*.bst' entry maps to a unique page output.",
-                                output_path.display(),
-                            ))],
+                            errors: vec![CompilerError::file_error(
+                                &module.entry_point,
+                                format!(
+                                    "HTML builder produced duplicate output path '{}'. Ensure each '#*.bst' entry maps to a unique page output.",
+                                    output_path.display(),
+                                ),
+                            )
+                            .with_error_type(ErrorType::Config)],
                             warnings: Vec::new(),
                         });
                     }
@@ -129,10 +133,14 @@ impl ProjectBuilder for HtmlProjectBuilder {
                 .as_deref()
                 .unwrap_or_else(|| Path::new("."));
             return Err(CompilerMessages {
-                errors: vec![CompilerError::compiler_error(format!(
-                    "HTML project builds require a '#page.bst' homepage at the root of the configured entry root '{}'.",
-                    entry_root.display(),
-                ))],
+                errors: vec![CompilerError::file_error(
+                    &config.entry_dir,
+                    format!(
+                        "HTML project builds require a '#page.bst' homepage at the root of the configured entry root '{}'.",
+                        entry_root.display(),
+                    ),
+                )
+                .with_error_type(ErrorType::Config)],
                 warnings: Vec::new(),
             });
         }

@@ -4,7 +4,7 @@
 //! writer (`write_project_outputs`). Build tools can compile once and choose where artifacts are
 //! written without reimplementing frontend/backend orchestration.
 
-use crate::build_system::create_project_modules::{ExternalImport, compile_project_frontend};
+use crate::build_system::create_project_modules::compile_project_frontend;
 use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::analysis::borrow_checker::BorrowCheckReport;
 use crate::compiler_frontend::basic_utility_functions::check_if_valid_path;
@@ -23,8 +23,6 @@ pub struct Module {
     pub(crate) entry_point: PathBuf, // The name of the main start function
     pub(crate) hir: HirModule,
     pub(crate) borrow_analysis: BorrowCheckReport,
-    pub(crate) required_module_imports: Vec<ExternalImport>,
-    pub(crate) exported_functions: Vec<String>,
     pub(crate) warnings: Vec<CompilerWarning>,
     pub(crate) string_table: StringTable,
 }

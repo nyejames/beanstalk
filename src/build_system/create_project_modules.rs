@@ -4,12 +4,13 @@
 // This now only compiles the HIR and runs the borrow checker.
 // This is because both a Wasm and JS backend must be supported, so it is agnostic about what happens after that.
 
-use crate::backends::function_registry::HostRegistry;
 use crate::build_system::build::{InputFile, Module};
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages, ErrorType};
 use crate::compiler_frontend::headers::parse_file_headers::{Header, HeaderKind, parse_headers};
+use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::tokenizer::paths::collect_import_paths_from_tokens;
 use crate::compiler_frontend::tokenizer::tokenizer::tokenize;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, Token, TokenKind, TokenizeMode};
 use crate::compiler_frontend::{CompilerFrontend, Flag};
@@ -22,73 +23,14 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-/// External function import required by the compiled WASM
-#[derive(Debug, Clone)]
-pub struct ExternalImport {
-    /// Module name (e.g., "env", "beanstalk_io", "host")
-    pub module: String,
-    /// Function name
-    pub function: String,
-    /// Function signature for validation
-    pub signature: FunctionSignature,
-    /// Whether this is a built-in compiler_frontend function or user-defined import
-    pub import_type: ImportType,
-}
-
-/// Function signature for external imports
-#[derive(Debug, Clone)]
-pub struct FunctionSignature {
-    /// Parameter types
-    pub params: Vec<WasmType>,
-    /// Return types
-    pub returns: Vec<WasmType>,
-}
-
-/// Type of external import
-#[derive(Debug, Clone)]
-pub enum ImportType {
-    /// Built-in compiler_frontend library function (IO, memory management, etc.)
-    BuiltIn(BuiltInFunction),
-    /// User-defined external function from the host environment
-    External,
-}
-
-/// Built-in compiler_frontend functions that the runtime must provide
-#[derive(Debug, Clone)]
-pub enum BuiltInFunction {
-    /// IO operations
-    Print,
-    ReadInput,
-    WriteFile,
-    ReadFile,
-    /// Memory management
-    Malloc,
-    Free,
-    /// Environment access
-    GetEnv,
-    SetEnv,
-    /// System operations
-    Exit,
-}
-
-/// WASM value types for function signatures
-#[derive(Debug, Clone)]
-pub enum WasmType {
-    I32,
-    I64,
-    F32,
-    F64,
-}
-
 struct DiscoveredModule {
     entry_point: PathBuf,
     input_files: Vec<InputFile>,
 }
 
-#[derive(Debug, Clone)]
-struct ImportPathSpec {
-    components: Vec<String>,
-    display: String,
+struct ParsedImportPaths {
+    paths: Vec<InternedPath>,
+    string_table: StringTable,
 }
 
 /// Find and compile all modules in the project.
@@ -177,10 +119,10 @@ pub fn compile_project_frontend(
     //   PARSE THE CONFIG
     // --------------------
     let config_path = config.entry_dir.join(settings::CONFIG_FILE_NAME);
-    if config_path.exists() {
-        if let Err(error) = parse_project_config_file(config, &config_path) {
-            return_err_as_messages!(error);
-        }
+    if config_path.exists()
+        && let Err(error) = parse_project_config_file(config, &config_path)
+    {
+        return_err_as_messages!(error);
     }
 
     // -------------------------------------
@@ -370,8 +312,6 @@ pub fn compile_module(
         entry_point: entry_file_path.to_path_buf(),
         hir: hir_module,
         borrow_analysis,
-        required_module_imports: Vec::new(), //TODO: parse imports for external modules and add to requirements list
-        exported_functions: Vec::new(), //TODO: Get the list of exported functions from the AST (with their signatures)
         warnings: compiler_messages.warnings,
         string_table: compiler.string_table,
     })
@@ -551,13 +491,14 @@ fn discover_reachable_files(
         }
 
         let import_paths = extract_import_paths(&canonical_file)?;
-        for import_path in import_paths {
+        for import_path in &import_paths.paths {
             let resolved = resolve_import_to_file(
-                &import_path,
+                import_path,
                 &canonical_file,
                 &source_root,
                 library_roots,
                 project_root,
+                &import_paths.string_table,
             )?;
             if !reachable.contains(&resolved) {
                 queue.push_back(resolved);
@@ -568,7 +509,7 @@ fn discover_reachable_files(
     Ok(reachable.into_iter().collect())
 }
 
-fn extract_import_paths(file_path: &Path) -> Result<Vec<ImportPathSpec>, CompilerError> {
+fn extract_import_paths(file_path: &Path) -> Result<ParsedImportPaths, CompilerError> {
     let source = extract_source_code(file_path)?;
     let mut string_table = StringTable::new();
     let interned_path = InternedPath::from_path_buf(file_path, &mut string_table);
@@ -580,63 +521,22 @@ fn extract_import_paths(file_path: &Path) -> Result<Vec<ImportPathSpec>, Compile
     )
     .map_err(|error| error.with_file_path(file_path.to_path_buf()))?;
 
-    let mut imports = Vec::new();
-    let mut index = 0usize;
-    while index < tokens.tokens.len() {
-        if !matches!(tokens.tokens[index].kind, TokenKind::Import) {
-            index += 1;
-            continue;
-        }
+    let imports = collect_import_paths_from_tokens(&tokens.tokens, &string_table)
+        .map_err(|error| error.with_file_path(file_path.to_path_buf()))?;
 
-        index += 1;
-        while index < tokens.tokens.len() && matches!(tokens.tokens[index].kind, TokenKind::Newline)
-        {
-            index += 1;
-        }
-
-        let Some(token) = tokens.tokens.get(index) else {
-            return Err(CompilerError::file_error(
-                file_path,
-                "Import statement ended unexpectedly without a path.",
-            ));
-        };
-
-        let TokenKind::Path(paths) = &token.kind else {
-            return Err(CompilerError::new(
-                "Expected a path token after 'import'.",
-                token.location.to_error_location(&string_table),
-                ErrorType::Syntax,
-            ));
-        };
-
-        for path in paths {
-            let components = path
-                .components()
-                .map(|component| string_table.resolve(component).to_string())
-                .collect::<Vec<_>>();
-            let display = if components.is_empty() {
-                String::from("<empty>")
-            } else {
-                components.join("/")
-            };
-
-            imports.push(ImportPathSpec {
-                components,
-                display,
-            });
-        }
-        index += 1;
-    }
-
-    Ok(imports)
+    Ok(ParsedImportPaths {
+        paths: imports,
+        string_table,
+    })
 }
 
 fn resolve_import_to_file(
-    import_path: &ImportPathSpec,
+    import_path: &InternedPath,
     importer_file: &Path,
     source_root: &Path,
     library_roots: &[PathBuf],
     project_root: &Path,
+    string_table: &StringTable,
 ) -> Result<PathBuf, CompilerError> {
     let importer_dir = importer_file.parent().ok_or_else(|| {
         CompilerError::file_error(
@@ -645,7 +545,7 @@ fn resolve_import_to_file(
         )
     })?;
 
-    if import_path.components.is_empty() {
+    if import_path.as_components().is_empty() {
         return_file_error!(
             importer_file,
             "Import path cannot be empty",
@@ -657,7 +557,10 @@ fn resolve_import_to_file(
     }
 
     let is_relative = matches!(
-        import_path.components.first().map(String::as_str),
+        import_path
+            .as_components()
+            .first()
+            .map(|component| string_table.resolve(*component)),
         Some(".") | Some("..")
     );
 
@@ -670,14 +573,14 @@ fn resolve_import_to_file(
     }
 
     for root in search_roots {
-        for candidate in candidate_import_files(&root, &import_path.components) {
+        for candidate in candidate_import_files(&root, import_path, string_table) {
             if candidate.is_file() {
                 return fs::canonicalize(candidate).map_err(|error| {
                     CompilerError::file_error(
                         importer_file,
                         format!(
                             "Failed to canonicalize resolved import from '{}': {error}",
-                            import_path.display
+                            import_path.to_portable_string(string_table)
                         ),
                     )
                 });
@@ -689,7 +592,7 @@ fn resolve_import_to_file(
         importer_file,
         format!(
             "Could not resolve import '{}'. Tried entry root '{}' and configured library roots.",
-            import_path.display,
+            import_path.to_portable_string(string_table),
             source_root
                 .strip_prefix(project_root)
                 .unwrap_or(source_root)
@@ -698,19 +601,24 @@ fn resolve_import_to_file(
     ))
 }
 
-fn candidate_import_files(root: &Path, components: &[String]) -> Vec<PathBuf> {
+fn candidate_import_files(
+    root: &Path,
+    import_path: &InternedPath,
+    string_table: &StringTable,
+) -> Vec<PathBuf> {
+    let components = import_path.as_components();
     let mut candidates = Vec::with_capacity(2);
 
     let mut exact = root.to_path_buf();
     for component in components {
-        exact.push(component);
+        exact.push(string_table.resolve(*component));
     }
     candidates.push(with_bst_extension(exact));
 
     if components.len() > 1 {
         let mut parent = root.to_path_buf();
         for component in &components[..components.len() - 1] {
-            parent.push(component);
+            parent.push(string_table.resolve(*component));
         }
         candidates.push(with_bst_extension(parent));
     }

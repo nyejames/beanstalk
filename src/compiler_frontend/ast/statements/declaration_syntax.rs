@@ -189,7 +189,14 @@ fn parse_explicit_type_annotation(
             Ok((DataType::Inferred, Some(type_name)))
         }
         TokenKind::Colon => {
-            todo!("Labeled scope")
+            return_rule_error!(
+                "Labeled scopes are not yet implemented in the language.",
+                token_stream.current_location().to_error_location(string_table),
+                {
+                    CompilationStage => "Variable Declaration",
+                    PrimarySuggestion => "Remove the label syntax for now or rewrite this as supported control flow",
+                }
+            )
         }
         TokenKind::Dot
         | TokenKind::AddAssign

@@ -33,7 +33,7 @@ impl StringId {
     ///
     /// Time complexity: O(1)
     #[inline]
-    pub fn resolve<'a>(self, table: &'a StringTable) -> &'a str {
+    pub fn resolve(self, table: &StringTable) -> &str {
         table.resolve(self)
     }
 }

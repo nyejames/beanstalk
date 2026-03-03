@@ -505,15 +505,22 @@ pub fn get_token_kind(
         }
 
         if dot_count == 0 {
-            return_token!(
-                TokenKind::IntLiteral(token_value.parse::<i64>().unwrap()),
-                stream
-            );
+            let parsed_value = token_value.parse::<i64>().map_err(|error| {
+                CompilerError::new_syntax_error(
+                    format!("Invalid integer literal '{token_value}': {error}"),
+                    stream.new_location().to_error_location(string_table),
+                )
+            })?;
+            return_token!(TokenKind::IntLiteral(parsed_value), stream);
         }
-        return_token!(
-            TokenKind::FloatLiteral(token_value.parse::<f64>().unwrap()),
-            stream
-        );
+
+        let parsed_value = token_value.parse::<f64>().map_err(|error| {
+            CompilerError::new_syntax_error(
+                format!("Invalid float literal '{token_value}': {error}"),
+                stream.new_location().to_error_location(string_table),
+            )
+        })?;
+        return_token!(TokenKind::FloatLiteral(parsed_value), stream);
     }
 
     if current_char.is_alphabetic() {

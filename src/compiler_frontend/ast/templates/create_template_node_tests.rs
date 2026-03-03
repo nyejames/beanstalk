@@ -1,5 +1,3 @@
-#![cfg(test)]
-
 use super::*;
 use crate::compiler_frontend::ast::ast::ScopeContext;
 use crate::compiler_frontend::ast::templates::template::TemplateType;

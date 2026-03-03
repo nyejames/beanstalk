@@ -1,7 +1,4 @@
-#![cfg(test)]
-
 use crate::build_system::build::Module;
-use crate::build_system::create_project_modules::ExternalImport;
 use crate::compiler_frontend::CompilerFrontend;
 use crate::compiler_frontend::analysis::borrow_checker::tests::test_support::{
     assignment_target, build_ast, default_host_registry, entry_and_start, function_node, location,
@@ -123,8 +120,6 @@ fn successful_borrow_report_can_be_stored_on_module() {
         entry_point: std::path::PathBuf::from("main.bst"),
         hir,
         borrow_analysis,
-        required_module_imports: Vec::<ExternalImport>::new(),
-        exported_functions: Vec::new(),
         warnings: Vec::new(),
         string_table,
     };

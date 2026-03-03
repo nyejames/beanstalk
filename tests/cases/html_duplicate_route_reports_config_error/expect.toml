@@ -1,0 +1,4 @@
+mode = "failure"
+entry = "."
+error_type = "Config"
+message_contains = ["duplicate output path"]

@@ -1,0 +1,3 @@
+mode = "success"
+entry = "main.bst"
+output_paths = ["main.html"]

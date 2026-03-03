@@ -1,5 +1,6 @@
 use super::*;
 use crate::compiler_frontend::analysis::borrow_checker::BorrowCheckReport;
+use crate::compiler_frontend::compiler_errors::ErrorType;
 use crate::compiler_frontend::hir::hir_datatypes::{HirType, HirTypeKind, TypeContext};
 use crate::compiler_frontend::hir::hir_nodes::{
     BlockId, ConstStringId, FunctionId, HirBlock, HirExpression, HirExpressionKind, HirFunction,
@@ -70,8 +71,6 @@ fn create_test_module(entry_point: PathBuf) -> Module {
         entry_point,
         hir: hir_module,
         borrow_analysis: BorrowCheckReport::default(),
-        required_module_imports: vec![],
-        exported_functions: vec![],
         warnings: vec![],
         string_table,
     }
@@ -229,6 +228,12 @@ fn duplicate_output_paths_are_rejected() {
             .any(|error| error.msg.contains("duplicate output path")),
         "expected duplicate output path error message"
     );
+    assert!(
+        err.errors
+            .iter()
+            .any(|error| error.error_type == ErrorType::Config),
+        "expected duplicate output path to be classified as a config error"
+    );
 }
 
 #[test]
@@ -357,6 +362,12 @@ fn directory_build_requires_homepage_at_entry_root() {
             .iter()
             .any(|error| error.msg.contains("require a '#page.bst' homepage")),
         "expected homepage error message"
+    );
+    assert!(
+        err.errors
+            .iter()
+            .any(|error| error.error_type == ErrorType::Config),
+        "expected missing homepage to be classified as a config error"
     );
 
     fs::remove_dir_all(&root).expect("should remove temp dir");

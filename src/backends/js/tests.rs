@@ -1,4 +1,3 @@
-use crate::backends::function_registry::CallTarget;
 use crate::backends::js::{JsLoweringConfig, lower_hir_to_js};
 use crate::compiler_frontend::hir::hir_datatypes::{HirType, HirTypeKind, TypeContext, TypeId};
 use crate::compiler_frontend::hir::hir_nodes::{
@@ -6,6 +5,7 @@ use crate::compiler_frontend::hir::hir_nodes::{
     HirModule, HirRegion, HirStatement, HirStatementKind, HirTerminator, LocalId, OptionVariant,
     RegionId, ValueKind,
 };
+use crate::compiler_frontend::host_functions::CallTarget;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::TextLocation;

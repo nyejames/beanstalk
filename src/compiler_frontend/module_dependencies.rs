@@ -57,17 +57,17 @@ pub fn resolve_module_dependencies(
     let mut sorted: Vec<Header> = Vec::with_capacity(graph.len());
 
     for path in &ordered_paths {
-        if !tracker.visited.contains(path) {
-            if let Err(e) = visit_node(
+        if !tracker.visited.contains(path)
+            && let Err(error) = visit_node(
                 path,
                 &mut tracker,
                 &graph,
                 &order_lookup,
                 &mut sorted,
                 string_table,
-            ) {
-                errors.push(e);
-            }
+            )
+        {
+            errors.push(error);
         }
     }
 

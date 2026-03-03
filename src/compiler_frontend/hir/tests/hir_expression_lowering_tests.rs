@@ -1,6 +1,3 @@
-#![cfg(test)]
-
-use crate::backends::function_registry::CallTarget;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, Operator,
@@ -13,6 +10,7 @@ use crate::compiler_frontend::hir::hir_nodes::{
     BlockId, FieldId, FunctionId, HirBinOp, HirBlock, HirExpressionKind, HirLocal, HirPlace,
     HirStatementKind, HirTerminator, HirUnaryOp, LocalId, RegionId, StructId, ValueKind,
 };
+use crate::compiler_frontend::host_functions::CallTarget;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::TextLocation;

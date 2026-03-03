@@ -1,6 +1,3 @@
-#![cfg(test)]
-
-use crate::backends::function_registry::{HostAbiType, HostAccessKind, HostReturnAlias};
 use crate::compiler_frontend::analysis::borrow_checker::tests::test_support::{
     assignment_target, build_ast, default_host_registry, entry_and_start, function_node, location,
     lower_hir, node, param, reference_expr, register_host_function, run_borrow_checker, symbol,
@@ -11,6 +8,7 @@ use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::statements::functions::{FunctionReturn, FunctionSignature};
 use crate::compiler_frontend::compiler_errors::ErrorType;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::host_functions::{HostAbiType, HostAccessKind, HostReturnAlias};
 use crate::compiler_frontend::string_interning::StringTable;
 
 fn fresh_returns(result_types: Vec<DataType>) -> Vec<FunctionReturn> {

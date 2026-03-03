@@ -5,12 +5,12 @@
 //! - `visible_symbol_paths` limits what a specific source file is allowed to reference.
 //! - `start_aliases` tracks bare-file imports that map to implicit start functions.
 
-use crate::backends::function_registry::HostRegistry;
 use crate::compiler_frontend::ast::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::statements::declarations::resolve_declaration_syntax;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::headers::parse_file_headers::{FileImport, Header, HeaderKind};
+use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::projects::settings::IMPLICIT_START_FUNC_NAME;

@@ -1,0 +1,3 @@
+mode = "failure"
+error_type = "Rule"
+message_contains = ["Choice declarations are not yet implemented"]

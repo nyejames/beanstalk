@@ -8,7 +8,6 @@ mod access;
 mod call_semantics;
 mod facts;
 
-use crate::backends::function_registry::HostRegistry;
 use crate::compiler_frontend::analysis::borrow_checker::diagnostics::BorrowDiagnostics;
 use crate::compiler_frontend::analysis::borrow_checker::state::{BorrowState, FunctionLayout};
 use crate::compiler_frontend::analysis::borrow_checker::types::{
@@ -18,6 +17,7 @@ use crate::compiler_frontend::analysis::borrow_checker::types::{
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::hir::hir_nodes::{BlockId, FunctionId, HirNodeId, HirValueId};
 use crate::compiler_frontend::hir::hir_nodes::{HirBlock, HirModule};
+use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
 use rustc_hash::FxHashMap;

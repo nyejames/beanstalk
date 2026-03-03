@@ -1,4 +1,3 @@
-use crate::backends::function_registry::HostFunctionDef;
 use crate::compiler_frontend::ast::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
@@ -8,6 +7,7 @@ use crate::compiler_frontend::ast::statements::structs::{
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::host_functions::HostFunctionDef;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TextLocation, TokenKind};
@@ -46,19 +46,10 @@ impl FunctionReturn {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct FunctionSignature {
     pub parameters: Vec<Declaration>,
     pub returns: Vec<FunctionReturn>,
-}
-
-impl Default for FunctionSignature {
-    fn default() -> Self {
-        Self {
-            parameters: Vec::new(),
-            returns: Vec::new(),
-        }
-    }
 }
 
 impl FunctionSignature {

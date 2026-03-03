@@ -6,7 +6,6 @@
 //! (CompilerMessages)
 //! It will also enable printing out Hir structures for easy debugging also.
 
-use crate::backends::function_registry::CallTarget;
 use crate::compiler_frontend::hir::hir_datatypes::{HirTypeKind, TypeContext, TypeId};
 use crate::compiler_frontend::hir::hir_nodes::{
     BlockId, FieldId, FunctionId, HirBinOp, HirBlock, HirExpression, HirExpressionKind, HirField,
@@ -14,6 +13,7 @@ use crate::compiler_frontend::hir::hir_nodes::{
     HirStatementKind, HirStruct, HirTerminator, HirValueId, LocalId, OptionVariant, RegionId,
     ResultVariant, StructId, ValueKind,
 };
+use crate::compiler_frontend::host_functions::CallTarget;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::TextLocation;
@@ -642,12 +642,12 @@ impl<'a> HirDisplayContext<'a> {
         }
 
         out.push_str("  terminator: ");
-        if self.options.include_locations {
-            if let Some(location) = self.side_table.and_then(|side| {
+        if self.options.include_locations
+            && let Some(location) = self.side_table.and_then(|side| {
                 side.hir_source_location_for_hir(HirLocation::Terminator(block.id))
-            }) {
-                let _ = write!(out, "@{} ", self.render_text_location(location));
-            }
+            })
+        {
+            let _ = write!(out, "@{} ", self.render_text_location(location));
         }
         out.push_str(&self.render_terminator(&block.terminator));
         out.push('\n');
@@ -672,13 +672,13 @@ impl<'a> HirDisplayContext<'a> {
             let _ = write!(out, " [{}]", self.region_label(local.region));
         }
 
-        if self.options.include_locations {
-            if let Some(location) = local.source_info.as_ref().or_else(|| {
+        if self.options.include_locations
+            && let Some(location) = local.source_info.as_ref().or_else(|| {
                 self.side_table
                     .and_then(|side| side.hir_source_location_for_hir(HirLocation::Local(local.id)))
-            }) {
-                let _ = write!(out, " @{}", self.render_text_location(location));
-            }
+            })
+        {
+            let _ = write!(out, " @{}", self.render_text_location(location));
         }
 
         out

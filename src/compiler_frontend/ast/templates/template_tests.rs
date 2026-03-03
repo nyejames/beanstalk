@@ -1,5 +1,3 @@
-#![cfg(test)]
-
 use super::*;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::Expression;

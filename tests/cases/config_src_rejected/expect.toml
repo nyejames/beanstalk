@@ -1,0 +1,4 @@
+mode = "failure"
+entry = "."
+error_type = "Config"
+message_contains = ["Config key '#src' is deprecated"]

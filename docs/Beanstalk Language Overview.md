@@ -289,7 +289,7 @@ At the root of every project is a `#config.bst` file.
 Example:
 ```beanstalk
 #project = "html"
-#src = "src"
+#entry_root = "src"
 #output_folder = "dist"
 #libraries = {"src/libs"}
 ```

@@ -3,7 +3,6 @@
 //! Lowers AST statements/control-flow nodes into explicit HIR blocks,
 //! statements, and terminators.
 
-use crate::backends::function_registry::CallTarget;
 use crate::compiler_frontend::ast::ast::Ast;
 use crate::compiler_frontend::ast::ast_nodes::{
     AstNode, Declaration, ForLoopRange, NodeKind, TextLocation,
@@ -20,6 +19,7 @@ use crate::compiler_frontend::hir::hir_nodes::{
     HirExpressionKind, HirField, HirFunction, HirLocal, HirMatchArm, HirModuleConst, HirPattern,
     HirRegion, HirStatement, HirStatementKind, HirStruct, HirTerminator, LocalId, ValueKind,
 };
+use crate::compiler_frontend::host_functions::CallTarget;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::projects::settings::IMPLICIT_START_FUNC_NAME;
 use crate::return_hir_transformation_error;

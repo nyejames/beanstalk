@@ -1,4 +1,3 @@
-use crate::backends::function_registry::HostRegistry;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::function_body_to_ast::function_body_to_ast;
@@ -17,6 +16,7 @@ use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::headers::parse_file_headers::{
     FileImport, Header, HeaderKind, TopLevelTemplateItem,
 };
+use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::projects::settings::{self, IMPLICIT_START_FUNC_NAME};
@@ -374,8 +374,12 @@ impl Ast {
                 }
 
                 HeaderKind::Choice => {
-                    // TODO: Implement choice handling
-                    todo!()
+                    return Err(CompilerMessages {
+                        errors: vec![CompilerError::compiler_error(
+                            "Choice headers should be rejected during header parsing before AST construction.",
+                        )],
+                        warnings,
+                    });
                 }
 
                 HeaderKind::ConstTemplate { .. } => {
