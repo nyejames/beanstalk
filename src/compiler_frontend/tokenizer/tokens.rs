@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
@@ -151,10 +153,6 @@ impl Token {
         Self { kind, location }
     }
 
-    pub fn to_string(&self) -> String {
-        format!("{:?}", self.kind)
-    }
-
     /// Get the string content of this token if it contains string data.
     /// Returns the resolved string content for Symbol, StringSliceLiteral, RawStringLiteral, and PathLiteral tokens.
     /// Returns empty string for other token types.
@@ -167,7 +165,7 @@ impl Token {
             TokenKind::Path(paths) => {
                 let mut string = String::with_capacity(8 * paths.len());
                 for path in paths {
-                    string.extend(path.to_string(string_table).chars())
+                    string.push_str(&path.to_string(string_table));
                 }
                 string
             }

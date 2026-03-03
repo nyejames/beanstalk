@@ -45,6 +45,7 @@ pub fn create_struct_definition(
 
 // This is a constant version of a struct
 // It is compile time only
+#[allow(dead_code)]
 pub fn create_record_definition(
     token_stream: &mut FileTokens,
     string_table: &mut StringTable,
@@ -67,7 +68,7 @@ pub fn parse_parameters(
     token_stream: &mut FileTokens,
     pure: &mut bool,
     string_table: &mut StringTable,
-    is_const: bool, // False for function definitions, true for struct definitions
+    _is_const: bool, // False for function definitions, true for struct definitions
 ) -> Result<Vec<Declaration>, CompilerError> {
     let mut args: Vec<Declaration> = Vec::with_capacity(1);
     let mut next_in_list: bool = true;

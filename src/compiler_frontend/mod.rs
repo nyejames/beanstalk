@@ -47,22 +47,7 @@ use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokenizer::tokenize;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenizeMode};
 use crate::projects::settings::Config;
-use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-
-pub struct OutputModule {
-    pub(crate) imports: HashSet<PathBuf>,
-    pub(crate) source_path: PathBuf,
-}
-
-impl OutputModule {
-    pub(crate) fn new(source_path: PathBuf, imports: HashSet<PathBuf>) -> Self {
-        OutputModule {
-            imports,
-            source_path,
-        }
-    }
-}
 
 /// Flags change the behavior of the core compiler_frontend pipeline.
 /// These are a future-proof way of extending the behavior of a build system or the core pipeline
@@ -74,19 +59,17 @@ pub enum Flag {
     DisableTimers,
 }
 
-pub struct CompilerFrontend<'a> {
-    pub(crate) project_config: &'a Config,
+pub struct CompilerFrontend {
     pub(crate) host_function_registry: HostRegistry,
     pub(crate) string_table: StringTable,
 }
 
-impl<'a> CompilerFrontend<'a> {
-    pub(crate) fn new(project_config: &'a Config, mut string_table: StringTable) -> Self {
+impl CompilerFrontend {
+    pub(crate) fn new(_project_config: &Config, mut string_table: StringTable) -> Self {
         // Create a builtin host function registry with print and other host functions
         let host_function_registry = HostRegistry::new(&mut string_table);
 
         Self {
-            project_config,
             host_function_registry,
             string_table,
         }

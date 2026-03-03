@@ -116,7 +116,6 @@ fn successful_borrow_report_can_be_stored_on_module() {
         .expect("borrow checking should pass");
 
     let module = Module {
-        folder_name: "test".to_string(),
         entry_point: std::path::PathBuf::from("main.bst"),
         hir,
         borrow_analysis,

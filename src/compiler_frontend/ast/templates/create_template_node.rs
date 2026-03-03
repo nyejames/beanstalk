@@ -1,3 +1,5 @@
+#![allow(clippy::needless_borrow)]
+
 use crate::compiler_frontend::ast::ast::ScopeContext;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
@@ -19,6 +21,7 @@ pub struct Template {
     pub content: TemplateContent,
     pub kind: TemplateType,
     pub style: Style,
+    #[allow(dead_code)]
     pub control_flow: TemplateControlFlow,
     pub id: String,
     pub location: TextLocation,

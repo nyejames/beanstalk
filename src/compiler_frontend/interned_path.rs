@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::compiler_frontend::basic_utility_functions::is_valid_var_char;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use std::path::{Path, PathBuf};

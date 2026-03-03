@@ -41,6 +41,7 @@ impl FunctionReturn {
         }
     }
 
+    #[allow(dead_code)]
     pub fn is_alias(&self) -> bool {
         matches!(self, FunctionReturn::AliasCandidates { .. })
     }
@@ -541,7 +542,7 @@ pub fn create_function_call_arguments(
                     "This function does not accept any arguments, found '{:?}' instead",
                     token_stream.current_token_kind()
                 ),
-                token_stream.current_location().to_error_location(&string_table),
+                token_stream.current_location().to_error_location(string_table),
                 {
                     CompilationStage => "Function Call Parsing",
                     PrimarySuggestion => "Remove the arguments or check the function signature",
@@ -567,6 +568,7 @@ pub fn create_function_call_arguments(
 
 /// Coerce an expression to a string at compile time if possible
 /// This handles compile-time constant folding for CoerceToString parameters
+#[allow(dead_code)]
 fn coerce_to_string_at_compile_time(
     expr: &Expression,
     string_table: &mut StringTable,
@@ -650,7 +652,7 @@ pub fn parse_host_function_call(
     )?;
 
     // Validate the host function call
-    validate_host_function_call(host_func, &args, location.clone(), &string_table)?;
+    validate_host_function_call(host_func, &args, location.clone(), string_table)?;
 
     // Create an interned path name from the name
     let name = InternedPath::from_single_str(host_func.name, string_table);
@@ -687,7 +689,7 @@ pub fn validate_host_function_call(
                     got,
                     if got == 1 { "was" } else { "were" }
                 ),
-                location.to_error_location(&string_table),
+                location.to_error_location(string_table),
                 {
                     CompilationStage => "Function Call Validation",
                     PrimarySuggestion => "Remove the parentheses and arguments",
@@ -701,7 +703,7 @@ pub fn validate_host_function_call(
                     expected,
                     if expected == 1 { "" } else { "s" }
                 ),
-                location.to_error_location(&string_table),
+                location.to_error_location(string_table),
                 {
                     CompilationStage => "Function Call Validation",
                     PrimarySuggestion => "Add the required arguments to the function call",
@@ -721,7 +723,7 @@ pub fn validate_host_function_call(
                         "Not enough arguments provided"
                     }
                 ),
-                location.to_error_location(&string_table),
+                location.to_error_location(string_table),
                 {
                     CompilationStage => "Function Call Validation",
                     PrimarySuggestion => if got > expected {
@@ -746,7 +748,7 @@ pub fn validate_host_function_call(
                     format_type_for_error(&expression.data_type),
                     get_type_conversion_hint(&expression.data_type, &param.language_type)
                 ),
-                location.to_error_location(&string_table),
+                location.to_error_location(string_table),
                 {
                     CompilationStage => "Function Call Validation",
                     PrimarySuggestion => "Convert the argument to the expected type",

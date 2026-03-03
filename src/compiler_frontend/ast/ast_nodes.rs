@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, Operator,
 };
@@ -37,6 +39,7 @@ pub struct ForLoopRange {
     pub step: Option<Expression>,
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone)]
 pub enum NodeKind {
     // Warning Message

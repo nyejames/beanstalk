@@ -69,7 +69,7 @@ pub fn create_branch(
                 "Expected ':' after the if condition to open a new scope, found '{:?}' instead",
                 token_stream.current_token_kind()
             ),
-            token_stream.current_location().to_error_location(&string_table),
+            token_stream.current_location().to_error_location(string_table),
             {
                 CompilationStage => "If Statement Parsing",
                 PrimarySuggestion => "Add ':' after the if condition to open the if body",
@@ -243,7 +243,7 @@ fn create_match_node(
                             "Expected ':' after the match condition to open a new scope, found '{:?}' instead",
                             token_stream.current_token_kind()
                         ),
-                        token_stream.current_location().to_error_location(&string_table),
+                        token_stream.current_location().to_error_location(string_table),
                         {
                             CompilationStage => "Match Statement Parsing",
                             PrimarySuggestion => "Add ':' after the match arm condition to open the arm body",

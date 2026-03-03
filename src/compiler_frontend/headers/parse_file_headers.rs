@@ -36,6 +36,7 @@ pub enum TopLevelTemplateKind {
     RuntimeTemplate,
 }
 
+#[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub enum HeaderKind {
     Function { signature: FunctionSignature },
@@ -56,6 +57,7 @@ pub enum HeaderKind {
     StartFunction,
 }
 
+#[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub struct ConstantHeaderMetadata {
     pub declaration_syntax: DeclarationSyntax,
@@ -146,6 +148,7 @@ pub fn parse_headers(
 // Everything at the top level of a file is visible to the whole module.
 // This function splits up the file into each of its headers with entry point detection.
 // Each header is a function, struct, choice, constant declaration or part of the implicit main function (anything else in the top level scope).
+#[allow(clippy::too_many_arguments)]
 pub fn parse_headers_in_file(
     token_stream: &mut FileTokens,
     host_function_registry: &HostRegistry,
@@ -391,6 +394,7 @@ pub fn parse_headers_in_file(
 
 // This should probably be just creating a HeaderKind instead,
 // Lots of stuff is just being passed straight through, but who cares tbh
+#[allow(clippy::too_many_arguments)]
 fn create_header(
     full_name: InternedPath,
     source_file: &InternedPath,
@@ -589,6 +593,7 @@ fn create_header(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 fn create_top_level_const_template(
     scope: InternedPath,
     opening_template_token: crate::compiler_frontend::tokenizer::tokens::Token,

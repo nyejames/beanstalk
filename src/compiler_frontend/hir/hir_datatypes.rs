@@ -3,6 +3,8 @@
 // ============================================================
 //
 // This is the canonical type representation used by HIR.
+#![allow(dead_code)]
+
 // All types are fully resolved and interned.
 // No inference, no AST residue, no surface syntax artifacts.
 //

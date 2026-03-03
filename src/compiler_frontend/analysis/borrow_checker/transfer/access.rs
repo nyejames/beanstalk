@@ -3,6 +3,8 @@
 //! This file contains the forward transfer logic for borrow checking.
 //! It classifies shared vs mutable access, checks exclusivity constraints,
 //! and emits statement/terminator/value facts.
+#![allow(dead_code)]
+
 
 use crate::compiler_frontend::analysis::borrow_checker::state::{
     BorrowState, FunctionLayout, FutureUseKind, LocalState, RootSet,
@@ -348,6 +350,7 @@ pub(super) fn transfer_terminator(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn record_shared_reads_in_pattern(
     context: &BorrowTransferContext<'_>,
     layout: &FunctionLayout,
@@ -387,6 +390,7 @@ fn record_shared_reads_in_pattern(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn transfer_assign_target(
     context: &BorrowTransferContext<'_>,
     layout: &FunctionLayout,
@@ -602,6 +606,7 @@ fn classify_move_decision(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn check_shared_access(
     context: &BorrowTransferContext<'_>,
     layout: &FunctionLayout,
@@ -666,6 +671,7 @@ fn check_shared_access(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn check_mutable_access(
     context: &BorrowTransferContext<'_>,
     layout: &FunctionLayout,
@@ -683,24 +689,24 @@ fn check_mutable_access(
     for root_index in roots.iter_ones() {
         stats.conflicts_checked += 1;
 
-        if let Some(existing) = tracker.conflict(root_index, AccessKind::Mutable) {
-            if !(allow_prior_shared && existing == AccessKind::Shared) {
-                let root_name = context.diagnostics.local_name(layout.local_ids[root_index]);
+        if let Some(existing) = tracker.conflict(root_index, AccessKind::Mutable)
+            && !(allow_prior_shared && existing == AccessKind::Shared)
+        {
+            let root_name = context.diagnostics.local_name(layout.local_ids[root_index]);
 
-                return_borrow_checker_error!(
-                    format!(
-                        "Cannot mutably access '{}' due to overlapping {:?} access in the same evaluation sequence",
-                        root_name,
-                        existing
-                    ),
-                    location.clone(),
-                    {
-                        CompilationStage => "Borrow Checking",
-                        BorrowKind => "Mutable",
-                        PrimarySuggestion => "Split mutable and shared accesses into separate statements",
-                    }
-                );
-            }
+            return_borrow_checker_error!(
+                format!(
+                    "Cannot mutably access '{}' due to overlapping {:?} access in the same evaluation sequence",
+                    root_name,
+                    existing
+                ),
+                location.clone(),
+                {
+                    CompilationStage => "Borrow Checking",
+                    BorrowKind => "Mutable",
+                    PrimarySuggestion => "Split mutable and shared accesses into separate statements",
+                }
+            );
         }
 
         if require_root_mutable && !layout.local_mutable[root_index] {
@@ -1077,6 +1083,7 @@ fn roots_for_place(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn record_shared_reads_in_place_indices(
     context: &BorrowTransferContext<'_>,
     layout: &FunctionLayout,
@@ -1127,6 +1134,7 @@ fn record_shared_reads_in_place_indices(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn record_shared_reads_in_expression(
     context: &BorrowTransferContext<'_>,
     layout: &FunctionLayout,
@@ -1298,19 +1306,19 @@ fn record_shared_reads_in_expression(
         }
 
         HirExpressionKind::OptionConstruct { variant, value } => {
-            if matches!(variant, OptionVariant::Some) {
-                if let Some(inner) = value {
-                    record_shared_reads_in_expression(
-                        context,
-                        layout,
-                        state,
-                        inner,
-                        tracker,
-                        location.clone(),
-                        stats,
-                        value_fact_buffer,
-                    )?;
-                }
+            if matches!(variant, OptionVariant::Some)
+                && let Some(inner) = value
+            {
+                record_shared_reads_in_expression(
+                    context,
+                    layout,
+                    state,
+                    inner,
+                    tracker,
+                    location.clone(),
+                    stats,
+                    value_fact_buffer,
+                )?;
             }
         }
 

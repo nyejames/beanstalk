@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::string_interning::StringTable;
@@ -25,6 +27,7 @@ impl Ownership {
         )
     }
 
+    #[allow(clippy::wrong_self_convention)]
     pub fn to_reference(&mut self) {
         match self {
             Ownership::MutableOwned => {
@@ -176,6 +179,7 @@ impl DataType {
     }
 
     // Special Types that might change (basically the same as rust with more syntax sugar)
+    #[allow(clippy::wrong_self_convention)]
     pub fn to_option(self) -> DataType {
         match self {
             DataType::Bool => DataType::Option(Box::new(DataType::Bool)),
@@ -283,8 +287,7 @@ impl DataType {
             DataType::Returns(returns) => {
                 let mut returns_string = String::new();
                 for return_type in returns {
-                    returns_string
-                        .push_str(&format!("{}", return_type.display_with_table(string_table)));
+                    returns_string.push_str(&return_type.display_with_table(string_table).to_string());
                 }
                 format!("Returns({})", returns_string)
             }
@@ -319,10 +322,8 @@ impl DataType {
             DataType::Choices(inner_types) => {
                 let mut inner_types_str = String::new();
                 for inner_type in inner_types {
-                    inner_types_str.push_str(&format!(
-                        "{}",
-                        inner_type.value.data_type.display_with_table(string_table)
-                    ));
+                    inner_types_str
+                        .push_str(&inner_type.value.data_type.display_with_table(string_table).to_string());
                 }
                 format!("Choices({})", inner_types_str)
             }
@@ -436,7 +437,7 @@ impl Display for DataType {
             DataType::Returns(returns) => {
                 let mut returns_string = String::new();
                 for return_type in returns {
-                    returns_string.push_str(&format!("{}, ", return_type.to_string()));
+                    returns_string.push_str(&format!("{return_type}, "));
                 }
                 write!(f, "{self:?} Returns({returns_string})")
             }

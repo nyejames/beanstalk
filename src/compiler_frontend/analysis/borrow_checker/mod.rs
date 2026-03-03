@@ -3,6 +3,8 @@
 //! This module orchestrates borrow checking for a complete HIR module.
 //! It builds function metadata, runs a forward fixed-point dataflow analysis
 //! per function, and stores snapshots/facts for downstream phases.
+#![allow(dead_code)]
+
 
 mod diagnostics;
 mod state;

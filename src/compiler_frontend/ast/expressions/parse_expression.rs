@@ -1,3 +1,5 @@
+#![allow(clippy::needless_borrow)]
+
 use super::eval_expression::evaluate_expression;
 use crate::compiler_frontend::ast::ast::ContextKind;
 use crate::compiler_frontend::ast::ast::ScopeContext;

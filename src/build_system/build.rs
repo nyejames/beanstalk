@@ -19,7 +19,6 @@ use std::path::{Component, Path, PathBuf};
 use std::time::Instant;
 
 pub struct Module {
-    pub(crate) folder_name: String,
     pub(crate) entry_point: PathBuf, // The name of the main start function
     pub(crate) hir: HirModule,
     pub(crate) borrow_analysis: BorrowCheckReport,

@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::templates::create_template_node::Template;
 

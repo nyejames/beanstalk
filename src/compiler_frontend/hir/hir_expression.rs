@@ -2,6 +2,8 @@
 //!
 //! Lowers typed AST expressions into HIR expressions and statement preludes.
 //! This file contains expression-specific lowering logic on `HirBuilder`.
+#![allow(dead_code, unused_variables)]
+
 
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::{
@@ -133,7 +135,7 @@ impl<'a> HirBuilder<'a> {
                         HirExpressionKind::StringLiteral(format!(
                             "{}{}",
                             self.string_table.resolve(*value1),
-                            self.string_table.resolve(*value1)
+                            self.string_table.resolve(*value2)
                         )),
                         ty,
                         ValueKind::Const,

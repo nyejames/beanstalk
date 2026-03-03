@@ -160,7 +160,7 @@ pub fn compile_module(
     // Create the compiler_frontend instance
     let mut compiler = CompilerFrontend::new(config, string_table);
 
-    let time = Instant::now();
+    let _time = Instant::now();
 
     // ----------------------------------
     //         Token generation
@@ -194,7 +194,7 @@ pub fn compile_module(
         return Err(compiler_messages);
     }
 
-    timer_log!(time, "Tokenized in: ");
+    timer_log!(_time, "Tokenized in: ");
 
     // ----------------------------------
     //           Parse Headers
@@ -202,7 +202,7 @@ pub fn compile_module(
     // This will parse all the top level declarations across the token_stream
     // This is to split up the AST generation into discreet blocks and make all the public declarations known during AST generation.
     // All imports are figured out at this stage, so each header can be ordered depending on their dependencies.
-    let time = Instant::now();
+    let _time = Instant::now();
 
     let module_headers = match compiler.tokens_to_headers(
         project_tokens,
@@ -216,12 +216,12 @@ pub fn compile_module(
         }
     };
 
-    timer_log!(time, "Headers Parsed in: ");
+    timer_log!(_time, "Headers Parsed in: ");
 
     // ----------------------------------
     //       Dependency resolution
     // ----------------------------------
-    let time = Instant::now();
+    let _time = Instant::now();
     let sorted_modules = match compiler.sort_headers(module_headers.headers) {
         Ok(modules) => modules,
         Err(error) => {
@@ -230,12 +230,12 @@ pub fn compile_module(
         }
     };
 
-    timer_log!(time, "Dependency graph created in: ");
+    timer_log!(_time, "Dependency graph created in: ");
 
     // ----------------------------------
     //          AST generation
     // ----------------------------------
-    let time = Instant::now();
+    let _time = Instant::now();
     // Combine all headers into one AST for this module.
     let module_ast = match compiler.headers_to_ast(
         sorted_modules,
@@ -254,12 +254,12 @@ pub fn compile_module(
         }
     };
 
-    timer_log!(time, "AST created in: ");
+    timer_log!(_time, "AST created in: ");
 
     // ----------------------------------
     //          HIR generation
     // ----------------------------------
-    let time = Instant::now();
+    let _time = Instant::now();
 
     let hir_module = match compiler.generate_hir(module_ast) {
         Ok(nodes) => nodes,
@@ -270,12 +270,12 @@ pub fn compile_module(
         }
     };
 
-    timer_log!(time, "HIR generated in: ");
+    timer_log!(_time, "HIR generated in: ");
 
     // ----------------------------------
     //          BORROW CHECKING
     // ----------------------------------
-    let time = Instant::now();
+    let _time = Instant::now();
 
     let borrow_analysis = match compiler.check_borrows(&hir_module) {
         Ok(outcome) => outcome,
@@ -286,7 +286,7 @@ pub fn compile_module(
         }
     };
 
-    timer_log!(time, "Borrow checking completed in: ");
+    timer_log!(_time, "Borrow checking completed in: ");
 
     // Debug output for the borrow checker (macro-gated by `show_borrow_checker`)
     borrow_log!("=== BORROW CHECKER OUTPUT ===");
@@ -303,12 +303,6 @@ pub fn compile_module(
     borrow_log!("=== END BORROW CHECKER OUTPUT ===");
 
     Ok(Module {
-        folder_name: entry_file_path
-            .file_name()
-            .unwrap_or(OsStr::new(""))
-            .to_str()
-            .unwrap_or("")
-            .to_string(),
         entry_point: entry_file_path.to_path_buf(),
         hir: hir_module,
         borrow_analysis,

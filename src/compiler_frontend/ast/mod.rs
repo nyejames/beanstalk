@@ -1,3 +1,5 @@
+#![allow(clippy::module_inception)]
+
 pub(crate) mod ast;
 pub(crate) mod ast_nodes;
 pub(crate) mod function_body_to_ast;

@@ -89,7 +89,7 @@ pub fn constant_fold(
 
                 if matches!(op, Operator::Not) {
                     let mut boolean = stack.pop().unwrap();
-                    if !boolean.flip(&string_table)? {
+                    if !boolean.flip(string_table)? {
                         stack.push(boolean);
                         stack.push(node.to_owned());
                     } else {
@@ -118,7 +118,7 @@ pub fn constant_fold(
                 };
 
                 // Try to evaluate the operation
-                if let Some(result) = lhs_expr.evaluate_operator(&rhs_expr, op, string_table)? {
+                if let Some(result) = lhs_expr.evaluate_operator(rhs_expr, op, string_table)? {
                     // Successfully evaluated - push a result onto the stack
                     let new_literal = AstNode {
                         kind: NodeKind::Rvalue(result.to_owned()),
@@ -231,12 +231,12 @@ impl Expression {
 
                     Operator::Range => ExpressionKind::Range(
                         Box::new(Expression::int(
-                            lhs_val.clone(),
+                            *lhs_val,
                             self.location.to_owned(),
                             Ownership::ImmutableOwned,
                         )),
                         Box::new(Expression::int(
-                            rhs_val.clone(),
+                            *rhs_val,
                             self.location.to_owned(),
                             Ownership::ImmutableOwned,
                         )),

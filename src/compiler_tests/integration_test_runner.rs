@@ -42,7 +42,6 @@ struct TestSuiteSpec {
 
 #[derive(Clone)]
 struct TestCaseSpec {
-    id: String,
     display_name: String,
     entry_path: PathBuf,
     fixture_root: Option<PathBuf>,
@@ -383,7 +382,6 @@ fn load_canonical_case(
     };
 
     Ok(TestCaseSpec {
-        id: case_id.clone(),
         display_name: case_id,
         entry_path,
         fixture_root: Some(fixture_root.to_path_buf()),
@@ -577,7 +575,6 @@ fn load_legacy_cases(root: &Path, should_succeed: bool) -> Vec<TestCaseSpec> {
         };
 
         cases.push(TestCaseSpec {
-            id: relative.clone(),
             display_name: relative,
             entry_path: path,
             fixture_root: None,

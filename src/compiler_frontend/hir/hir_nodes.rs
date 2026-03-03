@@ -3,6 +3,8 @@
 //! ============================================================
 //! A Fully resolved, canonical semantic representation of Beanstalk programs.
 //!  - All symbols are resolved to stable IDs
+#![allow(dead_code)]
+
 //!  - All expressions fully typed
 //!  - Explicit locals and regions
 //!  - No AST artefacts

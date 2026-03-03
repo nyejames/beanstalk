@@ -2,6 +2,8 @@
 //!
 //! Lowers AST statements/control-flow nodes into explicit HIR blocks,
 //! statements, and terminators.
+#![allow(dead_code, unused_variables)]
+
 
 use crate::compiler_frontend::ast::ast::Ast;
 use crate::compiler_frontend::ast::ast_nodes::{

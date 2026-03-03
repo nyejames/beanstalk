@@ -3,6 +3,8 @@
 //! This module coordinates block transfer for the borrow checker.
 //! Statement/terminator rules live in submodules so the control flow of the
 //! fixed-point analysis remains easy to follow from a single entrypoint.
+#![allow(dead_code)]
+
 
 mod access;
 mod call_semantics;

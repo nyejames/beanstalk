@@ -27,6 +27,7 @@ pub use crate::compiler_frontend::ast::templates::top_level_templates::AstStartT
 
 static CONTROL_FLOW_SCOPE_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
+#[allow(dead_code)]
 pub struct ModuleExport {
     pub id: StringId,
     pub signature: FunctionSignature,
@@ -42,6 +43,7 @@ pub struct Ast {
     // Exported out of the final compiled wasm module
     // Functions must use explicit 'export' syntax Token::Export to be exported
     // The only exception is the Main function, which is the start function of the entry point file
+    #[allow(dead_code)]
     pub external_exports: Vec<ModuleExport>,
     pub start_template_items: Vec<AstStartTemplateItem>,
     pub warnings: Vec<CompilerWarning>,
@@ -543,7 +545,7 @@ impl ScopeContext {
         &self,
         id: StringId,
         signature: FunctionSignature,
-        string_table: &mut StringTable,
+        _string_table: &mut StringTable,
     ) -> ScopeContext {
         let mut new_context = self.to_owned();
         new_context.kind = ContextKind::Function;

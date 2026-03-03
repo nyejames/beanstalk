@@ -2,6 +2,8 @@
 //!
 //! This module delegates compilation and artifact writing to the core build APIs, then translates
 //! build outcomes into dev-server state updates and SSE reload broadcasts.
+#![allow(dead_code)]
+
 
 use crate::build_system::build::{self, BuildResult, ProjectBuilder, WriteOptions};
 use crate::compiler_frontend::Flag;

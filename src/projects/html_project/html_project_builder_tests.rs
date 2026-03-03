@@ -67,7 +67,6 @@ fn create_test_module(entry_point: PathBuf) -> Module {
     );
 
     Module {
-        folder_name: "test".to_owned(),
         entry_point,
         hir: hir_module,
         borrow_analysis: BorrowCheckReport::default(),

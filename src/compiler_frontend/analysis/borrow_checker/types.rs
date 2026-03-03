@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::compiler_frontend::hir::hir_nodes::{
     BlockId, FunctionId, HirNodeId, HirValueId, LocalId,
 };

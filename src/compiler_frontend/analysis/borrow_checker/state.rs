@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::compiler_frontend::analysis::borrow_checker::types::{
     BorrowStateSnapshot, LocalBorrowSnapshot, LocalMode,
 };
@@ -26,6 +28,7 @@ pub(super) enum FutureUseKind {
 }
 
 impl FunctionLayout {
+    #[allow(clippy::too_many_arguments)]
     pub(super) fn new(
         local_ids: Vec<LocalId>,
         local_mutable: Vec<bool>,

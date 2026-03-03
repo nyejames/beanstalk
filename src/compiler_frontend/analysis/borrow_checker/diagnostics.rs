@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::compiler_frontend::analysis::borrow_checker::state::{BorrowState, FunctionLayout};
 use crate::compiler_frontend::compiler_errors::ErrorLocation;
 use crate::compiler_frontend::hir::hir_display::HirLocation;

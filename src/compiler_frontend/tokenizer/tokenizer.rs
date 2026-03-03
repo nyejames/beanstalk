@@ -83,7 +83,7 @@ pub fn get_token_kind(
         // If we reach here, the raw string was not terminated
         return_syntax_error!(
             "Unterminated raw string literal - missing closing backtick",
-            stream.new_location().to_error_location(&string_table),
+            stream.new_location().to_error_location(string_table),
             {
                 CompilationStage => "Tokenization",
                 PrimarySuggestion => "Add closing backtick at the end of the raw string",
@@ -208,12 +208,12 @@ pub fn get_token_kind(
         }
 
         // ::
-        if let Some(&next_char) = stream.peek() {
-            if next_char == ':' {
-                stream.next();
+        if let Some(&next_char) = stream.peek()
+            && next_char == ':'
+        {
+            stream.next();
 
-                return_token!(TokenKind::DoubleColon, stream);
-            }
+            return_token!(TokenKind::DoubleColon, stream);
         }
 
         return_token!(TokenKind::Colon, stream);
@@ -230,19 +230,18 @@ pub fn get_token_kind(
 
     // Check for character literals
     if current_char == '\'' {
-        if let Some(c) = stream.next() {
-            if let Some(&char_after_next) = stream.peek()
-                && char_after_next == '\''
-            {
-                stream.next(); // Consume the closing quote
-                return_token!(TokenKind::CharLiteral(c), stream);
-            }
+        if let Some(c) = stream.next()
+            && let Some(&char_after_next) = stream.peek()
+            && char_after_next == '\''
+        {
+            stream.next(); // Consume the closing quote
+            return_token!(TokenKind::CharLiteral(c), stream);
         };
 
         // If not correct declaration of char
         return_syntax_error!(
             format!("Expected a character after the single quote in a char literal. Found {current_char}"),
-            stream.new_location().to_error_location(&string_table),
+            stream.new_location().to_error_location(string_table),
             {
                 CompilationStage => "Tokenization",
                 PrimarySuggestion => "Character literals must be exactly one character between single quotes",
@@ -312,65 +311,65 @@ pub fn get_token_kind(
     }
 
     // Comments / Subtraction / Negative / Scene Head / Arrow
-    if current_char == '-' {
-        if let Some(&next_char) = stream.peek() {
-            // Comments
-            if next_char == '-' {
+    if current_char == '-'
+        && let Some(&next_char) = stream.peek()
+    {
+        // Comments
+        if next_char == '-' {
+            stream.next();
+
+            while let Some(ch) = stream.peek() {
+                if ch == &'\n' {
+                    break;
+                }
+
                 stream.next();
-
-                while let Some(ch) = stream.peek() {
-                    if ch == &'\n' {
-                        break;
-                    }
-
-                    stream.next();
-                }
-
-                // Do not add any token to the stream, call this function again
-                return get_token_kind(stream, template_nesting_level, string_table);
-
-            // Subtraction / Negative / Return / Subtract Assign
-            } else {
-                if next_char == '=' {
-                    stream.next();
-                    return_token!(TokenKind::SubtractAssign, stream);
-                }
-
-                if next_char == '>' {
-                    stream.next();
-                    return_token!(TokenKind::Arrow, stream);
-                }
-
-                if next_char.is_numeric() {
-                    return_token!(TokenKind::Negative, stream);
-                }
-
-                return_token!(TokenKind::Subtract, stream);
             }
+
+            // Do not add any token to the stream, call this function again
+            return get_token_kind(stream, template_nesting_level, string_table);
         }
+
+        // Subtraction / Negative / Return / Subtract Assign
+        if next_char == '=' {
+            stream.next();
+            return_token!(TokenKind::SubtractAssign, stream);
+        }
+
+        if next_char == '>' {
+            stream.next();
+            return_token!(TokenKind::Arrow, stream);
+        }
+
+        if next_char.is_numeric() {
+            return_token!(TokenKind::Negative, stream);
+        }
+
+        return_token!(TokenKind::Subtract, stream);
     }
 
     // Mathematical operators
     // must peak ahead to check for exponentiation (**) or roots (//) and assign variations
     if current_char == '+' {
-        if let Some(&next_char) = stream.peek() {
-            if next_char == '=' {
-                stream.next();
-                return_token!(TokenKind::AddAssign, stream);
-            }
+        if let Some(&next_char) = stream.peek()
+            && next_char == '='
+        {
+            stream.next();
+            return_token!(TokenKind::AddAssign, stream);
         }
 
         return_token!(TokenKind::Add, stream);
     }
 
     if current_char == '*' {
-        if let Some(&next_char) = stream.peek() {
-            if next_char == '=' {
-                stream.next();
-                return_token!(TokenKind::MultiplyAssign, stream);
-            }
-            return_token!(TokenKind::Multiply, stream);
+        if let Some(&next_char) = stream.peek()
+            && next_char == '='
+        {
+            stream.next();
+            return_token!(TokenKind::MultiplyAssign, stream);
         }
+
+        return_token!(TokenKind::Multiply, stream);
     }
 
     if current_char == '/' {
@@ -378,20 +377,22 @@ pub fn get_token_kind(
             if next_char == '/' {
                 stream.next();
 
-                if let Some(&next_next_char) = stream.peek() {
-                    if next_next_char == '=' {
-                        stream.next();
-                        return_token!(TokenKind::RootAssign, stream);
-                    }
+                if let Some(&next_next_char) = stream.peek()
+                    && next_next_char == '='
+                {
+                    stream.next();
+                    return_token!(TokenKind::RootAssign, stream);
                 }
                 return_token!(TokenKind::Root, stream);
             }
+
             if next_char == '=' {
                 stream.next();
                 return_token!(TokenKind::DivideAssign, stream);
             }
-            return_token!(TokenKind::Divide, stream);
         }
+
+        return_token!(TokenKind::Divide, stream);
     }
 
     if current_char == '%' {
@@ -400,50 +401,55 @@ pub fn get_token_kind(
                 stream.next();
                 return_token!(TokenKind::ModulusAssign, stream);
             }
+
             if next_char == '%' {
                 stream.next();
-                if let Some(&next_next_char) = stream.peek() {
-                    if next_next_char == '=' {
-                        stream.next();
-                        return_token!(TokenKind::RemainderAssign, stream);
-                    }
+                if let Some(&next_next_char) = stream.peek()
+                    && next_next_char == '='
+                {
+                    stream.next();
+                    return_token!(TokenKind::RemainderAssign, stream);
                 }
                 return_token!(TokenKind::Remainder, stream);
             }
-            return_token!(TokenKind::Modulus, stream);
         }
+
+        return_token!(TokenKind::Modulus, stream);
     }
 
     if current_char == '^' {
-        if let Some(&next_char) = stream.peek() {
-            if next_char == '=' {
-                stream.next();
-                return_token!(TokenKind::ExponentAssign, stream);
-            }
+        if let Some(&next_char) = stream.peek()
+            && next_char == '='
+        {
+            stream.next();
+            return_token!(TokenKind::ExponentAssign, stream);
         }
+
         return_token!(TokenKind::Exponent, stream);
     }
 
     // Check for greater than and Less than logic operators
     // must also peak ahead to check it's not also equal to
     if current_char == '>' {
-        if let Some(&next_char) = stream.peek() {
-            if next_char == '=' {
-                stream.next();
-                return_token!(TokenKind::GreaterThanOrEqual, stream);
-            }
-            return_token!(TokenKind::GreaterThan, stream);
+        if let Some(&next_char) = stream.peek()
+            && next_char == '='
+        {
+            stream.next();
+            return_token!(TokenKind::GreaterThanOrEqual, stream);
         }
+
+        return_token!(TokenKind::GreaterThan, stream);
     }
 
     if current_char == '<' {
-        if let Some(&next_char) = stream.peek() {
-            if next_char == '=' {
-                stream.next();
-                return_token!(TokenKind::LessThanOrEqual, stream);
-            }
-            return_token!(TokenKind::LessThan, stream);
+        if let Some(&next_char) = stream.peek()
+            && next_char == '='
+        {
+            stream.next();
+            return_token!(TokenKind::LessThanOrEqual, stream);
         }
+
+        return_token!(TokenKind::LessThan, stream);
     }
 
     if current_char == '~' {
@@ -467,11 +473,25 @@ pub fn get_token_kind(
     // Numbers
     if current_char.is_numeric() {
         token_value.push(current_char);
-        let mut dot_count = 0;
+        let mut has_decimal_point = false;
+        let mut saw_digit_after_decimal = false;
+        let mut last_segment_was_digit = true;
 
         while let Some(&next_char) = stream.peek() {
             if next_char == '_' {
-                stream.next();
+                if !last_segment_was_digit {
+                    return_syntax_error!(
+                        "Numeric separators must appear between digits",
+                        stream.new_location().to_error_location(string_table),
+                        {
+                            CompilationStage => "Tokenization",
+                            PrimarySuggestion => "Place underscores only between digits in numeric literals",
+                        }
+                    )
+                }
+
+                let _ = stream.next();
+                last_segment_was_digit = false;
                 continue;
             }
 
@@ -479,12 +499,10 @@ pub fn get_token_kind(
                 // TODO: need to handle range operator without backtracking through token stream
                 // Or consuming too many dots.
 
-                dot_count += 1;
-                // Stop if too many dots in number
-                if dot_count > 1 {
+                if has_decimal_point {
                     return_syntax_error!(
                         "Can't have more than one decimal point in a number",
-                        stream.new_location().to_error_location(&string_table),
+                        stream.new_location().to_error_location(string_table),
                         {
                             CompilationStage => "Tokenization",
                             PrimarySuggestion => "Remove extra decimal points from the number",
@@ -492,19 +510,68 @@ pub fn get_token_kind(
                     )
                 }
 
-                let dot = stream.next().unwrap();
+                if !last_segment_was_digit {
+                    return_syntax_error!(
+                        "A decimal point must follow a digit",
+                        stream.new_location().to_error_location(string_table),
+                        {
+                            CompilationStage => "Tokenization",
+                            PrimarySuggestion => "Remove the separator before the decimal point",
+                        }
+                    )
+                }
+
+                has_decimal_point = true;
+                last_segment_was_digit = false;
+
+                let Some(dot) = stream.next() else {
+                    return Err(CompilerError::compiler_error(
+                        "Tokenizer peeked a decimal point but could not advance the stream.",
+                    ));
+                };
                 token_value.push(dot);
                 continue;
             }
 
             if next_char.is_numeric() {
-                token_value.push(stream.next().unwrap());
+                let Some(digit) = stream.next() else {
+                    return Err(CompilerError::compiler_error(
+                        "Tokenizer peeked a numeric character but could not advance the stream.",
+                    ));
+                };
+                token_value.push(digit);
+                last_segment_was_digit = true;
+                if has_decimal_point {
+                    saw_digit_after_decimal = true;
+                }
             } else {
                 break;
             }
         }
 
-        if dot_count == 0 {
+        if !last_segment_was_digit {
+            return_syntax_error!(
+                "Number literals must end with a digit",
+                stream.new_location().to_error_location(string_table),
+                {
+                    CompilationStage => "Tokenization",
+                    PrimarySuggestion => "Remove the trailing separator or add a digit after the decimal point",
+                }
+            )
+        }
+
+        if has_decimal_point && !saw_digit_after_decimal {
+            return_syntax_error!(
+                "Float literals must include digits after the decimal point",
+                stream.new_location().to_error_location(string_table),
+                {
+                    CompilationStage => "Tokenization",
+                    PrimarySuggestion => "Add at least one digit after the decimal point",
+                }
+            )
+        }
+
+        if !has_decimal_point {
             let parsed_value = token_value.parse::<i64>().map_err(|error| {
                 CompilerError::new_syntax_error(
                     format!("Invalid integer literal '{token_value}': {error}"),
@@ -530,7 +597,7 @@ pub fn get_token_kind(
 
     return_syntax_error!(
         format!("Invalid Token Used: '{}' this is not recognised or supported by the compiler_frontend", current_char),
-        stream.new_location().to_error_location(&string_table),
+        stream.new_location().to_error_location(string_table),
         {
             CompilationStage => "Tokenization",
             PrimarySuggestion => "Check for typos or unsupported characters",

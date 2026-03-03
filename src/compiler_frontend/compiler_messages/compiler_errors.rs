@@ -318,6 +318,7 @@ impl CompilerError {
     }
 
     /// Create a compiler_frontend error (internal bug, not user's fault)
+    #[allow(clippy::self_named_constructors)]
     pub fn compiler_error(msg: impl Into<String>) -> Self {
         CompilerError {
             msg: msg.into(),

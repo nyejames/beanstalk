@@ -20,7 +20,7 @@ pub fn handle_mutation(
 
     // Check for field access on this arg,
     // Or just provide the reference AST node
-    let node = parse_field_access(token_stream, variable_arg, &context, string_table)?;
+    let node = parse_field_access(token_stream, variable_arg, context, string_table)?;
 
     // Check if the variable is mutable
     let ownership = &variable_arg.value.ownership;
@@ -37,7 +37,7 @@ pub fn handle_mutation(
     if !ownership.is_mutable() {
         return_rule_error!(
             format!("Cannot mutate immutable variable '{}'. Use '~' to declare a mutable variable", variable_arg.id.to_string(string_table)),
-            location.to_error_location(&string_table),
+            location.to_error_location(string_table),
             {
                 BorrowKind => "Mutable",
                 CompilationStage => "Expression Parsing",
@@ -223,7 +223,7 @@ pub fn handle_mutation(
         _ => {
             return_syntax_error!(
                 format!("Expected assignment operator after variable '{}', found '{:?}'", variable_arg.id.to_string(string_table), token_stream.current_token_kind()),
-                location.to_error_location(&string_table),
+                location.to_error_location(string_table),
                 {
                     CompilationStage => "Expression Parsing",
                     PrimarySuggestion => "Use '=', '+=', '-=', '*=', or '/=' for assignment",

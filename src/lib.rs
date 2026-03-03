@@ -1,6 +1,6 @@
 // While many parts of the compiler are in heavy development,
 // there are lots of placeholders and code that will possibly be used, but isn't atm.
-#![allow(dead_code, unused_macros, unused_variables)]
+// #![allow(dead_code, unused_macros, unused_variables)]
 
 mod compiler_tests {
     pub(crate) mod integration_test_runner; // For running all integration tests and report back the results

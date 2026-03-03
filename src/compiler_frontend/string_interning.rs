@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::projects::settings::MINIMUM_STRING_TABLE_CAPACITY;
 use rustc_hash::FxHashMap;
 
