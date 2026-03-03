@@ -129,8 +129,33 @@ They are the ONLY way to create mutable strings in Beanstalk. "" are only for st
 - Variable capture from the surrounding scope
 
 Templates unlock the full power of Beanstalk's HTML / CSS generation capabilities.
-You can use slots and special Style structs to determine how the templates are constructed.
-They can be used to build complex HTML pages with minimal boilerplate.
+
+### Template Styles
+Templates can be used to build complex UI components. They can use slots to insert content from other templates and have **style metadata** attached to them.
+
+A template’s style is defined in the **template head** using `$` directives. 
+`$` introduces **compiler-handled settings** (so they don’t collide with normal variables and can be extended in the future), such as choosing a formatter, a precedence and default child templates that are automatically applied to nested templates.
+
+```beanstalk
+-- Define a template style
+[
+  $formatter(markdown, 10),                     -- optional formatter precedence second argument
+  $ignore,                                      -- Ignores all inherited style settings
+  $[: All children start with this prefix! ]    -- Applies to all children
+:
+  # Hello
+  This template is parsed as markdown.
+]
+```
+
+Shorthand formatter sugar will be supported for built-in formatters:
+
+```beanstalk
+[$markdown:
+  Hello (markdown formatted)
+]
+```
+
 
 **Control flow patterns:**
 
@@ -144,7 +169,7 @@ else
 ;
 ```
 
-### Loops in Beanstalk
+## Loops
 
 Beanstalk uses a **single** loop keyword: `loop`.
 
@@ -243,7 +268,8 @@ loop t in 0.0 to 1.0 by 0.1:
 ;
 ```
 
-**Structs**
+## Structs
+
 ```beanstalk
     -- To create a new instance of this struct, it must have 2 parameters passed in,
     -- a string and an integer
@@ -288,10 +314,10 @@ At the root of every project is a `#config.bst` file.
 
 Example:
 ```beanstalk
-#project = "html"
-#entry_root = "src"
-#output_folder = "dist"
-#libraries = {"src/libs"}
+# project = "html"
+# entry_root = "src"
+# output_folder = "dist"
+# libraries = {"src/libs"}
 ```
 
 **Import syntax:**
@@ -342,16 +368,16 @@ Non-`#` top-level declarations are module-private.
 
 ```beanstalk
 -- Exported constants
-#name = "Beanstalk"
-#pi = 0.1 + 0.2
+# name = "Beanstalk"
+# pi = 0.1 + 0.2
 
 -- Exported function
-#foo |...| -> T: 
+# foo |...| -> T: 
     ... 
 ;
 
 -- Exported struct/type
-#MyStruct = | ... |
+# MyStruct = | ... |
 ```
 
 ### Constants and compile-time folding
@@ -368,9 +394,9 @@ Constant rules:
 - Cross-file constant dependencies are resolved in dependency order so constants can reference constants from imported files
 
 ```beanstalk
-#site_name String = "Beanstalk"
-#major_version Int = 1
-#full_name = [: [site_name] v[major_version]]
+# site_name String = "Beanstalk"
+# major_version Int = 1
+# full_name = [: [site_name] v[major_version]]
 ```
 
 ### Struct instances in constants (const records)
@@ -380,7 +406,7 @@ All constructor arguments must also be constant-foldable values.
 
 ```beanstalk
 Basic = | defaults String |
-#values = Basic("Only allowed const values here")
+# values = Basic("Only allowed const values here")
 ```
 
 `values` has type `#Basic` and is data-only.
@@ -407,7 +433,7 @@ They are also useful for constant data that wants to be shared module wide.
 Example:
 
 ```beanstalk
-#head_defaults = [:
+# head_defaults = [:
   <meta charset="UTF-8">
 ]
 

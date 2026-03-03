@@ -3,7 +3,6 @@
 //! Supports:
 //! - canonical self-contained case folders under `tests/cases/<case>/`
 //! - optional manifest-driven case ordering
-//! - legacy `tests/cases/success` / `tests/cases/failure` compatibility during migration
 
 use crate::build_system::build::{BuildResult, FileKind, build_project};
 use crate::compiler_frontend::Flag;
@@ -21,8 +20,6 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::{Path, PathBuf};
 
 const CANONICAL_TESTS_PATH: &str = "tests/cases";
-const LEGACY_SUCCESS_PATH: &str = "tests/cases/success";
-const LEGACY_FAILURE_PATH: &str = "tests/cases/failure";
 const MANIFEST_FILE_NAME: &str = "manifest.toml";
 const EXPECT_FILE_NAME: &str = "expect.toml";
 const INPUT_DIR_NAME: &str = "input";
@@ -35,16 +32,14 @@ struct TestRunnerOptions {
 }
 
 struct TestSuiteSpec {
-    canonical_cases: Vec<TestCaseSpec>,
-    legacy_success_cases: Vec<TestCaseSpec>,
-    legacy_failure_cases: Vec<TestCaseSpec>,
+    cases: Vec<TestCaseSpec>,
 }
 
 #[derive(Clone)]
 struct TestCaseSpec {
     display_name: String,
     entry_path: PathBuf,
-    fixture_root: Option<PathBuf>,
+    fixture_root: PathBuf,
     expected: ExpectedOutcome,
 }
 
@@ -119,11 +114,11 @@ pub fn run_all_test_cases(show_warnings: bool) {
     let mut expected_failures = 0usize;
     let mut unexpected_successes = 0usize;
 
-    if !suite.canonical_cases.is_empty() {
-        say!(Cyan "Testing canonical cases:");
+    if !suite.cases.is_empty() {
+        say!(Cyan "Testing integration cases:");
         say!(Dark White "=".repeat(SEPARATOR_LINE_LENGTH));
 
-        for case in &suite.canonical_cases {
+        for case in &suite.cases {
             total_tests += 1;
             println!("  {}", case.display_name);
 
@@ -146,50 +141,6 @@ pub fn run_all_test_cases(show_warnings: bool) {
         }
 
         println!();
-    }
-
-    if !suite.legacy_success_cases.is_empty() {
-        say!(Cyan "Testing legacy success files:");
-        say!(Dark White "=".repeat(SEPARATOR_LINE_LENGTH));
-
-        for case in &suite.legacy_success_cases {
-            total_tests += 1;
-            println!("  {}", case.display_name);
-
-            let result = execute_test_case(case);
-            render_case_result(case, &result, options.show_warnings);
-
-            if result.passed {
-                passed_tests += 1;
-            } else {
-                failed_tests += 1;
-            }
-
-            say!(Dark White "-".repeat(SEPARATOR_LINE_LENGTH));
-        }
-
-        println!();
-    }
-
-    if !suite.legacy_failure_cases.is_empty() {
-        say!(Cyan "Testing legacy failure files:");
-        say!(Dark White "=".repeat(SEPARATOR_LINE_LENGTH));
-
-        for case in &suite.legacy_failure_cases {
-            total_tests += 1;
-            println!("  {}", case.display_name);
-
-            let result = execute_test_case(case);
-            render_case_result(case, &result, options.show_warnings);
-
-            if result.passed {
-                expected_failures += 1;
-            } else {
-                unexpected_successes += 1;
-            }
-
-            say!(Dark White "-".repeat(SEPARATOR_LINE_LENGTH));
-        }
     }
 
     println!();
@@ -227,7 +178,7 @@ pub fn run_all_test_cases(show_warnings: bool) {
 
 fn load_test_suite() -> Result<TestSuiteSpec, String> {
     let root = Path::new(CANONICAL_TESTS_PATH);
-    let mut canonical_cases = Vec::new();
+    let mut cases = Vec::new();
     let mut loaded_canonical_paths = HashSet::new();
 
     let manifest_path = root.join(MANIFEST_FILE_NAME);
@@ -236,7 +187,7 @@ fn load_test_suite() -> Result<TestSuiteSpec, String> {
             let fixture_root = root.join(&manifest_case.path);
             let case = load_canonical_case(&fixture_root, Some(manifest_case.id))?;
             loaded_canonical_paths.insert(fs::canonicalize(&fixture_root).unwrap_or(fixture_root));
-            canonical_cases.push(case);
+            cases.push(case);
         }
     }
 
@@ -280,18 +231,14 @@ fn load_test_suite() -> Result<TestSuiteSpec, String> {
                 continue;
             }
 
-            canonical_cases.push(load_canonical_case(&fixture_root, None)?);
+            cases.push(load_canonical_case(&fixture_root, None)?);
             loaded_canonical_paths.insert(canonical_path);
         }
     }
 
-    canonical_cases.sort_by(|lhs, rhs| lhs.display_name.cmp(&rhs.display_name));
+    cases.sort_by(|lhs, rhs| lhs.display_name.cmp(&rhs.display_name));
 
-    Ok(TestSuiteSpec {
-        canonical_cases,
-        legacy_success_cases: load_legacy_cases(Path::new(LEGACY_SUCCESS_PATH), true),
-        legacy_failure_cases: load_legacy_cases(Path::new(LEGACY_FAILURE_PATH), false),
-    })
+    Ok(TestSuiteSpec { cases })
 }
 
 fn parse_manifest_file(path: &Path) -> Result<Vec<ManifestCaseSpec>, String> {
@@ -384,7 +331,7 @@ fn load_canonical_case(
     Ok(TestCaseSpec {
         display_name: case_id,
         entry_path,
-        fixture_root: Some(fixture_root.to_path_buf()),
+        fixture_root: fixture_root.to_path_buf(),
         expected,
     })
 }
@@ -548,43 +495,6 @@ fn collect_root_hash_entries(input_root: &Path) -> Result<Vec<PathBuf>, String> 
     Ok(entries)
 }
 
-fn load_legacy_cases(root: &Path, should_succeed: bool) -> Vec<TestCaseSpec> {
-    if !root.exists() {
-        return Vec::new();
-    }
-
-    let mut cases = Vec::new();
-    for path in collect_bst_files_recursive(root) {
-        let relative = path
-            .strip_prefix(root)
-            .unwrap_or(&path)
-            .to_string_lossy()
-            .to_string();
-        let expected = if should_succeed {
-            ExpectedOutcome::Success(SuccessExpectation {
-                warnings: WarningExpectation::Ignore,
-                output_paths: None,
-            })
-        } else {
-            ExpectedOutcome::Failure(FailureExpectation {
-                allow_panic: false,
-                warnings: WarningExpectation::Ignore,
-                error_type: None,
-                message_contains: Vec::new(),
-            })
-        };
-
-        cases.push(TestCaseSpec {
-            display_name: relative,
-            entry_path: path,
-            fixture_root: None,
-            expected,
-        });
-    }
-
-    cases
-}
-
 fn execute_test_case(case: &TestCaseSpec) -> CaseExecutionResult {
     let builder = HtmlProjectBuilder::new();
     let flags = vec![Flag::DisableTimers];
@@ -672,9 +582,8 @@ fn validate_success_result(
         };
     }
 
-    if let Some(fixture_root) = &case.fixture_root
-        && let Some(reason) =
-            validate_golden_outputs(&build_result, &fixture_root.join(GOLDEN_DIR_NAME))
+    if let Some(reason) =
+        validate_golden_outputs(&build_result, &case.fixture_root.join(GOLDEN_DIR_NAME))
     {
         return CaseExecutionResult {
             passed: false,
@@ -997,13 +906,6 @@ fn parse_error_type(value: &str) -> Result<ErrorType, String> {
         "wasmgeneration" | "wasm_generation" => Ok(ErrorType::WasmGeneration),
         other => Err(format!("Unsupported error type '{other}'")),
     }
-}
-
-fn collect_bst_files_recursive(root: &Path) -> Vec<PathBuf> {
-    let mut discovered = collect_files_recursive(root);
-    discovered.retain(|path| path.extension().is_some_and(|ext| ext == "bst"));
-    discovered.sort();
-    discovered
 }
 
 fn collect_files_recursive(root: &Path) -> Vec<PathBuf> {

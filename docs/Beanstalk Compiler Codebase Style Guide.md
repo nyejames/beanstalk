@@ -189,8 +189,8 @@ cargo run --features "show_ast,show_hir,detailed_timers" -- build test.bst
 # Run integration test suite
 cargo run -- tests
 
-# Run specific test case
-cargo run -- build tests/cases/success/basic_print.bst
+# Run a specific canonical test case entry
+cargo run -- build tests/cases/basic_print_statement/input/main.bst
 ```
 
 ### Feature Flags for Debugging
@@ -244,7 +244,6 @@ tests/cases/
 Canonical integration cases should be self-contained directories that describe one scenario each.
 Multi-file fixtures should stay inside a single case folder so helper files are not counted as standalone tests.
 Failure cases should assert the intended `ErrorType` and, when practical, message fragments that prove the compiler failed for the right reason.
-Legacy `tests/cases/success/**` and `tests/cases/failure/**` fixtures may exist temporarily during migrations, but new tests should use the canonical case-folder layout.
 
 **No user-input panics**:
 - Active frontend stages must reject unsupported syntax and malformed input with structured diagnostics, not `panic!`, `todo!`, or user-data-driven `.unwrap()`.
@@ -256,7 +255,7 @@ Legacy `tests/cases/success/**` and `tests/cases/failure/**` fixtures may exist 
 cargo run -- tests
 
 # Debugging a single file
-cargo run --features "detailed_timers,show_ast,show_hir" -- build tests/cases/test.bst
+cargo run --features "detailed_timers,show_ast,show_hir" -- build tests/cases/test/input/main.bst
 
 ```
 
