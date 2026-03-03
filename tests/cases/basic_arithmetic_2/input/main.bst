@@ -26,3 +26,5 @@ main ||:
     
     io("Arithmetic tests passed")
 ;
+
+main()

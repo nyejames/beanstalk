@@ -65,21 +65,6 @@ pub fn create_multiple_expressions(
         }
     }
 
-    if token_stream.current_token_kind() == &TokenKind::Comma {
-        return_type_error!(
-            format!(
-                "Too many arguments provided. Expected: {}. Provided: {}.",
-                context.expected_result_types.len(),
-                expressions.len() + 1
-            ),
-            token_stream.current_location().to_error_location(&string_table),
-            {
-                CompilationStage => "Expression Parsing",
-                PrimarySuggestion => "Remove extra arguments to match the expected count",
-            }
-        )
-    }
-
     if consume_closing_parenthesis {
         if token_stream.current_token_kind() != &TokenKind::CloseParenthesis {
             return_syntax_error!(
@@ -910,6 +895,8 @@ pub fn create_expression(
 
         token_stream.advance();
     }
+
+    token_stream.skip_newlines();
 
     evaluate_expression(
         &context.scope,

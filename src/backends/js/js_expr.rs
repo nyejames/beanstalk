@@ -134,12 +134,14 @@ impl<'hir> JsEmitter<'hir> {
         expression: &HirExpression,
     ) -> Result<String, CompilerError> {
         match &expression.kind {
-            HirExpressionKind::Load(place) => self.lower_place(place),
+            HirExpressionKind::Load(place) => Ok(
+                format!("__bs_read({})", self.lower_place(place)?)
+            ),
             HirExpressionKind::Copy(place) => Ok(format!(
-                "__bs_binding(__bs_clone_value(__bs_read({})))",
+                "__bs_clone_value(__bs_read({}))",
                 self.lower_place(place)?
             )),
-            _ => Ok(format!("__bs_binding({})", self.lower_expr(expression)?)),
+            _ => Ok(format!("__bs_read(__bs_binding({}))", self.lower_expr(expression)?)),
         }
     }
 
