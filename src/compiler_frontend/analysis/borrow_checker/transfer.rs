@@ -5,7 +5,6 @@
 //! fixed-point analysis remains easy to follow from a single entrypoint.
 #![allow(dead_code)]
 
-
 mod access;
 mod call_semantics;
 mod facts;

@@ -5,7 +5,6 @@
 //! and emits statement/terminator/value facts.
 #![allow(dead_code)]
 
-
 use crate::compiler_frontend::analysis::borrow_checker::state::{
     BorrowState, FunctionLayout, FutureUseKind, LocalState, RootSet,
 };
@@ -23,11 +22,75 @@ use super::call_semantics::{CallResultAlias, resolve_call_semantics};
 use super::facts::{StatementAccessTracker, ValueFactBuffer, roots_to_local_ids};
 use super::{BlockTransferStats, BorrowTransferContext};
 
+struct SharedReadEnv<'a, 'module> {
+    context: &'a BorrowTransferContext<'module>,
+    layout: &'a FunctionLayout,
+    state: &'a BorrowState,
+    tracker: &'a mut StatementAccessTracker,
+    location: ErrorLocation,
+    stats: &'a mut BlockTransferStats,
+    value_fact_buffer: &'a mut ValueFactBuffer,
+}
+
+struct AssignTargetTransfer<'a, 'module> {
+    context: &'a BorrowTransferContext<'module>,
+    layout: &'a FunctionLayout,
+    state: &'a mut BorrowState,
+    tracker: &'a mut StatementAccessTracker,
+    location: ErrorLocation,
+    stats: &'a mut BlockTransferStats,
+}
+
+struct SharedAccessCheck<'a, 'module> {
+    context: &'a BorrowTransferContext<'module>,
+    layout: &'a FunctionLayout,
+    state: &'a BorrowState,
+    tracker: &'a mut StatementAccessTracker,
+    location: ErrorLocation,
+    stats: &'a mut BlockTransferStats,
+    actor_index_hint: Option<usize>,
+    current_line: i32,
+}
+
+struct MutableAccessCheck<'a, 'module> {
+    context: &'a BorrowTransferContext<'module>,
+    layout: &'a FunctionLayout,
+    state: &'a BorrowState,
+    tracker: &'a mut StatementAccessTracker,
+    location: ErrorLocation,
+    stats: &'a mut BlockTransferStats,
+    allow_prior_shared: bool,
+    actor_index_hint: Option<usize>,
+    require_root_mutable: bool,
+    current_line: i32,
+    strict_move_exclusivity: bool,
+}
+
+fn shared_read_env<'a, 'module>(
+    context: &'a BorrowTransferContext<'module>,
+    layout: &'a FunctionLayout,
+    state: &'a BorrowState,
+    tracker: &'a mut StatementAccessTracker,
+    location: ErrorLocation,
+    stats: &'a mut BlockTransferStats,
+    value_fact_buffer: &'a mut ValueFactBuffer,
+) -> SharedReadEnv<'a, 'module> {
+    SharedReadEnv {
+        context,
+        layout,
+        state,
+        tracker,
+        location,
+        stats,
+        value_fact_buffer,
+    }
+}
+
 pub(super) fn transfer_statement(
     context: &BorrowTransferContext<'_>,
     layout: &FunctionLayout,
     state: &mut BorrowState,
-    block_id: BlockId,
+    _block_id: BlockId,
     statement: &HirStatement,
     stats: &mut BlockTransferStats,
     value_fact_buffer: &mut ValueFactBuffer,
@@ -39,38 +102,40 @@ pub(super) fn transfer_statement(
         HirStatementKind::Assign { target, value } => {
             let location = context.diagnostics.statement_error_location(statement);
 
-            record_shared_reads_in_place_indices(
-                context,
-                layout,
-                state,
-                target,
-                &mut tracker,
-                location.clone(),
-                stats,
-                value_fact_buffer,
-            )?;
-            record_shared_reads_in_expression(
-                context,
-                layout,
-                state,
-                value,
-                &mut tracker,
-                location.clone(),
-                stats,
-                value_fact_buffer,
-            )?;
+            {
+                let mut read_env = shared_read_env(
+                    context,
+                    layout,
+                    state,
+                    &mut tracker,
+                    location.clone(),
+                    stats,
+                    value_fact_buffer,
+                );
+                record_shared_reads_in_place_indices(&mut read_env, target, location.clone())?;
+            }
+            {
+                let mut read_env = shared_read_env(
+                    context,
+                    layout,
+                    state,
+                    &mut tracker,
+                    location.clone(),
+                    stats,
+                    value_fact_buffer,
+                );
+                record_shared_reads_in_expression(&mut read_env, value, location.clone())?;
+            }
 
-            transfer_assign_target(
+            let mut assign_env = AssignTargetTransfer {
                 context,
                 layout,
                 state,
-                block_id,
-                target,
-                value,
-                &mut tracker,
+                tracker: &mut tracker,
                 location,
                 stats,
-            )?;
+            };
+            transfer_assign_target(&mut assign_env, target, value)?;
         }
 
         HirStatementKind::Call {
@@ -101,40 +166,52 @@ pub(super) fn transfer_statement(
                     // reads needed to evaluate projections (for example index expressions).
                     match &argument.kind {
                         HirExpressionKind::Load(place) => {
-                            record_shared_reads_in_place_indices(
+                            let mut read_env = shared_read_env(
                                 context,
                                 layout,
                                 state,
-                                place,
                                 &mut tracker,
                                 argument_location.clone(),
                                 stats,
                                 value_fact_buffer,
+                            );
+                            record_shared_reads_in_place_indices(
+                                &mut read_env,
+                                place,
+                                argument_location.clone(),
                             )?;
                         }
                         _ => {
-                            record_shared_reads_in_expression(
+                            let mut read_env = shared_read_env(
                                 context,
                                 layout,
                                 state,
-                                argument,
                                 &mut tracker,
                                 argument_location.clone(),
                                 stats,
                                 value_fact_buffer,
+                            );
+                            record_shared_reads_in_expression(
+                                &mut read_env,
+                                argument,
+                                argument_location.clone(),
                             )?;
                         }
                     }
                 } else {
-                    record_shared_reads_in_expression(
+                    let mut read_env = shared_read_env(
                         context,
                         layout,
                         state,
-                        argument,
                         &mut tracker,
                         argument_location.clone(),
                         stats,
                         value_fact_buffer,
+                    );
+                    record_shared_reads_in_expression(
+                        &mut read_env,
+                        argument,
+                        argument_location.clone(),
                     )?;
                 }
 
@@ -152,20 +229,22 @@ pub(super) fn transfer_statement(
                     let mutable_roots =
                         mutable_argument_roots(layout, state, argument, argument_location.clone())?;
                     if !mutable_roots.is_empty() {
-                        check_mutable_access(
+                        let current_line = argument_location.start_pos.line_number;
+                        let mut check = MutableAccessCheck {
                             context,
                             layout,
                             state,
-                            &mutable_roots,
-                            false,
-                            None,
-                            semantics.arg_requires_declared_mutability[arg_index],
-                            argument_location.start_pos.line_number,
-                            false,
-                            &mut tracker,
-                            argument_location,
+                            tracker: &mut tracker,
+                            location: argument_location,
                             stats,
-                        )?;
+                            allow_prior_shared: false,
+                            actor_index_hint: None,
+                            require_root_mutable: semantics.arg_requires_declared_mutability
+                                [arg_index],
+                            current_line,
+                            strict_move_exclusivity: false,
+                        };
+                        check_mutable_access(&mut check, &mutable_roots)?;
                     }
 
                     value_fact_buffer.record(
@@ -220,16 +299,16 @@ pub(super) fn transfer_statement(
 
         HirStatementKind::Expr(expression) => {
             let location = context.diagnostics.statement_error_location(statement);
-            record_shared_reads_in_expression(
+            let mut read_env = shared_read_env(
                 context,
                 layout,
                 state,
-                expression,
                 &mut tracker,
-                location,
+                location.clone(),
                 stats,
                 value_fact_buffer,
-            )?;
+            );
+            record_shared_reads_in_expression(&mut read_env, expression, location.clone())?;
         }
 
         HirStatementKind::Drop(_local) => {
@@ -267,69 +346,71 @@ pub(super) fn transfer_terminator(
         HirTerminator::Jump { .. } => {}
 
         HirTerminator::If { condition, .. } => {
-            record_shared_reads_in_expression(
+            let mut read_env = shared_read_env(
                 context,
                 layout,
                 state,
-                condition,
-                &mut tracker,
-                location,
-                stats,
-                value_fact_buffer,
-            )?;
-        }
-
-        HirTerminator::Match { scrutinee, arms } => {
-            record_shared_reads_in_expression(
-                context,
-                layout,
-                state,
-                scrutinee,
                 &mut tracker,
                 location.clone(),
                 stats,
                 value_fact_buffer,
-            )?;
+            );
+            record_shared_reads_in_expression(&mut read_env, condition, location.clone())?;
+        }
 
-            for arm in arms {
-                record_shared_reads_in_pattern(
+        HirTerminator::Match { scrutinee, arms } => {
+            {
+                let mut read_env = shared_read_env(
                     context,
                     layout,
                     state,
-                    arm,
                     &mut tracker,
                     location.clone(),
                     stats,
                     value_fact_buffer,
-                )?;
+                );
+                record_shared_reads_in_expression(&mut read_env, scrutinee, location.clone())?;
+            }
+
+            for arm in arms {
+                let mut read_env = shared_read_env(
+                    context,
+                    layout,
+                    state,
+                    &mut tracker,
+                    location.clone(),
+                    stats,
+                    value_fact_buffer,
+                );
+                record_shared_reads_in_pattern(&mut read_env, arm)?;
             }
         }
 
         HirTerminator::Return(value) => {
-            record_shared_reads_in_expression(
+            let mut read_env = shared_read_env(
                 context,
                 layout,
                 state,
-                value,
                 &mut tracker,
-                location,
+                location.clone(),
                 stats,
                 value_fact_buffer,
-            )?;
+            );
+            record_shared_reads_in_expression(&mut read_env, value, location.clone())?;
         }
 
         HirTerminator::Panic { message } => {
             if let Some(message) = message {
-                record_shared_reads_in_expression(
+                let mut read_env = shared_read_env(
                     context,
                     layout,
                     state,
-                    message,
                     &mut tracker,
-                    location,
+                    location.clone(),
                     stats,
                     value_fact_buffer,
-                )?;
+                );
+                record_shared_reads_in_expression(&mut read_env, message, location.clone())?;
             }
         }
 
@@ -350,120 +431,94 @@ pub(super) fn transfer_terminator(
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
 fn record_shared_reads_in_pattern(
-    context: &BorrowTransferContext<'_>,
-    layout: &FunctionLayout,
-    state: &BorrowState,
+    env: &mut SharedReadEnv<'_, '_>,
     arm: &HirMatchArm,
-    tracker: &mut StatementAccessTracker,
-    location: ErrorLocation,
-    stats: &mut BlockTransferStats,
-    value_fact_buffer: &mut ValueFactBuffer,
 ) -> Result<(), CompilerError> {
     if let HirPattern::Literal(expression) = &arm.pattern {
-        record_shared_reads_in_expression(
-            context,
-            layout,
-            state,
-            expression,
-            tracker,
-            location.clone(),
-            stats,
-            value_fact_buffer,
-        )?;
+        let location = env.location.clone();
+        record_shared_reads_in_expression(env, expression, location)?;
     }
 
     if let Some(guard) = &arm.guard {
-        record_shared_reads_in_expression(
-            context,
-            layout,
-            state,
-            guard,
-            tracker,
-            location,
-            stats,
-            value_fact_buffer,
-        )?;
+        let location = env.location.clone();
+        record_shared_reads_in_expression(env, guard, location)?;
     }
 
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
 fn transfer_assign_target(
-    context: &BorrowTransferContext<'_>,
-    layout: &FunctionLayout,
-    state: &mut BorrowState,
-    _block_id: BlockId,
+    env: &mut AssignTargetTransfer<'_, '_>,
     target: &HirPlace,
     value: &HirExpression,
-    tracker: &mut StatementAccessTracker,
-    location: ErrorLocation,
-    stats: &mut BlockTransferStats,
 ) -> Result<(), CompilerError> {
     match target {
         HirPlace::Local(local_id) => {
-            let Some(local_index) = layout.index_of(*local_id) else {
+            let Some(local_index) = env.layout.index_of(*local_id) else {
                 return_borrow_checker_error!(
                     format!(
                         "Assignment target local '{}' is not in the active function layout",
-                        context.diagnostics.local_name(*local_id)
+                        env.context.diagnostics.local_name(*local_id)
                     ),
-                    location,
+                    env.location.clone(),
                     {
                         CompilationStage => "Borrow Checking",
                     }
                 );
             };
 
-            let local_state = state.local_state(local_index).clone();
-            let rhs_alias_roots =
-                direct_place_roots_from_expression(layout, state, value, location.clone())?;
+            let local_state = env.state.local_state(local_index).clone();
+            let rhs_alias_roots = direct_place_roots_from_expression(
+                env.layout,
+                env.state,
+                value,
+                env.location.clone(),
+            )?;
             let rhs_direct_alias_roots = rhs_alias_roots.as_ref().map(|rhs_roots| {
-                direct_root_aliases_from_expression(layout, state, value, rhs_roots)
+                direct_root_aliases_from_expression(env.layout, env.state, value, rhs_roots)
             });
-            let current_line = location.start_pos.line_number;
+            let current_line = env.location.start_pos.line_number;
 
             if local_state.mode.is_definitely_uninit() {
                 match rhs_alias_roots {
                     Some(rhs_roots) => {
-                        let target_is_mutable = layout.local_mutable[local_index];
+                        let target_is_mutable = env.layout.local_mutable[local_index];
                         if target_is_mutable && !rhs_roots.is_empty() {
-                            check_mutable_access(
-                                context,
-                                layout,
-                                state,
-                                &rhs_roots,
-                                true,
-                                Some(local_index),
-                                false,
+                            let mut check = MutableAccessCheck {
+                                context: env.context,
+                                layout: env.layout,
+                                state: &*env.state,
+                                tracker: env.tracker,
+                                location: env.location.clone(),
+                                stats: env.stats,
+                                allow_prior_shared: true,
+                                actor_index_hint: Some(local_index),
+                                require_root_mutable: false,
                                 current_line,
-                                false,
-                                tracker,
-                                location.clone(),
-                                stats,
-                            )?;
+                                strict_move_exclusivity: false,
+                            };
+                            check_mutable_access(&mut check, &rhs_roots)?;
                         }
 
                         let direct_roots = rhs_direct_alias_roots
-                            .unwrap_or_else(|| RootSet::empty(layout.local_count()));
-                        state.update_local_state(
+                            .unwrap_or_else(|| RootSet::empty(env.layout.local_count()));
+                        env.state.update_local_state(
                             local_index,
                             LocalState::alias_with_direct(rhs_roots, direct_roots),
                         );
                     }
                     None => {
-                        state.update_local_state(
+                        env.state.update_local_state(
                             local_index,
-                            LocalState::slot(layout.local_count()),
+                            LocalState::slot(env.layout.local_count()),
                         );
                     }
                 }
                 return Ok(());
             }
 
-            let mut write_roots = RootSet::empty(layout.local_count());
+            let mut write_roots = RootSet::empty(env.layout.local_count());
             if local_state.mode.contains(LocalMode::SLOT) {
                 write_roots.insert(local_index);
             }
@@ -471,20 +526,20 @@ fn transfer_assign_target(
                 write_roots.union_with(&local_state.alias_roots);
             }
 
-            check_mutable_access(
-                context,
-                layout,
-                state,
-                &write_roots,
-                true,
-                Some(local_index),
-                true,
+            let mut check = MutableAccessCheck {
+                context: env.context,
+                layout: env.layout,
+                state: &*env.state,
+                tracker: env.tracker,
+                location: env.location.clone(),
+                stats: env.stats,
+                allow_prior_shared: true,
+                actor_index_hint: Some(local_index),
+                require_root_mutable: true,
                 current_line,
-                false,
-                tracker,
-                location.clone(),
-                stats,
-            )?;
+                strict_move_exclusivity: false,
+            };
+            check_mutable_access(&mut check, &write_roots)?;
 
             match (
                 local_state.mode.contains(LocalMode::SLOT),
@@ -496,8 +551,8 @@ fn transfer_assign_target(
 
                 (true, false) => {
                     apply_slot_rebinding(
-                        state,
-                        layout.local_count(),
+                        env.state,
+                        env.layout.local_count(),
                         local_index,
                         rhs_alias_roots,
                         rhs_direct_alias_roots,
@@ -514,7 +569,7 @@ fn transfer_assign_target(
                         direct_alias_roots.union_with(&rhs_direct_roots);
                     }
 
-                    state.update_local_state(
+                    env.state.update_local_state(
                         local_index,
                         LocalState {
                             mode: LocalMode::SLOT.union(LocalMode::ALIAS),
@@ -525,28 +580,31 @@ fn transfer_assign_target(
                 }
 
                 (false, false) => {
-                    state.update_local_state(local_index, LocalState::slot(layout.local_count()));
+                    env.state.update_local_state(
+                        local_index,
+                        LocalState::slot(env.layout.local_count()),
+                    );
                 }
             }
         }
 
         _ => {
-            let roots = roots_for_place(layout, state, target, location.clone())?;
-            let current_line = location.start_pos.line_number;
-            check_mutable_access(
-                context,
-                layout,
-                state,
-                &roots,
-                true,
-                None,
-                true,
+            let roots = roots_for_place(env.layout, env.state, target, env.location.clone())?;
+            let current_line = env.location.start_pos.line_number;
+            let mut check = MutableAccessCheck {
+                context: env.context,
+                layout: env.layout,
+                state: &*env.state,
+                tracker: env.tracker,
+                location: env.location.clone(),
+                stats: env.stats,
+                allow_prior_shared: true,
+                actor_index_hint: None,
+                require_root_mutable: true,
                 current_line,
-                false,
-                tracker,
-                location,
-                stats,
-            )?;
+                strict_move_exclusivity: false,
+            };
+            check_mutable_access(&mut check, &roots)?;
         }
     }
 
@@ -606,23 +664,18 @@ fn classify_move_decision(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 fn check_shared_access(
-    context: &BorrowTransferContext<'_>,
-    layout: &FunctionLayout,
-    state: &BorrowState,
+    check: &mut SharedAccessCheck<'_, '_>,
     roots: &RootSet,
-    actor_index_hint: Option<usize>,
-    current_line: i32,
-    tracker: &mut StatementAccessTracker,
-    location: ErrorLocation,
-    stats: &mut BlockTransferStats,
 ) -> Result<(), CompilerError> {
     for root_index in roots.iter_ones() {
-        stats.conflicts_checked += 1;
+        check.stats.conflicts_checked += 1;
 
-        if let Some(existing) = tracker.conflict(root_index, AccessKind::Shared) {
-            let root_name = context.diagnostics.local_name(layout.local_ids[root_index]);
+        if let Some(existing) = check.tracker.conflict(root_index, AccessKind::Shared) {
+            let root_name = check
+                .context
+                .diagnostics
+                .local_name(check.layout.local_ids[root_index]);
 
             return_borrow_checker_error!(
                 format!(
@@ -630,7 +683,7 @@ fn check_shared_access(
                     root_name,
                     existing
                 ),
-                location,
+                check.location.clone(),
                 {
                     CompilationStage => "Borrow Checking",
                     BorrowKind => "Shared",
@@ -640,23 +693,27 @@ fn check_shared_access(
         }
 
         if let Some(conflicting_index) = active_mutable_alias_for_root(
-            context,
-            layout,
-            state,
+            check.context,
+            check.layout,
+            check.state,
             root_index,
-            actor_index_hint,
-            current_line,
+            check.actor_index_hint,
+            check.current_line,
         ) {
-            let root_name = context.diagnostics.local_name(layout.local_ids[root_index]);
-            let alias_name = context
+            let root_name = check
+                .context
                 .diagnostics
-                .local_name(layout.local_ids[conflicting_index]);
+                .local_name(check.layout.local_ids[root_index]);
+            let alias_name = check
+                .context
+                .diagnostics
+                .local_name(check.layout.local_ids[conflicting_index]);
             return_borrow_checker_error!(
                 format!(
                     "Cannot read '{}' as shared while mutable alias '{}' is still active",
                     root_name, alias_name
                 ),
-                location.clone(),
+                check.location.clone(),
                 {
                     CompilationStage => "Borrow Checking",
                     BorrowKind => "Shared",
@@ -665,34 +722,26 @@ fn check_shared_access(
             );
         }
 
-        tracker.record(root_index, AccessKind::Shared);
+        check.tracker.record(root_index, AccessKind::Shared);
     }
 
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
 fn check_mutable_access(
-    context: &BorrowTransferContext<'_>,
-    layout: &FunctionLayout,
-    state: &BorrowState,
+    check: &mut MutableAccessCheck<'_, '_>,
     roots: &RootSet,
-    allow_prior_shared: bool,
-    actor_index_hint: Option<usize>,
-    require_root_mutable: bool,
-    current_line: i32,
-    strict_move_exclusivity: bool,
-    tracker: &mut StatementAccessTracker,
-    location: ErrorLocation,
-    stats: &mut BlockTransferStats,
 ) -> Result<(), CompilerError> {
     for root_index in roots.iter_ones() {
-        stats.conflicts_checked += 1;
+        check.stats.conflicts_checked += 1;
 
-        if let Some(existing) = tracker.conflict(root_index, AccessKind::Mutable)
-            && !(allow_prior_shared && existing == AccessKind::Shared)
+        if let Some(existing) = check.tracker.conflict(root_index, AccessKind::Mutable)
+            && !(check.allow_prior_shared && existing == AccessKind::Shared)
         {
-            let root_name = context.diagnostics.local_name(layout.local_ids[root_index]);
+            let root_name = check
+                .context
+                .diagnostics
+                .local_name(check.layout.local_ids[root_index]);
 
             return_borrow_checker_error!(
                 format!(
@@ -700,7 +749,7 @@ fn check_mutable_access(
                     root_name,
                     existing
                 ),
-                location.clone(),
+                check.location.clone(),
                 {
                     CompilationStage => "Borrow Checking",
                     BorrowKind => "Mutable",
@@ -709,11 +758,14 @@ fn check_mutable_access(
             );
         }
 
-        if require_root_mutable && !layout.local_mutable[root_index] {
-            let root_name = context.diagnostics.local_name(layout.local_ids[root_index]);
+        if check.require_root_mutable && !check.layout.local_mutable[root_index] {
+            let root_name = check
+                .context
+                .diagnostics
+                .local_name(check.layout.local_ids[root_index]);
             return_borrow_checker_error!(
                 format!("Cannot mutably access immutable local '{}'", root_name),
-                location.clone(),
+                check.location.clone(),
                 {
                     CompilationStage => "Borrow Checking",
                     BorrowKind => "Mutable",
@@ -722,28 +774,34 @@ fn check_mutable_access(
             );
         }
 
-        let actor_index = actor_index_hint.unwrap_or(root_index);
+        let actor_index = check.actor_index_hint.unwrap_or(root_index);
         let alias_count = active_alias_count_for_root(
-            layout,
-            state,
+            check.layout,
+            check.state,
             root_index,
             actor_index,
-            current_line,
-            strict_move_exclusivity,
+            check.current_line,
+            check.strict_move_exclusivity,
         );
         if alias_count > 1 {
-            let actor_name = context
+            let actor_name = check
+                .context
                 .diagnostics
-                .local_name(layout.local_ids[actor_index]);
+                .local_name(check.layout.local_ids[actor_index]);
             let conflicting_local = conflicting_active_local_for_root(
-                layout,
-                state,
+                check.layout,
+                check.state,
                 root_index,
                 actor_index,
-                current_line,
-                strict_move_exclusivity,
+                check.current_line,
+                check.strict_move_exclusivity,
             )
-            .map(|index| context.diagnostics.local_name(layout.local_ids[index]))
+            .map(|index| {
+                check
+                    .context
+                    .diagnostics
+                    .local_name(check.layout.local_ids[index])
+            })
             .unwrap_or_else(|| String::from("<unknown>"));
 
             return_borrow_checker_error!(
@@ -751,7 +809,7 @@ fn check_mutable_access(
                     "Cannot mutably access '{}' because '{}' may alias the same value",
                     actor_name, conflicting_local
                 ),
-                location.clone(),
+                check.location.clone(),
                 {
                     CompilationStage => "Borrow Checking",
                     BorrowKind => "Mutable",
@@ -760,7 +818,7 @@ fn check_mutable_access(
             );
         }
 
-        tracker.record(root_index, AccessKind::Mutable);
+        check.tracker.record(root_index, AccessKind::Mutable);
     }
 
     Ok(())
@@ -1083,67 +1141,27 @@ fn roots_for_place(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 fn record_shared_reads_in_place_indices(
-    context: &BorrowTransferContext<'_>,
-    layout: &FunctionLayout,
-    state: &BorrowState,
+    env: &mut SharedReadEnv<'_, '_>,
     place: &HirPlace,
-    tracker: &mut StatementAccessTracker,
     location: ErrorLocation,
-    stats: &mut BlockTransferStats,
-    value_fact_buffer: &mut ValueFactBuffer,
 ) -> Result<(), CompilerError> {
     match place {
         HirPlace::Local(_) => Ok(()),
 
-        HirPlace::Field { base, .. } => record_shared_reads_in_place_indices(
-            context,
-            layout,
-            state,
-            base,
-            tracker,
-            location,
-            stats,
-            value_fact_buffer,
-        ),
+        HirPlace::Field { base, .. } => record_shared_reads_in_place_indices(env, base, location),
 
         HirPlace::Index { base, index } => {
-            record_shared_reads_in_place_indices(
-                context,
-                layout,
-                state,
-                base,
-                tracker,
-                location.clone(),
-                stats,
-                value_fact_buffer,
-            )?;
-
-            record_shared_reads_in_expression(
-                context,
-                layout,
-                state,
-                index,
-                tracker,
-                location,
-                stats,
-                value_fact_buffer,
-            )
+            record_shared_reads_in_place_indices(env, base, location.clone())?;
+            record_shared_reads_in_expression(env, index, location)
         }
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 fn record_shared_reads_in_expression(
-    context: &BorrowTransferContext<'_>,
-    layout: &FunctionLayout,
-    state: &BorrowState,
+    env: &mut SharedReadEnv<'_, '_>,
     expression: &HirExpression,
-    tracker: &mut StatementAccessTracker,
     location: ErrorLocation,
-    stats: &mut BlockTransferStats,
-    value_fact_buffer: &mut ValueFactBuffer,
 ) -> Result<(), CompilerError> {
     match &expression.kind {
         HirExpressionKind::Int(_)
@@ -1153,196 +1171,103 @@ fn record_shared_reads_in_expression(
         | HirExpressionKind::StringLiteral(_) => {}
 
         HirExpressionKind::Load(place) => {
-            let value_location = context
+            let value_location = env
+                .context
                 .diagnostics
                 .value_error_location(expression.id, location.clone());
-            record_shared_reads_in_place_indices(
-                context,
-                layout,
-                state,
-                place,
-                tracker,
-                value_location.clone(),
-                stats,
-                value_fact_buffer,
-            )?;
+            record_shared_reads_in_place_indices(env, place, value_location.clone())?;
 
-            let roots = roots_for_place(layout, state, place, value_location.clone())?;
-            let actor_index_hint = place_root_local_index(layout, place);
-            check_shared_access(
-                context,
-                layout,
-                state,
-                &roots,
+            let roots = roots_for_place(env.layout, env.state, place, value_location.clone())?;
+            let actor_index_hint = place_root_local_index(env.layout, place);
+            let mut check = SharedAccessCheck {
+                context: env.context,
+                layout: env.layout,
+                state: env.state,
+                tracker: env.tracker,
+                location: value_location,
+                stats: env.stats,
                 actor_index_hint,
-                location.start_pos.line_number,
-                tracker,
-                value_location,
-                stats,
-            )?;
+                current_line: location.start_pos.line_number,
+            };
+            check_shared_access(&mut check, &roots)?;
         }
 
         HirExpressionKind::Copy(place) => {
-            let value_location = context
+            let value_location = env
+                .context
                 .diagnostics
                 .value_error_location(expression.id, location.clone());
-            record_shared_reads_in_place_indices(
-                context,
-                layout,
-                state,
-                place,
-                tracker,
-                value_location.clone(),
-                stats,
-                value_fact_buffer,
-            )?;
+            record_shared_reads_in_place_indices(env, place, value_location.clone())?;
 
-            let roots = roots_for_place(layout, state, place, value_location.clone())?;
-            let actor_index_hint = place_root_local_index(layout, place);
-            check_shared_access(
-                context,
-                layout,
-                state,
-                &roots,
+            let roots = roots_for_place(env.layout, env.state, place, value_location.clone())?;
+            let actor_index_hint = place_root_local_index(env.layout, place);
+            let mut check = SharedAccessCheck {
+                context: env.context,
+                layout: env.layout,
+                state: env.state,
+                tracker: env.tracker,
+                location: value_location.clone(),
+                stats: env.stats,
                 actor_index_hint,
-                location.start_pos.line_number,
-                tracker,
-                value_location.clone(),
-                stats,
-            )?;
+                current_line: location.start_pos.line_number,
+            };
+            check_shared_access(&mut check, &roots)?;
 
-            value_fact_buffer.record(expression.id, ValueAccessClassification::SharedRead, &roots);
+            env.value_fact_buffer.record(
+                expression.id,
+                ValueAccessClassification::SharedRead,
+                &roots,
+            );
             return Ok(());
         }
 
         HirExpressionKind::BinOp { left, right, .. } => {
-            record_shared_reads_in_expression(
-                context,
-                layout,
-                state,
-                left,
-                tracker,
-                location.clone(),
-                stats,
-                value_fact_buffer,
-            )?;
-            record_shared_reads_in_expression(
-                context,
-                layout,
-                state,
-                right,
-                tracker,
-                location.clone(),
-                stats,
-                value_fact_buffer,
-            )?;
+            record_shared_reads_in_expression(env, left, location.clone())?;
+            record_shared_reads_in_expression(env, right, location.clone())?;
         }
 
         HirExpressionKind::UnaryOp { operand, .. } => {
-            record_shared_reads_in_expression(
-                context,
-                layout,
-                state,
-                operand,
-                tracker,
-                location.clone(),
-                stats,
-                value_fact_buffer,
-            )?;
+            record_shared_reads_in_expression(env, operand, location.clone())?;
         }
 
         HirExpressionKind::StructConstruct { fields, .. } => {
             for (_, value) in fields {
-                record_shared_reads_in_expression(
-                    context,
-                    layout,
-                    state,
-                    value,
-                    tracker,
-                    location.clone(),
-                    stats,
-                    value_fact_buffer,
-                )?;
+                record_shared_reads_in_expression(env, value, location.clone())?;
             }
         }
 
         HirExpressionKind::Collection(elements)
         | HirExpressionKind::TupleConstruct { elements } => {
             for element in elements {
-                record_shared_reads_in_expression(
-                    context,
-                    layout,
-                    state,
-                    element,
-                    tracker,
-                    location.clone(),
-                    stats,
-                    value_fact_buffer,
-                )?;
+                record_shared_reads_in_expression(env, element, location.clone())?;
             }
         }
 
         HirExpressionKind::Range { start, end } => {
-            record_shared_reads_in_expression(
-                context,
-                layout,
-                state,
-                start,
-                tracker,
-                location.clone(),
-                stats,
-                value_fact_buffer,
-            )?;
-            record_shared_reads_in_expression(
-                context,
-                layout,
-                state,
-                end,
-                tracker,
-                location.clone(),
-                stats,
-                value_fact_buffer,
-            )?;
+            record_shared_reads_in_expression(env, start, location.clone())?;
+            record_shared_reads_in_expression(env, end, location.clone())?;
         }
 
         HirExpressionKind::OptionConstruct { variant, value } => {
             if matches!(variant, OptionVariant::Some)
                 && let Some(inner) = value
             {
-                record_shared_reads_in_expression(
-                    context,
-                    layout,
-                    state,
-                    inner,
-                    tracker,
-                    location.clone(),
-                    stats,
-                    value_fact_buffer,
-                )?;
+                record_shared_reads_in_expression(env, inner, location.clone())?;
             }
         }
 
         HirExpressionKind::ResultConstruct { value, .. } => {
-            record_shared_reads_in_expression(
-                context,
-                layout,
-                state,
-                value,
-                tracker,
-                location.clone(),
-                stats,
-                value_fact_buffer,
-            )?;
+            record_shared_reads_in_expression(env, value, location.clone())?;
         }
     }
 
-    let mut expression_roots = RootSet::empty(layout.local_count());
+    let mut expression_roots = RootSet::empty(env.layout.local_count());
     collect_expression_roots(
-        layout,
-        state,
+        env.layout,
+        env.state,
         expression,
         &mut expression_roots,
-        context
+        env.context
             .diagnostics
             .value_error_location(expression.id, location.clone()),
     )?;
@@ -1351,7 +1276,8 @@ fn record_shared_reads_in_expression(
     } else {
         ValueAccessClassification::SharedRead
     };
-    value_fact_buffer.record(expression.id, classification, &expression_roots);
+    env.value_fact_buffer
+        .record(expression.id, classification, &expression_roots);
 
     Ok(())
 }

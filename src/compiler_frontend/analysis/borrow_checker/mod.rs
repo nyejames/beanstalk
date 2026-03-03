@@ -5,7 +5,6 @@
 //! per function, and stores snapshots/facts for downstream phases.
 #![allow(dead_code)]
 
-
 mod diagnostics;
 mod state;
 mod transfer;
@@ -17,7 +16,7 @@ pub(crate) use types::{BorrowAnalysis, BorrowCheckReport, BorrowCheckStats, Loca
 use crate::borrow_log;
 use crate::compiler_frontend::analysis::borrow_checker::diagnostics::BorrowDiagnostics;
 use crate::compiler_frontend::analysis::borrow_checker::state::{
-    BorrowState, FunctionLayout, RootSet,
+    BorrowState, FunctionLayout, FunctionLayoutInputs, RootSet,
 };
 use crate::compiler_frontend::analysis::borrow_checker::transfer::{
     BlockTransferStats, BorrowTransferContext, transfer_block,
@@ -686,7 +685,7 @@ impl<'a> BorrowChecker<'a> {
             &block_local_max_use_line,
         );
 
-        Ok(FunctionLayout::new(
+        Ok(FunctionLayout::new(FunctionLayoutInputs {
             local_ids,
             local_mutable,
             local_regions,
@@ -696,7 +695,7 @@ impl<'a> BorrowChecker<'a> {
             block_local_max_use_line,
             may_use_from_block,
             must_use_from_block,
-        ))
+        }))
     }
 
     fn build_visibility_masks(

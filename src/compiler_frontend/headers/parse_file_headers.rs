@@ -23,6 +23,24 @@ pub struct Headers {
     pub top_level_template_items: Vec<TopLevelTemplateItem>,
 }
 
+struct HeaderParseContext<'a> {
+    host_function_registry: &'a HostRegistry,
+    warnings: &'a mut Vec<CompilerWarning>,
+    is_entry_file: bool,
+    string_table: &'a mut StringTable,
+    const_template_number: &'a mut usize,
+    top_level_template_order: &'a mut usize,
+    top_level_template_items: &'a mut Vec<TopLevelTemplateItem>,
+}
+
+struct HeaderBuildContext<'a> {
+    source_file: &'a InternedPath,
+    file_imports: &'a HashSet<InternedPath>,
+    file_import_entries: &'a [FileImport],
+    file_constant_order: &'a mut usize,
+    string_table: &'a mut StringTable,
+}
+
 #[derive(Clone, Debug)]
 pub struct TopLevelTemplateItem {
     pub file_order: usize,
@@ -114,16 +132,17 @@ pub fn parse_headers(
     for mut file in tokenized_files {
         let is_entry_file = file.src_path.to_path_buf(string_table) == entry_file_path;
 
-        let headers_from_file = parse_headers_in_file(
-            &mut file,
-            host_registry,
+        let mut parse_context = HeaderParseContext {
+            host_function_registry: host_registry,
             warnings,
             is_entry_file,
             string_table,
-            &mut const_template_count,
-            &mut top_level_template_order,
-            &mut top_level_template_items,
-        );
+            const_template_number: &mut const_template_count,
+            top_level_template_order: &mut top_level_template_order,
+            top_level_template_items: &mut top_level_template_items,
+        };
+
+        let headers_from_file = parse_headers_in_file(&mut file, &mut parse_context);
 
         match headers_from_file {
             Ok(file_headers) => {
@@ -148,16 +167,9 @@ pub fn parse_headers(
 // Everything at the top level of a file is visible to the whole module.
 // This function splits up the file into each of its headers with entry point detection.
 // Each header is a function, struct, choice, constant declaration or part of the implicit main function (anything else in the top level scope).
-#[allow(clippy::too_many_arguments)]
-pub fn parse_headers_in_file(
+fn parse_headers_in_file(
     token_stream: &mut FileTokens,
-    host_function_registry: &HostRegistry,
-    warnings: &mut Vec<CompilerWarning>,
-    is_entry_file: bool,
-    string_table: &mut StringTable,
-    const_template_number: &mut usize,
-    top_level_template_order: &mut usize,
-    top_level_template_items: &mut Vec<TopLevelTemplateItem>,
+    context: &mut HeaderParseContext<'_>,
 ) -> Result<Vec<Header>, CompilerError> {
     let mut headers = Vec::with_capacity(token_stream.length / TOKEN_TO_HEADER_RATIO);
     let mut encountered_symbols: HashSet<StringId> = HashSet::with_capacity(
@@ -186,8 +198,9 @@ pub fn parse_headers_in_file(
         match current_token.kind.to_owned() {
             // New Function, Struct, Choice, or Constant declaration
             TokenKind::Symbol(name_id) => {
-                if host_function_registry
-                    .get_function(string_table.resolve(name_id))
+                if context
+                    .host_function_registry
+                    .get_function(context.string_table.resolve(name_id))
                     .is_none()
                 {
                     // Reference to an existing symbol
@@ -196,7 +209,7 @@ pub fn parse_headers_in_file(
                         if next_statement_exported {
                             return_rule_error!(
                                 "There is already a constant, function or struct using this name. You can't shadow these. Choose a unique name",
-                                token_stream.current_location().to_error_location(string_table), {
+                                token_stream.current_location().to_error_location(context.string_table), {
                                     PrimarySuggestion => "Rename the constant to something unique"
                                 }
                             )
@@ -220,20 +233,19 @@ pub fn parse_headers_in_file(
                         // we check if it fits into one of the Header categories.
                         // If not, it goes into the implicit main function.
                         let source_file = token_stream.src_path.to_owned();
+                        let mut build_context = HeaderBuildContext {
+                            source_file: &source_file,
+                            file_imports: &file_import_paths,
+                            file_import_entries: &file_imports,
+                            file_constant_order: &mut file_constant_order,
+                            string_table: context.string_table,
+                        };
                         let header = create_header(
                             token_stream.src_path.append(name_id),
-                            &source_file,
                             next_statement_exported,
                             token_stream,
                             current_location,
-                            // Since this is a new scope,
-                            // We don't want to add any imports from the header's scope to the global imports.
-                            // We also don't use encountered_symbols since headers don't capture variables from the surrounding scope
-                            &file_import_paths,
-                            &file_imports,
-                            &mut file_constant_order,
-                            host_function_registry,
-                            string_table,
+                            &mut build_context,
                         )?;
 
                         match header.kind {
@@ -261,13 +273,13 @@ pub fn parse_headers_in_file(
                     main_function_body.push(current_token);
                     if next_statement_exported {
                         next_statement_exported = false;
-                        warnings.push(CompilerWarning::new(
+                        context.warnings.push(CompilerWarning::new(
                             "You can't export a reference to a host function, only new declarations.",
                             token_stream
                                 .current_location()
-                                .to_error_location(string_table),
+                                .to_error_location(context.string_table),
                             WarningKind::PointlessExport,
-                            token_stream.src_path.to_path_buf(string_table),
+                            token_stream.src_path.to_path_buf(context.string_table),
                         ))
                     }
                 }
@@ -275,8 +287,11 @@ pub fn parse_headers_in_file(
 
             TokenKind::Import => {
                 let import_index = token_stream.index.saturating_sub(1);
-                let (paths, next_index) =
-                    parse_import_clause_tokens(&token_stream.tokens, import_index, string_table)?;
+                let (paths, next_index) = parse_import_clause_tokens(
+                    &token_stream.tokens,
+                    import_index,
+                    context.string_table,
+                )?;
 
                 for path in paths {
                     if let Some(name) = path.name() {
@@ -305,10 +320,10 @@ pub fn parse_headers_in_file(
 
             TokenKind::TemplateHead => {
                 if next_statement_exported {
-                    if !is_entry_file {
+                    if !context.is_entry_file {
                         return_rule_error!(
                             "Top-level const templates are currently only supported in the module entry file.",
-                            current_location.to_error_location(string_table), {
+                            current_location.to_error_location(context.string_table), {
                                 CompilationStage => "Header Parsing",
                                 PrimarySuggestion => "Move this '#[...]' template to the entry file or remove the export marker",
                             }
@@ -317,39 +332,43 @@ pub fn parse_headers_in_file(
                     // Top-level const template
                     // An 'exported' top-level template that must be evaluated at compile time
                     let source_file = token_stream.src_path.to_owned();
+                    let mut build_context = HeaderBuildContext {
+                        source_file: &source_file,
+                        file_imports: &file_import_paths,
+                        file_import_entries: &file_imports,
+                        file_constant_order: &mut file_constant_order,
+                        string_table: context.string_table,
+                    };
                     let header = create_top_level_const_template(
                         token_stream.src_path.to_owned(),
                         current_token,
-                        *const_template_number,
-                        &source_file,
-                        &file_import_paths,
-                        &file_imports,
+                        *context.const_template_number,
                         token_stream,
-                        string_table,
+                        &mut build_context,
                     )?;
 
-                    *const_template_number += 1;
-                    if is_entry_file {
-                        top_level_template_items.push(TopLevelTemplateItem {
-                            file_order: *top_level_template_order,
+                    *context.const_template_number += 1;
+                    if context.is_entry_file {
+                        context.top_level_template_items.push(TopLevelTemplateItem {
+                            file_order: *context.top_level_template_order,
                             location: header.name_location.clone(),
                             kind: TopLevelTemplateKind::ConstTemplate {
                                 header_path: header.tokens.src_path.clone(),
                             },
                         });
-                        *top_level_template_order += 1;
+                        *context.top_level_template_order += 1;
                     }
                     headers.push(header);
                     next_statement_exported = false;
                 } else {
                     // Regular top-level templates just go into the start function
-                    if is_entry_file {
-                        top_level_template_items.push(TopLevelTemplateItem {
-                            file_order: *top_level_template_order,
+                    if context.is_entry_file {
+                        context.top_level_template_items.push(TopLevelTemplateItem {
+                            file_order: *context.top_level_template_order,
                             location: current_location.clone(),
                             kind: TopLevelTemplateKind::RuntimeTemplate,
                         });
-                        *top_level_template_order += 1;
+                        *context.top_level_template_order += 1;
                     }
                     push_runtime_template_tokens_to_start_function(
                         current_token,
@@ -357,7 +376,7 @@ pub fn parse_headers_in_file(
                         &file_import_paths,
                         &mut main_function_dependencies,
                         &mut main_function_body,
-                        string_table,
+                        context.string_table,
                     )?;
                 }
             }
@@ -392,20 +411,13 @@ pub fn parse_headers_in_file(
     Ok(headers)
 }
 
-// This should probably be just creating a HeaderKind instead,
-// Lots of stuff is just being passed straight through, but who cares tbh
-#[allow(clippy::too_many_arguments)]
+// Split a top-level declaration into a concrete header payload.
 fn create_header(
     full_name: InternedPath,
-    source_file: &InternedPath,
     exported: bool,
     token_stream: &mut FileTokens,
     name_location: TextLocation,
-    file_imports: &HashSet<InternedPath>,
-    file_import_entries: &[FileImport],
-    file_constant_order: &mut usize,
-    _host_registry: &HostRegistry,
-    string_table: &mut StringTable,
+    context: &mut HeaderBuildContext<'_>,
 ) -> Result<Header, CompilerError> {
     // We only need to know what imports this header is actually using.
     // So only track symbols matching this file's imports to add to the dependencies.
@@ -421,7 +433,7 @@ fn create_header(
     match current_token {
         // FUNCTIONS
         TokenKind::TypeParameterBracket => {
-            let signature = FunctionSignature::new(token_stream, string_table, &full_name)?;
+            let signature = FunctionSignature::new(token_stream, context.string_table, &full_name)?;
 
             let mut scopes_opened = 1;
             let mut scopes_closed = 0;
@@ -456,7 +468,7 @@ fn create_header(
                     TokenKind::Eof => {
                         return_rule_error!(
                             "Unexpected end of file while parsing function body. Missing ';' to close this scope.",
-                            token_stream.current_location().to_error_location(string_table),
+                            token_stream.current_location().to_error_location(context.string_table),
                             {
                                 PrimarySuggestion => "Close the function body with ';'",
                                 SuggestedInsertion => ";",
@@ -465,7 +477,10 @@ fn create_header(
                     }
 
                     TokenKind::Symbol(name_id) => {
-                        if let Some(path) = file_imports.iter().find(|f| f.name() == Some(*name_id))
+                        if let Some(path) = context
+                            .file_imports
+                            .iter()
+                            .find(|f| f.name() == Some(*name_id))
                         {
                             dependencies.insert(path.to_owned());
                         }
@@ -505,7 +520,7 @@ fn create_header(
                         TokenKind::Eof => {
                             return_rule_error!(
                                 "Unexpected end of file while parsing struct definition. Missing closing '|'.",
-                                token_stream.current_location().to_error_location(string_table),
+                                token_stream.current_location().to_error_location(context.string_table),
                                 {
                                     PrimarySuggestion => "Close the struct fields with a final '|'",
                                     SuggestedInsertion => "|",
@@ -516,8 +531,10 @@ fn create_header(
                         TokenKind::Symbol(name_id) => {
                             body.push(token_stream.current_token());
 
-                            if let Some(path) =
-                                file_imports.iter().find(|f| f.name() == Some(*name_id))
+                            if let Some(path) = context
+                                .file_imports
+                                .iter()
+                                .find(|f| f.name() == Some(*name_id))
                             {
                                 dependencies.insert(path.to_owned());
                             }
@@ -536,14 +553,15 @@ fn create_header(
                 let declaration_syntax = parse_declaration_syntax(
                     token_stream,
                     full_name.name().unwrap(),
-                    string_table,
+                    context.string_table,
                 )?;
 
                 let declaration_tokens = declaration_syntax.to_tokens();
 
                 for token in &declaration_tokens {
                     if let TokenKind::Symbol(name_id) = token.kind
-                        && let Some(path) = file_imports
+                        && let Some(path) = context
+                            .file_imports
                             .iter()
                             .find(|import| import.name() == Some(name_id))
                     {
@@ -554,10 +572,10 @@ fn create_header(
                 let import_dependencies = dependencies.clone();
                 let metadata = ConstantHeaderMetadata {
                     declaration_syntax,
-                    file_constant_order: *file_constant_order,
+                    file_constant_order: *context.file_constant_order,
                     import_dependencies,
                 };
-                *file_constant_order += 1;
+                *context.file_constant_order += 1;
                 body = declaration_tokens;
                 kind = HeaderKind::Constant { metadata };
             }
@@ -570,7 +588,7 @@ fn create_header(
         TokenKind::DoubleColon => {
             return_rule_error!(
                 "Choice declarations are not yet implemented in the language.",
-                token_stream.current_location().to_error_location(string_table),
+                token_stream.current_location().to_error_location(context.string_table),
                 {
                     CompilationStage => "Header Parsing",
                     PrimarySuggestion => "Remove the '::' declaration for now or rewrite this as supported syntax",
@@ -588,23 +606,19 @@ fn create_header(
         dependencies,
         name_location,
         tokens: FileTokens::new(full_name, body),
-        source_file: source_file.to_owned(),
-        file_imports: file_import_entries.to_vec(),
+        source_file: context.source_file.to_owned(),
+        file_imports: context.file_import_entries.to_vec(),
     })
 }
 
-#[allow(clippy::too_many_arguments)]
 fn create_top_level_const_template(
     scope: InternedPath,
     opening_template_token: crate::compiler_frontend::tokenizer::tokens::Token,
     const_template_number: usize,
-    source_file: &InternedPath,
-    file_imports: &HashSet<InternedPath>,
-    file_import_entries: &[FileImport],
     token_stream: &mut FileTokens,
-    string_table: &mut StringTable,
+    context: &mut HeaderBuildContext<'_>,
 ) -> Result<Header, CompilerError> {
-    let const_template_name = string_table.intern(&format!(
+    let const_template_name = context.string_table.intern(&format!(
         "{TOP_LEVEL_CONST_TEMPLATE_NAME}{const_template_number}"
     ));
     let mut dependencies: HashSet<InternedPath> = HashSet::new();
@@ -637,7 +651,7 @@ fn create_top_level_const_template(
             TokenKind::Eof => {
                 return_rule_error!(
                     "Unexpected end of file while parsing top-level const template. Missing ']' to close the template.",
-                    token_stream.current_location().to_error_location(string_table),
+                    token_stream.current_location().to_error_location(context.string_table),
                     {
                         PrimarySuggestion => "Close the template with ']'",
                         SuggestedInsertion => "]",
@@ -646,7 +660,11 @@ fn create_top_level_const_template(
             }
 
             TokenKind::Symbol(name_id) => {
-                if let Some(path) = file_imports.iter().find(|f| f.name() == Some(*name_id)) {
+                if let Some(path) = context
+                    .file_imports
+                    .iter()
+                    .find(|f| f.name() == Some(*name_id))
+                {
                     dependencies.insert(path.to_owned());
                 }
                 body.push(token_stream.current_token());
@@ -682,8 +700,8 @@ fn create_top_level_const_template(
         dependencies,
         name_location,
         tokens: FileTokens::new(full_name, body),
-        source_file: source_file.to_owned(),
-        file_imports: file_import_entries.to_vec(),
+        source_file: context.source_file.to_owned(),
+        file_imports: context.file_import_entries.to_vec(),
     })
 }
 

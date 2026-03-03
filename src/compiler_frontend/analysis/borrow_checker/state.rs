@@ -20,6 +20,18 @@ pub(super) struct FunctionLayout {
     pub must_use_from_block: FxHashMap<BlockId, RootSet>,
 }
 
+pub(super) struct FunctionLayoutInputs {
+    pub local_ids: Vec<LocalId>,
+    pub local_mutable: Vec<bool>,
+    pub local_regions: Vec<RegionId>,
+    pub local_first_write_line: Vec<i32>,
+    pub local_last_use_line: Vec<i32>,
+    pub block_successors: FxHashMap<BlockId, Vec<BlockId>>,
+    pub block_local_max_use_line: FxHashMap<BlockId, Vec<i32>>,
+    pub may_use_from_block: FxHashMap<BlockId, RootSet>,
+    pub must_use_from_block: FxHashMap<BlockId, RootSet>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum FutureUseKind {
     None,
@@ -28,36 +40,25 @@ pub(super) enum FutureUseKind {
 }
 
 impl FunctionLayout {
-    #[allow(clippy::too_many_arguments)]
-    pub(super) fn new(
-        local_ids: Vec<LocalId>,
-        local_mutable: Vec<bool>,
-        local_regions: Vec<RegionId>,
-        local_first_write_line: Vec<i32>,
-        local_last_use_line: Vec<i32>,
-        block_successors: FxHashMap<BlockId, Vec<BlockId>>,
-        block_local_max_use_line: FxHashMap<BlockId, Vec<i32>>,
-        may_use_from_block: FxHashMap<BlockId, RootSet>,
-        must_use_from_block: FxHashMap<BlockId, RootSet>,
-    ) -> Self {
+    pub(super) fn new(inputs: FunctionLayoutInputs) -> Self {
         let mut local_index_by_id =
-            FxHashMap::with_capacity_and_hasher(local_ids.len(), Default::default());
+            FxHashMap::with_capacity_and_hasher(inputs.local_ids.len(), Default::default());
 
-        for (index, local_id) in local_ids.iter().enumerate() {
+        for (index, local_id) in inputs.local_ids.iter().enumerate() {
             local_index_by_id.insert(*local_id, index);
         }
 
         Self {
-            local_ids,
+            local_ids: inputs.local_ids,
             local_index_by_id,
-            local_mutable,
-            local_regions,
-            local_first_write_line,
-            local_last_use_line,
-            block_successors,
-            block_local_max_use_line,
-            may_use_from_block,
-            must_use_from_block,
+            local_mutable: inputs.local_mutable,
+            local_regions: inputs.local_regions,
+            local_first_write_line: inputs.local_first_write_line,
+            local_last_use_line: inputs.local_last_use_line,
+            block_successors: inputs.block_successors,
+            block_local_max_use_line: inputs.block_local_max_use_line,
+            may_use_from_block: inputs.may_use_from_block,
+            must_use_from_block: inputs.must_use_from_block,
         }
     }
 

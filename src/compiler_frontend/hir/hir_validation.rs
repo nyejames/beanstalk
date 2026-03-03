@@ -5,7 +5,6 @@
 //! rely on a consistent IR contract.
 #![allow(dead_code)]
 
-
 use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorLocation, ErrorType};
 use crate::compiler_frontend::hir::hir_datatypes::{HirTypeKind, TypeId};
 use crate::compiler_frontend::hir::hir_display::HirLocation;

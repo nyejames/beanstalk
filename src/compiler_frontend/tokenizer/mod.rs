@@ -1,5 +1,4 @@
-#![allow(clippy::module_inception)]
-
+pub(crate) mod lexer;
 pub(crate) mod paths;
-pub(crate) mod tokenizer;
+pub(crate) use lexer as tokenizer;
 pub(crate) mod tokens;

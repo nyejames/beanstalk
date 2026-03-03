@@ -4,7 +4,6 @@
 //! statements, and terminators.
 #![allow(dead_code, unused_variables)]
 
-
 use crate::compiler_frontend::ast::ast::Ast;
 use crate::compiler_frontend::ast::ast_nodes::{
     AstNode, Declaration, ForLoopRange, NodeKind, TextLocation,

@@ -287,7 +287,8 @@ impl DataType {
             DataType::Returns(returns) => {
                 let mut returns_string = String::new();
                 for return_type in returns {
-                    returns_string.push_str(&return_type.display_with_table(string_table).to_string());
+                    returns_string
+                        .push_str(&return_type.display_with_table(string_table).to_string());
                 }
                 format!("Returns({})", returns_string)
             }
@@ -322,8 +323,13 @@ impl DataType {
             DataType::Choices(inner_types) => {
                 let mut inner_types_str = String::new();
                 for inner_type in inner_types {
-                    inner_types_str
-                        .push_str(&inner_type.value.data_type.display_with_table(string_table).to_string());
+                    inner_types_str.push_str(
+                        &inner_type
+                            .value
+                            .data_type
+                            .display_with_table(string_table)
+                            .to_string(),
+                    );
                 }
                 format!("Choices({})", inner_types_str)
             }

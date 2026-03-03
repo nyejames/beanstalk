@@ -4,7 +4,6 @@
 //! This file contains expression-specific lowering logic on `HirBuilder`.
 #![allow(dead_code, unused_variables)]
 
-
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, Operator,

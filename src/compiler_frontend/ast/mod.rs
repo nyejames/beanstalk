@@ -1,6 +1,5 @@
-#![allow(clippy::module_inception)]
-
-pub(crate) mod ast;
+pub(crate) mod module_ast;
+pub(crate) use module_ast as ast;
 pub(crate) mod ast_nodes;
 pub(crate) mod function_body_to_ast;
 pub(crate) mod import_bindings;

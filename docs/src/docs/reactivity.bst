@@ -12,7 +12,8 @@
 
 This document describes the design and semantics of **reactivity in Beanstalk templates**.
 
-Reactivity in Beanstalk is **explicit**, **place-based**, and built directly on the existing mutability model of the language. There are no implicit reactive variables, no hidden schedulers, and no global UI state. A value only becomes reactive when it is *captured reactively* by a template.
+Reactivity in Beanstalk is **explicit**, **place-based**, and built directly on the existing mutability model of the language.
+There are no implicit reactive variables, no hidden schedulers, and no global UI state. A value only becomes reactive when it is *captured reactively* by a template.
 
 ---
 

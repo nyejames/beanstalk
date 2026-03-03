@@ -1,8 +1,4 @@
 -- This is a library of basic HTML components and styles
-markdown_style = Style(
-
-)
-
 Basic = |
     body String = [:<body>[..]</body>],
     page String = [:<section>[..]</section>],
