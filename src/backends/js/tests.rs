@@ -9,6 +9,7 @@ use crate::compiler_frontend::host_functions::CallTarget;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::TextLocation;
+use std::process::Command;
 
 #[derive(Clone, Copy)]
 struct TypeIds {
@@ -157,6 +158,22 @@ fn build_module(
     module
 }
 
+fn run_js_and_capture_stdout(source: &str) -> String {
+    let output = Command::new("node")
+        .arg("-e")
+        .arg(source)
+        .output()
+        .expect("node must be available to execute JavaScript backend tests");
+
+    assert!(
+        output.status.success(),
+        "generated JavaScript failed under node:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    String::from_utf8(output.stdout).expect("node stdout should be valid UTF-8")
+}
+
 #[test]
 fn lower_hir_smoke_test() {
     let mut string_table = StringTable::new();
@@ -180,7 +197,7 @@ fn lower_hir_smoke_test() {
 
     let module = build_module(
         &mut string_table,
-        "main",
+        "entry_start",
         vec![block],
         function,
         &[],
@@ -199,14 +216,14 @@ fn lower_hir_smoke_test() {
     )
     .expect("JS lowering should succeed");
 
-    assert!(output.source.contains("function main()"));
+    assert!(output.source.contains("function entry_start()"));
     assert!(output.source.contains("return;"));
     assert_eq!(
         output
             .function_name_by_id
             .get(&FunctionId(0))
             .map(String::as_str),
-        Some("main")
+        Some("entry_start")
     );
 }
 
@@ -479,17 +496,34 @@ fn lowers_break_and_continue_terminators_with_dispatcher() {
 }
 
 #[test]
-fn lowers_host_io_call_to_console_log() {
+fn host_io_reads_the_underlying_value_before_logging() {
     let mut string_table = StringTable::new();
     let (type_context, types) = build_type_context();
 
     let io_path = InternedPath::from_single_str("io", &mut string_table);
 
-    let call_statement = statement(
+    let assign_message = statement(
         1,
+        HirStatementKind::Assign {
+            target: crate::compiler_frontend::hir::hir_nodes::HirPlace::Local(LocalId(0)),
+            value: string_expression(1, "hello", types.string, RegionId(0)),
+        },
+        1,
+    );
+
+    let call_statement = statement(
+        2,
         HirStatementKind::Call {
             target: CallTarget::HostFunction(io_path),
-            args: vec![string_expression(1, "hello", types.string, RegionId(0))],
+            args: vec![expression(
+                2,
+                HirExpressionKind::Load(crate::compiler_frontend::hir::hir_nodes::HirPlace::Local(
+                    LocalId(0),
+                )),
+                types.string,
+                RegionId(0),
+                ValueKind::RValue,
+            )],
             result: None,
         },
         2,
@@ -498,9 +532,9 @@ fn lowers_host_io_call_to_console_log() {
     let block = HirBlock {
         id: BlockId(0),
         region: RegionId(0),
-        locals: vec![],
-        statements: vec![call_statement],
-        terminator: HirTerminator::Return(unit_expression(2, types.unit, RegionId(0))),
+        locals: vec![local(0, types.string, RegionId(0))],
+        statements: vec![assign_message, call_statement],
+        terminator: HirTerminator::Return(unit_expression(3, types.unit, RegionId(0))),
     };
 
     let function = HirFunction {
@@ -513,10 +547,10 @@ fn lowers_host_io_call_to_console_log() {
 
     let module = build_module(
         &mut string_table,
-        "main",
+        "entry_start",
         vec![block],
         function,
-        &[],
+        &[(LocalId(0), "message")],
         type_context,
     );
 
@@ -527,12 +561,13 @@ fn lowers_host_io_call_to_console_log() {
         JsLoweringConfig {
             pretty: true,
             emit_locations: false,
-            auto_invoke_start: false,
+            auto_invoke_start: true,
         },
     )
     .expect("JS lowering should succeed");
 
-    assert!(output.source.contains("console.log"));
+    let stdout = run_js_and_capture_stdout(&output.source);
+    assert_eq!(stdout.trim_end(), "hello");
 }
 
 #[test]

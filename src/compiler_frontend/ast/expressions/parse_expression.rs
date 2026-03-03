@@ -45,6 +45,13 @@ pub fn create_multiple_expressions(
 
         expressions.push(expression);
 
+        // Newlines are expression terminators almost everywhere else, but inside an
+        // already-open argument/return list they are just layout. Normalize them here
+        // so multiline calls like `io(\n value\n)` leave us positioned on the comma or `)`.
+        if token_stream.current_token_kind() == &TokenKind::Newline {
+            token_stream.skip_newlines();
+        }
+
         if type_index + 1 < context.expected_result_types.len() {
             if token_stream.current_token_kind() != &TokenKind::Comma {
                 return_type_error!(

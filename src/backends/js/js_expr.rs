@@ -133,16 +133,25 @@ impl<'hir> JsEmitter<'hir> {
         &mut self,
         expression: &HirExpression,
     ) -> Result<String, CompilerError> {
+        // User-defined Beanstalk functions speak the reference ABI: places stay as refs and
+        // rvalues are wrapped into fresh bindings so the callee can alias or overwrite them.
         match &expression.kind {
-            HirExpressionKind::Load(place) => Ok(
-                format!("__bs_read({})", self.lower_place(place)?)
-            ),
+            HirExpressionKind::Load(place) => self.lower_place(place),
             HirExpressionKind::Copy(place) => Ok(format!(
-                "__bs_clone_value(__bs_read({}))",
+                "__bs_binding(__bs_clone_value(__bs_read({})))",
                 self.lower_place(place)?
             )),
-            _ => Ok(format!("__bs_read(__bs_binding({}))", self.lower_expr(expression)?)),
+            _ => Ok(format!("__bs_binding({})", self.lower_expr(expression)?)),
         }
+    }
+
+    pub(crate) fn lower_host_call_argument(
+        &mut self,
+        expression: &HirExpression,
+    ) -> Result<String, CompilerError> {
+        // Host calls are raw JavaScript boundaries, not Beanstalk functions, so they need the
+        // concrete JS value rather than a binding wrapper.
+        self.lower_expr(expression)
     }
 
     pub(crate) fn is_unit_expression(&self, expression: &HirExpression) -> bool {

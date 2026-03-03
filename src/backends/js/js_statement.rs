@@ -34,10 +34,15 @@ impl<'hir> JsEmitter<'hir> {
                 result,
             } => {
                 let target_name = self.lower_call_target(target)?;
-                let args = args
-                    .iter()
-                    .map(|arg| self.lower_call_argument(arg))
-                    .collect::<Result<Vec<_>, _>>()?;
+                let args = if matches!(target, CallTarget::HostFunction(_)) {
+                    args.iter()
+                        .map(|arg| self.lower_host_call_argument(arg))
+                        .collect::<Result<Vec<_>, _>>()?
+                } else {
+                    args.iter()
+                        .map(|arg| self.lower_call_argument(arg))
+                        .collect::<Result<Vec<_>, _>>()?
+                };
 
                 let call = format!("{}({})", target_name, args.join(", "));
 

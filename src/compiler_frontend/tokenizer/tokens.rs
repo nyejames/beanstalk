@@ -247,7 +247,9 @@ impl FileTokens {
     }
 
     pub fn skip_newlines(&mut self) {
-        while matches!(self.current_token_kind(), TokenKind::Newline) {
+        while self.index + 1 < self.length
+            && matches!(self.current_token_kind(), TokenKind::Newline)
+        {
             self.index += 1;
         }
     }

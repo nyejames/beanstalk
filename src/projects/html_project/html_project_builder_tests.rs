@@ -61,7 +61,7 @@ fn create_test_module(entry_point: PathBuf) -> Module {
     hir_module.side_table.bind_function_name(
         FunctionId(0),
         crate::compiler_frontend::interned_path::InternedPath::from_single_str(
-            "main",
+            "start_entry",
             &mut string_table,
         ),
     );
@@ -259,7 +259,7 @@ fn emits_runtime_slots_and_bootstrap_calls_start() {
     assert!(html.contains("<meta charset=\"utf-8\">"));
     assert!(html.contains("<div id=\"bst-slot-0\"></div>"));
     assert!(html.contains("insertAdjacentHTML(\"beforeend\", fn());"));
-    assert!(html.contains("if (typeof main === \"function\") main();"));
+    assert!(html.contains("if (typeof start_entry === \"function\") start_entry();"));
 }
 
 #[test]

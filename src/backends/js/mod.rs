@@ -143,6 +143,9 @@ impl<'hir> JsEmitter<'hir> {
     }
 
     fn emit_runtime_prelude(&mut self) {
+        // The JS backend keeps Beanstalk's aliasing semantics by modeling locals and computed
+        // places as explicit reference records. Once everything goes through this uniform layer,
+        // the rest of the emitter can preserve HIR behaviour with ordinary JS reads/writes.
         self.emit_line("function __bs_is_ref(value) {");
         self.with_indent(|emitter| {
             emitter.emit_line(
@@ -163,6 +166,9 @@ impl<'hir> JsEmitter<'hir> {
 
         self.emit_line("function __bs_param_binding(value) {");
         self.with_indent(|emitter| {
+            // Calls from JS hosts can hand us plain values, while Beanstalk-to-Beanstalk calls
+            // pass reference records. Normalize both cases so function bodies only deal with the
+            // binding model.
             emitter.emit_line("if (!__bs_is_ref(value)) {");
             emitter.with_indent(|em| em.emit_line("return __bs_binding(value);"));
             emitter.emit_line("}");
