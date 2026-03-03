@@ -636,7 +636,7 @@ fn create_top_level_const_template(
     // The caller has already consumed the opening token.
     while scopes_opened > scopes_closed {
         match token_stream.current_token_kind() {
-            TokenKind::TemplateHead => {
+            TokenKind::TemplateHead | TokenKind::StyleTemplateHead => {
                 scopes_opened += 1;
                 body.push(token_stream.current_token());
             }
@@ -720,7 +720,7 @@ fn push_runtime_template_tokens_to_start_function(
 
     while scopes_opened > scopes_closed {
         match token_stream.current_token_kind() {
-            TokenKind::TemplateHead => {
+            TokenKind::TemplateHead | TokenKind::StyleTemplateHead => {
                 scopes_opened += 1;
                 main_function_body.push(token_stream.current_token());
             }

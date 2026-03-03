@@ -297,7 +297,7 @@ fn collect_initializer_tokens(token_stream: &mut FileTokens) -> Vec<Token> {
             TokenKind::CloseParenthesis => paren_depth = paren_depth.saturating_sub(1),
             TokenKind::OpenCurly => curly_depth += 1,
             TokenKind::CloseCurly => curly_depth = curly_depth.saturating_sub(1),
-            TokenKind::TemplateHead => template_depth += 1,
+            TokenKind::TemplateHead | TokenKind::StyleTemplateHead => template_depth += 1,
             TokenKind::TemplateClose => template_depth = template_depth.saturating_sub(1),
             _ => {}
         }

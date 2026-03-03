@@ -10,7 +10,7 @@ use std::cmp::Ordering;
 use std::iter::Peekable;
 use std::str::Chars;
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TokenizeMode {
     Normal,
     TemplateBody,
@@ -159,6 +159,7 @@ impl Token {
     pub fn as_string(&self, string_table: &StringTable) -> String {
         match &self.kind {
             TokenKind::Symbol(id)
+            | TokenKind::StyleDirective(id)
             | TokenKind::StringSliceLiteral(id)
             | TokenKind::RawStringLiteral(id) => string_table.resolve(*id).to_string(),
 
@@ -179,6 +180,7 @@ impl Token {
     pub fn eq_str(&self, string_table: &StringTable, other: &str) -> bool {
         match &self.kind {
             TokenKind::Symbol(id)
+            | TokenKind::StyleDirective(id)
             | TokenKind::StringSliceLiteral(id)
             | TokenKind::RawStringLiteral(id) => string_table.resolve(*id) == other,
             _ => false,
@@ -279,6 +281,10 @@ pub struct TokenStream<'a> {
     pub position: CharPosition,
     pub start_position: CharPosition,
     pub mode: TokenizeMode,
+    // Nested templates can now legally reopen a template head from inside another
+    // template head via `$[`. A stack is required so `]` can restore the correct
+    // outer mode instead of always falling back to `TemplateBody`.
+    pub template_mode_stack: Vec<TokenizeMode>,
 }
 
 impl<'a> TokenStream<'a> {
@@ -289,6 +295,7 @@ impl<'a> TokenStream<'a> {
             position: CharPosition::default(),
             start_position: Default::default(),
             mode,
+            template_mode_stack: vec![mode],
         }
     }
 
@@ -322,6 +329,36 @@ impl<'a> TokenStream<'a> {
     pub fn update_start_position(&mut self) {
         self.start_position = self.position;
     }
+
+    pub fn push_template_mode(&mut self, mode: TokenizeMode) {
+        self.template_mode_stack.push(mode);
+        self.mode = mode;
+    }
+
+    pub fn set_current_template_mode(&mut self, mode: TokenizeMode) {
+        // `:` switches the current template from head parsing to body parsing
+        // without closing the template nesting level, so mutate the top frame.
+        if let Some(current_mode) = self.template_mode_stack.last_mut() {
+            *current_mode = mode;
+        } else {
+            self.template_mode_stack.push(mode);
+        }
+
+        self.mode = mode;
+    }
+
+    pub fn pop_template_mode(&mut self) {
+        // `]` closes exactly one template nesting level. Keep the initial frame so
+        // tokenization started in a template mode cannot escape back to normal mode.
+        if self.template_mode_stack.len() > 1 {
+            self.template_mode_stack.pop();
+        }
+
+        self.mode = *self
+            .template_mode_stack
+            .last()
+            .unwrap_or(&TokenizeMode::Normal);
+    }
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -345,6 +382,8 @@ pub enum TokenKind {
 
     /// Variable name
     Symbol(StringId),
+    // `$markdown`, `$ignore`, `$formatter`, etc. inside template heads.
+    StyleDirective(StringId),
 
     // Values
     StringSliceLiteral(StringId),
@@ -460,6 +499,10 @@ pub enum TokenKind {
     Slot,
     TemplateClose,
     TemplateHead,
+    // `$[` opens a child template from inside a template head. It tokenizes
+    // separately so the AST parser can treat it as style metadata instead of
+    // regular nested body content.
+    StyleTemplateHead,
 
     Id(StringId), // ID for scenes
 
@@ -476,6 +519,7 @@ impl TokenKind {
     pub fn get_name(&self, string_table: &StringTable) -> String {
         match self {
             TokenKind::Symbol(name) => string_table.resolve(*name).to_string(),
+            TokenKind::StyleDirective(name) => string_table.resolve(*name).to_string(),
             TokenKind::RawStringLiteral(value) => string_table.resolve(*value).to_string(),
             TokenKind::StringSliceLiteral(string) => string_table.resolve(*string).to_string(),
             _ => String::new(),

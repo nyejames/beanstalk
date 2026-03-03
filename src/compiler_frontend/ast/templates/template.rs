@@ -2,6 +2,7 @@
 
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::templates::create_template_node::Template;
+use std::sync::Arc;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum TemplateType {
@@ -13,14 +14,20 @@ pub enum TemplateType {
 }
 #[derive(Clone, Debug)]
 pub struct TemplateContent {
-    pub before: Vec<Expression>,
-    pub after: Vec<Expression>,
+    // Content is still split around an optional slot, but each chunk now records
+    // whether it came from the template head or the template body. That lets the
+    // formatter system ignore head-inserted values later without losing slot order.
+    pub before: Vec<TemplateSegment>,
+    pub after: Vec<TemplateSegment>,
 }
 impl TemplateContent {
     pub fn new(content: Vec<Expression>) -> TemplateContent {
         TemplateContent {
             before: Vec::new(),
-            after: content,
+            after: content
+                .into_iter()
+                .map(|expression| TemplateSegment::new(expression, TemplateSegmentOrigin::Body))
+                .collect(),
         }
     }
 
@@ -31,24 +38,84 @@ impl TemplateContent {
         }
     }
     pub fn add(&mut self, content: Expression, after_slot: bool) {
+        self.add_with_origin(content, after_slot, TemplateSegmentOrigin::Body);
+    }
+
+    pub fn add_with_origin(
+        &mut self,
+        content: Expression,
+        after_slot: bool,
+        origin: TemplateSegmentOrigin,
+    ) {
+        let segment = TemplateSegment::new(content, origin);
         if after_slot {
-            self.after.push(content);
+            self.after.push(segment);
         } else {
-            self.before.push(content);
+            self.before.push(segment);
         }
     }
+
     pub fn flatten(&self) -> Vec<Expression> {
+        // Most downstream consumers only care about evaluation order, not whether
+        // a chunk came from the head or body. Keep this compatibility helper so HIR
+        // and reference collection can stay unchanged.
         let total_len = self.before.len() + self.after.len();
         let mut flattened = Vec::with_capacity(total_len);
 
-        flattened.extend(self.before.to_owned());
-        flattened.extend(self.after.to_owned());
+        flattened.extend(self.before.iter().map(|segment| segment.expression.clone()));
+        flattened.extend(self.after.iter().map(|segment| segment.expression.clone()));
 
         flattened
     }
+
     pub fn concat(&mut self, other: TemplateContent) {
         self.before.extend(other.before);
         self.after.extend(other.after);
+    }
+
+    pub fn concat_retagged(&mut self, other: TemplateContent, origin: TemplateSegmentOrigin) {
+        // When a template is unpacked into another template head, its content should
+        // behave like head content in the receiving template, even if it originally
+        // came from a body. Retagging preserves the new formatter boundary rules.
+        self.before.extend(
+            other
+                .before
+                .into_iter()
+                .map(|segment| segment.with_origin(origin)),
+        );
+        self.after.extend(
+            other
+                .after
+                .into_iter()
+                .map(|segment| segment.with_origin(origin)),
+        );
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TemplateSegmentOrigin {
+    // Head segments are values/configuration injected before the body starts.
+    // They must never be reformatted by the current template style.
+    Head,
+    // Body segments are literal body content, so they are eligible for style
+    // formatters such as markdown when they are compile-time-known strings.
+    Body,
+}
+
+#[derive(Clone, Debug)]
+pub struct TemplateSegment {
+    pub expression: Expression,
+    pub origin: TemplateSegmentOrigin,
+}
+
+impl TemplateSegment {
+    pub fn new(expression: Expression, origin: TemplateSegmentOrigin) -> Self {
+        Self { expression, origin }
+    }
+
+    pub fn with_origin(mut self, origin: TemplateSegmentOrigin) -> Self {
+        self.origin = origin;
+        self
     }
 }
 
@@ -61,11 +128,6 @@ impl std::fmt::Debug for dyn TemplateFormatter {
         write!(f, "TemplateFormatter")
     }
 }
-impl Clone for Box<dyn TemplateFormatter> {
-    fn clone(&self) -> Self {
-        self.to_owned()
-    }
-}
 
 #[derive(Clone, Debug)]
 pub struct Formatter {
@@ -73,7 +135,9 @@ pub struct Formatter {
 
     // This formatter will be skipped if there is already a formatter for the template
     pub skip_if_already_formatted: bool,
-    pub formatter: Box<dyn TemplateFormatter>,
+    // Shared ownership keeps formatters cheap to clone as styles are inherited or
+    // copied into nested templates during AST construction.
+    pub formatter: Arc<dyn TemplateFormatter>,
 }
 
 // Template Config Type

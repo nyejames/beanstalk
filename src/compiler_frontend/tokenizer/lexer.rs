@@ -27,13 +27,6 @@ pub fn tokenize(
     // About 1/6 of the source code seems to be tokens roughly from some very small preliminary tests
     let initial_capacity = source_code.len() / settings::SRC_TO_TOKEN_RATIO;
 
-    let mut template_nesting_level: i64 = if mode == TokenizeMode::Normal {
-        0
-    } else {
-        // This is so anything starting in the template head/body can't break out of it
-        i64::MAX / 2
-    };
-
     let mut tokens: Vec<Token> = Vec::with_capacity(initial_capacity);
     let mut stream = TokenStream::new(source_code, src_path, mode);
 
@@ -47,7 +40,7 @@ pub fn tokenize(
         }
 
         tokens.push(token);
-        token = get_token_kind(&mut stream, &mut template_nesting_level, string_table)?;
+        token = get_token_kind(&mut stream, string_table)?;
     }
 
     tokens.push(token);
@@ -58,7 +51,6 @@ pub fn tokenize(
 
 pub fn get_token_kind(
     stream: &mut TokenStream<'_>,
-    template_nesting_level: &mut i64,
     string_table: &mut StringTable,
 ) -> Result<Token, CompilerError> {
     let mut current_char = match stream.next() {
@@ -93,6 +85,9 @@ pub fn get_token_kind(
         )
     }
 
+    // Template bodies are intentionally tokenized as "mostly raw text" so the body
+    // parser can treat everything between delimiters as string content unless a new
+    // nested template begins or the current template closes.
     if stream.mode == TokenizeMode::TemplateBody && current_char != ']' && current_char != '[' {
         return tokenize_template_body(current_char, stream, string_table);
     }
@@ -145,7 +140,6 @@ pub fn get_token_kind(
     stream.update_start_position();
 
     if current_char == '[' {
-        *template_nesting_level += 1;
         match stream.mode {
             TokenizeMode::TemplateHead => {
                 return_syntax_error!(
@@ -180,29 +174,25 @@ pub fn get_token_kind(
                     return_token!(TokenKind::EmptyTemplate(spaces_after_template), stream);
                 }
 
-                // Starting a new template head from inside a template body
-                stream.mode = TokenizeMode::TemplateHead;
+                // Start a fresh nested template and remember that we are now parsing
+                // that nested template's head.
+                stream.push_template_mode(TokenizeMode::TemplateHead);
                 return_token!(TokenKind::TemplateHead, stream);
             }
         };
     }
 
     if current_char == ']' {
-        *template_nesting_level -= 1;
-
-        if *template_nesting_level == 0 {
-            stream.mode = TokenizeMode::Normal;
-        } else {
-            stream.mode = TokenizeMode::TemplateBody;
-        }
-
+        // Closing a template restores whatever mode the parent template was in
+        // (normal code, template head, or template body).
+        stream.pop_template_mode();
         return_token!(TokenKind::TemplateClose, stream);
     }
 
     // Check if going into the template body
     if current_char == ':' {
         if stream.mode == TokenizeMode::TemplateHead {
-            stream.mode = TokenizeMode::TemplateBody;
+            stream.set_current_template_mode(TokenizeMode::TemplateBody);
 
             return_token!(TokenKind::StartTemplateBody, stream);
         }
@@ -217,6 +207,65 @@ pub fn get_token_kind(
         }
 
         return_token!(TokenKind::Colon, stream);
+    }
+
+    if current_char == '$' {
+        if stream.mode != TokenizeMode::TemplateHead {
+            return_syntax_error!(
+                "The '$' style directive syntax is only valid inside template heads.",
+                stream.new_location().to_error_location(string_table),
+                {
+                    CompilationStage => "Tokenization",
+                    PrimarySuggestion => "Move this '$' directive into a template head or remove it",
+                }
+            )
+        }
+
+        if stream.peek() == Some(&'[') {
+            stream.next();
+            // `$[` is a style-level child template declaration. It still opens a real
+            // nested template head, but the AST needs a distinct token kind so it can
+            // attach the parsed child template to `style.child_templates`.
+            stream.push_template_mode(TokenizeMode::TemplateHead);
+            return_token!(TokenKind::StyleTemplateHead, stream);
+        }
+
+        let Some(&first_char) = stream.peek() else {
+            return_syntax_error!(
+                "Expected a style directive name after '$'.",
+                stream.new_location().to_error_location(string_table),
+                {
+                    CompilationStage => "Tokenization",
+                    PrimarySuggestion => "Use '$markdown', '$ignore', or '$[' inside the template head",
+                }
+            )
+        };
+
+        if !first_char.is_alphabetic() && first_char != '_' {
+            return_syntax_error!(
+                "Expected a style directive name immediately after '$'.",
+                stream.new_location().to_error_location(string_table),
+                {
+                    CompilationStage => "Tokenization",
+                    PrimarySuggestion => "Write the directive without whitespace, for example '$markdown'",
+                }
+            )
+        }
+
+        token_value.push(stream.next().unwrap());
+
+        while let Some(&next_char) = stream.peek() {
+            if !is_valid_var_char(&next_char) {
+                break;
+            }
+
+            token_value.push(stream.next().unwrap());
+        }
+
+        let directive = string_table.intern(&token_value);
+        // The parser validates which directives are currently supported. The lexer
+        // only has to preserve the directive identifier as a distinct token.
+        return_token!(TokenKind::StyleDirective(directive), stream);
     }
 
     if current_char == END_SCOPE_CHAR {
@@ -327,7 +376,7 @@ pub fn get_token_kind(
             }
 
             // Do not add any token to the stream, call this function again
-            return get_token_kind(stream, template_nesting_level, string_table);
+            return get_token_kind(stream, string_table);
         }
 
         // Subtraction / Negative / Return / Subtract Assign
@@ -762,3 +811,7 @@ fn tokenize_template_body(
     let interned_string = string_table.intern(&token_value);
     return_token!(TokenKind::StringSliceLiteral(interned_string), stream);
 }
+
+#[cfg(test)]
+#[path = "tests/lexer_tests.rs"]
+mod lexer_tests;

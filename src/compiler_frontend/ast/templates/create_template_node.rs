@@ -3,8 +3,10 @@
 use crate::compiler_frontend::ast::ast::ScopeContext;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
+use crate::compiler_frontend::ast::templates::markdown::markdown_formatter;
 use crate::compiler_frontend::ast::templates::template::{
-    Formatter, Style, TemplateContent, TemplateControlFlow, TemplateType,
+    Formatter, Style, TemplateContent, TemplateControlFlow, TemplateSegment, TemplateSegmentOrigin,
+    TemplateType,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
@@ -36,6 +38,9 @@ impl Template {
     ) -> Result<Template, CompilerError> {
         // These are variables or special keywords passed into the template head
         let mut template = Self::create_default(templates_inherited);
+        // Capture the opening token location early so style/directive errors can
+        // still point at the template even if parsing later advances deeply.
+        template.location = token_stream.current_location();
 
         // Templates that call any functions or have children that call functions
         // Can't be folded at compile time (EVENTUALLY CAN FOLD THE CONST FUNCTIONS TOO).
@@ -177,6 +182,15 @@ impl Template {
             token_stream.advance();
         }
 
+        // Formatting is normalized here, before any later folding/lowering stage.
+        // This keeps runtime templates simple: only compile-time-known body strings
+        // are rewritten, while dynamic chunks remain untouched and keep their order.
+        apply_body_formatter(
+            &mut template.content,
+            &template.style.formatter,
+            string_table,
+        );
+
         if foldable {
             template.kind = TemplateType::String;
             return Ok(template);
@@ -233,9 +247,13 @@ impl Template {
             self.style.child_templates = template_being_inserted.style.child_templates.to_owned();
         }
 
-        // Unpack this scene into this scene's body
-        self.content
-            .concat(template_being_inserted.content.to_owned());
+        // A template inserted from the head now behaves like head content in the
+        // receiving template. That prevents a later body formatter from treating the
+        // inserted compile-time strings as if they were local body literals.
+        self.content.concat_retagged(
+            template_being_inserted.content.to_owned(),
+            TemplateSegmentOrigin::Head,
+        );
 
         Ok(())
     }
@@ -245,8 +263,12 @@ impl Template {
         inherited_style: &Option<Style>,
         string_table: &mut StringTable,
     ) -> Result<StringId, CompilerError> {
+        // Preserve head/body origin even during fold-to-string so nested parents can
+        // still protect already-formatted body runs from being formatted again.
+        let mut flattened_segments = self.content.before.to_owned();
+        flattened_segments.extend(self.content.after.to_owned());
         fold_side(
-            &self.content.flatten(),
+            &flattened_segments,
             inherited_style,
             &self.style,
             string_table,
@@ -433,7 +455,11 @@ pub fn parse_template_head(
                                 *foldable = false;
                             }
 
-                            template.content.before.push(expr);
+                            template.content.add_with_origin(
+                                expr,
+                                false,
+                                TemplateSegmentOrigin::Head,
+                            );
                             defer_separator_token = true;
                         }
                     }
@@ -466,7 +492,9 @@ pub fn parse_template_head(
                     string_table,
                 )?;
 
-                template.content.before.push(expr);
+                template
+                    .content
+                    .add_with_origin(expr, false, TemplateSegmentOrigin::Head);
                 defer_separator_token = true;
             }
 
@@ -482,11 +510,15 @@ pub fn parse_template_head(
 
                 for path in paths {
                     let interned_path = string_table.get_or_intern(path.to_string(string_table));
-                    template.content.before.push(Expression::string_slice(
-                        interned_path,
-                        token_stream.current_location(),
-                        Ownership::ImmutableOwned,
-                    ));
+                    template.content.add_with_origin(
+                        Expression::string_slice(
+                            interned_path,
+                            token_stream.current_location(),
+                            Ownership::ImmutableOwned,
+                        ),
+                        false,
+                        TemplateSegmentOrigin::Head,
+                    );
                 }
             }
 
@@ -514,8 +546,18 @@ pub fn parse_template_head(
                     *foldable = false;
                 }
 
-                template.content.before.push(expr);
+                template
+                    .content
+                    .add_with_origin(expr, false, TemplateSegmentOrigin::Head);
                 defer_separator_token = true;
+            }
+
+            TokenKind::StyleDirective(_) | TokenKind::StyleTemplateHead => {
+                // Style directives live in the same comma-separated list as ordinary
+                // head expressions, so we parse them inline and then resume the same
+                // separator rules as the rest of the head.
+                defer_separator_token =
+                    parse_style_directive(token_stream, context, template, string_table)?;
             }
 
             TokenKind::Comma => {
@@ -580,38 +622,40 @@ pub fn parse_template_head(
 }
 
 fn fold_side(
-    side: &[Expression],
+    side: &[TemplateSegment],
     inherited_style: &Option<Style>,
     style: &Style,
     string_table: &mut StringTable,
 ) -> Result<StringId, CompilerError> {
     // Now we start combining everything into one string
     let mut final_string = String::with_capacity(3);
-    let mut formatter: Option<Formatter> = style.formatter.to_owned();
+    let mut inside_protected_body_run = false;
 
-    // Format. How will the content be parsed at compile time?
-    if let Some(inherited_style) = inherited_style {
-        // Each format has a different precedence, using the highest precedence.
-        // But children with a lower precedence than the parent should reset their format to None.
-        // This is because the parent will already parse that formatting over all its children.
-        if inherited_style.formatter_precedence > style.formatter_precedence {
-            formatter = None;
-
-        // If the child has a higher precedence format that the parent,
-        // Then it inserts special characters around it that indicate to the parent that any formatting should be skipped here.
-        // And this template will run its own format parsing.
-        // This is only inserted when there is a parent style that will parse the content
-        // because the formatters will remove this character when parsing.
-        } else {
-            final_string.push(TEMPLATE_SPECIAL_IGNORE_CHAR);
-        }
-    };
+    // Body strings may already have been formatted by this template. If an inherited
+    // formatter would otherwise run over the same bytes again, wrap only those body
+    // runs in the invisible guard marker so the parent formatter skips them.
+    let should_protect_formatted_body = inherited_style.as_ref().is_some_and(|inherited_style| {
+        style.formatter.is_some()
+            && inherited_style.formatter_precedence <= style.formatter_precedence
+    });
 
     // template content
-    for value in side {
-        match value.kind {
+    for segment in side {
+        let protects_this_segment = should_protect_formatted_body
+            && segment.origin == TemplateSegmentOrigin::Body
+            && matches!(segment.expression.kind, ExpressionKind::StringSlice(_));
+
+        if protects_this_segment && !inside_protected_body_run {
+            final_string.push(TEMPLATE_SPECIAL_IGNORE_CHAR);
+            inside_protected_body_run = true;
+        } else if !protects_this_segment && inside_protected_body_run {
+            final_string.push(TEMPLATE_SPECIAL_IGNORE_CHAR);
+            inside_protected_body_run = false;
+        }
+
+        match &segment.expression.kind {
             ExpressionKind::StringSlice(string) => {
-                final_string.push_str(string_table.resolve(string));
+                final_string.push_str(string_table.resolve(*string));
             }
 
             ExpressionKind::Float(float) => {
@@ -627,6 +671,10 @@ fn fold_side(
                 final_string.push_str(&value.to_string());
             }
 
+            ExpressionKind::Char(value) => {
+                final_string.push(*value);
+            }
+
             // Anything else can't be folded and should not get to this stage.
             // This is a compiler_frontend error
             _ => {
@@ -638,23 +686,178 @@ fn fold_side(
         }
     }
 
-    // The style will be 'None' if the parent has the same style format
-    // But if this child has a different format with a higher precedence,
-    // then it will insert a special character that will be removed by the parent.
-    // This character indicates to the parent that it should skip formatting this content.
-
-    // Otherwise, we parse the content if there is a compile time formatter
-    if let Some(formatter) = &formatter {
-        formatter.formatter.format(&mut final_string);
-
-        if inherited_style.is_some() {
-            final_string.push(TEMPLATE_SPECIAL_IGNORE_CHAR);
-        }
+    if inside_protected_body_run {
+        final_string.push(TEMPLATE_SPECIAL_IGNORE_CHAR);
     }
 
     ast_log!("Folded template into: ", final_string);
 
     Ok(string_table.intern(&final_string))
+}
+
+fn parse_style_directive(
+    token_stream: &mut FileTokens,
+    context: &ScopeContext,
+    template: &mut Template,
+    string_table: &mut StringTable,
+) -> Result<bool, CompilerError> {
+    match token_stream.current_token_kind() {
+        TokenKind::StyleDirective(directive) => match string_table.resolve(*directive) {
+            "markdown" => {
+                // Built-in formatter sugar. Full `$formatter(...)` support comes later,
+                // but this gives the AST a concrete style object to carry right now.
+                template.style.id = "markdown";
+                template.style.formatter = Some(markdown_formatter());
+                template.style.formatter_precedence = 0;
+                Ok(false)
+            }
+
+            "ignore" => {
+                // `$ignore` wipes the inherited style state first, then later directives
+                // in the same head can layer fresh settings back on top.
+                template.style = Style::default();
+                Ok(false)
+            }
+
+            "formatter" => {
+                return_syntax_error!(
+                    "The '$formatter(...)' template style directive is not implemented yet.",
+                    token_stream
+                        .current_location()
+                        .to_error_location(string_table),
+                    {
+                        PrimarySuggestion => "Use '$markdown' for now, or remove '$formatter(...)' until formatter callbacks are implemented",
+                    }
+                )
+            }
+
+            other => {
+                return_syntax_error!(
+                    format!(
+                        "Unsupported style directive '${other}'. Supported directives are '$markdown', '$ignore', and '$['."
+                    ),
+                    token_stream
+                        .current_location()
+                        .to_error_location(string_table),
+                    {
+                        PrimarySuggestion => "Use '$markdown', '$ignore', or '$[' inside the template head",
+                    }
+                )
+            }
+        },
+
+        TokenKind::StyleTemplateHead => {
+            // `$[` defines a default child template wrapper. Parse it using the same
+            // template parser as any other nested template, then store the result on
+            // the style instead of inserting it into this template's content.
+            let child_template = Template::new(
+                token_stream,
+                context,
+                template.style.child_templates.to_owned(),
+                string_table,
+            )?;
+            template.style.child_templates.push(child_template);
+            Ok(true)
+        }
+
+        _ => {
+            return_compiler_error!("Tried to parse a style directive while not positioned at one.")
+        }
+    }
+}
+
+fn apply_body_formatter(
+    content: &mut TemplateContent,
+    formatter: &Option<Formatter>,
+    string_table: &mut StringTable,
+) {
+    let Some(formatter) = formatter else {
+        return;
+    };
+
+    // The formatter only runs over compile-time body strings. Head segments and
+    // dynamic expressions are preserved as-is and act as hard boundaries.
+    format_segment_side(&mut content.before, formatter, string_table);
+    format_segment_side(&mut content.after, formatter, string_table);
+}
+
+fn format_segment_side(
+    side: &mut Vec<TemplateSegment>,
+    formatter: &Formatter,
+    string_table: &mut StringTable,
+) {
+    let mut formatted_side = Vec::with_capacity(side.len());
+    let mut buffered_text = String::new();
+    let mut buffer_location: Option<TextLocation> = None;
+
+    // Coalesce adjacent body string slices so the formatter sees the same text a
+    // user wrote contiguously in the source, rather than one token at a time.
+    for segment in std::mem::take(side) {
+        let ExpressionKind::StringSlice(text) = &segment.expression.kind else {
+            flush_formatted_body_run(
+                &mut formatted_side,
+                &mut buffered_text,
+                &mut buffer_location,
+                formatter,
+                string_table,
+            );
+            formatted_side.push(segment);
+            continue;
+        };
+
+        if segment.origin != TemplateSegmentOrigin::Body {
+            flush_formatted_body_run(
+                &mut formatted_side,
+                &mut buffered_text,
+                &mut buffer_location,
+                formatter,
+                string_table,
+            );
+            formatted_side.push(segment);
+            continue;
+        }
+
+        if buffer_location.is_none() {
+            buffer_location = Some(segment.expression.location.clone());
+        }
+
+        buffered_text.push_str(string_table.resolve(*text));
+    }
+
+    flush_formatted_body_run(
+        &mut formatted_side,
+        &mut buffered_text,
+        &mut buffer_location,
+        formatter,
+        string_table,
+    );
+
+    *side = formatted_side;
+}
+
+fn flush_formatted_body_run(
+    side: &mut Vec<TemplateSegment>,
+    buffered_text: &mut String,
+    buffer_location: &mut Option<TextLocation>,
+    formatter: &Formatter,
+    string_table: &mut StringTable,
+) {
+    if buffered_text.is_empty() {
+        return;
+    }
+
+    // Format once per contiguous body run, then collapse it back into a single
+    // string-slice segment so later stages do not need any special formatter logic.
+    formatter.formatter.format(buffered_text);
+
+    let interned = string_table.intern(buffered_text.as_str());
+    let location = buffer_location.take().unwrap_or_default();
+    side.push(TemplateSegment::new(
+        Expression::string_slice(interned, location, Ownership::ImmutableOwned),
+        TemplateSegmentOrigin::Body,
+    ));
+
+    buffered_text.clear();
 }
 
 #[cfg(test)]

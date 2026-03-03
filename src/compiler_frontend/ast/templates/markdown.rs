@@ -1,4 +1,6 @@
+use crate::compiler_frontend::ast::templates::template::{Formatter, TemplateFormatter};
 use std::str::Chars;
+use std::sync::Arc;
 
 // Custom-flavoured Markdown parser
 #[derive(PartialEq, Debug, Clone)]
@@ -13,6 +15,23 @@ pub enum MarkdownContext {
 }
 
 pub const HIDDEN_SKIP_CHAR: char = '\u{FFFC}';
+
+#[derive(Debug)]
+pub struct MarkdownTemplateFormatter;
+
+impl TemplateFormatter for MarkdownTemplateFormatter {
+    fn format(&self, content: &mut String) {
+        *content = to_markdown(content, "p");
+    }
+}
+
+pub fn markdown_formatter() -> Formatter {
+    Formatter {
+        id: "markdown",
+        skip_if_already_formatted: false,
+        formatter: Arc::new(MarkdownTemplateFormatter),
+    }
+}
 
 // Only very basics (atm): P, Headings, Bold, Italics
 // May add some more later

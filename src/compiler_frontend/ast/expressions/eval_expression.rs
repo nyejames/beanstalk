@@ -334,12 +334,7 @@ pub fn concat_template(
             ExpressionKind::Template(template_to_concat) => {
                 template
                     .content
-                    .before
-                    .extend(template_to_concat.content.before);
-                template
-                    .content
-                    .after
-                    .extend(template_to_concat.content.after);
+                    .concat(template_to_concat.content.to_owned());
 
                 // TODO - scene style precedence
                 // Some styles will override others based on their precedence
