@@ -65,7 +65,7 @@ impl Template {
         // ---------------------
         // TEMPLATE BODY PARSING
         // ---------------------
-        // The tokenizer only allows for strings or templates inside the template body
+        // The tokenizer only allows for strings, templates or slots inside the template body
         while token_stream.index < token_stream.tokens.len() {
             match &token_stream.current_token_kind() {
                 TokenKind::Eof => {
