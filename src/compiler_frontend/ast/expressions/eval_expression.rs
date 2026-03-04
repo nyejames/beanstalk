@@ -332,9 +332,7 @@ pub fn concat_template(
     for node in simplified_expression {
         match node.get_expr()?.kind {
             ExpressionKind::Template(template_to_concat) => {
-                template
-                    .content
-                    .concat(template_to_concat.content.to_owned());
+                template.content.extend(template_to_concat.content.to_owned());
 
                 // TODO - scene style precedence
                 // Some styles will override others based on their precedence

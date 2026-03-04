@@ -497,8 +497,8 @@ pub enum TokenKind {
     Copy,
 
     // Templates
-    EmptyTemplate(usize), // MIGHT REMOVE THIS
-    Slot,
+    TemplateSlotMarker,
+    SlotTarget(usize),
     TemplateClose,
     TemplateHead,
     // `$[` opens a child template from inside a template head. It tokenizes

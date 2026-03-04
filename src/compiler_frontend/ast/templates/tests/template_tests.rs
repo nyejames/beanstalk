@@ -33,7 +33,7 @@ fn top_level_template_declaration(
     template.location = location.to_owned();
 
     for expression in content {
-        template.content.add(expression, false);
+        template.content.add(expression);
     }
 
     declaration(

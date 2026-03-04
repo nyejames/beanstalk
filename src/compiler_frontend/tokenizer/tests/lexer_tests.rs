@@ -106,3 +106,42 @@ fn rejects_style_directives_outside_template_heads() {
         "style directives outside template heads should fail"
     );
 }
+
+#[test]
+fn tokenizes_template_slot_markers_in_template_bodies() {
+    let (file_tokens, _) = tokenize_source("[: before [   ....   ] after]");
+
+    assert!(file_tokens
+        .tokens
+        .iter()
+        .any(|token| matches!(token.kind, TokenKind::TemplateSlotMarker)));
+}
+
+#[test]
+fn tokenizes_labeled_slot_targets_inside_template_heads() {
+    let (file_tokens, _) = tokenize_source("[wrapper: [$1: first][$2]]");
+
+    assert!(file_tokens
+        .tokens
+        .iter()
+        .any(|token| matches!(token.kind, TokenKind::SlotTarget(1))));
+    assert!(file_tokens
+        .tokens
+        .iter()
+        .any(|token| matches!(token.kind, TokenKind::SlotTarget(2))));
+}
+
+#[test]
+fn rejects_malformed_template_slot_markers() {
+    let mut string_table = StringTable::new();
+    let source_path = InternedPath::from_single_str("test.bst", &mut string_table);
+
+    let result = tokenize(
+        "[: before [ .x ] after]",
+        &source_path,
+        TokenizeMode::Normal,
+        &mut string_table,
+    );
+
+    assert!(result.is_err(), "malformed slot markers should fail");
+}

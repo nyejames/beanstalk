@@ -2,93 +2,190 @@
 
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::templates::create_template_node::Template;
+use crate::compiler_frontend::compiler_errors::CompilerError;
 use std::sync::Arc;
+use crate::return_rule_error;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum TemplateType {
     StringFunction,
-    String,         // Fully foldable string that can be used at compile time
-    StringWithSlot, // Still foldable, but has a slot so needs to become two string slices can can wrap another string
-    Slot,           // These go inside template bodies to determine where to put content around it
+    // Fully compile-time-resolved template content. This can still contain unresolved
+    // slots, which makes it a compile-time wrapper rather than a direct string value.
+    String,
+    // `[$1: ...]` / `[$2]` helper templates are parsed as their own template nodes so
+    // the body parser can reuse the normal nested-template path and route them later.
+    SlotInsertion(usize),
     Comment,
 }
+
 #[derive(Clone, Debug)]
 pub struct TemplateContent {
-    // Content is still split around an optional slot, but each chunk now records
-    // whether it came from the template head or the template body. That lets the
-    // formatter system ignore head-inserted values later without losing slot order.
-    pub before: Vec<TemplateSegment>,
-    pub after: Vec<TemplateSegment>,
+    // Slots are represented structurally so template composition can preserve the
+    // authored order instead of juggling a fragile before/after split.
+    pub atoms: Vec<TemplateAtom>,
 }
+
 impl TemplateContent {
     pub fn new(content: Vec<Expression>) -> TemplateContent {
         TemplateContent {
-            before: Vec::new(),
-            after: content
+            atoms: content
                 .into_iter()
-                .map(|expression| TemplateSegment::new(expression, TemplateSegmentOrigin::Body))
+                .map(|expression| {
+                    TemplateAtom::Content(TemplateSegment::new(
+                        expression,
+                        TemplateSegmentOrigin::Body,
+                    ))
+                })
                 .collect(),
         }
     }
 
     pub fn default() -> Self {
-        Self {
-            before: Vec::new(),
-            after: Vec::new(),
+        Self { atoms: Vec::new() }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.atoms.is_empty()
+    }
+
+    pub fn add(&mut self, content: Expression) {
+        self.add_with_origin(content, TemplateSegmentOrigin::Body);
+    }
+
+    pub fn add_with_origin(&mut self, content: Expression, origin: TemplateSegmentOrigin) {
+        self.atoms
+            .push(TemplateAtom::Content(TemplateSegment::new(content, origin)));
+    }
+
+    pub fn push_slot(&mut self) {
+        self.atoms.push(TemplateAtom::Slot);
+    }
+
+    pub fn slot_count(&self) -> usize {
+        self.atoms
+            .iter()
+            .filter(|atom| matches!(atom, TemplateAtom::Slot))
+            .count()
+    }
+
+    pub fn has_unresolved_slots(&self) -> bool {
+        self.atoms.iter().any(TemplateAtom::has_unresolved_slots)
+    }
+
+    pub fn contains_slot_insertions(&self) -> bool {
+        self.atoms.iter().any(TemplateAtom::contains_slot_insertions)
+    }
+
+    pub fn split_by_slots(&self) -> Vec<Vec<TemplateAtom>> {
+        let mut segments = vec![Vec::new()];
+
+        for atom in &self.atoms {
+            match atom {
+                TemplateAtom::Slot => segments.push(Vec::new()),
+                TemplateAtom::Content(_) => segments.last_mut().unwrap().push(atom.clone()),
+            }
         }
-    }
-    pub fn add(&mut self, content: Expression, after_slot: bool) {
-        self.add_with_origin(content, after_slot, TemplateSegmentOrigin::Body);
+
+        segments
     }
 
-    pub fn add_with_origin(
-        &mut self,
-        content: Expression,
-        after_slot: bool,
-        origin: TemplateSegmentOrigin,
-    ) {
-        let segment = TemplateSegment::new(content, origin);
-        if after_slot {
-            self.after.push(segment);
-        } else {
-            self.before.push(segment);
+    pub fn flatten_expressions(&self) -> Vec<Expression> {
+        self.atoms
+            .iter()
+            .filter_map(|atom| match atom {
+                TemplateAtom::Content(segment) => Some(segment.expression.clone()),
+                TemplateAtom::Slot => None,
+            })
+            .collect()
+    }
+
+    pub fn flatten_renderable_segments(&self) -> Result<Vec<Expression>, CompilerError> {
+        let mut flattened = Vec::with_capacity(self.atoms.len());
+
+        for atom in &self.atoms {
+            match atom {
+                TemplateAtom::Slot => {
+                    return Err(CompilerError::compiler_error(
+                        "Template still contains unresolved slots and cannot be rendered directly.",
+                    ));
+                }
+                TemplateAtom::Content(segment) => {
+                    if let crate::compiler_frontend::ast::expressions::expression::ExpressionKind::Template(
+                        template,
+                    ) = &segment.expression.kind
+                    {
+                        if matches!(template.kind, TemplateType::SlotInsertion(_)) {
+                            return_rule_error!(
+                                "Labeled slot insertions can only be used while filling a template that defines slots.",
+                                segment.expression.location.to_owned().to_error_location_without_table()
+                            );
+                        }
+
+                        if template.has_unresolved_slots() {
+                            return_rule_error!(
+                                "Template still contains unresolved slots and cannot be rendered directly.",
+                                segment.expression.location.to_owned().to_error_location_without_table()
+                            );
+                        }
+                    }
+
+                    flattened.push(segment.expression.clone())
+                }
+            }
         }
+
+        Ok(flattened)
     }
 
-    pub fn flatten(&self) -> Vec<Expression> {
-        // Most downstream consumers only care about evaluation order, not whether
-        // a chunk came from the head or body. Keep this compatibility helper so HIR
-        // and reference collection can stay unchanged.
-        let total_len = self.before.len() + self.after.len();
-        let mut flattened = Vec::with_capacity(total_len);
-
-        flattened.extend(self.before.iter().map(|segment| segment.expression.clone()));
-        flattened.extend(self.after.iter().map(|segment| segment.expression.clone()));
-
-        flattened
+    pub fn extend(&mut self, other: TemplateContent) {
+        self.atoms.extend(other.atoms);
     }
 
-    pub fn concat(&mut self, other: TemplateContent) {
-        self.before.extend(other.before);
-        self.after.extend(other.after);
-    }
-
-    pub fn concat_retagged(&mut self, other: TemplateContent, origin: TemplateSegmentOrigin) {
+    pub fn extend_retagged(&mut self, other: TemplateContent, origin: TemplateSegmentOrigin) {
         // When a template is unpacked into another template head, its content should
         // behave like head content in the receiving template, even if it originally
         // came from a body. Retagging preserves the new formatter boundary rules.
-        self.before.extend(
-            other
-                .before
-                .into_iter()
-                .map(|segment| segment.with_origin(origin)),
-        );
-        self.after.extend(
-            other
-                .after
-                .into_iter()
-                .map(|segment| segment.with_origin(origin)),
-        );
+        self.atoms.extend(other.atoms.into_iter().map(|atom| match atom {
+            TemplateAtom::Content(segment) => {
+                TemplateAtom::Content(segment.with_origin(origin))
+            }
+            TemplateAtom::Slot => TemplateAtom::Slot,
+        }));
+    }
+}
+
+#[derive(Clone, Debug)]
+pub enum TemplateAtom {
+    Content(TemplateSegment),
+    Slot,
+}
+
+impl TemplateAtom {
+    fn has_unresolved_slots(&self) -> bool {
+        match self {
+            TemplateAtom::Slot => true,
+            TemplateAtom::Content(segment) => match &segment.expression.kind {
+                crate::compiler_frontend::ast::expressions::expression::ExpressionKind::Template(
+                    template,
+                ) => template.has_unresolved_slots(),
+                _ => false,
+            },
+        }
+    }
+
+    fn contains_slot_insertions(&self) -> bool {
+        match self {
+            TemplateAtom::Slot => false,
+            TemplateAtom::Content(segment) => match &segment.expression.kind {
+                crate::compiler_frontend::ast::expressions::expression::ExpressionKind::Template(
+                    template,
+                ) => {
+                    matches!(template.kind, TemplateType::SlotInsertion(_))
+                        || template.content.contains_slot_insertions()
+                }
+                _ => false,
+            },
+        }
     }
 }
 

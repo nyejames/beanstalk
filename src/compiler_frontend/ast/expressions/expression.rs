@@ -35,13 +35,6 @@ impl Expression {
             ExpressionKind::Reference(interned_name) => interned_name.to_string(string_table),
             ExpressionKind::Copy(..) => String::new(),
             ExpressionKind::Template(..) => String::new(),
-            ExpressionKind::WrapperTemplate(string1, string2) => {
-                format!(
-                    "{}{}",
-                    string_table.resolve(*string1),
-                    string_table.resolve(*string2)
-                )
-            }
             ExpressionKind::Collection(items, ..) => {
                 let mut all_items = String::new();
                 for item in items {
@@ -320,20 +313,6 @@ impl Expression {
         }
     }
 
-    pub fn template_wrapper(
-        value1: StringId,
-        value2: StringId,
-        location: TextLocation,
-        ownership: Ownership,
-    ) -> Self {
-        Self {
-            data_type: DataType::StringSlice,
-            kind: ExpressionKind::WrapperTemplate(value1, value2),
-            location,
-            ownership,
-        }
-    }
-
     pub fn range(
         lower: Expression,
         upper: Expression,
@@ -402,13 +381,13 @@ impl Expression {
             }
             ExpressionKind::Template(template) => {
                 matches!(template.kind, TemplateType::String)
+                    && !template.has_unresolved_slots()
                     && template
                         .content
-                        .flatten()
+                        .flatten_expressions()
                         .iter()
                         .all(|expression| expression.is_compile_time_constant())
             }
-            ExpressionKind::WrapperTemplate(_, _) => true,
             ExpressionKind::Reference(_)
             | ExpressionKind::Copy(_)
             | ExpressionKind::Runtime(_)
@@ -452,8 +431,7 @@ pub enum ExpressionKind {
     HostFunctionCall(InternedPath, Vec<Expression>),
 
     // Also equivalent to a String if it folds into a string
-    Template(Box<Template>),             // Template Body, Styles, ID
-    WrapperTemplate(StringId, StringId), // Folded template that can wrap other strings
+    Template(Box<Template>), // Template Body, Styles, ID
 
     Collection(Vec<Expression>),
 

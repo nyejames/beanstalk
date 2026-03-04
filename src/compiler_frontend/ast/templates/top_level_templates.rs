@@ -114,13 +114,21 @@ pub(crate) fn synthesize_start_template_items(
 
                 // Runtime template expressions can still fold to constants after AST folding.
                 // Keep them as const fragments to avoid generating unnecessary wrapper functions.
-                if matches!(template.kind, TemplateType::String) {
+                if matches!(template.kind, TemplateType::String) && !template.has_unresolved_slots()
+                {
                     let folded = template.fold_into_stringid(&None, string_table)?;
                     start_template_items.push(AstStartTemplateItem::ConstString {
                         value: folded,
                         location: candidate.location.to_owned(),
                     });
                     continue;
+                }
+
+                if template.has_unresolved_slots() {
+                    return Err(CompilerError::new_rule_error(
+                        "Top-level templates must resolve all slots before they can be emitted.",
+                        candidate.location.to_error_location(string_table),
+                    ));
                 }
 
                 let fragment_name =
@@ -419,7 +427,7 @@ fn collect_references_from_expression(
         }
 
         ExpressionKind::Template(template) => {
-            for value in template.content.flatten() {
+            for value in template.content.flatten_expressions() {
                 collect_references_from_expression(&value, references);
             }
         }
@@ -445,7 +453,6 @@ fn collect_references_from_expression(
         | ExpressionKind::Int(_)
         | ExpressionKind::Float(_)
         | ExpressionKind::StringSlice(_)
-        | ExpressionKind::WrapperTemplate(..)
         | ExpressionKind::Bool(_)
         | ExpressionKind::Char(_) => {}
     }

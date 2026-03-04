@@ -5,7 +5,9 @@
 // This is because both a Wasm and JS backend must be supported, so it is agnostic about what happens after that.
 
 use crate::build_system::build::{InputFile, Module};
-use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages, ErrorType};
+use crate::compiler_frontend::compiler_errors::{
+    CompilerError, CompilerMessages, ErrorLocation, ErrorType,
+};
 use crate::compiler_frontend::headers::parse_file_headers::{Header, HeaderKind, parse_headers};
 use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
@@ -582,17 +584,20 @@ fn resolve_import_to_file(
         }
     }
 
-    Err(CompilerError::file_error(
-        importer_file,
-        format!(
-            "Could not resolve import '{}'. Tried entry root '{}' and configured library roots.",
-            import_path.to_portable_string(string_table),
-            source_root
-                .strip_prefix(project_root)
-                .unwrap_or(source_root)
-                .display(),
-        ),
-    ))
+    Err(
+        CompilerError::new_syntax_error(
+            format!(
+                "Could not resolve import '{}'. Tried entry root '{}' and configured library roots.",
+                import_path.to_portable_string(string_table),
+                source_root
+                    .strip_prefix(project_root)
+                    .unwrap_or(source_root)
+                    .display(),
+            ),
+            ErrorLocation::default(),
+        )
+        .with_file_path(importer_file.to_path_buf()),
+    )
 }
 
 fn candidate_import_files(

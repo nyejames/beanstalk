@@ -220,6 +220,13 @@ pub fn function_body_to_ast(
                 //   New Function or Variable declaration
                 // -----------------------------------------
                 } else {
+                    if token_stream.peek_next_token() == Some(&TokenKind::OpenParenthesis) {
+                        return_compiler_error!(format!(
+                            "Call target '{}' is not declared or registered as a host function.",
+                            string_table.resolve(id)
+                        ));
+                    }
+
                     let arg = new_declaration(token_stream, id, &context, warnings, string_table)?;
 
                     // -----------------------------

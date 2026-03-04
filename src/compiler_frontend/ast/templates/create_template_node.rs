@@ -5,9 +5,12 @@ use crate::compiler_frontend::ast::expressions::expression::{Expression, Express
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
 use crate::compiler_frontend::ast::templates::code::configure_code_style;
 use crate::compiler_frontend::ast::templates::markdown::markdown_formatter;
+use crate::compiler_frontend::ast::templates::slots::{
+    compose_template_with_slots, ensure_no_slot_insertions_remain,
+};
 use crate::compiler_frontend::ast::templates::template::{
-    Formatter, Style, TemplateContent, TemplateControlFlow, TemplateSegment, TemplateSegmentOrigin,
-    TemplateType,
+    Formatter, Style, TemplateAtom, TemplateContent, TemplateControlFlow, TemplateSegment,
+    TemplateSegmentOrigin, TemplateType,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
@@ -48,16 +51,16 @@ impl Template {
         // This is because the template might be changing at runtime.
         // If the entire template can be folded, it just becomes a string after the AST stage.
         let mut foldable = true;
+        let mut active_wrapper: Option<Template> = None;
 
         parse_template_head(
             token_stream,
             context,
             &mut template,
+            &mut active_wrapper,
             &mut foldable,
             string_table,
         )?;
-
-        let mut is_after_slot = false;
 
         // ---------------------
         // TEMPLATE BODY PARSING
@@ -85,7 +88,7 @@ impl Template {
                     )?;
 
                     match nested_template.kind {
-                        TemplateType::String => {
+                        TemplateType::String if !nested_template.has_unresolved_slots() => {
                             ast_log!(
                                 "Found a compile time foldable template inside a template. Folding into a string slice..."
                             );
@@ -107,39 +110,25 @@ impl Template {
                                     token_stream.current_location(),
                                     Ownership::ImmutableOwned,
                                 ),
-                                is_after_slot,
                             );
 
                             continue;
                         }
 
-                        // Uses runtime stuff, not foldable
                         TemplateType::StringFunction => {
                             foldable = false;
-                            // Insert it into the template
-                            let expr =
-                                Expression::template(nested_template, Ownership::ImmutableOwned);
-                            template.content.add(expr, is_after_slot);
-                            // Nested template parsing already positioned the stream correctly.
+                        }
+
+                        TemplateType::Comment => {
                             continue;
                         }
 
-                        // Can still be folded, but needs to be represented as two string slices,
-                        // since it can be used to wrap other strings.
-                        TemplateType::StringWithSlot => {}
-
-                        TemplateType::Slot => {
-                            // Now body content goes after the slot.
-                            // If this template is unpacked from a template head into another template,
-                            // then its content can be placed before and after the template its being unpacked into.
-                            is_after_slot = true;
-                            // Nested template parsing already positioned the stream correctly.
-                            continue;
-                        }
-
-                        // Ignore everything else for now
-                        _ => {}
+                        TemplateType::String | TemplateType::SlotInsertion(_) => {}
                     }
+
+                    let expr = Expression::template(nested_template, Ownership::ImmutableOwned);
+                    template.content.add(expr);
+                    continue;
                 }
 
                 TokenKind::RawStringLiteral(content) | TokenKind::StringSliceLiteral(content) => {
@@ -149,7 +138,6 @@ impl Template {
                             token_stream.current_location(),
                             Ownership::ImmutableOwned,
                         ),
-                        is_after_slot,
                     );
                 }
 
@@ -161,8 +149,11 @@ impl Template {
                             token_stream.current_location(),
                             Ownership::ImmutableOwned,
                         ),
-                        is_after_slot,
                     );
+                }
+
+                TokenKind::TemplateSlotMarker => {
+                    template.content.push_slot();
                 }
 
                 TokenKind::Empty => {}
@@ -192,7 +183,18 @@ impl Template {
             string_table,
         );
 
-        if foldable {
+        if let Some(wrapper) = active_wrapper {
+            template.content = compose_template_with_slots(
+                &wrapper,
+                &template.content,
+                &template.location,
+            )?;
+            foldable &= matches!(wrapper.kind, TemplateType::String);
+        } else {
+            ensure_no_slot_insertions_remain(&template.content, &template.location)?;
+        }
+
+        if foldable && !matches!(template.kind, TemplateType::SlotInsertion(_)) {
             template.kind = TemplateType::String;
             return Ok(template);
         };
@@ -216,6 +218,10 @@ impl Template {
         }
     }
 
+    pub fn has_unresolved_slots(&self) -> bool {
+        self.content.has_unresolved_slots()
+    }
+
     pub fn insert_template_into_head(
         &mut self,
         template_being_inserted: &Template,
@@ -231,14 +237,14 @@ impl Template {
                 // Ignore this scene completely, don't insert anything
                 return Ok(());
             }
-            TemplateType::Slot => {
-                // Error, can't use slots in the scene head (would be empty square brackets)
+            TemplateType::SlotInsertion(_) => {
+                // Slot insertion templates only make sense while filling an active wrapper.
                 return_syntax_error!(
-                    "Can't use slots in the template head. Token",
+                    "Can't use labeled slot insertions in the template head.",
                     self.location.to_owned().to_error_location(&string_table)
                 )
             }
-            TemplateType::String | TemplateType::StringWithSlot => {
+            TemplateType::String => {
                 // All good, keep going
             }
         }
@@ -251,7 +257,7 @@ impl Template {
         // A template inserted from the head now behaves like head content in the
         // receiving template. That prevents a later body formatter from treating the
         // inserted compile-time strings as if they were local body literals.
-        self.content.concat_retagged(
+        self.content.extend_retagged(
             template_being_inserted.content.to_owned(),
             TemplateSegmentOrigin::Head,
         );
@@ -264,38 +270,7 @@ impl Template {
         inherited_style: &Option<Style>,
         string_table: &mut StringTable,
     ) -> Result<StringId, CompilerError> {
-        // Preserve head/body origin even during fold-to-string so nested parents can
-        // still protect already-formatted body runs from being formatted again.
-        let mut flattened_segments = self.content.before.to_owned();
-        flattened_segments.extend(self.content.after.to_owned());
-        fold_side(
-            &flattened_segments,
-            inherited_style,
-            &self.style,
-            string_table,
-        )
-    }
-
-    pub fn fold_into_wrapper(
-        &self,
-        inherited_style: &Option<Style>,
-        string_table: &mut StringTable,
-    ) -> Result<(StringId, StringId), CompilerError> {
-        let left = fold_side(
-            &self.content.before,
-            inherited_style,
-            &self.style,
-            string_table,
-        )?;
-
-        let right = fold_side(
-            &self.content.after,
-            inherited_style,
-            &self.style,
-            string_table,
-        )?;
-
-        Ok((left, right))
+        fold_atoms(&self.content.atoms, inherited_style, &self.style, string_table)
     }
 }
 
@@ -328,6 +303,7 @@ pub fn parse_template_head(
     token_stream: &mut FileTokens,
     context: &ScopeContext,
     template: &mut Template,
+    active_wrapper: &mut Option<Template>,
     foldable: &mut bool,
     string_table: &mut StringTable,
 ) -> Result<(), CompilerError> {
@@ -337,6 +313,8 @@ pub fn parse_template_head(
 
     // Each expression must be separated with a comma
     let mut comma_separator = true;
+    let mut slot_target: Option<usize> = None;
+    let mut saw_meaningful_head_item = false;
     token_stream.advance();
 
     while token_stream.index < token_stream.length {
@@ -362,14 +340,25 @@ pub fn parse_template_head(
             return Ok(());
         }
 
+        if slot_target.is_some() {
+            match token {
+                TokenKind::Newline | TokenKind::Empty => {
+                    token_stream.advance();
+                    continue;
+                }
+                _ => {
+                    return_syntax_error!(
+                        "Labeled slot insertion heads can only contain the slot label before the optional body.",
+                        token_stream
+                            .current_location()
+                            .to_error_location(&string_table)
+                    )
+                }
+            }
+        }
+
         // Make sure there is a comma before the next token
         if !comma_separator {
-            if token == TokenKind::Slot {
-                template.kind = TemplateType::Slot;
-                token_stream.advance();
-                continue;
-            }
-
             if token != TokenKind::Comma {
                 return_syntax_error!(
                     format!(
@@ -394,6 +383,7 @@ pub fn parse_template_head(
             // This doesn't follow regular declaration rules.
             TokenKind::Id(name) => {
                 template.id = format!("{BS_VAR_PREFIX}{name}");
+                saw_meaningful_head_item = true;
             }
 
             // If this is a template, we have to do some clever parsing here
@@ -405,7 +395,7 @@ pub fn parse_template_head(
                         // Reference to another string template
                         ExpressionKind::Template(inserted_template) => {
                             if context.kind.is_constant_context()
-                                && !matches!(inserted_template.kind, TemplateType::String)
+                                && matches!(inserted_template.kind, TemplateType::StringFunction)
                             {
                                 return_syntax_error!(
                                     format!(
@@ -417,11 +407,39 @@ pub fn parse_template_head(
                                         .to_error_location(&string_table)
                                 );
                             }
-                            template.insert_template_into_head(
-                                inserted_template,
-                                foldable,
-                                string_table,
-                            )?;
+
+                            if inserted_template.content.slot_count() > 0 {
+                                if active_wrapper.is_some() {
+                                    return_syntax_error!(
+                                        "Only one wrapper template can be applied from a template head.",
+                                        token_stream
+                                            .current_location()
+                                            .to_error_location(&string_table)
+                                    );
+                                }
+
+                                if !inserted_template.style.child_templates.is_empty() {
+                                    template.style.child_templates =
+                                        inserted_template.style.child_templates.to_owned();
+                                }
+
+                                if matches!(inserted_template.kind, TemplateType::StringFunction) {
+                                    *foldable = false;
+                                }
+
+                                // Wrapper selection changes how the template body is
+                                // interpreted later, so keep it separate from ordinary
+                                // head content instead of splicing it in immediately.
+                                *active_wrapper = Some(inserted_template.as_ref().to_owned());
+                            } else {
+                                template.insert_template_into_head(
+                                    inserted_template,
+                                    foldable,
+                                    string_table,
+                                )?;
+                            }
+
+                            saw_meaningful_head_item = true;
                         }
 
                         // Otherwise this is a reference to some other variable
@@ -458,10 +476,10 @@ pub fn parse_template_head(
 
                             template.content.add_with_origin(
                                 expr,
-                                false,
                                 TemplateSegmentOrigin::Head,
                             );
                             defer_separator_token = true;
+                            saw_meaningful_head_item = true;
                         }
                     }
                 } else {
@@ -495,8 +513,9 @@ pub fn parse_template_head(
 
                 template
                     .content
-                    .add_with_origin(expr, false, TemplateSegmentOrigin::Head);
+                    .add_with_origin(expr, TemplateSegmentOrigin::Head);
                 defer_separator_token = true;
+                saw_meaningful_head_item = true;
             }
 
             TokenKind::Path(paths) => {
@@ -517,10 +536,11 @@ pub fn parse_template_head(
                             token_stream.current_location(),
                             Ownership::ImmutableOwned,
                         ),
-                        false,
                         TemplateSegmentOrigin::Head,
                     );
                 }
+
+                saw_meaningful_head_item = true;
             }
 
             TokenKind::OpenParenthesis => {
@@ -549,8 +569,9 @@ pub fn parse_template_head(
 
                 template
                     .content
-                    .add_with_origin(expr, false, TemplateSegmentOrigin::Head);
+                    .add_with_origin(expr, TemplateSegmentOrigin::Head);
                 defer_separator_token = true;
+                saw_meaningful_head_item = true;
             }
 
             TokenKind::StyleDirective(_) | TokenKind::StyleTemplateHead => {
@@ -559,6 +580,7 @@ pub fn parse_template_head(
                 // separator rules as the rest of the head.
                 defer_separator_token =
                     parse_style_directive(token_stream, context, template, string_table)?;
+                saw_meaningful_head_item = true;
             }
 
             TokenKind::Comma => {
@@ -571,8 +593,19 @@ pub fn parse_template_head(
                 )
             }
 
-            TokenKind::Slot => {
-                template.kind = TemplateType::Slot;
+            TokenKind::SlotTarget(slot) => {
+                if saw_meaningful_head_item {
+                    return_syntax_error!(
+                        "Labeled slot insertion heads can only contain the slot label before the optional body.",
+                        token_stream
+                            .current_location()
+                            .to_error_location(&string_table)
+                    );
+                }
+
+                template.kind = TemplateType::SlotInsertion(slot);
+                slot_target = Some(slot);
+                saw_meaningful_head_item = true;
             }
 
             // Newlines / empty things in the scene head are ignored
@@ -622,8 +655,8 @@ pub fn parse_template_head(
     Ok(())
 }
 
-fn fold_side(
-    side: &[TemplateSegment],
+fn fold_atoms(
+    atoms: &[TemplateAtom],
     inherited_style: &Option<Style>,
     style: &Style,
     string_table: &mut StringTable,
@@ -641,7 +674,14 @@ fn fold_side(
     });
 
     // template content
-    for segment in side {
+    for atom in atoms {
+        let TemplateAtom::Content(segment) = atom else {
+            return_syntax_error!(
+                "Template still contains unresolved slots and cannot be folded into a string.",
+                TextLocation::default().to_error_location(string_table)
+            );
+        };
+
         let protects_this_segment = should_protect_formatted_body
             && segment.origin == TemplateSegmentOrigin::Body
             && matches!(segment.expression.kind, ExpressionKind::StringSlice(_));
@@ -785,43 +825,54 @@ fn apply_body_formatter(
 
     // The formatter only runs over compile-time body strings. Head segments and
     // dynamic expressions are preserved as-is and act as hard boundaries.
-    format_segment_side(&mut content.before, formatter, string_table);
-    format_segment_side(&mut content.after, formatter, string_table);
+    format_content_atoms(&mut content.atoms, formatter, string_table);
 }
 
-fn format_segment_side(
-    side: &mut Vec<TemplateSegment>,
+fn format_content_atoms(
+    atoms: &mut Vec<TemplateAtom>,
     formatter: &Formatter,
     string_table: &mut StringTable,
 ) {
-    let mut formatted_side = Vec::with_capacity(side.len());
+    let mut formatted_atoms = Vec::with_capacity(atoms.len());
     let mut buffered_text = String::new();
     let mut buffer_location: Option<TextLocation> = None;
 
     // Coalesce adjacent body string slices so the formatter sees the same text a
     // user wrote contiguously in the source, rather than one token at a time.
-    for segment in std::mem::take(side) {
-        let ExpressionKind::StringSlice(text) = &segment.expression.kind else {
+    for atom in std::mem::take(atoms) {
+        let TemplateAtom::Content(segment) = atom else {
             flush_formatted_body_run(
-                &mut formatted_side,
+                &mut formatted_atoms,
                 &mut buffered_text,
                 &mut buffer_location,
                 formatter,
                 string_table,
             );
-            formatted_side.push(segment);
+            formatted_atoms.push(TemplateAtom::Slot);
+            continue;
+        };
+
+        let ExpressionKind::StringSlice(text) = &segment.expression.kind else {
+            flush_formatted_body_run(
+                &mut formatted_atoms,
+                &mut buffered_text,
+                &mut buffer_location,
+                formatter,
+                string_table,
+            );
+            formatted_atoms.push(TemplateAtom::Content(segment));
             continue;
         };
 
         if segment.origin != TemplateSegmentOrigin::Body {
             flush_formatted_body_run(
-                &mut formatted_side,
+                &mut formatted_atoms,
                 &mut buffered_text,
                 &mut buffer_location,
                 formatter,
                 string_table,
             );
-            formatted_side.push(segment);
+            formatted_atoms.push(TemplateAtom::Content(segment));
             continue;
         }
 
@@ -833,18 +884,18 @@ fn format_segment_side(
     }
 
     flush_formatted_body_run(
-        &mut formatted_side,
+        &mut formatted_atoms,
         &mut buffered_text,
         &mut buffer_location,
         formatter,
         string_table,
     );
 
-    *side = formatted_side;
+    *atoms = formatted_atoms;
 }
 
 fn flush_formatted_body_run(
-    side: &mut Vec<TemplateSegment>,
+    atoms: &mut Vec<TemplateAtom>,
     buffered_text: &mut String,
     buffer_location: &mut Option<TextLocation>,
     formatter: &Formatter,
@@ -860,10 +911,10 @@ fn flush_formatted_body_run(
 
     let interned = string_table.intern(buffered_text.as_str());
     let location = buffer_location.take().unwrap_or_default();
-    side.push(TemplateSegment::new(
+    atoms.push(TemplateAtom::Content(TemplateSegment::new(
         Expression::string_slice(interned, location, Ownership::ImmutableOwned),
         TemplateSegmentOrigin::Body,
-    ));
+    )));
 
     buffered_text.clear();
 }

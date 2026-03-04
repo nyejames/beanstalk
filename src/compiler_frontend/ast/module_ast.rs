@@ -407,8 +407,9 @@ impl Ast {
                             }
                         };
 
-                    if !matches!(template.kind, TemplateType::String) {
-                        let error_message = if matches!(template.kind, TemplateType::Slot) {
+                    if !matches!(template.kind, TemplateType::String) || template.has_unresolved_slots()
+                    {
+                        let error_message = if template.has_unresolved_slots() {
                             "Top-level const templates can use slots only when they resolve fully at compile time. This slot remained unresolved."
                         } else {
                             "Top-level const templates must be fully foldable at compile time."

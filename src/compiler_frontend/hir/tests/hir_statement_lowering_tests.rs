@@ -76,7 +76,7 @@ fn runtime_template_expression(location: TextLocation, content: Vec<Expression>)
     template.location = location.clone();
 
     for expression in content {
-        template.content.add(expression, false);
+        template.content.add(expression);
     }
 
     Expression::template(template, Ownership::ImmutableOwned)

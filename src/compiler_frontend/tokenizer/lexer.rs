@@ -155,23 +155,11 @@ pub fn get_token_kind(
             }
 
             _ => {
-                // This is a slot
-                if stream.peek() == Some(&']') {
-                    stream.next();
-
-                    let mut spaces_after_template = 0;
-
-                    while let Some(ch) = stream.peek() {
-                        if !ch.is_whitespace() {
-                            break;
-                        }
-
-                        spaces_after_template += 1;
-
-                        stream.next();
-                    }
-
-                    return_token!(TokenKind::EmptyTemplate(spaces_after_template), stream);
+                // Slot markers live in the template body and share the same `[` opener as
+                // nested templates, so the lexer must recognize them before reopening a
+                // nested template head.
+                if let Some(token) = try_tokenize_template_slot(stream, string_table)? {
+                    return Ok(token);
                 }
 
                 // Start a fresh nested template and remember that we are now parsing
@@ -240,6 +228,33 @@ pub fn get_token_kind(
                 }
             )
         };
+
+        if first_char.is_ascii_digit() {
+            token_value.push(stream.next().unwrap());
+
+            while let Some(&next_char) = stream.peek() {
+                if !next_char.is_ascii_digit() {
+                    break;
+                }
+
+                token_value.push(stream.next().unwrap());
+            }
+
+            let slot_target = token_value.parse::<usize>().unwrap_or_default();
+
+            if slot_target == 0 {
+                return_syntax_error!(
+                    "Slot labels are 1-based. Use '$1', '$2', and so on.",
+                    stream.new_location().to_error_location(string_table),
+                    {
+                        CompilationStage => "Tokenization",
+                        PrimarySuggestion => "Start slot labels at '$1'",
+                    }
+                )
+            }
+
+            return_token!(TokenKind::SlotTarget(slot_target), stream);
+        }
 
         if !first_char.is_alphabetic() && first_char != '_' {
             return_syntax_error!(
@@ -323,11 +338,6 @@ pub fn get_token_kind(
             && peeked_char == '.'
         {
             stream.next();
-
-            // This represents a slot in the template head
-            if stream.mode == TokenizeMode::TemplateHead {
-                return_token!(TokenKind::Slot, stream);
-            }
 
             return_token!(TokenKind::Variadic, stream);
         }
@@ -810,6 +820,85 @@ fn tokenize_template_body(
 
     let interned_string = string_table.intern(&token_value);
     return_token!(TokenKind::StringSliceLiteral(interned_string), stream);
+}
+
+fn try_tokenize_template_slot(
+    stream: &mut TokenStream<'_>,
+    string_table: &mut StringTable,
+) -> Result<Option<Token>, CompilerError> {
+    let mut lookahead = stream.chars.clone();
+    let mut chars_to_consume = 0usize;
+
+    while let Some(ch) = lookahead.peek() {
+        if !is_inline_slot_whitespace(*ch) {
+            break;
+        }
+
+        lookahead.next();
+        chars_to_consume += 1;
+    }
+
+    let Some(next_char) = lookahead.peek() else {
+        return Ok(None);
+    };
+
+    if *next_char != '.' {
+        return Ok(None);
+    }
+
+    let mut dot_count = 0usize;
+    while let Some('.') = lookahead.peek().copied() {
+        lookahead.next();
+        chars_to_consume += 1;
+        dot_count += 1;
+    }
+
+    if dot_count < 2 {
+        return malformed_slot_error(stream, string_table);
+    }
+
+    while let Some(ch) = lookahead.peek() {
+        if !is_inline_slot_whitespace(*ch) {
+            break;
+        }
+
+        lookahead.next();
+        chars_to_consume += 1;
+    }
+
+    match lookahead.peek().copied() {
+        Some(']') => {
+            chars_to_consume += 1;
+
+            for _ in 0..chars_to_consume {
+                stream.next();
+            }
+
+            Ok(Some(Token::new(
+                TokenKind::TemplateSlotMarker,
+                stream.new_location(),
+            )))
+        }
+        _ => malformed_slot_error(stream, string_table),
+    }
+}
+
+fn malformed_slot_error(
+    stream: &mut TokenStream<'_>,
+    string_table: &StringTable,
+) -> Result<Option<Token>, CompilerError> {
+    return_syntax_error!(
+        "Invalid slot syntax. Use '[' followed by optional inline spaces, at least two dots, optional inline spaces, and ']'.",
+        stream.new_location().to_error_location(string_table),
+        {
+            CompilationStage => "Tokenization",
+            PrimarySuggestion => "Write a slot as '[..]' or '[   ....   ]'",
+        }
+    )
+}
+
+fn is_inline_slot_whitespace(ch: char) -> bool {
+    ch.is_whitespace() && ch != '\n'
 }
 
 #[cfg(test)]

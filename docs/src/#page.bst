@@ -1,6 +1,7 @@
 import @(libs/html/basic)
-import @(styles/docs/{navbar, footer})
-
+import @(styles/docs/{navbar, footer, default_style})
+#[basic.document]
+#[basic.style, default_style]
 #[basic.body:
 
 [navbar]

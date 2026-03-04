@@ -94,10 +94,29 @@ fn runtime_template_expression(location: TextLocation, content: Vec<Expression>)
     template.location = location.clone();
 
     for expr in content {
-        template.content.add(expr, false);
+        template.content.add(expr);
     }
 
     Expression::template(template, Ownership::ImmutableOwned)
+}
+
+#[test]
+fn rejects_templates_with_unresolved_slots_during_hir_lowering() {
+    let mut string_table = StringTable::new();
+    let location = TextLocation::new_just_line(1);
+    let mut builder = setup_builder(&mut string_table);
+
+    let mut template = Template::create_default(vec![]);
+    template.location = location.clone();
+    template.content.push_slot();
+    template.kind = crate::compiler_frontend::ast::templates::template::TemplateType::String;
+
+    let error = builder
+        .lower_expression(&Expression::template(template, Ownership::ImmutableOwned))
+        .expect_err("unresolved slot templates should not reach HIR");
+
+    assert_eq!(error.error_type, ErrorType::HirTransformation);
+    assert!(error.msg.contains("Slot resolution must happen in the AST"));
 }
 
 #[test]

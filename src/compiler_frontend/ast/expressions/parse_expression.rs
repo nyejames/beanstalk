@@ -602,17 +602,20 @@ pub fn create_expression(
                         return Ok(Expression::template(template, ownership.to_owned()));
                     }
 
-                    // Completely foldable string, no slots
                     TemplateType::String => {
-                        ast_log!("Template is foldable now. Folding...");
-
-                        let folded_string = template.fold_into_stringid(&None, string_table)?;
-
                         if consume_closing_parenthesis
                             && token_stream.current_token_kind() == &TokenKind::CloseParenthesis
                         {
                             token_stream.advance();
                         }
+
+                        if template.has_unresolved_slots() {
+                            return Ok(Expression::template(template, ownership.to_owned()));
+                        }
+
+                        ast_log!("Template is foldable now. Folding...");
+
+                        let folded_string = template.fold_into_stringid(&None, string_table)?;
 
                         return Ok(Expression::string_slice(
                             folded_string,
@@ -621,35 +624,15 @@ pub fn create_expression(
                         ));
                     }
 
-                    TemplateType::StringWithSlot => {
-                        ast_log!("Template is foldable into a wrapper. Folding...");
-
-                        let (string1, string2) = template.fold_into_wrapper(&None, string_table)?;
-
-                        if consume_closing_parenthesis
-                            && token_stream.current_token_kind() == &TokenKind::CloseParenthesis
-                        {
-                            token_stream.advance();
-                        }
-
-                        return Ok(Expression::template_wrapper(
-                            string1,
-                            string2,
-                            token_stream.current_location(),
-                            ownership.get_owned(),
-                        ));
-                    }
-
                     // Ignore comments
                     TemplateType::Comment => {}
 
-                    // Error for anything else for now
-                    TemplateType::Slot => {
+                    TemplateType::SlotInsertion(_) => {
                         return_rule_error!(
-                            "Slot used outside of a template body. ",
+                            "Labeled slot insertions can only be used while filling a template that defines slots.",
                             token_stream.current_location().to_error_location(&string_table), {
                                 CompilationStage => "Expression Parsing",
-                                PrimarySuggestion => "Place the slot inside a template body, or use an empty template if you want an empty string",
+                                PrimarySuggestion => "Only use '[$1: ...]' or '[$2]' inside the body of a template that applies a wrapper with slots",
                             }
                         );
                     }

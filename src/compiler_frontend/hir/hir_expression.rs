@@ -121,28 +121,6 @@ impl<'a> HirBuilder<'a> {
                 })
             }
 
-            // Currently just concatenates the wrapped into a single string,
-            // This seems like correct behaviour if it gets to this stage.
-            ExpressionKind::WrapperTemplate(value1, value2) => {
-                let region = self.current_region_or_error(&expr.location)?;
-                let ty = self.lower_data_type(&expr.data_type, &expr.location)?;
-
-                Ok(LoweredExpression {
-                    prelude: vec![],
-                    value: self.make_expression(
-                        &expr.location,
-                        HirExpressionKind::StringLiteral(format!(
-                            "{}{}",
-                            self.string_table.resolve(*value1),
-                            self.string_table.resolve(*value2)
-                        )),
-                        ty,
-                        ValueKind::Const,
-                        region,
-                    ),
-                })
-            }
-
             ExpressionKind::Reference(name) => {
                 self.lower_reference_expression(name, &expr.data_type, &expr.location)
             }
@@ -309,7 +287,14 @@ impl<'a> HirBuilder<'a> {
         template: &Template,
         location: &TextLocation,
     ) -> Result<LoweredExpression, CompilerError> {
-        let chunks: Vec<Expression> = template.content.flatten().into_iter().collect();
+        if template.has_unresolved_slots() {
+            return_hir_transformation_error!(
+                "Slot resolution must happen in the AST before HIR lowering.",
+                self.hir_error_location(location)
+            );
+        }
+
+        let chunks = template.content.flatten_renderable_segments()?;
         let chunk_types: Vec<DataType> =
             chunks.iter().map(|chunk| chunk.data_type.clone()).collect();
         let template_function = self.create_runtime_template_function(&chunk_types, location)?;
