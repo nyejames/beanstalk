@@ -1,3 +1,2 @@
 mode = "success"
-entry = "main.bst"
-output_paths = ["main.html"]
+output_paths = ["index.html"]

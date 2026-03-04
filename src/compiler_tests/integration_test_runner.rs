@@ -437,62 +437,16 @@ fn resolve_case_entry_path(
         return Ok(input_root.join(entry));
     }
 
-    let preferred_entries = [
-        PathBuf::from("main.bst"),
-        PathBuf::from("entry.bst"),
-        PathBuf::from("#page.bst"),
-    ];
-
-    for relative in preferred_entries {
-        let candidate = input_root.join(&relative);
-        if candidate.is_file() {
-            return Ok(candidate);
-        }
-    }
-
-    let root_entries = collect_root_hash_entries(input_root)?;
-    if root_entries.len() == 1 {
-        return Ok(root_entries
-            .into_iter()
-            .next()
-            .unwrap_or_else(|| input_root.to_path_buf()));
+    let default_entry = input_root.join("#page.bst");
+    if default_entry.is_file() {
+        return Ok(default_entry);
     }
 
     Err(format!(
-        "Could not determine canonical test entry for '{}'. Add 'entry = ...' to '{}' or provide main.bst / entry.bst / #page.bst.",
+        "Could not determine canonical test entry for '{}'. Add 'entry = ...' to '{}' or provide #page.bst.",
         input_root.display(),
         EXPECT_FILE_NAME
     ))
-}
-
-fn collect_root_hash_entries(input_root: &Path) -> Result<Vec<PathBuf>, String> {
-    let mut entries = Vec::new();
-    let directory = fs::read_dir(input_root).map_err(|error| {
-        format!(
-            "Failed to scan canonical test input root '{}': {error}",
-            input_root.display()
-        )
-    })?;
-
-    for entry in directory {
-        let entry =
-            entry.map_err(|error| format!("Failed to read canonical test input entry: {error}"))?;
-        let path = entry.path();
-        if !path.is_file() {
-            continue;
-        }
-
-        let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
-            continue;
-        };
-
-        if name.starts_with('#') && path.extension().is_some_and(|ext| ext == "bst") {
-            entries.push(path);
-        }
-    }
-
-    entries.sort();
-    Ok(entries)
 }
 
 fn execute_test_case(case: &TestCaseSpec) -> CaseExecutionResult {

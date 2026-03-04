@@ -93,7 +93,7 @@ fn build_project_returns_result_without_writing_files() {
 
     assert!(!result.project.output_files.is_empty());
     assert!(
-        !root.join("main.html").exists(),
+        !root.join("index.html").exists(),
         "build_project should not write files to disk"
     );
 

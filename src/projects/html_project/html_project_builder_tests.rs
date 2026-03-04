@@ -78,7 +78,7 @@ fn create_test_module(entry_point: PathBuf) -> Module {
 #[test]
 fn build_backend_emits_single_html_output_file() {
     let builder = HtmlProjectBuilder::new();
-    let entry_path = PathBuf::from("main.bst");
+    let entry_path = PathBuf::from("#page.bst");
     let module = create_test_module(entry_path.clone());
     let config = Config::new(entry_path.clone());
 
@@ -89,9 +89,9 @@ fn build_backend_emits_single_html_output_file() {
     assert_eq!(project.output_files.len(), 1);
     assert_eq!(
         project.output_files[0].relative_output_path(),
-        PathBuf::from("main.html")
+        PathBuf::from("index.html")
     );
-    assert_eq!(project.entry_page_rel, Some(PathBuf::from("main.html")));
+    assert_eq!(project.entry_page_rel, Some(PathBuf::from("index.html")));
     assert!(matches!(
         project.output_files[0].file_kind(),
         FileKind::Html(_)
@@ -101,7 +101,7 @@ fn build_backend_emits_single_html_output_file() {
 #[test]
 fn build_backend_respects_release_pretty_toggle() {
     let builder = HtmlProjectBuilder::new();
-    let entry_path = PathBuf::from("main.bst");
+    let entry_path = PathBuf::from("#page.bst");
 
     let dev_project = builder
         .build_backend(
@@ -238,7 +238,7 @@ fn duplicate_output_paths_are_rejected() {
 #[test]
 fn emits_runtime_slots_and_bootstrap_calls_start() {
     let builder = HtmlProjectBuilder::new();
-    let entry_path = PathBuf::from("main.bst");
+    let entry_path = PathBuf::from("#page.bst");
     let mut module = create_test_module(entry_path.clone());
 
     module.hir.start_fragments = vec![
