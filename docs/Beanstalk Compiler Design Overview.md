@@ -63,6 +63,7 @@ Since compile speed is a goal of the compiler, complex optimisations are left to
 
 ## Pipeline Stages
 The Beanstalk compiler frontend and build system processes modules through these stages:
+
 0. **Project Structure** – Parses the config file and determines the boundaries of each module in the project
 1. **Tokenization** – Convert source text to tokens
 2. **Header Parsing** – Extract headers and identify the entry point. Separates function definitions, structs and constants from top-level code. Processes import statements so dependencies can be sorted after.
@@ -72,6 +73,7 @@ The Beanstalk compiler frontend and build system processes modules through these
 6. **Borrow Validation** – An analysis pass to verify memory safety
 
 Project builders then perform:
+
 7. **Backend Lowering**
     - JS Backend (current stabilisation target): HIR → JavaScript (GC-only)
     - Wasm Backend (long-term primary target): HIR → LIR → Wasm (GC-first, ownership-eliding over time)
