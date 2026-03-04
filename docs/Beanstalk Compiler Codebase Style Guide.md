@@ -88,7 +88,7 @@ for node in ast_nodes {
 
 ### Comments:
 Stick to concise and brief descriptions. Add doc comments at the top of new files.
-Always add short comments of WHAT something does and WHY it is done that way.
+Always add short comments of WHAT something does and WHY it is done that way across new code to make it easy to read and understandable for people seeing the code for the first time.
 
 Good places to add comments: 
 - Short summaries before important / complex functions and control flow

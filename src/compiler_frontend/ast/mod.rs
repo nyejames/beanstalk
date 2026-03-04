@@ -21,6 +21,7 @@ pub(crate) mod statements {
 }
 pub(crate) mod field_access;
 pub(crate) mod templates {
+    pub(crate) mod code;
     pub(crate) mod create_template_node;
     pub(crate) mod markdown;
     pub(crate) mod template;

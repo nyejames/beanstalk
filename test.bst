@@ -1,8 +1,4 @@
-# str = "hello"
-
-#[$markdown, str:
-
-# testing things for fun
-
-
+#[ $code("bst"):
+loop item in items
+-- highlighted as Beanstalk code
 ]

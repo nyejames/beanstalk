@@ -181,28 +181,39 @@ body {
 /* Code Style */
 .codeblock {
   color: light-dark(#222222, #ddd);
+  font-family: var(--bs-font-family-monospace);
+  white-space: break-spaces;
+  tab-size: 4;
 }
+.bs-code-comment,
 .bst-code-comment {
   color:light-dark(var(--comment-light), var(--comment-dark))
 }
+.bs-code-keyword,
 .bst-code-keyword {
   color:light-dark( var(--keyword-light), var(--keyword-dark))
 }
+.bs-code-string,
 .bst-code-string {
   color:light-dark( var(--string-light), var(--string-dark))
 }
+.bs-code-number,
 .bst-code-number {
   color:light-dark( var(--number-light), var(--number-dark))
 }
+.bs-code-operator,
 .bst-code-operator {
   color:light-dark( var(--operator-light), var(--operator-dark))
 }
+.bs-code-struct,
 .bst-code-struct {
   color:light-dark( var(--struct-light), var(--struct-dark))
 }
+.bs-code-type,
 .bst-code-type {
   color:light-dark( var(--type-light), var(--type-dark))
 }
+.bs-code-parenthesis,
 .bst-code-parenthesis {
   color:light-dark( var(--parenthesis-light), var(--parenthesis-dark))
 }

@@ -2,6 +2,9 @@ use super::*;
 use crate::compiler_frontend::ast::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
+use crate::compiler_frontend::ast::templates::code::{
+    CodeLanguage, code_formatter, highlight_code_html,
+};
 use crate::compiler_frontend::ast::templates::markdown::markdown_formatter;
 use crate::compiler_frontend::ast::templates::template::{TemplateSegmentOrigin, TemplateType};
 use crate::compiler_frontend::datatypes::Ownership;
@@ -57,6 +60,30 @@ fn runtime_template_context(scope: &InternedPath, string_table: &mut StringTable
         HostRegistry::default(),
         vec![],
     )
+}
+
+fn folded_template_output(source: &str) -> String {
+    let mut string_table = StringTable::new();
+    let mut token_stream = template_tokens_from_source(source, &mut string_table);
+    let context = ScopeContext::new_constant(token_stream.src_path.to_owned());
+
+    let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
+        .expect("template should parse");
+    let folded = template
+        .fold_into_stringid(&None, &mut string_table)
+        .expect("folding should succeed");
+
+    string_table.resolve(folded).to_owned()
+}
+
+fn template_parse_error(source: &str) -> String {
+    let mut string_table = StringTable::new();
+    let mut token_stream = template_tokens_from_source(source, &mut string_table);
+    let context = ScopeContext::new_constant(token_stream.src_path.to_owned());
+
+    Template::new(&mut token_stream, &context, vec![], &mut string_table)
+        .expect_err("template should fail to parse")
+        .msg
 }
 
 #[test]
@@ -226,4 +253,186 @@ fn unknown_style_directives_error_cleanly() {
 
     assert!(error.msg.contains("Unsupported style directive"));
     assert!(error.msg.contains("$unknown"));
+}
+
+#[test]
+fn code_without_argument_uses_generic_highlighting() {
+    let rendered = folded_template_output("[$code:\nloop(x + 1)\n]");
+
+    assert!(rendered.contains("<code class='codeblock'>"));
+    assert!(rendered.contains("<span class='bs-code-parenthesis'>(</span>"));
+    assert!(!rendered.contains("bs-code-keyword"));
+}
+
+#[test]
+fn code_bst_argument_highlights_beanstalk_rules() {
+    let rendered = folded_template_output("[$code(\"bst\"):\nloop x\n-- hi\n]");
+
+    assert!(rendered.contains("<span class='bs-code-keyword'>loop</span>"));
+    assert!(rendered.contains("<span class='bs-code-comment'>-- hi</span>"));
+}
+
+#[test]
+fn code_javascript_argument_highlights_js_comments() {
+    let rendered = folded_template_output("[$code(\"js\"):\nconst x = 1\n// hi\n]");
+
+    assert!(rendered.contains("<span class='bs-code-keyword'>const</span>"));
+    assert!(rendered.contains("<span class='bs-code-comment'>// hi</span>"));
+}
+
+#[test]
+fn code_python_argument_highlights_python_comments() {
+    let rendered = folded_template_output("[$code(\"py\"):\ndef run():\n# hi\n]");
+
+    assert!(rendered.contains("<span class='bs-code-keyword'>def</span>"));
+    assert!(rendered.contains("<span class='bs-code-comment'># hi</span>"));
+}
+
+#[test]
+fn code_typescript_argument_highlights_typescript_types() {
+    let rendered = folded_template_output("[$code(\"ts\"):\ntype Name = string\n]");
+
+    assert!(rendered.contains("<span class='bs-code-keyword'>type</span>"));
+    assert!(rendered.contains("<span class='bs-code-type'>string</span>"));
+}
+
+#[test]
+fn code_empty_parentheses_error_cleanly() {
+    let error = template_parse_error("[$code(): body]");
+
+    assert!(error.contains("$code()"));
+    assert!(error.contains("generic highlighting"));
+}
+
+#[test]
+fn code_requires_a_quoted_string_literal_argument() {
+    let error = template_parse_error("[$code(lang): body]");
+
+    assert!(error.contains("quoted string literal"));
+}
+
+#[test]
+fn code_rejects_unknown_language_aliases() {
+    let error = template_parse_error("[$code(\"unknown\"): body]");
+
+    assert!(error.contains("Unsupported '$code(...)' language"));
+    assert!(error.contains("\"unknown\""));
+}
+
+#[test]
+fn code_rejects_multiple_language_arguments() {
+    let error = template_parse_error("[$code(\"bst\", \"js\"): body]");
+
+    assert!(error.contains("only one language argument"));
+}
+
+#[test]
+fn runtime_templates_with_code_format_only_static_body_strings() {
+    let mut string_table = StringTable::new();
+    let mut token_stream =
+        template_tokens_from_source("[value, $code(\"bst\"):\nloop x\n]", &mut string_table);
+    let context = runtime_template_context(&token_stream.src_path, &mut string_table);
+
+    let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
+        .expect("template should parse");
+
+    assert!(template.content.before.iter().any(|segment| {
+        segment.origin == TemplateSegmentOrigin::Head
+            && matches!(segment.expression.kind, ExpressionKind::Reference(_))
+    }));
+
+    let formatted_body = template
+        .content
+        .before
+        .iter()
+        .find_map(
+            |segment| match (&segment.origin, &segment.expression.kind) {
+                (TemplateSegmentOrigin::Body, ExpressionKind::StringSlice(text)) => Some(*text),
+                _ => None,
+            },
+        )
+        .expect("expected a formatted body segment");
+
+    let rendered = string_table.resolve(formatted_body);
+    assert!(rendered.contains("<code class='codeblock'>"));
+    assert!(rendered.contains("<span class='bs-code-keyword'>loop</span>"));
+}
+
+#[test]
+fn generic_code_highlighter_marks_syntax_but_not_keywords() {
+    let highlighted = highlight_code_html("loop(x + 1)", CodeLanguage::Generic);
+
+    assert!(highlighted.contains("<span class='bs-code-parenthesis'>(</span>"));
+    assert!(highlighted.contains("<span class='bs-code-operator'>+</span>"));
+    assert!(highlighted.contains("<span class='bs-code-number'>1</span>"));
+    assert!(!highlighted.contains("bs-code-keyword"));
+    assert!(highlighted.contains("loop"));
+}
+
+#[test]
+fn direct_beanstalk_highlighter_marks_comments_and_keywords() {
+    let highlighted = highlight_code_html("loop x\n-- hi", CodeLanguage::Beanstalk);
+
+    assert!(highlighted.contains("<span class='bs-code-keyword'>loop</span>"));
+    assert!(highlighted.contains("<span class='bs-code-comment'>-- hi</span>"));
+}
+
+#[test]
+fn direct_javascript_highlighter_marks_line_comments() {
+    let highlighted = highlight_code_html("const x = 1\n// hi", CodeLanguage::JavaScript);
+
+    assert!(highlighted.contains("<span class='bs-code-keyword'>const</span>"));
+    assert!(highlighted.contains("<span class='bs-code-comment'>// hi</span>"));
+}
+
+#[test]
+fn direct_python_highlighter_marks_hash_comments() {
+    let highlighted = highlight_code_html("def run():\n# hi", CodeLanguage::Python);
+
+    assert!(highlighted.contains("<span class='bs-code-keyword'>def</span>"));
+    assert!(highlighted.contains("<span class='bs-code-comment'># hi</span>"));
+}
+
+#[test]
+fn direct_typescript_highlighter_marks_type_keywords() {
+    let highlighted = highlight_code_html("type Name = string", CodeLanguage::TypeScript);
+
+    assert!(highlighted.contains("<span class='bs-code-keyword'>type</span>"));
+    assert!(highlighted.contains("<span class='bs-code-type'>string</span>"));
+}
+
+#[test]
+fn direct_code_highlighter_preserves_trailing_words_at_eof() {
+    let highlighted = highlight_code_html("value", CodeLanguage::Generic);
+
+    assert!(highlighted.ends_with("value"));
+}
+
+#[test]
+fn direct_code_highlighter_preserves_single_quoted_strings() {
+    let highlighted = highlight_code_html("'value'", CodeLanguage::Generic);
+
+    assert!(highlighted.contains("&#39;value&#39;"));
+}
+
+#[test]
+fn direct_code_highlighter_escapes_html_sensitive_content() {
+    let highlighted = highlight_code_html("<tag>", CodeLanguage::Generic);
+
+    assert!(highlighted.contains("&lt;"));
+    assert!(highlighted.contains("tag"));
+    assert!(highlighted.contains("&gt;"));
+    assert!(!highlighted.contains("<tag>"));
+}
+
+#[test]
+fn code_formatter_wrapper_preserves_newlines_after_dedent() {
+    let formatter = code_formatter(CodeLanguage::Generic);
+    let mut content = String::from("    x\n    y");
+
+    formatter.formatter.format(&mut content);
+
+    assert!(content.starts_with("<code class='codeblock'>"));
+    assert!(content.ends_with("</code>"));
+    assert!(content.contains("x\ny"));
 }

@@ -41,7 +41,7 @@ Even for primitive types such as integers.
 Comments use a double minus sign. 
 Documentation comments will eventually be created via special templates.
 
-```beanstalk
+[$code("bst"):
     -- normal comment
 
     --[:
@@ -49,7 +49,7 @@ Documentation comments will eventually be created via special templates.
 
         Woo
     ]
-```
+]
 
 # Variables
 Equals means assign. Tilde ~ means this is a mutable and can change.
@@ -59,7 +59,7 @@ All variables must be assigned a value when they are declared.
 ## Assignment
 
 ### Variables
-```beanstalk
+[$code("bst"):`
     int ~= 0
     float ~= 0.0
 
@@ -85,9 +85,9 @@ All variables must be assigned a value when they are declared.
         value = 1.2, 
         another_value = "hey"
     )
-```
+`]
 
-```beanstalk
+[$code("bst"):`
     -- 64 bit immutable float
     number = 420.69
 
@@ -118,11 +118,11 @@ All variables must be assigned a value when they are declared.
     -- You can't use the '+' operator on strings,
     -- They are always concatenated using templates
     concatenated_strings = [string_slice, a_mutable_string]
-```
+`]
 
 All copies are explicit and must use the 'copy' keyword in place of a type.
 
-```beanstalk
+[$code("bst"):`
     -- Create a new collection of integers
     a_collection ~= {1, 2, 3, 4, 5}
     
@@ -141,13 +141,13 @@ All copies are explicit and must use the 'copy' keyword in place of a type.
 
     a_collection.pull(a_collection.length() - 1)
     io(a_collection) -- {23.0}
-```
+`]
 
 Expressions can span over multiple lines.
 
 But new statements must start after a newline.
 
-```beanstalk
+[$code("bst"):`
     -- Valid
     some_int =
         4 + 5 + 6 + 7 + 
@@ -157,7 +157,7 @@ But new statements must start after a newline.
     some_int =
         4 + (5 + 6) * 7
         + 8 / 9 + 10
-```
+`]
 
 # Data Types
 All data type keywords contain methods from the standard library for common manipulation of types.
@@ -174,13 +174,13 @@ All data type keywords contain methods from the standard library for common mani
 ## String based Types
 These are all different ways to create strings.
 
-```beanstalk
+[$code("bst"):
     [: Type] [: Description]
 
     [: string slice ] [: UTF-8]
 
     [: template ] [: The string templating syntax of Beanstalk for creating strings. ]
-```
+]
 
 # Strings and String slices
 String is the keyword for string types in Beanstalk. 
@@ -196,7 +196,7 @@ Scenes are used instead of format strings.
 The 'is' keyword is used to check equality, not '==''. 
 The "and / or" keywords are used for logical and / or and 'not' is used to invert a truthy value to falsy or vice versa.
 
-```beanstalk
+[$code("bst"):
     [: Operator] [: Description]          [: Precedence]
     [: `^`]        [: Exponent]            [: 4]
     [: `//`]       [: Root]                [: 4]
@@ -206,8 +206,9 @@ The "and / or" keywords are used for logical and / or and 'not' is used to inver
     [: %%]         [: Remainder (floored)]  [: 3]
     [: +]          [: Sum]                  [: 2]
     [: `-`]        [: Subtraction]          [: 2]
-```
 ]
+
+]--page
 
 [footer]
 

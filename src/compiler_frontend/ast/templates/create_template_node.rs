@@ -3,6 +3,7 @@
 use crate::compiler_frontend::ast::ast::ScopeContext;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
+use crate::compiler_frontend::ast::templates::code::configure_code_style;
 use crate::compiler_frontend::ast::templates::markdown::markdown_formatter;
 use crate::compiler_frontend::ast::templates::template::{
     Formatter, Style, TemplateContent, TemplateControlFlow, TemplateSegment, TemplateSegmentOrigin,
@@ -701,14 +702,21 @@ fn parse_style_directive(
     template: &mut Template,
     string_table: &mut StringTable,
 ) -> Result<bool, CompilerError> {
-    match token_stream.current_token_kind() {
-        TokenKind::StyleDirective(directive) => match string_table.resolve(*directive) {
+    match token_stream.current_token_kind().clone() {
+        TokenKind::StyleDirective(directive) => match string_table.resolve(directive) {
             "markdown" => {
                 // Built-in formatter sugar. Full `$formatter(...)` support comes later,
                 // but this gives the AST a concrete style object to carry right now.
                 template.style.id = "markdown";
                 template.style.formatter = Some(markdown_formatter());
                 template.style.formatter_precedence = 0;
+                Ok(false)
+            }
+
+            "code" => {
+                // Keep the directive-specific parsing in the code formatter module so
+                // this general template parser does not accumulate every built-in style.
+                configure_code_style(token_stream, template, string_table)?;
                 Ok(false)
             }
 
@@ -726,7 +734,7 @@ fn parse_style_directive(
                         .current_location()
                         .to_error_location(string_table),
                     {
-                        PrimarySuggestion => "Use '$markdown' for now, or remove '$formatter(...)' until formatter callbacks are implemented",
+                        PrimarySuggestion => "Use '$markdown' or '$code' for now, or remove '$formatter(...)' until formatter callbacks are implemented",
                     }
                 )
             }
@@ -734,13 +742,13 @@ fn parse_style_directive(
             other => {
                 return_syntax_error!(
                     format!(
-                        "Unsupported style directive '${other}'. Supported directives are '$markdown', '$ignore', and '$['."
+                        "Unsupported style directive '${other}'. Supported directives are '$markdown', '$code', '$ignore', and '$['."
                     ),
                     token_stream
                         .current_location()
                         .to_error_location(string_table),
                     {
-                        PrimarySuggestion => "Use '$markdown', '$ignore', or '$[' inside the template head",
+                        PrimarySuggestion => "Use '$markdown', '$code', '$ignore', or '$[' inside the template head",
                     }
                 )
             }
@@ -861,5 +869,5 @@ fn flush_formatted_body_run(
 }
 
 #[cfg(test)]
-#[path = "create_template_node_tests.rs"]
+#[path = "tests/create_template_node_tests.rs"]
 mod create_template_node_tests;

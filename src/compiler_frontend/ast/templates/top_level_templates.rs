@@ -562,5 +562,5 @@ fn collect_references_from_ast_node(node: &AstNode, references: &mut FxHashSet<I
 }
 
 #[cfg(test)]
-#[path = "template_tests.rs"]
+#[path = "tests/template_tests.rs"]
 mod template_tests;
