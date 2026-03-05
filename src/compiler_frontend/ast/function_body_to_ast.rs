@@ -21,7 +21,22 @@ use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::compiler_frontend::traits::ContainsReferences;
 use crate::projects::settings;
 use crate::projects::settings::TOP_LEVEL_TEMPLATE_NAME;
-use crate::{ast_log, return_compiler_error, return_rule_error, return_syntax_error};
+use crate::{
+    ast_log, return_compiler_error, return_rule_error, return_syntax_error, return_type_error,
+};
+
+fn is_return_terminator(token: &TokenKind) -> bool {
+    matches!(token, TokenKind::Newline | TokenKind::End | TokenKind::Eof)
+}
+
+fn normalize_return_expression_type(data_type: &DataType) -> DataType {
+    // Runtime templates lower into string-producing functions.
+    // Treat them as string returns during signature validation.
+    match data_type {
+        DataType::Template | DataType::TemplateWrapper => DataType::StringSlice,
+        _ => data_type.to_owned(),
+    }
+}
 
 pub fn function_body_to_ast(
     token_stream: &mut FileTokens,
@@ -334,8 +349,90 @@ pub fn function_body_to_ast(
 
                 token_stream.advance();
 
-                let return_values =
-                    create_multiple_expressions(token_stream, &context, false, string_table)?;
+                let return_values = if context.expected_result_types.is_empty() {
+                    if is_return_terminator(token_stream.current_token_kind()) {
+                        Vec::new()
+                    } else {
+                        return_type_error!(
+                            "This function has no return signature, so 'return' must be bare (no return values).",
+                            token_stream
+                                .current_location()
+                                .to_error_location(string_table),
+                            {
+                                CompilationStage => "AST Construction",
+                                PrimarySuggestion => "Use bare 'return' with no value in this function",
+                                AlternativeSuggestion => "If you intended to return a value, add a return signature (for example '|args| -> String:')",
+                            }
+                        )
+                    }
+                } else {
+                    if is_return_terminator(token_stream.current_token_kind()) {
+                        let expected_count = context.expected_result_types.len();
+                        return_type_error!(
+                            format!(
+                                "This function must return {} value{}, but this return statement is bare.",
+                                expected_count,
+                                if expected_count == 1 { "" } else { "s" }
+                            ),
+                            token_stream
+                                .current_location()
+                                .to_error_location(string_table),
+                            {
+                                CompilationStage => "AST Construction",
+                                PrimarySuggestion => "Provide return values that match the function signature",
+                            }
+                        )
+                    }
+
+                    let parsed_returns =
+                        create_multiple_expressions(token_stream, &context, false, string_table)?;
+
+                    if token_stream.current_token_kind() == &TokenKind::Comma {
+                        let expected_count = context.expected_result_types.len();
+                        return_type_error!(
+                            format!(
+                                "This function signature declares {} return value{}, but this return statement provides more.",
+                                expected_count,
+                                if expected_count == 1 { "" } else { "s" }
+                            ),
+                            token_stream
+                                .current_location()
+                                .to_error_location(string_table),
+                            {
+                                CompilationStage => "AST Construction",
+                                PrimarySuggestion => "Remove extra return values or update the function return signature",
+                            }
+                        );
+                    }
+
+                    for (index, (returned_value, expected_type)) in parsed_returns
+                        .iter()
+                        .zip(context.expected_result_types.iter())
+                        .enumerate()
+                    {
+                        let normalized_actual =
+                            normalize_return_expression_type(&returned_value.data_type);
+
+                        if &normalized_actual != expected_type {
+                            return_type_error!(
+                                format!(
+                                    "Return value {} has incorrect type. Expected '{}', got '{}'. Return values must match the function signature exactly.",
+                                    index + 1,
+                                    expected_type.display_with_table(string_table),
+                                    normalized_actual.display_with_table(string_table)
+                                ),
+                                returned_value.location.to_error_location(string_table),
+                                {
+                                    CompilationStage => "AST Construction",
+                                    PrimarySuggestion => "Update the returned expression to match the declared return type",
+                                    AlternativeSuggestion => "If this value is intended, change the function return signature to the correct type",
+                                }
+                            );
+                        }
+                    }
+
+                    parsed_returns
+                };
 
                 // if !return_value.is_pure() {
                 //     *pure = false;

@@ -1,4 +1,4 @@
-runtime ||:
+runtime || -> String:
     return [: runtime]
 ;
 

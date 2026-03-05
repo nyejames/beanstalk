@@ -1,2 +1,2 @@
 mode = "failure"
-error_type = "Syntax"
+error_type = "Rule"
