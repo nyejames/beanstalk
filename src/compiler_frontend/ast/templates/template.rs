@@ -18,6 +18,24 @@ pub enum TemplateType {
     Comment,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TemplateConstValueKind {
+    RenderableString,
+    WrapperTemplate,
+    SlotInsertion,
+    NonConst,
+}
+
+impl TemplateConstValueKind {
+    pub fn is_compile_time_value(self) -> bool {
+        !matches!(self, Self::NonConst)
+    }
+
+    pub fn is_renderable_string(self) -> bool {
+        matches!(self, Self::RenderableString)
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct TemplateContent {
     // Slots are represented structurally so template composition can preserve the
@@ -66,6 +84,12 @@ impl TemplateContent {
             .iter()
             .filter(|atom| matches!(atom, TemplateAtom::Slot))
             .count()
+    }
+
+    /// Count every unresolved slot marker reachable inside this content,
+    /// including slots nested in child templates.
+    pub fn total_slot_count(&self) -> usize {
+        self.atoms.iter().map(TemplateAtom::total_slot_count).sum()
     }
 
     pub fn has_unresolved_slots(&self) -> bool {
@@ -170,6 +194,18 @@ pub enum TemplateAtom {
 }
 
 impl TemplateAtom {
+    fn total_slot_count(&self) -> usize {
+        match self {
+            TemplateAtom::Slot => 1,
+            TemplateAtom::Content(segment) => match &segment.expression.kind {
+                crate::compiler_frontend::ast::expressions::expression::ExpressionKind::Template(
+                    template,
+                ) => template.content.total_slot_count(),
+                _ => 0,
+            },
+        }
+    }
+
     fn has_unresolved_slots(&self) -> bool {
         match self {
             TemplateAtom::Slot => true,

@@ -320,6 +320,73 @@ fn omits_unresolved_slot_wrapper_constants_from_hir_const_pool() {
 }
 
 #[test]
+fn omits_nested_struct_constants_with_unresolved_template_helpers_from_hir_const_pool() {
+    let mut string_table = StringTable::new();
+    let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
+
+    let start_function = function_node(
+        start_name,
+        FunctionSignature {
+            parameters: vec![],
+            returns: vec![],
+        },
+        vec![],
+        test_location(1),
+    );
+
+    let mut wrapper_template = Template::create_default(vec![]);
+    wrapper_template.kind =
+        crate::compiler_frontend::ast::templates::template::TemplateType::String;
+    wrapper_template.location = test_location(2);
+    wrapper_template.content.add(Expression::string_slice(
+        string_table.intern("<section>"),
+        test_location(2),
+        Ownership::ImmutableOwned,
+    ));
+    wrapper_template.content.push_slot();
+    wrapper_template.content.add(Expression::string_slice(
+        string_table.intern("</section>"),
+        test_location(2),
+        Ownership::ImmutableOwned,
+    ));
+
+    let page_const_name = symbol("PAGE", &mut string_table);
+    let body_field = page_const_name.append(string_table.intern("body"));
+
+    let mut ast = build_ast(vec![start_function], entry_path);
+    ast.module_constants.push(var(
+        page_const_name,
+        Expression::struct_instance(
+            vec![var(
+                body_field,
+                Expression::template(wrapper_template, Ownership::ImmutableOwned),
+            )],
+            test_location(2),
+            Ownership::ImmutableOwned,
+        ),
+    ));
+    ast.module_constants.push(var(
+        symbol("READY", &mut string_table),
+        Expression::string_slice(
+            string_table.intern("materialized"),
+            test_location(3),
+            Ownership::ImmutableOwned,
+        ),
+    ));
+
+    let module = lower_ast(ast, &mut string_table)
+        .expect("HIR lowering should skip nested unresolved wrapper constants");
+
+    assert_eq!(module.module_constants.len(), 1);
+    let constant = &module.module_constants[0];
+    assert_eq!(constant.name, "READY");
+    assert!(matches!(
+        constant.value,
+        HirConstValue::String(ref value) if value == "materialized"
+    ));
+}
+
+#[test]
 fn lowers_struct_module_constant_into_record_with_ordered_fields() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);

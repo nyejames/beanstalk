@@ -1,8 +1,8 @@
-#single_slot = [: before [..] after]
-#wrapped_content = [single_slot: this content is now wrapped]
+# single_slot = [: before [..] after]
+# wrapped_content = [single_slot: this content is now wrapped]
 
-#basic_slots = [: before [..] in the middle [..] afterwards]
-#template_using_slots = [basic_slots:
+# basic_slots = [: before [..] in the middle [..] afterwards]
+# template_using_slots = [basic_slots:
     this text goes before any slots
     [$1: This goes into the first slot]
     this would go in between the slots

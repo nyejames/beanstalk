@@ -3,6 +3,7 @@
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration};
 use crate::compiler_frontend::ast::statements::functions::{FunctionReturn, FunctionSignature};
 use crate::compiler_frontend::ast::templates::create_template_node::Template;
+use crate::compiler_frontend::ast::templates::template::TemplateConstValueKind;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
@@ -19,6 +20,22 @@ pub struct Expression {
     pub data_type: DataType,
     pub ownership: Ownership,
     pub location: TextLocation,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ConstValueKind {
+    Literal,
+    Composite,
+    RenderableTemplate,
+    TemplateWrapper,
+    SlotInsertionTemplate,
+    NonConst,
+}
+
+impl ConstValueKind {
+    pub fn is_compile_time_value(self) -> bool {
+        !matches!(self, Self::NonConst)
+    }
 }
 
 impl Expression {
@@ -359,26 +376,50 @@ impl Expression {
     }
 
     pub fn is_constant(&self) -> bool {
-        !self.ownership.is_mutable() && self.kind.is_foldable()
+        self.const_value_kind().is_compile_time_value()
     }
 
     pub fn is_compile_time_constant(&self) -> bool {
+        self.const_value_kind().is_compile_time_value()
+    }
+
+    pub fn const_value_kind(&self) -> ConstValueKind {
         match &self.kind {
             ExpressionKind::Int(_)
             | ExpressionKind::Float(_)
             | ExpressionKind::StringSlice(_)
             | ExpressionKind::Bool(_)
-            | ExpressionKind::Char(_) => true,
+            | ExpressionKind::Char(_) => ConstValueKind::Literal,
             ExpressionKind::Collection(items) => {
-                items.iter().all(Expression::is_compile_time_constant)
+                if items.iter().all(Expression::is_compile_time_constant) {
+                    ConstValueKind::Composite
+                } else {
+                    ConstValueKind::NonConst
+                }
             }
-            ExpressionKind::StructInstance(fields) => fields
-                .iter()
-                .all(|field| field.value.is_compile_time_constant()),
+            ExpressionKind::StructInstance(fields) => {
+                if fields
+                    .iter()
+                    .all(|field| field.value.is_compile_time_constant())
+                {
+                    ConstValueKind::Composite
+                } else {
+                    ConstValueKind::NonConst
+                }
+            }
             ExpressionKind::Range(start, end) => {
-                start.is_compile_time_constant() && end.is_compile_time_constant()
+                if start.is_compile_time_constant() && end.is_compile_time_constant() {
+                    ConstValueKind::Composite
+                } else {
+                    ConstValueKind::NonConst
+                }
             }
-            ExpressionKind::Template(template) => template.is_const_evaluable_value(),
+            ExpressionKind::Template(template) => match template.const_value_kind() {
+                TemplateConstValueKind::RenderableString => ConstValueKind::RenderableTemplate,
+                TemplateConstValueKind::WrapperTemplate => ConstValueKind::TemplateWrapper,
+                TemplateConstValueKind::SlotInsertion => ConstValueKind::SlotInsertionTemplate,
+                TemplateConstValueKind::NonConst => ConstValueKind::NonConst,
+            },
             ExpressionKind::Reference(_)
             | ExpressionKind::Copy(_)
             | ExpressionKind::Runtime(_)
@@ -386,7 +427,7 @@ impl Expression {
             | ExpressionKind::FunctionCall(..)
             | ExpressionKind::HostFunctionCall(..)
             | ExpressionKind::StructDefinition(..)
-            | ExpressionKind::None => false,
+            | ExpressionKind::None => ConstValueKind::NonConst,
         }
     }
 }

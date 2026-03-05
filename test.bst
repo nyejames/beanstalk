@@ -1,5 +1,21 @@
-nested_slot = [: very-before [: before [..] after ] very-after]
+Basic = |
+    document String = [:
+        <head>
+            [..]
+        </head>
+        <body>[$markdown: [..]]</body>
+    ],
+    page String = [$markdown:<section>[..]</section>],
 
-wrapped_content = [nested_slot: wrapperinoed]
+    -- Basic formatting
+    center String = [:<span align="center">[..]<span/>],
+    underline String = [:<u>[..]</u>],
+    strikethrough String = [:<s>[..]</s>],
+|
 
-[wrapped_content]
+-- Export a constant instance of the basic library
+-- Using all of its default values
+# basic = Basic()
+
+
+#[basic.page: Hello world]

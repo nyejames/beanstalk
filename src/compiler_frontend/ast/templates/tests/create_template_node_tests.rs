@@ -2,6 +2,7 @@ use super::*;
 use crate::compiler_frontend::ast::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
+use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
 use crate::compiler_frontend::ast::templates::code::{
     CodeLanguage, code_formatter, highlight_code_html,
 };
@@ -9,7 +10,7 @@ use crate::compiler_frontend::ast::templates::markdown::markdown_formatter;
 use crate::compiler_frontend::ast::templates::template::{
     TemplateAtom, TemplateSegment, TemplateSegmentOrigin, TemplateType,
 };
-use crate::compiler_frontend::datatypes::Ownership;
+use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
@@ -108,6 +109,32 @@ fn template_segments(template: &Template) -> Vec<&TemplateSegment> {
             TemplateAtom::Slot => None,
         })
         .collect()
+}
+
+fn collect_static_template_fragments(
+    atoms: &[TemplateAtom],
+    string_table: &StringTable,
+    output: &mut String,
+) {
+    for atom in atoms {
+        let TemplateAtom::Content(segment) = atom else {
+            continue;
+        };
+
+        match &segment.expression.kind {
+            ExpressionKind::StringSlice(value) => output.push_str(string_table.resolve(*value)),
+            ExpressionKind::Template(template) => {
+                collect_static_template_fragments(&template.content.atoms, string_table, output)
+            }
+            _ => {}
+        }
+    }
+}
+
+fn render_static_template_fragments(template: &Template, string_table: &StringTable) -> String {
+    let mut rendered = String::new();
+    collect_static_template_fragments(&template.content.atoms, string_table, &mut rendered);
+    rendered
 }
 
 #[test]
@@ -408,6 +435,83 @@ fn wrapper_templates_with_runtime_references_are_not_compile_time_constants() {
 }
 
 #[test]
+fn constant_context_template_head_with_constant_references_folds_to_string_slice() {
+    let mut string_table = StringTable::new();
+    let scope = InternedPath::from_single_str("main.bst/#const_template0", &mut string_table);
+    let const_before = string_table.intern("const_before");
+    let const_after = string_table.intern("const_after");
+    let declarations = vec![
+        Declaration {
+            id: scope.append(const_before),
+            value: Expression::string_slice(
+                string_table.intern("Hello "),
+                TextLocation::new_just_line(1),
+                Ownership::ImmutableOwned,
+            ),
+        },
+        Declaration {
+            id: scope.append(const_after),
+            value: Expression::string_slice(
+                string_table.intern("World!"),
+                TextLocation::new_just_line(1),
+                Ownership::ImmutableOwned,
+            ),
+        },
+    ];
+
+    let context = ScopeContext::new(
+        ContextKind::Constant,
+        scope,
+        &declarations,
+        HostRegistry::default(),
+        vec![],
+    );
+    let mut token_stream =
+        template_tokens_from_source("[const_before, const_after]", &mut string_table);
+    let mut expected_type = DataType::Inferred;
+
+    let expression = create_expression(
+        &mut token_stream,
+        &context,
+        &mut expected_type,
+        &Ownership::ImmutableOwned,
+        false,
+        &mut string_table,
+    )
+    .expect("constant template references should fold");
+
+    let ExpressionKind::StringSlice(value) = expression.kind else {
+        panic!("expected folded StringSlice expression in constant context");
+    };
+
+    assert_eq!(string_table.resolve(value), "Hello World!");
+}
+
+#[test]
+fn non_constant_context_template_head_keeps_runtime_template() {
+    let mut string_table = StringTable::new();
+    let mut token_stream = template_tokens_from_source("[value]", &mut string_table);
+    let context = runtime_template_context(&token_stream.src_path, &mut string_table);
+    let mut expected_type = DataType::Inferred;
+
+    let expression = create_expression(
+        &mut token_stream,
+        &context,
+        &mut expected_type,
+        &Ownership::ImmutableOwned,
+        false,
+        &mut string_table,
+    )
+    .expect("runtime template expression should parse");
+
+    let ExpressionKind::Template(template) = expression.kind else {
+        panic!("expected runtime template expression");
+    };
+
+    assert!(matches!(template.kind, TemplateType::StringFunction));
+}
+
+#[test]
 fn fills_single_slot_templates_in_source_order() {
     let mut string_table = StringTable::new();
     let wrapper_scope =
@@ -600,6 +704,148 @@ fn rejects_out_of_order_labeled_slots() {
         .expect_err("out-of-order slots should fail");
 
     assert!(error.msg.contains("out of order"));
+}
+
+#[test]
+fn fills_nested_slots_in_parent_authored_order() {
+    let mut string_table = StringTable::new();
+    let wrapper_scope =
+        InternedPath::from_single_str("main.bst/#const_template0", &mut string_table);
+    let mut wrapper_tokens = template_tokens_from_source(
+        "[: outer [: inner [..] middle [: deep [..] end] tail] after]",
+        &mut string_table,
+    );
+    let wrapper_context = ScopeContext::new_constant(wrapper_tokens.src_path.to_owned());
+    let wrapper = Template::new(
+        &mut wrapper_tokens,
+        &wrapper_context,
+        vec![],
+        &mut string_table,
+    )
+    .expect("nested wrapper should parse");
+
+    let declaration = Declaration {
+        id: wrapper_scope.append(string_table.intern("nested_slots")),
+        value: Expression::template(wrapper, Ownership::ImmutableOwned),
+    };
+
+    let mut token_stream = template_tokens_from_source(
+        "[nested_slots: [$1: first slot] in between [$2: second slot]]",
+        &mut string_table,
+    );
+    let context = constant_template_context(&token_stream.src_path, &[declaration]);
+
+    let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
+        .expect("nested slot application should parse");
+    let folded = template
+        .fold_into_stringid(&None, &mut string_table)
+        .expect("nested slot template should fold");
+    let rendered = string_table.resolve(folded);
+
+    let first_slot = rendered
+        .find("first slot")
+        .expect("first slot content should be present");
+    let between = rendered
+        .find("in between")
+        .expect("gap content should be present");
+    let second_slot = rendered
+        .find("second slot")
+        .expect("second slot content should be present");
+    let deep = rendered
+        .find("deep")
+        .expect("nested wrapper text should be present");
+    let end = rendered
+        .find("end")
+        .expect("nested wrapper text should be present");
+
+    assert!(first_slot < between);
+    assert!(between < second_slot);
+    assert!(deep < second_slot);
+    assert!(second_slot < end);
+}
+
+#[test]
+fn fills_nested_slots_for_runtime_wrappers() {
+    let mut string_table = StringTable::new();
+    let scope = InternedPath::from_single_str("main.bst/#const_template0", &mut string_table);
+    let value_name = string_table.intern("value");
+    let value_declaration = Declaration {
+        id: scope.append(value_name),
+        value: Expression::string_slice(
+            string_table.intern("runtime"),
+            TextLocation::new_just_line(1),
+            Ownership::ImmutableOwned,
+        ),
+    };
+
+    let wrapper_context = ScopeContext::new(
+        ContextKind::Template,
+        scope.to_owned(),
+        &[value_declaration.to_owned()],
+        HostRegistry::default(),
+        vec![],
+    );
+    let mut wrapper_tokens = template_tokens_from_source(
+        "[value: outer [: inner [..] middle [: deep [..] end] tail] after]",
+        &mut string_table,
+    );
+    let wrapper = Template::new(
+        &mut wrapper_tokens,
+        &wrapper_context,
+        vec![],
+        &mut string_table,
+    )
+    .expect("runtime nested wrapper should parse");
+    assert!(matches!(wrapper.kind, TemplateType::StringFunction));
+
+    let wrapper_declaration = Declaration {
+        id: scope.append(string_table.intern("runtime_wrapper")),
+        value: Expression::template(wrapper, Ownership::ImmutableOwned),
+    };
+    let declarations = vec![value_declaration, wrapper_declaration];
+    let consuming_context = ScopeContext::new(
+        ContextKind::Template,
+        scope,
+        &declarations,
+        HostRegistry::default(),
+        vec![],
+    );
+    let mut token_stream = template_tokens_from_source(
+        "[runtime_wrapper: [$1: first slot] in between [$2: second slot]]",
+        &mut string_table,
+    );
+
+    let template = Template::new(
+        &mut token_stream,
+        &consuming_context,
+        vec![],
+        &mut string_table,
+    )
+    .expect("runtime wrapper slot application should parse");
+    assert!(matches!(template.kind, TemplateType::StringFunction));
+    assert!(!template.has_unresolved_slots());
+
+    let rendered = render_static_template_fragments(&template, &string_table);
+    let first_slot = rendered
+        .find("first slot")
+        .expect("first slot content should be present");
+    let between = rendered
+        .find("in between")
+        .expect("gap content should be present");
+    let second_slot = rendered
+        .find("second slot")
+        .expect("second slot content should be present");
+    let deep = rendered
+        .find("deep")
+        .expect("nested wrapper text should be present");
+    let end = rendered
+        .find("end")
+        .expect("nested wrapper text should be present");
+
+    assert!(first_slot < between);
+    assert!(between < second_slot);
+    assert!(deep < second_slot);
+    assert!(second_slot < end);
 }
 
 #[test]

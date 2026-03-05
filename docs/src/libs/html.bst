@@ -5,7 +5,9 @@ Basic = |
     document String = [:
         <head>
             [..]
-            <style>[default_style]</style>
+            <style>
+                [default_style]
+            </style>
         </head>
         <body>[$markdown: [..]]</body>
     ],
@@ -20,7 +22,6 @@ Basic = |
 -- Export a constant instance of the basic library
 -- Using all of its default values
 # basic = Basic()
-
 
 # default_style = [:
     @charset "UTF-8";

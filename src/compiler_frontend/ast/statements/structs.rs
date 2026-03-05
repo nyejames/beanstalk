@@ -8,7 +8,7 @@ use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
-use crate::return_syntax_error;
+use crate::{return_rule_error, return_syntax_error};
 
 #[derive(Clone, Copy)]
 pub enum SignatureTypeContext {
@@ -16,49 +16,21 @@ pub enum SignatureTypeContext {
     Return,
 }
 
-// TODO: struct parsing needs to be separated into two phases:
-
-// 1. Parse the shape of the struct if there are references to other structs, put in symbol placeholders and list them in its dependencies.
-// This stage does not need to resolve the existence of other structs yet, or what type their default values are.
-// This happens at the Header stage, but at the AST stage this happens immediately before the second stage anyway.
-
-// 2. Fully parse the struct at the AST stage with symbol resolution and type checking of the default values.
-// Both these stages should probably be kept as the ONLY way to parse structs (since the AST stage could just use a single amalgamated version)
-// Just to avoid diverging and duplicating logic for how to parse structs.
-
 pub fn create_struct_definition(
     token_stream: &mut FileTokens,
+    context: &ScopeContext,
     string_table: &mut StringTable,
 ) -> Result<Vec<Declaration>, CompilerError> {
     // Should start at the parameter bracket
     // Need to skip it,
     token_stream.advance();
 
-    // Also used by functions, so broken out here
-    let arguments = parse_parameters(token_stream, &mut true, string_table, true)?;
+    let arguments = parse_parameters(token_stream, &mut true, string_table, true, Some(context))?;
 
     // Skip the Parameters token
     token_stream.advance();
 
-    Ok(arguments)
-}
-
-// This is a constant version of a struct
-// It is compile time only
-#[allow(dead_code)]
-pub fn create_record_definition(
-    token_stream: &mut FileTokens,
-    string_table: &mut StringTable,
-) -> Result<Vec<Declaration>, CompilerError> {
-    // Should start at the parameter bracket
-    // Need to skip it,
-    token_stream.advance();
-
-    // Also used by functions, so broken out here
-    let arguments = parse_parameters(token_stream, &mut true, string_table, true)?;
-
-    // Skip the Parameters token
-    token_stream.advance();
+    validate_struct_default_values(&arguments, string_table)?;
 
     Ok(arguments)
 }
@@ -69,6 +41,7 @@ pub fn parse_parameters(
     pure: &mut bool,
     string_table: &mut StringTable,
     _is_const: bool, // False for function definitions, true for struct definitions
+    expression_context: Option<&ScopeContext>,
 ) -> Result<Vec<Declaration>, CompilerError> {
     let mut args: Vec<Declaration> = Vec::with_capacity(1);
     let mut next_in_list: bool = true;
@@ -112,6 +85,7 @@ pub fn parse_parameters(
                 let argument = new_parameter(
                     token_stream,
                     token_stream.src_path.append(arg_name),
+                    expression_context,
                     string_table,
                 )?;
 
@@ -363,6 +337,7 @@ fn parse_collection_inner_signature_type(
 pub fn new_parameter(
     token_stream: &mut FileTokens,
     full_name: InternedPath,
+    expression_context: Option<&ScopeContext>,
     string_table: &mut StringTable,
 ) -> Result<Declaration, CompilerError> {
     // Move past the name
@@ -435,7 +410,9 @@ pub fn new_parameter(
 
     // Check if this whole expression is nested in brackets.
     // This is just so we don't wastefully call create_expression recursively right away
-    let parameter_context = ScopeContext::new_constant(token_stream.src_path.to_owned());
+    let parameter_context = expression_context
+        .cloned()
+        .unwrap_or_else(|| ScopeContext::new_constant(token_stream.src_path.to_owned()));
 
     let parsed_expr = create_expression(
         token_stream,
@@ -457,4 +434,31 @@ pub fn new_parameter(
         id: full_name,
         value: parsed_expr,
     })
+}
+
+fn validate_struct_default_values(
+    fields: &[Declaration],
+    string_table: &StringTable,
+) -> Result<(), CompilerError> {
+    for field in fields {
+        if matches!(field.value.kind, ExpressionKind::None) {
+            continue;
+        }
+
+        if !field.value.is_compile_time_constant() {
+            let field_name = field.id.name_str(string_table).unwrap_or("<field>");
+            return_rule_error!(
+                format!(
+                    "Struct field '{}' default value must fold to a single compile-time value.",
+                    field_name
+                ),
+                field.value.location.to_error_location(string_table), {
+                    CompilationStage => "Struct/Parameter Parsing",
+                    PrimarySuggestion => "Use only compile-time constants and constant expressions in struct default values",
+                }
+            );
+        }
+    }
+
+    Ok(())
 }

@@ -60,7 +60,7 @@ pub enum HeaderKind {
     Function { signature: FunctionSignature },
 
     Constant { metadata: ConstantHeaderMetadata },
-    Struct,
+    Struct { metadata: StructHeaderMetadata },
     Choice, // Tagged unions. Not yet implemented in the language
 
     ConstTemplate { file_order: usize },
@@ -81,6 +81,13 @@ pub struct ConstantHeaderMetadata {
     pub declaration_syntax: DeclarationSyntax,
     pub file_constant_order: usize,
     pub import_dependencies: HashSet<InternedPath>,
+    pub symbol_dependencies: HashSet<InternedPath>,
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Debug)]
+pub struct StructHeaderMetadata {
+    pub default_value_dependencies: HashSet<InternedPath>,
 }
 
 #[derive(Clone, Debug)]
@@ -548,39 +555,50 @@ fn create_header(
                     token_stream.advance();
                 }
 
-                kind = HeaderKind::Struct;
-            } else if exported {
-                let declaration_syntax = parse_declaration_syntax(
-                    token_stream,
-                    full_name.name().unwrap(),
-                    context.string_table,
-                )?;
-
-                let declaration_tokens = declaration_syntax.to_tokens();
-
-                for token in &declaration_tokens {
-                    if let TokenKind::Symbol(name_id) = token.kind
-                        && let Some(path) = context
-                            .file_imports
-                            .iter()
-                            .find(|import| import.name() == Some(name_id))
-                    {
-                        dependencies.insert(path.to_owned());
-                    }
-                }
-
-                let import_dependencies = dependencies.clone();
-                let metadata = ConstantHeaderMetadata {
-                    declaration_syntax,
-                    file_constant_order: *context.file_constant_order,
-                    import_dependencies,
+                let default_value_dependencies =
+                    collect_struct_default_dependencies(&body, context);
+                kind = HeaderKind::Struct {
+                    metadata: StructHeaderMetadata {
+                        default_value_dependencies,
+                    },
                 };
-                *context.file_constant_order += 1;
-                body = declaration_tokens;
-                kind = HeaderKind::Constant { metadata };
+            } else if exported {
+                let constant_header = create_constant_header_payload(
+                    &full_name,
+                    token_stream,
+                    context,
+                    &mut dependencies,
+                )?;
+                body = constant_header.body;
+                kind = HeaderKind::Constant {
+                    metadata: constant_header.metadata,
+                };
             }
 
             // Anything else just goes into the start function
+        }
+
+        // Explicit declaration forms that are not immediate '='.
+        // Example: '# page String = ...' and '# item ~ Foo = ...'
+        TokenKind::Mutable
+        | TokenKind::DatatypeInt
+        | TokenKind::DatatypeFloat
+        | TokenKind::DatatypeBool
+        | TokenKind::DatatypeString
+        | TokenKind::OpenCurly
+        | TokenKind::Symbol(_) => {
+            if exported {
+                let constant_header = create_constant_header_payload(
+                    &full_name,
+                    token_stream,
+                    context,
+                    &mut dependencies,
+                )?;
+                body = constant_header.body;
+                kind = HeaderKind::Constant {
+                    metadata: constant_header.metadata,
+                };
+            }
         }
 
         // Should be a choice declaration
@@ -609,6 +627,186 @@ fn create_header(
         source_file: context.source_file.to_owned(),
         file_imports: context.file_import_entries.to_vec(),
     })
+}
+
+struct ConstantHeaderPayload {
+    body: Vec<Token>,
+    metadata: ConstantHeaderMetadata,
+}
+
+fn create_constant_header_payload(
+    full_name: &InternedPath,
+    token_stream: &mut FileTokens,
+    context: &mut HeaderBuildContext<'_>,
+    dependencies: &mut HashSet<InternedPath>,
+) -> Result<ConstantHeaderPayload, CompilerError> {
+    let declaration_name = full_name
+        .name()
+        .expect("create_constant_header_payload called with empty declaration path");
+    let declaration_syntax =
+        parse_declaration_syntax(token_stream, declaration_name, context.string_table)?;
+    let declaration_tokens = declaration_syntax.to_tokens();
+
+    for token in &declaration_tokens {
+        if let TokenKind::Symbol(name_id) = token.kind
+            && let Some(path) = context
+                .file_imports
+                .iter()
+                .find(|import| import.name() == Some(name_id))
+        {
+            dependencies.insert(path.to_owned());
+        }
+    }
+
+    let import_dependencies = dependencies.clone();
+    let symbol_dependencies = collect_constant_symbol_dependencies(&declaration_syntax, context);
+    let metadata = ConstantHeaderMetadata {
+        declaration_syntax,
+        file_constant_order: *context.file_constant_order,
+        import_dependencies,
+        symbol_dependencies,
+    };
+    *context.file_constant_order += 1;
+
+    Ok(ConstantHeaderPayload {
+        body: declaration_tokens,
+        metadata,
+    })
+}
+
+fn collect_constant_symbol_dependencies(
+    declaration_syntax: &DeclarationSyntax,
+    context: &HeaderBuildContext<'_>,
+) -> HashSet<InternedPath> {
+    let mut dependencies = HashSet::new();
+    let mut previous_token_was_dot = false;
+
+    if let Some(type_name) = declaration_syntax.explicit_named_type {
+        if let Some(import_path) = context
+            .file_imports
+            .iter()
+            .find(|import_path| import_path.name() == Some(type_name))
+        {
+            dependencies.insert(import_path.to_owned());
+        } else {
+            dependencies.insert(context.source_file.append(type_name));
+        }
+    }
+
+    for token in &declaration_syntax.initializer_tokens {
+        let token_kind = &token.kind;
+
+        if let TokenKind::Symbol(symbol_id) = token_kind {
+            if previous_token_was_dot {
+                previous_token_was_dot = false;
+                continue;
+            }
+
+            if let Some(import_path) = context
+                .file_imports
+                .iter()
+                .find(|import_path| import_path.name() == Some(*symbol_id))
+            {
+                dependencies.insert(import_path.to_owned());
+            } else {
+                dependencies.insert(context.source_file.append(*symbol_id));
+            }
+        }
+
+        previous_token_was_dot = matches!(token_kind, TokenKind::Dot);
+    }
+
+    dependencies
+}
+
+fn collect_struct_default_dependencies(
+    tokens: &[Token],
+    context: &HeaderBuildContext<'_>,
+) -> HashSet<InternedPath> {
+    let mut dependencies = HashSet::new();
+    let mut saw_opening_bracket = false;
+    let mut inside_default_expression = false;
+    let mut paren_depth = 0usize;
+    let mut curly_depth = 0usize;
+    let mut template_depth = 0usize;
+    let mut previous_token_was_dot = false;
+
+    for token in tokens {
+        let token_kind = &token.kind;
+
+        if !saw_opening_bracket {
+            if matches!(token_kind, TokenKind::TypeParameterBracket) {
+                saw_opening_bracket = true;
+            }
+            previous_token_was_dot = matches!(token_kind, TokenKind::Dot);
+            continue;
+        }
+
+        if !inside_default_expression {
+            if matches!(token_kind, TokenKind::Assign) {
+                inside_default_expression = true;
+                paren_depth = 0;
+                curly_depth = 0;
+                template_depth = 0;
+            }
+            previous_token_was_dot = matches!(token_kind, TokenKind::Dot);
+            continue;
+        }
+
+        if matches!(
+            token_kind,
+            TokenKind::Comma | TokenKind::TypeParameterBracket
+        ) && paren_depth == 0
+            && curly_depth == 0
+            && template_depth == 0
+        {
+            inside_default_expression = false;
+            previous_token_was_dot = matches!(token_kind, TokenKind::Dot);
+            continue;
+        }
+
+        match token_kind {
+            TokenKind::OpenParenthesis => {
+                paren_depth += 1;
+            }
+            TokenKind::CloseParenthesis => {
+                paren_depth = paren_depth.saturating_sub(1);
+            }
+            TokenKind::OpenCurly => {
+                curly_depth += 1;
+            }
+            TokenKind::CloseCurly => {
+                curly_depth = curly_depth.saturating_sub(1);
+            }
+            TokenKind::TemplateHead | TokenKind::StyleTemplateHead => {
+                template_depth += 1;
+            }
+            TokenKind::TemplateClose => {
+                template_depth = template_depth.saturating_sub(1);
+            }
+            TokenKind::Symbol(symbol_id) => {
+                if previous_token_was_dot {
+                    previous_token_was_dot = false;
+                    continue;
+                }
+
+                if let Some(import_path) = context
+                    .file_imports
+                    .iter()
+                    .find(|import_path| import_path.name() == Some(*symbol_id))
+                {
+                    dependencies.insert(import_path.to_owned());
+                } else {
+                    dependencies.insert(context.source_file.append(*symbol_id));
+                }
+            }
+            _ => {}
+        }
+
+        previous_token_was_dot = matches!(token_kind, TokenKind::Dot);
+    }
+
+    dependencies
 }
 
 fn create_top_level_const_template(

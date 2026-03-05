@@ -134,10 +134,12 @@ pub fn resolve_declaration_syntax(
 
     // Check if this whole expression is nested in brackets.
     // This is just so we don't wastefully call create_expression recursively right away.
+    let const_context = ScopeContext::new_constant(initializer_stream.src_path.to_owned());
     let mut parsed_expr = match initializer_stream.current_token_kind() {
         // Struct Definition
         TokenKind::TypeParameterBracket => {
-            let params = create_struct_definition(&mut initializer_stream, string_table)?;
+            let params =
+                create_struct_definition(&mut initializer_stream, &const_context, string_table)?;
 
             Expression::struct_definition(
                 params,

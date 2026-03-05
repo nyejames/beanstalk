@@ -1,10 +1,11 @@
 #![allow(clippy::needless_borrow)]
 
 use super::eval_expression::evaluate_expression;
-use crate::compiler_frontend::ast::ast::ContextKind;
-use crate::compiler_frontend::ast::ast::ScopeContext;
+use crate::compiler_frontend::ast::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
-use crate::compiler_frontend::ast::expressions::expression::{Expression, Operator};
+use crate::compiler_frontend::ast::expressions::expression::{
+    Expression, ExpressionKind, Operator,
+};
 use crate::compiler_frontend::ast::expressions::struct_instance::parse_struct_constructor_expression;
 use crate::compiler_frontend::ast::statements::collections::new_collection;
 use crate::compiler_frontend::ast::statements::declarations::create_reference;
@@ -19,8 +20,7 @@ use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TextLocation, Token, TokenKind};
 use crate::compiler_frontend::traits::ContainsReferences;
 use crate::{
-    ast_log, new_template_context, return_compiler_error, return_rule_error, return_syntax_error,
-    return_type_error,
+    ast_log, return_compiler_error, return_rule_error, return_syntax_error, return_type_error,
 };
 
 // For multiple returns or function calls
@@ -276,6 +276,25 @@ pub fn create_expression(
                 let full_name = context.scope.to_owned().append(*id);
 
                 if let Some(arg) = context.get_reference(id) {
+                    if let ExpressionKind::Template(template_value) = &arg.value.kind
+                        && matches!(template_value.kind, TemplateType::SlotInsertion(_))
+                        && !matches!(
+                            context.kind,
+                            ContextKind::Template
+                                | ContextKind::Constant
+                                | ContextKind::ConstantHeader
+                        )
+                    {
+                        return_rule_error!(
+                            "Labeled slot insertions can only be used while filling a template that defines slots.",
+                            token_stream.current_location().to_error_location(string_table),
+                            {
+                                CompilationStage => "Expression Parsing",
+                                PrimarySuggestion => "Use this slot insertion inside a template head that applies an active wrapper template",
+                            }
+                        );
+                    }
+
                     if let DataType::Struct(fields, struct_ownership) = &arg.value.data_type
                         && token_stream.peek_next_token() == Some(&TokenKind::OpenParenthesis)
                     {
@@ -573,12 +592,9 @@ pub fn create_expression(
             }
 
             TokenKind::TemplateHead => {
-                let template = Template::new(
-                    token_stream,
-                    new_template_context!(context),
-                    vec![],
-                    string_table,
-                )?;
+                let template_context = context.new_template_parsing_context();
+                let template =
+                    Template::new(token_stream, &template_context, vec![], string_table)?;
 
                 match template.kind {
                     TemplateType::StringFunction => {
@@ -629,13 +645,13 @@ pub fn create_expression(
                     TemplateType::Comment => {}
 
                     TemplateType::SlotInsertion(_) => {
-                        return_rule_error!(
-                            "Labeled slot insertions can only be used while filling a template that defines slots.",
-                            token_stream.current_location().to_error_location(&string_table), {
-                                CompilationStage => "Expression Parsing",
-                                PrimarySuggestion => "Only use '[$1: ...]' or '[$2]' inside the body of a template that applies a wrapper with slots",
-                            }
-                        );
+                        if consume_closing_parenthesis
+                            && token_stream.current_token_kind() == &TokenKind::CloseParenthesis
+                        {
+                            token_stream.advance();
+                        }
+
+                        return Ok(Expression::template(template, ownership.to_owned()));
                     }
                 }
             }

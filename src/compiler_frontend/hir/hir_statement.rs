@@ -80,66 +80,83 @@ impl<'a> HirBuilder<'a> {
         expression: &Expression,
         location: &TextLocation,
     ) -> Result<Option<HirConstValue>, CompilerError> {
-        // Slot wrappers are compile-time composition helpers owned by AST template
-        // composition. They are valid constants for AST folding, but they are not
-        // concrete runtime metadata values for HIR module constant pools.
-        if let ExpressionKind::Template(template) = &expression.kind {
-            if template.has_unresolved_slots() {
-                return Ok(None);
-            }
-
-            if !template.is_const_renderable_string() {
-                return_hir_transformation_error!(
-                    "Template constant reached HIR without being fully renderable at compile time.",
-                    self.hir_error_location(location)
-                );
-            }
-
-            let folded = template.fold_into_stringid(&None, self.string_table)?;
-            return Ok(Some(HirConstValue::String(
-                self.string_table.resolve(folded).to_string(),
-            )));
-        }
-
-        self.lower_const_value(expression, location).map(Some)
+        self.lower_const_value(expression, location)
     }
 
     fn lower_const_value(
         &mut self,
         expression: &Expression,
         location: &TextLocation,
-    ) -> Result<HirConstValue, CompilerError> {
+    ) -> Result<Option<HirConstValue>, CompilerError> {
         match &expression.kind {
-            ExpressionKind::Int(value) => Ok(HirConstValue::Int(*value)),
-            ExpressionKind::Float(value) => Ok(HirConstValue::Float(*value)),
-            ExpressionKind::Bool(value) => Ok(HirConstValue::Bool(*value)),
-            ExpressionKind::Char(value) => Ok(HirConstValue::Char(*value)),
-            ExpressionKind::StringSlice(value) => Ok(HirConstValue::String(
+            ExpressionKind::Int(value) => Ok(Some(HirConstValue::Int(*value))),
+            ExpressionKind::Float(value) => Ok(Some(HirConstValue::Float(*value))),
+            ExpressionKind::Bool(value) => Ok(Some(HirConstValue::Bool(*value))),
+            ExpressionKind::Char(value) => Ok(Some(HirConstValue::Char(*value))),
+            ExpressionKind::StringSlice(value) => Ok(Some(HirConstValue::String(
                 self.string_table.resolve(*value).to_string(),
-            )),
+            ))),
             ExpressionKind::Collection(items) => {
                 let mut lowered_items = Vec::with_capacity(items.len());
                 for item in items {
-                    lowered_items.push(self.lower_const_value(item, location)?);
+                    let Some(lowered_item) = self.lower_const_value(item, location)? else {
+                        return Ok(None);
+                    };
+                    lowered_items.push(lowered_item);
                 }
-                Ok(HirConstValue::Collection(lowered_items))
+                Ok(Some(HirConstValue::Collection(lowered_items)))
             }
             ExpressionKind::StructInstance(fields) => {
                 let mut lowered_fields = Vec::with_capacity(fields.len());
                 for field in fields {
+                    let Some(lowered_value) = self.lower_const_value(&field.value, location)?
+                    else {
+                        return Ok(None);
+                    };
                     lowered_fields.push(HirConstField {
                         name: field.id.to_string(self.string_table),
-                        value: self.lower_const_value(&field.value, location)?,
+                        value: lowered_value,
                     });
                 }
                 // Const-eligible struct constructors in top-level '#' constants are coerced
                 // in AST to data-only struct instances, and land here as HIR const records.
-                Ok(HirConstValue::Record(lowered_fields))
+                Ok(Some(HirConstValue::Record(lowered_fields)))
             }
-            ExpressionKind::Range(start, end) => Ok(HirConstValue::Range(
-                Box::new(self.lower_const_value(start, location)?),
-                Box::new(self.lower_const_value(end, location)?),
-            )),
+            ExpressionKind::Range(start, end) => {
+                let Some(lowered_start) = self.lower_const_value(start, location)? else {
+                    return Ok(None);
+                };
+                let Some(lowered_end) = self.lower_const_value(end, location)? else {
+                    return Ok(None);
+                };
+
+                Ok(Some(HirConstValue::Range(
+                    Box::new(lowered_start),
+                    Box::new(lowered_end),
+                )))
+            }
+            ExpressionKind::Template(template) => {
+                // WHAT: omit unresolved wrapper/slot helpers from the HIR constant pool.
+                // WHY: these are AST-time composition values, not concrete runtime metadata.
+                match template.const_value_kind() {
+                    crate::compiler_frontend::ast::templates::template::TemplateConstValueKind::RenderableString => {
+                        let folded = template.fold_into_stringid(&None, self.string_table)?;
+                        Ok(Some(HirConstValue::String(
+                            self.string_table.resolve(folded).to_string(),
+                        )))
+                    }
+                    crate::compiler_frontend::ast::templates::template::TemplateConstValueKind::WrapperTemplate
+                    | crate::compiler_frontend::ast::templates::template::TemplateConstValueKind::SlotInsertion => {
+                        Ok(None)
+                    }
+                    crate::compiler_frontend::ast::templates::template::TemplateConstValueKind::NonConst => {
+                        return_hir_transformation_error!(
+                            "Template constant reached HIR without compile-time const semantics.",
+                            self.hir_error_location(location)
+                        )
+                    }
+                }
+            }
             _ => return_hir_transformation_error!(
                 format!(
                     "Unsupported constant expression during HIR lowering: {:?}",

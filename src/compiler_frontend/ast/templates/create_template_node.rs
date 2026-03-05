@@ -9,8 +9,8 @@ use crate::compiler_frontend::ast::templates::slots::{
     compose_template_with_slots, ensure_no_slot_insertions_remain,
 };
 use crate::compiler_frontend::ast::templates::template::{
-    Formatter, Style, TemplateAtom, TemplateContent, TemplateControlFlow, TemplateSegment,
-    TemplateSegmentOrigin, TemplateType,
+    Formatter, Style, TemplateAtom, TemplateConstValueKind, TemplateContent, TemplateControlFlow,
+    TemplateSegment, TemplateSegmentOrigin, TemplateType,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
@@ -214,17 +214,42 @@ impl Template {
     }
 
     pub fn is_const_evaluable_value(&self) -> bool {
-        // Const template values can still carry unresolved slot markers so they can
-        // be composed by consuming templates during AST construction.
-        matches!(self.kind, TemplateType::String)
-            && !self.content.contains_slot_insertions()
-            && self.content.is_const_evaluable_value()
+        self.const_value_kind().is_compile_time_value()
     }
 
     pub fn is_const_renderable_string(&self) -> bool {
-        // Unfilled slots render as empty content when a template is used directly
-        // as a string value, so renderability only requires const-evaluable atoms.
-        self.is_const_evaluable_value()
+        self.const_value_kind().is_renderable_string()
+    }
+
+    pub fn const_value_kind(&self) -> TemplateConstValueKind {
+        // WHAT: classify template const-ness in one place.
+        // WHY: AST constant checks and render-required paths need consistent rules.
+        if !self.content.is_const_evaluable_value() {
+            return TemplateConstValueKind::NonConst;
+        }
+
+        if matches!(self.kind, TemplateType::SlotInsertion(_)) {
+            // Slot insertion templates are compile-time helper values and are only
+            // valid when consumed by an active wrapper fill site.
+            if self.content.contains_slot_insertions() {
+                return TemplateConstValueKind::NonConst;
+            }
+            return TemplateConstValueKind::SlotInsertion;
+        }
+
+        if !matches!(self.kind, TemplateType::String) {
+            return TemplateConstValueKind::NonConst;
+        }
+
+        if self.has_unresolved_slots() {
+            return TemplateConstValueKind::WrapperTemplate;
+        }
+
+        if self.content.contains_slot_insertions() {
+            return TemplateConstValueKind::NonConst;
+        }
+
+        TemplateConstValueKind::RenderableString
     }
 
     pub fn insert_template_into_head(
@@ -401,54 +426,19 @@ pub fn parse_template_head(
                 // Check if it's a regular scene or variable reference
                 // If this is a reference to a function or variable
                 if let Some(arg) = context.get_reference(&name) {
+                    let value_location = token_stream.current_location();
                     match &arg.value.kind {
-                        // Reference to another string template
+                        // Direct template references should preserve wrapper/slot semantics.
                         ExpressionKind::Template(inserted_template) => {
-                            if context.kind.is_constant_context()
-                                && matches!(inserted_template.kind, TemplateType::StringFunction)
-                            {
-                                return_syntax_error!(
-                                    format!(
-                                        "Const templates can only reference compile-time templates. '{}' is runtime.",
-                                        name
-                                    ),
-                                    token_stream
-                                        .current_location()
-                                        .to_error_location(&string_table)
-                                );
-                            }
-
-                            if inserted_template.content.slot_count() > 0 {
-                                if active_wrapper.is_some() {
-                                    return_syntax_error!(
-                                        "Only one wrapper template can be applied from a template head.",
-                                        token_stream
-                                            .current_location()
-                                            .to_error_location(&string_table)
-                                    );
-                                }
-
-                                if !inserted_template.style.child_templates.is_empty() {
-                                    template.style.child_templates =
-                                        inserted_template.style.child_templates.to_owned();
-                                }
-
-                                if matches!(inserted_template.kind, TemplateType::StringFunction) {
-                                    *foldable = false;
-                                }
-
-                                // Wrapper selection changes how the template body is
-                                // interpreted later, so keep it separate from ordinary
-                                // head content instead of splicing it in immediately.
-                                *active_wrapper = Some(inserted_template.as_ref().to_owned());
-                            } else {
-                                template.insert_template_into_head(
-                                    inserted_template,
-                                    foldable,
-                                    string_table,
-                                )?;
-                            }
-
+                            handle_template_value_in_template_head(
+                                inserted_template,
+                                context,
+                                template,
+                                active_wrapper,
+                                foldable,
+                                &value_location,
+                                string_table,
+                            )?;
                             saw_meaningful_head_item = true;
                         }
 
@@ -464,29 +454,15 @@ pub fn parse_template_head(
                                 string_table,
                             )?;
 
-                            if context.kind.is_constant_context()
-                                && !expr.is_compile_time_constant()
-                            {
-                                return_syntax_error!(
-                                    format!(
-                                        "Const templates can only capture constants. '{}' resolves to a non-constant value.",
-                                        name
-                                    ),
-                                    token_stream
-                                        .current_location()
-                                        .to_error_location(&string_table)
-                                );
-                            }
-
-                            // Any non-constant expression can't be folded
-                            if !expr.kind.is_foldable() && !expr.is_compile_time_constant() {
-                                ast_log!("Template is no longer foldable due to reference");
-                                *foldable = false;
-                            }
-
-                            template
-                                .content
-                                .add_with_origin(expr, TemplateSegmentOrigin::Head);
+                            push_template_head_expression(
+                                expr,
+                                context,
+                                template,
+                                active_wrapper,
+                                foldable,
+                                &value_location,
+                                string_table,
+                            )?;
                             defer_separator_token = true;
                             saw_meaningful_head_item = true;
                         }
@@ -511,6 +487,7 @@ pub fn parse_template_head(
             | TokenKind::IntLiteral(_)
             | TokenKind::StringSliceLiteral(_)
             | TokenKind::RawStringLiteral(_) => {
+                let value_location = token_stream.current_location();
                 let expr = create_expression(
                     token_stream,
                     context,
@@ -520,9 +497,15 @@ pub fn parse_template_head(
                     string_table,
                 )?;
 
-                template
-                    .content
-                    .add_with_origin(expr, TemplateSegmentOrigin::Head);
+                push_template_head_expression(
+                    expr,
+                    context,
+                    template,
+                    active_wrapper,
+                    foldable,
+                    &value_location,
+                    string_table,
+                )?;
                 defer_separator_token = true;
                 saw_meaningful_head_item = true;
             }
@@ -553,6 +536,7 @@ pub fn parse_template_head(
             }
 
             TokenKind::OpenParenthesis => {
+                let value_location = token_stream.current_location();
                 let expr = create_expression(
                     token_stream,
                     context,
@@ -562,23 +546,15 @@ pub fn parse_template_head(
                     string_table,
                 )?;
 
-                if context.kind.is_constant_context() && !expr.is_compile_time_constant() {
-                    return_syntax_error!(
-                        "Const templates require compile-time expressions in the template head.",
-                        token_stream
-                            .current_location()
-                            .to_error_location(&string_table)
-                    );
-                }
-
-                if !expr.kind.is_foldable() && !expr.is_compile_time_constant() {
-                    ast_log!("Template is no longer foldable");
-                    *foldable = false;
-                }
-
-                template
-                    .content
-                    .add_with_origin(expr, TemplateSegmentOrigin::Head);
+                push_template_head_expression(
+                    expr,
+                    context,
+                    template,
+                    active_wrapper,
+                    foldable,
+                    &value_location,
+                    string_table,
+                )?;
                 defer_separator_token = true;
                 saw_meaningful_head_item = true;
             }
@@ -664,6 +640,102 @@ pub fn parse_template_head(
     Ok(())
 }
 
+fn handle_template_value_in_template_head(
+    value: &Template,
+    context: &ScopeContext,
+    template: &mut Template,
+    active_wrapper: &mut Option<Template>,
+    foldable: &mut bool,
+    location: &TextLocation,
+    string_table: &StringTable,
+) -> Result<(), CompilerError> {
+    if context.kind.is_constant_context() && matches!(value.kind, TemplateType::StringFunction) {
+        return_syntax_error!(
+            "Const templates can only capture compile-time templates.",
+            location.to_owned().to_error_location(string_table)
+        );
+    }
+
+    if value.has_unresolved_slots() {
+        if active_wrapper.is_some() {
+            return_syntax_error!(
+                "Only one wrapper template can be applied from a template head.",
+                location.to_owned().to_error_location(string_table)
+            );
+        }
+
+        if !value.style.child_templates.is_empty() {
+            template.style.child_templates = value.style.child_templates.to_owned();
+        }
+
+        if matches!(value.kind, TemplateType::StringFunction) {
+            *foldable = false;
+        }
+
+        // WHAT: hold wrapper selection separately from normal head content.
+        // WHY: wrapper composition must be applied to the final merged head+body
+        // stream in authored order.
+        *active_wrapper = Some(value.to_owned());
+        return Ok(());
+    }
+
+    if matches!(value.kind, TemplateType::SlotInsertion(_)) {
+        if active_wrapper.is_none() {
+            return_syntax_error!(
+                "Labeled slot insertions can only be used while filling a template that defines slots.",
+                location.to_owned().to_error_location(string_table)
+            );
+        }
+
+        template.content.add_with_origin(
+            Expression::template(value.to_owned(), Ownership::ImmutableOwned),
+            TemplateSegmentOrigin::Head,
+        );
+        return Ok(());
+    }
+
+    template.insert_template_into_head(value, foldable, string_table)
+}
+
+fn push_template_head_expression(
+    expr: Expression,
+    context: &ScopeContext,
+    template: &mut Template,
+    active_wrapper: &mut Option<Template>,
+    foldable: &mut bool,
+    location: &TextLocation,
+    string_table: &StringTable,
+) -> Result<(), CompilerError> {
+    if let ExpressionKind::Template(template_value) = &expr.kind {
+        return handle_template_value_in_template_head(
+            template_value,
+            context,
+            template,
+            active_wrapper,
+            foldable,
+            location,
+            string_table,
+        );
+    }
+
+    if context.kind.is_constant_context() && !expr.is_compile_time_constant() {
+        return_syntax_error!(
+            "Const templates can only capture compile-time values in the template head.",
+            location.to_owned().to_error_location(string_table)
+        );
+    }
+
+    if !expr.kind.is_foldable() && !expr.is_compile_time_constant() {
+        ast_log!("Template is no longer foldable due to reference");
+        *foldable = false;
+    }
+
+    template
+        .content
+        .add_with_origin(expr, TemplateSegmentOrigin::Head);
+    Ok(())
+}
+
 fn fold_atoms(
     atoms: &[TemplateAtom],
     inherited_style: &Option<Style>,
@@ -722,6 +794,27 @@ fn fold_atoms(
 
             ExpressionKind::Char(value) => {
                 final_string.push(*value);
+            }
+
+            ExpressionKind::Template(template) => {
+                if matches!(template.kind, TemplateType::SlotInsertion(_))
+                    || template.content.contains_slot_insertions()
+                    || template.has_unresolved_slots()
+                {
+                    return_compiler_error!(
+                        "Invalid template content reached string folding: unresolved slot insertions cannot be rendered directly."
+                    );
+                }
+
+                // If nested templates become fully resolved only after wrapper composition,
+                // fold them here so authored nesting order is preserved in the final string.
+                let nested_inherited_style = style
+                    .child_templates
+                    .last()
+                    .map(|template| template.style.to_owned());
+                let folded_nested =
+                    template.fold_into_stringid(&nested_inherited_style, string_table)?;
+                final_string.push_str(string_table.resolve(folded_nested));
             }
 
             // Anything else can't be folded and should not get to this stage.

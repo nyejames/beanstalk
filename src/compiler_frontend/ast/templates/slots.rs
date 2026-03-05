@@ -1,7 +1,7 @@
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
 use crate::compiler_frontend::ast::templates::create_template_node::Template;
 use crate::compiler_frontend::ast::templates::template::{
-    TemplateAtom, TemplateContent, TemplateType,
+    TemplateAtom, TemplateContent, TemplateSegment, TemplateType,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::tokenizer::tokens::TextLocation;
@@ -9,7 +9,6 @@ use crate::return_rule_error;
 
 #[derive(Clone, Debug)]
 struct SlotFillState {
-    wrapper_segments: Vec<Vec<TemplateAtom>>,
     gap_buckets: Vec<Vec<TemplateAtom>>,
     slot_buckets: Vec<Vec<TemplateAtom>>,
     slot_used: Vec<bool>,
@@ -19,15 +18,11 @@ struct SlotFillState {
 }
 
 impl SlotFillState {
-    fn new(wrapper: &Template) -> Self {
-        let slot_count = wrapper.content.slot_count();
-        let wrapper_segments = wrapper.content.split_by_slots();
-
+    fn new(slot_count: usize) -> Self {
         Self {
             gap_buckets: vec![Vec::new(); slot_count + 1],
             slot_buckets: vec![Vec::new(); slot_count],
             slot_used: vec![false; slot_count],
-            wrapper_segments,
             expected_next_slot: 1,
             current_gap_index: 0,
             saw_explicit_slot_directive: false,
@@ -46,7 +41,14 @@ pub(crate) fn compose_template_with_slots(
     fill_content: &TemplateContent,
     error_location: &TextLocation,
 ) -> Result<TemplateContent, CompilerError> {
-    let mut state = SlotFillState::new(wrapper);
+    let slot_count = wrapper.content.total_slot_count();
+    if slot_count == 0 {
+        return Err(CompilerError::compiler_error(
+            "Internal template wrapper state error: expected at least one slot while composing.",
+        ));
+    }
+
+    let mut state = SlotFillState::new(slot_count);
 
     for atom in &fill_content.atoms {
         let Some(slot_index) = slot_target_from_atom(atom) else {
@@ -83,7 +85,17 @@ pub(crate) fn compose_template_with_slots(
         return missing_slot_error(state.slot_count(), error_location);
     }
 
-    Ok(merge_slot_content(state))
+    let mut slot_cursor = 0usize;
+    let mut atoms =
+        compose_wrapper_atoms_recursive(&wrapper.content.atoms, &mut state, &mut slot_cursor)?;
+    if slot_cursor != state.slot_count() {
+        return Err(CompilerError::compiler_error(
+            "Internal slot composition mismatch: not all wrapper slots were consumed.",
+        ));
+    }
+
+    atoms.extend(state.gap_buckets[state.slot_count()].clone());
+    Ok(TemplateContent { atoms })
 }
 
 pub(crate) fn ensure_no_slot_insertions_remain(
@@ -100,21 +112,51 @@ pub(crate) fn ensure_no_slot_insertions_remain(
     Ok(())
 }
 
-fn merge_slot_content(state: SlotFillState) -> TemplateContent {
-    // The wrapper's authored structure always owns the merge order. Gaps receive the
-    // surrounding free-form text, and each numbered slot drops into its matching hole.
-    let mut atoms = Vec::new();
+fn compose_wrapper_atoms_recursive(
+    wrapper_atoms: &[TemplateAtom],
+    state: &mut SlotFillState,
+    slot_cursor: &mut usize,
+) -> Result<Vec<TemplateAtom>, CompilerError> {
+    let mut composed = Vec::with_capacity(wrapper_atoms.len());
 
-    for slot_index in 0..state.slot_count() {
-        atoms.extend(state.wrapper_segments[slot_index].clone());
-        atoms.extend(state.gap_buckets[slot_index].clone());
-        atoms.extend(state.slot_buckets[slot_index].clone());
+    for atom in wrapper_atoms {
+        match atom {
+            TemplateAtom::Slot => {
+                if *slot_cursor >= state.slot_count() {
+                    return Err(CompilerError::compiler_error(
+                        "Internal slot composition mismatch: resolved more slots than expected.",
+                    ));
+                }
+
+                let slot_index = *slot_cursor;
+                composed.extend(state.gap_buckets[slot_index].clone());
+                composed.extend(state.slot_buckets[slot_index].clone());
+                *slot_cursor += 1;
+            }
+            TemplateAtom::Content(segment) => match &segment.expression.kind {
+                ExpressionKind::Template(template) if template.has_unresolved_slots() => {
+                    let mut nested_template = template.as_ref().to_owned();
+                    nested_template.content = TemplateContent {
+                        atoms: compose_wrapper_atoms_recursive(
+                            &nested_template.content.atoms,
+                            state,
+                            slot_cursor,
+                        )?,
+                    };
+
+                    let mut nested_expression = segment.expression.to_owned();
+                    nested_expression.kind = ExpressionKind::Template(Box::new(nested_template));
+                    composed.push(TemplateAtom::Content(TemplateSegment::new(
+                        nested_expression,
+                        segment.origin,
+                    )));
+                }
+                _ => composed.push(atom.to_owned()),
+            },
+        }
     }
 
-    atoms.extend(state.wrapper_segments[state.slot_count()].clone());
-    atoms.extend(state.gap_buckets[state.slot_count()].clone());
-
-    TemplateContent { atoms }
+    Ok(composed)
 }
 
 fn slot_target_from_atom(atom: &TemplateAtom) -> Option<usize> {

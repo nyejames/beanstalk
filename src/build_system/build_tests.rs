@@ -528,6 +528,217 @@ fn build_project_runtime_struct_constructor_supports_partial_defaults() {
 }
 
 #[test]
+fn build_project_struct_default_uses_same_file_constant_declared_later() {
+    let root = temp_dir("struct_default_forward_constant");
+    fs::create_dir_all(&root).expect("should create temp root");
+    fs::write(
+        root.join("main.bst"),
+        "Card = |\n    color String = base + \"!\",\n|\n#base = \"red\"\ncard = Card()\nio([: card.color])\n",
+    )
+    .expect("should write source file");
+    let _cwd_guard = CurrentDirGuard::set_to(&root);
+
+    let builder = HtmlProjectBuilder::new();
+    let build_result = build_project(&builder, "main.bst", &[])
+        .expect("struct default should resolve same-file constants declared later");
+
+    let html = match build_result.project.output_files[0].file_kind() {
+        FileKind::Html(content) => content,
+        other => panic!(
+            "expected HTML output, got {:?}",
+            std::mem::discriminant(other)
+        ),
+    };
+    assert!(
+        html.contains("red!"),
+        "forward constant dependency should be sorted before struct parsing and fold into one value",
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
+fn build_project_constant_can_reference_same_file_struct_declared_later() {
+    let root = temp_dir("const_depends_on_forward_struct");
+    fs::create_dir_all(&root).expect("should create temp root");
+    fs::write(
+        root.join("main.bst"),
+        "#basic = Basic()\nBasic = |\n    body String = \"ok\",\n|\nio([: basic.body])\n",
+    )
+    .expect("should write source file");
+    let _cwd_guard = CurrentDirGuard::set_to(&root);
+
+    let builder = HtmlProjectBuilder::new();
+    let build_result = build_project(&builder, "main.bst", &[])
+        .expect("constant should resolve same-file struct declared later");
+
+    let html = match build_result.project.output_files[0].file_kind() {
+        FileKind::Html(content) => content,
+        other => panic!(
+            "expected HTML output, got {:?}",
+            std::mem::discriminant(other)
+        ),
+    };
+    assert!(
+        !html.is_empty(),
+        "build output should still be produced when constant references forward-declared struct"
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
+fn build_project_typed_constant_template_head_can_reference_prior_constant() {
+    let root = temp_dir("typed_constant_template_head_reference");
+    fs::create_dir_all(&root).expect("should create temp root");
+    fs::write(
+        root.join("main.bst"),
+        "# page String = [: world]\n# test = [page: Hello ]\nio(test)\n",
+    )
+    .expect("should write source file");
+    let _cwd_guard = CurrentDirGuard::set_to(&root);
+
+    let builder = HtmlProjectBuilder::new();
+    let build_result = build_project(&builder, "main.bst", &[])
+        .expect("typed constant should remain visible to later constants");
+
+    let html = match build_result.project.output_files[0].file_kind() {
+        FileKind::Html(content) => content,
+        other => panic!(
+            "expected HTML output, got {:?}",
+            std::mem::discriminant(other)
+        ),
+    };
+    assert!(
+        html.contains("world Hello"),
+        "typed constant reference in template head should compile and render expected output"
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
+fn build_project_const_struct_template_field_can_fill_template_slots() {
+    let root = temp_dir("const_struct_template_field_slots");
+    fs::create_dir_all(&root).expect("should create temp root");
+    fs::write(
+        root.join("main.bst"),
+        "Basic = |\n    page String = [:<section>[..]</section>],\n|\n#basic = Basic()\n#[basic.page: Hello world]\n",
+    )
+    .expect("should write source file");
+    let _cwd_guard = CurrentDirGuard::set_to(&root);
+
+    let builder = HtmlProjectBuilder::new();
+    let build_result = build_project(&builder, "main.bst", &[])
+        .expect("const struct template field should remain foldable in const template heads");
+
+    let html = match build_result.project.output_files[0].file_kind() {
+        FileKind::Html(content) => content,
+        other => panic!(
+            "expected HTML output, got {:?}",
+            std::mem::discriminant(other)
+        ),
+    };
+    assert!(
+        html.contains("<section>") && html.contains("Hello world") && html.contains("</section>"),
+        "const struct wrapper field should compose slot content in place",
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
+fn build_project_const_slot_insertion_constant_is_composed_at_use_site() {
+    let root = temp_dir("const_slot_insertion_use_site");
+    fs::create_dir_all(&root).expect("should create temp root");
+    fs::write(
+        root.join("main.bst"),
+        "#wrapper = [:<section>[..]</section>]\n#slot_1 = [$1: Hello world]\n#[wrapper, slot_1]\n",
+    )
+    .expect("should write source file");
+    let _cwd_guard = CurrentDirGuard::set_to(&root);
+
+    let builder = HtmlProjectBuilder::new();
+    let build_result = build_project(&builder, "main.bst", &[])
+        .expect("slot insertion constants should fold when consumed by wrapper templates");
+
+    let html = match build_result.project.output_files[0].file_kind() {
+        FileKind::Html(content) => content,
+        other => panic!(
+            "expected HTML output, got {:?}",
+            std::mem::discriminant(other)
+        ),
+    };
+    assert!(
+        html.contains("<section>") && html.contains("Hello world") && html.contains("</section>"),
+        "slot insertion constant should be resolved at the wrapper use-site",
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
+fn build_project_rejects_slot_insertion_constant_without_active_wrapper() {
+    let root = temp_dir("const_slot_insertion_without_wrapper");
+    fs::create_dir_all(&root).expect("should create temp root");
+    fs::write(root.join("main.bst"), "#slot_1 = [$1: hello]\n#[slot_1]\n")
+        .expect("should write source file");
+    let _cwd_guard = CurrentDirGuard::set_to(&root);
+
+    let builder = HtmlProjectBuilder::new();
+    let result = build_project(&builder, "main.bst", &[]);
+    assert!(
+        result.is_err(),
+        "slot insertion constants should fail when used outside wrapper composition",
+    );
+    let messages = match result {
+        Err(messages) => messages,
+        Ok(_) => unreachable!("assert above guarantees this is an error"),
+    };
+
+    assert!(
+        messages.errors.iter().any(|error| error.msg.contains(
+            "Labeled slot insertions can only be used while filling a template that defines slots."
+        )),
+        "expected a targeted slot insertion usage diagnostic",
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
+fn build_project_struct_default_uses_imported_constant() {
+    let root = temp_dir("struct_default_imported_constant");
+    fs::create_dir_all(root.join("styles")).expect("should create temp root");
+    fs::write(
+        root.join("main.bst"),
+        "import @(styles/theme/base)\nCard = |\n    color String = base,\n|\ncard = Card()\nio([: card.color])\n",
+    )
+    .expect("should write main source file");
+    fs::write(root.join("styles/theme.bst"), "#base = \"green\"\n")
+        .expect("should write imported constant source file");
+    let _cwd_guard = CurrentDirGuard::set_to(&root);
+
+    let builder = HtmlProjectBuilder::new();
+    let build_result = build_project(&builder, "main.bst", &[])
+        .expect("struct default should resolve imported constants");
+
+    let html = match build_result.project.output_files[0].file_kind() {
+        FileKind::Html(content) => content,
+        other => panic!(
+            "expected HTML output, got {:?}",
+            std::mem::discriminant(other)
+        ),
+    };
+    assert!(
+        html.contains("green"),
+        "imported constant should be available in struct default value resolution",
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
 fn build_project_rejects_const_record_with_non_constant_argument() {
     let root = temp_dir("const_record_non_constant_arg");
     fs::create_dir_all(&root).expect("should create temp root");

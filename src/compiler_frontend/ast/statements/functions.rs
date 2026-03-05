@@ -57,13 +57,19 @@ impl FunctionSignature {
     pub fn new(
         token_stream: &mut FileTokens,
         string_table: &mut StringTable,
-        _scope: &InternedPath,
+        scope: &InternedPath,
     ) -> Result<Self, CompilerError> {
         // Should start at the Colon
         // Need to skip it,
         token_stream.advance();
 
-        let parameters = parse_parameters(token_stream, &mut true, string_table, false)?;
+        let parameters = parse_parameters(
+            token_stream,
+            &mut true,
+            string_table,
+            false,
+            Some(&ScopeContext::new_constant(scope.to_owned())),
+        )?;
         token_stream.advance();
 
         // parse_parameters leaves us on the closing `|`,

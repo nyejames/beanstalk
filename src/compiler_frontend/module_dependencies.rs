@@ -3,7 +3,7 @@
 // Declarations will be parsed first in the tokenizer now.
 
 use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorLocation};
-use crate::compiler_frontend::headers::parse_file_headers::Header;
+use crate::compiler_frontend::headers::parse_file_headers::{Header, HeaderKind};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::{header_log, return_rule_error};
@@ -128,9 +128,9 @@ fn visit_node(
         // mark temporarily
         tracker.temp_mark.insert(resolved_path.to_owned());
 
-        // recurse on all imports
-        let mut imports = header.dependencies.iter().cloned().collect::<Vec<_>>();
-        imports.sort_by(|left, right| {
+        // recurse on strict imports first
+        let mut strict_imports = header.dependencies.iter().cloned().collect::<Vec<_>>();
+        strict_imports.sort_by(|left, right| {
             let left_order = resolve_graph_path(left, graph, string_table)
                 .and_then(|path| order_lookup.get(&path).copied())
                 .unwrap_or(usize::MAX);
@@ -144,9 +144,88 @@ fn visit_node(
             })
         });
 
-        for import in imports {
+        for import in strict_imports {
             visit_node(&import, tracker, graph, order_lookup, sorted, string_table)?;
         }
+
+        // Struct default-expression dependencies are soft sort edges:
+        // resolve and order them when possible but never fail dependency sorting
+        // if a candidate is unresolved here. AST semantic validation owns those errors.
+        if let HeaderKind::Struct { metadata } = &header.kind {
+            let mut soft_imports = metadata
+                .default_value_dependencies
+                .iter()
+                .filter_map(|dependency| resolve_graph_path(dependency, graph, string_table))
+                .filter(|dependency| {
+                    matches!(
+                        graph.get(dependency).map(|header| &header.kind),
+                        Some(HeaderKind::Constant { .. })
+                    )
+                })
+                .filter(|dependency| dependency != &resolved_path)
+                .collect::<Vec<_>>();
+
+            soft_imports.sort_by(|left, right| {
+                let left_order = order_lookup.get(left).copied().unwrap_or(usize::MAX);
+                let right_order = order_lookup.get(right).copied().unwrap_or(usize::MAX);
+                left_order.cmp(&right_order).then_with(|| {
+                    left.to_portable_string(string_table)
+                        .cmp(&right.to_portable_string(string_table))
+                })
+            });
+            soft_imports.dedup();
+
+            for dependency in soft_imports {
+                visit_node(
+                    &dependency,
+                    tracker,
+                    graph,
+                    order_lookup,
+                    sorted,
+                    string_table,
+                )?;
+            }
+        }
+
+        // Constant declaration symbol dependencies are soft sort edges:
+        // resolve and order them when possible but never fail dependency sorting
+        // if a candidate is unresolved here. AST semantic validation owns those errors.
+        if let HeaderKind::Constant { metadata } = &header.kind {
+            let mut soft_imports = metadata
+                .symbol_dependencies
+                .iter()
+                .filter_map(|dependency| resolve_graph_path(dependency, graph, string_table))
+                .filter(|dependency| {
+                    matches!(
+                        graph.get(dependency).map(|header| &header.kind),
+                        Some(HeaderKind::Struct { .. }) | Some(HeaderKind::Constant { .. })
+                    )
+                })
+                .filter(|dependency| dependency != &resolved_path)
+                .collect::<Vec<_>>();
+
+            soft_imports.sort_by(|left, right| {
+                let left_order = order_lookup.get(left).copied().unwrap_or(usize::MAX);
+                let right_order = order_lookup.get(right).copied().unwrap_or(usize::MAX);
+                left_order.cmp(&right_order).then_with(|| {
+                    left.to_portable_string(string_table)
+                        .cmp(&right.to_portable_string(string_table))
+                })
+            });
+            soft_imports.dedup();
+
+            for dependency in soft_imports {
+                visit_node(
+                    &dependency,
+                    tracker,
+                    graph,
+                    order_lookup,
+                    sorted,
+                    string_table,
+                )?;
+            }
+        }
+
         // when children are done, push this node (clone of context)
         sorted.push(header.clone());
 

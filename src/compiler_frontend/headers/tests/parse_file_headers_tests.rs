@@ -111,6 +111,153 @@ fn exported_constant_dependency_tracks_imported_symbol() {
 }
 
 #[test]
+fn exported_typed_constant_headers_are_parsed_and_follow_on_constant_stays_header() {
+    let headers =
+        parse_single_file_headers("# page String = [: world]\n\n# test = [page: Hello ]\n");
+
+    assert!(
+        matches!(
+            headers.headers.first().map(|header| &header.kind),
+            Some(HeaderKind::Constant { .. })
+        ),
+        "first header should be parsed as a constant"
+    );
+    assert!(
+        matches!(
+            headers.headers.get(1).map(|header| &header.kind),
+            Some(HeaderKind::Constant { .. })
+        ),
+        "follow-on '# test = ...' should remain a constant header"
+    );
+}
+
+#[test]
+fn constant_symbol_dependencies_track_import_struct_and_constant_and_ignore_member_access() {
+    let headers = parse_single_file_headers(
+        "import @(styles/docs/theme)\n\
+         #base = \"seed\"\n\
+         Card = |\n\
+             title String,\n\
+         |\n\
+         #result Card = Card(theme.value + base)\n",
+    );
+
+    let struct_path = headers
+        .headers
+        .iter()
+        .find(|header| matches!(header.kind, HeaderKind::Struct { .. }))
+        .expect("expected struct header")
+        .tokens
+        .src_path
+        .to_owned();
+
+    let base_constant_path = headers
+        .headers
+        .iter()
+        .find(|header| {
+            matches!(
+                &header.kind,
+                HeaderKind::Constant { metadata } if metadata.file_constant_order == 0
+            )
+        })
+        .expect("expected first constant header")
+        .tokens
+        .src_path
+        .to_owned();
+
+    let result_header = headers
+        .headers
+        .iter()
+        .find(|header| {
+            matches!(
+                &header.kind,
+                HeaderKind::Constant { metadata } if metadata.file_constant_order == 1
+            )
+        })
+        .expect("expected result constant header");
+
+    let import_dependency = result_header
+        .dependencies
+        .iter()
+        .next()
+        .expect("result constant should track imported symbol dependency")
+        .to_owned();
+
+    let HeaderKind::Constant { metadata } = &result_header.kind else {
+        panic!("expected constant metadata");
+    };
+
+    assert_eq!(
+        metadata.symbol_dependencies.len(),
+        3,
+        "expected dependencies for imported symbol, local struct, and local constant only"
+    );
+    assert!(
+        metadata.symbol_dependencies.contains(&import_dependency),
+        "constant symbol dependencies should include imported symbols"
+    );
+    assert!(
+        metadata.symbol_dependencies.contains(&struct_path),
+        "constant symbol dependencies should include same-file struct references"
+    );
+    assert!(
+        metadata.symbol_dependencies.contains(&base_constant_path),
+        "constant symbol dependencies should include same-file constant references"
+    );
+}
+
+#[test]
+fn struct_default_dependencies_track_imports_and_local_constants() {
+    let headers = parse_single_file_headers(
+        "import @(styles/docs/theme)\n\
+         #base = \"red\"\n\
+         Card = |\n\
+             title String = theme + base,\n\
+         |\n",
+    );
+    let struct_header = headers
+        .headers
+        .iter()
+        .find(|header| matches!(header.kind, HeaderKind::Struct { .. }))
+        .expect("expected struct header");
+
+    let HeaderKind::Struct { metadata } = &struct_header.kind else {
+        panic!("expected struct metadata");
+    };
+
+    assert_eq!(
+        metadata.default_value_dependencies.len(),
+        2,
+        "struct default dependencies should capture imported and local constant symbols",
+    );
+}
+
+#[test]
+fn struct_default_dependencies_ignore_field_access_member_symbol() {
+    let headers = parse_single_file_headers(
+        "import @(styles/docs/theme)\n\
+         Card = |\n\
+             title String = theme.value,\n\
+         |\n",
+    );
+    let struct_header = headers
+        .headers
+        .iter()
+        .find(|header| matches!(header.kind, HeaderKind::Struct { .. }))
+        .expect("expected struct header");
+
+    let HeaderKind::Struct { metadata } = &struct_header.kind else {
+        panic!("expected struct metadata");
+    };
+
+    assert_eq!(
+        metadata.default_value_dependencies.len(),
+        1,
+        "member symbol after '.' should not be treated as an extra dependency edge",
+    );
+}
+
+#[test]
 fn top_level_const_template_outside_entry_file_errors() {
     let result = parse_single_file_headers_with_entry(
         "#[html.head: [\"x\"]]\n",

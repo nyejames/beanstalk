@@ -71,6 +71,8 @@ impl Ast {
         let mut declared_names_by_file: FxHashMap<InternedPath, FxHashSet<StringId>> =
             FxHashMap::default();
         let mut module_file_paths: FxHashSet<InternedPath> = FxHashSet::default();
+        let mut resolved_struct_fields_by_path: FxHashMap<InternedPath, Vec<Declaration>> =
+            FxHashMap::default();
 
         // Collect every module declaration once.
         // WHY: Resolution stores fully qualified symbol paths.
@@ -106,27 +108,7 @@ impl Ast {
                             .insert(name);
                     }
                 }
-                HeaderKind::Struct => {
-                    let mut struct_tokens = header.tokens.to_owned();
-                    let fields = match create_struct_definition(&mut struct_tokens, string_table) {
-                        Ok(fields) => fields,
-                        Err(e) => {
-                            return Err(CompilerMessages {
-                                errors: vec![e],
-                                warnings,
-                            });
-                        }
-                    };
-
-                    declarations.push(Declaration {
-                        id: header.tokens.src_path.to_owned(),
-                        value: Expression::new(
-                            ExpressionKind::None,
-                            header.name_location.to_owned(),
-                            DataType::Struct(fields, Ownership::MutableOwned),
-                            Ownership::ImmutableReference,
-                        ),
-                    });
+                HeaderKind::Struct { .. } => {
                     importable_symbol_exported
                         .insert(header.tokens.src_path.to_owned(), header.exported);
                     declared_paths_by_file
@@ -208,37 +190,81 @@ impl Ast {
             }
         };
 
-        // Parse exported constant headers into declarations before lowering other bodies.
-        // This keeps constants visible module-wide just like function/struct declarations.
+        // Resolve constants and structs in dependency order with file-scoped visibility.
+        // Struct defaults require constant-context parsing and import gates, so defaults can
+        // consume constants deterministically.
         for header in &sorted_headers {
-            if matches!(header.kind, HeaderKind::Constant { .. }) {
-                let bindings = file_import_bindings
-                    .get(&header.source_file)
-                    .cloned()
-                    .unwrap_or_default();
-                let declaration = match parse_constant_header_declaration(
-                    header,
-                    &declarations,
-                    &bindings.visible_symbol_paths,
-                    &bindings.start_aliases,
-                    host_registry,
-                    string_table,
-                ) {
-                    Ok(declaration) => declaration,
-                    Err(error) => {
-                        return Err(CompilerMessages {
-                            errors: vec![error],
-                            warnings,
-                        });
-                    }
-                };
+            let bindings = file_import_bindings
+                .get(&header.source_file)
+                .cloned()
+                .unwrap_or_default();
 
-                declarations.push(declaration.clone());
-                module_constants.push(declaration);
+            match &header.kind {
+                HeaderKind::Constant { .. } => {
+                    let declaration = match parse_constant_header_declaration(
+                        header,
+                        &declarations,
+                        &bindings.visible_symbol_paths,
+                        &bindings.start_aliases,
+                        host_registry,
+                        string_table,
+                    ) {
+                        Ok(declaration) => declaration,
+                        Err(error) => {
+                            return Err(CompilerMessages {
+                                errors: vec![error],
+                                warnings,
+                            });
+                        }
+                    };
+
+                    declarations.push(declaration.clone());
+                    module_constants.push(declaration);
+                }
+                HeaderKind::Struct { .. } => {
+                    let context = ScopeContext::new(
+                        ContextKind::Constant,
+                        header.tokens.src_path.to_owned(),
+                        &declarations,
+                        host_registry.clone(),
+                        vec![],
+                    )
+                    .with_visible_declarations(bindings.visible_symbol_paths.to_owned())
+                    .with_start_import_aliases(bindings.start_aliases.to_owned());
+
+                    let mut struct_tokens = header.tokens.to_owned();
+                    let fields = match create_struct_definition(
+                        &mut struct_tokens,
+                        &context,
+                        string_table,
+                    ) {
+                        Ok(fields) => fields,
+                        Err(error) => {
+                            return Err(CompilerMessages {
+                                errors: vec![error],
+                                warnings,
+                            });
+                        }
+                    };
+
+                    resolved_struct_fields_by_path
+                        .insert(header.tokens.src_path.to_owned(), fields.to_owned());
+
+                    declarations.push(Declaration {
+                        id: header.tokens.src_path.to_owned(),
+                        value: Expression::new(
+                            ExpressionKind::None,
+                            header.name_location.to_owned(),
+                            DataType::Struct(fields, Ownership::MutableOwned),
+                            Ownership::ImmutableReference,
+                        ),
+                    });
+                }
+                _ => {}
             }
         }
 
-        for mut header in sorted_headers {
+        for header in sorted_headers {
             let bindings = file_import_bindings
                 .get(&header.source_file)
                 .cloned()
@@ -352,12 +378,17 @@ impl Ast {
                     });
                 }
 
-                HeaderKind::Struct => {
-                    let fields = match create_struct_definition(&mut header.tokens, string_table) {
-                        Ok(f) => f,
-                        Err(e) => {
+                HeaderKind::Struct { .. } => {
+                    let fields = match resolved_struct_fields_by_path
+                        .get(&header.tokens.src_path)
+                        .cloned()
+                    {
+                        Some(fields) => fields,
+                        None => {
                             return Err(CompilerMessages {
-                                errors: vec![e],
+                                errors: vec![CompilerError::compiler_error(
+                                    "Struct fields were not resolved before AST emission.",
+                                )],
                                 warnings,
                             });
                         }
@@ -407,10 +438,14 @@ impl Ast {
                         };
 
                     if !template.is_const_renderable_string() {
-                        let error_message = if template.has_unresolved_slots() {
-                            "Top-level const templates can use slots only when they resolve fully at compile time. This slot remained unresolved."
-                        } else {
-                            "Top-level const templates must be fully foldable at compile time."
+                        let error_message = match template.const_value_kind() {
+                            crate::compiler_frontend::ast::templates::template::TemplateConstValueKind::WrapperTemplate => {
+                                "Top-level const templates can use slots only when they resolve fully at compile time. This slot remained unresolved."
+                            }
+                            crate::compiler_frontend::ast::templates::template::TemplateConstValueKind::SlotInsertion => {
+                                "Top-level const templates cannot evaluate to labeled slot insertion helpers. Apply this slot while filling a wrapper template."
+                            }
+                            _ => "Top-level const templates must be fully foldable at compile time.",
                         };
                         return Err(CompilerMessages {
                             errors: vec![CompilerError::new_rule_error(
@@ -567,6 +602,29 @@ impl ScopeContext {
         new_context
     }
 
+    /// Build the context used while parsing template expressions.
+    ///
+    /// Constant contexts stay constant so template-head captures can inline
+    /// compile-time values. All other contexts parse templates as runtime-capable.
+    pub fn new_template_parsing_context(&self) -> ScopeContext {
+        let template_kind = if self.kind.is_constant_context() {
+            self.kind.clone()
+        } else {
+            ContextKind::Template
+        };
+
+        ScopeContext {
+            kind: template_kind,
+            scope: self.scope.clone(),
+            declarations: self.declarations.to_owned(),
+            visible_declaration_ids: self.visible_declaration_ids.clone(),
+            start_import_aliases: self.start_import_aliases.clone(),
+            expected_result_types: vec![],
+            host_registry: self.host_registry.clone(),
+            loop_depth: self.loop_depth,
+        }
+    }
+
     // Can also be a cheeky struct or enum or something
     pub fn new_constant(scope: InternedPath) -> ScopeContext {
         ScopeContext {
@@ -622,7 +680,11 @@ impl ScopeContext {
 macro_rules! new_template_context {
     ($context:expr) => {
         &ScopeContext {
-            kind: ContextKind::Template,
+            kind: if $context.kind.is_constant_context() {
+                $context.kind.clone()
+            } else {
+                ContextKind::Template
+            },
             scope: $context.scope.clone(),
             declarations: $context.declarations.to_owned(),
             visible_declaration_ids: $context.visible_declaration_ids.clone(),
