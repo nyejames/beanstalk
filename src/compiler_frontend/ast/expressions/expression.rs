@@ -3,7 +3,6 @@
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration};
 use crate::compiler_frontend::ast::statements::functions::{FunctionReturn, FunctionSignature};
 use crate::compiler_frontend::ast::templates::create_template_node::Template;
-use crate::compiler_frontend::ast::templates::template::TemplateType;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
@@ -379,15 +378,7 @@ impl Expression {
             ExpressionKind::Range(start, end) => {
                 start.is_compile_time_constant() && end.is_compile_time_constant()
             }
-            ExpressionKind::Template(template) => {
-                matches!(template.kind, TemplateType::String)
-                    && !template.has_unresolved_slots()
-                    && template
-                        .content
-                        .flatten_expressions()
-                        .iter()
-                        .all(|expression| expression.is_compile_time_constant())
-            }
+            ExpressionKind::Template(template) => template.is_const_evaluable_value(),
             ExpressionKind::Reference(_)
             | ExpressionKind::Copy(_)
             | ExpressionKind::Runtime(_)

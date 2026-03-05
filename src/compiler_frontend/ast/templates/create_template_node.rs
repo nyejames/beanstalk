@@ -104,13 +104,11 @@ impl Template {
                             let interned_child = nested_template
                                 .fold_into_stringid(&inherited_style, string_table)?;
 
-                            template.content.add(
-                                Expression::string_slice(
-                                    interned_child,
-                                    token_stream.current_location(),
-                                    Ownership::ImmutableOwned,
-                                ),
-                            );
+                            template.content.add(Expression::string_slice(
+                                interned_child,
+                                token_stream.current_location(),
+                                Ownership::ImmutableOwned,
+                            ));
 
                             continue;
                         }
@@ -132,24 +130,20 @@ impl Template {
                 }
 
                 TokenKind::RawStringLiteral(content) | TokenKind::StringSliceLiteral(content) => {
-                    template.content.add(
-                        Expression::string_slice(
-                            *content,
-                            token_stream.current_location(),
-                            Ownership::ImmutableOwned,
-                        ),
-                    );
+                    template.content.add(Expression::string_slice(
+                        *content,
+                        token_stream.current_location(),
+                        Ownership::ImmutableOwned,
+                    ));
                 }
 
                 TokenKind::Newline => {
                     let newline_id = string_table.intern("\n");
-                    template.content.add(
-                        Expression::string_slice(
-                            newline_id,
-                            token_stream.current_location(),
-                            Ownership::ImmutableOwned,
-                        ),
-                    );
+                    template.content.add(Expression::string_slice(
+                        newline_id,
+                        token_stream.current_location(),
+                        Ownership::ImmutableOwned,
+                    ));
                 }
 
                 TokenKind::TemplateSlotMarker => {
@@ -184,11 +178,8 @@ impl Template {
         );
 
         if let Some(wrapper) = active_wrapper {
-            template.content = compose_template_with_slots(
-                &wrapper,
-                &template.content,
-                &template.location,
-            )?;
+            template.content =
+                compose_template_with_slots(&wrapper, &template.content, &template.location)?;
             foldable &= matches!(wrapper.kind, TemplateType::String);
         } else {
             ensure_no_slot_insertions_remain(&template.content, &template.location)?;
@@ -220,6 +211,20 @@ impl Template {
 
     pub fn has_unresolved_slots(&self) -> bool {
         self.content.has_unresolved_slots()
+    }
+
+    pub fn is_const_evaluable_value(&self) -> bool {
+        // Const template values can still carry unresolved slot markers so they can
+        // be composed by consuming templates during AST construction.
+        matches!(self.kind, TemplateType::String)
+            && !self.content.contains_slot_insertions()
+            && self.content.is_const_evaluable_value()
+    }
+
+    pub fn is_const_renderable_string(&self) -> bool {
+        // Unfilled slots render as empty content when a template is used directly
+        // as a string value, so renderability only requires const-evaluable atoms.
+        self.is_const_evaluable_value()
     }
 
     pub fn insert_template_into_head(
@@ -270,7 +275,12 @@ impl Template {
         inherited_style: &Option<Style>,
         string_table: &mut StringTable,
     ) -> Result<StringId, CompilerError> {
-        fold_atoms(&self.content.atoms, inherited_style, &self.style, string_table)
+        fold_atoms(
+            &self.content.atoms,
+            inherited_style,
+            &self.style,
+            string_table,
+        )
     }
 }
 
@@ -474,10 +484,9 @@ pub fn parse_template_head(
                                 *foldable = false;
                             }
 
-                            template.content.add_with_origin(
-                                expr,
-                                TemplateSegmentOrigin::Head,
-                            );
+                            template
+                                .content
+                                .add_with_origin(expr, TemplateSegmentOrigin::Head);
                             defer_separator_token = true;
                             saw_meaningful_head_item = true;
                         }
@@ -676,10 +685,9 @@ fn fold_atoms(
     // template content
     for atom in atoms {
         let TemplateAtom::Content(segment) = atom else {
-            return_syntax_error!(
-                "Template still contains unresolved slots and cannot be folded into a string.",
-                TextLocation::default().to_error_location(string_table)
-            );
+            // When a slot-bearing template is rendered directly, unfilled slots are
+            // intentionally ignored so the surrounding authored content still renders.
+            continue;
         };
 
         let protects_this_segment = should_protect_formatted_body

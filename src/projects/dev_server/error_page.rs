@@ -132,10 +132,9 @@ pub fn render_runtime_error_page(title: &str, details: &str, build_version: u64)
       border-bottom: 1px solid var(--border);
       background: #fcfcfd;
     }}
-    pre {{
+    .msg {{
       margin: 0;
-      padding: 1.2rem;
-      overflow-x: auto;
+      padding: 1.3rem;
       line-height: 1.45;
       font-size: 0.92rem;
     }}
@@ -146,7 +145,7 @@ pub fn render_runtime_error_page(title: &str, details: &str, build_version: u64)
     <section class="card">
       <header><h1>{escaped_title}</h1></header>
       <div class="meta">Build Version: {build_version} | Timestamp (unix): {timestamp}</div>
-      <pre>{escaped_details}</pre>
+      <div class="msg">{escaped_details}</div>
     </section>
   </main>
   {DEV_CLIENT_MARKER}

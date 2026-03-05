@@ -111,24 +111,30 @@ fn rejects_style_directives_outside_template_heads() {
 fn tokenizes_template_slot_markers_in_template_bodies() {
     let (file_tokens, _) = tokenize_source("[: before [   ....   ] after]");
 
-    assert!(file_tokens
-        .tokens
-        .iter()
-        .any(|token| matches!(token.kind, TokenKind::TemplateSlotMarker)));
+    assert!(
+        file_tokens
+            .tokens
+            .iter()
+            .any(|token| matches!(token.kind, TokenKind::TemplateSlotMarker))
+    );
 }
 
 #[test]
 fn tokenizes_labeled_slot_targets_inside_template_heads() {
     let (file_tokens, _) = tokenize_source("[wrapper: [$1: first][$2]]");
 
-    assert!(file_tokens
-        .tokens
-        .iter()
-        .any(|token| matches!(token.kind, TokenKind::SlotTarget(1))));
-    assert!(file_tokens
-        .tokens
-        .iter()
-        .any(|token| matches!(token.kind, TokenKind::SlotTarget(2))));
+    assert!(
+        file_tokens
+            .tokens
+            .iter()
+            .any(|token| matches!(token.kind, TokenKind::SlotTarget(1)))
+    );
+    assert!(
+        file_tokens
+            .tokens
+            .iter()
+            .any(|token| matches!(token.kind, TokenKind::SlotTarget(2)))
+    );
 }
 
 #[test]

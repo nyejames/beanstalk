@@ -55,9 +55,14 @@ impl<'a> HirBuilder<'a> {
                 .insert(declaration.id.to_owned(), declaration.to_owned());
 
             let location = declaration.value.location.to_owned();
+            let Some(const_value) =
+                self.lower_const_value_for_module_pool(&declaration.value, &location)?
+            else {
+                continue;
+            };
+
             let const_id = self.allocate_const_id();
             let const_type = self.lower_data_type(&declaration.value.data_type, &location)?;
-            let const_value = self.lower_const_value(&declaration.value, &location)?;
 
             self.module.module_constants.push(HirModuleConst {
                 id: const_id,
@@ -68,6 +73,35 @@ impl<'a> HirBuilder<'a> {
         }
 
         Ok(())
+    }
+
+    fn lower_const_value_for_module_pool(
+        &mut self,
+        expression: &Expression,
+        location: &TextLocation,
+    ) -> Result<Option<HirConstValue>, CompilerError> {
+        // Slot wrappers are compile-time composition helpers owned by AST template
+        // composition. They are valid constants for AST folding, but they are not
+        // concrete runtime metadata values for HIR module constant pools.
+        if let ExpressionKind::Template(template) = &expression.kind {
+            if template.has_unresolved_slots() {
+                return Ok(None);
+            }
+
+            if !template.is_const_renderable_string() {
+                return_hir_transformation_error!(
+                    "Template constant reached HIR without being fully renderable at compile time.",
+                    self.hir_error_location(location)
+                );
+            }
+
+            let folded = template.fold_into_stringid(&None, self.string_table)?;
+            return Ok(Some(HirConstValue::String(
+                self.string_table.resolve(folded).to_string(),
+            )));
+        }
+
+        self.lower_const_value(expression, location).map(Some)
     }
 
     fn lower_const_value(

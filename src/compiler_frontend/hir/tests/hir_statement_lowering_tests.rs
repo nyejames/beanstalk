@@ -263,6 +263,63 @@ fn start_function_can_reference_module_constant() {
 }
 
 #[test]
+fn omits_unresolved_slot_wrapper_constants_from_hir_const_pool() {
+    let mut string_table = StringTable::new();
+    let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
+
+    let start_function = function_node(
+        start_name,
+        FunctionSignature {
+            parameters: vec![],
+            returns: vec![],
+        },
+        vec![],
+        test_location(1),
+    );
+
+    let mut wrapper_template = Template::create_default(vec![]);
+    wrapper_template.kind =
+        crate::compiler_frontend::ast::templates::template::TemplateType::String;
+    wrapper_template.location = test_location(2);
+    wrapper_template.content.add(Expression::string_slice(
+        string_table.intern("before "),
+        test_location(2),
+        Ownership::ImmutableOwned,
+    ));
+    wrapper_template.content.push_slot();
+    wrapper_template.content.add(Expression::string_slice(
+        string_table.intern(" after"),
+        test_location(2),
+        Ownership::ImmutableOwned,
+    ));
+
+    let mut ast = build_ast(vec![start_function], entry_path);
+    ast.module_constants.push(var(
+        symbol("WRAPPER", &mut string_table),
+        Expression::template(wrapper_template, Ownership::ImmutableOwned),
+    ));
+    ast.module_constants.push(var(
+        symbol("READY", &mut string_table),
+        Expression::string_slice(
+            string_table.intern("materialized"),
+            test_location(3),
+            Ownership::ImmutableOwned,
+        ),
+    ));
+
+    let module =
+        lower_ast(ast, &mut string_table).expect("HIR lowering should skip unresolved wrappers");
+
+    assert_eq!(module.module_constants.len(), 1);
+    let constant = &module.module_constants[0];
+    assert_eq!(constant.name, "READY");
+    assert!(matches!(
+        constant.value,
+        HirConstValue::String(ref value) if value == "materialized"
+    ));
+}
+
+#[test]
 fn lowers_struct_module_constant_into_record_with_ordered_fields() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);

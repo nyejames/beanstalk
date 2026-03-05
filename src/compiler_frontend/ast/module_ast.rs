@@ -7,7 +7,6 @@ use crate::compiler_frontend::ast::import_bindings::{
 use crate::compiler_frontend::ast::statements::functions::{FunctionReturn, FunctionSignature};
 use crate::compiler_frontend::ast::statements::structs::create_struct_definition;
 use crate::compiler_frontend::ast::templates::create_template_node::Template;
-use crate::compiler_frontend::ast::templates::template::TemplateType;
 use crate::compiler_frontend::ast::templates::top_level_templates::synthesize_start_template_items;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
@@ -407,8 +406,7 @@ impl Ast {
                             }
                         };
 
-                    if !matches!(template.kind, TemplateType::String) || template.has_unresolved_slots()
-                    {
+                    if !template.is_const_renderable_string() {
                         let error_message = if template.has_unresolved_slots() {
                             "Top-level const templates can use slots only when they resolve fully at compile time. This slot remained unresolved."
                         } else {

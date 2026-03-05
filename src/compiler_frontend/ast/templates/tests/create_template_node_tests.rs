@@ -389,25 +389,49 @@ fn slot_wrappers_remain_compile_time_templates_until_filled() {
 
     assert!(matches!(template.kind, TemplateType::String));
     assert!(template.has_unresolved_slots());
+    assert!(Expression::template(template, Ownership::ImmutableOwned).is_compile_time_constant());
+}
+
+#[test]
+fn wrapper_templates_with_runtime_references_are_not_compile_time_constants() {
+    let mut string_table = StringTable::new();
+    let mut token_stream =
+        template_tokens_from_source("[value: before [..] after]", &mut string_table);
+    let context = runtime_template_context(&token_stream.src_path, &mut string_table);
+
+    let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
+        .expect("runtime wrapper template should parse");
+
+    assert!(matches!(template.kind, TemplateType::StringFunction));
+    assert!(template.has_unresolved_slots());
     assert!(!Expression::template(template, Ownership::ImmutableOwned).is_compile_time_constant());
 }
 
 #[test]
 fn fills_single_slot_templates_in_source_order() {
     let mut string_table = StringTable::new();
-    let wrapper_scope = InternedPath::from_single_str("main.bst/#const_template0", &mut string_table);
-    let mut wrapper_tokens = template_tokens_from_source("[: before [..] after]", &mut string_table);
+    let wrapper_scope =
+        InternedPath::from_single_str("main.bst/#const_template0", &mut string_table);
+    let mut wrapper_tokens =
+        template_tokens_from_source("[: before [..] after]", &mut string_table);
     let wrapper_context = ScopeContext::new_constant(wrapper_tokens.src_path.to_owned());
-    let wrapper = Template::new(&mut wrapper_tokens, &wrapper_context, vec![], &mut string_table)
-        .expect("wrapper should parse");
+    let wrapper = Template::new(
+        &mut wrapper_tokens,
+        &wrapper_context,
+        vec![],
+        &mut string_table,
+    )
+    .expect("wrapper should parse");
 
     let declaration = Declaration {
         id: wrapper_scope.append(string_table.intern("single_slot")),
         value: Expression::template(wrapper, Ownership::ImmutableOwned),
     };
 
-    let mut token_stream =
-        template_tokens_from_source("[single_slot: this content is now wrapped]", &mut string_table);
+    let mut token_stream = template_tokens_from_source(
+        "[single_slot: this content is now wrapped]",
+        &mut string_table,
+    );
     let context = constant_template_context(&token_stream.src_path, &[declaration]);
 
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
@@ -425,14 +449,20 @@ fn fills_single_slot_templates_in_source_order() {
 #[test]
 fn fills_multiple_slots_with_ordered_labels() {
     let mut string_table = StringTable::new();
-    let wrapper_scope = InternedPath::from_single_str("main.bst/#const_template0", &mut string_table);
+    let wrapper_scope =
+        InternedPath::from_single_str("main.bst/#const_template0", &mut string_table);
     let mut wrapper_tokens = template_tokens_from_source(
         "[: before [..] in the middle [..] afterwards]",
         &mut string_table,
     );
     let wrapper_context = ScopeContext::new_constant(wrapper_tokens.src_path.to_owned());
-    let wrapper = Template::new(&mut wrapper_tokens, &wrapper_context, vec![], &mut string_table)
-        .expect("wrapper should parse");
+    let wrapper = Template::new(
+        &mut wrapper_tokens,
+        &wrapper_context,
+        vec![],
+        &mut string_table,
+    )
+    .expect("wrapper should parse");
 
     let declaration = Declaration {
         id: wrapper_scope.append(string_table.intern("basic_slots")),
@@ -470,14 +500,20 @@ fn fills_multiple_slots_with_ordered_labels() {
 #[test]
 fn allows_explicitly_empty_slots() {
     let mut string_table = StringTable::new();
-    let wrapper_scope = InternedPath::from_single_str("main.bst/#const_template0", &mut string_table);
+    let wrapper_scope =
+        InternedPath::from_single_str("main.bst/#const_template0", &mut string_table);
     let mut wrapper_tokens = template_tokens_from_source(
         "[: before [..] in the middle [..] afterwards]",
         &mut string_table,
     );
     let wrapper_context = ScopeContext::new_constant(wrapper_tokens.src_path.to_owned());
-    let wrapper = Template::new(&mut wrapper_tokens, &wrapper_context, vec![], &mut string_table)
-        .expect("wrapper should parse");
+    let wrapper = Template::new(
+        &mut wrapper_tokens,
+        &wrapper_context,
+        vec![],
+        &mut string_table,
+    )
+    .expect("wrapper should parse");
 
     let declaration = Declaration {
         id: wrapper_scope.append(string_table.intern("basic_slots")),
@@ -503,14 +539,20 @@ fn allows_explicitly_empty_slots() {
 #[test]
 fn rejects_missing_required_slot_use() {
     let mut string_table = StringTable::new();
-    let wrapper_scope = InternedPath::from_single_str("main.bst/#const_template0", &mut string_table);
+    let wrapper_scope =
+        InternedPath::from_single_str("main.bst/#const_template0", &mut string_table);
     let mut wrapper_tokens = template_tokens_from_source(
         "[: before [..] in the middle [..] afterwards]",
         &mut string_table,
     );
     let wrapper_context = ScopeContext::new_constant(wrapper_tokens.src_path.to_owned());
-    let wrapper = Template::new(&mut wrapper_tokens, &wrapper_context, vec![], &mut string_table)
-        .expect("wrapper should parse");
+    let wrapper = Template::new(
+        &mut wrapper_tokens,
+        &wrapper_context,
+        vec![],
+        &mut string_table,
+    )
+    .expect("wrapper should parse");
 
     let declaration = Declaration {
         id: wrapper_scope.append(string_table.intern("basic_slots")),
@@ -530,24 +572,28 @@ fn rejects_missing_required_slot_use() {
 #[test]
 fn rejects_out_of_order_labeled_slots() {
     let mut string_table = StringTable::new();
-    let wrapper_scope = InternedPath::from_single_str("main.bst/#const_template0", &mut string_table);
+    let wrapper_scope =
+        InternedPath::from_single_str("main.bst/#const_template0", &mut string_table);
     let mut wrapper_tokens = template_tokens_from_source(
         "[: before [..] in the middle [..] afterwards]",
         &mut string_table,
     );
     let wrapper_context = ScopeContext::new_constant(wrapper_tokens.src_path.to_owned());
-    let wrapper = Template::new(&mut wrapper_tokens, &wrapper_context, vec![], &mut string_table)
-        .expect("wrapper should parse");
+    let wrapper = Template::new(
+        &mut wrapper_tokens,
+        &wrapper_context,
+        vec![],
+        &mut string_table,
+    )
+    .expect("wrapper should parse");
 
     let declaration = Declaration {
         id: wrapper_scope.append(string_table.intern("basic_slots")),
         value: Expression::template(wrapper, Ownership::ImmutableOwned),
     };
 
-    let mut token_stream = template_tokens_from_source(
-        "[basic_slots: [$2: second] [$1: first]]",
-        &mut string_table,
-    );
+    let mut token_stream =
+        template_tokens_from_source("[basic_slots: [$2: second] [$1: first]]", &mut string_table);
     let context = constant_template_context(&token_stream.src_path, &[declaration]);
 
     let error = Template::new(&mut token_stream, &context, vec![], &mut string_table)

@@ -609,7 +609,8 @@ pub fn create_expression(
                             token_stream.advance();
                         }
 
-                        if template.has_unresolved_slots() {
+                        if !template.is_const_renderable_string() || template.has_unresolved_slots()
+                        {
                             return Ok(Expression::template(template, ownership.to_owned()));
                         }
 

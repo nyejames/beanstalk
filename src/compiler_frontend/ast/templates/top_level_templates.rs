@@ -8,7 +8,6 @@
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::statements::functions::{FunctionReturn, FunctionSignature};
-use crate::compiler_frontend::ast::templates::template::TemplateType;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::headers::parse_file_headers::{
@@ -114,21 +113,13 @@ pub(crate) fn synthesize_start_template_items(
 
                 // Runtime template expressions can still fold to constants after AST folding.
                 // Keep them as const fragments to avoid generating unnecessary wrapper functions.
-                if matches!(template.kind, TemplateType::String) && !template.has_unresolved_slots()
-                {
+                if template.is_const_renderable_string() {
                     let folded = template.fold_into_stringid(&None, string_table)?;
                     start_template_items.push(AstStartTemplateItem::ConstString {
                         value: folded,
                         location: candidate.location.to_owned(),
                     });
                     continue;
-                }
-
-                if template.has_unresolved_slots() {
-                    return Err(CompilerError::new_rule_error(
-                        "Top-level templates must resolve all slots before they can be emitted.",
-                        candidate.location.to_error_location(string_table),
-                    ));
                 }
 
                 let fragment_name =

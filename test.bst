@@ -23,15 +23,15 @@ io(template_using_slots)
 -- COMPILETIME
 
 -- Single slot example
-# single_slot2 = [: before [..] after]
+# single_slot2 = [: BEFORE [..] AFTER]
 
 # wrapped_content2 = [single_slot2: this content is now wrapped]
 
--- Create top level const template
-#[wrapped_content2]
+-- Create runtime top level template
+[wrapped_content2:<br><br><br>]
 
 -- Multiple slots example
-# basic_slots2 = [: before [..] in the middle [..] afterwards]
+# basic_slots2 = [: BEFORE [..] MIDDLE [..] AFTER]
 
 # template_using_slots2 = [basic_slots2:
     this text goes before any slots

@@ -101,22 +101,46 @@ fn runtime_template_expression(location: TextLocation, content: Vec<Expression>)
 }
 
 #[test]
-fn rejects_templates_with_unresolved_slots_during_hir_lowering() {
+fn unresolved_slots_are_ignored_when_lowering_runtime_templates() {
     let mut string_table = StringTable::new();
+    let before = string_table.intern("before ");
+    let after = string_table.intern("after");
     let location = TextLocation::new_just_line(1);
     let mut builder = setup_builder(&mut string_table);
 
     let mut template = Template::create_default(vec![]);
     template.location = location.clone();
+    template.content.add(Expression::string_slice(
+        before,
+        location.clone(),
+        Ownership::ImmutableOwned,
+    ));
     template.content.push_slot();
+    template.content.add(Expression::string_slice(
+        after,
+        location,
+        Ownership::ImmutableOwned,
+    ));
     template.kind = crate::compiler_frontend::ast::templates::template::TemplateType::String;
 
-    let error = builder
+    let lowered = builder
         .lower_expression(&Expression::template(template, Ownership::ImmutableOwned))
-        .expect_err("unresolved slot templates should not reach HIR");
+        .expect("unresolved slots should be ignored in runtime template lowering");
 
-    assert_eq!(error.error_type, ErrorType::HirTransformation);
-    assert!(error.msg.contains("Slot resolution must happen in the AST"));
+    let args = match &lowered.prelude[0].kind {
+        HirStatementKind::Call { args, .. } => args,
+        other => panic!("expected synthetic template call, got {other:?}"),
+    };
+
+    assert_eq!(args.len(), 2);
+    assert!(matches!(
+        args[0].kind,
+        HirExpressionKind::StringLiteral(ref value) if value == "before "
+    ));
+    assert!(matches!(
+        args[1].kind,
+        HirExpressionKind::StringLiteral(ref value) if value == "after"
+    ));
 }
 
 #[test]

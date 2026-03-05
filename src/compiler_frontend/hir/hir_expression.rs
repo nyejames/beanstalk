@@ -287,14 +287,9 @@ impl<'a> HirBuilder<'a> {
         template: &Template,
         location: &TextLocation,
     ) -> Result<LoweredExpression, CompilerError> {
-        if template.has_unresolved_slots() {
-            return_hir_transformation_error!(
-                "Slot resolution must happen in the AST before HIR lowering.",
-                self.hir_error_location(location)
-            );
-        }
-
-        let chunks = template.content.flatten_renderable_segments()?;
+        // Unfilled slots are rendered as empty strings when templates are used directly.
+        // Keep lowering focused on the authored content atoms that carry expressions.
+        let chunks = template.content.flatten_expressions();
         let chunk_types: Vec<DataType> =
             chunks.iter().map(|chunk| chunk.data_type.clone()).collect();
         let template_function = self.create_runtime_template_function(&chunk_types, location)?;
@@ -1156,6 +1151,22 @@ impl<'a> HirBuilder<'a> {
         let Some(constant_declaration) = self.module_constants_by_name.get(name).cloned() else {
             return Ok(None);
         };
+
+        if let ExpressionKind::Template(template) = &constant_declaration.value.kind
+            && template.is_const_renderable_string()
+        {
+            let folded = template.fold_into_stringid(&None, self.string_table)?;
+            let string_ty = self.intern_type_kind(HirTypeKind::String);
+            let region = self.current_region_or_error(location)?;
+
+            return Ok(Some(self.make_expression(
+                location,
+                HirExpressionKind::StringLiteral(self.string_table.resolve(folded).to_owned()),
+                string_ty,
+                ValueKind::Const,
+                region,
+            )));
+        }
 
         if !self.currently_lowering_constants.insert(name.to_owned()) {
             return_hir_transformation_error!(

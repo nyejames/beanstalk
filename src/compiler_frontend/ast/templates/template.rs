@@ -3,8 +3,8 @@
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::templates::create_template_node::Template;
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use std::sync::Arc;
 use crate::return_rule_error;
+use std::sync::Arc;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum TemplateType {
@@ -73,7 +73,15 @@ impl TemplateContent {
     }
 
     pub fn contains_slot_insertions(&self) -> bool {
-        self.atoms.iter().any(TemplateAtom::contains_slot_insertions)
+        self.atoms
+            .iter()
+            .any(TemplateAtom::contains_slot_insertions)
+    }
+
+    pub fn is_const_evaluable_value(&self) -> bool {
+        self.atoms
+            .iter()
+            .all(TemplateAtom::is_const_evaluable_value)
     }
 
     pub fn split_by_slots(&self) -> Vec<Vec<TemplateAtom>> {
@@ -145,12 +153,13 @@ impl TemplateContent {
         // When a template is unpacked into another template head, its content should
         // behave like head content in the receiving template, even if it originally
         // came from a body. Retagging preserves the new formatter boundary rules.
-        self.atoms.extend(other.atoms.into_iter().map(|atom| match atom {
-            TemplateAtom::Content(segment) => {
-                TemplateAtom::Content(segment.with_origin(origin))
-            }
-            TemplateAtom::Slot => TemplateAtom::Slot,
-        }));
+        self.atoms
+            .extend(other.atoms.into_iter().map(|atom| match atom {
+                TemplateAtom::Content(segment) => {
+                    TemplateAtom::Content(segment.with_origin(origin))
+                }
+                TemplateAtom::Slot => TemplateAtom::Slot,
+            }));
     }
 }
 
@@ -184,6 +193,20 @@ impl TemplateAtom {
                         || template.content.contains_slot_insertions()
                 }
                 _ => false,
+            },
+        }
+    }
+
+    fn is_const_evaluable_value(&self) -> bool {
+        match self {
+            // Unresolved slots are allowed for compile-time wrapper values.
+            // They only become invalid when a fully rendered string is required.
+            TemplateAtom::Slot => true,
+            TemplateAtom::Content(segment) => match &segment.expression.kind {
+                crate::compiler_frontend::ast::expressions::expression::ExpressionKind::Template(
+                    template,
+                ) => template.is_const_evaluable_value(),
+                _ => segment.expression.is_compile_time_constant(),
             },
         }
     }

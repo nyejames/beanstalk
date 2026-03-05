@@ -584,20 +584,18 @@ fn resolve_import_to_file(
         }
     }
 
-    Err(
-        CompilerError::new_syntax_error(
-            format!(
-                "Could not resolve import '{}'. Tried entry root '{}' and configured library roots.",
-                import_path.to_portable_string(string_table),
-                source_root
-                    .strip_prefix(project_root)
-                    .unwrap_or(source_root)
-                    .display(),
-            ),
-            ErrorLocation::default(),
-        )
-        .with_file_path(importer_file.to_path_buf()),
+    Err(CompilerError::new_syntax_error(
+        format!(
+            "Could not resolve import '{}'. Tried entry root '{}' and configured library roots.",
+            import_path.to_portable_string(string_table),
+            source_root
+                .strip_prefix(project_root)
+                .unwrap_or(source_root)
+                .display(),
+        ),
+        ErrorLocation::default(),
     )
+    .with_file_path(importer_file.to_path_buf()))
 }
 
 fn candidate_import_files(

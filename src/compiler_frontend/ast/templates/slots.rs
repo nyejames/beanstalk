@@ -1,6 +1,8 @@
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
 use crate::compiler_frontend::ast::templates::create_template_node::Template;
-use crate::compiler_frontend::ast::templates::template::{TemplateAtom, TemplateContent, TemplateType};
+use crate::compiler_frontend::ast::templates::template::{
+    TemplateAtom, TemplateContent, TemplateType,
+};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::tokenizer::tokens::TextLocation;
 use crate::return_rule_error;
@@ -147,9 +149,7 @@ fn slot_out_of_range_error(
     location: &TextLocation,
 ) -> Result<TemplateContent, CompilerError> {
     return_rule_error!(
-        format!(
-            "Slot ${slot_index} is out of range. This template defines {slot_count} slot(s)."
-        ),
+        format!("Slot ${slot_index} is out of range. This template defines {slot_count} slot(s)."),
         location.to_owned().to_error_location_without_table()
     );
 }
