@@ -10,6 +10,6 @@
 # title = "Test Title"
 
 -- Colors for the documentation website
-#  red = [:<span style="color: red;">[..]</span>],
-#  green = [:<span style="color: green;">[..]</span>],
-#  blue = [:<span style="color: blue;">[..]</span>],
+# red = [:<span style="color: red;">[..]</span>],
+# green = [:<span style="color: green;">[..]</span>],
+# blue = [:<span style="color: blue;">[..]</span>],

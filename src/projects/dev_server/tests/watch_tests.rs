@@ -2,7 +2,7 @@
 
 use super::{
     FileFingerprint, collect_fingerprints, detect_changes, should_ignore_path,
-    should_trigger_debounced_build,
+    should_trigger_debounced_build, should_trigger_debounced_build_at,
 };
 use std::collections::HashMap;
 use std::fs;
@@ -75,16 +75,34 @@ fn detects_modified_file_fingerprints() {
 
 #[test]
 fn debounce_trigger_only_after_window() {
-    let dirty_since = Instant::now();
-    assert!(!should_trigger_debounced_build(
-        Some(dirty_since),
+    let now = Instant::now();
+    let just_dirty = now
+        .checked_sub(Duration::from_millis(50))
+        .expect("checked_sub should produce a valid instant");
+    let old_dirty = now
+        .checked_sub(Duration::from_secs(2))
+        .expect("checked_sub should produce a valid instant");
+
+    assert!(!should_trigger_debounced_build_at(
+        Some(just_dirty),
+        now,
+        Duration::from_millis(100)
+    ));
+    assert!(should_trigger_debounced_build_at(
+        Some(old_dirty),
+        now,
+        Duration::from_millis(100)
+    ));
+    assert!(!should_trigger_debounced_build_at(
+        None,
+        now,
         Duration::from_millis(100)
     ));
 
-    std::thread::sleep(Duration::from_millis(110));
-    assert!(should_trigger_debounced_build(
-        Some(dirty_since),
-        Duration::from_millis(100)
+    // Keep one smoke check on the public wrapper that uses Instant::now internally.
+    assert!(!should_trigger_debounced_build(
+        Some(Instant::now()),
+        Duration::from_secs(10)
     ));
 }
 

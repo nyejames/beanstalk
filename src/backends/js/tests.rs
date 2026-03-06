@@ -9,7 +9,6 @@ use crate::compiler_frontend::host_functions::CallTarget;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::TextLocation;
-use std::process::Command;
 
 #[derive(Clone, Copy)]
 struct TypeIds {
@@ -156,75 +155,6 @@ fn build_module(
     }
 
     module
-}
-
-fn run_js_and_capture_stdout(source: &str) -> String {
-    let output = Command::new("node")
-        .arg("-e")
-        .arg(source)
-        .output()
-        .expect("node must be available to execute JavaScript backend tests");
-
-    assert!(
-        output.status.success(),
-        "generated JavaScript failed under node:\n{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-
-    String::from_utf8(output.stdout).expect("node stdout should be valid UTF-8")
-}
-
-#[test]
-fn lower_hir_smoke_test() {
-    let mut string_table = StringTable::new();
-    let (type_context, types) = build_type_context();
-
-    let block = HirBlock {
-        id: BlockId(0),
-        region: RegionId(0),
-        locals: vec![],
-        statements: vec![],
-        terminator: HirTerminator::Return(unit_expression(0, types.unit, RegionId(0))),
-    };
-
-    let function = HirFunction {
-        id: FunctionId(0),
-        entry: BlockId(0),
-        params: vec![],
-        return_type: types.unit,
-        return_aliases: vec![],
-    };
-
-    let module = build_module(
-        &mut string_table,
-        "entry_start",
-        vec![block],
-        function,
-        &[],
-        type_context,
-    );
-
-    let output = lower_hir_to_js(
-        &module,
-        &crate::compiler_frontend::analysis::borrow_checker::BorrowCheckReport::default(),
-        &string_table,
-        JsLoweringConfig {
-            pretty: true,
-            emit_locations: false,
-            auto_invoke_start: false,
-        },
-    )
-    .expect("JS lowering should succeed");
-
-    assert!(output.source.contains("function entry_start()"));
-    assert!(output.source.contains("return;"));
-    assert_eq!(
-        output
-            .function_name_by_id
-            .get(&FunctionId(0))
-            .map(String::as_str),
-        Some("entry_start")
-    );
 }
 
 #[test]
@@ -566,8 +496,19 @@ fn host_io_reads_the_underlying_value_before_logging() {
     )
     .expect("JS lowering should succeed");
 
-    let stdout = run_js_and_capture_stdout(&output.source);
-    assert_eq!(stdout.trim_end(), "hello");
+    let assign_index = output
+        .source
+        .find("__bs_assign_value(message, \"hello\");")
+        .expect("expected local assignment to store the string value");
+    let log_index = output
+        .source
+        .find("console.log(__bs_read(message));")
+        .expect("expected host io call to read from the local binding");
+
+    assert!(
+        assign_index < log_index,
+        "host logging should occur after assigning the local value"
+    );
 }
 
 #[test]

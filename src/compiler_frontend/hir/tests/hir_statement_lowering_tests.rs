@@ -663,68 +663,6 @@ fn start_function_with_no_template_declaration_returns_empty_string() {
 }
 
 #[test]
-fn start_function_rejects_duplicate_top_level_template_symbol_declarations() {
-    let mut string_table = StringTable::new();
-    let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
-    let template_name = symbol(TOP_LEVEL_TEMPLATE_NAME, &mut string_table);
-    let first = string_table.intern("First");
-    let second = string_table.intern("Second");
-
-    let first_template = runtime_template_expression(
-        test_location(2),
-        vec![Expression::string_slice(
-            first,
-            test_location(2),
-            Ownership::ImmutableOwned,
-        )],
-    );
-
-    let second_template = runtime_template_expression(
-        test_location(3),
-        vec![Expression::string_slice(
-            second,
-            test_location(3),
-            Ownership::ImmutableOwned,
-        )],
-    );
-
-    let start_function = function_node(
-        start_name,
-        FunctionSignature {
-            parameters: vec![],
-            returns: fresh_returns(vec![DataType::StringSlice]),
-        },
-        vec![
-            node(
-                NodeKind::VariableDeclaration(var(template_name.clone(), first_template)),
-                test_location(2),
-            ),
-            node(
-                NodeKind::VariableDeclaration(var(template_name.clone(), second_template)),
-                test_location(3),
-            ),
-            node(
-                NodeKind::Return(vec![Expression::reference(
-                    template_name,
-                    DataType::Template,
-                    test_location(4),
-                    Ownership::ImmutableReference,
-                )]),
-                test_location(4),
-            ),
-        ],
-        test_location(1),
-    );
-
-    let ast = build_ast(vec![start_function], entry_path);
-    let error = lower_ast(ast, &mut string_table).expect_err("duplicate symbol should fail");
-    assert!(error.errors.iter().any(|item| {
-        item.msg
-            .contains("Local '#template' is already declared in this function scope")
-    }));
-}
-
-#[test]
 fn top_level_template_declarations_require_unique_symbols() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);

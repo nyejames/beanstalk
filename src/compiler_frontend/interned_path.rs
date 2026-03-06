@@ -261,6 +261,8 @@ impl Default for InternedPath {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+    use std::time::SystemTime;
 
     #[test]
     fn to_portable_string_normalizes_windows_separator() {
@@ -275,11 +277,21 @@ mod tests {
     }
 
     #[test]
-    fn from_path_buf_round_trips_current_directory() {
+    fn from_path_buf_round_trips_temp_directory_path() {
         let mut string_table = StringTable::new();
-        let current_dir = std::env::current_dir().expect("current dir should be available");
-        let path = InternedPath::from_path_buf(&current_dir, &mut string_table);
+        let unique = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .expect("system time should be after unix epoch")
+            .as_nanos();
+        let temp_dir = std::env::temp_dir().join(format!("beanstalk_interned_path_{unique}"));
+        fs::create_dir_all(&temp_dir).expect("should create temp directory");
 
-        assert_eq!(path.to_path_buf(&string_table), current_dir);
+        let canonical = temp_dir
+            .canonicalize()
+            .expect("temp directory should canonicalize");
+        let path = InternedPath::from_path_buf(&canonical, &mut string_table);
+        assert_eq!(path.to_path_buf(&string_table), canonical);
+
+        fs::remove_dir_all(&temp_dir).expect("should remove temp directory");
     }
 }

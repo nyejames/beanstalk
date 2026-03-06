@@ -80,8 +80,16 @@ pub fn should_trigger_debounced_build(
     dirty_since: Option<Instant>,
     debounce_window: Duration,
 ) -> bool {
+    should_trigger_debounced_build_at(dirty_since, Instant::now(), debounce_window)
+}
+
+fn should_trigger_debounced_build_at(
+    dirty_since: Option<Instant>,
+    now: Instant,
+    debounce_window: Duration,
+) -> bool {
     match dirty_since {
-        Some(first_dirty_at) => first_dirty_at.elapsed() >= debounce_window,
+        Some(first_dirty_at) => now.saturating_duration_since(first_dirty_at) >= debounce_window,
         None => false,
     }
 }

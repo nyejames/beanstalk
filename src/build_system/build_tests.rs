@@ -85,11 +85,18 @@ impl ProjectBuilder for WarningBuilder {
 fn build_project_returns_result_without_writing_files() {
     let root = temp_dir("build_only");
     fs::create_dir_all(&root).expect("should create temp root");
-    fs::write(root.join("main.bst"), "value = 1\n").expect("should write source file");
-    let _cwd_guard = CurrentDirGuard::set_to(&root);
+    let entry_file = root.join("main.bst");
+    fs::write(&entry_file, "value = 1\n").expect("should write source file");
 
     let builder = HtmlProjectBuilder::new();
-    let result = build_project(&builder, "main.bst", &[]).expect("build should succeed");
+    let result = build_project(
+        &builder,
+        entry_file
+            .to_str()
+            .expect("temp file path should be valid UTF-8 for this test"),
+        &[],
+    )
+    .expect("build should succeed");
 
     assert!(!result.project.output_files.is_empty());
     assert!(

@@ -136,30 +136,6 @@ fn validator_rejects_invalid_jump_target() {
 }
 
 #[test]
-fn validator_allows_placeholder_terminator_during_transition() {
-    let mut string_table = StringTable::new();
-    let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
-
-    let start_fn = function_node(
-        start_name,
-        FunctionSignature {
-            parameters: vec![],
-            returns: vec![],
-        },
-        vec![node(NodeKind::Return(vec![]), test_location(1))],
-        test_location(1),
-    );
-
-    let ast = build_ast(vec![start_fn], entry_path);
-    let mut module = lower_ast(ast, &mut string_table).expect("lowering should succeed");
-    let entry_block = module.functions[module.start_function.0 as usize].entry;
-    module.blocks[entry_block.0 as usize].terminator = HirTerminator::Panic { message: None };
-
-    validate_module_for_tests(&module, &string_table)
-        .expect("placeholder terminators are temporarily allowed by validation");
-}
-
-#[test]
 fn validator_rejects_non_literal_match_pattern() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);

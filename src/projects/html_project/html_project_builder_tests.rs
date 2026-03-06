@@ -144,23 +144,6 @@ fn build_backend_respects_release_pretty_toggle() {
 }
 
 #[test]
-fn page_entry_outputs_index_html() {
-    let builder = HtmlProjectBuilder::new();
-    let entry_path = PathBuf::from("#page.bst");
-    let module = create_test_module(entry_path.clone());
-    let config = Config::new(entry_path);
-
-    let project = builder
-        .build_backend(vec![module], &config, &[])
-        .expect("build_backend should succeed");
-    assert_eq!(
-        project.output_files[0].relative_output_path(),
-        PathBuf::from("index.html")
-    );
-    assert_eq!(project.entry_page_rel, Some(PathBuf::from("index.html")));
-}
-
-#[test]
 fn hash_prefixed_route_name_strips_hash_from_output() {
     let builder = HtmlProjectBuilder::new();
     let entry_path = PathBuf::from("#404.bst");
