@@ -34,7 +34,7 @@ import @blog_styles/{section, divider}
     
     io("Creating a blog post!")
 
-    formatted_blog = [section:
+    formatted_blog = [section, $markdown:
         [date]
         [center: 
             # [title]
@@ -57,7 +57,7 @@ import @html/doc
 import @blog_styles/{page, title, pad2}
 
 date = 2025
-post = create_post(date, [:
+post = create_post(date, [$markdown:
     I have absolutely nothing interesting to say, and never will.
 ])
 
