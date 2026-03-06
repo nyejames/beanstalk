@@ -1,10 +1,6 @@
 import @styles/docs/{navbar, footer, page, pallette}
 
-#[page:
-    [: ]
-]
-
-#[page:
+#[page, $markdown:
     [navbar]
     [page:
 

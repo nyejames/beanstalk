@@ -43,8 +43,8 @@ pub fn to_markdown(content: &str, default_tag: &str) -> String {
     let chars: Chars = content.chars();
     let mut output = String::new();
 
-    // Headings must be at the start of the line
-    // So we'll keep track of when we're at the start of a line
+    // Headings must be at the start of the line,
+    // so we'll keep track of when we're at the start of a line
     // Any amount of indentation or tabs at the start of a line will be ignored
     let mut newlines = 0;
     let mut prev_whitespace = false;

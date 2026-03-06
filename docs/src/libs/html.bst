@@ -14,6 +14,7 @@ Document = |
     title String = [:<title>[..]</title>],
     style String = [:<style>[default_style][..]</style>],
     body String = [:<body>[..]</body>],
+    div String = [:<div>[..]</div>],
 |
 
 -- Export a constant instance of Document
@@ -22,7 +23,6 @@ Document = |
 
 Format = |
     -- Basic formatting
-    center String = [:<span align="center">[..]<span/>],
     underline String = [:<u>[..]</u>],
     strikethrough String = [:<s>[..]</s>],
 

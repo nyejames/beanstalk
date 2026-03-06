@@ -1,6 +1,8 @@
-import @(libs/html/{format})
-import @(styles/docs/{navbar, footer, title, page, pallette})
-[page:
+-- ADD A HASH TO THIS FILE TO INCLUDE IT IN THE MODULES.
+-- FOR NOW THIS IS DISABLED FOR TESTING
+import @libs/html/{format}
+import @styles/docs/{navbar, footer, title, page, pallette}
+[page, $markdown:
 
 [navbar]
 [format.center:
@@ -43,12 +45,6 @@ Documentation comments will eventually be created via special templates.
 
 [$code("bst"):
     -- normal comment
-
-    --[:
-        Multiline comment
-
-        Woo
-    ]
 ]
 
 # Variables
@@ -59,7 +55,7 @@ All variables must be assigned a value when they are declared.
 ## Assignment
 
 ### Variables
-[$code("bst"):`
+[$code("bst"):
     int ~= 0
     float ~= 0.0
 
@@ -85,9 +81,9 @@ All variables must be assigned a value when they are declared.
         value = 1.2, 
         another_value = "hey"
     )
-`]
+]
 
-[$code("bst"):`
+[$code("bst"):
     -- 64 bit immutable float
     number = 420.69
 
@@ -116,13 +112,13 @@ All variables must be assigned a value when they are declared.
     a_mutable_string ~String = [:World!]
 
     -- You can't use the '+' operator on strings,
-    -- They are always concatenated using templates
+    -- They can be concatenated using templates
     concatenated_strings = [string_slice, a_mutable_string]
-`]
+]
 
 All copies are explicit and must use the 'copy' keyword in place of a type.
 
-[$code("bst"):`
+[$code("bst"):
     -- Create a new collection of integers
     a_collection ~= {1, 2, 3, 4, 5}
     
@@ -141,13 +137,13 @@ All copies are explicit and must use the 'copy' keyword in place of a type.
 
     a_collection.pull(a_collection.length() - 1)
     io(a_collection) -- {23.0}
-`]
+]
 
 Expressions can span over multiple lines.
 
 But new statements must start after a newline.
 
-[$code("bst"):`
+[$code("bst"):
     -- Valid
     some_int =
         4 + 5 + 6 + 7 + 
@@ -157,7 +153,7 @@ But new statements must start after a newline.
     some_int =
         4 + (5 + 6) * 7
         + 8 / 9 + 10
-`]
+]
 
 # Data Types
 All data type keywords contain methods from the standard library for common manipulation of types.
@@ -193,7 +189,7 @@ Backticks are used for RAW strings. To escape a backtick it must be preceded wit
 Scenes are used instead of format strings.
 
 # Logical Operators
-The 'is' keyword is used to check equality, not '==''. 
+The 'is' keyword is used to check equality, not '=='. 
 The "and / or" keywords are used for logical and / or and 'not' is used to invert a truthy value to falsy or vice versa.
 
 [$code("bst"):
