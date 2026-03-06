@@ -26,21 +26,22 @@ It originated with the desire to never have to use TypeScript, web frameworks or
 <br>
 
 ```haskell
-import @(html/basic)
+import @html/center
+import @blog_styles/{section, divider}
 
 -- Create a new blog post
 # create_post |title String, date Int, content String| -> String:
     
     io("Creating a blog post!")
 
-    formatted_blog = [basic.section:
-        [basic.small, date]
-        [basic.center: 
+    formatted_blog = [section:
+        [date]
+        [center: 
             # [title]
             ## The worst blog on the internet
         ]
 
-        [basic.divider]
+        [divider]
 
         [content]
     ]
@@ -51,8 +52,9 @@ import @(html/basic)
 
 The HTML build system will generate an HTML page from this code:
 ```haskell
-import @(generators/create_post)
-import @(html/basic)
+import @generators/create_post
+import @html/doc
+import @blog_styles/{page, title, pad2}
 
 date = 2025
 post = create_post(date, [:
@@ -60,11 +62,11 @@ post = create_post(date, [:
 ])
 
 -- Compile time generated HTML
-#[basic.prelude, basic.title: Pointless Blog!!!]
+#[doc.prelude, title: Pointless Blog!!!]
 
 -- Runtime generated HTML
-[basic.page:
-    [basic.pad(3), post]
+[page:
+    [pad2, post]
 ]
 ```
 
