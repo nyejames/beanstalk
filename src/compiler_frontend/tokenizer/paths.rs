@@ -10,8 +10,11 @@ pub fn parse_file_path(
     string_table: &mut StringTable,
 ) -> Result<Token, CompilerError> {
     // Path Syntax
+    // @path/to/file
     // @(path/to/file)
     // Path to multiple items within the same directory (used for imports)
+    // @path/to/file/{import1, import2, import3}
+    // @path/to/file/ {import1, import2, import3}
     // @(path/to/file/ {import1, import2, import3})
     // or @(path/to/file/ {
     //        import1,
@@ -29,26 +32,27 @@ pub fn parse_file_path(
         break;
     }
 
-    if stream.peek() == Some(&'(') {
+    let wrapped_in_parentheses = if stream.peek() == Some(&'(') {
         stream.next();
+        true
     } else {
-        return_syntax_error!(
-            "Path must start with an open parenthesis after '@'",
-            stream.new_location().to_error_location(string_table), {
-                CompilationStage => "Tokenization",
-                PrimarySuggestion => "Use an open parenthesis after '@' to start a path",
-            }
-        )
-    }
+        false
+    };
 
     let mut imports: Vec<InternedPath> = Vec::with_capacity(1);
     let mut grouped_imports = false;
+    let mut closed_wrapped_path = false;
 
     while let Some(c) = stream.peek().copied() {
+        if !wrapped_in_parentheses && matches!(c, '\n' | '\r') {
+            break;
+        }
+
         match c {
-            ')' => {
+            ')' if wrapped_in_parentheses => {
                 push_segment_if_non_empty(&mut base_components, &mut segment, string_table);
                 stream.next();
+                closed_wrapped_path = true;
                 break;
             }
 
@@ -56,6 +60,16 @@ pub fn parse_file_path(
                 grouped_imports = true;
                 push_segment_if_non_empty(&mut base_components, &mut segment, string_table);
                 stream.next();
+                break;
+            }
+
+            _ if !wrapped_in_parentheses && c.is_non_newline_whitespace() => {
+                push_segment_if_non_empty(&mut base_components, &mut segment, string_table);
+                consume_non_newline_whitespace(stream);
+                if stream.peek() == Some(&'{') {
+                    grouped_imports = true;
+                    stream.next();
+                }
                 break;
             }
 
@@ -70,6 +84,18 @@ pub fn parse_file_path(
             }
         }
     }
+
+    if wrapped_in_parentheses && !grouped_imports && !closed_wrapped_path {
+        return_syntax_error!(
+            "Invalid character, expected a closing parenthesis for this path.",
+            stream.new_location().to_error_location(string_table), {
+                CompilationStage => "Tokenization",
+                PrimarySuggestion => "Close the path with ')' after the import target",
+            }
+        )
+    }
+
+    push_segment_if_non_empty(&mut base_components, &mut segment, string_table);
 
     if base_components.is_empty() {
         return_syntax_error!(
@@ -179,25 +205,28 @@ pub fn parse_file_path(
         )
     }
 
-    // Skip trailing whitespace and enforce final ')'
-    while let Some(c) = stream.peek() {
-        if c.is_whitespace() {
-            stream.next();
-        } else {
-            break;
-        }
-    }
-
-    if stream.peek() != Some(&')') {
-        return_syntax_error!(
-            "Invalid character, expected a closing parenthesis after grouped imports.",
-            stream.new_location().to_error_location(string_table), {
-                CompilationStage => "Tokenization",
-                PrimarySuggestion => "Add a closing parenthesis after the grouped imports",
+    if wrapped_in_parentheses {
+        // Skip trailing whitespace and enforce final ')'
+        while let Some(c) = stream.peek() {
+            if c.is_whitespace() {
+                stream.next();
+            } else {
+                break;
             }
-        )
+        }
+
+        if stream.peek() != Some(&')') {
+            return_syntax_error!(
+                "Invalid character, expected a closing parenthesis after grouped imports.",
+                stream.new_location().to_error_location(string_table), {
+                    CompilationStage => "Tokenization",
+                    PrimarySuggestion => "Add a closing parenthesis after the grouped imports",
+                }
+            )
+        }
+
+        stream.next();
     }
-    stream.next();
 
     return_token!(TokenKind::Path(imports), stream)
 }
@@ -275,6 +304,15 @@ fn push_segment_if_non_empty(
         components.push(string_table.intern(trimmed));
     }
     segment.clear();
+}
+
+fn consume_non_newline_whitespace(stream: &mut TokenStream) {
+    while stream
+        .peek()
+        .is_some_and(|character| character.is_non_newline_whitespace())
+    {
+        stream.next();
+    }
 }
 
 #[cfg(test)]

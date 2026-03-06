@@ -56,6 +56,12 @@ fn parse_file_path_preserves_final_segment() {
 }
 
 #[test]
+fn parse_file_path_supports_bare_path_syntax() {
+    let paths = first_path_token_values("import @a/b/c\n");
+    assert_eq!(paths, vec!["a/b/c".to_string()]);
+}
+
+#[test]
 fn parse_file_path_grouped_imports_expand_all_symbols() {
     let paths = first_path_token_values("import @(styles/docs/ {footer, navbar})\n");
     assert_eq!(
@@ -65,6 +71,36 @@ fn parse_file_path_grouped_imports_expand_all_symbols() {
             "styles/docs/navbar".to_string(),
         ]
     );
+}
+
+#[test]
+fn parse_file_path_bare_grouped_imports_expand_all_symbols() {
+    let paths = first_path_token_values("import @styles/docs/{footer, navbar}\n");
+    assert_eq!(
+        paths,
+        vec![
+            "styles/docs/footer".to_string(),
+            "styles/docs/navbar".to_string(),
+        ]
+    );
+}
+
+#[test]
+fn parse_file_path_bare_grouped_imports_accept_whitespace_before_group() {
+    let paths = first_path_token_values("import @styles/docs/   {footer,\n  navbar}\n");
+    assert_eq!(
+        paths,
+        vec![
+            "styles/docs/footer".to_string(),
+            "styles/docs/navbar".to_string(),
+        ]
+    );
+}
+
+#[test]
+fn parse_file_path_bare_syntax_stops_at_whitespace_without_group() {
+    let paths = first_path_token_values("import @styles/docs/footer trailing_symbol\n");
+    assert_eq!(paths, vec!["styles/docs/footer".to_string()]);
 }
 
 #[test]

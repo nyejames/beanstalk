@@ -1,25 +1,24 @@
-import @(libs/html/basic)
-import @(styles/docs/{navbar, footer})
+import @styles/docs/{navbar, footer, page, pallette}
 
-#[basic.document:
-    [$1: ]
-    [$2: ]
-]
-#[basic.body:
-
-[navbar]
-[basic.page:
-
-# What is Beanstalk?
-This website was created using Beanstalk!
-
-## Documentation
-[basic.red:
-    *Only a small amount of documentation is written so far.*
+#[page:
+    [: ]
 ]
 
-More documentation to be added soon!
+#[page:
+    [navbar]
+    [page:
 
-]]
+    # What is Beanstalk?
+    This website was created using Beanstalk!
+
+    ## Documentation
+    [pallette.red:
+        *Only a small amount of documentation is written so far.*
+    ]
+
+    More documentation to be added soon!
+
+    ]
+]
 
 #[footer]

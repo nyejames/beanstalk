@@ -1,37 +1,43 @@
 -- This is a library of basic HTML components and styles
--- This will not contain specific pallets or themes,
--- just basic HTML components and styles
-Basic = |
-    document String = [:
-        <head>
-            [..]
-            <style>
-                [default_style]
-            </style>
-        </head>
-        <body>[$markdown: [..]]</body>
+-- This contains a css reset and classes for some core beanstalk formatters
+Document = |
+    prelude String = "<!DOCTYPE html>",
+    en String = [:<html lang="en">],
+    head String = [:
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport"content="width=device-width, initial-scale=1">
+        <meta name="color-scheme" content="light dark" />
+        [..]
+      </head>
     ],
-    page String = [$markdown:<section>[..]</section>],
+    title String = [:<title>[..]</title>],
+    style String = [:<style>[default_style][..]</style>],
+    body String = [:<body>[..]</body>],
+|
 
+-- Export a constant instance of Document
+-- Using all of its default values
+# doc = Document()
+
+Format = |
     -- Basic formatting
     center String = [:<span align="center">[..]<span/>],
     underline String = [:<u>[..]</u>],
     strikethrough String = [:<s>[..]</s>],
+
+    table String = [:
+      <table>[..]</table>
+    ],
 |
 
--- Export a constant instance of the basic library
--- Using all of its default values
-# basic = Basic()
+# format = Format()
 
+-- A css reset and some classes for the built-in code formatter
+-- This is inspired by Pico.css, but is an even more minimal reset.
+-- Actual style systems are intended to be built on top of this easily.
 # default_style = [:
     @charset "UTF-8";
-    /*!
-      BS CSS CORE (absolute basics CSS reset)
-      This is inspired by Pico.css, but is an even more minimal reset.
-
-      Actual style systems are intended to be built on top of this easily.
-    */
-
     :root {
       color-scheme: light dark;
 

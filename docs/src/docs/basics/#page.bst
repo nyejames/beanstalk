@@ -1,9 +1,9 @@
-import @(libs/html/basic)
-import @(styles/docs/{navbar, footer, title})
-[basic.page:
+import @(libs/html/{format})
+import @(styles/docs/{navbar, footer, title, page, pallette})
+[page:
 
 [navbar]
-[basic.center:
+[format.center:
     [title: LANGUAGE BASICS]
 ]
 
@@ -163,7 +163,7 @@ But new statements must start after a newline.
 All data type keywords contain methods from the standard library for common manipulation of types.
 
 ## Numerical Types
-[basic.table(3):
+[format.table:
     [: Type] [: Description]
 
     [: float ] [: 64 bit floating point number]
