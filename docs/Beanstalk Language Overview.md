@@ -5,7 +5,7 @@ The design principles are:
 - Powerful and flexible string templates for rendering content or describing UI
 - Minimal and consistent syntax. Simple to learn and reason about
 - Fast compile times for hot reloading dev builds that can give quick feedback for UI heavy projects
-- Memory Safe with fallback GC that can eventally be statically optimised out with borrow checker rules
+- Memory Safe with fallback GC that can eventually be statically optimised out with borrow checker rules
 - Strict, statically typed and opinionated about doing things in as few ways as possible as concisely as possible
 
 ## Syntax Summary

@@ -5,7 +5,7 @@ import @(./components)
 
 [Docs.navbar]
 [Docs.header, Basic.center:
-    [Basic.title: Aynsc and Coroutines]
+    [Basic.title: Async and Coroutines]
 ]
 
 ## Coroutines and Async in Beanstalk (Design Overview)

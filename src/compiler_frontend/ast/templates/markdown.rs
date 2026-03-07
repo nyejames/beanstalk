@@ -150,8 +150,10 @@ pub fn to_markdown(content: &str, default_tag: &str) -> String {
         // HANDLING SPECIAL CHARACTERS
 
         // New heading
-        // Don't switch context to heading until finished getting strength
-        if ch == '#' && newlines > 0 {
+        // Don't switch context to heading until finished getting strength.
+        // Once a heading marker sequence starts at the beginning of a line,
+        // keep consuming consecutive '#' characters for strengths like '##'.
+        if ch == '#' && (newlines > 0 || heading_strength > 0) {
             heading_strength += 1;
             prev_whitespace = false;
             newlines = 0;

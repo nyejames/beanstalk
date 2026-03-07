@@ -245,9 +245,7 @@ fn lowers_reference_to_registered_local() {
     assert_eq!(lowered.value.value_kind, ValueKind::Place);
     assert!(matches!(
         lowered.value.kind,
-        HirExpressionKind::Load(HirPlace::Local(
-            LocalId(10)
-        ))
+        HirExpressionKind::Load(HirPlace::Local(LocalId(10)))
     ));
 }
 

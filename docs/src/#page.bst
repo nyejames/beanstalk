@@ -1,4 +1,4 @@
-import @styles/docs/{navbar, footer, page, pallette}
+import @styles/docs/{navbar, footer, page, palette}
 
 #[page, $markdown:
     [navbar]
@@ -7,7 +7,7 @@ import @styles/docs/{navbar, footer, page, pallette}
     This website was created using Beanstalk!
 
     ## Documentation
-    [pallette.red:
+    [palette.red:
         *Only a small amount of documentation is written so far.*
     ]
 

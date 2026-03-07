@@ -30,12 +30,12 @@ import @libs/html/doc
 
 # title = [: <h1 style="font-size: 2em;">[$slot]</h1>]
 
-Pallette = |
+Palette = |
     -- Colors for the documentation website
     red String = [:<span style="color: red;">[$slot]</span>],
     green String = [:<span style="color: green;">[$slot]</span>],
     blue String = [:<span style="color: blue;">[$slot]</span>],
 |
 
-# pallette = Pallette()
+# palette = Palette()
 

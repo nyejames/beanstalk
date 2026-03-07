@@ -156,7 +156,7 @@ impl Template {
                         ),
                         token_stream
                             .current_location()
-                            .to_error_location(&string_table)
+                            .to_error_location(string_table)
                     )
                 }
             }
@@ -339,7 +339,7 @@ pub fn parse_template_head(
                     "'$slot' markers cannot declare a body. Use '[$slot]' or '[$slot(\"name\")]'.",
                     token_stream
                         .current_location()
-                        .to_error_location(&string_table)
+                        .to_error_location(string_table)
                 );
             }
 
@@ -361,7 +361,7 @@ pub fn parse_template_head(
                         "Slot helper template heads can only contain one '$slot' or '$insert(\"name\")' directive.",
                         token_stream
                             .current_location()
-                            .to_error_location(&string_table)
+                            .to_error_location(string_table)
                     )
                 }
             }
@@ -377,7 +377,7 @@ pub fn parse_template_head(
                     ),
                     token_stream
                         .current_location()
-                        .to_error_location(&string_table)
+                        .to_error_location(string_table)
                 )
             }
 
@@ -448,7 +448,7 @@ pub fn parse_template_head(
                         ),
                         token_stream
                             .current_location()
-                            .to_error_location(&string_table)
+                            .to_error_location(string_table)
                     )
                 };
             }
@@ -488,7 +488,7 @@ pub fn parse_template_head(
                         "Path token in template head cannot be empty.",
                         token_stream
                             .current_location()
-                            .to_error_location(&string_table)
+                            .to_error_location(string_table)
                     );
                 }
 
@@ -540,7 +540,7 @@ pub fn parse_template_head(
                                 "Slot helper template heads can only contain '$slot' before the optional body.",
                                 token_stream
                                     .current_location()
-                                    .to_error_location(&string_table)
+                                    .to_error_location(string_table)
                             );
                         }
 
@@ -558,7 +558,7 @@ pub fn parse_template_head(
                                 "Slot helper template heads can only contain '$insert(\"name\")' before the optional body.",
                                 token_stream
                                     .current_location()
-                                    .to_error_location(&string_table)
+                                    .to_error_location(string_table)
                             );
                         }
 
@@ -587,7 +587,7 @@ pub fn parse_template_head(
                     "Multiple commas used back to back in the template head. You must have a valid expression between each comma",
                     token_stream
                         .current_location()
-                        .to_error_location(&string_table)
+                        .to_error_location(string_table)
                 )
             }
 
@@ -605,7 +605,7 @@ pub fn parse_template_head(
                     ),
                     token_stream
                         .current_location()
-                        .to_error_location(&string_table)
+                        .to_error_location(string_table)
                 )
             }
         }

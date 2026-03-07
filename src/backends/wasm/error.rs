@@ -18,11 +18,6 @@
 //! - Stack discipline violations
 //! - Invalid instruction sequences
 //!
-//! ### Validation Errors
-//! - WASM module validation failures (via wasmparser)
-//! - Type mismatches between expected and actual types
-//! - Stack imbalances in generated code
-//!
 //! ### Memory Model Errors
 //! - Layout calculation failures
 //! - Alignment violations

@@ -206,6 +206,13 @@ fn markdown_formats_only_template_body_content() {
 }
 
 #[test]
+fn markdown_supports_h2_headings() {
+    let rendered = folded_template_output("[$markdown:\n## Documentation\n]");
+
+    assert!(rendered.contains("<h2>Documentation</h2>"));
+}
+
+#[test]
 fn runtime_templates_format_static_body_strings_only() {
     let mut string_table = StringTable::new();
     let mut token_stream =
