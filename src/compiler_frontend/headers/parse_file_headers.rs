@@ -811,7 +811,7 @@ fn collect_struct_default_dependencies(
 
 fn create_top_level_const_template(
     scope: InternedPath,
-    opening_template_token: crate::compiler_frontend::tokenizer::tokens::Token,
+    opening_template_token: Token,
     const_template_number: usize,
     token_stream: &mut FileTokens,
     context: &mut HeaderBuildContext<'_>,

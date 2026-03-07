@@ -442,8 +442,8 @@ impl Ast {
                             crate::compiler_frontend::ast::templates::template::TemplateConstValueKind::WrapperTemplate => {
                                 "Top-level const templates can use slots only when they resolve fully at compile time. This slot remained unresolved."
                             }
-                            crate::compiler_frontend::ast::templates::template::TemplateConstValueKind::SlotInsertion => {
-                                "Top-level const templates cannot evaluate to labeled slot insertion helpers. Apply this slot while filling a wrapper template."
+                            crate::compiler_frontend::ast::templates::template::TemplateConstValueKind::SlotInsertHelper => {
+                                "Top-level const templates cannot evaluate to '$insert(...)' helpers. Apply this insert while filling an immediate parent '$slot' template."
                             }
                             _ => "Top-level const templates must be fully foldable at compile time.",
                         };

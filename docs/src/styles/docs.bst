@@ -5,16 +5,18 @@ import @libs/html/doc
     [doc.prelude, doc.en]
     
     [doc.head:
+        <meta charset="UTF-8">
+        <meta name="viewport"content="width=device-width, initial-scale=1">
+        <link rel="icon"href="[$slot("favicon")]">
+
         [doc.title: "Beanstalk Documentation"]
         [doc.style:
-            body {
-                padding: 1rem;
-            }
+            [$slot("css")]
         ]
     ]
 
     [doc.body:
-        [..]
+        [$slot]
     ]
 ]
 
@@ -26,13 +28,13 @@ import @libs/html/doc
     <div></div>
 ]
 
-# title = [: <h1 style="font-size: 2em;">[..]</h1>]
+# title = [: <h1 style="font-size: 2em;">[$slot]</h1>]
 
 Pallette = |
     -- Colors for the documentation website
-    red String = [:<span style="color: red;">[..]</span>],
-    green String = [:<span style="color: green;">[..]</span>],
-    blue String = [:<span style="color: blue;">[..]</span>],
+    red String = [:<span style="color: red;">[$slot]</span>],
+    green String = [:<span style="color: green;">[$slot]</span>],
+    blue String = [:<span style="color: blue;">[$slot]</span>],
 |
 
 # pallette = Pallette()

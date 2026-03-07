@@ -194,16 +194,14 @@ pub fn run_watch_build_loop(
         Err(_) => return,
     };
 
-    let mut known_fingerprints = match watch::collect_fingerprints(&watch_root, &output_dir) {
-        Ok(fingerprints) => fingerprints,
-        Err(error) => {
+    let mut known_fingerprints = watch::collect_fingerprints(&watch_root, &output_dir)
+        .unwrap_or_else(|error| {
             say!(
                 Yellow "Dev server watch warning: failed to collect initial fingerprints: ",
                 Yellow error.to_string()
             );
             HashMap::new()
-        }
-    };
+        });
 
     let mut dirty_since: Option<Instant> = None;
 

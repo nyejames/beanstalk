@@ -1,5 +1,3 @@
-#![allow(clippy::needless_borrow)]
-
 use crate::compiler_frontend::ast::ast::ScopeContext;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
@@ -9,8 +7,8 @@ use crate::compiler_frontend::ast::templates::slots::{
     compose_template_with_slots, ensure_no_slot_insertions_remain,
 };
 use crate::compiler_frontend::ast::templates::template::{
-    Formatter, Style, TemplateAtom, TemplateConstValueKind, TemplateContent, TemplateControlFlow,
-    TemplateSegment, TemplateSegmentOrigin, TemplateType,
+    Formatter, SlotKey, Style, TemplateAtom, TemplateConstValueKind, TemplateContent,
+    TemplateControlFlow, TemplateSegment, TemplateSegmentOrigin, TemplateType,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
@@ -51,13 +49,11 @@ impl Template {
         // This is because the template might be changing at runtime.
         // If the entire template can be folded, it just becomes a string after the AST stage.
         let mut foldable = true;
-        let mut active_wrapper: Option<Template> = None;
 
         parse_template_head(
             token_stream,
             context,
             &mut template,
-            &mut active_wrapper,
             &mut foldable,
             string_table,
         )?;
@@ -121,7 +117,11 @@ impl Template {
                             continue;
                         }
 
-                        TemplateType::String | TemplateType::SlotInsertion(_) => {}
+                        TemplateType::String | TemplateType::SlotInsert(_) => {}
+                        TemplateType::SlotDefinition(slot_key) => {
+                            template.content.push_slot(slot_key);
+                            continue;
+                        }
                     }
 
                     let expr = Expression::template(nested_template, Ownership::ImmutableOwned);
@@ -144,10 +144,6 @@ impl Template {
                         token_stream.current_location(),
                         Ownership::ImmutableOwned,
                     ));
-                }
-
-                TokenKind::TemplateSlotMarker => {
-                    template.content.push_slot();
                 }
 
                 TokenKind::Empty => {}
@@ -177,15 +173,23 @@ impl Template {
             string_table,
         );
 
-        if let Some(wrapper) = active_wrapper {
-            template.content =
-                compose_template_with_slots(&wrapper, &template.content, &template.location)?;
-            foldable &= matches!(wrapper.kind, TemplateType::String);
-        } else {
+        template.content = compose_template_head_chain(&template.content, &mut foldable)?;
+
+        // `$insert(...)` helpers are allowed to survive while a template still has
+        // unresolved `$slot` markers, because that template may later compose into
+        // an immediate parent and contribute upward. Once a template has no slots
+        // left, any remaining `$insert(...)` is out of scope and must error.
+        if !matches!(template.kind, TemplateType::SlotInsert(_)) && !template.has_unresolved_slots()
+        {
             ensure_no_slot_insertions_remain(&template.content, &template.location)?;
         }
 
-        if foldable && !matches!(template.kind, TemplateType::SlotInsertion(_)) {
+        if foldable
+            && !matches!(
+                template.kind,
+                TemplateType::SlotInsert(_) | TemplateType::SlotDefinition(_)
+            )
+        {
             template.kind = TemplateType::String;
             return Ok(template);
         };
@@ -228,13 +232,17 @@ impl Template {
             return TemplateConstValueKind::NonConst;
         }
 
-        if matches!(self.kind, TemplateType::SlotInsertion(_)) {
+        if matches!(self.kind, TemplateType::SlotInsert(_)) {
             // Slot insertion templates are compile-time helper values and are only
             // valid when consumed by an active wrapper fill site.
             if self.content.contains_slot_insertions() {
                 return TemplateConstValueKind::NonConst;
             }
-            return TemplateConstValueKind::SlotInsertion;
+            return TemplateConstValueKind::SlotInsertHelper;
+        }
+
+        if matches!(self.kind, TemplateType::SlotDefinition(_)) {
+            return TemplateConstValueKind::NonConst;
         }
 
         if !matches!(self.kind, TemplateType::String) {
@@ -250,49 +258,6 @@ impl Template {
         }
 
         TemplateConstValueKind::RenderableString
-    }
-
-    pub fn insert_template_into_head(
-        &mut self,
-        template_being_inserted: &Template,
-        foldable: &mut bool,
-        string_table: &StringTable,
-    ) -> Result<(), CompilerError> {
-        match template_being_inserted.kind {
-            TemplateType::StringFunction => {
-                // Keep going, but this template can't be folded at compile time now
-                *foldable = false
-            }
-            TemplateType::Comment => {
-                // Ignore this scene completely, don't insert anything
-                return Ok(());
-            }
-            TemplateType::SlotInsertion(_) => {
-                // Slot insertion templates only make sense while filling an active wrapper.
-                return_syntax_error!(
-                    "Can't use labeled slot insertions in the template head.",
-                    self.location.to_owned().to_error_location(&string_table)
-                )
-            }
-            TemplateType::String => {
-                // All good, keep going
-            }
-        }
-
-        // Override the current child_default if there is a new one coming in
-        if !template_being_inserted.style.child_templates.is_empty() {
-            self.style.child_templates = template_being_inserted.style.child_templates.to_owned();
-        }
-
-        // A template inserted from the head now behaves like head content in the
-        // receiving template. That prevents a later body formatter from treating the
-        // inserted compile-time strings as if they were local body literals.
-        self.content.extend_retagged(
-            template_being_inserted.content.to_owned(),
-            TemplateSegmentOrigin::Head,
-        );
-
-        Ok(())
     }
 
     pub fn fold_into_stringid(
@@ -338,7 +303,6 @@ pub fn parse_template_head(
     token_stream: &mut FileTokens,
     context: &ScopeContext,
     template: &mut Template,
-    active_wrapper: &mut Option<Template>,
     foldable: &mut bool,
     string_table: &mut StringTable,
 ) -> Result<(), CompilerError> {
@@ -348,7 +312,6 @@ pub fn parse_template_head(
 
     // Each expression must be separated with a comma
     let mut comma_separator = true;
-    let mut slot_target: Option<usize> = None;
     let mut saw_meaningful_head_item = false;
     token_stream.advance();
 
@@ -371,11 +334,23 @@ pub fn parse_template_head(
         }
 
         if token == TokenKind::StartTemplateBody {
+            if matches!(template.kind, TemplateType::SlotDefinition(_)) {
+                return_syntax_error!(
+                    "'$slot' markers cannot declare a body. Use '[$slot]' or '[$slot(\"name\")]'.",
+                    token_stream
+                        .current_location()
+                        .to_error_location(&string_table)
+                );
+            }
+
             token_stream.advance();
             return Ok(());
         }
 
-        if slot_target.is_some() {
+        if matches!(
+            template.kind,
+            TemplateType::SlotDefinition(_) | TemplateType::SlotInsert(_)
+        ) {
             match token {
                 TokenKind::Newline | TokenKind::Empty => {
                     token_stream.advance();
@@ -383,7 +358,7 @@ pub fn parse_template_head(
                 }
                 _ => {
                     return_syntax_error!(
-                        "Labeled slot insertion heads can only contain the slot label before the optional body.",
+                        "Slot helper template heads can only contain one '$slot' or '$insert(\"name\")' directive.",
                         token_stream
                             .current_location()
                             .to_error_location(&string_table)
@@ -434,7 +409,6 @@ pub fn parse_template_head(
                                 inserted_template,
                                 context,
                                 template,
-                                active_wrapper,
                                 foldable,
                                 &value_location,
                                 string_table,
@@ -458,7 +432,6 @@ pub fn parse_template_head(
                                 expr,
                                 context,
                                 template,
-                                active_wrapper,
                                 foldable,
                                 &value_location,
                                 string_table,
@@ -501,7 +474,6 @@ pub fn parse_template_head(
                     expr,
                     context,
                     template,
-                    active_wrapper,
                     foldable,
                     &value_location,
                     string_table,
@@ -550,7 +522,6 @@ pub fn parse_template_head(
                     expr,
                     context,
                     template,
-                    active_wrapper,
                     foldable,
                     &value_location,
                     string_table,
@@ -559,10 +530,52 @@ pub fn parse_template_head(
                 saw_meaningful_head_item = true;
             }
 
-            TokenKind::StyleDirective(_) | TokenKind::StyleTemplateHead => {
-                // Style directives live in the same comma-separated list as ordinary
-                // head expressions, so we parse them inline and then resume the same
-                // separator rules as the rest of the head.
+            TokenKind::StyleDirective(directive) => {
+                // Template directives share the `$name` token shape with style directives.
+                // Parse `$slot` / `$insert` first, then fall back to style handling.
+                match string_table.resolve(directive) {
+                    "slot" => {
+                        if saw_meaningful_head_item {
+                            return_syntax_error!(
+                                "Slot helper template heads can only contain '$slot' before the optional body.",
+                                token_stream
+                                    .current_location()
+                                    .to_error_location(&string_table)
+                            );
+                        }
+
+                        let slot_name =
+                            parse_optional_slot_name_argument(token_stream, string_table)?;
+                        template.kind = TemplateType::SlotDefinition(match slot_name {
+                            Some(name) => SlotKey::named(name),
+                            None => SlotKey::Default,
+                        });
+                        saw_meaningful_head_item = true;
+                    }
+                    "insert" => {
+                        if saw_meaningful_head_item {
+                            return_syntax_error!(
+                                "Slot helper template heads can only contain '$insert(\"name\")' before the optional body.",
+                                token_stream
+                                    .current_location()
+                                    .to_error_location(&string_table)
+                            );
+                        }
+
+                        let slot_name =
+                            parse_required_slot_name_argument(token_stream, string_table)?;
+                        template.kind = TemplateType::SlotInsert(SlotKey::named(slot_name));
+                        saw_meaningful_head_item = true;
+                    }
+                    _ => {
+                        defer_separator_token =
+                            parse_style_directive(token_stream, context, template, string_table)?;
+                        saw_meaningful_head_item = true;
+                    }
+                }
+            }
+
+            TokenKind::StyleTemplateHead => {
                 defer_separator_token =
                     parse_style_directive(token_stream, context, template, string_table)?;
                 saw_meaningful_head_item = true;
@@ -576,21 +589,6 @@ pub fn parse_template_head(
                         .current_location()
                         .to_error_location(&string_table)
                 )
-            }
-
-            TokenKind::SlotTarget(slot) => {
-                if saw_meaningful_head_item {
-                    return_syntax_error!(
-                        "Labeled slot insertion heads can only contain the slot label before the optional body.",
-                        token_stream
-                            .current_location()
-                            .to_error_location(&string_table)
-                    );
-                }
-
-                template.kind = TemplateType::SlotInsertion(slot);
-                slot_target = Some(slot);
-                saw_meaningful_head_item = true;
             }
 
             // Newlines / empty things in the scene head are ignored
@@ -640,11 +638,74 @@ pub fn parse_template_head(
     Ok(())
 }
 
+fn parse_optional_slot_name_argument(
+    token_stream: &mut FileTokens,
+    string_table: &StringTable,
+) -> Result<Option<StringId>, CompilerError> {
+    if token_stream.peek_next_token() != Some(&TokenKind::OpenParenthesis) {
+        return Ok(None);
+    }
+
+    // Move from `StyleDirective("slot")`/`StyleDirective("insert")` to the
+    // directive argument and leave the parser positioned at `)` on success.
+    token_stream.advance();
+    token_stream.advance();
+
+    let slot_name = match token_stream.current_token_kind() {
+        TokenKind::StringSliceLiteral(name) => *name,
+        TokenKind::CloseParenthesis => {
+            return_syntax_error!(
+                "'$slot()' and '$insert()' cannot use empty parentheses. Use '$slot' for default or quoted names like '$slot(\"style\")'.",
+                token_stream
+                    .current_location()
+                    .to_error_location(string_table)
+            );
+        }
+        _ => {
+            return_syntax_error!(
+                "'$slot(...)' and '$insert(...)' only accept quoted string literal names.",
+                token_stream
+                    .current_location()
+                    .to_error_location(string_table)
+            );
+        }
+    };
+
+    token_stream.advance();
+    if token_stream.current_token_kind() != &TokenKind::CloseParenthesis {
+        return_syntax_error!(
+            "Expected ')' after template slot directive argument.",
+            token_stream.current_location().to_error_location(string_table),
+            {
+                SuggestedInsertion => ")",
+            }
+        );
+    }
+
+    Ok(Some(slot_name))
+}
+
+fn parse_required_slot_name_argument(
+    token_stream: &mut FileTokens,
+    string_table: &StringTable,
+) -> Result<StringId, CompilerError> {
+    let slot_name = parse_optional_slot_name_argument(token_stream, string_table)?;
+    let Some(slot_name) = slot_name else {
+        return_syntax_error!(
+            "'$insert' requires a quoted named target like '$insert(\"style\")'.",
+            token_stream
+                .current_location()
+                .to_error_location(string_table)
+        );
+    };
+
+    Ok(slot_name)
+}
+
 fn handle_template_value_in_template_head(
     value: &Template,
     context: &ScopeContext,
     template: &mut Template,
-    active_wrapper: &mut Option<Template>,
     foldable: &mut bool,
     location: &TextLocation,
     string_table: &StringTable,
@@ -656,52 +717,33 @@ fn handle_template_value_in_template_head(
         );
     }
 
-    if value.has_unresolved_slots() {
-        if active_wrapper.is_some() {
-            return_syntax_error!(
-                "Only one wrapper template can be applied from a template head.",
-                location.to_owned().to_error_location(string_table)
-            );
-        }
-
-        if !value.style.child_templates.is_empty() {
-            template.style.child_templates = value.style.child_templates.to_owned();
-        }
-
-        if matches!(value.kind, TemplateType::StringFunction) {
-            *foldable = false;
-        }
-
-        // WHAT: hold wrapper selection separately from normal head content.
-        // WHY: wrapper composition must be applied to the final merged head+body
-        // stream in authored order.
-        *active_wrapper = Some(value.to_owned());
+    if matches!(value.kind, TemplateType::Comment) {
         return Ok(());
     }
 
-    if matches!(value.kind, TemplateType::SlotInsertion(_)) {
-        if active_wrapper.is_none() {
-            return_syntax_error!(
-                "Labeled slot insertions can only be used while filling a template that defines slots.",
-                location.to_owned().to_error_location(string_table)
-            );
-        }
-
-        template.content.add_with_origin(
-            Expression::template(value.to_owned(), Ownership::ImmutableOwned),
-            TemplateSegmentOrigin::Head,
+    if matches!(value.kind, TemplateType::SlotDefinition(_)) {
+        return_syntax_error!(
+            "'$slot' markers are only valid as direct nested templates inside template bodies.",
+            location.to_owned().to_error_location(string_table)
         );
-        return Ok(());
     }
 
-    template.insert_template_into_head(value, foldable, string_table)
+    if matches!(value.kind, TemplateType::StringFunction) {
+        *foldable = false;
+    }
+
+    template.content.add_with_origin(
+        Expression::template(value.to_owned(), Ownership::ImmutableOwned),
+        TemplateSegmentOrigin::Head,
+    );
+
+    Ok(())
 }
 
 fn push_template_head_expression(
     expr: Expression,
     context: &ScopeContext,
     template: &mut Template,
-    active_wrapper: &mut Option<Template>,
     foldable: &mut bool,
     location: &TextLocation,
     string_table: &StringTable,
@@ -711,7 +753,6 @@ fn push_template_head_expression(
             template_value,
             context,
             template,
-            active_wrapper,
             foldable,
             location,
             string_table,
@@ -734,6 +775,184 @@ fn push_template_head_expression(
         .content
         .add_with_origin(expr, TemplateSegmentOrigin::Head);
     Ok(())
+}
+
+#[derive(Clone, Debug)]
+enum PendingChainItem {
+    Atom(TemplateAtom),
+    LayerRef {
+        layer_index: usize,
+        origin: TemplateSegmentOrigin,
+    },
+}
+
+#[derive(Clone, Debug)]
+struct ChainLayer {
+    wrapper: Template,
+    fill_items: Vec<PendingChainItem>,
+}
+
+fn compose_template_head_chain(
+    content: &TemplateContent,
+    foldable: &mut bool,
+) -> Result<TemplateContent, CompilerError> {
+    let mut head_atoms = Vec::new();
+    let mut body_atoms = Vec::new();
+
+    // Keep head and body atoms separated so only head template arguments can open
+    // new receiving layers. Body atoms still flow into the deepest active receiver.
+    for atom in &content.atoms {
+        match atom {
+            TemplateAtom::Content(segment) if segment.origin == TemplateSegmentOrigin::Head => {
+                head_atoms.push(atom.to_owned());
+            }
+            _ => body_atoms.push(atom.to_owned()),
+        }
+    }
+
+    if head_atoms.is_empty() {
+        return Ok(content.to_owned());
+    }
+
+    let mut root_items = Vec::new();
+    let mut layers = Vec::new();
+    let mut active_layer: Option<usize> = None;
+
+    for atom in head_atoms {
+        if let Some((receiver, origin)) = receiver_template_from_head_atom(&atom) {
+            let layer_index = layers.len();
+
+            push_chain_item(
+                &mut root_items,
+                &mut layers,
+                active_layer,
+                PendingChainItem::LayerRef {
+                    layer_index,
+                    origin,
+                },
+            );
+
+            if matches!(receiver.kind, TemplateType::StringFunction) {
+                *foldable = false;
+            }
+
+            layers.push(ChainLayer {
+                wrapper: receiver.to_owned(),
+                fill_items: Vec::new(),
+            });
+            active_layer = Some(layer_index);
+            continue;
+        }
+
+        push_chain_item(
+            &mut root_items,
+            &mut layers,
+            active_layer,
+            PendingChainItem::Atom(atom),
+        );
+    }
+
+    // Body atoms are appended after head parsing. If the head opened a receiving
+    // chain, body atoms become contributions to the deepest active receiver.
+    for atom in body_atoms {
+        push_chain_item(
+            &mut root_items,
+            &mut layers,
+            active_layer,
+            PendingChainItem::Atom(atom),
+        );
+    }
+
+    let mut cache = rustc_hash::FxHashMap::default();
+    let atoms = resolve_pending_chain_items(&root_items, &layers, &mut cache)?;
+    Ok(TemplateContent { atoms })
+}
+
+fn push_chain_item(
+    root_items: &mut Vec<PendingChainItem>,
+    layers: &mut [ChainLayer],
+    active_layer: Option<usize>,
+    item: PendingChainItem,
+) {
+    match active_layer {
+        Some(layer_index) => layers[layer_index].fill_items.push(item),
+        None => root_items.push(item),
+    }
+}
+
+fn receiver_template_from_head_atom(
+    atom: &TemplateAtom,
+) -> Option<(&Template, TemplateSegmentOrigin)> {
+    let TemplateAtom::Content(segment) = atom else {
+        return None;
+    };
+
+    let ExpressionKind::Template(template) = &segment.expression.kind else {
+        return None;
+    };
+
+    if !template.has_unresolved_slots() {
+        return None;
+    }
+
+    if matches!(
+        template.kind,
+        TemplateType::SlotInsert(_) | TemplateType::SlotDefinition(_)
+    ) {
+        return None;
+    }
+
+    Some((template, segment.origin))
+}
+
+fn resolve_pending_chain_items(
+    items: &[PendingChainItem],
+    layers: &[ChainLayer],
+    cache: &mut rustc_hash::FxHashMap<usize, Template>,
+) -> Result<Vec<TemplateAtom>, CompilerError> {
+    let mut atoms = Vec::with_capacity(items.len());
+
+    for item in items {
+        match item {
+            PendingChainItem::Atom(atom) => atoms.push(atom.to_owned()),
+            PendingChainItem::LayerRef {
+                layer_index,
+                origin,
+            } => {
+                let resolved_layer = resolve_chain_layer(*layer_index, layers, cache)?;
+                atoms.push(TemplateAtom::Content(TemplateSegment::new(
+                    Expression::template(resolved_layer, Ownership::ImmutableOwned),
+                    *origin,
+                )));
+            }
+        }
+    }
+
+    Ok(atoms)
+}
+
+fn resolve_chain_layer(
+    layer_index: usize,
+    layers: &[ChainLayer],
+    cache: &mut rustc_hash::FxHashMap<usize, Template>,
+) -> Result<Template, CompilerError> {
+    if let Some(cached) = cache.get(&layer_index) {
+        return Ok(cached.to_owned());
+    }
+
+    let layer = &layers[layer_index];
+    let resolved_fill_atoms = resolve_pending_chain_items(&layer.fill_items, layers, cache)?;
+    let resolved_fill = TemplateContent {
+        atoms: resolved_fill_atoms,
+    };
+    let composed_content =
+        compose_template_with_slots(&layer.wrapper, &resolved_fill, &layer.wrapper.location)?;
+
+    let mut resolved_wrapper = layer.wrapper.to_owned();
+    resolved_wrapper.content = composed_content;
+    cache.insert(layer_index, resolved_wrapper.to_owned());
+
+    Ok(resolved_wrapper)
 }
 
 fn fold_atoms(
@@ -797,7 +1016,7 @@ fn fold_atoms(
             }
 
             ExpressionKind::Template(template) => {
-                if matches!(template.kind, TemplateType::SlotInsertion(_))
+                if matches!(template.kind, TemplateType::SlotInsert(_))
                     || template.content.contains_slot_insertions()
                     || template.has_unresolved_slots()
                 {
@@ -949,7 +1168,9 @@ fn format_content_atoms(
                 formatter,
                 string_table,
             );
-            formatted_atoms.push(TemplateAtom::Slot);
+            if let TemplateAtom::Slot(slot_key) = atom {
+                formatted_atoms.push(TemplateAtom::Slot(slot_key));
+            }
             continue;
         };
 

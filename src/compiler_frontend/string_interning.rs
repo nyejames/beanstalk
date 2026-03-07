@@ -213,16 +213,14 @@ impl StringTable {
         let string_content_bytes: usize = self.strings.iter().map(|s| s.len()).sum();
 
         // Box<str> overhead: ptr + len (no capacity like String)
-        let vec_overhead = self.strings.capacity() * std::mem::size_of::<Box<str>>();
+        let vec_overhead = self.strings.capacity() * size_of::<Box<str>>();
 
         // FxHashMap overhead is minimal
-        let hashmap_overhead = self.string_to_id.capacity()
-            * (std::mem::size_of::<&str>() + std::mem::size_of::<StringId>());
+        let hashmap_overhead =
+            self.string_to_id.capacity() * (size_of::<&str>() + size_of::<StringId>());
 
-        let total_bytes = string_content_bytes
-            + vec_overhead
-            + hashmap_overhead
-            + std::mem::size_of::<StringTable>();
+        let total_bytes =
+            string_content_bytes + vec_overhead + hashmap_overhead + size_of::<StringTable>();
 
         MemoryStats {
             total_bytes,

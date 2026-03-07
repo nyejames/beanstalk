@@ -35,7 +35,7 @@ fn parse_single_file_headers_with_entry(
     source: &str,
     file_path: &str,
     entry_file_path: &str,
-) -> Result<Headers, Vec<crate::compiler_frontend::compiler_errors::CompilerError>> {
+) -> Result<Headers, Vec<CompilerError>> {
     let mut string_table = StringTable::new();
     let file_path = PathBuf::from(file_path);
     let entry_file_path = PathBuf::from(entry_file_path);

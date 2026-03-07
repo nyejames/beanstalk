@@ -3,6 +3,7 @@ use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, Operator,
 };
 use crate::compiler_frontend::ast::templates::create_template_node::Template;
+use crate::compiler_frontend::ast::templates::template::SlotKey;
 use crate::compiler_frontend::compiler_errors::ErrorType;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
@@ -15,7 +16,7 @@ use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::TextLocation;
 
-fn setup_builder<'a>(string_table: &'a mut StringTable) -> HirBuilder<'a> {
+fn setup_builder(string_table: &'_ mut StringTable) -> HirBuilder<'_> {
     let test_function_name = InternedPath::from_single_str("__expr_test_fn", string_table);
     let mut builder = HirBuilder::new(string_table);
 
@@ -115,7 +116,7 @@ fn unresolved_slots_are_ignored_when_lowering_runtime_templates() {
         location.clone(),
         Ownership::ImmutableOwned,
     ));
-    template.content.push_slot();
+    template.content.push_slot(SlotKey::Default);
     template.content.add(Expression::string_slice(
         after,
         location,
@@ -244,7 +245,7 @@ fn lowers_reference_to_registered_local() {
     assert_eq!(lowered.value.value_kind, ValueKind::Place);
     assert!(matches!(
         lowered.value.kind,
-        HirExpressionKind::Load(crate::compiler_frontend::hir::hir_nodes::HirPlace::Local(
+        HirExpressionKind::Load(HirPlace::Local(
             LocalId(10)
         ))
     ));
@@ -492,7 +493,7 @@ fn lowers_function_call_to_call_statement_and_temp_load() {
 
     assert!(matches!(
         lowered.value.kind,
-        HirExpressionKind::Load(crate::compiler_frontend::hir::hir_nodes::HirPlace::Local(local))
+        HirExpressionKind::Load(HirPlace::Local(local))
         if local == result_local
     ));
     assert_eq!(lowered.value.value_kind, ValueKind::RValue);

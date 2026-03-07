@@ -630,7 +630,7 @@ fn build_project_const_struct_template_field_can_fill_template_slots() {
     fs::create_dir_all(&root).expect("should create temp root");
     fs::write(
         root.join("main.bst"),
-        "Basic = |\n    page String = [:<section>[..]</section>],\n|\n#basic = Basic()\n#[basic.page: Hello world]\n",
+        "Basic = |\n    page String = [:<section>[$slot]</section>],\n|\n#basic = Basic()\n#[basic.page: Hello world]\n",
     )
     .expect("should write source file");
     let _cwd_guard = CurrentDirGuard::set_to(&root);
@@ -660,7 +660,7 @@ fn build_project_const_slot_insertion_constant_is_composed_at_use_site() {
     fs::create_dir_all(&root).expect("should create temp root");
     fs::write(
         root.join("main.bst"),
-        "#wrapper = [:<section>[..]</section>]\n#slot_1 = [$1: Hello world]\n#[wrapper, slot_1]\n",
+        "#wrapper = [:<section>[$slot(\"content\")]</section>]\n#slot_1 = [$insert(\"content\"): Hello world]\n#[wrapper, slot_1]\n",
     )
     .expect("should write source file");
     let _cwd_guard = CurrentDirGuard::set_to(&root);
@@ -688,8 +688,11 @@ fn build_project_const_slot_insertion_constant_is_composed_at_use_site() {
 fn build_project_rejects_slot_insertion_constant_without_active_wrapper() {
     let root = temp_dir("const_slot_insertion_without_wrapper");
     fs::create_dir_all(&root).expect("should create temp root");
-    fs::write(root.join("main.bst"), "#slot_1 = [$1: hello]\n#[slot_1]\n")
-        .expect("should write source file");
+    fs::write(
+        root.join("main.bst"),
+        "#slot_1 = [$insert(\"content\"): hello]\n#[slot_1]\n",
+    )
+    .expect("should write source file");
     let _cwd_guard = CurrentDirGuard::set_to(&root);
 
     let builder = HtmlProjectBuilder::new();
@@ -705,7 +708,7 @@ fn build_project_rejects_slot_insertion_constant_without_active_wrapper() {
 
     assert!(
         messages.errors.iter().any(|error| error.msg.contains(
-            "Labeled slot insertions can only be used while filling a template that defines slots."
+            "'$insert(...)' can only be used while filling an immediate parent template"
         )),
         "expected a targeted slot insertion usage diagnostic",
     );

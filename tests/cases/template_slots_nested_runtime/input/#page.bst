@@ -2,17 +2,18 @@ prefix = "runtime"
 
 runtime_wrapper = [prefix:
     BEFORE [:
-        first slot lives here [..]
+        first slot lives here [$slot("first")]
+        bridge [$slot]
         second slot lives here [:
-            deeper scene [..]
+            deeper scene [$slot("second")]
         ]
     ] AFTER
 ]
 
 using_runtime_slots = [runtime_wrapper:
-    [$1: first]
+    [$insert("first"): first]
     in between
-    [$2: second]
+    [$insert("second"): second]
 ]
 
 io(using_runtime_slots)

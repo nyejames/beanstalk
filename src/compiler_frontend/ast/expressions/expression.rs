@@ -28,7 +28,7 @@ pub enum ConstValueKind {
     Composite,
     RenderableTemplate,
     TemplateWrapper,
-    SlotInsertionTemplate,
+    SlotInsertTemplate,
     NonConst,
 }
 
@@ -417,7 +417,7 @@ impl Expression {
             ExpressionKind::Template(template) => match template.const_value_kind() {
                 TemplateConstValueKind::RenderableString => ConstValueKind::RenderableTemplate,
                 TemplateConstValueKind::WrapperTemplate => ConstValueKind::TemplateWrapper,
-                TemplateConstValueKind::SlotInsertion => ConstValueKind::SlotInsertionTemplate,
+                TemplateConstValueKind::SlotInsertHelper => ConstValueKind::SlotInsertTemplate,
                 TemplateConstValueKind::NonConst => ConstValueKind::NonConst,
             },
             ExpressionKind::Reference(_)

@@ -70,7 +70,7 @@ Inside the body of a template, you can nest more templates using square brackets
     
     -- A template with a slot for content injection
     [:
-        Content will be inserted here: [..]
+        Content will be inserted here: [$slot]
     ]
     
 ```

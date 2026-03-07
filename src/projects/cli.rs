@@ -88,7 +88,7 @@ pub fn start_cli() {
             let html_project_builder = HtmlProjectBuilder::new();
             match build::build_project(&html_project_builder, &path, &flags) {
                 Ok(build_result) => {
-                    let output_root = match std::env::current_dir() {
+                    let output_root = match env::current_dir() {
                         Ok(path) => path,
                         Err(error) => {
                             print_compiler_messages(CompilerMessages {

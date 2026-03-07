@@ -135,8 +135,7 @@ pub fn parse_declaration_syntax(
 fn parse_explicit_type_annotation(
     token_stream: &mut FileTokens,
     string_table: &StringTable,
-) -> Result<(DataType, Option<StringId>), crate::compiler_frontend::compiler_errors::CompilerError>
-{
+) -> Result<(DataType, Option<StringId>), CompilerError> {
     match token_stream.current_token_kind() {
         TokenKind::Assign | TokenKind::Newline => Ok((DataType::Inferred, None)),
         TokenKind::DatatypeInt => {

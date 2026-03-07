@@ -1,0 +1,2 @@
+mode = "failure"
+message_contains = ["$insert(\"name\")", "does not exist on the immediate parent template"]

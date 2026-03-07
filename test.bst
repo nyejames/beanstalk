@@ -1,16 +1,16 @@
 Basic = |
     document String = [:
         <head>
-            [..]
+            [$slot]
         </head>
-        <body>[$markdown: [..]]</body>
+        <body>[$markdown: [$slot]]</body>
     ],
-    page String = [$markdown:<section>[..]</section>],
+    page String = [$markdown:<section>[$slot]</section>],
 
     -- Basic formatting
-    center String = [:<span align="center">[..]<span/>],
-    underline String = [:<u>[..]</u>],
-    strikethrough String = [:<s>[..]</s>],
+    center String = [:<span align="center">[$slot]<span/>],
+    underline String = [:<u>[$slot]</u>],
+    strikethrough String = [:<s>[$slot]</s>],
 |
 
 -- Export a constant instance of the basic library

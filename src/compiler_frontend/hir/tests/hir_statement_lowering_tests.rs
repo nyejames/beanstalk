@@ -6,6 +6,7 @@ use crate::compiler_frontend::ast::expressions::expression::{Expression, Express
 use crate::compiler_frontend::ast::statements::branching::MatchArm;
 use crate::compiler_frontend::ast::statements::functions::{FunctionReturn, FunctionSignature};
 use crate::compiler_frontend::ast::templates::create_template_node::Template;
+use crate::compiler_frontend::ast::templates::template::SlotKey;
 use crate::compiler_frontend::compiler_errors::{CompilerMessages, ErrorType};
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
@@ -114,10 +115,7 @@ fn entry_path_and_start_name(string_table: &mut StringTable) -> (InternedPath, I
     (entry_path, start_name)
 }
 
-fn lower_ast(
-    ast: Ast,
-    string_table: &mut StringTable,
-) -> Result<crate::compiler_frontend::hir::hir_nodes::HirModule, CompilerMessages> {
+fn lower_ast(ast: Ast, string_table: &mut StringTable) -> Result<HirModule, CompilerMessages> {
     HirBuilder::new(string_table).build_hir_module(ast)
 }
 
@@ -286,7 +284,7 @@ fn omits_unresolved_slot_wrapper_constants_from_hir_const_pool() {
         test_location(2),
         Ownership::ImmutableOwned,
     ));
-    wrapper_template.content.push_slot();
+    wrapper_template.content.push_slot(SlotKey::Default);
     wrapper_template.content.add(Expression::string_slice(
         string_table.intern(" after"),
         test_location(2),
@@ -343,7 +341,7 @@ fn omits_nested_struct_constants_with_unresolved_template_helpers_from_hir_const
         test_location(2),
         Ownership::ImmutableOwned,
     ));
-    wrapper_template.content.push_slot();
+    wrapper_template.content.push_slot(SlotKey::Default);
     wrapper_template.content.add(Expression::string_slice(
         string_table.intern("</section>"),
         test_location(2),

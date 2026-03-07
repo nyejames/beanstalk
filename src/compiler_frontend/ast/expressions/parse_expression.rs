@@ -277,7 +277,7 @@ pub fn create_expression(
 
                 if let Some(arg) = context.get_reference(id) {
                     if let ExpressionKind::Template(template_value) = &arg.value.kind
-                        && matches!(template_value.kind, TemplateType::SlotInsertion(_))
+                        && matches!(template_value.kind, TemplateType::SlotInsert(_))
                         && !matches!(
                             context.kind,
                             ContextKind::Template
@@ -286,11 +286,11 @@ pub fn create_expression(
                         )
                     {
                         return_rule_error!(
-                            "Labeled slot insertions can only be used while filling a template that defines slots.",
+                            "'$insert(...)' helpers can only be used while filling an immediate parent template that defines matching '$slot' targets.",
                             token_stream.current_location().to_error_location(string_table),
                             {
                                 CompilationStage => "Expression Parsing",
-                                PrimarySuggestion => "Use this slot insertion inside a template head that applies an active wrapper template",
+                                PrimarySuggestion => "Use this '$insert(...)' helper inside a template invocation that has a slot-bearing parent in the head chain",
                             }
                         );
                     }
@@ -644,7 +644,7 @@ pub fn create_expression(
                     // Ignore comments
                     TemplateType::Comment => {}
 
-                    TemplateType::SlotInsertion(_) => {
+                    TemplateType::SlotInsert(_) => {
                         if consume_closing_parenthesis
                             && token_stream.current_token_kind() == &TokenKind::CloseParenthesis
                         {
@@ -652,6 +652,17 @@ pub fn create_expression(
                         }
 
                         return Ok(Expression::template(template, ownership.to_owned()));
+                    }
+
+                    TemplateType::SlotDefinition(_) => {
+                        return_rule_error!(
+                            "'$slot' markers are only valid as direct nested templates inside template bodies.",
+                            token_stream.current_location().to_error_location(&string_table),
+                            {
+                                CompilationStage => "Expression Parsing",
+                                PrimarySuggestion => "Use '$slot' inside a template body where it defines a receiving slot",
+                            }
+                        );
                     }
                 }
             }

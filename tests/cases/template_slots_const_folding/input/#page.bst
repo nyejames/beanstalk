@@ -1,14 +1,8 @@
-# single_slot = [: before [..] after]
+# single_slot = [: before [$slot] after]
 # wrapped_content = [single_slot: this content is now wrapped]
 
-# basic_slots = [: before [..] in the middle [..] afterwards]
-# template_using_slots = [basic_slots:
-    this text goes before any slots
-    [$1: This goes into the first slot]
-    this would go in between the slots
-    [$2: This goes into the second slot]
-    this would go after any slots
-]
+# basic_slots = [: before [$slot("first")] in the middle [$slot("second")] afterwards]
+# template_using_slots = [basic_slots:[$insert("first"): This goes into the first slot][$insert("second"): This goes into the second slot]]
 
 io(wrapped_content)
 io(template_using_slots)

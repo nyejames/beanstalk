@@ -8,13 +8,13 @@ Document = |
         <meta charset="UTF-8">
         <meta name="viewport"content="width=device-width, initial-scale=1">
         <meta name="color-scheme" content="light dark" />
-        [..]
+        [$slot]
       </head>
     ],
-    title String = [:<title>[..]</title>],
-    style String = [:<style>[default_style][..]</style>],
-    body String = [:<body>[..]</body>],
-    div String = [:<div>[..]</div>],
+    title String = [:<title>[$slot]</title>],
+    style String = [:<style>[default_style][$slot]</style>],
+    body String = [:<body class="container">[$slot]</body>],
+    div String = [:<div>[$slot]</div>],
 |
 
 -- Export a constant instance of Document
@@ -23,11 +23,11 @@ Document = |
 
 Format = |
     -- Basic formatting
-    underline String = [:<u>[..]</u>],
-    strikethrough String = [:<s>[..]</s>],
+    underline String = [:<u>[$slot]</u>],
+    strikethrough String = [:<s>[$slot]</s>],
 
     table String = [:
-      <table>[..]</table>
+      <table>[$slot]</table>
     ],
 |
 

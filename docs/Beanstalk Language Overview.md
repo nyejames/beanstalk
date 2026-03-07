@@ -156,6 +156,30 @@ Shorthand formatter sugar will be supported for built-in formatters:
 ]
 ```
 
+### Template Slots
+
+Template slots let one template receive content from another template. The default slot is written as `[$slot]` and marks where the main body content should be inserted.
+
+Named slots can also be declared with `[$slot("name")]`. These allow helper templates to insert content into a specific part of another template using `$insert("name")`.
+
+```beanstalk
+title = [:
+    <h1 style="[$slot("style")]">
+        [$slot]
+    </h1>
+]
+
+blue = [$insert("style"): color: blue;]
+
+[title, blue:
+    Hello world
+]
+````
+
+In this example, `blue` inserts `color: blue;` into the `style` slot of `title`, while `Hello world` is inserted into the default slot.
+
+If a template has named slots but no default slot, loose body content is an error and content must be inserted explicitly into a named slot. 
+If a named slot receives no `$insert(...)` content, it expands to an empty string.
 
 **Control flow patterns:**
 
@@ -444,11 +468,3 @@ Example:
 -- Slots are allowed if their resolved content is constant.
 #[html.head: [head_defaults]]
 ```
-
-## Key Differences from Rust
-| Aspect | Rust | Beanstalk |
-|--------|------|-----------|
-| Borrow syntax | `&x`, `&mut x` | `x` (shared), `x ~=` (mut) |
-| Default semantics | Move | Borrow |
-| Explicit operations | Borrow | Mutability/Move |
-| Copy behavior | Implicit for Copy types | Always explicit |

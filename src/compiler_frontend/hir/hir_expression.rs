@@ -1183,7 +1183,7 @@ impl<'a> HirBuilder<'a> {
                         region,
                     )));
                 }
-                crate::compiler_frontend::ast::templates::template::TemplateConstValueKind::SlotInsertion => {
+                crate::compiler_frontend::ast::templates::template::TemplateConstValueKind::SlotInsertHelper => {
                     return_hir_transformation_error!(
                         format!(
                             "Template helper constant '{}' reached HIR expression lowering before AST wrapper-slot resolution.",

@@ -91,11 +91,11 @@ impl LoweringContext {
         blocks: &[HirBlock],
     ) -> Result<Vec<LirInst>, CompilerError> {
         if arms.is_empty() {
-            if let Some(default_id) = default_block {
-                return self.lower_block(default_id, blocks);
+            return if let Some(default_id) = default_block {
+                self.lower_block(default_id, blocks)
             } else {
-                return Ok(vec![LirInst::Nop]);
-            }
+                Ok(vec![LirInst::Nop])
+            };
         }
 
         let arm = &arms[0];

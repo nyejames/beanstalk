@@ -227,7 +227,7 @@ fn extract_runtime_template_candidates(
                     .filter(|statement| {
                         as_top_level_template_declaration(statement, string_table).is_none()
                     })
-                    .map(std::borrow::ToOwned::to_owned)
+                    .map(ToOwned::to_owned)
                     .collect(),
             });
             continue;

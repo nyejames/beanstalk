@@ -108,46 +108,44 @@ fn rejects_style_directives_outside_template_heads() {
 }
 
 #[test]
-fn tokenizes_template_slot_markers_in_template_bodies() {
-    let (file_tokens, _) = tokenize_source("[: before [   ....   ] after]");
+fn tokenizes_slot_and_insert_directives_inside_template_heads() {
+    let (file_tokens, string_table) =
+        tokenize_source("[wrapper: [$slot][$slot(\"style\")][$insert(\"style\"): blue]]");
 
+    let slot_directive_count = file_tokens
+        .tokens
+        .iter()
+        .filter(|token| {
+            matches!(token.kind, TokenKind::StyleDirective(id) if string_table.resolve(id) == "slot")
+        })
+        .count();
+    let has_insert_directive = file_tokens.tokens.iter().any(|token| {
+        matches!(token.kind, TokenKind::StyleDirective(id) if string_table.resolve(id) == "insert")
+    });
+
+    assert_eq!(slot_directive_count, 2);
+    assert!(has_insert_directive);
     assert!(
         file_tokens
             .tokens
             .iter()
-            .any(|token| matches!(token.kind, TokenKind::TemplateSlotMarker))
+            .any(|token| matches!(token.kind, TokenKind::StringSliceLiteral(_)))
     );
 }
 
 #[test]
-fn tokenizes_labeled_slot_targets_inside_template_heads() {
-    let (file_tokens, _) = tokenize_source("[wrapper: [$1: first][$2]]");
-
-    assert!(
-        file_tokens
-            .tokens
-            .iter()
-            .any(|token| matches!(token.kind, TokenKind::SlotTarget(1)))
-    );
-    assert!(
-        file_tokens
-            .tokens
-            .iter()
-            .any(|token| matches!(token.kind, TokenKind::SlotTarget(2)))
-    );
-}
-
-#[test]
-fn rejects_malformed_template_slot_markers() {
+fn rejects_numeric_slot_directive_prefixes() {
     let mut string_table = StringTable::new();
     let source_path = InternedPath::from_single_str("test.bst", &mut string_table);
 
     let result = tokenize(
-        "[: before [ .x ] after]",
+        "[wrapper: [$1: first]]",
         &source_path,
         TokenizeMode::Normal,
         &mut string_table,
     );
-
-    assert!(result.is_err(), "malformed slot markers should fail");
+    assert!(
+        result.is_err(),
+        "legacy numeric '$1' slot directives should fail"
+    );
 }

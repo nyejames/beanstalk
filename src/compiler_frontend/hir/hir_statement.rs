@@ -146,7 +146,7 @@ impl<'a> HirBuilder<'a> {
                         )))
                     }
                     crate::compiler_frontend::ast::templates::template::TemplateConstValueKind::WrapperTemplate
-                    | crate::compiler_frontend::ast::templates::template::TemplateConstValueKind::SlotInsertion => {
+                    | crate::compiler_frontend::ast::templates::template::TemplateConstValueKind::SlotInsertHelper => {
                         Ok(None)
                     }
                     crate::compiler_frontend::ast::templates::template::TemplateConstValueKind::NonConst => {

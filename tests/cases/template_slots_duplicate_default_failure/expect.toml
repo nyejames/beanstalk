@@ -1,0 +1,2 @@
+mode = "failure"
+message_contains = ["only define one default '$slot'"]

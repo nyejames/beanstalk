@@ -3,8 +3,21 @@
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::templates::create_template_node::Template;
 use crate::compiler_frontend::compiler_errors::CompilerError;
+use crate::compiler_frontend::string_interning::StringId;
 use crate::return_rule_error;
 use std::sync::Arc;
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum SlotKey {
+    Default,
+    Named(StringId),
+}
+
+impl SlotKey {
+    pub fn named(name: StringId) -> Self {
+        Self::Named(name)
+    }
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum TemplateType {
@@ -12,9 +25,12 @@ pub enum TemplateType {
     // Fully compile-time-resolved template content. This can still contain unresolved
     // slots, which makes it a compile-time wrapper rather than a direct string value.
     String,
-    // `[$1: ...]` / `[$2]` helper templates are parsed as their own template nodes so
-    // the body parser can reuse the normal nested-template path and route them later.
-    SlotInsertion(usize),
+    // `[$slot]` and `[$slot("name")]` parse as dedicated template nodes while body
+    // parsing, then become structural slot atoms in the parent template content.
+    SlotDefinition(SlotKey),
+    // `[$insert("name"): ...]` helpers carry contribution content that only an
+    // immediate parent template can consume during slot composition.
+    SlotInsert(SlotKey),
     Comment,
 }
 
@@ -22,7 +38,7 @@ pub enum TemplateType {
 pub enum TemplateConstValueKind {
     RenderableString,
     WrapperTemplate,
-    SlotInsertion,
+    SlotInsertHelper,
     NonConst,
 }
 
@@ -75,15 +91,27 @@ impl TemplateContent {
             .push(TemplateAtom::Content(TemplateSegment::new(content, origin)));
     }
 
-    pub fn push_slot(&mut self) {
-        self.atoms.push(TemplateAtom::Slot);
+    pub fn push_slot(&mut self, key: SlotKey) {
+        self.atoms.push(TemplateAtom::Slot(key));
     }
 
     pub fn slot_count(&self) -> usize {
         self.atoms
             .iter()
-            .filter(|atom| matches!(atom, TemplateAtom::Slot))
+            .filter(|atom| matches!(atom, TemplateAtom::Slot(_)))
             .count()
+    }
+
+    pub fn has_default_slot(&self) -> bool {
+        self.atoms
+            .iter()
+            .any(|atom| matches!(atom, TemplateAtom::Slot(SlotKey::Default)))
+    }
+
+    pub fn has_named_slots(&self) -> bool {
+        self.atoms
+            .iter()
+            .any(|atom| matches!(atom, TemplateAtom::Slot(SlotKey::Named(_))))
     }
 
     /// Count every unresolved slot marker reachable inside this content,
@@ -113,7 +141,7 @@ impl TemplateContent {
 
         for atom in &self.atoms {
             match atom {
-                TemplateAtom::Slot => segments.push(Vec::new()),
+                TemplateAtom::Slot(_) => segments.push(Vec::new()),
                 TemplateAtom::Content(_) => segments.last_mut().unwrap().push(atom.clone()),
             }
         }
@@ -126,7 +154,7 @@ impl TemplateContent {
             .iter()
             .filter_map(|atom| match atom {
                 TemplateAtom::Content(segment) => Some(segment.expression.clone()),
-                TemplateAtom::Slot => None,
+                TemplateAtom::Slot(_) => None,
             })
             .collect()
     }
@@ -136,9 +164,9 @@ impl TemplateContent {
 
         for atom in &self.atoms {
             match atom {
-                TemplateAtom::Slot => {
+                TemplateAtom::Slot(_) => {
                     return Err(CompilerError::compiler_error(
-                        "Template still contains unresolved slots and cannot be rendered directly.",
+                        "Template still contains unresolved '$slot' directives and cannot be rendered directly.",
                     ));
                 }
                 TemplateAtom::Content(segment) => {
@@ -146,16 +174,16 @@ impl TemplateContent {
                         template,
                     ) = &segment.expression.kind
                     {
-                        if matches!(template.kind, TemplateType::SlotInsertion(_)) {
+                        if matches!(template.kind, TemplateType::SlotInsert(_)) {
                             return_rule_error!(
-                                "Labeled slot insertions can only be used while filling a template that defines slots.",
+                                "'$insert(...)' can only be used while filling an immediate parent template that defines matching slots.",
                                 segment.expression.location.to_owned().to_error_location_without_table()
                             );
                         }
 
                         if template.has_unresolved_slots() {
                             return_rule_error!(
-                                "Template still contains unresolved slots and cannot be rendered directly.",
+                                "Template still contains unresolved '$slot' directives and cannot be rendered directly.",
                                 segment.expression.location.to_owned().to_error_location_without_table()
                             );
                         }
@@ -182,7 +210,7 @@ impl TemplateContent {
                 TemplateAtom::Content(segment) => {
                     TemplateAtom::Content(segment.with_origin(origin))
                 }
-                TemplateAtom::Slot => TemplateAtom::Slot,
+                TemplateAtom::Slot(key) => TemplateAtom::Slot(key),
             }));
     }
 }
@@ -190,13 +218,13 @@ impl TemplateContent {
 #[derive(Clone, Debug)]
 pub enum TemplateAtom {
     Content(TemplateSegment),
-    Slot,
+    Slot(SlotKey),
 }
 
 impl TemplateAtom {
     fn total_slot_count(&self) -> usize {
         match self {
-            TemplateAtom::Slot => 1,
+            TemplateAtom::Slot(_) => 1,
             TemplateAtom::Content(segment) => match &segment.expression.kind {
                 crate::compiler_frontend::ast::expressions::expression::ExpressionKind::Template(
                     template,
@@ -208,7 +236,7 @@ impl TemplateAtom {
 
     fn has_unresolved_slots(&self) -> bool {
         match self {
-            TemplateAtom::Slot => true,
+            TemplateAtom::Slot(_) => true,
             TemplateAtom::Content(segment) => match &segment.expression.kind {
                 crate::compiler_frontend::ast::expressions::expression::ExpressionKind::Template(
                     template,
@@ -220,12 +248,12 @@ impl TemplateAtom {
 
     fn contains_slot_insertions(&self) -> bool {
         match self {
-            TemplateAtom::Slot => false,
+            TemplateAtom::Slot(_) => false,
             TemplateAtom::Content(segment) => match &segment.expression.kind {
                 crate::compiler_frontend::ast::expressions::expression::ExpressionKind::Template(
                     template,
                 ) => {
-                    matches!(template.kind, TemplateType::SlotInsertion(_))
+                    matches!(template.kind, TemplateType::SlotInsert(_))
                         || template.content.contains_slot_insertions()
                 }
                 _ => false,
@@ -237,7 +265,7 @@ impl TemplateAtom {
         match self {
             // Unresolved slots are allowed for compile-time wrapper values.
             // They only become invalid when a fully rendered string is required.
-            TemplateAtom::Slot => true,
+            TemplateAtom::Slot(_) => true,
             TemplateAtom::Content(segment) => match &segment.expression.kind {
                 crate::compiler_frontend::ast::expressions::expression::ExpressionKind::Template(
                     template,

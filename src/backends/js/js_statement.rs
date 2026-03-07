@@ -196,7 +196,7 @@ impl<'hir> JsEmitter<'hir> {
 
     pub(crate) fn emit_return_terminator(
         &mut self,
-        expression: &crate::compiler_frontend::hir::hir_nodes::HirExpression,
+        expression: &HirExpression,
     ) -> Result<(), CompilerError> {
         if self.is_unit_expression(expression) {
             self.emit_line("return;");
@@ -210,7 +210,7 @@ impl<'hir> JsEmitter<'hir> {
 
     pub(crate) fn emit_panic_terminator(
         &mut self,
-        message: &Option<crate::compiler_frontend::hir::hir_nodes::HirExpression>,
+        message: &Option<HirExpression>,
     ) -> Result<(), CompilerError> {
         if let Some(message) = message {
             let message = self.lower_expr(message)?;
