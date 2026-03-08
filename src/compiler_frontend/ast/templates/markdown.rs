@@ -105,7 +105,7 @@ pub fn to_markdown(content: &str, default_tag: &str) -> String {
                 context = MarkdownContext::Heading(heading_strength);
                 heading_strength = 0;
             } else {
-                output.push(ch);
+                push_escaped_html_char(&mut output, ch);
             }
 
             index += 1;
@@ -218,7 +218,11 @@ pub fn to_markdown(content: &str, default_tag: &str) -> String {
 
                 newlines = 0;
                 prev_whitespace = false;
-                output.push_str(&format!("<a href=\"{}\">{}</a>", link.target, link.label));
+                output.push_str("<a href=\"");
+                push_escaped_html_text(&mut output, &link.target);
+                output.push_str("\">");
+                push_escaped_html_text(&mut output, &link.label);
+                output.push_str("</a>");
                 index += link.consumed_chars;
                 continue;
             }
@@ -236,7 +240,7 @@ pub fn to_markdown(content: &str, default_tag: &str) -> String {
 
         newlines = 0;
         prev_whitespace = false;
-        output.push(ch);
+        push_escaped_html_char(&mut output, ch);
         index += 1;
     }
 
@@ -407,6 +411,23 @@ fn flush_pending_markers(output: &mut String, heading_strength: &mut u32, em_str
 
     *heading_strength = 0;
     *em_strength = 0;
+}
+
+fn push_escaped_html_text(output: &mut String, text: &str) {
+    for ch in text.chars() {
+        push_escaped_html_char(output, ch);
+    }
+}
+
+fn push_escaped_html_char(output: &mut String, ch: char) {
+    match ch {
+        '<' => output.push_str("&lt;"),
+        '>' => output.push_str("&gt;"),
+        '&' => output.push_str("&amp;"),
+        '"' => output.push_str("&quot;"),
+        '\'' => output.push_str("&#39;"),
+        _ => output.push(ch),
+    }
 }
 
 fn em_tag_strength(strength: i32, closing: bool) -> &'static str {

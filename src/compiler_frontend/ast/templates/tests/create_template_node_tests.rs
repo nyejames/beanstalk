@@ -241,6 +241,22 @@ fn markdown_links_render_to_anchor_tags() {
 }
 
 #[test]
+fn markdown_escapes_html_characters_in_body_text() {
+    let rendered = folded_template_output("[$markdown:\n<b>Hello & \"World\" 'x'</b>\n]");
+
+    assert!(rendered.contains("&lt;b&gt;Hello &amp; &quot;World&quot; &#39;x&#39;&lt;/b&gt;"));
+    assert!(!rendered.contains("<b>Hello"));
+}
+
+#[test]
+fn non_markdown_templates_do_not_escape_html_body_text() {
+    let rendered = folded_template_output("[:<b>Hello & \"World\" 'x'</b>]");
+
+    assert!(rendered.contains("<b>Hello & \"World\" 'x'</b>"));
+    assert!(!rendered.contains("&lt;b&gt;"));
+}
+
+#[test]
 fn runtime_templates_format_static_body_strings_only() {
     let mut string_table = StringTable::new();
     let mut token_stream =

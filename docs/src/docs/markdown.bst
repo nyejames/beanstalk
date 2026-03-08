@@ -49,6 +49,8 @@ Beanstalk files can still import additional HTML, CSS, JS or Beanstalk files to 
 
     The body of a template is mostly like a simple flavour of markdown, 
     the main difference being square brackets [Basic.red: *cannot*] be used without an escape character or by using backticks to create a raw string.
+    HTML characters are escaped in markdown bodies, so tags are treated as text.
+    Use raw strings or compose custom templates when you need literal HTML output.
 
     ]
 ```
