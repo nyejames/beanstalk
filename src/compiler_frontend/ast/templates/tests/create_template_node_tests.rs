@@ -4,7 +4,7 @@ use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
 use crate::compiler_frontend::ast::templates::code::{
-    CodeLanguage, code_formatter, highlight_code_html,
+    code_formatter, highlight_code_html, CodeLanguage,
 };
 use crate::compiler_frontend::ast::templates::markdown::markdown_formatter;
 use crate::compiler_frontend::ast::templates::template::{
@@ -49,9 +49,7 @@ fn template_tokens_from_source(source: &str, string_table: &mut StringTable) -> 
     tokens.index = tokens
         .tokens
         .iter()
-        .position(|token| {
-            matches!(token.kind, TokenKind::TemplateHead)
-        })
+        .position(|token| matches!(token.kind, TokenKind::TemplateHead))
         .expect("expected a template opener");
 
     tokens
@@ -235,6 +233,14 @@ fn markdown_supports_h2_headings() {
 }
 
 #[test]
+fn markdown_links_render_to_anchor_tags() {
+    let rendered =
+        folded_template_output("[$markdown:\nVisit @https://example.com/docs (Beanstalk docs)\n]");
+
+    assert!(rendered.contains("<a href=\"https://example.com/docs\">Beanstalk docs</a>"));
+}
+
+#[test]
 fn runtime_templates_format_static_body_strings_only() {
     let mut string_table = StringTable::new();
     let mut token_stream =
@@ -260,11 +266,9 @@ fn runtime_templates_format_static_body_strings_only() {
         )
         .expect("expected a formatted body segment");
 
-    assert!(
-        string_table
-            .resolve(formatted_body)
-            .contains("<h1>Hello</h1>")
-    );
+    assert!(string_table
+        .resolve(formatted_body)
+        .contains("<h1>Hello</h1>"));
 }
 
 #[test]
@@ -347,7 +351,8 @@ fn children_directive_accepts_const_string_reference() {
 #[test]
 fn children_directive_rejects_runtime_values() {
     let mut string_table = StringTable::new();
-    let mut token_stream = template_tokens_from_source("[$children(value): [: child]]", &mut string_table);
+    let mut token_stream =
+        template_tokens_from_source("[$children(value): [: child]]", &mut string_table);
     let context = runtime_template_context(&token_stream.src_path, &mut string_table);
 
     let error = Template::new(&mut token_stream, &context, vec![], &mut string_table)

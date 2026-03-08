@@ -1,5 +1,4 @@
 use crate::compiler_frontend::ast::templates::template::{Formatter, TemplateFormatter};
-use std::str::Chars;
 use std::sync::Arc;
 
 // Custom-flavoured Markdown parser
@@ -33,14 +32,12 @@ pub fn markdown_formatter() -> Formatter {
     }
 }
 
-// Only very basics (atm): P, Headings, Bold, Italics
-// May add some more later
 pub fn to_markdown(content: &str, default_tag: &str) -> String {
     let mut context = MarkdownContext::None;
     const NEWLINES_BEFORE_NEW_P: usize = 2;
     const NEWLINES_BEFORE_BREAK: usize = 3;
 
-    let chars: Chars = content.chars();
+    let chars: Vec<char> = content.chars().collect();
     let mut output = String::new();
 
     // Headings must be at the start of the line,
@@ -57,12 +54,16 @@ pub fn to_markdown(content: &str, default_tag: &str) -> String {
 
     let mut skip_parsing = false;
 
-    for ch in chars {
+    let mut index = 0usize;
+    while index < chars.len() {
+        let ch = chars[index];
+
         // Special object replace character that signals to ignore parsing a section into Markdown
         // This is used to ignore nested templates that have already been parsed
         // And may not be mark down. e.g. raw strings
         if ch == HIDDEN_SKIP_CHAR {
             skip_parsing = !skip_parsing;
+            index += 1;
             continue;
         }
         // // Codeblock indicator character (invisible multiply)
@@ -78,6 +79,7 @@ pub fn to_markdown(content: &str, default_tag: &str) -> String {
         // }
         if skip_parsing {
             output.push(ch);
+            index += 1;
             continue;
         }
 
@@ -106,6 +108,7 @@ pub fn to_markdown(content: &str, default_tag: &str) -> String {
                 output.push(ch);
             }
 
+            index += 1;
             continue;
         }
 
@@ -144,6 +147,7 @@ pub fn to_markdown(content: &str, default_tag: &str) -> String {
                 }
             }
 
+            index += 1;
             continue;
         }
 
@@ -157,6 +161,7 @@ pub fn to_markdown(content: &str, default_tag: &str) -> String {
             heading_strength += 1;
             prev_whitespace = false;
             newlines = 0;
+            index += 1;
             continue;
         }
 
@@ -175,12 +180,14 @@ pub fn to_markdown(content: &str, default_tag: &str) -> String {
                     em_strength = 0;
                 }
 
+                index += 1;
                 continue;
             } else if prev_whitespace && em_strength >= 0 {
                 // Possible new emphasis tag
                 em_strength += 1;
                 newlines = 0;
 
+                index += 1;
                 continue;
             }
         }
@@ -204,57 +211,33 @@ pub fn to_markdown(content: &str, default_tag: &str) -> String {
             em_strength = 0;
         }
 
-        // If nothing else special has happened, and we are not inside a P tag
-        // Then start a new P tag
-        if context == MarkdownContext::None {
-            // if prev_whitespace {
-            //     output.push_str("&nbsp;");
-            // }
+        if ch == '@' {
+            if let Some(link) = try_parse_link_at(&chars, index) {
+                ensure_default_context(&mut output, &mut context, default_tag);
+                flush_pending_markers(&mut output, &mut heading_strength, &mut em_strength);
 
-            output.push_str(&format!("<{default_tag}>"));
-            context = MarkdownContext::Default;
+                newlines = 0;
+                prev_whitespace = false;
+                output.push_str(&format!("<a href=\"{}\">{}</a>", link.target, link.label));
+                index += link.consumed_chars;
+                continue;
+            }
         }
 
-        // Escape HTML characters that might lead to accidental HTML injection
-        // You can't write HTML in this flavour of Markdown
-        // TODO: need to make this skippable for slots and such
-        // if ch == '<' {
-        //     output.push_str("&lt;");
-        //     continue;
-        // }
-        // if ch == '>' {
-        //     output.push_str("&gt;");
-        //     continue;
-        // }
-        // if ch == '&' {
-        //     output.push_str("&amp;");
-        //     continue;
-        // }
-        // if ch == '"' {
-        //     output.push_str("&quot;");
-        //     continue;
-        // }
-        // if ch == '\'' {
-        //     output.push_str("&#39;");
-        //     continue;
-        // }
+        // If nothing else special has happened, and we are not inside a P tag
+        // Then start a new P tag
+        ensure_default_context(&mut output, &mut context, default_tag);
 
         // If it's fallen through, then strengths and newlines can be reset
 
         // If heading strength or emphasis is positive (or negative for emphasis)
         // Before it's reset, those characters need to be added to the output
-        if heading_strength > 0 {
-            output.push_str(&"#".repeat(heading_strength as usize).to_string());
-        }
-
-        if em_strength != 0 {
-            output.push_str(&"*".repeat(em_strength.unsigned_abs() as usize).to_string());
-        }
+        flush_pending_markers(&mut output, &mut heading_strength, &mut em_strength);
 
         newlines = 0;
-        heading_strength = 0;
         prev_whitespace = false;
         output.push(ch);
+        index += 1;
     }
 
     // Close off the final tag if needed
@@ -274,8 +257,156 @@ pub fn to_markdown(content: &str, default_tag: &str) -> String {
         MarkdownContext::None => {}
     }
 
-    // format!("{HIDDEN_SKIP_CHAR}{output}{HIDDEN_SKIP_CHAR}")
     output
+}
+
+#[derive(Debug)]
+struct ParsedMarkdownLink {
+    target: String,
+    label: String,
+    consumed_chars: usize,
+}
+
+fn try_parse_link_at(chars: &[char], at_index: usize) -> Option<ParsedMarkdownLink> {
+    if at_index >= chars.len() || chars[at_index] != '@' {
+        return None;
+    }
+
+    if at_index > 0 {
+        let prev = chars[at_index - 1];
+        if prev != HIDDEN_SKIP_CHAR && !prev.is_whitespace() {
+            return None;
+        }
+    }
+
+    let target_start = at_index + 1;
+    let mut cursor = target_start;
+    if !consume_target_start(chars, &mut cursor) {
+        return None;
+    }
+
+    while cursor < chars.len() && !chars[cursor].is_whitespace() {
+        cursor += 1;
+    }
+    let target_end = cursor;
+    if target_end == target_start {
+        return None;
+    }
+
+    let spacing_start = cursor;
+    while cursor < chars.len() && is_horizontal_whitespace(chars[cursor]) {
+        cursor += 1;
+    }
+    if spacing_start == cursor {
+        return None;
+    }
+
+    if cursor >= chars.len() || chars[cursor] != '(' {
+        return None;
+    }
+    cursor += 1;
+
+    let label_start = cursor;
+    while cursor < chars.len() && chars[cursor] != ')' {
+        cursor += 1;
+    }
+    if cursor >= chars.len() || chars[cursor] != ')' {
+        return None;
+    }
+
+    let label = chars[label_start..cursor].iter().collect::<String>();
+    if label.chars().all(char::is_whitespace) {
+        return None;
+    }
+
+    let target = chars[target_start..target_end].iter().collect::<String>();
+
+    Some(ParsedMarkdownLink {
+        target,
+        label,
+        consumed_chars: cursor + 1 - at_index,
+    })
+}
+
+fn consume_target_start(chars: &[char], cursor: &mut usize) -> bool {
+    if *cursor >= chars.len() {
+        return false;
+    }
+
+    let remaining = &chars[*cursor..];
+    if starts_with_chars(remaining, &['/', '/']) {
+        *cursor += 2;
+        return true;
+    }
+    if starts_with_chars(remaining, &['.', '/']) {
+        *cursor += 2;
+        return true;
+    }
+    if starts_with_chars(remaining, &['.', '.', '/']) {
+        *cursor += 3;
+        return true;
+    }
+
+    match chars[*cursor] {
+        '/' | '#' | '?' => {
+            *cursor += 1;
+            true
+        }
+        ch if ch.is_ascii_alphabetic() => consume_scheme_prefix(chars, cursor),
+        _ => false,
+    }
+}
+
+fn consume_scheme_prefix(chars: &[char], cursor: &mut usize) -> bool {
+    if *cursor >= chars.len() || !chars[*cursor].is_ascii_alphabetic() {
+        return false;
+    }
+
+    *cursor += 1;
+    while *cursor < chars.len() && is_scheme_char(chars[*cursor]) {
+        *cursor += 1;
+    }
+
+    if *cursor >= chars.len() || chars[*cursor] != ':' {
+        return false;
+    }
+
+    *cursor += 1;
+    true
+}
+
+fn is_scheme_char(ch: char) -> bool {
+    ch.is_ascii_alphanumeric() || matches!(ch, '+' | '.' | '-')
+}
+
+fn starts_with_chars(input: &[char], prefix: &[char]) -> bool {
+    input.starts_with(prefix)
+}
+
+fn is_horizontal_whitespace(ch: char) -> bool {
+    matches!(ch, ' ' | '\t')
+}
+
+fn ensure_default_context(output: &mut String, context: &mut MarkdownContext, default_tag: &str) {
+    if *context != MarkdownContext::None {
+        return;
+    }
+
+    output.push_str(&format!("<{default_tag}>"));
+    *context = MarkdownContext::Default;
+}
+
+fn flush_pending_markers(output: &mut String, heading_strength: &mut u32, em_strength: &mut i32) {
+    if *heading_strength > 0 {
+        output.push_str(&"#".repeat(*heading_strength as usize));
+    }
+
+    if *em_strength != 0 {
+        output.push_str(&"*".repeat(em_strength.unsigned_abs() as usize));
+    }
+
+    *heading_strength = 0;
+    *em_strength = 0;
 }
 
 fn em_tag_strength(strength: i32, closing: bool) -> &'static str {
@@ -293,3 +424,7 @@ fn em_tag_strength(strength: i32, closing: bool) -> &'static str {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "tests/markdown_tests.rs"]
+mod markdown_tests;

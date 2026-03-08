@@ -13,7 +13,7 @@ Beanstalk is a new programming language and toolchain.
 Everything you see on this page, including the layout, styles, and even the text content 
 was created using Beanstalk code and the built-in HTML project builder.
 
-The source code for this website can be found on @https://github.com/nyejames/beanstalk/tree/main/docs/src (Github)
+The source code for this website can be found on @https://github.com/nyejames/beanstalk/tree/main/docs/src (Github).
 
 ## Documentation
 [palette.red:

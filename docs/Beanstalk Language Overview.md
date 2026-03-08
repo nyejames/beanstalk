@@ -145,6 +145,8 @@ A template’s style is defined in the **template head** using `$` directives.
   # Hello
   This template is parsed as markdown.
 
+  @example.com (Here is a link!) using this custom markdown flavour.
+
   [$todo: write some more info!]
 
   [: This child is prefixed!]

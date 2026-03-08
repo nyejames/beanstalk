@@ -43,7 +43,7 @@ Beanstalk files can still import additional HTML, CSS, JS or Beanstalk files to 
     It uses the built-in markdown parser function to parse this template body into markdown at compile time.
 
     # A Heading
-    Some text that has a [Basic.link("example.com"): link to example.com] inside it.
+    Some text that has a @https://example.com (link to example.com) inside it.
 
     A constant variable from some imported code inserted into the template: [ CONSTANT ].
 
