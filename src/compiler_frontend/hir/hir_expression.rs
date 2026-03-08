@@ -2,21 +2,18 @@
 //!
 //! Lowers typed AST expressions into HIR expressions and statement preludes.
 //! This file contains expression-specific lowering logic on `HirBuilder`.
-#![allow(dead_code, unused_variables)]
 
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, Operator,
 };
-use crate::compiler_frontend::ast::templates::create_template_node::Template;
 use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorLocation};
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::hir::hir_datatypes::{HirType, HirTypeKind, TypeId};
 use crate::compiler_frontend::hir::hir_nodes::{
-    FieldId, FunctionId, HirBinOp, HirBlock, HirExpression, HirExpressionKind, HirFunction,
-    HirLocal, HirNodeId, HirPlace, HirRegion, HirStatement, HirStatementKind, HirTerminator,
-    HirUnaryOp, LocalId, RegionId, StructId, ValueKind,
+    FieldId, FunctionId, HirBlock, HirExpression, HirExpressionKind, HirLocal, HirNodeId, HirPlace,
+    HirStatement, HirStatementKind, HirUnaryOp, LocalId, RegionId, StructId, ValueKind,
 };
 use crate::compiler_frontend::host_functions::CallTarget;
 use crate::compiler_frontend::interned_path::InternedPath;
@@ -25,8 +22,13 @@ use crate::compiler_frontend::tokenizer::tokens::TextLocation;
 use crate::hir_log;
 use crate::return_hir_transformation_error;
 
+mod operators;
+mod templates;
+
 #[derive(Debug, Clone)]
 pub(crate) struct LoweredExpression {
+    // WHAT: Statements that must execute before evaluating `value`.
+    // WHY: HIR requires expression side effects to be linearized into explicit statements.
     pub prelude: Vec<HirStatement>,
     pub value: HirExpression,
 }
@@ -269,6 +271,7 @@ impl<'a> HirBuilder<'a> {
         Ok(lowered)
     }
 
+    #[allow(dead_code)]
     pub(crate) fn lower_expression_and_emit(
         &mut self,
         expr: &Expression,
@@ -280,263 +283,6 @@ impl<'a> HirBuilder<'a> {
         }
 
         Ok(lowered.value)
-    }
-
-    fn lower_runtime_template_expression(
-        &mut self,
-        template: &Template,
-        location: &TextLocation,
-    ) -> Result<LoweredExpression, CompilerError> {
-        if !self.currently_lowering_constants.is_empty() {
-            // Module constant evaluation must stay statement-free. When constant structs carry
-            // wrapper templates, fold them into string literals with unresolved slots rendered
-            // as empty segments so constant references can lower without runtime template calls.
-            let folded = template.fold_into_stringid(&None, self.string_table)?;
-            let region = self.current_region_or_error(location)?;
-            let string_ty = self.intern_type_kind(HirTypeKind::String);
-
-            return Ok(LoweredExpression {
-                prelude: vec![],
-                value: self.make_expression(
-                    location,
-                    HirExpressionKind::StringLiteral(self.string_table.resolve(folded).to_owned()),
-                    string_ty,
-                    ValueKind::Const,
-                    region,
-                ),
-            });
-        }
-
-        // Unfilled slots are rendered as empty strings when templates are used directly.
-        // Keep lowering focused on the authored content atoms that carry expressions.
-        let chunks = template.content.flatten_expressions();
-        let chunk_types: Vec<DataType> =
-            chunks.iter().map(|chunk| chunk.data_type.clone()).collect();
-        let template_function = self.create_runtime_template_function(&chunk_types, location)?;
-
-        self.lower_call_expression(
-            CallTarget::UserFunction(template_function),
-            &chunks,
-            &[DataType::StringSlice],
-            location,
-        )
-    }
-
-    fn create_runtime_template_function(
-        &mut self,
-        chunk_types: &[DataType],
-        location: &TextLocation,
-    ) -> Result<InternedPath, CompilerError> {
-        let Some(current_function_id) = self.current_function else {
-            return_hir_transformation_error!(
-                "Runtime template lowering requires an active function context",
-                self.hir_error_location(location)
-            );
-        };
-
-        let Some(current_function_name) = self
-            .side_table
-            .function_name_path(current_function_id)
-            .cloned()
-        else {
-            return_hir_transformation_error!(
-                format!(
-                    "Missing function symbol for {:?} while lowering runtime template",
-                    current_function_id
-                ),
-                self.hir_error_location(location)
-            );
-        };
-
-        let template_function_name = self.allocate_template_function_name(&current_function_name);
-        let template_function_id = self.allocate_function_id();
-        let string_ty = self.intern_type_kind(HirTypeKind::String);
-
-        let entry_region = self.allocate_region_id();
-        self.push_region(HirRegion::lexical(entry_region, None));
-
-        let entry_block_id = self.allocate_block_id();
-        let entry_block = HirBlock {
-            id: entry_block_id,
-            region: entry_region,
-            locals: vec![],
-            statements: vec![],
-            terminator: HirTerminator::Panic { message: None },
-        };
-        self.side_table.map_block(location, &entry_block);
-        self.push_block(entry_block);
-
-        let template_function = HirFunction {
-            id: template_function_id,
-            entry: entry_block_id,
-            params: vec![],
-            return_type: string_ty,
-            return_aliases: vec![None],
-        };
-
-        self.functions_by_name
-            .insert(template_function_name.clone(), template_function_id);
-        self.side_table
-            .bind_function_name(template_function_id, template_function_name.clone());
-        self.side_table.map_function(location, &template_function);
-        self.push_function(template_function);
-
-        let mut params = Vec::with_capacity(chunk_types.len());
-        for (index, chunk_type) in chunk_types.iter().enumerate() {
-            let param_ty = self.lower_template_chunk_type(chunk_type, location)?;
-            let local_id = LocalId(self.next_local_id);
-            self.next_local_id += 1;
-
-            let local_name =
-                template_function_name.join_str(&format!("chunk_{index}"), self.string_table);
-            let local = HirLocal {
-                id: local_id,
-                ty: param_ty,
-                mutable: false,
-                region: entry_region,
-                source_info: Some(location.clone()),
-            };
-
-            {
-                let block = self.block_mut_by_id_or_error(entry_block_id, location)?;
-                block.locals.push(local.clone());
-            }
-
-            {
-                let function = self.function_mut_by_id_or_error(template_function_id, location)?;
-                function.params.push(local_id);
-            }
-
-            self.side_table.bind_local_name(local_id, local_name);
-            self.side_table.map_local_source(&local);
-
-            params.push((local_id, param_ty));
-        }
-
-        let return_value =
-            self.build_runtime_template_return_expression(&params, location, entry_region);
-        self.set_block_terminator(
-            entry_block_id,
-            HirTerminator::Return(return_value),
-            location,
-        )?;
-
-        Ok(template_function_name)
-    }
-
-    fn allocate_template_function_name(&mut self, parent_function: &InternedPath) -> InternedPath {
-        loop {
-            let candidate = parent_function.join_str(
-                &format!("__template_fn_{}", self.template_function_counter),
-                self.string_table,
-            );
-            self.template_function_counter += 1;
-
-            if !self.functions_by_name.contains_key(&candidate) {
-                return candidate;
-            }
-        }
-    }
-
-    fn lower_template_chunk_type(
-        &mut self,
-        chunk_type: &DataType,
-        location: &TextLocation,
-    ) -> Result<TypeId, CompilerError> {
-        let normalized = match chunk_type {
-            // Runtime template chunks must have a concrete lowered type.
-            DataType::Inferred => DataType::CoerceToString,
-            other => other.clone(),
-        };
-
-        self.lower_data_type(&normalized, location)
-    }
-
-    fn build_runtime_template_return_expression(
-        &mut self,
-        params: &[(LocalId, TypeId)],
-        location: &TextLocation,
-        region: RegionId,
-    ) -> HirExpression {
-        let string_ty = self.intern_type_kind(HirTypeKind::String);
-        let mut accumulated = self.make_expression(
-            location,
-            HirExpressionKind::StringLiteral(String::new()),
-            string_ty,
-            ValueKind::Const,
-            region,
-        );
-
-        for (local_id, local_ty) in params {
-            let chunk = self.make_expression(
-                location,
-                HirExpressionKind::Load(HirPlace::Local(*local_id)),
-                *local_ty,
-                ValueKind::Place,
-                region,
-            );
-            let chunk_as_string =
-                self.coerce_expression_to_string(chunk, location, string_ty, region);
-
-            accumulated = self.make_expression(
-                location,
-                HirExpressionKind::BinOp {
-                    left: Box::new(accumulated),
-                    op: HirBinOp::Add,
-                    right: Box::new(chunk_as_string),
-                },
-                string_ty,
-                ValueKind::RValue,
-                region,
-            );
-        }
-
-        accumulated
-    }
-
-    pub(crate) fn coerce_expression_to_string(
-        &mut self,
-        expression: HirExpression,
-        location: &TextLocation,
-        string_ty: TypeId,
-        region: RegionId,
-    ) -> HirExpression {
-        if matches!(
-            self.type_context.get(expression.ty).kind,
-            HirTypeKind::String
-        ) {
-            return expression;
-        }
-
-        if matches!(self.type_context.get(expression.ty).kind, HirTypeKind::Unit) {
-            return self.make_expression(
-                location,
-                HirExpressionKind::StringLiteral(String::new()),
-                string_ty,
-                ValueKind::Const,
-                region,
-            );
-        }
-
-        let empty = self.make_expression(
-            location,
-            HirExpressionKind::StringLiteral(String::new()),
-            string_ty,
-            ValueKind::Const,
-            region,
-        );
-
-        self.make_expression(
-            location,
-            HirExpressionKind::BinOp {
-                left: Box::new(empty),
-                op: HirBinOp::Add,
-                right: Box::new(expression),
-            },
-            string_ty,
-            ValueKind::RValue,
-            region,
-        )
     }
 
     pub(crate) fn lower_runtime_rpn_expression(
@@ -795,7 +541,8 @@ impl<'a> HirBuilder<'a> {
                     // Field/index lowering requires a place. Module constants are lowered as
                     // rvalues, so materialize them into a temporary local when referenced in
                     // place-position expressions (for example `format.center`).
-                    let lowered = self.lower_reference_expression(name, &expr.data_type, &node.location)?;
+                    let lowered =
+                        self.lower_reference_expression(name, &expr.data_type, &node.location)?;
                     if let HirExpressionKind::Load(place) = &lowered.value.kind {
                         return Ok((lowered.prelude, place.clone()));
                     }
@@ -1272,6 +1019,7 @@ impl<'a> HirBuilder<'a> {
 
     // AST enforces module-wide unique InternedPath symbols and disallows shadowing.
     // HIR therefore resolves locals/functions by full path identity, not leaf names.
+    #[allow(dead_code)]
     pub(crate) fn resolve_local_id_or_error(
         &self,
         name: &InternedPath,
@@ -1540,107 +1288,6 @@ impl<'a> HirBuilder<'a> {
         Ok(place.clone())
     }
 
-    fn lower_bin_op(
-        &self,
-        op: &Operator,
-        location: &TextLocation,
-    ) -> Result<HirBinOp, CompilerError> {
-        match op {
-            Operator::Add => Ok(HirBinOp::Add),
-            Operator::Subtract => Ok(HirBinOp::Sub),
-            Operator::Multiply => Ok(HirBinOp::Mul),
-            Operator::Divide => Ok(HirBinOp::Div),
-            Operator::Modulus => Ok(HirBinOp::Mod),
-            Operator::Root => Ok(HirBinOp::Root),
-            Operator::Exponent => Ok(HirBinOp::Exponent),
-            Operator::And => Ok(HirBinOp::And),
-            Operator::Or => Ok(HirBinOp::Or),
-            Operator::GreaterThan => Ok(HirBinOp::Gt),
-            Operator::GreaterThanOrEqual => Ok(HirBinOp::Ge),
-            Operator::LessThan => Ok(HirBinOp::Lt),
-            Operator::LessThanOrEqual => Ok(HirBinOp::Le),
-            Operator::Equality => Ok(HirBinOp::Eq),
-            Operator::NotEqual => Ok(HirBinOp::Ne),
-            Operator::Not => {
-                return_hir_transformation_error!(
-                    "'not' cannot be lowered as a binary operator",
-                    self.hir_error_location(location)
-                )
-            }
-            Operator::Range => {
-                return_hir_transformation_error!(
-                    "Range operator is lowered as HirExpressionKind::Range",
-                    self.hir_error_location(location)
-                )
-            }
-        }
-    }
-
-    fn lower_unary_op(
-        &self,
-        op: &Operator,
-        location: &TextLocation,
-    ) -> Result<HirUnaryOp, CompilerError> {
-        match op {
-            Operator::Not => Ok(HirUnaryOp::Not),
-            Operator::Subtract => Ok(HirUnaryOp::Neg),
-            _ => {
-                return_hir_transformation_error!(
-                    format!("Unsupported unary operator: {:?}", op),
-                    self.hir_error_location(location)
-                )
-            }
-        }
-    }
-
-    fn infer_binop_result_type(&mut self, left: TypeId, right: TypeId, op: HirBinOp) -> TypeId {
-        match op {
-            HirBinOp::Eq
-            | HirBinOp::Ne
-            | HirBinOp::Lt
-            | HirBinOp::Le
-            | HirBinOp::Gt
-            | HirBinOp::Ge
-            | HirBinOp::And
-            | HirBinOp::Or => self.intern_type_kind(HirTypeKind::Bool),
-
-            HirBinOp::Add
-            | HirBinOp::Sub
-            | HirBinOp::Mul
-            | HirBinOp::Div
-            | HirBinOp::Mod
-            | HirBinOp::Root
-            | HirBinOp::Exponent => {
-                let left_kind = self.type_context.get(left).kind.clone();
-                let right_kind = self.type_context.get(right).kind.clone();
-
-                if matches!(left_kind, HirTypeKind::Float)
-                    || matches!(right_kind, HirTypeKind::Float)
-                {
-                    self.intern_type_kind(HirTypeKind::Float)
-                } else if matches!(left_kind, HirTypeKind::Decimal)
-                    || matches!(right_kind, HirTypeKind::Decimal)
-                {
-                    self.intern_type_kind(HirTypeKind::Decimal)
-                } else if matches!(left_kind, HirTypeKind::String)
-                    || matches!(right_kind, HirTypeKind::String)
-                {
-                    self.intern_type_kind(HirTypeKind::String)
-                } else {
-                    left
-                }
-            }
-        }
-    }
-
-    fn extract_return_types_from_datatype(&self, data_type: &DataType) -> Vec<DataType> {
-        match data_type {
-            DataType::Returns(returns) => returns.clone(),
-            DataType::None => vec![],
-            other => vec![other.clone()],
-        }
-    }
-
     pub(crate) fn make_expression(
         &mut self,
         location: &TextLocation,
@@ -1680,18 +1327,18 @@ impl<'a> HirBuilder<'a> {
         location.to_error_location(self.string_table)
     }
 
-    fn log_expression_input(&self, expr: &Expression) {
+    fn log_expression_input(&self, _expr: &Expression) {
         hir_log!(format!(
             "[HIR] Lowering expression {:?} @ {:?}",
-            expr.kind, expr.location
+            _expr.kind, _expr.location
         ));
     }
 
-    fn log_expression_output(&self, input: &Expression, output: &HirExpression) {
+    fn log_expression_output(&self, _input: &Expression, _output: &HirExpression) {
         hir_log!(format!(
             "[HIR] Lowered expression {:?} -> {}",
-            input.kind,
-            output.display_with_context(
+            _input.kind,
+            _output.display_with_context(
                 &crate::compiler_frontend::hir::hir_display::HirDisplayContext::new(
                     self.string_table,
                 )
@@ -1701,18 +1348,18 @@ impl<'a> HirBuilder<'a> {
         ));
     }
 
-    fn log_rpn_step(&self, stage: &str, node: &AstNode, stack: &[HirExpression]) {
+    fn log_rpn_step(&self, _stage: &str, _node: &AstNode, _stack: &[HirExpression]) {
         hir_log!(format!(
             "[HIR][RPN] {} node={:?} stack=[{}]",
-            stage,
-            node.kind,
+            _stage,
+            _node.kind,
             {
                 let display = crate::compiler_frontend::hir::hir_display::HirDisplayContext::new(
                     self.string_table,
                 )
                 .with_side_table(&self.side_table)
                 .with_type_context(&self.type_context);
-                stack
+                _stack
                     .iter()
                     .map(|expr| expr.display_with_context(&display))
                     .collect::<Vec<_>>()
@@ -1723,15 +1370,15 @@ impl<'a> HirBuilder<'a> {
 
     fn log_call_result_binding(
         &self,
-        location: &TextLocation,
-        local: Option<LocalId>,
-        value: &HirExpression,
+        _location: &TextLocation,
+        _local: Option<LocalId>,
+        _value: &HirExpression,
     ) {
         hir_log!(format!(
             "[HIR] Emitted call binding @ {:?}: result={:?}, value={}",
-            location,
-            local,
-            value.display_with_context(
+            _location,
+            _local,
+            _value.display_with_context(
                 &crate::compiler_frontend::hir::hir_display::HirDisplayContext::new(
                     self.string_table,
                 )

@@ -1,6 +1,6 @@
 //! Call-target semantic resolution for borrow transfer.
 //!
-//! Maps call targets to per-argument mutability and result alias behavior.
+//! Maps call targets to per-argument effects and result alias behavior.
 
 use crate::compiler_frontend::analysis::borrow_checker::types::FunctionReturnAliasSummary;
 use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorLocation};
@@ -14,9 +14,20 @@ use super::BorrowTransferContext;
 
 #[derive(Debug, Clone)]
 pub(super) struct CallSemantics {
-    pub(super) arg_mutability: Vec<bool>,
-    pub(super) arg_requires_declared_mutability: Vec<bool>,
+    pub(super) arg_effects: Vec<ArgEffect>,
     pub(super) return_alias: CallResultAlias,
+}
+
+/// Per-argument effect contract consumed by transfer.
+///
+/// Why this exists:
+/// `~` call parameters are not always plain mutable borrows. They can either
+/// remain a mutable borrow or become a consuming move based on last-use facts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum ArgEffect {
+    SharedBorrow,
+    MutableBorrow,
+    MayConsume,
 }
 
 #[derive(Debug, Clone)]
@@ -80,14 +91,33 @@ pub(super) fn resolve_call_semantics(
             let return_alias = match context.function_return_alias.get(&function_id) {
                 Some(FunctionReturnAliasSummary::Fresh) => CallResultAlias::Fresh,
                 Some(FunctionReturnAliasSummary::AliasParams(indices)) => {
+                    validate_alias_indices(
+                        indices,
+                        arg_len,
+                        location.clone(),
+                        format!(
+                            "user function '{}'",
+                            context.diagnostics.function_name(function_id)
+                        ),
+                    )?;
                     CallResultAlias::AliasArgs(indices.clone())
                 }
                 Some(FunctionReturnAliasSummary::Unknown) | None => CallResultAlias::Unknown,
             };
 
             Ok(CallSemantics {
-                arg_mutability: param_mutability.clone(),
-                arg_requires_declared_mutability: vec![false; arg_len],
+                // Mutable user parameters can either borrow mutably or consume ownership.
+                // Transfer chooses the concrete behavior with last-use analysis.
+                arg_effects: param_mutability
+                    .iter()
+                    .map(|is_mutable| {
+                        if *is_mutable {
+                            ArgEffect::MayConsume
+                        } else {
+                            ArgEffect::SharedBorrow
+                        }
+                    })
+                    .collect(),
                 return_alias,
             })
         }
@@ -110,27 +140,30 @@ pub(super) fn resolve_call_semantics(
                 );
             }
 
-            let arg_mutability = host_def
+            let arg_effects = host_def
                 .parameters
                 .iter()
-                .map(|param| matches!(param.access_kind, HostAccessKind::Mutable))
-                .collect::<Vec<_>>();
-            let arg_requires_declared_mutability = host_def
-                .parameters
-                .iter()
-                .map(|param| matches!(param.access_kind, HostAccessKind::Mutable))
+                .map(|param| match param.access_kind {
+                    HostAccessKind::Shared => ArgEffect::SharedBorrow,
+                    HostAccessKind::Mutable => ArgEffect::MutableBorrow,
+                })
                 .collect::<Vec<_>>();
 
             let return_alias = match host_def.return_alias {
                 HostReturnAlias::Fresh => CallResultAlias::Fresh,
                 HostReturnAlias::AliasArgs(ref indices) => {
+                    validate_alias_indices(
+                        indices,
+                        arg_len,
+                        location.clone(),
+                        format!("host function '{}'", host_def.name),
+                    )?;
                     CallResultAlias::AliasArgs(indices.clone())
                 }
             };
 
             Ok(CallSemantics {
-                arg_mutability,
-                arg_requires_declared_mutability,
+                arg_effects,
                 return_alias,
             })
         }
@@ -166,4 +199,31 @@ fn resolve_host_definition<'a>(
             PrimarySuggestion => "Ensure host registry metadata includes this host function",
         }
     )
+}
+
+fn validate_alias_indices(
+    indices: &[usize],
+    arg_len: usize,
+    location: ErrorLocation,
+    callee_name: String,
+) -> Result<(), CompilerError> {
+    for index in indices {
+        if *index < arg_len {
+            continue;
+        }
+
+        return_borrow_checker_error!(
+            format!(
+                "Borrow checker found out-of-range return-alias index {} for {} with {} argument(s)",
+                index, callee_name, arg_len
+            ),
+            location,
+            {
+                CompilationStage => "Borrow Checking",
+                PrimarySuggestion => "Ensure return-alias metadata only references existing parameter indices",
+            }
+        );
+    }
+
+    Ok(())
 }

@@ -3,7 +3,6 @@
 //! This module orchestrates borrow checking for a complete HIR module.
 //! It builds function metadata, runs a forward fixed-point dataflow analysis
 //! per function, and stores snapshots/facts for downstream phases.
-#![allow(dead_code)]
 
 mod diagnostics;
 mod state;
@@ -187,7 +186,9 @@ impl<'a> BorrowChecker<'a> {
     }
 
     fn build_function_return_alias_summaries(&mut self) -> Result<(), CompilerError> {
-        // Callee summaries are declared at the signature level and reused at each call site.
+        // Signature metadata is authoritative for user-function return aliasing.
+        // The classifier is used as a validator so contradictory lowering states
+        // are rejected early instead of silently degrading call-site behavior.
         for function in &self.module.functions {
             let mut alias_indices = function
                 .return_aliases
@@ -204,7 +205,78 @@ impl<'a> BorrowChecker<'a> {
             } else {
                 FunctionReturnAliasSummary::AliasParams(alias_indices)
             };
+
+            let classified = self.classify_function_return_alias(function)?;
+            self.validate_return_alias_consistency(function, &summary, &classified)?;
             self.function_return_alias.insert(function.id, summary);
+        }
+
+        Ok(())
+    }
+
+    fn validate_return_alias_consistency(
+        &self,
+        function: &HirFunction,
+        declared: &FunctionReturnAliasSummary,
+        classified: &FunctionReturnAliasSummary,
+    ) -> Result<(), CompilerError> {
+        let function_location = self.diagnostics.function_error_location(function.id);
+        let function_name = self.diagnostics.function_name(function.id);
+
+        match (declared, classified) {
+            (
+                FunctionReturnAliasSummary::Fresh,
+                FunctionReturnAliasSummary::AliasParams(indices),
+            ) => {
+                return_borrow_checker_error!(
+                    format!(
+                        "Return alias metadata for function '{}' declares Fresh, but analysis found aliases to parameter index/indices {:?}",
+                        function_name, indices
+                    ),
+                    function_location,
+                    {
+                        CompilationStage => "Borrow Checking",
+                        PrimarySuggestion => "Ensure non-alias returns copy values instead of returning parameter-backed places",
+                    }
+                );
+            }
+            (
+                FunctionReturnAliasSummary::AliasParams(expected_indices),
+                FunctionReturnAliasSummary::AliasParams(observed_indices),
+            ) => {
+                for observed in observed_indices {
+                    if expected_indices.contains(observed) {
+                        continue;
+                    }
+
+                    return_borrow_checker_error!(
+                        format!(
+                            "Return alias metadata for function '{}' does not include observed alias parameter index {}",
+                            function_name, observed
+                        ),
+                        function_location,
+                        {
+                            CompilationStage => "Borrow Checking",
+                            PrimarySuggestion => "Update return alias metadata so it matches actual returned aliases",
+                        }
+                    );
+                }
+            }
+            (FunctionReturnAliasSummary::AliasParams(_), FunctionReturnAliasSummary::Fresh)
+            | (FunctionReturnAliasSummary::AliasParams(_), FunctionReturnAliasSummary::Unknown) => {
+                return_borrow_checker_error!(
+                    format!(
+                        "Return alias metadata for function '{}' declares aliased return values, but analysis could not validate that aliasing shape",
+                        function_name
+                    ),
+                    function_location,
+                    {
+                        CompilationStage => "Borrow Checking",
+                        PrimarySuggestion => "Return the declared aliased parameter place directly on all paths",
+                    }
+                );
+            }
+            _ => {}
         }
 
         Ok(())
@@ -379,7 +451,6 @@ impl<'a> BorrowChecker<'a> {
             self.build_visibility_masks(function.id, &layout, &reachable_blocks)?;
 
         let transfer_context = BorrowTransferContext {
-            module: self.module,
             string_table: self.string_table,
             host_registry: self.host_registry,
             function_by_path: &self.function_by_path,
@@ -619,56 +690,58 @@ impl<'a> BorrowChecker<'a> {
         }
 
         let reachable_block_set = reachable_blocks.iter().copied().collect::<FxHashSet<_>>();
-        let mut local_first_write_line = vec![-1; local_ids.len()];
-        let mut local_last_use_line = vec![-1; local_ids.len()];
+        let mut local_first_write_order = vec![-1; local_ids.len()];
+        let mut local_last_use_order = vec![-1; local_ids.len()];
+        let mut statement_order_by_id = FxHashMap::default();
+        let mut terminator_order_by_block = FxHashMap::default();
         let mut block_successors = FxHashMap::default();
-        let mut block_local_max_use_line = FxHashMap::default();
+        let mut block_local_max_use_order = FxHashMap::default();
+        let mut next_order_key = 0i32;
 
         for block_id in reachable_blocks {
             let block = self.block_by_id_or_error(*block_id, function.id)?;
-            let mut max_use_line = vec![-1; local_ids.len()];
+            let mut max_use_order = vec![-1; local_ids.len()];
 
             for statement in &block.statements {
-                let line = statement.location.start_pos.line_number;
+                // WHAT: assign a deterministic ordinal key for this statement.
+                // WHY: same-line source locations are not sufficient for precise move decisions.
+                let order_key = next_order_key;
+                next_order_key += 1;
+                statement_order_by_id.insert(statement.id, order_key);
+
                 collect_statement_written_locals(statement, &mut |local_id| {
                     if let Some(index) = local_index_by_id.get(&local_id).copied() {
-                        let first_write = &mut local_first_write_line[index];
-                        if *first_write < 0 || line < *first_write {
-                            *first_write = line;
+                        let first_write = &mut local_first_write_order[index];
+                        if *first_write < 0 || order_key < *first_write {
+                            *first_write = order_key;
                         }
 
-                        local_last_use_line[index] = local_last_use_line[index].max(line);
-                        max_use_line[index] = max_use_line[index].max(line);
+                        local_last_use_order[index] = local_last_use_order[index].max(order_key);
+                        max_use_order[index] = max_use_order[index].max(order_key);
                     }
                 });
                 collect_statement_loaded_locals(statement, &mut |local_id| {
                     if let Some(index) = local_index_by_id.get(&local_id).copied() {
-                        local_last_use_line[index] = local_last_use_line[index].max(line);
-                        max_use_line[index] = max_use_line[index].max(line);
+                        local_last_use_order[index] = local_last_use_order[index].max(order_key);
+                        max_use_order[index] = max_use_order[index].max(order_key);
                     }
                 });
             }
 
-            let terminator_line = self
-                .module
-                .side_table
-                .hir_source_location_for_hir(HirLocation::Terminator(*block_id))
-                .or_else(|| {
-                    self.module
-                        .side_table
-                        .ast_location_for_hir(HirLocation::Terminator(*block_id))
-                })
-                .map(|location| location.start_pos.line_number)
-                .unwrap_or_default();
+            // WHAT: terminators also participate in future-use classification.
+            // WHY: return/branch conditions can be the last read of a root in the block.
+            let terminator_order = next_order_key;
+            next_order_key += 1;
+            terminator_order_by_block.insert(*block_id, terminator_order);
 
             collect_terminator_loaded_locals(&block.terminator, &mut |local_id| {
                 if let Some(index) = local_index_by_id.get(&local_id).copied() {
-                    local_last_use_line[index] = local_last_use_line[index].max(terminator_line);
-                    max_use_line[index] = max_use_line[index].max(terminator_line);
+                    local_last_use_order[index] = local_last_use_order[index].max(terminator_order);
+                    max_use_order[index] = max_use_order[index].max(terminator_order);
                 }
             });
 
-            block_local_max_use_line.insert(*block_id, max_use_line);
+            block_local_max_use_order.insert(*block_id, max_use_order);
             block_successors.insert(
                 *block_id,
                 successors(&block.terminator)
@@ -682,17 +755,19 @@ impl<'a> BorrowChecker<'a> {
             local_ids.len(),
             reachable_blocks,
             &block_successors,
-            &block_local_max_use_line,
+            &block_local_max_use_order,
         );
 
         Ok(FunctionLayout::new(FunctionLayoutInputs {
             local_ids,
             local_mutable,
             local_regions,
-            local_first_write_line,
-            local_last_use_line,
+            local_first_write_order,
+            local_last_use_order,
+            statement_order_by_id,
+            terminator_order_by_block,
+            block_local_max_use_order,
             block_successors,
-            block_local_max_use_line,
             may_use_from_block,
             must_use_from_block,
         }))
@@ -885,14 +960,16 @@ fn compute_future_use_sets(
     local_count: usize,
     reachable_blocks: &[BlockId],
     block_successors: &FxHashMap<BlockId, Vec<BlockId>>,
-    block_local_max_use_line: &FxHashMap<BlockId, Vec<i32>>,
+    block_local_max_use_order: &FxHashMap<BlockId, Vec<i32>>,
 ) -> (FxHashMap<BlockId, RootSet>, FxHashMap<BlockId, RootSet>) {
+    // WHAT: derives per-block MAY/MUST future-use summaries by fixed-point propagation.
+    // WHY: transfer needs O(1) future-use classification when deciding borrow vs move.
     let mut block_use_sets = FxHashMap::default();
     for block_id in reachable_blocks {
         let mut uses = RootSet::empty(local_count);
-        if let Some(max_use_line) = block_local_max_use_line.get(block_id) {
-            for (local_index, line) in max_use_line.iter().enumerate() {
-                if *line >= 0 {
+        if let Some(max_use_order) = block_local_max_use_order.get(block_id) {
+            for (local_index, order_key) in max_use_order.iter().enumerate() {
+                if *order_key >= 0 {
                     uses.insert(local_index);
                 }
             }

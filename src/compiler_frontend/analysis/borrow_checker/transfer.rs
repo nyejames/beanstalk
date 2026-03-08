@@ -3,7 +3,6 @@
 //! This module coordinates block transfer for the borrow checker.
 //! Statement/terminator rules live in submodules so the control flow of the
 //! fixed-point analysis remains easy to follow from a single entrypoint.
-#![allow(dead_code)]
 
 mod access;
 mod call_semantics;
@@ -16,8 +15,8 @@ use crate::compiler_frontend::analysis::borrow_checker::types::{
     ValueBorrowFact,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
+use crate::compiler_frontend::hir::hir_nodes::HirBlock;
 use crate::compiler_frontend::hir::hir_nodes::{BlockId, FunctionId, HirNodeId, HirValueId};
-use crate::compiler_frontend::hir::hir_nodes::{HirBlock, HirModule};
 use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
@@ -27,7 +26,8 @@ use access::{transfer_statement, transfer_terminator};
 use facts::ValueFactBuffer;
 
 pub(super) struct BorrowTransferContext<'a> {
-    pub module: &'a HirModule,
+    // WHAT: shared lookup/diagnostic tables for one function transfer pass.
+    // WHY: avoids repeated module scans while statements/terminators are analyzed.
     pub string_table: &'a StringTable,
     pub host_registry: &'a HostRegistry,
     pub function_by_path: &'a FxHashMap<InternedPath, FunctionId>,

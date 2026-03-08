@@ -1,41 +1,62 @@
-#![allow(dead_code)]
-
 use crate::compiler_frontend::analysis::borrow_checker::types::{
     BorrowStateSnapshot, LocalBorrowSnapshot, LocalMode,
 };
-use crate::compiler_frontend::hir::hir_nodes::{BlockId, LocalId, RegionId};
+use crate::compiler_frontend::hir::hir_nodes::{BlockId, HirNodeId, LocalId, RegionId};
 use rustc_hash::FxHashMap;
+
+// WHAT: Stable intra-function position key used by move/borrow decisions.
+// WHY: Source line numbers are not precise enough when several accesses share a line.
+pub(super) type OrderKey = i32;
+pub(super) const UNKNOWN_ORDER_KEY: OrderKey = -1;
 
 #[derive(Debug, Clone)]
 pub(super) struct FunctionLayout {
+    // WHAT: Dense local metadata keyed by stable local index.
+    // WHY: Transfer rules and joins rely on O(1) lookups while iterating CFG edges.
     pub local_ids: Vec<LocalId>,
     pub local_index_by_id: FxHashMap<LocalId, usize>,
     pub local_mutable: Vec<bool>,
     pub local_regions: Vec<RegionId>,
-    pub local_first_write_line: Vec<i32>,
-    pub local_last_use_line: Vec<i32>,
+    pub local_first_write_order: Vec<OrderKey>,
+    pub local_last_use_order: Vec<OrderKey>,
+    // WHAT: Per-node evaluation order used during transfer.
+    // WHY: Transfer runs per statement/terminator and needs deterministic ordering.
+    pub statement_order_by_id: FxHashMap<HirNodeId, OrderKey>,
+    pub terminator_order_by_block: FxHashMap<BlockId, OrderKey>,
+    // WHAT: Max local use order observed in each block.
+    // WHY: Enables "future use in this block" checks without rescanning statements.
+    pub block_local_max_use_order: FxHashMap<BlockId, Vec<OrderKey>>,
     pub block_successors: FxHashMap<BlockId, Vec<BlockId>>,
-    pub block_local_max_use_line: FxHashMap<BlockId, Vec<i32>>,
     pub may_use_from_block: FxHashMap<BlockId, RootSet>,
     pub must_use_from_block: FxHashMap<BlockId, RootSet>,
 }
 
 pub(super) struct FunctionLayoutInputs {
+    // WHAT: Raw function facts collected during layout construction.
+    // WHY: Keeping this separate from FunctionLayout lets callers build then validate atomically.
     pub local_ids: Vec<LocalId>,
     pub local_mutable: Vec<bool>,
     pub local_regions: Vec<RegionId>,
-    pub local_first_write_line: Vec<i32>,
-    pub local_last_use_line: Vec<i32>,
+    pub local_first_write_order: Vec<OrderKey>,
+    pub local_last_use_order: Vec<OrderKey>,
+    pub statement_order_by_id: FxHashMap<HirNodeId, OrderKey>,
+    pub terminator_order_by_block: FxHashMap<BlockId, OrderKey>,
+    pub block_local_max_use_order: FxHashMap<BlockId, Vec<OrderKey>>,
     pub block_successors: FxHashMap<BlockId, Vec<BlockId>>,
-    pub block_local_max_use_line: FxHashMap<BlockId, Vec<i32>>,
     pub may_use_from_block: FxHashMap<BlockId, RootSet>,
     pub must_use_from_block: FxHashMap<BlockId, RootSet>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum FutureUseKind {
+    // WHAT: No reachable future read from this program point.
+    // WHY: Call/assignment transfer may consume ownership when all roots are None.
     None,
+    // WHAT: Some paths use the root, others do not.
+    // WHY: Mixed outcomes are rejected for move-sensitive operations.
     May,
+    // WHAT: Every reachable path uses the root again.
+    // WHY: Operations must treat the root as borrowed to preserve later uses.
     Must,
 }
 
@@ -53,10 +74,12 @@ impl FunctionLayout {
             local_index_by_id,
             local_mutable: inputs.local_mutable,
             local_regions: inputs.local_regions,
-            local_first_write_line: inputs.local_first_write_line,
-            local_last_use_line: inputs.local_last_use_line,
+            local_first_write_order: inputs.local_first_write_order,
+            local_last_use_order: inputs.local_last_use_order,
+            statement_order_by_id: inputs.statement_order_by_id,
+            terminator_order_by_block: inputs.terminator_order_by_block,
+            block_local_max_use_order: inputs.block_local_max_use_order,
             block_successors: inputs.block_successors,
-            block_local_max_use_line: inputs.block_local_max_use_line,
             may_use_from_block: inputs.may_use_from_block,
             must_use_from_block: inputs.must_use_from_block,
         }
@@ -70,18 +93,32 @@ impl FunctionLayout {
         self.local_index_by_id.get(&local_id).copied()
     }
 
-    pub(super) fn local_is_expired(&self, local_index: usize, current_line: i32) -> bool {
-        let last_use = self.local_last_use_line[local_index];
-        last_use >= 0 && last_use < current_line
+    pub(super) fn statement_order_or_unknown(&self, statement_id: HirNodeId) -> OrderKey {
+        self.statement_order_by_id
+            .get(&statement_id)
+            .copied()
+            .unwrap_or(UNKNOWN_ORDER_KEY)
+    }
+
+    pub(super) fn terminator_order_or_unknown(&self, block_id: BlockId) -> OrderKey {
+        self.terminator_order_by_block
+            .get(&block_id)
+            .copied()
+            .unwrap_or(UNKNOWN_ORDER_KEY)
+    }
+
+    pub(super) fn local_is_expired(&self, local_index: usize, current_order: OrderKey) -> bool {
+        let last_use = self.local_last_use_order[local_index];
+        last_use >= 0 && last_use < current_order
     }
 
     pub(super) fn future_use_kind(
         &self,
         block_id: BlockId,
         local_index: usize,
-        current_line: i32,
+        current_order: OrderKey,
     ) -> FutureUseKind {
-        if self.local_has_future_use_in_block(block_id, local_index, current_line) {
+        if self.local_has_future_use_in_block(block_id, local_index, current_order) {
             return FutureUseKind::Must;
         }
 
@@ -124,12 +161,12 @@ impl FunctionLayout {
         &self,
         block_id: BlockId,
         local_index: usize,
-        current_line: i32,
+        current_order: OrderKey,
     ) -> bool {
-        self.block_local_max_use_line
+        self.block_local_max_use_order
             .get(&block_id)
-            .and_then(|max_use_lines| max_use_lines.get(local_index))
-            .map(|line| *line > current_line)
+            .and_then(|max_use_order| max_use_order.get(local_index))
+            .map(|order| *order > current_order)
             .unwrap_or(false)
     }
 }
@@ -162,10 +199,6 @@ impl BorrowState {
 
     pub(super) fn local_state(&self, local_index: usize) -> &LocalState {
         &self.locals[local_index]
-    }
-
-    pub(super) fn alias_count_for_root(&self, root_index: usize) -> u32 {
-        self.root_ref_counts[root_index]
     }
 
     pub(super) fn has_any_alias_conflict(&self) -> bool {

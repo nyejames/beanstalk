@@ -2,7 +2,6 @@
 //!
 //! Lowers AST statements/control-flow nodes into explicit HIR blocks,
 //! statements, and terminators.
-#![allow(dead_code, unused_variables)]
 
 use crate::compiler_frontend::ast::ast::Ast;
 use crate::compiler_frontend::ast::ast_nodes::{
@@ -775,9 +774,10 @@ impl<'a> HirBuilder<'a> {
 
         self.set_current_block(then_block, location)?;
         self.lower_statement_sequence(then_body)?;
-        let then_terminated = self.block_has_explicit_terminator(then_block, location)?;
+        let then_tail_block = self.current_block_id_or_error(location)?;
+        let then_terminated = self.block_has_explicit_terminator(then_tail_block, location)?;
         if then_terminated {
-            terminated_anchor = Some(then_block);
+            terminated_anchor = Some(then_tail_block);
         }
 
         self.set_current_block(else_block, location)?;
@@ -785,9 +785,10 @@ impl<'a> HirBuilder<'a> {
             self.lower_statement_sequence(else_nodes)?;
         }
 
-        let else_terminated = self.block_has_explicit_terminator(else_block, location)?;
+        let else_tail_block = self.current_block_id_or_error(location)?;
+        let else_terminated = self.block_has_explicit_terminator(else_tail_block, location)?;
         if else_terminated && terminated_anchor.is_none() {
-            terminated_anchor = Some(else_block);
+            terminated_anchor = Some(else_tail_block);
         }
 
         if then_terminated && else_terminated {
@@ -797,10 +798,10 @@ impl<'a> HirBuilder<'a> {
 
         let merge_block = self.create_block(parent_region, location, "if-merge")?;
         if !then_terminated {
-            self.emit_jump_to(then_block, merge_block, location, "if.then.merge")?;
+            self.emit_jump_to(then_tail_block, merge_block, location, "if.then.merge")?;
         }
         if !else_terminated {
-            self.emit_jump_to(else_block, merge_block, location, "if.else.merge")?;
+            self.emit_jump_to(else_tail_block, merge_block, location, "if.else.merge")?;
         }
 
         self.set_current_block(merge_block, location)
@@ -890,8 +891,9 @@ impl<'a> HirBuilder<'a> {
         self.lower_statement_sequence(body)?;
         self.pop_loop_targets();
 
-        if !self.block_has_explicit_terminator(body_block, location)? {
-            self.emit_jump_to(body_block, header_block, location, "while.backedge")?;
+        let body_tail_block = self.current_block_id_or_error(location)?;
+        if !self.block_has_explicit_terminator(body_tail_block, location)? {
+            self.emit_jump_to(body_tail_block, header_block, location, "while.backedge")?;
         }
 
         self.set_current_block(exit_block, location)
@@ -971,15 +973,16 @@ impl<'a> HirBuilder<'a> {
             self.set_current_block(arm_block, location)?;
             self.lower_statement_sequence(&arm.body)?;
 
-            let arm_terminated = self.block_has_explicit_terminator(arm_block, location)?;
+            let arm_tail_block = self.current_block_id_or_error(location)?;
+            let arm_terminated = self.block_has_explicit_terminator(arm_tail_block, location)?;
             if arm_terminated {
                 if terminated_anchor.is_none() {
-                    terminated_anchor = Some(arm_block);
+                    terminated_anchor = Some(arm_tail_block);
                 }
             } else {
                 let merge_target =
                     self.ensure_match_merge_block(parent_region, location, &mut merge_block)?;
-                self.emit_jump_to(arm_block, merge_target, location, "match.arm.merge")?;
+                self.emit_jump_to(arm_tail_block, merge_target, location, "match.arm.merge")?;
             }
         }
 
@@ -987,17 +990,18 @@ impl<'a> HirBuilder<'a> {
             self.set_current_block(default_block_id, location)?;
             self.lower_statement_sequence(default_body)?;
 
+            let default_tail_block = self.current_block_id_or_error(location)?;
             let default_terminated =
-                self.block_has_explicit_terminator(default_block_id, location)?;
+                self.block_has_explicit_terminator(default_tail_block, location)?;
             if default_terminated {
                 if terminated_anchor.is_none() {
-                    terminated_anchor = Some(default_block_id);
+                    terminated_anchor = Some(default_tail_block);
                 }
             } else {
                 let merge_target =
                     self.ensure_match_merge_block(parent_region, location, &mut merge_block)?;
                 self.emit_jump_to(
-                    default_block_id,
+                    default_tail_block,
                     merge_target,
                     location,
                     "match.default.merge",
@@ -1266,44 +1270,46 @@ impl<'a> HirBuilder<'a> {
         matches!(self.type_context.get(ty).kind, HirTypeKind::Unit)
     }
 
+    #[allow(dead_code)]
     fn is_string_type(&self, ty: crate::compiler_frontend::hir::hir_datatypes::TypeId) -> bool {
         matches!(self.type_context.get(ty).kind, HirTypeKind::String)
     }
 
+    #[allow(dead_code)]
     fn is_start_function(&self, function_id: FunctionId) -> bool {
         function_id == self.module.start_function
     }
 
-    fn log_statement_input(&self, node: &AstNode) {
-        hir_log!(format!("[HIR][Stmt] Lowering {:?}", node.kind));
+    fn log_statement_input(&self, _node: &AstNode) {
+        hir_log!(format!("[HIR][Stmt] Lowering {:?}", _node.kind));
     }
 
-    fn log_statement_output(&self, node: &AstNode) {
-        hir_log!(format!("[HIR][Stmt] Lowered {:?}", node.kind));
+    fn log_statement_output(&self, _node: &AstNode) {
+        hir_log!(format!("[HIR][Stmt] Lowered {:?}", _node.kind));
     }
 
-    fn log_block_created(&self, block_id: BlockId, label: &str, location: &TextLocation) {
+    fn log_block_created(&self, _block_id: BlockId, _label: &str, _location: &TextLocation) {
         hir_log!(format!(
             "[HIR][CFG] Created block {} ({}) @ {:?}",
-            block_id, label, location
+            _block_id, _label, _location
         ));
     }
 
-    fn log_control_flow_edge(&self, from: BlockId, to: BlockId, label: &str) {
-        hir_log!(format!("[HIR][CFG] Edge {} -> {} ({})", from, to, label));
+    fn log_control_flow_edge(&self, _from: BlockId, _to: BlockId, _label: &str) {
+        hir_log!(format!("[HIR][CFG] Edge {} -> {} ({})", _from, _to, _label));
     }
 
     fn log_terminator_emitted(
         &self,
-        block_id: BlockId,
-        terminator: &HirTerminator,
-        location: &TextLocation,
+        _block_id: BlockId,
+        _terminator: &HirTerminator,
+        _location: &TextLocation,
     ) {
         hir_log!(format!(
             "[HIR][CFG] Terminator for {} @ {:?}: {}",
-            block_id,
-            location,
-            terminator.display_with_context(
+            _block_id,
+            _location,
+            _terminator.display_with_context(
                 &crate::compiler_frontend::hir::hir_display::HirDisplayContext::new(
                     self.string_table,
                 )
