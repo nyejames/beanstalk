@@ -11,54 +11,54 @@
         <meta name="viewport"content="width=device-width, initial-scale=1">
         <link rel="icon"href="">
 
-        <title> "Beanstalk Documentation"</title>
+        <title> Beanstalk Documentation</title>
         <style>
     @charset "UTF-8";
     :root {
       color-scheme: light dark;
 
-      --bs-font-size: 100%;
+      --bst-font-size: 100%;
 
       /* Default Background Colours */
-      --bs-bg-lightmode: "#fff";
-      --bs-bg-darkmode: "#13171f";
-      --bs-text-lightmode: "#373c44";
-      --bs-text-darkmode: "#e0e3e7";
+      --bst-bg-lightmode: #fff;
+      --bst-bg-darkmode: #13171f;
+      --bst-text-lightmode: #373c44;
+      --bst-text-darkmode: #e0e3e7;
 
-      --bs-font-family-emoji: "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
-      --bs-font-family-sans-serif: system-ui, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, Helvetica, Arial, "Helvetica Neue", sans-serif, var(--bs-font-family-emoji);
-      --bs-font-family-monospace: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace, var(--bs-font-family-emoji);
-      --bs-font-family: var(--bs-font-family-sans-serif);
+      --bst-font-family-emoji: "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+      --bst-font-family-sans-serif: system-ui, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, Helvetica, Arial, "Helvetica Neue", sans-serif, var(--bst-font-family-emoji);
+      --bst-font-family-monospace: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace, var(--bst-font-family-emoji);
+      --bst-font-family: var(--bst-font-family-sans-serif);
 
-      --bs-line-height: 1.5;
-      --bs-font-weight: 400;
-      --bs-font-size: 100%;
-      --bs-text-underline-offset: 0.1rem;
-      --bs-border-radius: 0.25rem;
-      --bs-border-width: 0.0625rem;
-      --bs-outline-width: 0.125rem;
-      --bs-transition: 0.2s ease-in-out;
+      --bst-line-height: 1.5;
+      --bst-font-weight: 400;
+      --bst-font-size: 100%;
+      --bst-text-underline-offset: 0.1rem;
+      --bst-border-radius: 0.25rem;
+      --bst-border-width: 0.0625rem;
+      --bst-outline-width: 0.125rem;
+      --bst-transition: 0.2s ease-in-out;
 
-      --bs-spacing: 1rem;
-      --bs-spacing-small: 0.5rem;
+      --bst-spacing: 1rem;
+      --bst-spacing-small: 0.5rem;
 
       /* Code block colours */
-      --comment-dark: "#838c86";
-      --comment-light: "#759061";
-      --keyword-dark: "#ea943e";
-      --keyword-light: "#ad590e";
-      --string-dark: "#4fba11";
-      --string-light: "#007130";
-      --number-dark: "#96b5ed";
-      --number-light: "#073f85";
-      --operator-dark: "#9ec1ff";
-      --operator-light: "#2b476a";
-      --struct-dark: "#a17fbd";
-      --struct-light: "#ac2187";
-      --type-dark: "#54c5d3";
-      --type-light: "#0d8db3";
-      --parenthesis-dark: "#bcac52";
-      --parenthesis-light: "#ad7e0d";
+      --comment-dark: #838c86;
+      --comment-light: #759061;
+      --keyword-dark: #ea943e;
+      --keyword-light: #ad590e;
+      --string-dark: #4fba11;
+      --string-light: #007130;
+      --number-dark: #96b5ed;
+      --number-light: #073f85;
+      --operator-dark: #9ec1ff;
+      --operator-light: #2b476a;
+      --struct-dark: #a17fbd;
+      --struct-light: #ac2187;
+      --type-dark: #54c5d3;
+      --type-light: #0d8db3;
+      --parenthesis-dark: #bcac52;
+      --parenthesis-light: #ad7e0d;
     }
 
     /* where: is used here for less specificity, allowing easier overriding */
@@ -67,11 +67,11 @@
       -webkit-text-size-adjust: 100%;
       -moz-text-size-adjust: 100%;
       text-size-adjust: 100%;
-      font-weight: var(--bs-font-weight);
-      font-size: var(--bs-font-size);
-      line-height: var(--bs-line-height);
-      font-family: var(--bs-font-family);
-      text-underline-offset: var(--bs-text-underline-offset);
+      font-weight: var(--bst-font-weight);
+      font-size: var(--bst-font-size);
+      line-height: var(--bst-line-height);
+      font-family: var(--bst-font-family);
+      text-underline-offset: var(--bst-text-underline-offset);
       text-rendering: optimizeLegibility;
       overflow-wrap: break-word;
       -moz-tab-size: 4;
@@ -85,23 +85,23 @@
       width: 100%;
       margin-right: auto;
       margin-left: auto;
-      padding-right: var(--bs-spacing-small);
-      padding-left: var(--bs-spacing-small);
+      padding-right: var(--bst-spacing-small);
+      padding-left: var(--bst-spacing-small);
     }
 
     @media (min-width: 576px) {
       :root {
-        --bs-font-size: 106.25%;
+        --bst-font-size: 106.25%;
       }
       .container {
         max-width: 510px;
-        padding-right: var(--bs-spacing);
-        padding-left: var(--bs-spacing);
+        padding-right: var(--bst-spacing);
+        padding-left: var(--bst-spacing);
       }
     }
     @media (min-width: 768px) {
       :root {
-        --bs-font-size: 112.5%;
+        --bst-font-size: 112.5%;
       }
       .container {
         max-width: 700px;
@@ -109,7 +109,7 @@
     }
     @media (min-width: 1024px) {
       :root {
-        --bs-font-size: 118.75%;
+        --bst-font-size: 118.75%;
       }
       .container {
         max-width: 950px;
@@ -117,7 +117,7 @@
     }
     @media (min-width: 1280px) {
       :root {
-        --bs-font-size: 125%;
+        --bst-font-size: 125%;
       }
       .container {
         max-width: 1200px;
@@ -125,7 +125,7 @@
     }
     @media (min-width: 1536px) {
       :root {
-        --bs-font-size: 131.25%;
+        --bst-font-size: 131.25%;
       }
       .container {
         max-width: 1450px;
@@ -188,41 +188,42 @@
 
     /* Code Style */
     .codeblock {
+      color: #222222;
       color: light-dark(#222222, #ddd);
-      font-family: var(--bs-font-family-monospace);
+      font-family: var(--bst-font-family-monospace);
       white-space: break-spaces;
       tab-size: 4;
     }
-    .bs-code-comment,
     .bst-code-comment {
+      color: var(--comment-light);
       color:light-dark(var(--comment-light), var(--comment-dark))
     }
-    .bs-code-keyword,
     .bst-code-keyword {
+      color: var(--keyword-light);
       color:light-dark( var(--keyword-light), var(--keyword-dark))
     }
-    .bs-code-string,
     .bst-code-string {
+      color: var(--string-light);
       color:light-dark( var(--string-light), var(--string-dark))
     }
-    .bs-code-number,
     .bst-code-number {
+      color: var(--number-light);
       color:light-dark( var(--number-light), var(--number-dark))
     }
-    .bs-code-operator,
     .bst-code-operator {
+      color: var(--operator-light);
       color:light-dark( var(--operator-light), var(--operator-dark))
     }
-    .bs-code-struct,
     .bst-code-struct {
+      color: var(--struct-light);
       color:light-dark( var(--struct-light), var(--struct-dark))
     }
-    .bs-code-type,
     .bst-code-type {
+      color: var(--type-light);
       color:light-dark( var(--type-light), var(--type-dark))
     }
-    .bs-code-parenthesis,
     .bst-code-parenthesis {
+      color: var(--parenthesis-light);
       color:light-dark( var(--parenthesis-light), var(--parenthesis-dark))
     }
 
@@ -252,7 +253,11 @@
     
 
     <body class="container">
-        <br>    <p><nav></nav> </p><br><h1>What is Beanstalk?</h1><p>This website was created using Beanstalk! </p><h2>Documentation</h2><p><span style="color: hsl(0, 73%, 55%);">     <em>Only a small amount of documentation is written so far.</em> </span> </p><p>More documentation to be added soon! </p>
+        
+    <nav></nav>
+<br><h1>What is Beanstalk?</h1><p>Beanstalk is a new programming language and toolchain. </p><p><strong>This website was created using Beanstalk.</strong> </p><p>Everything you see on this page, including the layout, styles, and even the text content  was created using Beanstalk code and the built-in HTML project builder. </p><p>The source code for this website can be found on <a href="https://github.com/nyejames/beanstalk/tree/main/docs/src">Github</a>. </p><h2>Documentation</h2><span style="color: hsl(0, 73%, 55%);">
+    *A full rewrite of the documentation using Beanstalk is in progress*
+</span><br><p>- <a href="/docs/basics.html">Basics</a> </p>
     </body>
 
 

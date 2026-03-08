@@ -9,7 +9,7 @@ import @libs/html/doc
         <meta name="viewport"content="width=device-width, initial-scale=1">
         <link rel="icon"href="[$slot("favicon")]">
 
-        [doc.title: "Beanstalk Documentation"]
+        [doc.title: Beanstalk Documentation]
         [doc.style:
             [$slot("css")]
         ]

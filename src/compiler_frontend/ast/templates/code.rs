@@ -124,7 +124,7 @@ pub(crate) fn highlight_code_html(source: &str, language: CodeLanguage) -> Strin
         if matches_comment_prefix(&chars, index, language.comment_prefix()) {
             flush_word(&mut highlighted, &mut word, language);
             let prefix = language.comment_prefix().unwrap_or_default();
-            highlighted.push_str("<span class='bs-code-comment'>");
+            highlighted.push_str("<span class='bst-code-comment'>");
 
             for comment_char in prefix.chars() {
                 push_escaped_char(&mut highlighted, comment_char);
@@ -155,7 +155,7 @@ pub(crate) fn highlight_code_html(source: &str, language: CodeLanguage) -> Strin
 
         if current.is_bracket() {
             flush_word(&mut highlighted, &mut word, language);
-            highlighted.push_str("<span class='bs-code-parenthesis'>");
+            highlighted.push_str("<span class='bst-code-parenthesis'>");
             push_escaped_char(&mut highlighted, current);
             highlighted.push_str("</span>");
             index += 1;
@@ -164,7 +164,7 @@ pub(crate) fn highlight_code_html(source: &str, language: CodeLanguage) -> Strin
 
         if is_operator_char(current) {
             flush_word(&mut highlighted, &mut word, language);
-            highlighted.push_str("<span class='bs-code-operator'>");
+            highlighted.push_str("<span class='bst-code-operator'>");
             push_escaped_char(&mut highlighted, current);
             highlighted.push_str("</span>");
             index += 1;
@@ -364,7 +364,7 @@ fn starts_number_literal(chars: &[char], index: usize) -> bool {
 
 fn highlight_string(chars: &[char], mut index: usize, output: &mut String) -> usize {
     let quote = chars[index];
-    output.push_str("<span class='bs-code-string'>");
+    output.push_str("<span class='bst-code-string'>");
     push_escaped_char(output, quote);
     index += 1;
 
@@ -389,7 +389,7 @@ fn highlight_string(chars: &[char], mut index: usize, output: &mut String) -> us
 }
 
 fn highlight_number_literal(chars: &[char], mut index: usize, output: &mut String) -> usize {
-    output.push_str("<span class='bs-code-number'>");
+    output.push_str("<span class='bst-code-number'>");
 
     // Keep this deliberately narrow for now. The generic highlighter is only
     // meant to recognise obvious numeric runs, not fully parse every literal form.
@@ -415,17 +415,17 @@ fn flush_word(output: &mut String, word: &mut String, language: CodeLanguage) {
     // such as whitespace or punctuation. That keeps keyword matching simple and
     // lets generic mode leave unknown identifiers untouched.
     if is_keyword(word, language) {
-        output.push_str("<span class='bs-code-keyword'>");
+        output.push_str("<span class='bst-code-keyword'>");
         output.push_str(&escaped);
         output.push_str("</span>");
     } else if is_type_keyword(word, language) {
-        output.push_str("<span class='bs-code-type'>");
+        output.push_str("<span class='bst-code-type'>");
         output.push_str(&escaped);
         output.push_str("</span>");
     } else if language != CodeLanguage::Generic
         && word.chars().next().is_some_and(|ch| ch.is_uppercase())
     {
-        output.push_str("<span class='bs-code-struct'>");
+        output.push_str("<span class='bst-code-struct'>");
         output.push_str(&escaped);
         output.push_str("</span>");
     } else {
