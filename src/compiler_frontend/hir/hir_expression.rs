@@ -287,6 +287,26 @@ impl<'a> HirBuilder<'a> {
         template: &Template,
         location: &TextLocation,
     ) -> Result<LoweredExpression, CompilerError> {
+        if !self.currently_lowering_constants.is_empty() {
+            // Module constant evaluation must stay statement-free. When constant structs carry
+            // wrapper templates, fold them into string literals with unresolved slots rendered
+            // as empty segments so constant references can lower without runtime template calls.
+            let folded = template.fold_into_stringid(&None, self.string_table)?;
+            let region = self.current_region_or_error(location)?;
+            let string_ty = self.intern_type_kind(HirTypeKind::String);
+
+            return Ok(LoweredExpression {
+                prelude: vec![],
+                value: self.make_expression(
+                    location,
+                    HirExpressionKind::StringLiteral(self.string_table.resolve(folded).to_owned()),
+                    string_ty,
+                    ValueKind::Const,
+                    region,
+                ),
+            });
+        }
+
         // Unfilled slots are rendered as empty strings when templates are used directly.
         // Keep lowering focused on the authored content atoms that carry expressions.
         let chunks = template.content.flatten_expressions();
@@ -768,8 +788,35 @@ impl<'a> HirBuilder<'a> {
         match &node.kind {
             NodeKind::Rvalue(expr) => match &expr.kind {
                 ExpressionKind::Reference(name) => {
-                    let local = self.resolve_local_id_or_error(name, &node.location)?;
-                    Ok((vec![], HirPlace::Local(local)))
+                    if let Some(local) = self.locals_by_name.get(name).copied() {
+                        return Ok((vec![], HirPlace::Local(local)));
+                    }
+
+                    // Field/index lowering requires a place. Module constants are lowered as
+                    // rvalues, so materialize them into a temporary local when referenced in
+                    // place-position expressions (for example `format.center`).
+                    let lowered = self.lower_reference_expression(name, &expr.data_type, &node.location)?;
+                    if let HirExpressionKind::Load(place) = &lowered.value.kind {
+                        return Ok((lowered.prelude, place.clone()));
+                    }
+
+                    let temp_local =
+                        self.allocate_temp_local(lowered.value.ty, Some(node.location.clone()))?;
+                    let assign_statement = HirStatement {
+                        id: self.allocate_node_id(),
+                        kind: HirStatementKind::Assign {
+                            target: HirPlace::Local(temp_local),
+                            value: lowered.value,
+                        },
+                        location: node.location.clone(),
+                    };
+
+                    self.side_table
+                        .map_statement(&node.location, &assign_statement);
+
+                    let mut prelude = lowered.prelude;
+                    prelude.push(assign_statement);
+                    Ok((prelude, HirPlace::Local(temp_local)))
                 }
 
                 _ => {

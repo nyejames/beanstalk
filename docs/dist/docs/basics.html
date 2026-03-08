@@ -1,0 +1,303 @@
+<div id="bst-slot-0"></div>
+<div id="bst-slot-1"></div>
+<script>
+function __bs_is_ref(value) {
+    return value !== null && typeof value === "object" && value.__bs_ref === true;
+}
+
+function __bs_binding(value) {
+    return { __bs_ref: true, __bs_kind: "binding", __bs_mode: "slot", __bs_slot: { value }, __bs_target: null };
+}
+
+function __bs_param_binding(value) {
+    if (!__bs_is_ref(value)) {
+        return __bs_binding(value);
+    }
+    if (value.__bs_kind === "binding") {
+        return value;
+    }
+    const binding = __bs_binding(undefined);
+    binding.__bs_mode = "alias";
+    binding.__bs_target = value;
+    return binding;
+}
+
+function __bs_resolve(ref) {
+    while (ref.__bs_kind === "binding" && ref.__bs_mode === "alias") {
+        ref = ref.__bs_target;
+    }
+    return ref;
+}
+
+function __bs_read(ref) {
+    const resolved = __bs_resolve(ref);
+    return resolved.__bs_kind === "binding" ? resolved.__bs_slot.value : resolved.__bs_get();
+}
+
+function __bs_write(ref, value) {
+    const resolved = __bs_resolve(ref);
+    if (resolved.__bs_kind === "binding") {
+        resolved.__bs_slot.value = value;
+    } else {
+        resolved.__bs_set(value);
+    }
+    return value;
+}
+
+function __bs_assign_borrow(binding, ref) {
+    if (binding.__bs_mode === "alias") {
+        return __bs_write(binding, __bs_read(ref));
+    }
+    binding.__bs_mode = "alias";
+    binding.__bs_target = ref;
+    return binding;
+}
+
+function __bs_assign_value(binding, value) {
+    if (binding.__bs_mode === "alias") {
+        return __bs_write(binding, value);
+    }
+    binding.__bs_mode = "slot";
+    binding.__bs_target = null;
+    binding.__bs_slot.value = value;
+    return binding;
+}
+
+function __bs_field(baseRef, field) {
+    return {
+        __bs_ref: true,
+        __bs_kind: "computed",
+        __bs_get() {
+            return __bs_read(baseRef)[field];
+        },
+        __bs_set(value) {
+            __bs_read(baseRef)[field] = value;
+        }
+    };
+}
+
+function __bs_index(baseRef, index) {
+    return {
+        __bs_ref: true,
+        __bs_kind: "computed",
+        __bs_get() {
+            return __bs_read(baseRef)[index];
+        },
+        __bs_set(value) {
+            __bs_read(baseRef)[index] = value;
+        }
+    };
+}
+
+function __bs_clone_value(value) {
+    if (Array.isArray(value)) {
+        return value.map(__bs_clone_value);
+    }
+    if (value !== null && typeof value === "object") {
+        const result = {};
+        for (const key of Object.keys(value)) {
+            result[key] = __bs_clone_value(value[key]);
+        }
+        return result;
+    }
+    return value;
+}
+
+function _Users_aneirinjames_projects_beanstalk_beanstalk_docs_src_docs_basics__page_bst_start() {
+    
+    return "";
+}
+
+function _Users_aneirinjames_projects_beanstalk_beanstalk_docs_src_libs_html_bst_start() {
+    
+    return "";
+}
+
+function _Users_aneirinjames_projects_beanstalk_beanstalk_docs_src_styles_docs_bst_start() {
+    
+    return "";
+}
+
+function _Users_aneirinjames_projects_beanstalk_beanstalk_docs_src_docs_basics__page_bst___bst_frag_0() {
+    let __hir_tmp_0 = __bs_binding(undefined);
+    let __hir_tmp_1 = __bs_binding(undefined);
+    let __hir_tmp_2 = __bs_binding(undefined);
+    let __hir_tmp_3 = __bs_binding(undefined);
+    let __hir_tmp_4 = __bs_binding(undefined);
+    let __hir_tmp_5 = __bs_binding(undefined);
+    let __hir_tmp_6 = __bs_binding(undefined);
+    let __hir_tmp_7 = __bs_binding(undefined);
+    let __hir_tmp_8 = __bs_binding(undefined);
+    let __hir_tmp_9 = __bs_binding(undefined);
+    let __hir_tmp_10 = __bs_binding(undefined);
+    let __hir_tmp_11 = __bs_binding(undefined);
+    let __hir_tmp_12 = __bs_binding(undefined);
+    
+    __bs_assign_value(__hir_tmp_0, _Users_aneirinjames_projects_beanstalk_beanstalk_docs_src_docs_basics__page_bst___bst_frag_0___template_fn_5(__bs_binding("<style>"), __bs_binding("\n    @charset \"UTF-8\";\n    :root {\n      color-scheme: light dark;\n\n      --bs-font-size: 100%;\n\n      /* Default Background Colours */\n      --bs-bg-lightmode: \"#fff\";\n      --bs-bg-darkmode: \"#13171f\";\n      --bs-text-lightmode: \"#373c44\";\n      --bs-text-darkmode: \"#e0e3e7\";\n\n      --bs-font-family-emoji: \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\", \"Noto Color Emoji\";\n      --bs-font-family-sans-serif: system-ui, \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, Helvetica, Arial, \"Helvetica Neue\", sans-serif, var(--bs-font-family-emoji);\n      --bs-font-family-monospace: ui-monospace, SFMono-Regular, \"SF Mono\", Menlo, Consolas, \"Liberation Mono\", monospace, var(--bs-font-family-emoji);\n      --bs-font-family: var(--bs-font-family-sans-serif);\n\n      --bs-line-height: 1.5;\n      --bs-font-weight: 400;\n      --bs-font-size: 100%;\n      --bs-text-underline-offset: 0.1rem;\n      --bs-border-radius: 0.25rem;\n      --bs-border-width: 0.0625rem;\n      --bs-outline-width: 0.125rem;\n      --bs-transition: 0.2s ease-in-out;\n\n      --bs-spacing: 1rem;\n      --bs-spacing-small: 0.5rem;\n\n      /* Code block colours */\n      --comment-dark: \"#838c86\";\n      --comment-light: \"#759061\";\n      --keyword-dark: \"#ea943e\";\n      --keyword-light: \"#ad590e\";\n      --string-dark: \"#4fba11\";\n      --string-light: \"#007130\";\n      --number-dark: \"#96b5ed\";\n      --number-light: \"#073f85\";\n      --operator-dark: \"#9ec1ff\";\n      --operator-light: \"#2b476a\";\n      --struct-dark: \"#a17fbd\";\n      --struct-light: \"#ac2187\";\n      --type-dark: \"#54c5d3\";\n      --type-light: \"#0d8db3\";\n      --parenthesis-dark: \"#bcac52\";\n      --parenthesis-light: \"#ad7e0d\";\n    }\n\n    /* where: is used here for less specificity, allowing easier overriding */\n    :where(:root) {\n      -webkit-tap-highlight-color: transparent;\n      -webkit-text-size-adjust: 100%;\n      -moz-text-size-adjust: 100%;\n      text-size-adjust: 100%;\n      font-weight: var(--bs-font-weight);\n      font-size: var(--bs-font-size);\n      line-height: var(--bs-line-height);\n      font-family: var(--bs-font-family);\n      text-underline-offset: var(--bs-text-underline-offset);\n      text-rendering: optimizeLegibility;\n      overflow-wrap: break-word;\n      -moz-tab-size: 4;\n      -o-tab-size: 4;\n      tab-size: 4;\n\n    }\n\n    /* Container mostly provides default padding */\n    .container {\n      width: 100%;\n      margin-right: auto;\n      margin-left: auto;\n      padding-right: var(--bs-spacing-small);\n      padding-left: var(--bs-spacing-small);\n    }\n\n    @media (min-width: 576px) {\n      :root {\n        --bs-font-size: 106.25%;\n      }\n      .container {\n        max-width: 510px;\n        padding-right: var(--bs-spacing);\n        padding-left: var(--bs-spacing);\n      }\n    }\n    @media (min-width: 768px) {\n      :root {\n        --bs-font-size: 112.5%;\n      }\n      .container {\n        max-width: 700px;\n      }\n    }\n    @media (min-width: 1024px) {\n      :root {\n        --bs-font-size: 118.75%;\n      }\n      .container {\n        max-width: 950px;\n      }\n    }\n    @media (min-width: 1280px) {\n      :root {\n        --bs-font-size: 125%;\n      }\n      .container {\n        max-width: 1200px;\n      }\n    }\n    @media (min-width: 1536px) {\n      :root {\n        --bs-font-size: 131.25%;\n      }\n      .container {\n        max-width: 1450px;\n      }\n    }\n\n    body {\n      width: 100%;\n      margin: 0;\n    }\n\n    /* Common Styles */\n\n    .bst-center {\n      text-align: center;\n    }\n\n    /* Nav Style */\n    .bst-nav-0 {\n      display: flex;\n      justify-content: space-between;\n      align-items: center;\n      padding: 1rem;\n    }\n    .bst-nav-1 {\n      display: flex;\n      justify-content: space-between;\n      align-items: center;\n      border-bottom-color: grey;\n      border-bottom-style: solid;\n      border-bottom-width: 1px;\n      padding: 0rem 2rem 0rem 2rem;\n    }\n\n    /* Title Style */\n    .bst-title-0 {\n      font-size: 3.5rem;\n      font-weight: bold;\n      letter-spacing: 0.4rem;\n      word-spacing: 0.5rem;\n      margin: 1.5rem 0 1.4rem 0;\n      line-height: 3.7rem;\n    }\n    .bst-title-1 {\n      font-size: 3rem;\n      font-weight: bold;\n      letter-spacing: 0.3rem;\n      word-spacing: 0.4rem;\n      margin: 1.3rem 0 1.2rem 0;\n      line-height: 3.5rem;\n    }\n    .bst-title-2 {\n      font-size: 2.5rem;\n      font-weight: bold;\n      letter-spacing: 0.3rem;\n      word-spacing: 0.35rem;\n      margin: 1.2rem 0 1rem 0;\n      line-height: 3.3rem;\n    }\n\n    /* Code Style */\n    .codeblock {\n      color: light-dark(#222222, #ddd);\n      font-family: var(--bs-font-family-monospace);\n      white-space: break-spaces;\n      tab-size: 4;\n    }\n    .bs-code-comment,\n    .bst-code-comment {\n      color:light-dark(var(--comment-light), var(--comment-dark))\n    }\n    .bs-code-keyword,\n    .bst-code-keyword {\n      color:light-dark( var(--keyword-light), var(--keyword-dark))\n    }\n    .bs-code-string,\n    .bst-code-string {\n      color:light-dark( var(--string-light), var(--string-dark))\n    }\n    .bs-code-number,\n    .bst-code-number {\n      color:light-dark( var(--number-light), var(--number-dark))\n    }\n    .bs-code-operator,\n    .bst-code-operator {\n      color:light-dark( var(--operator-light), var(--operator-dark))\n    }\n    .bs-code-struct,\n    .bst-code-struct {\n      color:light-dark( var(--struct-light), var(--struct-dark))\n    }\n    .bs-code-type,\n    .bst-code-type {\n      color:light-dark( var(--type-light), var(--type-dark))\n    }\n    .bs-code-parenthesis,\n    .bst-code-parenthesis {\n      color:light-dark( var(--parenthesis-light), var(--parenthesis-dark))\n    }\n\n    /* BASIC CSS RESET STUFF */\n\n    /**\n     * Document\n     * Content-box & Responsive typography\n    */\n    *,\n    *::before,\n    *::after {\n      box-sizing: border-box;\n      background-repeat: no-repeat;\n    }\n\n    ::before,\n    ::after {\n      text-decoration: inherit;\n      vertical-align: inherit;\n    }\n"), __bs_binding("\n            "), __bs_binding("\n        "), __bs_binding("</style>")));
+    __bs_assign_value(__hir_tmp_1, _Users_aneirinjames_projects_beanstalk_beanstalk_docs_src_docs_basics__page_bst___bst_frag_0___template_fn_4(__hir_tmp_0));
+    __bs_assign_value(__hir_tmp_2, _Users_aneirinjames_projects_beanstalk_beanstalk_docs_src_docs_basics__page_bst___bst_frag_0___template_fn_3(__bs_binding("\n      <head>\n        <meta charset=\"UTF-8\">\n        <meta name=\"viewport\"content=\"width=device-width, initial-scale=1\">\n        <meta name=\"color-scheme\" content=\"light dark\" />\n        "), __bs_binding("\n        <meta charset=\"UTF-8\">\n        <meta name=\"viewport\"content=\"width=device-width, initial-scale=1\">\n        <link rel=\"icon\"href=\""), __bs_binding("\">\n\n        "), __bs_binding("<title> \"Beanstalk Documentation\"</title>"), __bs_binding("\n        "), __hir_tmp_1, __bs_binding("\n    "), __bs_binding("\n      </head>\n    ")));
+    __bs_assign_value(__hir_tmp_3, _Users_aneirinjames_projects_beanstalk_beanstalk_docs_src_docs_basics__page_bst___bst_frag_0___template_fn_2(__hir_tmp_2));
+    __bs_assign_value(__hir_tmp_4, _Users_aneirinjames_projects_beanstalk_beanstalk_docs_src_docs_basics__page_bst___bst_frag_0___template_fn_8(__bs_binding("\n    <nav></nav>\n")));
+    __bs_assign_value(__hir_tmp_5, { underline: "<u></u>", strikethrough: "<s></s>", center: "<div class=\"bst-center\"></div>", table: "\n      <table></table>\n    " });
+    __bs_assign_value(__hir_tmp_6, _Users_aneirinjames_projects_beanstalk_beanstalk_docs_src_docs_basics__page_bst___bst_frag_0___template_fn_9(__bs_field(__hir_tmp_5, "center"), __bs_binding("\n    "), __bs_binding(" <h1 style=\"font-size: 2em;\"> LANGUAGE BASICS</h1>"), __bs_binding("\n")));
+    __bs_assign_value(__hir_tmp_7, { underline: "<u></u>", strikethrough: "<s></s>", center: "<div class=\"bst-center\"></div>", table: "\n      <table></table>\n    " });
+    __bs_assign_value(__hir_tmp_8, _Users_aneirinjames_projects_beanstalk_beanstalk_docs_src_docs_basics__page_bst___bst_frag_0___template_fn_10(__bs_field(__hir_tmp_7, "table"), __bs_binding("\n    "), __bs_binding(" Type"), __bs_binding(" "), __bs_binding(" Description"), __bs_binding("\n\n    "), __bs_binding(" float "), __bs_binding(" "), __bs_binding(" 64 bit floating point number"), __bs_binding("\n\n    "), __bs_binding(" int "), __bs_binding(" "), __bs_binding("  64 bit signed integer "), __bs_binding("\n")));
+    __bs_assign_value(__hir_tmp_9, _Users_aneirinjames_projects_beanstalk_beanstalk_docs_src_docs_basics__page_bst___bst_frag_0___template_fn_7(__bs_binding("<body class=\"container\">"), __bs_binding("\n        "), __bs_binding(""), __hir_tmp_4, __bs_binding(""), __hir_tmp_6, __bs_binding("<p>Every project needing to be split into multiple Wasm modules must have a config.bst file. </p><p>If instead, you build or run a specific Beanstalk file, it will create a single Wasm module from that entry point and pull in all its dependencies. </p><p>From the config file you can define a Beanstalk file as the entry point of a program. </p><p>Web projects have their own directory based structure and config file also. </p><h1>Quick Syntax Summary</h1><p>For developers coming from most other languages,  here are some key idiosyncrasies from other C-like languages to note: </p><p>- Colon opens a scope, semicolon closes it. Semicolon does not end statements. - Square brackets are NOT used for arrays, curly braces are used instead.  Square brackets are only used for string templates. Items in collections are accessed via methods. - Equality and other logical operators use keywords like \"is\" and \"not\"  (you can't use == or ! for example) - ~ tilde symbol to indicate mutability (mutability must be explicit).  This comes before the type if there is an explicit type declaration. - Double dashes for single line comments (--) - Immutable Reference semantics are the default for all stack and heap allocated types.  - All copies have to be explicit unless they are used in part of a new expression.  Even for primitive types such as integers. </p><p>4 spaces are recommended for indentation. </p><p>- Types use UpperCamelCase - Everything else uses regular_snake_case </p><h1>Comments</h1><p>Comments use a double minus sign.  Documentation comments will eventually be created via special templates. </p><p><code class='codeblock'> <span class='bs-code-comment'>-- normal comment</span> </code> </p><h1>Variables</h1><p>Equals means assign. Tilde ~ means this is a mutable and can change. </p><p>All variables must be assigned a value when they are declared. </p><h2>Assignment</h2><h3>Variables</h3><p><code class='codeblock'> int <span class='bs-code-operator'>~</span><span class='bs-code-operator'>=</span> <span class='bs-code-number'>0</span> float <span class='bs-code-operator'>~</span><span class='bs-code-operator'>=</span> <span class='bs-code-number'>0.0</span> </p><p>string_slice <span class='bs-code-operator'>~</span><span class='bs-code-operator'>=</span> <span class='bs-code-string'>&quot;wow!&quot;</span> char <span class='bs-code-operator'>~</span><span class='bs-code-operator'>=</span> <span class='bs-code-string'>&#39;😊&#39;</span> raw_string_slice <span class='bs-code-operator'>~</span><span class='bs-code-operator'>=</span> <span class='bs-code-operator'>`</span>hi<span class='bs-code-operator'>`</span> </p><p>string_template <span class='bs-code-operator'>~</span><span class='bs-code-operator'>=</span> <span class='bs-code-parenthesis'>[</span><span class='bs-code-operator'>:</span>     <span class='bs-code-struct'>This</span> is the <span class='bs-code-struct'>Beanstalk</span> programming language <span class='bs-code-parenthesis'>]</span> </p><p>bool <span class='bs-code-operator'>~</span><span class='bs-code-operator'>=</span> true </p><p>mutable_collection <span class='bs-code-operator'>~</span><span class='bs-code-operator'>=</span> <span class='bs-code-parenthesis'>{</span><span class='bs-code-parenthesis'>}</span> immutable_collection <span class='bs-code-operator'>=</span> <span class='bs-code-parenthesis'>{</span><span class='bs-code-parenthesis'>}</span> </p><p><span class='bs-code-struct'>NewStruct</span> <span class='bs-code-operator'>=</span> <span class='bs-code-operator'>|</span>     value <span class='bs-code-struct'>Float,</span>     another_value <span class='bs-code-struct'>String,</span> <span class='bs-code-operator'>|</span> </p><p>instance <span class='bs-code-operator'>~</span><span class='bs-code-operator'>=</span> <span class='bs-code-struct'>NewStruct</span><span class='bs-code-parenthesis'>(</span>     value <span class='bs-code-operator'>=</span> <span class='bs-code-number'>1.2</span>,      another_value <span class='bs-code-operator'>=</span> <span class='bs-code-string'>&quot;hey&quot;</span> <span class='bs-code-parenthesis'>)</span> </code> </p><p><code class='codeblock'> <span class='bs-code-comment'>-- 64 bit immutable float</span> number <span class='bs-code-operator'>=</span> <span class='bs-code-number'>420.69</span> </p><p><span class='bs-code-comment'>-- Becomes an immutable reference to the value</span> <span class='bs-code-comment'>-- For primitives this is actually just an immutable copy,</span> <span class='bs-code-comment'>-- But the behaviour is consistent for all datatypes, including heap allocated ones</span> another_number <span class='bs-code-operator'>=</span> number </p><p><span class='bs-code-comment'>-- Becomes a mutable reference to the number</span> <span class='bs-code-comment'>-- or moves the value if it isn&#39;t used again later in the scope</span> another_mutable_number <span class='bs-code-operator'>~</span><span class='bs-code-operator'>=</span> number </p><p><span class='bs-code-comment'>-- Even with primative stack types,</span> <span class='bs-code-comment'>-- Copying is still explicit</span> a_copy_of_a_number <span class='bs-code-operator'>~</span><span class='bs-code-struct'>Copy</span> <span class='bs-code-operator'>=</span> another_mutable_number </p><p><span class='bs-code-comment'>-- Type error (number is not mutable)</span> number <span class='bs-code-operator'>=</span> <span class='bs-code-number'>1</span> </p><p><span class='bs-code-comment'>-- Type error (another_mutable_number is a float type)</span> another_mutable_number <span class='bs-code-operator'>~</span><span class='bs-code-operator'>=</span> <span class='bs-code-string'>&quot;Not a number&quot;</span> </p><p><span class='bs-code-comment'>-- Explicit type declarations</span> a_float <span class='bs-code-operator'>~</span><span class='bs-code-type'>Float</span> <span class='bs-code-operator'>=</span> <span class='bs-code-number'>84</span> string_slice <span class='bs-code-operator'>=</span> <span class='bs-code-string'>&quot;Hello &quot;</span> a_mutable_string <span class='bs-code-operator'>~</span><span class='bs-code-type'>String</span> <span class='bs-code-operator'>=</span> <span class='bs-code-parenthesis'>[</span><span class='bs-code-operator'>:</span><span class='bs-code-struct'>World</span><span class='bs-code-operator'>!</span><span class='bs-code-parenthesis'>]</span> </p><p><span class='bs-code-comment'>-- You can&#39;t use the &#39;+&#39; operator on strings,</span> <span class='bs-code-comment'>-- They can be concatenated using templates</span> concatenated_strings <span class='bs-code-operator'>=</span> <span class='bs-code-parenthesis'>[</span>string_slice, a_mutable_string<span class='bs-code-parenthesis'>]</span> </code> </p><p>All copies are explicit and must use the 'copy' keyword in place of a type. </p><p><code class='codeblock'> <span class='bs-code-comment'>-- Create a new collection of integers</span> a_collection <span class='bs-code-operator'>~</span><span class='bs-code-operator'>=</span> <span class='bs-code-parenthesis'>{</span><span class='bs-code-number'>1</span>, <span class='bs-code-number'>2</span>, <span class='bs-code-number'>3</span>, <span class='bs-code-number'>4</span>, <span class='bs-code-number'>5</span><span class='bs-code-parenthesis'>}</span> </p><p><span class='bs-code-comment'>-- Deep mutable copy of a collection</span> a_copy <span class='bs-code-operator'>~</span><span class='bs-code-operator'>=</span> <span class='bs-code-keyword'>copy</span> a_collection </p><p><span class='bs-code-comment'>-- Immutable reference to a_collection</span> a_reference <span class='bs-code-operator'>=</span> a_collection </p><p><span class='bs-code-comment'>-- Ownership passed or mutable reference depending on context</span> a_reference <span class='bs-code-operator'>~</span><span class='bs-code-operator'>=</span> a_collection </p><p><span class='bs-code-comment'>-- a_reference is still a reference to the original collection</span> a_reference.push<span class='bs-code-parenthesis'>(</span><span class='bs-code-number'>5</span><span class='bs-code-parenthesis'>)</span> io<span class='bs-code-parenthesis'>(</span>a_collection<span class='bs-code-parenthesis'>)</span> <span class='bs-code-comment'>-- {1, 2, 3, 4, 5, 5}</span> </p><p>a_collection.pull<span class='bs-code-parenthesis'>(</span>a_collection.length<span class='bs-code-parenthesis'>(</span><span class='bs-code-parenthesis'>)</span> <span class='bs-code-operator'>-</span> <span class='bs-code-number'>1</span><span class='bs-code-parenthesis'>)</span> io<span class='bs-code-parenthesis'>(</span>a_collection<span class='bs-code-parenthesis'>)</span> <span class='bs-code-comment'>-- {23.0}</span> </code> </p><p>Expressions can span over multiple lines. </p><p>But new statements must start after a newline. </p><p><code class='codeblock'> <span class='bs-code-comment'>-- Valid</span> some_int <span class='bs-code-operator'>=</span>     <span class='bs-code-number'>4</span> <span class='bs-code-operator'>+</span> <span class='bs-code-number'>5</span> <span class='bs-code-operator'>+</span> <span class='bs-code-number'>6</span> <span class='bs-code-operator'>+</span> <span class='bs-code-number'>7</span> <span class='bs-code-operator'>+</span>      <span class='bs-code-number'>8</span> <span class='bs-code-operator'>+</span> <span class='bs-code-number'>9</span> <span class='bs-code-operator'>+</span> <span class='bs-code-number'>10</span> </p><p><span class='bs-code-comment'>-- Also valid</span> some_int <span class='bs-code-operator'>=</span>     <span class='bs-code-number'>4</span> <span class='bs-code-operator'>+</span> <span class='bs-code-parenthesis'>(</span><span class='bs-code-number'>5</span> <span class='bs-code-operator'>+</span> <span class='bs-code-number'>6</span><span class='bs-code-parenthesis'>)</span> <span class='bs-code-operator'>*</span> <span class='bs-code-number'>7</span>     <span class='bs-code-operator'>+</span> <span class='bs-code-number'>8</span> <span class='bs-code-operator'>/</span> <span class='bs-code-number'>9</span> <span class='bs-code-operator'>+</span> <span class='bs-code-number'>10</span> </code> </p><h1>Data Types</h1><p>All data type keywords contain methods from the standard library for common manipulation of types. </p><h2>Numerical Types</h2>"), __hir_tmp_8, __bs_binding("<h2>String based Types</h2><p>These are all different ways to create strings. </p><p><code class='codeblock'> <span class='bs-code-parenthesis'>[</span><span class='bs-code-operator'>:</span> <span class='bs-code-struct'>Type</span><span class='bs-code-parenthesis'>]</span> <span class='bs-code-parenthesis'>[</span><span class='bs-code-operator'>:</span> <span class='bs-code-struct'>Description</span><span class='bs-code-parenthesis'>]</span> </p><p><span class='bs-code-parenthesis'>[</span><span class='bs-code-operator'>:</span> string slice <span class='bs-code-parenthesis'>]</span> <span class='bs-code-parenthesis'>[</span><span class='bs-code-operator'>:</span> <span class='bs-code-struct'>UTF</span><span class='bs-code-operator'>-</span><span class='bs-code-number'>8</span><span class='bs-code-parenthesis'>]</span> </p><p><span class='bs-code-parenthesis'>[</span><span class='bs-code-operator'>:</span> template <span class='bs-code-parenthesis'>]</span> <span class='bs-code-parenthesis'>[</span><span class='bs-code-operator'>:</span> <span class='bs-code-struct'>The</span> string templating syntax of <span class='bs-code-struct'>Beanstalk</span> for creating strings. <span class='bs-code-parenthesis'>]</span> </code> </p><h1>Strings and String slices</h1><p>String is the keyword for string types in Beanstalk.  Double quotes are automatically string slices.  </p><p>`\"Double quotes for a UTF-8 string slice\"` </p><p>Backticks are used for RAW strings. To escape a backtick it must be preceded with a backslash . </p><p>Scenes are used instead of format strings. </p><h1>Logical Operators</h1><p>The 'is' keyword is used to check equality, not '=='.  The \"and / or\" keywords are used for logical and / or and 'not' is used to invert a truthy value to falsy or vice versa. </p><p><code class='codeblock'> <span class='bs-code-parenthesis'>[</span><span class='bs-code-operator'>:</span> <span class='bs-code-struct'>Operator</span><span class='bs-code-parenthesis'>]</span> <span class='bs-code-parenthesis'>[</span><span class='bs-code-operator'>:</span> <span class='bs-code-struct'>Description</span><span class='bs-code-parenthesis'>]</span>          <span class='bs-code-parenthesis'>[</span><span class='bs-code-operator'>:</span> <span class='bs-code-struct'>Precedence</span><span class='bs-code-parenthesis'>]</span> <span class='bs-code-parenthesis'>[</span><span class='bs-code-operator'>:</span> <span class='bs-code-operator'>`</span><span class='bs-code-operator'>^</span><span class='bs-code-operator'>`</span><span class='bs-code-parenthesis'>]</span>        <span class='bs-code-parenthesis'>[</span><span class='bs-code-operator'>:</span> <span class='bs-code-struct'>Exponent</span><span class='bs-code-parenthesis'>]</span>            <span class='bs-code-parenthesis'>[</span><span class='bs-code-operator'>:</span> <span class='bs-code-number'>4</span><span class='bs-code-parenthesis'>]</span> <span class='bs-code-parenthesis'>[</span><span class='bs-code-operator'>:</span> <span class='bs-code-operator'>`</span><span class='bs-code-operator'>/</span><span class='bs-code-operator'>/</span><span class='bs-code-operator'>`</span><span class='bs-code-parenthesis'>]</span>       <span class='bs-code-parenthesis'>[</span><span class='bs-code-operator'>:</span> <span class='bs-code-struct'>Root</span><span class='bs-code-parenthesis'>]</span>                <span class='bs-code-parenthesis'>[</span><span class='bs-code-operator'>:</span> <span class='bs-code-number'>4</span><span class='bs-code-parenthesis'>]</span> <span class='bs-code-parenthesis'>[</span><span class='bs-code-operator'>:</span> <span class='bs-code-operator'>`</span><span class='bs-code-operator'>*</span><span class='bs-code-operator'>`</span><span class='bs-code-parenthesis'>]</span>        <span class='bs-code-parenthesis'>[</span><span class='bs-code-operator'>:</span> <span class='bs-code-struct'>Multiplication</span><span class='bs-code-parenthesis'>]</span>       <span class='bs-code-parenthesis'>[</span><span class='bs-code-operator'>:</span> <span class='bs-code-number'>3</span><span class='bs-code-parenthesis'>]</span> <span class='bs-code-parenthesis'>[</span><span class='bs-code-operator'>:</span> <span class='bs-code-operator'>`</span><span class='bs-code-operator'>/</span><span class='bs-code-operator'>`</span><span class='bs-code-parenthesis'>]</span>        <span class='bs-code-parenthesis'>[</span><span class='bs-code-operator'>:</span> <span class='bs-code-struct'>Division</span><span class='bs-code-parenthesis'>]</span>             <span class='bs-code-parenthesis'>[</span><span class='bs-code-operator'>:</span> <span class='bs-code-number'>3</span><span class='bs-code-parenthesis'>]</span> <span class='bs-code-parenthesis'>[</span><span class='bs-code-operator'>:</span> <span class='bs-code-operator'>%</span><span class='bs-code-parenthesis'>]</span>          <span class='bs-code-parenthesis'>[</span><span class='bs-code-operator'>:</span> <span class='bs-code-struct'>Modulo</span> <span class='bs-code-parenthesis'>(</span>truncated<span class='bs-code-parenthesis'>)</span><span class='bs-code-parenthesis'>]</span>   <span class='bs-code-parenthesis'>[</span><span class='bs-code-operator'>:</span> <span class='bs-code-number'>3</span><span class='bs-code-parenthesis'>]</span> <span class='bs-code-parenthesis'>[</span><span class='bs-code-operator'>:</span> <span class='bs-code-operator'>%</span><span class='bs-code-operator'>%</span><span class='bs-code-parenthesis'>]</span>         <span class='bs-code-parenthesis'>[</span><span class='bs-code-operator'>:</span> <span class='bs-code-struct'>Remainder</span> <span class='bs-code-parenthesis'>(</span>floored<span class='bs-code-parenthesis'>)</span><span class='bs-code-parenthesis'>]</span>  <span class='bs-code-parenthesis'>[</span><span class='bs-code-operator'>:</span> <span class='bs-code-number'>3</span><span class='bs-code-parenthesis'>]</span> <span class='bs-code-parenthesis'>[</span><span class='bs-code-operator'>:</span> <span class='bs-code-operator'>+</span><span class='bs-code-parenthesis'>]</span>          <span class='bs-code-parenthesis'>[</span><span class='bs-code-operator'>:</span> <span class='bs-code-struct'>Sum</span><span class='bs-code-parenthesis'>]</span>                  <span class='bs-code-parenthesis'>[</span><span class='bs-code-operator'>:</span> <span class='bs-code-number'>2</span><span class='bs-code-parenthesis'>]</span> <span class='bs-code-parenthesis'>[</span><span class='bs-code-operator'>:</span> <span class='bs-code-operator'>`</span><span class='bs-code-operator'>-</span><span class='bs-code-operator'>`</span><span class='bs-code-parenthesis'>]</span>        <span class='bs-code-parenthesis'>[</span><span class='bs-code-operator'>:</span> <span class='bs-code-struct'>Subtraction</span><span class='bs-code-parenthesis'>]</span>          <span class='bs-code-parenthesis'>[</span><span class='bs-code-operator'>:</span> <span class='bs-code-number'>2</span><span class='bs-code-parenthesis'>]</span> </code> </p>"), __bs_binding("\n    "), __bs_binding("</body>")));
+    __bs_assign_value(__hir_tmp_10, _Users_aneirinjames_projects_beanstalk_beanstalk_docs_src_docs_basics__page_bst___bst_frag_0___template_fn_6(__hir_tmp_9));
+    __bs_assign_value(__hir_tmp_11, _Users_aneirinjames_projects_beanstalk_beanstalk_docs_src_docs_basics__page_bst___bst_frag_0___template_fn_1(__bs_binding("\n    "), __bs_binding("<!DOCTYPE html><html lang=\"en\">"), __bs_binding("\n    \n    "), __hir_tmp_3, __bs_binding("\n\n    "), __hir_tmp_10, __bs_binding("\n")));
+    __bs_assign_value(__hir_tmp_12, _Users_aneirinjames_projects_beanstalk_beanstalk_docs_src_docs_basics__page_bst___bst_frag_0___template_fn_0(__hir_tmp_11));
+    return __bs_clone_value(__bs_read(__hir_tmp_12));
+}
+
+function _Users_aneirinjames_projects_beanstalk_beanstalk_docs_src_docs_basics__page_bst___bst_frag_1() {
+    let __hir_tmp_13 = __bs_binding(undefined);
+    
+    __bs_assign_value(__hir_tmp_13, _Users_aneirinjames_projects_beanstalk_beanstalk_docs_src_docs_basics__page_bst___bst_frag_1___template_fn_11(__bs_binding("\n    <div></div>\n")));
+    return __bs_clone_value(__bs_read(__hir_tmp_13));
+}
+
+function _Users_aneirinjames_projects_beanstalk_beanstalk_docs_src_docs_basics__page_bst___bst_frag_0___template_fn_0(chunk_0) {
+    
+    chunk_0 = __bs_param_binding(chunk_0);
+    
+    return ("" + __bs_read(chunk_0));
+}
+
+function _Users_aneirinjames_projects_beanstalk_beanstalk_docs_src_docs_basics__page_bst___bst_frag_0___template_fn_1(chunk_0_1, chunk_1, chunk_2, chunk_3, chunk_4, chunk_5, chunk_6) {
+    
+    chunk_0_1 = __bs_param_binding(chunk_0_1);
+    chunk_1 = __bs_param_binding(chunk_1);
+    chunk_2 = __bs_param_binding(chunk_2);
+    chunk_3 = __bs_param_binding(chunk_3);
+    chunk_4 = __bs_param_binding(chunk_4);
+    chunk_5 = __bs_param_binding(chunk_5);
+    chunk_6 = __bs_param_binding(chunk_6);
+    
+    return ((((((("" + __bs_read(chunk_0_1)) + __bs_read(chunk_1)) + __bs_read(chunk_2)) + __bs_read(chunk_3)) + __bs_read(chunk_4)) + __bs_read(chunk_5)) + __bs_read(chunk_6));
+}
+
+function _Users_aneirinjames_projects_beanstalk_beanstalk_docs_src_docs_basics__page_bst___bst_frag_0___template_fn_2(chunk_0_2) {
+    
+    chunk_0_2 = __bs_param_binding(chunk_0_2);
+    
+    return ("" + __bs_read(chunk_0_2));
+}
+
+function _Users_aneirinjames_projects_beanstalk_beanstalk_docs_src_docs_basics__page_bst___bst_frag_0___template_fn_3(chunk_0_3, chunk_1_1, chunk_2_1, chunk_3_1, chunk_4_1, chunk_5_1, chunk_6_1, chunk_7) {
+    
+    chunk_0_3 = __bs_param_binding(chunk_0_3);
+    chunk_1_1 = __bs_param_binding(chunk_1_1);
+    chunk_2_1 = __bs_param_binding(chunk_2_1);
+    chunk_3_1 = __bs_param_binding(chunk_3_1);
+    chunk_4_1 = __bs_param_binding(chunk_4_1);
+    chunk_5_1 = __bs_param_binding(chunk_5_1);
+    chunk_6_1 = __bs_param_binding(chunk_6_1);
+    chunk_7 = __bs_param_binding(chunk_7);
+    
+    return (((((((("" + __bs_read(chunk_0_3)) + __bs_read(chunk_1_1)) + __bs_read(chunk_2_1)) + __bs_read(chunk_3_1)) + __bs_read(chunk_4_1)) + __bs_read(chunk_5_1)) + __bs_read(chunk_6_1)) + __bs_read(chunk_7));
+}
+
+function _Users_aneirinjames_projects_beanstalk_beanstalk_docs_src_docs_basics__page_bst___bst_frag_0___template_fn_4(chunk_0_4) {
+    
+    chunk_0_4 = __bs_param_binding(chunk_0_4);
+    
+    return ("" + __bs_read(chunk_0_4));
+}
+
+function _Users_aneirinjames_projects_beanstalk_beanstalk_docs_src_docs_basics__page_bst___bst_frag_0___template_fn_5(chunk_0_5, chunk_1_2, chunk_2_2, chunk_3_2, chunk_4_2) {
+    
+    chunk_0_5 = __bs_param_binding(chunk_0_5);
+    chunk_1_2 = __bs_param_binding(chunk_1_2);
+    chunk_2_2 = __bs_param_binding(chunk_2_2);
+    chunk_3_2 = __bs_param_binding(chunk_3_2);
+    chunk_4_2 = __bs_param_binding(chunk_4_2);
+    
+    return ((((("" + __bs_read(chunk_0_5)) + __bs_read(chunk_1_2)) + __bs_read(chunk_2_2)) + __bs_read(chunk_3_2)) + __bs_read(chunk_4_2));
+}
+
+function _Users_aneirinjames_projects_beanstalk_beanstalk_docs_src_docs_basics__page_bst___bst_frag_0___template_fn_6(chunk_0_6) {
+    
+    chunk_0_6 = __bs_param_binding(chunk_0_6);
+    
+    return ("" + __bs_read(chunk_0_6));
+}
+
+function _Users_aneirinjames_projects_beanstalk_beanstalk_docs_src_docs_basics__page_bst___bst_frag_0___template_fn_7(chunk_0_7, chunk_1_3, chunk_2_3, chunk_3_3, chunk_4_3, chunk_5_2, chunk_6_2, chunk_7_1, chunk_8, chunk_9, chunk_10) {
+    
+    chunk_0_7 = __bs_param_binding(chunk_0_7);
+    chunk_1_3 = __bs_param_binding(chunk_1_3);
+    chunk_2_3 = __bs_param_binding(chunk_2_3);
+    chunk_3_3 = __bs_param_binding(chunk_3_3);
+    chunk_4_3 = __bs_param_binding(chunk_4_3);
+    chunk_5_2 = __bs_param_binding(chunk_5_2);
+    chunk_6_2 = __bs_param_binding(chunk_6_2);
+    chunk_7_1 = __bs_param_binding(chunk_7_1);
+    chunk_8 = __bs_param_binding(chunk_8);
+    chunk_9 = __bs_param_binding(chunk_9);
+    chunk_10 = __bs_param_binding(chunk_10);
+    
+    return ((((((((((("" + __bs_read(chunk_0_7)) + __bs_read(chunk_1_3)) + __bs_read(chunk_2_3)) + __bs_read(chunk_3_3)) + __bs_read(chunk_4_3)) + __bs_read(chunk_5_2)) + __bs_read(chunk_6_2)) + __bs_read(chunk_7_1)) + __bs_read(chunk_8)) + __bs_read(chunk_9)) + __bs_read(chunk_10));
+}
+
+function _Users_aneirinjames_projects_beanstalk_beanstalk_docs_src_docs_basics__page_bst___bst_frag_0___template_fn_8(chunk_0_8) {
+    
+    chunk_0_8 = __bs_param_binding(chunk_0_8);
+    
+    return ("" + __bs_read(chunk_0_8));
+}
+
+function _Users_aneirinjames_projects_beanstalk_beanstalk_docs_src_docs_basics__page_bst___bst_frag_0___template_fn_9(chunk_0_9, chunk_1_4, chunk_2_4, chunk_3_4) {
+    
+    chunk_0_9 = __bs_param_binding(chunk_0_9);
+    chunk_1_4 = __bs_param_binding(chunk_1_4);
+    chunk_2_4 = __bs_param_binding(chunk_2_4);
+    chunk_3_4 = __bs_param_binding(chunk_3_4);
+    
+    return (((("" + __bs_read(chunk_0_9)) + __bs_read(chunk_1_4)) + __bs_read(chunk_2_4)) + __bs_read(chunk_3_4));
+}
+
+function _Users_aneirinjames_projects_beanstalk_beanstalk_docs_src_docs_basics__page_bst___bst_frag_0___template_fn_10(chunk_0_10, chunk_1_5, chunk_2_5, chunk_3_5, chunk_4_4, chunk_5_3, chunk_6_3, chunk_7_2, chunk_8_1, chunk_9_1, chunk_10_1, chunk_11, chunk_12, chunk_13) {
+    
+    chunk_0_10 = __bs_param_binding(chunk_0_10);
+    chunk_1_5 = __bs_param_binding(chunk_1_5);
+    chunk_2_5 = __bs_param_binding(chunk_2_5);
+    chunk_3_5 = __bs_param_binding(chunk_3_5);
+    chunk_4_4 = __bs_param_binding(chunk_4_4);
+    chunk_5_3 = __bs_param_binding(chunk_5_3);
+    chunk_6_3 = __bs_param_binding(chunk_6_3);
+    chunk_7_2 = __bs_param_binding(chunk_7_2);
+    chunk_8_1 = __bs_param_binding(chunk_8_1);
+    chunk_9_1 = __bs_param_binding(chunk_9_1);
+    chunk_10_1 = __bs_param_binding(chunk_10_1);
+    chunk_11 = __bs_param_binding(chunk_11);
+    chunk_12 = __bs_param_binding(chunk_12);
+    chunk_13 = __bs_param_binding(chunk_13);
+    
+    return (((((((((((((("" + __bs_read(chunk_0_10)) + __bs_read(chunk_1_5)) + __bs_read(chunk_2_5)) + __bs_read(chunk_3_5)) + __bs_read(chunk_4_4)) + __bs_read(chunk_5_3)) + __bs_read(chunk_6_3)) + __bs_read(chunk_7_2)) + __bs_read(chunk_8_1)) + __bs_read(chunk_9_1)) + __bs_read(chunk_10_1)) + __bs_read(chunk_11)) + __bs_read(chunk_12)) + __bs_read(chunk_13));
+}
+
+function _Users_aneirinjames_projects_beanstalk_beanstalk_docs_src_docs_basics__page_bst___bst_frag_1___template_fn_11(chunk_0_11) {
+    
+    chunk_0_11 = __bs_param_binding(chunk_0_11);
+    
+    return ("" + __bs_read(chunk_0_11));
+}
+
+</script>
+<script>
+(function () {
+  const slots = [
+    ["bst-slot-0", _Users_aneirinjames_projects_beanstalk_beanstalk_docs_src_docs_basics__page_bst___bst_frag_0],
+    ["bst-slot-1", _Users_aneirinjames_projects_beanstalk_beanstalk_docs_src_docs_basics__page_bst___bst_frag_1],
+  ];
+
+  for (const [id, fn] of slots) {
+    const el = document.getElementById(id);
+    if (!el) throw new Error("Missing runtime mount slot: " + id);
+    el.insertAdjacentHTML("beforeend", fn());
+  }
+
+  // start() remains the lifecycle entrypoint and runs after fragment hydration.
+  if (typeof _Users_aneirinjames_projects_beanstalk_beanstalk_docs_src_docs_basics__page_bst_start === "function") _Users_aneirinjames_projects_beanstalk_beanstalk_docs_src_docs_basics__page_bst_start();
+})();
+</script>

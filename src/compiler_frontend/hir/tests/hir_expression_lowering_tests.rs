@@ -999,3 +999,107 @@ fn field_access_uses_base_struct_identity_not_global_leaf_lookup() {
         other => panic!("expected field place, got {:?}", other),
     }
 }
+
+#[test]
+fn field_access_from_module_constant_base_materializes_temp_place() {
+    let mut string_table = StringTable::new();
+    let location = location(14);
+    let format_name = symbol("format", &mut string_table);
+    let format_struct = symbol("Format", &mut string_table);
+    let center_leaf = string_table.intern("center");
+    let center_field = format_struct.append(center_leaf);
+    let before = string_table.intern("<div>");
+    let after = string_table.intern("</div>");
+    let mut builder = setup_builder(&mut string_table);
+
+    let template_type = builder
+        .lower_data_type(&DataType::Template, &location)
+        .expect("template type lowering should succeed");
+
+    builder.test_register_struct_with_fields(
+        StructId(20),
+        format_struct.clone(),
+        vec![(FieldId(200), center_field.clone(), template_type)],
+    );
+
+    let mut wrapper_template = Template::create_default(vec![]);
+    wrapper_template.location = location.clone();
+    wrapper_template.content.add(Expression::string_slice(
+        before,
+        location.clone(),
+        Ownership::ImmutableOwned,
+    ));
+    wrapper_template.content.push_slot(SlotKey::Default);
+    wrapper_template.content.add(Expression::string_slice(
+        after,
+        location.clone(),
+        Ownership::ImmutableOwned,
+    ));
+
+    builder.test_register_module_constant(
+        format_name.clone(),
+        Expression::struct_instance(
+            vec![Declaration {
+                id: center_field.clone(),
+                value: Expression::template(wrapper_template, Ownership::ImmutableOwned),
+            }],
+            location.clone(),
+            Ownership::ImmutableOwned,
+        ),
+    );
+
+    let format_struct_type = DataType::Struct(
+        vec![Declaration {
+            id: center_field,
+            value: Expression::new(
+                ExpressionKind::None,
+                location.clone(),
+                DataType::Template,
+                Ownership::ImmutableOwned,
+            ),
+        }],
+        Ownership::ImmutableOwned,
+    );
+
+    let base_node = AstNode {
+        kind: NodeKind::Rvalue(Expression::reference(
+            format_name,
+            format_struct_type,
+            location.clone(),
+            Ownership::ImmutableReference,
+        )),
+        location: location.clone(),
+        scope: InternedPath::new(),
+    };
+
+    let field_access = AstNode {
+        kind: NodeKind::FieldAccess {
+            base: Box::new(base_node),
+            field: center_leaf,
+            data_type: DataType::Template,
+            ownership: Ownership::ImmutableReference,
+        },
+        location: location.clone(),
+        scope: InternedPath::new(),
+    };
+
+    let lowered = builder
+        .lower_ast_node_as_expression(&field_access)
+        .expect("module constant field access should lower");
+
+    assert!(
+        lowered
+            .prelude
+            .iter()
+            .any(|statement| matches!(statement.kind, HirStatementKind::Assign { .. })),
+        "expected module constant base to be materialized into a temporary local"
+    );
+
+    match lowered.value.kind {
+        HirExpressionKind::Load(HirPlace::Field { field, base }) => {
+            assert_eq!(field, FieldId(200));
+            assert!(matches!(*base, HirPlace::Local(_)));
+        }
+        other => panic!("expected field load expression, got {:?}", other),
+    }
+}
