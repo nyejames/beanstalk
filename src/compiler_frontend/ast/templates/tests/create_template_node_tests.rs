@@ -15,10 +15,25 @@ use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokenizer::tokenize;
-use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TextLocation, Token, TokenKind};
+use crate::compiler_frontend::tokenizer::tokens::{
+    CharPosition, FileTokens, TextLocation, Token, TokenKind,
+};
 
 fn token(kind: TokenKind, line: i32) -> Token {
-    Token::new(kind, TextLocation::new_just_line(line))
+    Token::new(
+        kind,
+        TextLocation {
+            scope: InternedPath::new(),
+            start_pos: CharPosition {
+                line_number: line,
+                char_column: 0,
+            },
+            end_pos: CharPosition {
+                line_number: line,
+                char_column: 120, // Arbitrary number
+            },
+        },
+    )
 }
 
 fn template_tokens_from_source(source: &str, string_table: &mut StringTable) -> FileTokens {
@@ -51,7 +66,17 @@ fn runtime_template_context(scope: &InternedPath, string_table: &mut StringTable
         id: scope.append(value_name),
         value: Expression::string_slice(
             string_table.intern("dynamic"),
-            TextLocation::new_just_line(1),
+            TextLocation {
+                scope: InternedPath::new(),
+                start_pos: CharPosition {
+                    line_number: 1,
+                    char_column: 0,
+                },
+                end_pos: CharPosition {
+                    line_number: 1,
+                    char_column: 120, // Arbitrary number
+                },
+            },
             Ownership::ImmutableOwned,
         ),
     };
@@ -413,6 +438,20 @@ fn runtime_templates_with_code_format_only_static_body_strings() {
 }
 
 #[test]
+fn code_templates_keep_nested_square_brackets_as_literal_body_text() {
+    let rendered = folded_template_output(
+        "[$code(\"bst\"):\nconcatenated_strings = [string_slice, a_mutable_string]\n]",
+    );
+
+    assert!(rendered.contains("<code class='codeblock'>"));
+    assert!(rendered.contains("concatenated_strings"));
+    assert!(rendered.contains("string_slice"));
+    assert!(rendered.contains("a_mutable_string"));
+    assert!(rendered.contains("<span class='bs-code-parenthesis'>[</span>"));
+    assert!(rendered.contains("<span class='bs-code-parenthesis'>]</span>"));
+}
+
+#[test]
 fn slot_wrappers_remain_compile_time_templates_until_filled() {
     let mut string_table = StringTable::new();
     let mut token_stream =
@@ -453,7 +492,17 @@ fn constant_context_template_head_with_constant_references_folds_to_string_slice
             id: scope.append(const_before),
             value: Expression::string_slice(
                 string_table.intern("Hello "),
-                TextLocation::new_just_line(1),
+                TextLocation {
+                    scope: InternedPath::new(),
+                    start_pos: CharPosition {
+                        line_number: 1,
+                        char_column: 0,
+                    },
+                    end_pos: CharPosition {
+                        line_number: 1,
+                        char_column: 120, // Arbitrary number
+                    },
+                },
                 Ownership::ImmutableOwned,
             ),
         },
@@ -461,7 +510,17 @@ fn constant_context_template_head_with_constant_references_folds_to_string_slice
             id: scope.append(const_after),
             value: Expression::string_slice(
                 string_table.intern("World!"),
-                TextLocation::new_just_line(1),
+                TextLocation {
+                    scope: InternedPath::new(),
+                    start_pos: CharPosition {
+                        line_number: 1,
+                        char_column: 0,
+                    },
+                    end_pos: CharPosition {
+                        line_number: 1,
+                        char_column: 120, // Arbitrary number
+                    },
+                },
                 Ownership::ImmutableOwned,
             ),
         },
@@ -883,7 +942,17 @@ fn fills_nested_slots_for_runtime_wrappers() {
         id: scope.append(value_name),
         value: Expression::string_slice(
             string_table.intern("runtime"),
-            TextLocation::new_just_line(1),
+            TextLocation {
+                scope: InternedPath::new(),
+                start_pos: CharPosition {
+                    line_number: 1,
+                    char_column: 0,
+                },
+                end_pos: CharPosition {
+                    line_number: 1,
+                    char_column: 120, // Arbitrary number
+                },
+            },
             Ownership::ImmutableOwned,
         ),
     };

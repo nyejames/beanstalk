@@ -146,8 +146,6 @@ impl Template {
                     ));
                 }
 
-                TokenKind::Empty => {}
-
                 _ => {
                     return_syntax_error!(
                         format!(
@@ -352,7 +350,7 @@ pub fn parse_template_head(
             TemplateType::SlotDefinition(_) | TemplateType::SlotInsert(_)
         ) {
             match token {
-                TokenKind::Newline | TokenKind::Empty => {
+                TokenKind::Newline => {
                     token_stream.advance();
                     continue;
                 }
@@ -389,13 +387,6 @@ pub fn parse_template_head(
         let mut defer_separator_token = false;
 
         match token {
-            // This is a declaration of the ID by using the export prefix followed by a variable name
-            // This doesn't follow regular declaration rules.
-            TokenKind::Id(name) => {
-                template.id = format!("{BS_VAR_PREFIX}{name}");
-                saw_meaningful_head_item = true;
-            }
-
             // If this is a template, we have to do some clever parsing here
             TokenKind::Symbol(name) => {
                 // Check if it's a regular scene or variable reference
@@ -592,7 +583,7 @@ pub fn parse_template_head(
             }
 
             // Newlines / empty things in the scene head are ignored
-            TokenKind::Newline | TokenKind::Empty => {
+            TokenKind::Newline => {
                 token_stream.advance();
                 continue;
             }

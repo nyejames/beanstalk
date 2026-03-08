@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
@@ -36,20 +34,6 @@ impl TextLocation {
             scope,
             start_pos: start,
             end_pos: end,
-        }
-    }
-
-    pub fn new_just_line(start: i32) -> Self {
-        Self {
-            scope: InternedPath::new(),
-            start_pos: CharPosition {
-                line_number: start,
-                char_column: 0,
-            },
-            end_pos: CharPosition {
-                line_number: start,
-                char_column: 120, // Arbitrary number
-            },
         }
     }
 
@@ -152,40 +136,6 @@ impl Token {
     pub fn new(kind: TokenKind, location: TextLocation) -> Self {
         Self { kind, location }
     }
-
-    /// Get the string content of this token if it contains string data.
-    /// Returns the resolved string content for Symbol, StringSliceLiteral, RawStringLiteral, and PathLiteral tokens.
-    /// Returns empty string for other token types.
-    pub fn as_string(&self, string_table: &StringTable) -> String {
-        match &self.kind {
-            TokenKind::Symbol(id)
-            | TokenKind::StyleDirective(id)
-            | TokenKind::StringSliceLiteral(id)
-            | TokenKind::RawStringLiteral(id) => string_table.resolve(*id).to_string(),
-
-            TokenKind::Path(paths) => {
-                let mut string = String::with_capacity(8 * paths.len());
-                for path in paths {
-                    string.push_str(&path.to_string(string_table));
-                }
-                string
-            }
-            _ => String::new(),
-        }
-    }
-
-    /// Compare this token's string content with a string slice efficiently.
-    /// Only works for tokens that contain string data (Symbol, StringSliceLiteral, etc.).
-    /// Returns false for tokens that don't contain string data.
-    pub fn eq_str(&self, string_table: &StringTable, other: &str) -> bool {
-        match &self.kind {
-            TokenKind::Symbol(id)
-            | TokenKind::StyleDirective(id)
-            | TokenKind::StringSliceLiteral(id)
-            | TokenKind::RawStringLiteral(id) => string_table.resolve(*id) == other,
-            _ => false,
-        }
-    }
 }
 
 #[derive(Clone, Debug)]
@@ -253,28 +203,6 @@ impl FileTokens {
             self.index += 1;
         }
     }
-
-    pub fn go_back(&mut self) {
-        self.index -= 1;
-    }
-
-    // Used for header parsing
-    // Or can be used for skipping an unused block of code
-    // Assumes already inside a scope (have passed the first colon)
-    pub fn skip_to_end_of_scope(&mut self) {
-        let mut scopes_opened = 1;
-        let mut scopes_closed = 0;
-
-        while scopes_opened > scopes_closed {
-            match self.current_token_kind() {
-                TokenKind::End => scopes_closed += 1,
-                TokenKind::Colon => scopes_opened += 1,
-                TokenKind::Eof => break,
-                _ => {}
-            }
-            self.advance();
-        }
-    }
 }
 
 pub struct TokenStream<'a> {
@@ -283,10 +211,43 @@ pub struct TokenStream<'a> {
     pub position: CharPosition,
     pub start_position: CharPosition,
     pub mode: TokenizeMode,
-    // Nested templates can now legally reopen a template head from inside another
-    // template head via `$[`. A stack is required so `]` can restore the correct
-    // outer mode instead of always falling back to `TemplateBody`.
-    pub template_mode_stack: Vec<TokenizeMode>,
+    // WHAT: Stack of per-template parsing frames.
+    //
+    // WHY: `]` must restore the exact parent mode for nested templates opened by
+    // `[`/`$[`, and code-template behavior must stay local to the template that
+    // declared `$code`.
+    //
+    // A single global mode (for example `TokenizeMode::Codeblock`) is not enough:
+    // nested template heads can appear while parsing another template head/body,
+    // and parent/child templates can have different style directives. We therefore
+    // keep code-specific state on the current template frame and pop it naturally
+    // when that template closes.
+    pub template_mode_stack: Vec<TemplateModeFrame>,
+}
+
+// WHAT: Metadata for one template nesting level in the tokenizer.
+//
+// WHY: `$code` is declared in a template head, but affects only that template's
+// body tokenization. This frame carries that intent across `:` (head -> body),
+// tracks bracket balance for `$code` bodies, and ensures nested templates cannot
+// accidentally inherit or overwrite the parent's codeblock state.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TemplateModeFrame {
+    pub mode: TokenizeMode,
+    pub is_code_template: bool,
+    pub code_open_square_brackets: usize,
+    pub code_closed_square_brackets: usize,
+}
+
+impl TemplateModeFrame {
+    fn new(mode: TokenizeMode) -> Self {
+        Self {
+            mode,
+            is_code_template: false,
+            code_open_square_brackets: 0,
+            code_closed_square_brackets: 0,
+        }
+    }
 }
 
 impl<'a> TokenStream<'a> {
@@ -297,7 +258,7 @@ impl<'a> TokenStream<'a> {
             position: CharPosition::default(),
             start_position: Default::default(),
             mode,
-            template_mode_stack: vec![mode],
+            template_mode_stack: vec![TemplateModeFrame::new(mode)],
         }
     }
 
@@ -333,7 +294,7 @@ impl<'a> TokenStream<'a> {
     }
 
     pub fn push_template_mode(&mut self, mode: TokenizeMode) {
-        self.template_mode_stack.push(mode);
+        self.template_mode_stack.push(TemplateModeFrame::new(mode));
         self.mode = mode;
     }
 
@@ -341,9 +302,15 @@ impl<'a> TokenStream<'a> {
         // `:` switches the current template from head parsing to body parsing
         // without closing the template nesting level, so mutate the top frame.
         if let Some(current_mode) = self.template_mode_stack.last_mut() {
-            *current_mode = mode;
+            current_mode.mode = mode;
+            if mode == TokenizeMode::TemplateBody && current_mode.is_code_template {
+                // Code-template body termination is driven by bracket balance:
+                // the opening `[` that started the template counts as one open.
+                current_mode.code_open_square_brackets = 1;
+                current_mode.code_closed_square_brackets = 0;
+            }
         } else {
-            self.template_mode_stack.push(mode);
+            self.template_mode_stack.push(TemplateModeFrame::new(mode));
         }
 
         self.mode = mode;
@@ -359,7 +326,55 @@ impl<'a> TokenStream<'a> {
         self.mode = *self
             .template_mode_stack
             .last()
+            .map(|frame| &frame.mode)
             .unwrap_or(&TokenizeMode::Normal);
+    }
+
+    pub fn mark_current_template_as_codeblock(&mut self) {
+        if let Some(current_mode) = self.template_mode_stack.last_mut() {
+            current_mode.is_code_template = true;
+            if current_mode.mode == TokenizeMode::TemplateBody {
+                current_mode.code_open_square_brackets = 1;
+                current_mode.code_closed_square_brackets = 0;
+            }
+        }
+    }
+
+    pub fn in_code_template_body(&self) -> bool {
+        self.template_mode_stack
+            .last()
+            .is_some_and(|frame| frame.mode == TokenizeMode::TemplateBody && frame.is_code_template)
+    }
+
+    pub fn code_template_register_open_square_bracket(&mut self) {
+        if let Some(current_mode) = self.template_mode_stack.last_mut()
+            && current_mode.is_code_template
+        {
+            current_mode.code_open_square_brackets =
+                current_mode.code_open_square_brackets.saturating_add(1);
+        }
+    }
+
+    pub fn code_template_register_close_square_bracket(&mut self) {
+        if let Some(current_mode) = self.template_mode_stack.last_mut()
+            && current_mode.is_code_template
+        {
+            current_mode.code_closed_square_brackets =
+                current_mode.code_closed_square_brackets.saturating_add(1);
+        }
+    }
+
+    pub fn code_template_next_close_balances_brackets(&self) -> bool {
+        let Some(current_mode) = self.template_mode_stack.last() else {
+            return false;
+        };
+
+        if !current_mode.is_code_template || current_mode.mode != TokenizeMode::TemplateBody {
+            return false;
+        }
+
+        current_mode.code_closed_square_brackets.saturating_add(1)
+            == current_mode.code_open_square_brackets
     }
 }
 
@@ -372,9 +387,6 @@ pub enum TokenKind {
     // Module Import
     /// For Wasm files or host environment - importing from a different module or the host
     Import,
-
-    /// For other Beanstalk files - indicates using public items from another file
-    Use,
 
     // #
     Hash,
@@ -478,7 +490,6 @@ pub enum TokenKind {
     /// If statements and match statements
     If,
     Else,
-    ElseIf,
     Return,
 
     // Loops
@@ -504,10 +515,6 @@ pub enum TokenKind {
     // regular nested body content.
     StyleTemplateHead,
 
-    Id(StringId), // ID for scenes
-
-    Empty,
-
     // Channels
     CreateChannel,  // =>
     ChannelSend,    // >>
@@ -516,16 +523,6 @@ pub enum TokenKind {
 }
 
 impl TokenKind {
-    pub fn get_name(&self, string_table: &StringTable) -> String {
-        match self {
-            TokenKind::Symbol(name) => string_table.resolve(*name).to_string(),
-            TokenKind::StyleDirective(name) => string_table.resolve(*name).to_string(),
-            TokenKind::RawStringLiteral(value) => string_table.resolve(*value).to_string(),
-            TokenKind::StringSliceLiteral(string) => string_table.resolve(*string).to_string(),
-            _ => String::new(),
-        }
-    }
-
     pub fn to_datatype(&self) -> Option<DataType> {
         match self {
             TokenKind::DatatypeInt => Some(DataType::Int),
@@ -568,17 +565,3 @@ impl TokenKind {
         )
     }
 }
-
-// pub fn string_dimensions(s: &str) -> TokenLocation {
-//     let (width, height) = s
-//         .lines()
-//         .map(|line| line.len())
-//         .fold((0, 0), |(max_width, count), len| {
-//             (max_width.max(len), count + 1)
-//         });
-//
-//     TokenLocation {
-//         line_number: height.max(1),
-//         char_column: width as i32,
-//     }
-// }

@@ -330,7 +330,7 @@ pub fn function_body_to_ast(
             }
 
             // IGNORED TOKENS
-            TokenKind::Newline | TokenKind::Empty => {
+            TokenKind::Newline => {
                 // Skip standalone newlines / empty tokens
                 token_stream.advance();
             }

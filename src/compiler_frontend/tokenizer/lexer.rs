@@ -88,6 +88,10 @@ pub fn get_token_kind(
     // Template bodies are intentionally tokenized as "mostly raw text" so the body
     // parser can treat everything between delimiters as string content unless a new
     // nested template begins or the current template closes.
+    if stream.in_code_template_body() {
+        return tokenize_code_template_body(current_char, stream, string_table);
+    }
+
     if stream.mode == TokenizeMode::TemplateBody && current_char != ']' && current_char != '[' {
         return tokenize_template_body(current_char, stream, string_table);
     }
@@ -244,6 +248,9 @@ pub fn get_token_kind(
         }
 
         let directive = string_table.intern(&token_value);
+        if token_value == "code" {
+            stream.mark_current_template_as_codeblock();
+        }
         // The parser validates which directives are currently supported. The lexer
         // only has to preserve the directive identifier as a distinct token.
         return_token!(TokenKind::StyleDirective(directive), stream);
@@ -291,6 +298,14 @@ pub fn get_token_kind(
 
     // Context Free Grammars
     if current_char == '=' {
+        // =>
+        if let Some(&next_char) = stream.peek()
+            && next_char == '>'
+        {
+            stream.next();
+            return_token!(TokenKind::CreateChannel, stream);
+        }
+
         return_token!(TokenKind::Assign, stream);
     }
 
@@ -456,22 +471,32 @@ pub fn get_token_kind(
     // Check for greater than and Less than logic operators
     // must also peak ahead to check it's not also equal to
     if current_char == '>' {
-        if let Some(&next_char) = stream.peek()
-            && next_char == '='
-        {
-            stream.next();
-            return_token!(TokenKind::GreaterThanOrEqual, stream);
+        if let Some(&next_char) = stream.peek() {
+            if next_char == '=' {
+                stream.next();
+                return_token!(TokenKind::GreaterThanOrEqual, stream);
+            }
+
+            if next_char == '>' {
+                stream.next();
+                return_token!(TokenKind::ChannelSend, stream);
+            }
         }
 
         return_token!(TokenKind::GreaterThan, stream);
     }
 
     if current_char == '<' {
-        if let Some(&next_char) = stream.peek()
-            && next_char == '='
-        {
-            stream.next();
-            return_token!(TokenKind::LessThanOrEqual, stream);
+        if let Some(&next_char) = stream.peek() {
+            if next_char == '=' {
+                stream.next();
+                return_token!(TokenKind::LessThanOrEqual, stream);
+            }
+
+            if next_char == '<' {
+                stream.next();
+                return_token!(TokenKind::ChannelReceive, stream);
+            }
         }
 
         return_token!(TokenKind::LessThan, stream);
@@ -786,6 +811,54 @@ fn tokenize_template_body(
 
     let interned_string = string_table.intern(&token_value);
     return_token!(TokenKind::StringSliceLiteral(interned_string), stream);
+}
+
+fn tokenize_code_template_body(
+    current_char: char,
+    stream: &mut TokenStream<'_>,
+    string_table: &mut StringTable,
+) -> Result<Token, CompilerError> {
+    // `$code` template bodies treat square brackets as literal code characters.
+    // The template only closes when the running bracket counts become balanced.
+    if current_char == ']' && stream.code_template_next_close_balances_brackets() {
+        stream.code_template_register_close_square_bracket();
+        stream.pop_template_mode();
+        return_token!(TokenKind::TemplateClose, stream);
+    }
+
+    let mut token_value = String::new();
+    append_code_template_body_char(current_char, &mut token_value, stream);
+
+    while let Some(&ch) = stream.peek() {
+        if ch == ']' && stream.code_template_next_close_balances_brackets() {
+            break;
+        }
+
+        let Some(next_char) = stream.next() else {
+            return Err(CompilerError::compiler_error(
+                "Tokenizer peeked a code-template body character but could not advance the stream.",
+            ));
+        };
+
+        append_code_template_body_char(next_char, &mut token_value, stream);
+    }
+
+    let interned_string = string_table.intern(&token_value);
+    return_token!(TokenKind::StringSliceLiteral(interned_string), stream);
+}
+
+fn append_code_template_body_char(
+    ch: char,
+    token_value: &mut String,
+    stream: &mut TokenStream<'_>,
+) {
+    match ch {
+        '[' => stream.code_template_register_open_square_bracket(),
+        ']' => stream.code_template_register_close_square_bracket(),
+        _ => {}
+    }
+
+    token_value.push(ch);
 }
 
 #[cfg(test)]

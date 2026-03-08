@@ -149,3 +149,42 @@ fn rejects_numeric_slot_directive_prefixes() {
         "legacy numeric '$1' slot directives should fail"
     );
 }
+
+#[test]
+fn code_template_body_keeps_nested_square_brackets_as_literal_text() {
+    let (file_tokens, string_table) =
+        tokenize_source("[$code(\"bst\"):\nconcatenated = [string_slice, a_mutable_string]\n]");
+
+    let template_heads = file_tokens
+        .tokens
+        .iter()
+        .filter(|token| matches!(token.kind, TokenKind::TemplateHead))
+        .count();
+    let template_closes = file_tokens
+        .tokens
+        .iter()
+        .filter(|token| matches!(token.kind, TokenKind::TemplateClose))
+        .count();
+
+    assert_eq!(
+        template_heads, 1,
+        "code template bodies should not tokenize nested '[' as template opens"
+    );
+    assert_eq!(template_closes, 1);
+
+    let body_literal = file_tokens
+        .tokens
+        .iter()
+        .find_map(|token| match token.kind {
+            TokenKind::StringSliceLiteral(id) => {
+                let value = string_table.resolve(id);
+                value
+                    .contains("[string_slice, a_mutable_string]")
+                    .then_some(value)
+            }
+            _ => None,
+        })
+        .expect("expected code template body text to include literal square brackets");
+
+    assert!(body_literal.contains("concatenated"));
+}

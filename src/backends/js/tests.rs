@@ -8,7 +8,7 @@ use crate::compiler_frontend::hir::hir_nodes::{
 use crate::compiler_frontend::host_functions::CallTarget;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
-use crate::compiler_frontend::tokenizer::tokens::TextLocation;
+use crate::compiler_frontend::tokenizer::tokens::{CharPosition, TextLocation};
 
 #[derive(Clone, Copy)]
 struct TypeIds {
@@ -19,8 +19,18 @@ struct TypeIds {
     option_int: TypeId,
 }
 
-fn loc(line: i32) -> TextLocation {
-    TextLocation::new_just_line(line)
+fn loc(start: i32) -> TextLocation {
+    TextLocation {
+        scope: InternedPath::new(),
+        start_pos: CharPosition {
+            line_number: start,
+            char_column: 0,
+        },
+        end_pos: CharPosition {
+            line_number: start,
+            char_column: 120, // Arbitrary number
+        },
+    }
 }
 
 fn build_type_context() -> (TypeContext, TypeIds) {

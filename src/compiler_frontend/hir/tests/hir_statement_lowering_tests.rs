@@ -14,12 +14,13 @@ use crate::compiler_frontend::hir::hir_nodes::{
     HirBinOp, HirConstValue, HirExpressionKind, HirModule, HirPattern, HirStatementKind,
     HirTerminator, StartFragment,
 };
+use crate::compiler_frontend::hir::tests::hir_expression_lowering_tests::location;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::projects::settings::{IMPLICIT_START_FUNC_NAME, TOP_LEVEL_TEMPLATE_NAME};
 
 fn test_location(line: i32) -> TextLocation {
-    TextLocation::new_just_line(line)
+    location(line)
 }
 
 fn node(kind: NodeKind, location: TextLocation) -> AstNode {

@@ -32,7 +32,7 @@ import @libs/html/doc
 
 Palette = |
     -- Colors for the documentation website
-    red String = [:<span style="color: red;">[$slot]</span>],
+    red String = [:<span style="color: hsl(0, 73%, 55%);">[$slot]</span>],
     green String = [:<span style="color: green;">[$slot]</span>],
     blue String = [:<span style="color: blue;">[$slot]</span>],
 |

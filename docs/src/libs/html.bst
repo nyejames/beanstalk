@@ -26,6 +26,8 @@ Format = |
     underline String = [:<u>[$slot]</u>],
     strikethrough String = [:<s>[$slot]</s>],
 
+    center String = [:<div class="bst-center">[$slot]</div>],
+
     table String = [:
       <table>[$slot]</table>
     ],

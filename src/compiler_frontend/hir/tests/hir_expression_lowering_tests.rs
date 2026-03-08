@@ -14,7 +14,7 @@ use crate::compiler_frontend::hir::hir_nodes::{
 use crate::compiler_frontend::host_functions::CallTarget;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
-use crate::compiler_frontend::tokenizer::tokens::TextLocation;
+use crate::compiler_frontend::tokenizer::tokens::{CharPosition, TextLocation};
 
 fn setup_builder(string_table: &'_ mut StringTable) -> HirBuilder<'_> {
     let test_function_name = InternedPath::from_single_str("__expr_test_fn", string_table);
@@ -37,6 +37,20 @@ fn setup_builder(string_table: &'_ mut StringTable) -> HirBuilder<'_> {
     builder.test_set_current_function(function_id);
 
     builder
+}
+
+pub(crate) fn location(line: i32) -> TextLocation {
+    TextLocation {
+        scope: InternedPath::new(),
+        start_pos: CharPosition {
+            line_number: line,
+            char_column: 0,
+        },
+        end_pos: CharPosition {
+            line_number: line,
+            char_column: 120, // Arbitrary number
+        },
+    }
 }
 
 fn register_local(
@@ -106,7 +120,7 @@ fn unresolved_slots_are_ignored_when_lowering_runtime_templates() {
     let mut string_table = StringTable::new();
     let before = string_table.intern("before ");
     let after = string_table.intern("after");
-    let location = TextLocation::new_just_line(1);
+    let location = location(1);
     let mut builder = setup_builder(&mut string_table);
 
     let mut template = Template::create_default(vec![]);
@@ -148,7 +162,7 @@ fn unresolved_slots_are_ignored_when_lowering_runtime_templates() {
 fn lowers_primitive_literals() {
     let mut string_table = StringTable::new();
     let text = string_table.intern("hello");
-    let location = TextLocation::new_just_line(1);
+    let location = location(1);
     let mut builder = setup_builder(&mut string_table);
 
     let int_lowered = builder
@@ -220,7 +234,7 @@ fn lowers_primitive_literals() {
 fn lowers_reference_to_registered_local() {
     let mut string_table = StringTable::new();
     let x = symbol("x", &mut string_table);
-    let location = TextLocation::new_just_line(2);
+    let location = location(2);
     let mut builder = setup_builder(&mut string_table);
 
     register_local(
@@ -253,7 +267,7 @@ fn lowers_reference_to_registered_local() {
 fn lowers_reference_to_module_constant_when_local_is_missing() {
     let mut string_table = StringTable::new();
     let third_const = symbol("third_const", &mut string_table);
-    let location = TextLocation::new_just_line(3);
+    let location = location(3);
     let mut builder = setup_builder(&mut string_table);
 
     builder.test_register_module_constant(
@@ -281,7 +295,7 @@ fn rejects_cyclic_module_constant_dependencies() {
     let mut string_table = StringTable::new();
     let const_a = symbol("const_a", &mut string_table);
     let const_b = symbol("const_b", &mut string_table);
-    let location = TextLocation::new_just_line(4);
+    let location = location(4);
     let mut builder = setup_builder(&mut string_table);
 
     builder.test_register_module_constant(
@@ -321,7 +335,7 @@ fn lowers_runtime_rpn_arithmetic_stack_correctly() {
     let mut string_table = StringTable::new();
     let x = symbol("x", &mut string_table);
     let y = symbol("y", &mut string_table);
-    let location = TextLocation::new_just_line(3);
+    let location = location(3);
     let mut builder = setup_builder(&mut string_table);
 
     register_local(
@@ -384,7 +398,7 @@ fn lowers_runtime_rpn_arithmetic_stack_correctly() {
 #[test]
 fn lowers_unary_not_in_runtime_rpn() {
     let mut string_table = StringTable::new();
-    let location = TextLocation::new_just_line(4);
+    let location = location(4);
     let mut builder = setup_builder(&mut string_table);
 
     let nodes = vec![
@@ -418,7 +432,7 @@ fn lowers_unary_not_in_runtime_rpn() {
 #[test]
 fn lowers_range_operator_in_runtime_rpn() {
     let mut string_table = StringTable::new();
-    let location = TextLocation::new_just_line(5);
+    let location = location(5);
     let mut builder = setup_builder(&mut string_table);
 
     let nodes = vec![
@@ -455,7 +469,7 @@ fn lowers_range_operator_in_runtime_rpn() {
 fn lowers_function_call_to_call_statement_and_temp_load() {
     let mut string_table = StringTable::new();
     let function_name = symbol("sum", &mut string_table);
-    let location = TextLocation::new_just_line(6);
+    let location = location(6);
     let mut builder = setup_builder(&mut string_table);
     builder.test_register_function_name(function_name.clone(), FunctionId(2));
 
@@ -502,7 +516,7 @@ fn lowers_host_call_expression_with_host_target() {
     let mut string_table = StringTable::new();
     let literal_x = string_table.intern("x");
     let io = symbol("io", &mut string_table);
-    let location = TextLocation::new_just_line(7);
+    let location = location(7);
     let mut builder = setup_builder(&mut string_table);
 
     let host_call = Expression::host_function_call(
@@ -533,7 +547,7 @@ fn preserves_left_to_right_call_prelude_order_in_nested_call_args() {
     let first = symbol("first", &mut string_table);
     let second = symbol("second", &mut string_table);
     let outer = symbol("outer", &mut string_table);
-    let location = TextLocation::new_just_line(8);
+    let location = location(8);
     let mut builder = setup_builder(&mut string_table);
 
     builder.test_register_function_name(first.clone(), FunctionId(1));
@@ -583,7 +597,7 @@ fn preserves_left_to_right_call_prelude_order_in_nested_call_args() {
 #[test]
 fn malformed_runtime_rpn_reports_hir_transformation_error() {
     let mut string_table = StringTable::new();
-    let location = TextLocation::new_just_line(9);
+    let location = location(9);
     let mut builder = setup_builder(&mut string_table);
 
     let expr = Expression::runtime(
@@ -608,7 +622,7 @@ fn malformed_runtime_rpn_reports_hir_transformation_error() {
 fn runtime_template_expression_lowers_to_synthetic_function_call() {
     let mut string_table = StringTable::new();
     let hello = string_table.intern("hello");
-    let location = TextLocation::new_just_line(10);
+    let location = location(10);
     let mut builder = setup_builder(&mut string_table);
 
     let expr = runtime_template_expression(
@@ -648,7 +662,7 @@ fn runtime_template_expression_lowers_to_synthetic_function_call() {
 #[test]
 fn runtime_template_generated_function_coerces_non_string_segments() {
     let mut string_table = StringTable::new();
-    let location = TextLocation::new_just_line(11);
+    let location = location(11);
     let mut builder = setup_builder(&mut string_table);
 
     let expr = runtime_template_expression(
@@ -727,7 +741,7 @@ fn runtime_template_lowers_nested_templates_in_order() {
     let a = string_table.intern("A");
     let b = string_table.intern("B");
     let c = string_table.intern("C");
-    let location = TextLocation::new_just_line(12);
+    let location = location(12);
     let mut builder = setup_builder(&mut string_table);
 
     let nested = runtime_template_expression(
@@ -799,7 +813,7 @@ fn local_resolution_uses_full_path_identity_not_leaf_name() {
     let scope_b = InternedPath::from_single_str("scope_b", &mut string_table);
     let local_a = scope_a.append(x_leaf);
     let local_b = scope_b.append(x_leaf);
-    let location = TextLocation::new_just_line(10);
+    let location = location(10);
     let mut builder = setup_builder(&mut string_table);
 
     register_local(
@@ -827,7 +841,7 @@ fn local_resolution_uses_full_path_identity_not_leaf_name() {
 #[test]
 fn nominal_struct_identity_uses_field_parent_path() {
     let mut string_table = StringTable::new();
-    let location = TextLocation::new_just_line(11);
+    let location = location(11);
     let struct_path = symbol("MyStruct", &mut string_table);
     let field_path = field_symbol(&struct_path, "value", &mut string_table);
     let mut builder = setup_builder(&mut string_table);
@@ -872,7 +886,7 @@ fn temp_locals_are_not_resolvable_as_user_symbols() {
     let mut string_table = StringTable::new();
     let callee = symbol("callee", &mut string_table);
     let temp_name = symbol("__hir_tmp_0", &mut string_table);
-    let location = TextLocation::new_just_line(12);
+    let location = location(12);
     let mut builder = setup_builder(&mut string_table);
 
     builder.test_register_function_name(callee.clone(), FunctionId(8));
@@ -910,7 +924,7 @@ fn temp_locals_are_not_resolvable_as_user_symbols() {
 #[test]
 fn field_access_uses_base_struct_identity_not_global_leaf_lookup() {
     let mut string_table = StringTable::new();
-    let location = TextLocation::new_just_line(13);
+    let location = location(13);
     let struct_a = symbol("StructA", &mut string_table);
     let struct_b = symbol("StructB", &mut string_table);
     let field_leaf = string_table.intern("value");

@@ -1,7 +1,7 @@
 -- ADD A HASH TO THIS FILE TO INCLUDE IT IN THE MODULES.
 -- FOR NOW THIS IS DISABLED FOR TESTING
 import @libs/html/{format}
-import @styles/docs/{navbar, footer, title, page, pallette}
+import @styles/docs/{navbar, footer, title, page, palette}
 [page, $markdown:
 
 [navbar]
@@ -123,7 +123,7 @@ All copies are explicit and must use the 'copy' keyword in place of a type.
     a_collection ~= {1, 2, 3, 4, 5}
     
     -- Deep mutable copy of a collection
-    a_copy ~copy = a_collection
+    a_copy ~= copy a_collection
 
     -- Immutable reference to a_collection
     a_reference = a_collection

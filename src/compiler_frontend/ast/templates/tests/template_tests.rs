@@ -10,12 +10,22 @@ use crate::compiler_frontend::headers::parse_file_headers::{
 };
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
-use crate::compiler_frontend::tokenizer::tokens::TextLocation;
+use crate::compiler_frontend::tokenizer::tokens::{CharPosition, TextLocation};
 use crate::projects::settings::{IMPLICIT_START_FUNC_NAME, TOP_LEVEL_TEMPLATE_NAME};
 use rustc_hash::FxHashMap;
 
 fn test_location(line: i32) -> TextLocation {
-    TextLocation::new_just_line(line)
+    TextLocation {
+        scope: InternedPath::new(),
+        start_pos: CharPosition {
+            line_number: line,
+            char_column: 0,
+        },
+        end_pos: CharPosition {
+            line_number: line,
+            char_column: 120, // Arbitrary number
+        },
+    }
 }
 
 fn declaration(id: InternedPath, value: Expression) -> Declaration {
