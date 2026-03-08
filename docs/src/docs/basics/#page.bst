@@ -9,7 +9,7 @@ import @styles/docs/{navbar, footer, title, page, palette}
     [title: LANGUAGE BASICS]
 ]
 
-Every project needing to be split into multiple Wasm modules must have a config.bst file.
+Every project has a #config.bst file.
 
 If instead, you build or run a specific Beanstalk file,
 it will create a single Wasm module from that entry point and pull in all its dependencies.

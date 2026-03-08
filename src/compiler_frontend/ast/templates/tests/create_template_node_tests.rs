@@ -241,6 +241,24 @@ fn markdown_links_render_to_anchor_tags() {
 }
 
 #[test]
+fn markdown_does_not_escape_html_inserted_from_template_head() {
+    let rendered = folded_template_output("[\"<b>head-html</b>\", $markdown:\nbody\n]");
+
+    assert!(rendered.starts_with("<b>head-html</b>"));
+    assert!(!rendered.contains("&lt;b&gt;head-html&lt;/b&gt;"));
+}
+
+#[test]
+fn markdown_escapes_child_body_but_not_child_head_insertions() {
+    let rendered =
+        folded_template_output("[$markdown:\n[\"<i>child-head</i>\": <b>child-body</b>]\n]");
+
+    assert!(rendered.contains("<i>child-head</i>"));
+    assert!(!rendered.contains("&lt;i&gt;child-head&lt;/i&gt;"));
+    assert!(rendered.contains("&lt;b&gt;child-body&lt;/b&gt;"));
+}
+
+#[test]
 fn markdown_escapes_html_characters_in_body_text() {
     let rendered = folded_template_output("[$markdown:\n<b>Hello & \"World\" 'x'</b>\n]");
 

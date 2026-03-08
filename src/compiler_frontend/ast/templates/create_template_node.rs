@@ -3,9 +3,7 @@ use crate::compiler_frontend::ast::expressions::expression::{Expression, Express
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
 use crate::compiler_frontend::ast::templates::code::configure_code_style;
 use crate::compiler_frontend::ast::templates::markdown::markdown_formatter;
-use crate::compiler_frontend::ast::templates::slots::{
-    compose_template_with_slots, ensure_no_slot_insertions_remain,
-};
+use crate::compiler_frontend::ast::templates::slots::{compose_template_with_slots, ensure_no_slot_insertions_remain, parse_optional_slot_name_argument, parse_required_slot_name_argument};
 use crate::compiler_frontend::ast::templates::template::{
     CommentDirectiveKind, Formatter, SlotKey, Style, TemplateAtom, TemplateConstValueKind,
     TemplateContent, TemplateControlFlow, TemplateSegment, TemplateSegmentOrigin, TemplateType,
@@ -109,7 +107,10 @@ impl Template {
                         ),
                     )?;
 
-                    if matches!(template.kind, TemplateType::Comment(CommentDirectiveKind::Doc)) {
+                    if matches!(
+                        template.kind,
+                        TemplateType::Comment(CommentDirectiveKind::Doc)
+                    ) {
                         template.doc_children.push(nested_template);
                         continue;
                     }
@@ -120,13 +121,10 @@ impl Template {
                                 "Found a compile time foldable template inside a template. Folding into a string slice..."
                             );
 
-                            // Just uses the last inherited template atm
-                            // TODO: should this take the highest precedence template?
-                            let inherited_style = template
-                                .style
-                                .child_templates
-                                .last()
-                                .map(|template| template.style.to_owned());
+                            // Preserve formatter boundaries when folding nested compile-time
+                            // templates into this template's body stream.
+                            let inherited_style =
+                                effective_inherited_style_for_nested_templates(&template.style);
 
                             let interned_child = nested_template
                                 .fold_into_stringid(&inherited_style, string_table)?;
@@ -206,8 +204,10 @@ impl Template {
 
         template.content = compose_template_head_chain(&template.content, &mut foldable)?;
 
-        if matches!(template.kind, TemplateType::Comment(CommentDirectiveKind::Doc))
-            && !template.content.is_const_evaluable_value()
+        if matches!(
+            template.kind,
+            TemplateType::Comment(CommentDirectiveKind::Doc)
+        ) && !template.content.is_const_evaluable_value()
         {
             return_syntax_error!(
                 "'$doc' comments can only contain compile-time values.",
@@ -706,70 +706,6 @@ pub fn parse_template_head(
     Ok(())
 }
 
-fn parse_optional_slot_name_argument(
-    token_stream: &mut FileTokens,
-    string_table: &StringTable,
-) -> Result<Option<StringId>, CompilerError> {
-    if token_stream.peek_next_token() != Some(&TokenKind::OpenParenthesis) {
-        return Ok(None);
-    }
-
-    // Move from `StyleDirective("slot")`/`StyleDirective("insert")` to the
-    // directive argument and leave the parser positioned at `)` on success.
-    token_stream.advance();
-    token_stream.advance();
-
-    let slot_name = match token_stream.current_token_kind() {
-        TokenKind::StringSliceLiteral(name) => *name,
-        TokenKind::CloseParenthesis => {
-            return_syntax_error!(
-                "'$slot()' and '$insert()' cannot use empty parentheses. Use '$slot' for default or quoted names like '$slot(\"style\")'.",
-                token_stream
-                    .current_location()
-                    .to_error_location(string_table)
-            );
-        }
-        _ => {
-            return_syntax_error!(
-                "'$slot(...)' and '$insert(...)' only accept quoted string literal names.",
-                token_stream
-                    .current_location()
-                    .to_error_location(string_table)
-            );
-        }
-    };
-
-    token_stream.advance();
-    if token_stream.current_token_kind() != &TokenKind::CloseParenthesis {
-        return_syntax_error!(
-            "Expected ')' after template slot directive argument.",
-            token_stream.current_location().to_error_location(string_table),
-            {
-                SuggestedInsertion => ")",
-            }
-        );
-    }
-
-    Ok(Some(slot_name))
-}
-
-fn parse_required_slot_name_argument(
-    token_stream: &mut FileTokens,
-    string_table: &StringTable,
-) -> Result<StringId, CompilerError> {
-    let slot_name = parse_optional_slot_name_argument(token_stream, string_table)?;
-    let Some(slot_name) = slot_name else {
-        return_syntax_error!(
-            "'$insert' requires a quoted named target like '$insert(\"style\")'.",
-            token_stream
-                .current_location()
-                .to_error_location(string_table)
-        );
-    };
-
-    Ok(slot_name)
-}
-
 fn handle_template_value_in_template_head(
     value: &Template,
     context: &ScopeContext,
@@ -845,7 +781,10 @@ fn push_template_head_expression(
     Ok(())
 }
 
-fn prepend_inherited_child_templates(content: &mut TemplateContent, inherited_templates: &[Template]) {
+fn prepend_inherited_child_templates(
+    content: &mut TemplateContent,
+    inherited_templates: &[Template],
+) {
     if inherited_templates.is_empty() {
         return;
     }
@@ -1057,6 +996,9 @@ fn fold_atoms(
         style.formatter.is_some()
             && inherited_style.formatter_precedence <= style.formatter_precedence
     });
+    let protect_head_segments_from_markdown = inherited_style
+        .as_ref()
+        .is_some_and(|inherited_style| inherited_style.id == "markdown");
 
     // template content
     for atom in atoms {
@@ -1069,6 +1011,8 @@ fn fold_atoms(
         let protects_this_segment = should_protect_formatted_body
             && segment.origin == TemplateSegmentOrigin::Body
             && matches!(segment.expression.kind, ExpressionKind::StringSlice(_));
+        let protect_this_head_segment =
+            protect_head_segments_from_markdown && segment.origin == TemplateSegmentOrigin::Head;
 
         if protects_this_segment && !inside_protected_body_run {
             final_string.push(TEMPLATE_SPECIAL_IGNORE_CHAR);
@@ -1080,24 +1024,46 @@ fn fold_atoms(
 
         match &segment.expression.kind {
             ExpressionKind::StringSlice(string) => {
-                final_string.push_str(string_table.resolve(*string));
+                push_folded_segment_str(
+                    &mut final_string,
+                    string_table.resolve(*string),
+                    protect_this_head_segment,
+                );
             }
 
             ExpressionKind::Float(float) => {
-                final_string.push_str(&float.to_string());
+                push_folded_segment_str(
+                    &mut final_string,
+                    &float.to_string(),
+                    protect_this_head_segment,
+                );
             }
 
             ExpressionKind::Int(int) => {
-                final_string.push_str(&int.to_string());
+                push_folded_segment_str(
+                    &mut final_string,
+                    &int.to_string(),
+                    protect_this_head_segment,
+                );
             }
 
             // Add the string representation of the bool
             ExpressionKind::Bool(value) => {
-                final_string.push_str(&value.to_string());
+                push_folded_segment_str(
+                    &mut final_string,
+                    &value.to_string(),
+                    protect_this_head_segment,
+                );
             }
 
             ExpressionKind::Char(value) => {
+                if protect_this_head_segment {
+                    final_string.push(TEMPLATE_SPECIAL_IGNORE_CHAR);
+                }
                 final_string.push(*value);
+                if protect_this_head_segment {
+                    final_string.push(TEMPLATE_SPECIAL_IGNORE_CHAR);
+                }
             }
 
             ExpressionKind::Template(template) => {
@@ -1116,13 +1082,14 @@ fn fold_atoms(
 
                 // If nested templates become fully resolved only after wrapper composition,
                 // fold them here so authored nesting order is preserved in the final string.
-                let nested_inherited_style = style
-                    .child_templates
-                    .last()
-                    .map(|template| template.style.to_owned());
+                let nested_inherited_style = effective_inherited_style_for_nested_templates(style);
                 let folded_nested =
                     template.fold_into_stringid(&nested_inherited_style, string_table)?;
-                final_string.push_str(string_table.resolve(folded_nested));
+                push_folded_segment_str(
+                    &mut final_string,
+                    string_table.resolve(folded_nested),
+                    protect_this_head_segment,
+                );
             }
 
             // Anything else can't be folded and should not get to this stage.
@@ -1143,6 +1110,33 @@ fn fold_atoms(
     ast_log!("Folded template into: ", final_string);
 
     Ok(string_table.intern(&final_string))
+}
+
+fn effective_inherited_style_for_nested_templates(style: &Style) -> Option<Style> {
+    if style.formatter.is_some() {
+        return Some(Style {
+            id: style.id,
+            formatter: style.formatter.clone(),
+            formatter_precedence: style.formatter_precedence,
+            override_precedence: style.override_precedence,
+            child_templates: vec![],
+        });
+    }
+
+    style
+        .child_templates
+        .last()
+        .map(|template| template.style.to_owned())
+}
+
+fn push_folded_segment_str(output: &mut String, value: &str, protect_from_markdown: bool) {
+    if protect_from_markdown {
+        output.push(TEMPLATE_SPECIAL_IGNORE_CHAR);
+    }
+    output.push_str(value);
+    if protect_from_markdown {
+        output.push(TEMPLATE_SPECIAL_IGNORE_CHAR);
+    }
 }
 
 fn parse_style_directive(

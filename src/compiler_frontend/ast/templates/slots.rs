@@ -4,9 +4,10 @@ use crate::compiler_frontend::ast::templates::template::{
     SlotKey, TemplateAtom, TemplateContent, TemplateSegment, TemplateType,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::tokenizer::tokens::TextLocation;
-use crate::return_rule_error;
+use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TextLocation, TokenKind};
+use crate::{return_rule_error, return_syntax_error};
 use rustc_hash::{FxHashMap, FxHashSet};
+use crate::compiler_frontend::string_interning::{StringId, StringTable};
 
 #[derive(Clone, Debug, Default)]
 struct SlotSchema {
@@ -166,6 +167,71 @@ fn collect_slot_schema_atoms(
     }
 
     Ok(())
+}
+
+
+pub fn parse_optional_slot_name_argument(
+    token_stream: &mut FileTokens,
+    string_table: &StringTable,
+) -> Result<Option<StringId>, CompilerError> {
+    if token_stream.peek_next_token() != Some(&TokenKind::OpenParenthesis) {
+        return Ok(None);
+    }
+
+    // Move from `StyleDirective("slot")`/`StyleDirective("insert")` to the
+    // directive argument and leave the parser positioned at `)` on success.
+    token_stream.advance();
+    token_stream.advance();
+
+    let slot_name = match token_stream.current_token_kind() {
+        TokenKind::StringSliceLiteral(name) => *name,
+        TokenKind::CloseParenthesis => {
+            return_syntax_error!(
+                "'$slot()' and '$insert()' cannot use empty parentheses. Use '$slot' for default or quoted names like '$slot(\"style\")'.",
+                token_stream
+                    .current_location()
+                    .to_error_location(string_table)
+            );
+        }
+        _ => {
+            return_syntax_error!(
+                "'$slot(...)' and '$insert(...)' only accept quoted string literal names.",
+                token_stream
+                    .current_location()
+                    .to_error_location(string_table)
+            );
+        }
+    };
+
+    token_stream.advance();
+    if token_stream.current_token_kind() != &TokenKind::CloseParenthesis {
+        return_syntax_error!(
+            "Expected ')' after template slot directive argument.",
+            token_stream.current_location().to_error_location(string_table),
+            {
+                SuggestedInsertion => ")",
+            }
+        );
+    }
+
+    Ok(Some(slot_name))
+}
+
+pub fn parse_required_slot_name_argument(
+    token_stream: &mut FileTokens,
+    string_table: &StringTable,
+) -> Result<StringId, CompilerError> {
+    let slot_name = parse_optional_slot_name_argument(token_stream, string_table)?;
+    let Some(slot_name) = slot_name else {
+        return_syntax_error!(
+            "'$insert' requires a quoted named target like '$insert(\"style\")'.",
+            token_stream
+                .current_location()
+                .to_error_location(string_table)
+        );
+    };
+
+    Ok(slot_name)
 }
 
 fn compose_wrapper_atoms_recursive(
