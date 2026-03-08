@@ -778,7 +778,7 @@ fn collect_struct_default_dependencies(
             TokenKind::CloseCurly => {
                 curly_depth = curly_depth.saturating_sub(1);
             }
-            TokenKind::TemplateHead | TokenKind::StyleTemplateHead => {
+            TokenKind::TemplateHead => {
                 template_depth += 1;
             }
             TokenKind::TemplateClose => {
@@ -834,7 +834,7 @@ fn create_top_level_const_template(
     // The caller has already consumed the opening token.
     while scopes_opened > scopes_closed {
         match token_stream.current_token_kind() {
-            TokenKind::TemplateHead | TokenKind::StyleTemplateHead => {
+            TokenKind::TemplateHead => {
                 scopes_opened += 1;
                 body.push(token_stream.current_token());
             }
@@ -918,7 +918,7 @@ fn push_runtime_template_tokens_to_start_function(
 
     while scopes_opened > scopes_closed {
         match token_stream.current_token_kind() {
-            TokenKind::TemplateHead | TokenKind::StyleTemplateHead => {
+            TokenKind::TemplateHead => {
                 scopes_opened += 1;
                 main_function_body.push(token_stream.current_token());
             }

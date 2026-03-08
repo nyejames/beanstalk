@@ -1,4 +1,4 @@
-use crate::compiler_frontend::ast::ast::{Ast, ModuleExport};
+use crate::compiler_frontend::ast::ast::{Ast, AstDocFragment, AstDocFragmentKind, ModuleExport};
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind, TextLocation};
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::statements::functions::{FunctionReturn, FunctionSignature};
@@ -65,6 +65,7 @@ fn build_ast(nodes: Vec<AstNode>, entry_path: InternedPath) -> Ast {
     Ast {
         nodes,
         module_constants: vec![],
+        doc_fragments: vec![],
         entry_path,
         external_exports: Vec::<ModuleExport>::new(),
         start_template_items: vec![],
@@ -230,6 +231,38 @@ fn validator_rejects_missing_side_table_mappings() {
         .expect_err("validator should reject missing side-table mappings");
     assert_eq!(error.error_type, ErrorType::HirTransformation);
     assert!(error.msg.contains("side-table mapping"));
+}
+
+#[test]
+fn validator_rejects_invalid_doc_fragment_location() {
+    let mut string_table = StringTable::new();
+    let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
+
+    let start_fn = function_node(
+        start_name,
+        FunctionSignature {
+            parameters: vec![],
+            returns: vec![],
+        },
+        vec![node(NodeKind::Return(vec![]), test_location(1))],
+        test_location(1),
+    );
+
+    let mut ast = build_ast(vec![start_fn], entry_path);
+    let mut invalid_location = test_location(10);
+    invalid_location.end_pos.line_number = 9;
+    ast.doc_fragments.push(AstDocFragment {
+        kind: AstDocFragmentKind::Doc,
+        value: string_table.intern("broken"),
+        location: invalid_location,
+    });
+
+    let error = lower_ast(ast, &mut string_table)
+        .expect_err("validator should reject invalid doc fragment locations");
+    assert!(error
+        .errors
+        .iter()
+        .any(|diagnostic| diagnostic.msg.contains("Doc fragment")));
 }
 
 #[test]

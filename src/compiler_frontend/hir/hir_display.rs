@@ -528,6 +528,7 @@ impl<'a> HirDisplayContext<'a> {
             "  const_string_pool: {}",
             module.const_string_pool.len()
         );
+        let _ = writeln!(out, "  doc_fragments: {}", module.doc_fragments.len());
 
         let _ = writeln!(out, "  regions: {}", module.regions.len());
 

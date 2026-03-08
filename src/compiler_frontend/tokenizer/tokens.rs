@@ -16,6 +16,26 @@ pub enum TokenizeMode {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum TemplateBodyMode {
+    #[default]
+    Normal,
+    CodeBalanced,
+    DiscardBalanced,
+    DocBalanced,
+}
+
+impl TemplateBodyMode {
+    pub fn is_balanced_mode(self) -> bool {
+        matches!(
+            self,
+            TemplateBodyMode::CodeBalanced
+                | TemplateBodyMode::DiscardBalanced
+                | TemplateBodyMode::DocBalanced
+        )
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub struct CharPosition {
     pub line_number: i32,
     pub char_column: i32,
@@ -214,10 +234,10 @@ pub struct TokenStream<'a> {
     // WHAT: Stack of per-template parsing frames.
     //
     // WHY: `]` must restore the exact parent mode for nested templates opened by
-    // `[`/`$[`, and code-template behavior must stay local to the template that
-    // declared `$code`.
+    // `[`, and template-body behaviour must stay local to the template that
+    // declared its head directives.
     //
-    // A single global mode (for example `TokenizeMode::Codeblock`) is not enough:
+    // A single global mode (for example, `TokenizeMode::Codeblock`) is not enough:
     // nested template heads can appear while parsing another template head/body,
     // and parent/child templates can have different style directives. We therefore
     // keep code-specific state on the current template frame and pop it naturally
@@ -227,25 +247,25 @@ pub struct TokenStream<'a> {
 
 // WHAT: Metadata for one template nesting level in the tokenizer.
 //
-// WHY: `$code` is declared in a template head, but affects only that template's
+// WHY: directives are declared in a template head, but affect only that template's
 // body tokenization. This frame carries that intent across `:` (head -> body),
-// tracks bracket balance for `$code` bodies, and ensures nested templates cannot
-// accidentally inherit or overwrite the parent's codeblock state.
+// tracks bracket balance for balanced body modes, and ensures nested templates
+// cannot accidentally inherit or overwrite the parent's body behavior.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TemplateModeFrame {
     pub mode: TokenizeMode,
-    pub is_code_template: bool,
-    pub code_open_square_brackets: usize,
-    pub code_closed_square_brackets: usize,
+    pub body_mode: TemplateBodyMode,
+    pub body_open_square_brackets: usize,
+    pub body_closed_square_brackets: usize,
 }
 
 impl TemplateModeFrame {
     fn new(mode: TokenizeMode) -> Self {
         Self {
             mode,
-            is_code_template: false,
-            code_open_square_brackets: 0,
-            code_closed_square_brackets: 0,
+            body_mode: TemplateBodyMode::Normal,
+            body_open_square_brackets: 0,
+            body_closed_square_brackets: 0,
         }
     }
 }
@@ -303,11 +323,11 @@ impl<'a> TokenStream<'a> {
         // without closing the template nesting level, so mutate the top frame.
         if let Some(current_mode) = self.template_mode_stack.last_mut() {
             current_mode.mode = mode;
-            if mode == TokenizeMode::TemplateBody && current_mode.is_code_template {
-                // Code-template body termination is driven by bracket balance:
-                // the opening `[` that started the template counts as one open.
-                current_mode.code_open_square_brackets = 1;
-                current_mode.code_closed_square_brackets = 0;
+            if mode == TokenizeMode::TemplateBody && current_mode.body_mode.is_balanced_mode() {
+                // Balanced template-body modes terminate only when square brackets are
+                // balanced. The opening `[` that started this template counts as one open.
+                current_mode.body_open_square_brackets = 1;
+                current_mode.body_closed_square_brackets = 0;
             }
         } else {
             self.template_mode_stack.push(TemplateModeFrame::new(mode));
@@ -330,51 +350,54 @@ impl<'a> TokenStream<'a> {
             .unwrap_or(&TokenizeMode::Normal);
     }
 
-    pub fn mark_current_template_as_codeblock(&mut self) {
+    pub fn mark_current_template_body_mode(&mut self, body_mode: TemplateBodyMode) {
         if let Some(current_mode) = self.template_mode_stack.last_mut() {
-            current_mode.is_code_template = true;
-            if current_mode.mode == TokenizeMode::TemplateBody {
-                current_mode.code_open_square_brackets = 1;
-                current_mode.code_closed_square_brackets = 0;
+            current_mode.body_mode = body_mode;
+            if current_mode.mode == TokenizeMode::TemplateBody && body_mode.is_balanced_mode() {
+                current_mode.body_open_square_brackets = 1;
+                current_mode.body_closed_square_brackets = 0;
             }
         }
     }
 
-    pub fn in_code_template_body(&self) -> bool {
+    pub fn current_template_body_mode(&self) -> TemplateBodyMode {
         self.template_mode_stack
             .last()
-            .is_some_and(|frame| frame.mode == TokenizeMode::TemplateBody && frame.is_code_template)
+            .map(|frame| frame.body_mode)
+            .unwrap_or_default()
     }
 
-    pub fn code_template_register_open_square_bracket(&mut self) {
+    pub fn register_template_body_open_square_bracket(&mut self) {
         if let Some(current_mode) = self.template_mode_stack.last_mut()
-            && current_mode.is_code_template
+            && current_mode.body_mode.is_balanced_mode()
         {
-            current_mode.code_open_square_brackets =
-                current_mode.code_open_square_brackets.saturating_add(1);
+            current_mode.body_open_square_brackets =
+                current_mode.body_open_square_brackets.saturating_add(1);
         }
     }
 
-    pub fn code_template_register_close_square_bracket(&mut self) {
+    pub fn register_template_body_close_square_bracket(&mut self) {
         if let Some(current_mode) = self.template_mode_stack.last_mut()
-            && current_mode.is_code_template
+            && current_mode.body_mode.is_balanced_mode()
         {
-            current_mode.code_closed_square_brackets =
-                current_mode.code_closed_square_brackets.saturating_add(1);
+            current_mode.body_closed_square_brackets =
+                current_mode.body_closed_square_brackets.saturating_add(1);
         }
     }
 
-    pub fn code_template_next_close_balances_brackets(&self) -> bool {
+    pub fn template_body_next_close_balances_brackets(&self) -> bool {
         let Some(current_mode) = self.template_mode_stack.last() else {
             return false;
         };
 
-        if !current_mode.is_code_template || current_mode.mode != TokenizeMode::TemplateBody {
+        if current_mode.mode != TokenizeMode::TemplateBody
+            || !current_mode.body_mode.is_balanced_mode()
+        {
             return false;
         }
 
-        current_mode.code_closed_square_brackets.saturating_add(1)
-            == current_mode.code_open_square_brackets
+        current_mode.body_closed_square_brackets.saturating_add(1)
+            == current_mode.body_open_square_brackets
     }
 }
 
@@ -510,10 +533,6 @@ pub enum TokenKind {
     // Templates
     TemplateClose,
     TemplateHead,
-    // `$[` opens a child template from inside a template head. It tokenizes
-    // separately so the AST parser can treat it as style metadata instead of
-    // regular nested body content.
-    StyleTemplateHead,
 
     // Channels
     CreateChannel,  // =>

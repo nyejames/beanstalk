@@ -3,7 +3,7 @@ use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::statements::functions::{FunctionReturn, FunctionSignature};
 use crate::compiler_frontend::ast::templates::create_template_node::Template;
-use crate::compiler_frontend::ast::templates::template::TemplateType;
+use crate::compiler_frontend::ast::templates::template::{CommentDirectiveKind, TemplateType};
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::headers::parse_file_headers::{
     TopLevelTemplateItem, TopLevelTemplateKind,
@@ -453,4 +453,192 @@ fn errors_when_entry_start_function_is_missing() {
     .expect_err("missing entry start function should fail");
 
     assert!(error.msg.contains("Failed to find entry start function"));
+}
+
+#[test]
+fn collects_and_strips_top_level_doc_comment_templates() {
+    let mut string_table = StringTable::new();
+    let entry_dir = InternedPath::from_single_str("main.bst", &mut string_table);
+    let entry_scope = entry_dir.to_owned();
+    let doc_location = test_location(2);
+    let runtime_location = test_location(3);
+
+    let doc_declaration = variable_declaration_node(
+        InternedPath::from_single_str(TOP_LEVEL_TEMPLATE_NAME, &mut string_table),
+        top_level_template_declaration(
+            vec![Expression::string_slice(
+                string_table.intern("doc"),
+                doc_location.to_owned(),
+                Ownership::ImmutableOwned,
+            )],
+            TemplateType::Comment(CommentDirectiveKind::Doc),
+            doc_location.to_owned(),
+            &mut string_table,
+        )
+        .value,
+        doc_location.to_owned(),
+        entry_scope.to_owned(),
+    );
+
+    let runtime_declaration = variable_declaration_node(
+        InternedPath::from_single_str(TOP_LEVEL_TEMPLATE_NAME, &mut string_table),
+        top_level_template_declaration(
+            vec![Expression::string_slice(
+                string_table.intern("runtime"),
+                runtime_location.to_owned(),
+                Ownership::ImmutableOwned,
+            )],
+            TemplateType::String,
+            runtime_location.to_owned(),
+            &mut string_table,
+        )
+        .value,
+        runtime_location.to_owned(),
+        entry_scope.to_owned(),
+    );
+
+    let mut ast_nodes = vec![start_function_node(
+        &entry_dir,
+        vec![doc_declaration, runtime_declaration],
+        test_location(1),
+        &mut string_table,
+    )];
+
+    let doc_fragments = collect_and_strip_comment_templates(&mut ast_nodes, &mut string_table)
+        .expect("doc comment collection should succeed");
+
+    assert_eq!(doc_fragments.len(), 1);
+    assert!(matches!(doc_fragments[0].kind, AstDocFragmentKind::Doc));
+    assert_eq!(string_table.resolve(doc_fragments[0].value), "doc");
+
+    let entry_start_name = entry_dir.join_str(IMPLICIT_START_FUNC_NAME, &mut string_table);
+    let entry_start = find_function(&ast_nodes, &entry_start_name);
+    let NodeKind::Function(_, _, body) = &entry_start.kind else {
+        panic!("entry start should remain a function");
+    };
+    assert_eq!(
+        body.len(),
+        1,
+        "top-level doc template should be stripped from runtime start body"
+    );
+}
+
+#[test]
+fn collects_nested_doc_fragments_in_source_order() {
+    let mut string_table = StringTable::new();
+    let entry_dir = InternedPath::from_single_str("main.bst", &mut string_table);
+    let entry_scope = entry_dir.to_owned();
+
+    let mut parent = Template::create_default(vec![]);
+    parent.kind = TemplateType::Comment(CommentDirectiveKind::Doc);
+    parent.location = test_location(2);
+    parent.content.add(Expression::string_slice(
+        string_table.intern("parent"),
+        test_location(2),
+        Ownership::ImmutableOwned,
+    ));
+
+    let mut child = Template::create_default(vec![]);
+    child.kind = TemplateType::Comment(CommentDirectiveKind::Doc);
+    child.location = test_location(3);
+    child.content.add(Expression::string_slice(
+        string_table.intern("child"),
+        test_location(3),
+        Ownership::ImmutableOwned,
+    ));
+
+    let mut grandchild = Template::create_default(vec![]);
+    grandchild.kind = TemplateType::Comment(CommentDirectiveKind::Doc);
+    grandchild.location = test_location(4);
+    grandchild.content.add(Expression::string_slice(
+        string_table.intern("grandchild"),
+        test_location(4),
+        Ownership::ImmutableOwned,
+    ));
+
+    child.doc_children.push(grandchild);
+    parent.doc_children.push(child);
+
+    let doc_declaration = variable_declaration_node(
+        InternedPath::from_single_str(TOP_LEVEL_TEMPLATE_NAME, &mut string_table),
+        Expression::template(parent, Ownership::ImmutableOwned),
+        test_location(2),
+        entry_scope.to_owned(),
+    );
+
+    let mut ast_nodes = vec![start_function_node(
+        &entry_dir,
+        vec![doc_declaration],
+        test_location(1),
+        &mut string_table,
+    )];
+
+    let doc_fragments = collect_and_strip_comment_templates(&mut ast_nodes, &mut string_table)
+        .expect("nested doc comment collection should succeed");
+
+    assert_eq!(doc_fragments.len(), 3);
+    assert_eq!(string_table.resolve(doc_fragments[0].value), "parent");
+    assert_eq!(string_table.resolve(doc_fragments[1].value), "child");
+    assert_eq!(string_table.resolve(doc_fragments[2].value), "grandchild");
+}
+
+#[test]
+fn top_level_doc_comments_do_not_generate_start_fragments() {
+    let mut string_table = StringTable::new();
+    let entry_dir = InternedPath::from_single_str("main.bst", &mut string_table);
+    let entry_scope = entry_dir.to_owned();
+
+    let doc_declaration = variable_declaration_node(
+        InternedPath::from_single_str(TOP_LEVEL_TEMPLATE_NAME, &mut string_table),
+        top_level_template_declaration(
+            vec![Expression::string_slice(
+                string_table.intern("doc"),
+                test_location(2),
+                Ownership::ImmutableOwned,
+            )],
+            TemplateType::Comment(CommentDirectiveKind::Doc),
+            test_location(2),
+            &mut string_table,
+        )
+        .value,
+        test_location(2),
+        entry_scope.to_owned(),
+    );
+
+    let runtime_declaration = variable_declaration_node(
+        InternedPath::from_single_str(TOP_LEVEL_TEMPLATE_NAME, &mut string_table),
+        top_level_template_declaration(
+            vec![Expression::string_slice(
+                string_table.intern("runtime"),
+                test_location(3),
+                Ownership::ImmutableOwned,
+            )],
+            TemplateType::String,
+            test_location(3),
+            &mut string_table,
+        )
+        .value,
+        test_location(3),
+        entry_scope.to_owned(),
+    );
+
+    let mut ast_nodes = vec![start_function_node(
+        &entry_dir,
+        vec![doc_declaration, runtime_declaration],
+        test_location(1),
+        &mut string_table,
+    )];
+
+    let _ = collect_and_strip_comment_templates(&mut ast_nodes, &mut string_table)
+        .expect("doc comment stripping should succeed");
+    let start_items = synthesize_start_template_items(
+        &mut ast_nodes,
+        &entry_dir,
+        &[],
+        &FxHashMap::default(),
+        &mut string_table,
+    )
+    .expect("start fragment synthesis should succeed");
+
+    assert_eq!(start_items.len(), 1);
 }

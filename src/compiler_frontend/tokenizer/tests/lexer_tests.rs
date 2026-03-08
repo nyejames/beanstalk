@@ -50,27 +50,46 @@ fn tokenizes_style_directives_inside_template_heads() {
 }
 
 #[test]
-fn tokenizes_style_child_templates_without_leaving_the_outer_template_head() {
-    let (file_tokens, string_table) = tokenize_source("[$[:prefix], $markdown:\nhello\n]");
+fn tokenizes_children_directive_with_template_argument() {
+    let (file_tokens, string_table) =
+        tokenize_source("[$children([:prefix]), $markdown:\nhello\n]");
 
     let outer_head = find_token_index(&file_tokens.tokens, |kind| {
         matches!(kind, TokenKind::TemplateHead)
     });
-    let style_child = find_token_index(&file_tokens.tokens, |kind| {
-        matches!(kind, TokenKind::StyleTemplateHead)
+    let children = find_token_index(
+        &file_tokens.tokens,
+        |kind| matches!(kind, TokenKind::StyleDirective(id) if string_table.resolve(*id) == "children"),
+    );
+    let open_paren = find_token_index(&file_tokens.tokens, |kind| {
+        matches!(kind, TokenKind::OpenParenthesis)
     });
+    let child_template = file_tokens
+        .tokens
+        .iter()
+        .enumerate()
+        .skip(open_paren + 1)
+        .find_map(|(index, token)| matches!(token.kind, TokenKind::TemplateHead).then_some(index))
+        .expect("expected child template opener");
     let close = file_tokens
         .tokens
         .iter()
         .enumerate()
-        .skip(style_child + 1)
+        .skip(child_template + 1)
         .find_map(|(index, token)| matches!(token.kind, TokenKind::TemplateClose).then_some(index))
         .expect("expected the child template to close");
-    let comma = file_tokens
+    let close_paren = file_tokens
         .tokens
         .iter()
         .enumerate()
         .skip(close + 1)
+        .find_map(|(index, token)| matches!(token.kind, TokenKind::CloseParenthesis).then_some(index))
+        .expect("expected ')' after the child template");
+    let comma = file_tokens
+        .tokens
+        .iter()
+        .enumerate()
+        .skip(close_paren + 1)
         .find_map(|(index, token)| matches!(token.kind, TokenKind::Comma).then_some(index))
         .expect("expected a comma after the child template");
     let markdown = file_tokens
@@ -84,10 +103,25 @@ fn tokenizes_style_child_templates_without_leaving_the_outer_template_head() {
         })
         .expect("expected the outer head to continue with '$markdown'");
 
-    assert!(outer_head < style_child);
-    assert!(style_child < close);
-    assert!(close < comma);
+    assert!(outer_head < children);
+    assert!(children < open_paren);
+    assert!(open_paren < child_template);
+    assert!(child_template < close);
+    assert!(close < close_paren);
+    assert!(close_paren < comma);
     assert!(comma < markdown);
+}
+
+#[test]
+fn rejects_legacy_style_child_template_prefix_syntax() {
+    let mut string_table = StringTable::new();
+    let source_path = InternedPath::from_single_str("test.bst", &mut string_table);
+
+    let result = tokenize("[$[:prefix], $markdown:\nhello\n]", &source_path, TokenizeMode::Normal, &mut string_table);
+    assert!(
+        result.is_err(),
+        "legacy '$[' child-template syntax should fail"
+    );
 }
 
 #[test]
@@ -187,4 +221,62 @@ fn code_template_body_keeps_nested_square_brackets_as_literal_text() {
         .expect("expected code template body text to include literal square brackets");
 
     assert!(body_literal.contains("concatenated"));
+}
+
+#[test]
+fn note_and_todo_template_bodies_are_discarded_until_balanced_close() {
+    for directive in ["note", "todo"] {
+        let source = format!(
+            "[${directive}:\n[this [body] has [nested [brackets]] and should be discarded]\n]"
+        );
+        let (file_tokens, string_table) = tokenize_source(&source);
+
+        let template_heads = file_tokens
+            .tokens
+            .iter()
+            .filter(|token| matches!(token.kind, TokenKind::TemplateHead))
+            .count();
+        let template_closes = file_tokens
+            .tokens
+            .iter()
+            .filter(|token| matches!(token.kind, TokenKind::TemplateClose))
+            .count();
+
+        assert_eq!(template_heads, 1);
+        assert_eq!(template_closes, 1);
+        assert!(file_tokens.tokens.iter().any(|token| {
+            matches!(token.kind, TokenKind::StyleDirective(id) if string_table.resolve(id) == directive)
+        }));
+        assert!(
+            !file_tokens.tokens.iter().any(|token| {
+                matches!(token.kind, TokenKind::StringSliceLiteral(id) if string_table.resolve(id).contains("discarded"))
+            }),
+            "expected ${directive} body text to be discarded during tokenization"
+        );
+    }
+}
+
+#[test]
+fn doc_template_body_keeps_nested_templates_as_template_tokens() {
+    let (file_tokens, string_table) = tokenize_source("[$doc:\n[: child]\n]");
+
+    let template_heads = file_tokens
+        .tokens
+        .iter()
+        .filter(|token| matches!(token.kind, TokenKind::TemplateHead))
+        .count();
+    let template_closes = file_tokens
+        .tokens
+        .iter()
+        .filter(|token| matches!(token.kind, TokenKind::TemplateClose))
+        .count();
+
+    assert_eq!(
+        template_heads, 2,
+        "expected doc body nested template to tokenize as a child template"
+    );
+    assert_eq!(template_closes, 2);
+    assert!(file_tokens.tokens.iter().any(|token| {
+        matches!(token.kind, TokenKind::StyleDirective(id) if string_table.resolve(id) == "doc")
+    }));
 }

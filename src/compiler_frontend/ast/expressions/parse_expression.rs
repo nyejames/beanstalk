@@ -642,7 +642,7 @@ pub fn create_expression(
                     }
 
                     // Ignore comments
-                    TemplateType::Comment => {}
+                    TemplateType::Comment(_) => {}
 
                     TemplateType::SlotInsert(_) => {
                         if consume_closing_parenthesis

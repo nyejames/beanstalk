@@ -1,4 +1,6 @@
-use crate::compiler_frontend::ast::ast::{Ast, AstStartTemplateItem, ModuleExport};
+use crate::compiler_frontend::ast::ast::{
+    Ast, AstDocFragment, AstDocFragmentKind, AstStartTemplateItem, ModuleExport,
+};
 use crate::compiler_frontend::ast::ast_nodes::{
     AstNode, Declaration, ForLoopRange, NodeKind, RangeEndKind, TextLocation,
 };
@@ -11,8 +13,8 @@ use crate::compiler_frontend::compiler_errors::{CompilerMessages, ErrorType};
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::hir::hir_nodes::{
-    HirBinOp, HirConstValue, HirExpressionKind, HirModule, HirPattern, HirStatementKind,
-    HirTerminator, StartFragment,
+    HirBinOp, HirConstValue, HirDocFragmentKind, HirExpressionKind, HirModule, HirPattern,
+    HirStatementKind, HirTerminator, StartFragment,
 };
 use crate::compiler_frontend::hir::tests::hir_expression_lowering_tests::location;
 use crate::compiler_frontend::interned_path::InternedPath;
@@ -102,6 +104,7 @@ fn build_ast(nodes: Vec<AstNode>, entry_path: InternedPath) -> Ast {
     Ast {
         nodes,
         module_constants: vec![],
+        doc_fragments: vec![],
         entry_path,
         external_exports: Vec::<ModuleExport>::new(),
         start_template_items: vec![],
@@ -544,6 +547,47 @@ fn lowers_ast_start_template_items_into_ordered_hir_fragments() {
         module.start_fragments[1],
         StartFragment::RuntimeStringFn(_)
     ));
+}
+
+#[test]
+fn lowers_ast_doc_fragments_into_hir_doc_metadata() {
+    let mut string_table = StringTable::new();
+    let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
+    let first_doc = string_table.intern("First doc");
+    let second_doc = string_table.intern("Second doc");
+
+    let start_function = function_node(
+        start_name,
+        FunctionSignature {
+            parameters: vec![],
+            returns: vec![],
+        },
+        vec![],
+        test_location(1),
+    );
+
+    let mut ast = build_ast(vec![start_function], entry_path);
+    ast.doc_fragments = vec![
+        AstDocFragment {
+            kind: AstDocFragmentKind::Doc,
+            value: first_doc,
+            location: test_location(4),
+        },
+        AstDocFragment {
+            kind: AstDocFragmentKind::Doc,
+            value: second_doc,
+            location: test_location(7),
+        },
+    ];
+
+    let module = lower_ast(ast, &mut string_table).expect("HIR lowering should succeed");
+    assert_eq!(module.doc_fragments.len(), 2);
+    assert!(matches!(module.doc_fragments[0].kind, HirDocFragmentKind::Doc));
+    assert!(matches!(module.doc_fragments[1].kind, HirDocFragmentKind::Doc));
+    assert_eq!(module.doc_fragments[0].rendered_text, "First doc");
+    assert_eq!(module.doc_fragments[1].rendered_text, "Second doc");
+    assert_eq!(module.doc_fragments[0].location.start_pos.line_number, 4);
+    assert_eq!(module.doc_fragments[1].location.start_pos.line_number, 7);
 }
 
 #[test]

@@ -8,7 +8,7 @@ use crate::compiler_frontend::ast::templates::code::{
 };
 use crate::compiler_frontend::ast::templates::markdown::markdown_formatter;
 use crate::compiler_frontend::ast::templates::template::{
-    TemplateAtom, TemplateSegment, TemplateSegmentOrigin, TemplateType,
+    CommentDirectiveKind, TemplateAtom, TemplateSegment, TemplateSegmentOrigin, TemplateType,
 };
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::host_functions::HostRegistry;
@@ -50,10 +50,7 @@ fn template_tokens_from_source(source: &str, string_table: &mut StringTable) -> 
         .tokens
         .iter()
         .position(|token| {
-            matches!(
-                token.kind,
-                TokenKind::TemplateHead | TokenKind::StyleTemplateHead
-            )
+            matches!(token.kind, TokenKind::TemplateHead)
         })
         .expect("expected a template opener");
 
@@ -298,15 +295,140 @@ fn ignore_clears_inherited_style_before_reapplying_markdown() {
 }
 
 #[test]
-fn stores_style_child_templates_from_dollar_bracket_syntax() {
+fn stores_style_child_templates_from_children_directive() {
     let mut string_table = StringTable::new();
-    let mut token_stream = template_tokens_from_source("[$[:prefix], : body]", &mut string_table);
+    let mut token_stream =
+        template_tokens_from_source("[$children([:prefix]), : body]", &mut string_table);
     let context = ScopeContext::new_constant(token_stream.src_path.to_owned());
 
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("template should parse");
 
     assert_eq!(template.style.child_templates.len(), 1);
+}
+
+#[test]
+fn children_directive_accepts_const_string_reference() {
+    let mut string_table = StringTable::new();
+    let scope = InternedPath::from_single_str("main.bst/#const_template0", &mut string_table);
+    let prefix_name = string_table.intern("prefix");
+    let declarations = vec![Declaration {
+        id: scope.append(prefix_name),
+        value: Expression::string_slice(
+            string_table.intern("prefix: "),
+            TextLocation {
+                scope: InternedPath::new(),
+                start_pos: CharPosition {
+                    line_number: 1,
+                    char_column: 0,
+                },
+                end_pos: CharPosition {
+                    line_number: 1,
+                    char_column: 120,
+                },
+            },
+            Ownership::ImmutableOwned,
+        ),
+    }];
+
+    let mut token_stream =
+        template_tokens_from_source("[$children(prefix): [: child]]", &mut string_table);
+    let context = constant_template_context(&token_stream.src_path, &declarations);
+
+    let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
+        .expect("children directive should accept const-folded references");
+    let folded = template
+        .fold_into_stringid(&None, &mut string_table)
+        .expect("template should fold");
+
+    assert!(string_table.resolve(folded).contains("prefix:"));
+}
+
+#[test]
+fn children_directive_rejects_runtime_values() {
+    let mut string_table = StringTable::new();
+    let mut token_stream = template_tokens_from_source("[$children(value): [: child]]", &mut string_table);
+    let context = runtime_template_context(&token_stream.src_path, &mut string_table);
+
+    let error = Template::new(&mut token_stream, &context, vec![], &mut string_table)
+        .expect_err("children directive should reject runtime values");
+
+    assert!(error.msg.contains("$children(..)"));
+    assert!(error.msg.contains("compile-time"));
+}
+
+#[test]
+fn inherited_children_wrappers_are_applied_to_nested_templates() {
+    let rendered = folded_template_output("[$children([: pref[$slot]suf]): [: body]]");
+    assert!(rendered.contains("pref"));
+    assert!(rendered.contains("body"));
+    assert!(rendered.contains("suf"));
+}
+
+#[test]
+fn note_and_todo_templates_do_not_render_content() {
+    let note_rendered = folded_template_output("[:before[$note:ignored]after]");
+    let todo_rendered = folded_template_output("[:before[$todo:ignored]after]");
+
+    assert_eq!(note_rendered, "beforeafter");
+    assert_eq!(todo_rendered, "beforeafter");
+}
+
+#[test]
+fn note_and_todo_directives_reject_arguments() {
+    let note_error = template_parse_error("[$note(\"x\"): ignored]");
+    let todo_error = template_parse_error("[$todo(\"x\"): ignored]");
+
+    assert!(note_error.contains("does not accept arguments"));
+    assert!(todo_error.contains("does not accept arguments"));
+}
+
+#[test]
+fn doc_templates_require_const_values() {
+    let mut string_table = StringTable::new();
+    let mut token_stream = template_tokens_from_source("[$doc:\n[value]\n]", &mut string_table);
+    let context = runtime_template_context(&token_stream.src_path, &mut string_table);
+
+    let error = Template::new(&mut token_stream, &context, vec![], &mut string_table)
+        .expect_err("doc comments should reject runtime values");
+
+    assert!(error.msg.contains("$doc"));
+    assert!(error.msg.contains("compile-time"));
+}
+
+#[test]
+fn doc_templates_are_markdown_formatted_by_default() {
+    let mut string_table = StringTable::new();
+    let mut token_stream = template_tokens_from_source("[$doc:\n# Heading\n]", &mut string_table);
+    let context = ScopeContext::new_constant(token_stream.src_path.to_owned());
+
+    let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
+        .expect("doc template should parse");
+    assert!(matches!(
+        template.kind,
+        TemplateType::Comment(CommentDirectiveKind::Doc)
+    ));
+
+    let folded = template
+        .fold_into_stringid(&None, &mut string_table)
+        .expect("doc template should fold");
+    assert!(string_table.resolve(folded).contains("<h1>Heading</h1>"));
+}
+
+#[test]
+fn nested_templates_inside_doc_are_collected_as_doc_children() {
+    let mut string_table = StringTable::new();
+    let mut token_stream = template_tokens_from_source("[$doc:\n[: child]\n]", &mut string_table);
+    let context = ScopeContext::new_constant(token_stream.src_path.to_owned());
+
+    let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
+        .expect("doc template should parse");
+
+    assert_eq!(template.doc_children.len(), 1);
+    assert!(matches!(
+        template.doc_children[0].kind,
+        TemplateType::Comment(CommentDirectiveKind::Doc)
+    ));
 }
 
 #[test]

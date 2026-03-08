@@ -8,6 +8,7 @@
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::statements::functions::{FunctionReturn, FunctionSignature};
+use crate::compiler_frontend::ast::templates::template::{CommentDirectiveKind, TemplateType};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::headers::parse_file_headers::{
@@ -30,6 +31,18 @@ pub enum AstStartTemplateItem {
         function: InternedPath,
         location: TextLocation,
     },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum AstDocFragmentKind {
+    Doc,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AstDocFragment {
+    pub kind: AstDocFragmentKind,
+    pub value: StringId,
+    pub location: TextLocation,
 }
 
 #[derive(Clone)]
@@ -155,6 +168,76 @@ pub(crate) fn synthesize_start_template_items(
     }
 
     Ok(start_template_items)
+}
+
+pub(crate) fn collect_and_strip_comment_templates(
+    ast_nodes: &mut [AstNode],
+    string_table: &mut StringTable,
+) -> Result<Vec<AstDocFragment>, CompilerError> {
+    let mut fragments = Vec::new();
+
+    for node in ast_nodes.iter_mut() {
+        let NodeKind::Function(_, _, body) = &mut node.kind else {
+            continue;
+        };
+
+        let mut retained = Vec::with_capacity(body.len());
+        for statement in std::mem::take(body) {
+            if let Some(comment_template) =
+                as_top_level_template_comment_declaration(&statement, string_table)
+            {
+                collect_doc_fragments(comment_template, &mut fragments, string_table)?;
+                continue;
+            }
+
+            retained.push(statement);
+        }
+
+        *body = retained;
+    }
+
+    fragments.sort_by_key(|fragment| {
+        (
+            fragment.location.scope.to_string(string_table),
+            fragment.location.start_pos.line_number,
+            fragment.location.start_pos.char_column,
+        )
+    });
+
+    Ok(fragments)
+}
+
+fn as_top_level_template_comment_declaration<'a>(
+    node: &'a AstNode,
+    string_table: &StringTable,
+) -> Option<&'a crate::compiler_frontend::ast::templates::create_template_node::Template> {
+    let declaration = as_top_level_template_declaration(node, string_table)?;
+    let ExpressionKind::Template(template) = &declaration.value.kind else {
+        return None;
+    };
+
+    matches!(template.kind, TemplateType::Comment(_)).then_some(template.as_ref())
+}
+
+fn collect_doc_fragments(
+    template: &crate::compiler_frontend::ast::templates::create_template_node::Template,
+    fragments: &mut Vec<AstDocFragment>,
+    string_table: &mut StringTable,
+) -> Result<(), CompilerError> {
+    if matches!(template.kind, TemplateType::Comment(CommentDirectiveKind::Doc)) {
+        let rendered = template.fold_into_stringid(&None, string_table)?;
+        fragments.push(AstDocFragment {
+            kind: AstDocFragmentKind::Doc,
+            value: rendered,
+            location: template.location.to_owned(),
+        });
+    }
+
+    for child in &template.doc_children {
+        collect_doc_fragments(child, fragments, string_table)?;
+    }
+
+    Ok(())
 }
 
 #[allow(clippy::large_enum_variant)]

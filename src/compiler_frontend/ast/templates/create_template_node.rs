@@ -7,8 +7,8 @@ use crate::compiler_frontend::ast::templates::slots::{
     compose_template_with_slots, ensure_no_slot_insertions_remain,
 };
 use crate::compiler_frontend::ast::templates::template::{
-    Formatter, SlotKey, Style, TemplateAtom, TemplateConstValueKind, TemplateContent,
-    TemplateControlFlow, TemplateSegment, TemplateSegmentOrigin, TemplateType,
+    CommentDirectiveKind, Formatter, SlotKey, Style, TemplateAtom, TemplateConstValueKind,
+    TemplateContent, TemplateControlFlow, TemplateSegment, TemplateSegmentOrigin, TemplateType,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
@@ -24,6 +24,7 @@ pub const TEMPLATE_SPECIAL_IGNORE_CHAR: char = '\u{FFFC}';
 pub struct Template {
     pub content: TemplateContent,
     pub kind: TemplateType,
+    pub doc_children: Vec<Template>,
     pub style: Style,
     #[allow(dead_code)]
     pub control_flow: TemplateControlFlow,
@@ -38,6 +39,23 @@ impl Template {
         templates_inherited: Vec<Template>,
         string_table: &mut StringTable,
     ) -> Result<Template, CompilerError> {
+        Self::new_with_doc_context(
+            token_stream,
+            context,
+            templates_inherited,
+            string_table,
+            false,
+        )
+    }
+
+    fn new_with_doc_context(
+        token_stream: &mut FileTokens,
+        context: &ScopeContext,
+        templates_inherited: Vec<Template>,
+        string_table: &mut StringTable,
+        doc_context: bool,
+    ) -> Result<Template, CompilerError> {
+        let inherited_templates = templates_inherited.to_owned();
         // These are variables or special keywords passed into the template head
         let mut template = Self::create_default(templates_inherited);
         // Capture the opening token location early so style/directive errors can
@@ -58,6 +76,10 @@ impl Template {
             string_table,
         )?;
 
+        if doc_context {
+            apply_doc_comment_defaults(&mut template);
+        }
+
         // ---------------------
         // TEMPLATE BODY PARSING
         // ---------------------
@@ -76,12 +98,21 @@ impl Template {
                 }
 
                 TokenKind::TemplateHead => {
-                    let nested_template = Self::new(
+                    let nested_template = Self::new_with_doc_context(
                         token_stream,
                         context,
                         template.style.child_templates.to_owned(),
                         string_table,
+                        matches!(
+                            template.kind,
+                            TemplateType::Comment(CommentDirectiveKind::Doc)
+                        ),
                     )?;
+
+                    if matches!(template.kind, TemplateType::Comment(CommentDirectiveKind::Doc)) {
+                        template.doc_children.push(nested_template);
+                        continue;
+                    }
 
                     match nested_template.kind {
                         TemplateType::String if !nested_template.has_unresolved_slots() => {
@@ -113,7 +144,7 @@ impl Template {
                             foldable = false;
                         }
 
-                        TemplateType::Comment => {
+                        TemplateType::Comment(_) => {
                             continue;
                         }
 
@@ -171,7 +202,21 @@ impl Template {
             string_table,
         );
 
+        prepend_inherited_child_templates(&mut template.content, &inherited_templates);
+
         template.content = compose_template_head_chain(&template.content, &mut foldable)?;
+
+        if matches!(template.kind, TemplateType::Comment(CommentDirectiveKind::Doc))
+            && !template.content.is_const_evaluable_value()
+        {
+            return_syntax_error!(
+                "'$doc' comments can only contain compile-time values.",
+                template.location.to_error_location(string_table),
+                {
+                    PrimarySuggestion => "Use constants and foldable template/string values inside '$doc' comments",
+                }
+            );
+        }
 
         // `$insert(...)` helpers are allowed to survive while a template still has
         // unresolved `$slot` markers, because that template may later compose into
@@ -185,7 +230,9 @@ impl Template {
         if foldable
             && !matches!(
                 template.kind,
-                TemplateType::SlotInsert(_) | TemplateType::SlotDefinition(_)
+                TemplateType::SlotInsert(_)
+                    | TemplateType::SlotDefinition(_)
+                    | TemplateType::Comment(_)
             )
         {
             template.kind = TemplateType::String;
@@ -197,13 +244,18 @@ impl Template {
 
     pub fn create_default(templates: Vec<Template>) -> Template {
         let style = match templates.last() {
-            Some(t) => t.style.clone(),
+            Some(t) => {
+                let mut inherited_style = t.style.clone();
+                inherited_style.child_templates = templates;
+                inherited_style
+            }
             None => Style::default(),
         };
 
         Template {
             content: TemplateContent::default(),
             kind: TemplateType::StringFunction,
+            doc_children: vec![],
             style,
             control_flow: TemplateControlFlow::None,
             id: String::new(),
@@ -347,7 +399,9 @@ pub fn parse_template_head(
 
         if matches!(
             template.kind,
-            TemplateType::SlotDefinition(_) | TemplateType::SlotInsert(_)
+            TemplateType::SlotDefinition(_)
+                | TemplateType::SlotInsert(_)
+                | TemplateType::Comment(_)
         ) {
             match token {
                 TokenKind::Newline => {
@@ -355,8 +409,25 @@ pub fn parse_template_head(
                     continue;
                 }
                 _ => {
+                    let restriction_message = match template.kind {
+                        TemplateType::SlotDefinition(_) | TemplateType::SlotInsert(_) => {
+                            "Slot helper template heads can only contain one '$slot' or '$insert(\"name\")' directive."
+                        }
+                        TemplateType::Comment(CommentDirectiveKind::Doc) => {
+                            "'$doc' template heads can only contain '$doc' before the optional body."
+                        }
+                        TemplateType::Comment(CommentDirectiveKind::Note) => {
+                            "'$note' template heads can only contain '$note' before the optional body."
+                        }
+                        TemplateType::Comment(CommentDirectiveKind::Todo) => {
+                            "'$todo' template heads can only contain '$todo' before the optional body."
+                        }
+                        TemplateType::String | TemplateType::StringFunction => {
+                            "Template helper heads can only contain one helper directive."
+                        }
+                    };
                     return_syntax_error!(
-                        "Slot helper template heads can only contain one '$slot' or '$insert(\"name\")' directive.",
+                        restriction_message,
                         token_stream
                             .current_location()
                             .to_error_location(string_table)
@@ -524,7 +595,8 @@ pub fn parse_template_head(
             TokenKind::StyleDirective(directive) => {
                 // Template directives share the `$name` token shape with style directives.
                 // Parse `$slot` / `$insert` first, then fall back to style handling.
-                match string_table.resolve(directive) {
+                let directive_name = string_table.resolve(directive);
+                match directive_name {
                     "slot" => {
                         if saw_meaningful_head_item {
                             return_syntax_error!(
@@ -559,17 +631,22 @@ pub fn parse_template_head(
                         saw_meaningful_head_item = true;
                     }
                     _ => {
+                        if saw_meaningful_head_item
+                            && matches!(directive_name, "note" | "todo" | "doc")
+                        {
+                            return_syntax_error!(
+                                "Comment template heads cannot mix '$note', '$todo', or '$doc' with other head expressions/directives.",
+                                token_stream
+                                    .current_location()
+                                    .to_error_location(string_table)
+                            );
+                        }
+
                         defer_separator_token =
                             parse_style_directive(token_stream, context, template, string_table)?;
                         saw_meaningful_head_item = true;
                     }
                 }
-            }
-
-            TokenKind::StyleTemplateHead => {
-                defer_separator_token =
-                    parse_style_directive(token_stream, context, template, string_table)?;
-                saw_meaningful_head_item = true;
             }
 
             TokenKind::Comma => {
@@ -708,7 +785,7 @@ fn handle_template_value_in_template_head(
         );
     }
 
-    if matches!(value.kind, TemplateType::Comment) {
+    if matches!(value.kind, TemplateType::Comment(_)) {
         return Ok(());
     }
 
@@ -766,6 +843,23 @@ fn push_template_head_expression(
         .content
         .add_with_origin(expr, TemplateSegmentOrigin::Head);
     Ok(())
+}
+
+fn prepend_inherited_child_templates(content: &mut TemplateContent, inherited_templates: &[Template]) {
+    if inherited_templates.is_empty() {
+        return;
+    }
+
+    let mut inherited_atoms = Vec::with_capacity(inherited_templates.len() + content.atoms.len());
+    for inherited in inherited_templates {
+        inherited_atoms.push(TemplateAtom::Content(TemplateSegment::new(
+            Expression::template(inherited.to_owned(), Ownership::ImmutableOwned),
+            TemplateSegmentOrigin::Head,
+        )));
+    }
+
+    inherited_atoms.extend(std::mem::take(&mut content.atoms));
+    content.atoms = inherited_atoms;
 }
 
 #[derive(Clone, Debug)]
@@ -1007,6 +1101,10 @@ fn fold_atoms(
             }
 
             ExpressionKind::Template(template) => {
+                if matches!(template.kind, TemplateType::Comment(_)) {
+                    continue;
+                }
+
                 if matches!(template.kind, TemplateType::SlotInsert(_))
                     || template.content.contains_slot_insertions()
                     || template.has_unresolved_slots()
@@ -1071,10 +1169,35 @@ fn parse_style_directive(
                 Ok(false)
             }
 
+            "children" => {
+                parse_children_style_directive(token_stream, context, template, string_table)?;
+                Ok(false)
+            }
+
             "ignore" => {
                 // `$ignore` wipes the inherited style state first, then later directives
                 // in the same head can layer fresh settings back on top.
                 template.style = Style::default();
+                Ok(false)
+            }
+
+            "note" => {
+                reject_directive_arguments(token_stream, "note", string_table)?;
+                template.kind = TemplateType::Comment(CommentDirectiveKind::Note);
+                template.style = Style::default();
+                Ok(false)
+            }
+
+            "todo" => {
+                reject_directive_arguments(token_stream, "todo", string_table)?;
+                template.kind = TemplateType::Comment(CommentDirectiveKind::Todo);
+                template.style = Style::default();
+                Ok(false)
+            }
+
+            "doc" => {
+                reject_directive_arguments(token_stream, "doc", string_table)?;
+                apply_doc_comment_defaults(template);
                 Ok(false)
             }
 
@@ -1093,36 +1216,154 @@ fn parse_style_directive(
             other => {
                 return_syntax_error!(
                     format!(
-                        "Unsupported style directive '${other}'. Supported directives are '$markdown', '$code', '$ignore', and '$['."
+                        "Unsupported style directive '${other}'. Supported directives are '$markdown', '$children(..)', '$code', '$ignore', '$slot', '$insert(..)', '$note', '$todo', '$doc', and '$formatter(...)'."
                     ),
                     token_stream
                         .current_location()
                         .to_error_location(string_table),
                     {
-                        PrimarySuggestion => "Use '$markdown', '$code', '$ignore', or '$[' inside the template head",
+                        PrimarySuggestion => "Use '$markdown', '$children(..)', '$code', '$ignore', '$slot', '$insert(..)', '$note', '$todo', '$doc', or '$formatter(...)' inside the template head",
                     }
                 )
             }
         },
 
-        TokenKind::StyleTemplateHead => {
-            // `$[` defines a default child template wrapper. Parse it using the same
-            // template parser as any other nested template, then store the result on
-            // the style instead of inserting it into this template's content.
-            let child_template = Template::new(
-                token_stream,
-                context,
-                template.style.child_templates.to_owned(),
-                string_table,
-            )?;
-            template.style.child_templates.push(child_template);
-            Ok(true)
-        }
-
         _ => {
             return_compiler_error!("Tried to parse a style directive while not positioned at one.")
         }
     }
+}
+
+fn apply_doc_comment_defaults(template: &mut Template) {
+    template.kind = TemplateType::Comment(CommentDirectiveKind::Doc);
+    template.style = Style::default();
+    // Doc comments are parsed as markdown content by default.
+    template.style.id = "markdown";
+    template.style.formatter = Some(markdown_formatter());
+    template.style.formatter_precedence = 0;
+}
+
+fn reject_directive_arguments(
+    token_stream: &FileTokens,
+    directive_name: &str,
+    string_table: &StringTable,
+) -> Result<(), CompilerError> {
+    if token_stream.peek_next_token() == Some(&TokenKind::OpenParenthesis) {
+        return_syntax_error!(
+            format!("'${directive_name}' does not accept arguments."),
+            token_stream
+                .current_location()
+                .to_error_location(string_table)
+        );
+    }
+
+    Ok(())
+}
+
+fn parse_children_style_directive(
+    token_stream: &mut FileTokens,
+    context: &ScopeContext,
+    template: &mut Template,
+    string_table: &mut StringTable,
+) -> Result<(), CompilerError> {
+    if token_stream.peek_next_token() != Some(&TokenKind::OpenParenthesis) {
+        return_syntax_error!(
+            "The '$children(..)' directive requires one argument: a template or string value.",
+            token_stream
+                .current_location()
+                .to_error_location(string_table),
+            {
+                PrimarySuggestion => "Use '$children([:prefix])' or '$children(\"prefix\")'",
+            }
+        );
+    }
+
+    // Move from '$children' to the first token inside '(' ... ')'
+    token_stream.advance();
+    token_stream.advance();
+
+    if token_stream.current_token_kind() == &TokenKind::CloseParenthesis {
+        return_syntax_error!(
+            "The '$children(..)' directive cannot be empty. Provide a template or string argument.",
+            token_stream
+                .current_location()
+                .to_error_location(string_table)
+        );
+    }
+
+    let argument_location = token_stream.current_location();
+    let argument = create_expression(
+        token_stream,
+        context,
+        &mut DataType::CoerceToString,
+        &Ownership::ImmutableOwned,
+        false,
+        string_table,
+    )?;
+
+    if token_stream.current_token_kind() != &TokenKind::CloseParenthesis {
+        return_syntax_error!(
+            "The '$children(..)' directive supports exactly one argument and must end with ')'.",
+            token_stream
+                .current_location()
+                .to_error_location(string_table),
+            {
+                PrimarySuggestion => "Use '$children(template_or_string)'",
+                SuggestedInsertion => ")",
+            }
+        );
+    }
+
+    if !argument.is_compile_time_constant() {
+        return_syntax_error!(
+            "The '$children(..)' directive only accepts compile-time values.",
+            argument_location.to_error_location(string_table),
+            {
+                PrimarySuggestion => "Use a template literal, string literal, or constant reference that folds at compile time",
+            }
+        );
+    }
+
+    let normalized = match argument.kind {
+        ExpressionKind::Template(child_template) => {
+            if matches!(
+                child_template.kind,
+                TemplateType::StringFunction
+                    | TemplateType::SlotDefinition(_)
+                    | TemplateType::SlotInsert(_)
+                    | TemplateType::Comment(_)
+            ) {
+                return_syntax_error!(
+                    "The '$children(..)' directive only accepts compile-time template/string values.",
+                    argument_location.to_error_location(string_table)
+                );
+            }
+
+            child_template.as_ref().to_owned()
+        }
+
+        ExpressionKind::StringSlice(value) => {
+            let mut wrapper = Template::create_default(vec![]);
+            wrapper.kind = TemplateType::String;
+            wrapper.location = argument_location.to_owned();
+            wrapper.content.add(Expression::string_slice(
+                value,
+                argument_location,
+                Ownership::ImmutableOwned,
+            ));
+            wrapper
+        }
+
+        _ => {
+            return_syntax_error!(
+                "The '$children(..)' directive only accepts template or string arguments.",
+                argument_location.to_error_location(string_table)
+            )
+        }
+    };
+
+    template.style.child_templates.push(normalized);
+    Ok(())
 }
 
 fn apply_body_formatter(

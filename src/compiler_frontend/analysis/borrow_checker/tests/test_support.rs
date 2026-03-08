@@ -100,6 +100,7 @@ pub(crate) fn build_ast(nodes: Vec<AstNode>, entry_path: InternedPath) -> Ast {
     Ast {
         nodes,
         module_constants: vec![],
+        doc_fragments: vec![],
         entry_path,
         external_exports: Vec::<ModuleExport>::new(),
         start_template_items: vec![],

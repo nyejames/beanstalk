@@ -91,6 +91,18 @@ pub enum StartFragment {
     RuntimeStringFn(FunctionId),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum HirDocFragmentKind {
+    Doc,
+}
+
+#[derive(Debug, Clone)]
+pub struct HirDocFragment {
+    pub kind: HirDocFragmentKind,
+    pub rendered_text: String,
+    pub location: TextLocation,
+}
+
 #[derive(Debug, Clone)]
 pub struct HirConstField {
     pub name: String,
@@ -134,6 +146,7 @@ pub struct HirModule {
     /// Ordered start-fragment stream consumed by project builders.
     pub start_fragments: Vec<StartFragment>,
     pub const_string_pool: Vec<String>,
+    pub doc_fragments: Vec<HirDocFragment>,
     pub module_constants: Vec<HirModuleConst>,
 
     /// Region tree
@@ -154,6 +167,7 @@ impl HirModule {
             start_function: FunctionId(0),
             start_fragments: vec![],
             const_string_pool: vec![],
+            doc_fragments: vec![],
             module_constants: vec![],
             regions: vec![],
             warnings: vec![],

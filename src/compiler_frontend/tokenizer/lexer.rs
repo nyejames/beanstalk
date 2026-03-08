@@ -4,7 +4,7 @@ use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::paths::parse_file_path;
 use crate::compiler_frontend::tokenizer::tokens::{
-    FileTokens, TextLocation, Token, TokenKind, TokenStream, TokenizeMode,
+    FileTokens, TemplateBodyMode, TextLocation, Token, TokenKind, TokenStream, TokenizeMode,
 };
 use crate::projects::settings;
 use crate::{return_syntax_error, token_log};
@@ -60,8 +60,27 @@ pub fn get_token_kind(
 
     let mut token_value: String = String::new();
 
+    // Template bodies are intentionally tokenized as "mostly raw text" so the body
+    // parser can treat everything between delimiters as string content unless a new
+    // nested template begins or the current template closes.
+    if stream.mode == TokenizeMode::TemplateBody {
+        match stream.current_template_body_mode() {
+            TemplateBodyMode::CodeBalanced => {
+                return tokenize_code_template_body(current_char, stream, string_table);
+            }
+            TemplateBodyMode::DiscardBalanced => {
+                return tokenize_discard_template_body(current_char, stream);
+            }
+            TemplateBodyMode::DocBalanced | TemplateBodyMode::Normal => {
+                if current_char != ']' && current_char != '[' {
+                    return tokenize_template_body(current_char, stream, string_table);
+                }
+            }
+        }
+    }
+
     // Check for raw strings (backticks)
-    // Also used in scenes for raw outputs
+    // Also used in templates for raw outputs
     if current_char == '`' {
         while let Some(ch) = stream.next() {
             if ch == '`' {
@@ -83,17 +102,6 @@ pub fn get_token_kind(
                 SuggestedLocation => "at end of raw string",
             }
         )
-    }
-
-    // Template bodies are intentionally tokenized as "mostly raw text" so the body
-    // parser can treat everything between delimiters as string content unless a new
-    // nested template begins or the current template closes.
-    if stream.in_code_template_body() {
-        return tokenize_code_template_body(current_char, stream, string_table);
-    }
-
-    if stream.mode == TokenizeMode::TemplateBody && current_char != ']' && current_char != '[' {
-        return tokenize_template_body(current_char, stream, string_table);
     }
 
     // Whitespace
@@ -144,27 +152,10 @@ pub fn get_token_kind(
     stream.update_start_position();
 
     if current_char == '[' {
-        match stream.mode {
-            TokenizeMode::TemplateHead => {
-                return_syntax_error!(
-                    "Cannot have nested templates inside of a template head, must be inside the template body. \
-                    Use a colon to start the template body.",
-                    stream.new_location().to_error_location(string_table),
-                    {
-                        CompilationStage => "Tokenization",
-                        PrimarySuggestion => "Add ':' after the template head to start the template body",
-                        SuggestedInsertion => ":",
-                    }
-                )
-            }
-
-            _ => {
-                // Start a fresh nested template and remember that we are now parsing
-                // that nested template's head.
-                stream.push_template_mode(TokenizeMode::TemplateHead);
-                return_token!(TokenKind::TemplateHead, stream);
-            }
-        };
+        // Start a fresh nested template and remember that we are now parsing
+        // that nested template's head.
+        stream.push_template_mode(TokenizeMode::TemplateHead);
+        return_token!(TokenKind::TemplateHead, stream);
     }
 
     if current_char == ']' {
@@ -206,22 +197,13 @@ pub fn get_token_kind(
             )
         }
 
-        if stream.peek() == Some(&'[') {
-            stream.next();
-            // `$[` is a style-level child template declaration. It still opens a real
-            // nested template head, but the AST needs a distinct token kind so it can
-            // attach the parsed child template to `style.child_templates`.
-            stream.push_template_mode(TokenizeMode::TemplateHead);
-            return_token!(TokenKind::StyleTemplateHead, stream);
-        }
-
         let Some(&first_char) = stream.peek() else {
             return_syntax_error!(
                 "Expected a style directive name after '$'.",
                 stream.new_location().to_error_location(string_table),
                 {
                     CompilationStage => "Tokenization",
-                    PrimarySuggestion => "Use '$markdown', '$ignore', '$slot', '$insert', '$code', or '$children' inside the template head",
+                    PrimarySuggestion => "Use '$markdown', '$children(..)', '$ignore', '$slot', '$insert(..)', '$note', '$todo', '$doc', '$code', or '$formatter(...)' inside the template head",
                 }
             )
         };
@@ -248,8 +230,13 @@ pub fn get_token_kind(
         }
 
         let directive = string_table.intern(&token_value);
-        if token_value == "code" {
-            stream.mark_current_template_as_codeblock();
+        match token_value.as_str() {
+            "code" => stream.mark_current_template_body_mode(TemplateBodyMode::CodeBalanced),
+            "note" | "todo" => {
+                stream.mark_current_template_body_mode(TemplateBodyMode::DiscardBalanced)
+            }
+            "doc" => stream.mark_current_template_body_mode(TemplateBodyMode::DocBalanced),
+            _ => {}
         }
         // The parser validates which directives are currently supported. The lexer
         // only has to preserve the directive identifier as a distinct token.
@@ -820,8 +807,8 @@ fn tokenize_code_template_body(
 ) -> Result<Token, CompilerError> {
     // `$code` template bodies treat square brackets as literal code characters.
     // The template only closes when the running bracket counts become balanced.
-    if current_char == ']' && stream.code_template_next_close_balances_brackets() {
-        stream.code_template_register_close_square_bracket();
+    if current_char == ']' && stream.template_body_next_close_balances_brackets() {
+        stream.register_template_body_close_square_bracket();
         stream.pop_template_mode();
         return_token!(TokenKind::TemplateClose, stream);
     }
@@ -830,7 +817,7 @@ fn tokenize_code_template_body(
     append_code_template_body_char(current_char, &mut token_value, stream);
 
     while let Some(&ch) = stream.peek() {
-        if ch == ']' && stream.code_template_next_close_balances_brackets() {
+        if ch == ']' && stream.template_body_next_close_balances_brackets() {
             break;
         }
 
@@ -853,12 +840,54 @@ fn append_code_template_body_char(
     stream: &mut TokenStream<'_>,
 ) {
     match ch {
-        '[' => stream.code_template_register_open_square_bracket(),
-        ']' => stream.code_template_register_close_square_bracket(),
+        '[' => stream.register_template_body_open_square_bracket(),
+        ']' => stream.register_template_body_close_square_bracket(),
         _ => {}
     }
 
     token_value.push(ch);
+}
+
+fn tokenize_discard_template_body(
+    current_char: char,
+    stream: &mut TokenStream<'_>,
+) -> Result<Token, CompilerError> {
+    match current_char {
+        '[' => stream.register_template_body_open_square_bracket(),
+        ']' => {
+            if stream.template_body_next_close_balances_brackets() {
+                stream.register_template_body_close_square_bracket();
+                stream.pop_template_mode();
+                return_token!(TokenKind::TemplateClose, stream);
+            }
+            stream.register_template_body_close_square_bracket();
+        }
+        _ => {}
+    }
+
+    while let Some(&ch) = stream.peek() {
+        match ch {
+            '[' => {
+                stream.next();
+                stream.register_template_body_open_square_bracket();
+            }
+            ']' => {
+                if stream.template_body_next_close_balances_brackets() {
+                    stream.next();
+                    stream.register_template_body_close_square_bracket();
+                    stream.pop_template_mode();
+                    return_token!(TokenKind::TemplateClose, stream);
+                }
+                stream.next();
+                stream.register_template_body_close_square_bracket();
+            }
+            _ => {
+                stream.next();
+            }
+        }
+    }
+
+    return_token!(TokenKind::Eof, stream)
 }
 
 #[cfg(test)]

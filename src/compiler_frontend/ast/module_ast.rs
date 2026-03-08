@@ -7,7 +7,9 @@ use crate::compiler_frontend::ast::import_bindings::{
 use crate::compiler_frontend::ast::statements::functions::{FunctionReturn, FunctionSignature};
 use crate::compiler_frontend::ast::statements::structs::create_struct_definition;
 use crate::compiler_frontend::ast::templates::create_template_node::Template;
-use crate::compiler_frontend::ast::templates::top_level_templates::synthesize_start_template_items;
+use crate::compiler_frontend::ast::templates::top_level_templates::{
+    collect_and_strip_comment_templates, synthesize_start_template_items,
+};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
@@ -22,7 +24,9 @@ use crate::projects::settings::{self, IMPLICIT_START_FUNC_NAME};
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-pub use crate::compiler_frontend::ast::templates::top_level_templates::AstStartTemplateItem;
+pub use crate::compiler_frontend::ast::templates::top_level_templates::{
+    AstDocFragment, AstDocFragmentKind, AstStartTemplateItem,
+};
 
 static CONTROL_FLOW_SCOPE_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
@@ -35,6 +39,7 @@ pub struct ModuleExport {
 pub struct Ast {
     pub nodes: Vec<AstNode>,
     pub module_constants: Vec<Declaration>,
+    pub doc_fragments: Vec<AstDocFragment>,
 
     // The path to the original entry point file
     pub entry_path: InternedPath,
@@ -474,6 +479,13 @@ impl Ast {
             if header.exported {}
         }
 
+        let doc_fragments = collect_and_strip_comment_templates(&mut ast, string_table).map_err(
+            |error| CompilerMessages {
+                errors: vec![error],
+                warnings: warnings.clone(),
+            },
+        )?;
+
         let start_template_items = synthesize_start_template_items(
             &mut ast,
             &entry_dir,
@@ -489,6 +501,7 @@ impl Ast {
         Ok(Ast {
             nodes: ast,
             module_constants,
+            doc_fragments,
             entry_path: entry_dir,
             external_exports,
             start_template_items,

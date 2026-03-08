@@ -10,8 +10,8 @@ use crate::compiler_frontend::hir::hir_datatypes::{HirTypeKind, TypeId};
 use crate::compiler_frontend::hir::hir_display::HirLocation;
 use crate::compiler_frontend::hir::hir_nodes::{
     BlockId, FieldId, FunctionId, HirConstValue, HirExpression, HirExpressionKind, HirMatchArm,
-    HirModule, HirPattern, HirPlace, HirStatement, HirStatementKind, HirTerminator, LocalId,
-    RegionId, StartFragment, StructId, ValueKind,
+    HirDocFragmentKind, HirModule, HirPattern, HirPlace, HirStatement, HirStatementKind,
+    HirTerminator, LocalId, RegionId, StartFragment, StructId, ValueKind,
 };
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::TextLocation;
@@ -66,6 +66,7 @@ impl<'a> HirValidator<'a> {
         self.validate_region_graph()?;
         self.validate_start_function()?;
         self.validate_start_fragments()?;
+        self.validate_doc_fragments()?;
         self.validate_module_constants()?;
         self.validate_functions()?;
         self.validate_function_cfg_ownership()?;
@@ -220,6 +221,40 @@ impl<'a> HirValidator<'a> {
                         ));
                     }
                 }
+            }
+        }
+
+        Ok(())
+    }
+
+    fn validate_doc_fragments(&self) -> Result<(), CompilerError> {
+        for (index, fragment) in self.module.doc_fragments.iter().enumerate() {
+            if matches!(fragment.kind, HirDocFragmentKind::Doc)
+                && fragment
+                    .location
+                    .start_pos
+                    .line_number
+                    .gt(&fragment.location.end_pos.line_number)
+            {
+                return Err(self.error_with_hir(
+                    format!(
+                        "Doc fragment #{index} has invalid location: start line {} is after end line {}",
+                        fragment.location.start_pos.line_number, fragment.location.end_pos.line_number
+                    ),
+                    None,
+                ));
+            }
+
+            if fragment.location.start_pos.line_number == fragment.location.end_pos.line_number
+                && fragment.location.start_pos.char_column > fragment.location.end_pos.char_column
+            {
+                return Err(self.error_with_hir(
+                    format!(
+                        "Doc fragment #{index} has invalid location columns: start {} is after end {}",
+                        fragment.location.start_pos.char_column, fragment.location.end_pos.char_column
+                    ),
+                    None,
+                ));
             }
         }
 

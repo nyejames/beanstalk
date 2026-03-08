@@ -16,6 +16,7 @@
 //! Those occur in later compilation phases.
 
 use crate::compiler_frontend::ast::ast::Ast;
+use crate::compiler_frontend::ast::ast::AstDocFragmentKind;
 use crate::compiler_frontend::ast::ast::AstStartTemplateItem;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, TextLocation};
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
@@ -181,6 +182,13 @@ impl<'a> HirBuilder<'a> {
             });
         }
 
+        if let Err(error) = self.resolve_doc_fragments(&ast) {
+            return Err(CompilerMessages {
+                errors: vec![error],
+                warnings: self.module.warnings.clone(),
+            });
+        }
+
         for node in &ast.nodes {
             if let Err(error) = self.process_ast_node(node) {
                 return Err(CompilerMessages {
@@ -226,6 +234,24 @@ impl<'a> HirBuilder<'a> {
                         .push(StartFragment::RuntimeStringFn(function_id));
                 }
             }
+        }
+
+        Ok(())
+    }
+
+    fn resolve_doc_fragments(&mut self, ast: &Ast) -> Result<(), CompilerError> {
+        self.module.doc_fragments.clear();
+
+        for fragment in &ast.doc_fragments {
+            let kind = match fragment.kind {
+                AstDocFragmentKind::Doc => HirDocFragmentKind::Doc,
+            };
+
+            self.module.doc_fragments.push(HirDocFragment {
+                kind,
+                rendered_text: self.string_table.resolve(fragment.value).to_owned(),
+                location: fragment.location.to_owned(),
+            });
         }
 
         Ok(())

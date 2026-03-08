@@ -20,6 +20,23 @@ impl SlotKey {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+pub enum CommentDirectiveKind {
+    Note,
+    Todo,
+    Doc,
+}
+
+impl CommentDirectiveKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            CommentDirectiveKind::Note => "note",
+            CommentDirectiveKind::Todo => "todo",
+            CommentDirectiveKind::Doc => "doc",
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub enum TemplateType {
     StringFunction,
     // Fully compile-time-resolved template content. This can still contain unresolved
@@ -31,7 +48,7 @@ pub enum TemplateType {
     // `[$insert("name"): ...]` helpers carry contribution content that only an
     // immediate parent template can consume during slot composition.
     SlotInsert(SlotKey),
-    Comment,
+    Comment(CommentDirectiveKind),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
