@@ -16,6 +16,7 @@ use crate::compiler_frontend::hir::hir_nodes::{
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::TextLocation;
 use rustc_hash::{FxHashMap, FxHashSet};
+use std::collections::VecDeque;
 
 pub(crate) fn validate_hir_module(
     module: &HirModule,
@@ -30,6 +31,8 @@ struct HirValidator<'a> {
     string_table: &'a StringTable,
 
     block_ids: FxHashSet<BlockId>,
+    block_index_by_id: FxHashMap<BlockId, usize>,
+    block_owner_by_id: FxHashMap<BlockId, FunctionId>,
     function_ids: FxHashSet<FunctionId>,
     struct_ids: FxHashSet<StructId>,
     field_ids: FxHashSet<FieldId>,
@@ -46,6 +49,8 @@ impl<'a> HirValidator<'a> {
             module,
             string_table,
             block_ids: FxHashSet::default(),
+            block_index_by_id: FxHashMap::default(),
+            block_owner_by_id: FxHashMap::default(),
             function_ids: FxHashSet::default(),
             struct_ids: FxHashSet::default(),
             field_ids: FxHashSet::default(),
@@ -58,10 +63,12 @@ impl<'a> HirValidator<'a> {
 
     fn validate(&mut self) -> Result<(), CompilerError> {
         self.collect_definition_ids()?;
+        self.validate_region_graph()?;
         self.validate_start_function()?;
         self.validate_start_fragments()?;
         self.validate_module_constants()?;
         self.validate_functions()?;
+        self.validate_function_cfg_ownership()?;
         self.validate_blocks()?;
         Ok(())
     }
@@ -81,6 +88,8 @@ impl<'a> HirValidator<'a> {
                     Some(HirLocation::Block(block.id)),
                 ));
             }
+            self.block_index_by_id
+                .insert(block.id, self.block_index_by_id.len());
 
             for local in &block.locals {
                 if self.local_types.insert(local.id, local.ty).is_some() {
@@ -119,6 +128,51 @@ impl<'a> HirValidator<'a> {
                     format!("Duplicate HIR function id {:?}", function.id),
                     Some(HirLocation::Function(function.id)),
                 ));
+            }
+        }
+
+        Ok(())
+    }
+
+    fn validate_region_graph(&self) -> Result<(), CompilerError> {
+        let parent_by_region = self
+            .module
+            .regions
+            .iter()
+            .map(|region| (region.id(), region.parent()))
+            .collect::<FxHashMap<_, _>>();
+
+        for region in &self.module.regions {
+            if let Some(parent) = region.parent()
+                && !self.region_ids.contains(&parent)
+            {
+                return Err(self.error_with_hir(
+                    format!(
+                        "Region {} references missing parent region {}",
+                        region.id().0,
+                        parent.0
+                    ),
+                    None,
+                ));
+            }
+        }
+
+        for region in &self.module.regions {
+            let mut chain = FxHashSet::default();
+            let mut current = Some(region.id());
+
+            while let Some(region_id) = current {
+                if !chain.insert(region_id) {
+                    return Err(self.error_with_hir(
+                        format!(
+                            "Region parent graph contains a cycle at region {}",
+                            region_id.0
+                        ),
+                        None,
+                    ));
+                }
+
+                current = parent_by_region.get(&region_id).copied().flatten();
             }
         }
 
@@ -231,6 +285,57 @@ impl<'a> HirValidator<'a> {
                 Some(HirLocation::Function(function.id)),
             )?;
 
+            let expected_slots =
+                self.expected_return_alias_slots(function.return_type, function.id)?;
+            if function.return_aliases.len() != expected_slots {
+                return Err(self.error_with_hir(
+                    format!(
+                        "Function {:?} return_aliases has {} slot(s), expected {} from return type",
+                        function.id,
+                        function.return_aliases.len(),
+                        expected_slots
+                    ),
+                    Some(HirLocation::Function(function.id)),
+                ));
+            }
+
+            for (slot_index, alias_candidates) in function.return_aliases.iter().enumerate() {
+                let Some(alias_candidates) = alias_candidates.as_ref() else {
+                    continue;
+                };
+                if alias_candidates.is_empty() {
+                    return Err(self.error_with_hir(
+                        format!(
+                            "Function {:?} return_aliases slot {} uses an empty alias list",
+                            function.id, slot_index
+                        ),
+                        Some(HirLocation::Function(function.id)),
+                    ));
+                }
+
+                let mut seen = FxHashSet::default();
+                for param_index in alias_candidates {
+                    if *param_index >= function.params.len() {
+                        return Err(self.error_with_hir(
+                            format!(
+                                "Function {:?} return_aliases slot {} contains out-of-range parameter index {}",
+                                function.id, slot_index, param_index
+                            ),
+                            Some(HirLocation::Function(function.id)),
+                        ));
+                    }
+                    if !seen.insert(*param_index) {
+                        return Err(self.error_with_hir(
+                            format!(
+                                "Function {:?} return_aliases slot {} contains duplicate parameter index {}",
+                                function.id, slot_index, param_index
+                            ),
+                            Some(HirLocation::Function(function.id)),
+                        ));
+                    }
+                }
+            }
+
             for local in &function.params {
                 self.require_local_id(*local, Some(HirLocation::Function(function.id)))?;
             }
@@ -239,8 +344,84 @@ impl<'a> HirValidator<'a> {
         Ok(())
     }
 
+    fn expected_return_alias_slots(
+        &self,
+        return_type: TypeId,
+        function_id: FunctionId,
+    ) -> Result<usize, CompilerError> {
+        self.require_type_id(return_type, Some(HirLocation::Function(function_id)))?;
+        Ok(match &self.module.type_context.get(return_type).kind {
+            HirTypeKind::Unit => 0,
+            HirTypeKind::Tuple { fields } => fields.len(),
+            _ => 1,
+        })
+    }
+
+    fn validate_function_cfg_ownership(&mut self) -> Result<(), CompilerError> {
+        self.block_owner_by_id.clear();
+
+        for function in &self.module.functions {
+            let mut queue = VecDeque::new();
+            let mut visited = FxHashSet::default();
+            queue.push_back(function.entry);
+
+            while let Some(block_id) = queue.pop_front() {
+                if !visited.insert(block_id) {
+                    continue;
+                }
+
+                self.require_block_id(block_id, Some(HirLocation::Function(function.id)))?;
+
+                if let Some(existing_owner) = self.block_owner_by_id.get(&block_id).copied() {
+                    if existing_owner != function.id {
+                        return Err(self.error_with_hir(
+                            format!(
+                                "Block {} is reachable from multiple functions ({:?} and {:?})",
+                                block_id, existing_owner, function.id
+                            ),
+                            Some(HirLocation::Block(block_id)),
+                        ));
+                    }
+                } else {
+                    self.block_owner_by_id.insert(block_id, function.id);
+                }
+
+                let block = self.block_by_id(block_id)?;
+                for successor in terminator_targets(&block.terminator) {
+                    queue.push_back(successor);
+                }
+            }
+        }
+
+        for block in &self.module.blocks {
+            if self.block_owner_by_id.contains_key(&block.id) {
+                continue;
+            }
+
+            return Err(self.error_with_hir(
+                format!(
+                    "Block {} is not reachable from any function entry and has no CFG owner",
+                    block.id
+                ),
+                Some(HirLocation::Block(block.id)),
+            ));
+        }
+
+        Ok(())
+    }
+
     fn validate_blocks(&self) -> Result<(), CompilerError> {
         for block in &self.module.blocks {
+            if matches!(block.terminator, HirTerminator::Panic { message: None }) {
+                return Err(self.error_with_hir(
+                    format!(
+                        "Block {} still has placeholder terminator Panic(None) after HIR lowering",
+                        block.id
+                    ),
+                    Some(HirLocation::Block(block.id)),
+                ));
+            }
+
             self.require_region_id(block.region, Some(HirLocation::Block(block.id)))?;
 
             for local in &block.locals {
@@ -296,18 +477,6 @@ impl<'a> HirValidator<'a> {
     }
 
     fn validate_terminator_mapping(&self, block_id: BlockId) -> Result<(), CompilerError> {
-        // TODO: Require side-table mappings for placeholder terminators once lowering no longer
-        // emits `Panic { message: None }` as an intermediate sentinel.
-        if self
-            .module
-            .blocks
-            .iter()
-            .find(|block| block.id == block_id)
-            .is_some_and(|block| matches!(block.terminator, HirTerminator::Panic { message: None }))
-        {
-            return Ok(());
-        }
-
         let terminator_location = HirLocation::Terminator(block_id);
         if self
             .module
@@ -382,6 +551,7 @@ impl<'a> HirValidator<'a> {
         match terminator {
             HirTerminator::Jump { target, args } => {
                 self.require_block_id(*target, anchor)?;
+                self.require_same_function_cfg_owner(block_id, *target, anchor)?;
                 for local in args {
                     self.require_local_id(*local, anchor)?;
                 }
@@ -394,23 +564,28 @@ impl<'a> HirValidator<'a> {
             } => {
                 self.validate_expression(condition, anchor)?;
                 self.require_block_id(*then_block, anchor)?;
+                self.require_same_function_cfg_owner(block_id, *then_block, anchor)?;
                 self.require_block_id(*else_block, anchor)?;
+                self.require_same_function_cfg_owner(block_id, *else_block, anchor)?;
             }
 
             HirTerminator::Match { scrutinee, arms } => {
                 self.validate_expression(scrutinee, anchor)?;
                 for arm in arms {
-                    self.validate_match_arm(arm, anchor)?;
+                    self.validate_match_arm(block_id, arm, anchor)?;
                 }
             }
 
             HirTerminator::Loop { body, break_target } => {
                 self.require_block_id(*body, anchor)?;
+                self.require_same_function_cfg_owner(block_id, *body, anchor)?;
                 self.require_block_id(*break_target, anchor)?;
+                self.require_same_function_cfg_owner(block_id, *break_target, anchor)?;
             }
 
             HirTerminator::Break { target } | HirTerminator::Continue { target } => {
                 self.require_block_id(*target, anchor)?;
+                self.require_same_function_cfg_owner(block_id, *target, anchor)?;
             }
 
             HirTerminator::Return(value) => {
@@ -418,6 +593,12 @@ impl<'a> HirValidator<'a> {
             }
 
             HirTerminator::Panic { message } => {
+                if message.is_none() {
+                    return Err(self.error_with_hir(
+                        "Placeholder Panic(None) terminators are not allowed in validated HIR",
+                        anchor,
+                    ));
+                }
                 if let Some(message) = message {
                     self.validate_expression(message, anchor)?;
                 }
@@ -429,6 +610,7 @@ impl<'a> HirValidator<'a> {
 
     fn validate_match_arm(
         &self,
+        source_block_id: BlockId,
         arm: &HirMatchArm,
         anchor: Option<HirLocation>,
     ) -> Result<(), CompilerError> {
@@ -439,6 +621,7 @@ impl<'a> HirValidator<'a> {
         }
 
         self.require_block_id(arm.body, anchor)?;
+        self.require_same_function_cfg_owner(source_block_id, arm.body, anchor)?;
         Ok(())
     }
 
@@ -762,6 +945,52 @@ impl<'a> HirValidator<'a> {
         Err(self.error_with_hir(format!("Unknown HIR type id {:?}", type_id), anchor))
     }
 
+    fn require_same_function_cfg_owner(
+        &self,
+        source_block: BlockId,
+        target_block: BlockId,
+        anchor: Option<HirLocation>,
+    ) -> Result<(), CompilerError> {
+        let Some(source_owner) = self.block_owner_by_id.get(&source_block).copied() else {
+            return Err(self.error_with_hir(
+                format!("Block {} has no function CFG owner", source_block),
+                anchor,
+            ));
+        };
+        let Some(target_owner) = self.block_owner_by_id.get(&target_block).copied() else {
+            return Err(self.error_with_hir(
+                format!("Block {} has no function CFG owner", target_block),
+                anchor,
+            ));
+        };
+
+        if source_owner == target_owner {
+            return Ok(());
+        }
+
+        Err(self.error_with_hir(
+            format!(
+                "CFG edge from block {} to block {} crosses function boundary ({:?} -> {:?})",
+                source_block, target_block, source_owner, target_owner
+            ),
+            anchor,
+        ))
+    }
+
+    fn block_by_id(
+        &self,
+        block_id: BlockId,
+    ) -> Result<&crate::compiler_frontend::hir::hir_nodes::HirBlock, CompilerError> {
+        let Some(index) = self.block_index_by_id.get(&block_id).copied() else {
+            return Err(self.error_with_hir(
+                format!("Unknown HIR block id {:?}", block_id),
+                Some(HirLocation::Block(block_id)),
+            ));
+        };
+
+        Ok(&self.module.blocks[index])
+    }
+
     fn require_field_owned_by(
         &self,
         field_id: FieldId,
@@ -821,5 +1050,20 @@ impl<'a> HirValidator<'a> {
             .hir_source_location_for_hir(location)
             .or_else(|| self.module.side_table.ast_location_for_hir(location))
             .map(|location| location.to_error_location(self.string_table))
+    }
+}
+
+fn terminator_targets(terminator: &HirTerminator) -> Vec<BlockId> {
+    match terminator {
+        HirTerminator::Jump { target, .. } => vec![*target],
+        HirTerminator::If {
+            then_block,
+            else_block,
+            ..
+        } => vec![*then_block, *else_block],
+        HirTerminator::Match { arms, .. } => arms.iter().map(|arm| arm.body).collect(),
+        HirTerminator::Loop { body, break_target } => vec![*body, *break_target],
+        HirTerminator::Break { target } | HirTerminator::Continue { target } => vec![*target],
+        HirTerminator::Return(_) | HirTerminator::Panic { .. } => Vec::new(),
     }
 }

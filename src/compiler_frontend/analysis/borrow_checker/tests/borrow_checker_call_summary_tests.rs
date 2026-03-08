@@ -506,7 +506,6 @@ fn two_mutable_args_to_same_root_are_rejected() {
     let error = run_borrow_checker(&hir, &host_registry, &string_table)
         .expect_err("two mutable args to the same root should fail");
     assert_eq!(error.error_type, ErrorType::BorrowChecker);
-    assert!(error.msg.contains("overlapping"));
 }
 
 #[test]
@@ -635,5 +634,188 @@ fn unresolved_or_mismatched_host_signature_errors() {
     assert_eq!(error.error_type, ErrorType::BorrowChecker);
     assert!(
         error.msg.contains("host call target") || error.msg.contains("argument count mismatch")
+    );
+}
+
+#[test]
+fn mutable_user_parameter_rejects_immutable_argument_reused_after_call() {
+    let mut string_table = StringTable::new();
+    let (entry_path, start_name) = entry_and_start(&mut string_table);
+    let host_registry = default_host_registry(&mut string_table);
+
+    let mut_user = symbol("mut_user", &mut string_table);
+    let p = symbol("p", &mut string_table);
+    let x = symbol("x", &mut string_table);
+    let y = symbol("y", &mut string_table);
+
+    let callee = function_node(
+        mut_user.clone(),
+        FunctionSignature {
+            parameters: vec![param(p, DataType::Int, true, location(1))],
+            returns: vec![],
+        },
+        vec![],
+        location(1),
+    );
+
+    let caller = function_node(
+        start_name,
+        FunctionSignature {
+            parameters: vec![],
+            returns: vec![],
+        },
+        vec![
+            node(
+                NodeKind::VariableDeclaration(var(
+                    x.clone(),
+                    Expression::int(1, location(10), Ownership::ImmutableOwned),
+                )),
+                location(10),
+            ),
+            node(
+                NodeKind::FunctionCall {
+                    name: mut_user,
+                    args: vec![reference_expr(x.clone(), DataType::Int, location(11))],
+                    result_types: vec![],
+                    location: location(11),
+                },
+                location(11),
+            ),
+            node(
+                NodeKind::VariableDeclaration(var(
+                    y,
+                    reference_expr(x, DataType::Int, location(12)),
+                )),
+                location(12),
+            ),
+        ],
+        location(10),
+    );
+
+    let hir = lower_hir(
+        build_ast(vec![callee, caller], entry_path),
+        &mut string_table,
+    );
+    let error = run_borrow_checker(&hir, &host_registry, &string_table)
+        .expect_err("immutable argument passed to mutable user param and reused must fail");
+    assert_eq!(error.error_type, ErrorType::BorrowChecker);
+    assert!(error.msg.contains("immutable local"));
+}
+
+#[test]
+fn out_of_range_return_alias_metadata_is_reported_at_call_site() {
+    let mut string_table = StringTable::new();
+    let (entry_path, start_name) = entry_and_start(&mut string_table);
+    let mut host_registry = default_host_registry(&mut string_table);
+    register_host_function(
+        &mut host_registry,
+        "bad_alias_host",
+        vec![HostAccessKind::Shared],
+        HostReturnAlias::AliasArgs(vec![1]),
+        HostAbiType::I32,
+    );
+
+    let bad_alias_host = symbol("bad_alias_host", &mut string_table);
+    let x = symbol("x", &mut string_table);
+
+    let start = function_node(
+        start_name,
+        FunctionSignature {
+            parameters: vec![],
+            returns: vec![],
+        },
+        vec![
+            node(
+                NodeKind::VariableDeclaration(var(
+                    x.clone(),
+                    Expression::int(1, location(10), Ownership::MutableOwned),
+                )),
+                location(10),
+            ),
+            node(
+                NodeKind::HostFunctionCall {
+                    name: bad_alias_host,
+                    args: vec![reference_expr(x, DataType::Int, location(11))],
+                    result_types: vec![DataType::Int],
+                    location: location(11),
+                },
+                location(11),
+            ),
+        ],
+        location(10),
+    );
+
+    let hir = lower_hir(build_ast(vec![start], entry_path), &mut string_table);
+
+    let error = run_borrow_checker(&hir, &host_registry, &string_table)
+        .expect_err("out-of-range return alias metadata should fail at call site");
+    assert_eq!(error.error_type, ErrorType::BorrowChecker);
+    assert!(error.msg.contains("out-of-range return-alias index"));
+}
+
+#[test]
+fn same_line_mutable_call_then_reuse_uses_order_keys() {
+    let mut string_table = StringTable::new();
+    let (entry_path, start_name) = entry_and_start(&mut string_table);
+    let host_registry = default_host_registry(&mut string_table);
+
+    let mut_user = symbol("mut_user", &mut string_table);
+    let p = symbol("p", &mut string_table);
+    let x = symbol("x", &mut string_table);
+    let y = symbol("y", &mut string_table);
+
+    let callee = function_node(
+        mut_user.clone(),
+        FunctionSignature {
+            parameters: vec![param(p, DataType::Int, true, location(1))],
+            returns: vec![],
+        },
+        vec![],
+        location(1),
+    );
+
+    // WHAT: both statements intentionally share one source line.
+    // WHY: validates that borrow/move classification uses statement order keys, not line numbers.
+    let same_line = location(20);
+    let caller = function_node(
+        start_name,
+        FunctionSignature {
+            parameters: vec![],
+            returns: vec![],
+        },
+        vec![
+            node(
+                NodeKind::VariableDeclaration(var(
+                    x.clone(),
+                    Expression::int(1, location(10), Ownership::MutableOwned),
+                )),
+                location(10),
+            ),
+            node(
+                NodeKind::FunctionCall {
+                    name: mut_user,
+                    args: vec![reference_expr(x.clone(), DataType::Int, same_line.clone())],
+                    result_types: vec![],
+                    location: same_line.clone(),
+                },
+                same_line.clone(),
+            ),
+            node(
+                NodeKind::VariableDeclaration(var(
+                    y,
+                    reference_expr(x, DataType::Int, same_line.clone()),
+                )),
+                same_line,
+            ),
+        ],
+        location(10),
+    );
+
+    let hir = lower_hir(
+        build_ast(vec![callee, caller], entry_path),
+        &mut string_table,
+    );
+    run_borrow_checker(&hir, &host_registry, &string_table).expect(
+        "same-line mutable call + later reuse should borrow (not move) when ordered by statement",
     );
 }

@@ -96,6 +96,10 @@ Good places to add comments:
 - TODOs for unimplemented features or guards for unimplemented features
 - Comments referencing an unusual or unclear bit of code and why it is written the way it is. Particularly when something has been changed to fix a subtle bug.
 
+**Comment Quality Gate**
+- New or changed complex logic includes concise WHAT/WHY comments on functions, structs, methods or critical control-flow joins.
+- Comments explain behavior and rationale (invariants, dataflow direction, failure conditions), not just syntax.
+
 ### Returning Errors
 The error system is built around three core types:
 - **`CompilerError`**: The unified error type with owned data and structured metadata
