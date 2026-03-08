@@ -2,7 +2,7 @@
 -- FOR NOW THIS IS DISABLED FOR TESTING
 import @libs/html/{format}
 import @styles/docs/{navbar, footer, title, page, palette}
-[page, $markdown:
+#[page, $markdown:
 
 [navbar]
 [format.center:
@@ -204,7 +204,7 @@ The "and / or" keywords are used for logical and / or and 'not' is used to inver
     [: `-`]        [: Subtraction]          [: 2]
 ]
 
-]--page
+]-- end of page
 
 [footer]
 

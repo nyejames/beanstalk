@@ -221,7 +221,7 @@ pub fn get_token_kind(
                 stream.new_location().to_error_location(string_table),
                 {
                     CompilationStage => "Tokenization",
-                    PrimarySuggestion => "Use '$markdown', '$ignore', '$slot', '$insert', '$code', or '$[' inside the template head",
+                    PrimarySuggestion => "Use '$markdown', '$ignore', '$slot', '$insert', '$code', or '$children' inside the template head",
                 }
             )
         };

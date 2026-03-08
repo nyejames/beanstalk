@@ -139,22 +139,26 @@ A template’s style is defined in the **template head** using `$` directives.
 ```beanstalk
 -- Define a template style
 [
-  $formatter(markdown, 10),                     -- optional formatter precedence second argument
-  $ignore,                                      -- Ignores all inherited style settings
-  $[: All children start with this prefix! ]    -- Applies to all children
+  $markdown,                        
+  $children([: All children start with this prefix! ])    -- Applies to all children
 :
   # Hello
   This template is parsed as markdown.
+
+  [$todo: write some more info!]
+
+  [: This child is prefixed!]
 ]
 ```
 
-Shorthand formatter sugar will be supported for built-in formatters:
+**Built-in Style Directives**
 
-```beanstalk
-[$markdown:
-  Hello (markdown formatted)
-]
-```
+- $slot / $insert(..) - See slots below!
+- $ignore             - Ignores all inherited styles
+- $markdown           - Parses the template bodies with a custom flavour of Markdown
+- $note / $todo       - Comments (ignored by final output)
+- $doc                - Turns the template into a documentation comment
+- $children(..)       - Accepts a template (or string slice) that will be applied to all templates inside this one
 
 ### Template Slots
 

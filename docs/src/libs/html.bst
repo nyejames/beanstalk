@@ -35,6 +35,8 @@ Format = |
 
 # format = Format()
 
+# link = [:<a href="[$slot("href")]">[$slot]</a>]
+
 -- A css reset and some classes for the built-in code formatter
 -- This is inspired by Pico.css, but is an even more minimal reset.
 -- Actual style systems are intended to be built on top of this easily.
