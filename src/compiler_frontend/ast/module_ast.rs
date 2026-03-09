@@ -1,3 +1,4 @@
+use crate::compiler_frontend::FrontendBuildProfile;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::function_body_to_ast::function_body_to_ast;
@@ -22,6 +23,8 @@ use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::projects::settings::{self, IMPLICIT_START_FUNC_NAME};
 use rustc_hash::{FxHashMap, FxHashSet};
+use std::cell::RefCell;
+use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 pub use crate::compiler_frontend::ast::templates::top_level_templates::{
@@ -60,6 +63,7 @@ impl Ast {
         host_registry: &HostRegistry,
         string_table: &mut StringTable,
         entry_dir: InternedPath,
+        build_profile: FrontendBuildProfile,
     ) -> Result<Ast, CompilerMessages> {
         // Each file will be combined into a single AST.
         let mut ast: Vec<AstNode> =
@@ -212,6 +216,8 @@ impl Ast {
                         &bindings.visible_symbol_paths,
                         &bindings.start_aliases,
                         host_registry,
+                        build_profile,
+                        &mut warnings,
                         string_table,
                     ) {
                         Ok(declaration) => declaration,
@@ -234,15 +240,16 @@ impl Ast {
                         host_registry.clone(),
                         vec![],
                     )
+                    .with_build_profile(build_profile)
                     .with_visible_declarations(bindings.visible_symbol_paths.to_owned())
                     .with_start_import_aliases(bindings.start_aliases.to_owned());
 
                     let mut struct_tokens = header.tokens.to_owned();
-                    let fields = match create_struct_definition(
-                        &mut struct_tokens,
-                        &context,
-                        string_table,
-                    ) {
+                    let fields_result =
+                        create_struct_definition(&mut struct_tokens, &context, string_table);
+                    warnings.extend(context.take_emitted_warnings());
+
+                    let fields = match fields_result {
                         Ok(fields) => fields,
                         Err(error) => {
                             return Err(CompilerMessages {
@@ -292,17 +299,21 @@ impl Ast {
                         host_registry.clone(),
                         signature.return_data_types(),
                     )
+                    .with_build_profile(build_profile)
                     .with_visible_declarations(visible_declarations)
                     .with_start_import_aliases(bindings.start_aliases.to_owned());
 
                     let mut token_stream = header.tokens;
 
-                    let body = match function_body_to_ast(
+                    let body_result = function_body_to_ast(
                         &mut token_stream,
                         context.to_owned(),
                         &mut warnings,
                         string_table,
-                    ) {
+                    );
+                    warnings.extend(context.take_emitted_warnings());
+
+                    let body = match body_result {
                         Ok(b) => b,
                         Err(e) => {
                             return Err(CompilerMessages {
@@ -334,17 +345,21 @@ impl Ast {
                         host_registry.clone(),
                         vec![],
                     )
+                    .with_build_profile(build_profile)
                     .with_visible_declarations(bindings.visible_symbol_paths.to_owned())
                     .with_start_import_aliases(bindings.start_aliases.to_owned());
 
                     let mut token_stream = header.tokens;
 
-                    let mut body = match function_body_to_ast(
+                    let body_result = function_body_to_ast(
                         &mut token_stream,
                         context.to_owned(),
                         &mut warnings,
                         string_table,
-                    ) {
+                    );
+                    warnings.extend(context.take_emitted_warnings());
+
+                    let mut body = match body_result {
                         Ok(b) => b,
                         Err(e) => {
                             return Err(CompilerMessages {
@@ -428,19 +443,22 @@ impl Ast {
                         host_registry.clone(),
                         vec![],
                     )
+                    .with_build_profile(build_profile)
                     .with_visible_declarations(bindings.visible_symbol_paths.to_owned())
                     .with_start_import_aliases(bindings.start_aliases.to_owned());
 
-                    let template =
-                        match Template::new(&mut template_tokens, &context, vec![], string_table) {
-                            Ok(template) => template,
-                            Err(error) => {
-                                return Err(CompilerMessages {
-                                    errors: vec![error],
-                                    warnings,
-                                });
-                            }
-                        };
+                    let template_result =
+                        Template::new(&mut template_tokens, &context, vec![], string_table);
+                    warnings.extend(context.take_emitted_warnings());
+                    let template = match template_result {
+                        Ok(template) => template,
+                        Err(error) => {
+                            return Err(CompilerMessages {
+                                errors: vec![error],
+                                warnings,
+                            });
+                        }
+                    };
 
                     if !template.is_const_renderable_string() {
                         let error_message = match template.const_value_kind() {
@@ -479,12 +497,13 @@ impl Ast {
             if header.exported {}
         }
 
-        let doc_fragments = collect_and_strip_comment_templates(&mut ast, string_table).map_err(
-            |error| CompilerMessages {
-                errors: vec![error],
-                warnings: warnings.clone(),
-            },
-        )?;
+        let doc_fragments =
+            collect_and_strip_comment_templates(&mut ast, string_table).map_err(|error| {
+                CompilerMessages {
+                    errors: vec![error],
+                    warnings: warnings.clone(),
+                }
+            })?;
 
         let start_template_items = synthesize_start_template_items(
             &mut ast,
@@ -525,6 +544,8 @@ pub struct ScopeContext {
     pub expected_result_types: Vec<DataType>,
     pub host_registry: HostRegistry,
     pub loop_depth: usize,
+    pub build_profile: FrontendBuildProfile,
+    pub(crate) emitted_warnings: Rc<RefCell<Vec<CompilerWarning>>>,
 }
 #[derive(PartialEq, Clone)]
 pub enum ContextKind {
@@ -566,6 +587,8 @@ impl ScopeContext {
             expected_result_types,
             host_registry,
             loop_depth: 0,
+            build_profile: FrontendBuildProfile::Dev,
+            emitted_warnings: Rc::new(RefCell::new(Vec::new())),
         }
     }
 
@@ -635,6 +658,8 @@ impl ScopeContext {
             expected_result_types: vec![],
             host_registry: self.host_registry.clone(),
             loop_depth: self.loop_depth,
+            build_profile: self.build_profile,
+            emitted_warnings: self.emitted_warnings.clone(),
         }
     }
 
@@ -649,7 +674,14 @@ impl ScopeContext {
             expected_result_types: Vec::new(),
             host_registry: HostRegistry::default(),
             loop_depth: 0,
+            build_profile: FrontendBuildProfile::Dev,
+            emitted_warnings: Rc::new(RefCell::new(Vec::new())),
         }
+    }
+
+    pub fn with_build_profile(mut self, profile: FrontendBuildProfile) -> ScopeContext {
+        self.build_profile = profile;
+        self
     }
 
     pub fn with_visible_declarations(mut self, visible: FxHashSet<InternedPath>) -> ScopeContext {
@@ -683,6 +715,14 @@ impl ScopeContext {
     pub fn is_inside_loop(&self) -> bool {
         self.loop_depth > 0
     }
+
+    pub fn emit_warning(&self, warning: CompilerWarning) {
+        self.emitted_warnings.borrow_mut().push(warning);
+    }
+
+    pub fn take_emitted_warnings(&self) -> Vec<CompilerWarning> {
+        std::mem::take(&mut *self.emitted_warnings.borrow_mut())
+    }
 }
 
 /// A new AstContext for scenes
@@ -705,6 +745,8 @@ macro_rules! new_template_context {
             expected_result_types: vec![],
             host_registry: $context.host_registry.clone(),
             loop_depth: $context.loop_depth,
+            build_profile: $context.build_profile,
+            emitted_warnings: $context.emitted_warnings.clone(),
         }
     };
 }
@@ -726,6 +768,8 @@ macro_rules! new_config_context {
             expected_result_types: vec![],
             host_registry: $registry,
             loop_depth: 0,
+            build_profile: crate::compiler_frontend::FrontendBuildProfile::Dev,
+            emitted_warnings: std::rc::Rc::new(std::cell::RefCell::new(Vec::new())),
         }
     }};
 }
@@ -747,6 +791,8 @@ macro_rules! new_condition_context {
             expected_result_types: vec![], //Empty because conditions are always booleans
             host_registry: $registry,
             loop_depth: 0,
+            build_profile: crate::compiler_frontend::FrontendBuildProfile::Dev,
+            emitted_warnings: std::rc::Rc::new(std::cell::RefCell::new(Vec::new())),
         }
     }};
 }

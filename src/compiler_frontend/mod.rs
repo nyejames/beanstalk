@@ -59,6 +59,12 @@ pub enum Flag {
     DisableTimers,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FrontendBuildProfile {
+    Dev,
+    Release,
+}
+
 pub struct CompilerFrontend {
     pub(crate) host_function_registry: HostRegistry,
     pub(crate) string_table: StringTable,
@@ -149,6 +155,7 @@ impl CompilerFrontend {
         headers: Vec<Header>,
         top_level_template_items: Vec<TopLevelTemplateItem>,
         entry_file_path: &Path,
+        build_profile: FrontendBuildProfile,
     ) -> Result<Ast, CompilerMessages> {
         let interned_entry_dir =
             InternedPath::from_path_buf(entry_file_path, &mut self.string_table);
@@ -159,6 +166,7 @@ impl CompilerFrontend {
             &self.host_function_registry,
             &mut self.string_table,
             interned_entry_dir,
+            build_profile,
         )
     }
 

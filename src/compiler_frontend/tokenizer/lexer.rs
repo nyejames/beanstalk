@@ -65,7 +65,7 @@ pub fn get_token_kind(
     // nested template begins or the current template closes.
     if stream.mode == TokenizeMode::TemplateBody {
         match stream.current_template_body_mode() {
-            TemplateBodyMode::CodeBalanced => {
+            TemplateBodyMode::CodeBalanced | TemplateBodyMode::CssBalanced => {
                 return tokenize_code_template_body(current_char, stream, string_table);
             }
             TemplateBodyMode::DiscardBalanced => {
@@ -203,7 +203,7 @@ pub fn get_token_kind(
                 stream.new_location().to_error_location(string_table),
                 {
                     CompilationStage => "Tokenization",
-                    PrimarySuggestion => "Use '$markdown', '$children(..)', '$ignore', '$slot', '$insert(..)', '$note', '$todo', '$doc', '$code', or '$formatter(...)' inside the template head",
+                    PrimarySuggestion => "Use '$markdown', '$children(..)', '$ignore', '$slot', '$insert(..)', '$note', '$todo', '$doc', '$code', '$css', or '$formatter(...)' inside the template head",
                 }
             )
         };
@@ -232,6 +232,7 @@ pub fn get_token_kind(
         let directive = string_table.intern(&token_value);
         match token_value.as_str() {
             "code" => stream.mark_current_template_body_mode(TemplateBodyMode::CodeBalanced),
+            "css" => stream.mark_current_template_body_mode(TemplateBodyMode::CssBalanced),
             "note" | "todo" => {
                 stream.mark_current_template_body_mode(TemplateBodyMode::DiscardBalanced)
             }

@@ -4,10 +4,10 @@ use crate::compiler_frontend::ast::templates::template::{
     SlotKey, TemplateAtom, TemplateContent, TemplateSegment, TemplateType,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
+use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TextLocation, TokenKind};
 use crate::{return_rule_error, return_syntax_error};
 use rustc_hash::{FxHashMap, FxHashSet};
-use crate::compiler_frontend::string_interning::{StringId, StringTable};
 
 #[derive(Clone, Debug, Default)]
 struct SlotSchema {
@@ -168,7 +168,6 @@ fn collect_slot_schema_atoms(
 
     Ok(())
 }
-
 
 pub fn parse_optional_slot_name_argument(
     token_stream: &mut FileTokens,

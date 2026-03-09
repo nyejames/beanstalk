@@ -23,6 +23,7 @@ pub(crate) mod field_access;
 pub(crate) mod templates {
     pub(crate) mod code;
     pub(crate) mod create_template_node;
+    pub(crate) mod css;
     pub(crate) mod markdown;
     pub(crate) mod slots;
     pub(crate) mod template;

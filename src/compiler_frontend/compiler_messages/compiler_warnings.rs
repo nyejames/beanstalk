@@ -43,6 +43,7 @@ pub enum WarningKind {
     UnusedFunctionParameter,
     UnusedFunctionParameterDefaultValue,
     PointlessExport,
+    MalformedCssTemplate,
 }
 
 pub fn print_formatted_warning(w: CompilerWarning) {
@@ -78,6 +79,9 @@ pub fn print_formatted_warning(w: CompilerWarning) {
         }
         WarningKind::PointlessExport => {
             println!("Pointless export '{}'", w.msg);
+        }
+        WarningKind::MalformedCssTemplate => {
+            println!("Malformed CSS template: {}", w.msg);
         }
     }
 }

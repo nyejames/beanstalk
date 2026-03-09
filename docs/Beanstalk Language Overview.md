@@ -158,6 +158,7 @@ A template’s style is defined in the **template head** using `$` directives.
 - $slot / $insert(..) - See slots below!
 - $ignore             - Ignores all inherited styles
 - $markdown           - Parses the template bodies with a custom flavour of Markdown
+- $css                - Provides some basic warnings for malformed CSS
 - $note / $todo       - Comments (ignored by final output)
 - $doc                - Turns the template into a documentation comment
 - $children(..)       - Accepts a template (or string slice) that will be applied to all templates inside this one

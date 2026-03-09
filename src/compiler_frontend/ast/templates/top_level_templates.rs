@@ -224,7 +224,10 @@ fn collect_doc_fragments(
     fragments: &mut Vec<AstDocFragment>,
     string_table: &mut StringTable,
 ) -> Result<(), CompilerError> {
-    if matches!(template.kind, TemplateType::Comment(CommentDirectiveKind::Doc)) {
+    if matches!(
+        template.kind,
+        TemplateType::Comment(CommentDirectiveKind::Doc)
+    ) {
         let rendered = template.fold_into_stringid(&None, string_table)?;
         fragments.push(AstDocFragment {
             kind: AstDocFragmentKind::Doc,

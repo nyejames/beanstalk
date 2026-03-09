@@ -5,10 +5,12 @@
 //! - `visible_symbol_paths` limits what a specific source file is allowed to reference.
 //! - `start_aliases` tracks bare-file imports that map to implicit start functions.
 
+use crate::compiler_frontend::FrontendBuildProfile;
 use crate::compiler_frontend::ast::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::statements::declarations::resolve_declaration_syntax;
 use crate::compiler_frontend::compiler_errors::CompilerError;
+use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::headers::parse_file_headers::{FileImport, Header, HeaderKind};
 use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
@@ -215,6 +217,8 @@ pub(crate) fn parse_constant_header_declaration(
     visible_declaration_ids: &FxHashSet<InternedPath>,
     start_import_aliases: &FxHashMap<StringId, InternedPath>,
     host_registry: &HostRegistry,
+    build_profile: FrontendBuildProfile,
+    warnings: &mut Vec<CompilerWarning>,
     string_table: &mut StringTable,
 ) -> Result<Declaration, CompilerError> {
     let HeaderKind::Constant { metadata } = &header.kind else {
@@ -230,17 +234,20 @@ pub(crate) fn parse_constant_header_declaration(
         host_registry.clone(),
         vec![],
     )
+    .with_build_profile(build_profile)
     // Keep full module declarations for path identity, but explicitly gate what this file
     // can see to enforce import boundaries and prevent cross-file leakage.
     .with_visible_declarations(visible_declaration_ids.to_owned())
     .with_start_import_aliases(start_import_aliases.to_owned());
 
-    let declaration = resolve_declaration_syntax(
+    let declaration_result = resolve_declaration_syntax(
         metadata.declaration_syntax.clone(),
         header.tokens.src_path.to_owned(),
         &context,
         string_table,
-    )?;
+    );
+    warnings.extend(context.take_emitted_warnings());
+    let declaration = declaration_result?;
 
     if !declaration.value.is_compile_time_constant() {
         return Err(CompilerError::new_rule_error(

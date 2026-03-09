@@ -83,7 +83,9 @@ fn tokenizes_children_directive_with_template_argument() {
         .iter()
         .enumerate()
         .skip(close + 1)
-        .find_map(|(index, token)| matches!(token.kind, TokenKind::CloseParenthesis).then_some(index))
+        .find_map(|(index, token)| {
+            matches!(token.kind, TokenKind::CloseParenthesis).then_some(index)
+        })
         .expect("expected ')' after the child template");
     let comma = file_tokens
         .tokens
@@ -117,7 +119,12 @@ fn rejects_legacy_style_child_template_prefix_syntax() {
     let mut string_table = StringTable::new();
     let source_path = InternedPath::from_single_str("test.bst", &mut string_table);
 
-    let result = tokenize("[$[:prefix], $markdown:\nhello\n]", &source_path, TokenizeMode::Normal, &mut string_table);
+    let result = tokenize(
+        "[$[:prefix], $markdown:\nhello\n]",
+        &source_path,
+        TokenizeMode::Normal,
+        &mut string_table,
+    );
     assert!(
         result.is_err(),
         "legacy '$[' child-template syntax should fail"
@@ -221,6 +228,43 @@ fn code_template_body_keeps_nested_square_brackets_as_literal_text() {
         .expect("expected code template body text to include literal square brackets");
 
     assert!(body_literal.contains("concatenated"));
+}
+
+#[test]
+fn css_template_body_keeps_selector_brackets_as_literal_text() {
+    let (file_tokens, string_table) =
+        tokenize_source("[$css:\n.button[data-kind=\"cta\"] { color: red; }\n]");
+
+    let template_heads = file_tokens
+        .tokens
+        .iter()
+        .filter(|token| matches!(token.kind, TokenKind::TemplateHead))
+        .count();
+    let template_closes = file_tokens
+        .tokens
+        .iter()
+        .filter(|token| matches!(token.kind, TokenKind::TemplateClose))
+        .count();
+
+    assert_eq!(
+        template_heads, 1,
+        "css template bodies should not tokenize selector brackets as nested templates"
+    );
+    assert_eq!(template_closes, 1);
+
+    let body_literal = file_tokens
+        .tokens
+        .iter()
+        .find_map(|token| match token.kind {
+            TokenKind::StringSliceLiteral(id) => {
+                let value = string_table.resolve(id);
+                value.contains("[data-kind=\"cta\"]").then_some(value)
+            }
+            _ => None,
+        })
+        .expect("expected css template body text to include selector brackets");
+
+    assert!(body_literal.contains(".button"));
 }
 
 #[test]

@@ -341,6 +341,12 @@ pub struct Formatter {
     pub formatter: Arc<dyn TemplateFormatter>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CssDirectiveMode {
+    Block,
+    Inline,
+}
+
 // Template Config Type
 // This is passed into a template head to configure how it should be parsed
 #[derive(Clone, Debug)]
@@ -360,6 +366,7 @@ pub struct Style {
     // Passes templates into the head of every child template of this template
     // Wrappers can be overridden with parent overrides
     pub child_templates: Vec<Template>,
+    pub css_mode: Option<CssDirectiveMode>,
 }
 
 impl Style {
@@ -370,6 +377,7 @@ impl Style {
             formatter_precedence: -1,
             override_precedence: -1,
             child_templates: vec![],
+            css_mode: None,
         }
     }
 }

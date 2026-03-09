@@ -582,8 +582,14 @@ fn lowers_ast_doc_fragments_into_hir_doc_metadata() {
 
     let module = lower_ast(ast, &mut string_table).expect("HIR lowering should succeed");
     assert_eq!(module.doc_fragments.len(), 2);
-    assert!(matches!(module.doc_fragments[0].kind, HirDocFragmentKind::Doc));
-    assert!(matches!(module.doc_fragments[1].kind, HirDocFragmentKind::Doc));
+    assert!(matches!(
+        module.doc_fragments[0].kind,
+        HirDocFragmentKind::Doc
+    ));
+    assert!(matches!(
+        module.doc_fragments[1].kind,
+        HirDocFragmentKind::Doc
+    ));
     assert_eq!(module.doc_fragments[0].rendered_text, "First doc");
     assert_eq!(module.doc_fragments[1].rendered_text, "Second doc");
     assert_eq!(module.doc_fragments[0].location.start_pos.line_number, 4);

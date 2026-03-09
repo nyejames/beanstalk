@@ -20,6 +20,7 @@ pub enum TemplateBodyMode {
     #[default]
     Normal,
     CodeBalanced,
+    CssBalanced,
     DiscardBalanced,
     DocBalanced,
 }
@@ -29,6 +30,7 @@ impl TemplateBodyMode {
         matches!(
             self,
             TemplateBodyMode::CodeBalanced
+                | TemplateBodyMode::CssBalanced
                 | TemplateBodyMode::DiscardBalanced
                 | TemplateBodyMode::DocBalanced
         )

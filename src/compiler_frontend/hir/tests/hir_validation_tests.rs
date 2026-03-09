@@ -259,10 +259,12 @@ fn validator_rejects_invalid_doc_fragment_location() {
 
     let error = lower_ast(ast, &mut string_table)
         .expect_err("validator should reject invalid doc fragment locations");
-    assert!(error
-        .errors
-        .iter()
-        .any(|diagnostic| diagnostic.msg.contains("Doc fragment")));
+    assert!(
+        error
+            .errors
+            .iter()
+            .any(|diagnostic| diagnostic.msg.contains("Doc fragment"))
+    );
 }
 
 #[test]

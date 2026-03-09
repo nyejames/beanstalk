@@ -15,7 +15,7 @@ use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::paths::collect_import_paths_from_tokens;
 use crate::compiler_frontend::tokenizer::tokenizer::tokenize;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, Token, TokenKind, TokenizeMode};
-use crate::compiler_frontend::{CompilerFrontend, Flag};
+use crate::compiler_frontend::{CompilerFrontend, Flag, FrontendBuildProfile};
 use crate::projects::settings;
 use crate::projects::settings::{BEANSTALK_FILE_EXTENSION, Config};
 use crate::{borrow_log, return_err_as_messages, return_file_error, timer_log};
@@ -40,8 +40,14 @@ struct ParsedImportPaths {
 /// every builder will use it. It defines the structure of all Beanstalk projects
 pub fn compile_project_frontend(
     config: &mut Config,
-    _flags: &[Flag],
+    flags: &[Flag],
 ) -> Result<Vec<Module>, CompilerMessages> {
+    let build_profile = if flags.contains(&Flag::Release) {
+        FrontendBuildProfile::Release
+    } else {
+        FrontendBuildProfile::Dev
+    };
+
     // -----------------------------
     //    SINGLE FILE COMPILATION
     // -----------------------------
@@ -89,7 +95,7 @@ pub fn compile_project_frontend(
                     });
                 }
 
-                let module = compile_module(input_files, config, &entry_path)?;
+                let module = compile_module(input_files, config, &entry_path, build_profile)?;
                 return Ok(vec![module]);
             }
 
@@ -139,7 +145,12 @@ pub fn compile_project_frontend(
 
     let mut compiled_modules = Vec::with_capacity(discovered_modules.len());
     for discovered in discovered_modules {
-        let module = compile_module(discovered.input_files, config, &discovered.entry_point)?;
+        let module = compile_module(
+            discovered.input_files,
+            config,
+            &discovered.entry_point,
+            build_profile,
+        )?;
         compiled_modules.push(module);
     }
 
@@ -151,6 +162,7 @@ pub fn compile_module(
     module: Vec<InputFile>,
     config: &Config,
     entry_file_path: &Path,
+    build_profile: FrontendBuildProfile,
 ) -> Result<Module, CompilerMessages> {
     // Module capacity heuristic
     // Just a guess of how many strings we might need to intern per file
@@ -243,6 +255,7 @@ pub fn compile_module(
         sorted_modules,
         module_headers.top_level_template_items,
         entry_file_path,
+        build_profile,
     ) {
         Ok(parser_output) => {
             compiler_messages

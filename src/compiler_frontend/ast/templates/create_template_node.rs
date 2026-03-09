@@ -2,13 +2,18 @@ use crate::compiler_frontend::ast::ast::ScopeContext;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
 use crate::compiler_frontend::ast::templates::code::configure_code_style;
+use crate::compiler_frontend::ast::templates::css::{configure_css_style, validate_css_template};
 use crate::compiler_frontend::ast::templates::markdown::markdown_formatter;
-use crate::compiler_frontend::ast::templates::slots::{compose_template_with_slots, ensure_no_slot_insertions_remain, parse_optional_slot_name_argument, parse_required_slot_name_argument};
+use crate::compiler_frontend::ast::templates::slots::{
+    compose_template_with_slots, ensure_no_slot_insertions_remain,
+    parse_optional_slot_name_argument, parse_required_slot_name_argument,
+};
 use crate::compiler_frontend::ast::templates::template::{
     CommentDirectiveKind, Formatter, SlotKey, Style, TemplateAtom, TemplateConstValueKind,
     TemplateContent, TemplateControlFlow, TemplateSegment, TemplateSegmentOrigin, TemplateType,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
+use crate::compiler_frontend::compiler_warnings::{CompilerWarning, WarningKind};
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TextLocation, TokenKind};
@@ -236,8 +241,9 @@ impl Template {
             )
         {
             template.kind = TemplateType::String;
-            return Ok(template);
-        };
+        }
+
+        emit_css_template_warnings(&template, context, string_table);
 
         Ok(template)
     }
@@ -1120,6 +1126,7 @@ fn effective_inherited_style_for_nested_templates(style: &Style) -> Option<Style
             formatter_precedence: style.formatter_precedence,
             override_precedence: style.override_precedence,
             child_templates: vec![],
+            css_mode: style.css_mode,
         });
     }
 
@@ -1153,6 +1160,7 @@ fn parse_style_directive(
                 template.style.id = "markdown";
                 template.style.formatter = Some(markdown_formatter());
                 template.style.formatter_precedence = 0;
+                template.style.css_mode = None;
                 Ok(false)
             }
 
@@ -1160,6 +1168,11 @@ fn parse_style_directive(
                 // Keep the directive-specific parsing in the code formatter module so
                 // this general template parser does not accumulate every built-in style.
                 configure_code_style(token_stream, template, string_table)?;
+                Ok(false)
+            }
+
+            "css" => {
+                configure_css_style(token_stream, template, string_table)?;
                 Ok(false)
             }
 
@@ -1210,13 +1223,13 @@ fn parse_style_directive(
             other => {
                 return_syntax_error!(
                     format!(
-                        "Unsupported style directive '${other}'. Supported directives are '$markdown', '$children(..)', '$code', '$ignore', '$slot', '$insert(..)', '$note', '$todo', '$doc', and '$formatter(...)'."
+                        "Unsupported style directive '${other}'. Supported directives are '$markdown', '$children(..)', '$code', '$css', '$ignore', '$slot', '$insert(..)', '$note', '$todo', '$doc', and '$formatter(...)'."
                     ),
                     token_stream
                         .current_location()
                         .to_error_location(string_table),
                     {
-                        PrimarySuggestion => "Use '$markdown', '$children(..)', '$code', '$ignore', '$slot', '$insert(..)', '$note', '$todo', '$doc', or '$formatter(...)' inside the template head",
+                        PrimarySuggestion => "Use '$markdown', '$children(..)', '$code', '$css', '$ignore', '$slot', '$insert(..)', '$note', '$todo', '$doc', or '$formatter(...)' inside the template head",
                     }
                 )
             }
@@ -1235,6 +1248,28 @@ fn apply_doc_comment_defaults(template: &mut Template) {
     template.style.id = "markdown";
     template.style.formatter = Some(markdown_formatter());
     template.style.formatter_precedence = 0;
+    template.style.css_mode = None;
+}
+
+fn emit_css_template_warnings(
+    template: &Template,
+    context: &ScopeContext,
+    string_table: &StringTable,
+) {
+    if !template.is_const_renderable_string() {
+        return;
+    }
+
+    let diagnostics = validate_css_template(template, context.build_profile, string_table);
+    for diagnostic in diagnostics {
+        let file_path = diagnostic.location.scope.to_path_buf(string_table);
+        context.emit_warning(CompilerWarning::new(
+            &diagnostic.message,
+            diagnostic.location.to_error_location(string_table),
+            WarningKind::MalformedCssTemplate,
+            file_path,
+        ));
+    }
 }
 
 fn reject_directive_arguments(

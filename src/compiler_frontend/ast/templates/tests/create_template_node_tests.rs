@@ -4,12 +4,14 @@ use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
 use crate::compiler_frontend::ast::templates::code::{
-    code_formatter, highlight_code_html, CodeLanguage,
+    CodeLanguage, code_formatter, highlight_code_html,
 };
 use crate::compiler_frontend::ast::templates::markdown::markdown_formatter;
 use crate::compiler_frontend::ast::templates::template::{
-    CommentDirectiveKind, TemplateAtom, TemplateSegment, TemplateSegmentOrigin, TemplateType,
+    CommentDirectiveKind, CssDirectiveMode, TemplateAtom, TemplateSegment, TemplateSegmentOrigin,
+    TemplateType,
 };
+use crate::compiler_frontend::compiler_warnings::WarningKind;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
@@ -117,6 +119,23 @@ fn template_parse_error(source: &str) -> String {
     Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect_err("template should fail to parse")
         .msg
+}
+
+fn template_warnings(
+    source: &str,
+    runtime_context: bool,
+) -> Vec<crate::compiler_frontend::compiler_warnings::CompilerWarning> {
+    let mut string_table = StringTable::new();
+    let mut token_stream = template_tokens_from_source(source, &mut string_table);
+    let context = if runtime_context {
+        runtime_template_context(&token_stream.src_path, &mut string_table)
+    } else {
+        ScopeContext::new_constant(token_stream.src_path.to_owned())
+    };
+
+    let _ = Template::new(&mut token_stream, &context, vec![], &mut string_table)
+        .expect("template should parse for warning checks");
+    context.take_emitted_warnings()
 }
 
 fn template_segments(template: &Template) -> Vec<&TemplateSegment> {
@@ -300,9 +319,11 @@ fn runtime_templates_format_static_body_strings_only() {
         )
         .expect("expected a formatted body segment");
 
-    assert!(string_table
-        .resolve(formatted_body)
-        .contains("<h1>Hello</h1>"));
+    assert!(
+        string_table
+            .resolve(formatted_body)
+            .contains("<h1>Hello</h1>")
+    );
 }
 
 #[test]
@@ -495,6 +516,76 @@ fn unknown_style_directives_error_cleanly() {
 
     assert!(error.msg.contains("Unsupported style directive"));
     assert!(error.msg.contains("$unknown"));
+}
+
+#[test]
+fn css_without_argument_parses_as_block_mode() {
+    let mut string_table = StringTable::new();
+    let mut token_stream =
+        template_tokens_from_source("[$css:\n.button { color: red; }\n]", &mut string_table);
+    let context = ScopeContext::new_constant(token_stream.src_path.to_owned());
+    let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
+        .expect("css template should parse");
+
+    assert_eq!(template.style.css_mode, Some(CssDirectiveMode::Block));
+}
+
+#[test]
+fn css_inline_argument_parses_correctly() {
+    let mut string_table = StringTable::new();
+    let mut token_stream =
+        template_tokens_from_source("[$css(\"inline\"):\ncolor: blue;\n]", &mut string_table);
+    let context = ScopeContext::new_constant(token_stream.src_path.to_owned());
+    let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
+        .expect("inline css template should parse");
+
+    assert_eq!(template.style.css_mode, Some(CssDirectiveMode::Inline));
+}
+
+#[test]
+fn css_inline_argument_must_be_quoted_string_literal() {
+    let error = template_parse_error("[$css(inline): color: blue;]");
+    assert!(error.contains("quoted string literal"));
+}
+
+#[test]
+fn css_rejects_unknown_arguments() {
+    let error = template_parse_error("[$css(\"scoped\"): color: blue;]");
+    assert!(error.contains("only supported argument is \"inline\""));
+}
+
+#[test]
+fn const_css_template_emits_malformed_css_warnings() {
+    let warnings = template_warnings("[$css:\n.button { color red; }\n]", false);
+
+    assert!(!warnings.is_empty());
+    assert!(
+        warnings
+            .iter()
+            .all(|warning| { matches!(warning.warning_kind, WarningKind::MalformedCssTemplate) })
+    );
+    assert!(
+        warnings
+            .iter()
+            .any(|warning| warning.msg.contains("Expected 'property: value'"))
+    );
+}
+
+#[test]
+fn inline_css_warns_when_blocks_are_used() {
+    let warnings = template_warnings("[$css(\"inline\"):\n.button { color: red; }\n]", false);
+
+    assert!(
+        warnings
+            .iter()
+            .any(|warning| warning.msg.contains("only allow declarations"))
+    );
+}
+
+#[test]
+fn runtime_css_templates_do_not_emit_compile_time_warnings() {
+    let warnings = template_warnings("[value, $css:\n.button { color red; }\n]", true);
+    assert!(warnings.is_empty());
 }
 
 #[test]
