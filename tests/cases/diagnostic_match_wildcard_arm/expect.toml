@@ -1,0 +1,3 @@
+mode = "failure"
+error_type = "Syntax"
+message_contains = ["Wildcard '_'", "Use 'else:'"]

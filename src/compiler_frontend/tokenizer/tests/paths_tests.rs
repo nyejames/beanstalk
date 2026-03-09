@@ -127,6 +127,41 @@ fn parse_file_path_rejects_malformed_grouped_imports() {
 }
 
 #[test]
+fn parse_file_path_rejects_grouped_import_missing_closing_brace() {
+    let mut string_table = StringTable::new();
+    let source_path = InternedPath::from_single_str("test.bst", &mut string_table);
+
+    let result = tokenize(
+        "import @(styles/docs/{footer,navbar\n",
+        &source_path,
+        TokenizeMode::Normal,
+        &mut string_table,
+    );
+    assert!(result.is_err(), "missing grouped-import '}}' should fail");
+    let error = result.err().expect("expected tokenizer error");
+    assert!(error.msg.contains("missing a closing '}'"));
+}
+
+#[test]
+fn parse_file_path_rejects_grouped_import_missing_closing_parenthesis() {
+    let mut string_table = StringTable::new();
+    let source_path = InternedPath::from_single_str("test.bst", &mut string_table);
+
+    let result = tokenize(
+        "import @(styles/docs/{footer,navbar}\n",
+        &source_path,
+        TokenizeMode::Normal,
+        &mut string_table,
+    );
+    assert!(
+        result.is_err(),
+        "missing closing parenthesis after grouped import should fail"
+    );
+    let error = result.err().expect("expected tokenizer error");
+    assert!(error.msg.contains("closing parenthesis"));
+}
+
+#[test]
 fn collect_import_paths_from_tokens_supports_newline_after_import() {
     let paths = collect_import_path_values("import\n@(styles/docs/footer)\n");
     assert_eq!(paths, vec!["styles/docs/footer".to_string()]);

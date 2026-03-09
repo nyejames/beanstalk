@@ -1,2 +1,3 @@
 mode = "failure"
-error_type = "Compiler"
+error_type = "Rule"
+message_contains = ["not declared in this scope"]

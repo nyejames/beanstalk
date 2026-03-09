@@ -1,4 +1,6 @@
-use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages, ErrorType};
+use crate::compiler_frontend::compiler_errors::{
+    CompilerError, CompilerMessages, ErrorMetaDataKey, ErrorType,
+};
 use crate::compiler_frontend::compiler_warnings::print_formatted_warning;
 use saying::say;
 use std::path::{Path, PathBuf};
@@ -33,6 +35,40 @@ fn relative_display_path(scope: &Path) -> String {
             normalized_scope.to_string_lossy().to_string()
         }
     }
+}
+
+pub(crate) fn format_error_guidance_lines(error: &CompilerError) -> Vec<String> {
+    let mut lines = Vec::new();
+
+    if let Some(stage) = error.metadata.get(&ErrorMetaDataKey::CompilationStage) {
+        lines.push(format!("Stage: {stage}"));
+    }
+
+    if let Some(suggestion) = error.metadata.get(&ErrorMetaDataKey::PrimarySuggestion) {
+        lines.push(format!("Help: {suggestion}"));
+    }
+
+    if let Some(alternative) = error.metadata.get(&ErrorMetaDataKey::AlternativeSuggestion) {
+        lines.push(format!("Alternative: {alternative}"));
+    }
+
+    if let Some(replacement) = error.metadata.get(&ErrorMetaDataKey::SuggestedReplacement) {
+        lines.push(format!("Suggested replacement: {replacement}"));
+    }
+
+    match (
+        error.metadata.get(&ErrorMetaDataKey::SuggestedInsertion),
+        error.metadata.get(&ErrorMetaDataKey::SuggestedLocation),
+    ) {
+        (Some(insertion), Some(location)) => {
+            lines.push(format!("Suggested insertion: '{insertion}' {location}"))
+        }
+        (Some(insertion), None) => lines.push(format!("Suggested insertion: '{insertion}'")),
+        (None, Some(location)) => lines.push(format!("Suggested location: {location}")),
+        (None, None) => {}
+    }
+
+    lines
 }
 
 pub fn print_compiler_messages(messages: CompilerMessages) {
@@ -180,6 +216,9 @@ pub fn print_formatted_error(e: CompilerError) {
     }
 
     say!(Red e.msg);
+    for guidance_line in format_error_guidance_lines(&e) {
+        say!(Dark Yellow guidance_line);
+    }
 
     println!("\n{line}");
 
@@ -193,3 +232,7 @@ pub fn print_formatted_error(e: CompilerError) {
         (e.location.end_pos.char_column - e.location.start_pos.char_column + 1).max(1) as usize;
     say!(Red { "^".repeat(length_of_underline) });
 }
+
+#[cfg(test)]
+#[path = "tests/display_messages_tests.rs"]
+mod display_messages_tests;

@@ -86,6 +86,42 @@ impl FunctionSignature {
                 });
             }
 
+            TokenKind::DatatypeInt
+            | TokenKind::DatatypeFloat
+            | TokenKind::DatatypeBool
+            | TokenKind::DatatypeString
+            | TokenKind::DatatypeNone
+            | TokenKind::OpenCurly
+            | TokenKind::Symbol(_) => {
+                return_syntax_error!(
+                    format!(
+                        "Expected '->' or ':' after function parameters, but found what looks like a return declaration token '{:?}'.",
+                        token_stream.current_token_kind()
+                    ),
+                    token_stream.current_location().to_error_location(string_table),
+                    {
+                        CompilationStage => "Function Signature Parsing",
+                        PrimarySuggestion => "Add '->' before return declarations, for example '|args| -> Int:'",
+                        AlternativeSuggestion => "If the function returns nothing, remove the return declaration and end the signature with ':'",
+                        SuggestedInsertion => "->",
+                        SuggestedLocation => "after the closing '|' of the parameter list",
+                    }
+                )
+            }
+
+            TokenKind::Newline | TokenKind::Eof | TokenKind::End => {
+                return_syntax_error!(
+                    "Function signature ended unexpectedly after parameters",
+                    token_stream.current_location().to_error_location(string_table),
+                    {
+                        CompilationStage => "Function Signature Parsing",
+                        PrimarySuggestion => "End the signature with ':' for no returns, or use '-> ReturnType:'",
+                        SuggestedInsertion => ":",
+                        SuggestedLocation => "after the closing '|' of the parameter list",
+                    }
+                )
+            }
+
             _ => {
                 return_syntax_error!(
                     format!(
@@ -158,6 +194,27 @@ fn parse_return_list(
                     {
                         CompilationStage => "Function Signature Parsing",
                         PrimarySuggestion => "Terminate the function signature with ':'",
+                    }
+                )
+            }
+            TokenKind::Newline | TokenKind::End => {
+                return_syntax_error!(
+                    "Function return declarations must end with ':'",
+                    token_stream.current_location().to_error_location(string_table),
+                    {
+                        CompilationStage => "Function Signature Parsing",
+                        PrimarySuggestion => "Add ':' after the final return declaration",
+                        SuggestedInsertion => ":",
+                    }
+                )
+            }
+            TokenKind::Arrow => {
+                return_syntax_error!(
+                    "Unexpected '->' inside function return declarations",
+                    token_stream.current_location().to_error_location(string_table),
+                    {
+                        CompilationStage => "Function Signature Parsing",
+                        PrimarySuggestion => "Use '->' only once after parameters, then separate returns with ',' and end with ':'",
                     }
                 )
             }

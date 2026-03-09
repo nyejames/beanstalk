@@ -8,6 +8,7 @@
 //! - editor/highlighter tooling can treat these templates as CSS
 //! - the compiler can surface low-cost malformed-CSS warnings early, with source spans
 
+use crate::compiler_frontend::FrontendBuildProfile;
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
 use crate::compiler_frontend::ast::templates::create_template_node::Template;
 use crate::compiler_frontend::ast::templates::template::{
@@ -18,7 +19,6 @@ use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{
     CharPosition, FileTokens, TextLocation, TokenKind,
 };
-use crate::compiler_frontend::FrontendBuildProfile;
 use crate::return_syntax_error;
 
 #[derive(Clone, Debug)]

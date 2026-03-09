@@ -5,7 +5,9 @@ use super::{
     run_single_build_cycle,
 };
 use crate::build_system::build::{self, BuildResult, FileKind, OutputFile, Project, WriteOptions};
-use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages, ErrorType};
+use crate::compiler_frontend::compiler_errors::{
+    CompilerError, CompilerMessages, ErrorMetaDataKey, ErrorType,
+};
 use crate::projects::dev_server::state::DevServerState;
 use crate::projects::dev_server::watch;
 use crate::projects::settings::Config;
@@ -299,9 +301,15 @@ fn dev_server_error_messages_use_dev_server_error_type() {
 #[test]
 fn format_error_messages_contains_error_text() {
     let mut messages = CompilerMessages::new();
-    messages
-        .errors
-        .push(CompilerError::compiler_error("expected text"));
+    let mut error = CompilerError::compiler_error("expected text");
+    error.new_metadata_entry(ErrorMetaDataKey::CompilationStage, "AST Construction");
+    error.new_metadata_entry(
+        ErrorMetaDataKey::PrimarySuggestion,
+        "Declare/import the function before calling it",
+    );
+    messages.errors.push(error);
     let text = format_error_messages(&messages);
     assert!(text.contains("expected text"));
+    assert!(text.contains("stage: AST Construction"));
+    assert!(text.contains("help: Declare/import the function before calling it"));
 }

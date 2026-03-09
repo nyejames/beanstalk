@@ -1,0 +1,3 @@
+mode = "failure"
+error_type = "Syntax"
+message_contains = ["Unexpected '->' in match arm", "use ':' between the condition and body"]

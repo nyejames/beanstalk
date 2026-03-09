@@ -7,6 +7,7 @@ use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, Operator,
 };
 use crate::compiler_frontend::ast::expressions::struct_instance::parse_struct_constructor_expression;
+use crate::compiler_frontend::ast::parser_diagnostics::{SyntaxDiagnosticConfig, syntax_error};
 use crate::compiler_frontend::ast::statements::collections::new_collection;
 use crate::compiler_frontend::ast::statements::declarations::create_reference;
 use crate::compiler_frontend::ast::statements::functions::{
@@ -134,6 +135,36 @@ pub fn create_expression(
             | TokenKind::StartTemplateBody
             | TokenKind::Colon
             | TokenKind::End => {
+                if expression.is_empty() {
+                    match token {
+                        TokenKind::Comma => {
+                            return Err(syntax_error(
+                                "Unexpected ',' in expression. Commas separate list items, function arguments, or return declarations.",
+                                token_stream.current_location(),
+                                SyntaxDiagnosticConfig::new(
+                                    "Expression Parsing",
+                                    "Add a value before ',' or remove the comma",
+                                ),
+                                string_table,
+                            ));
+                        }
+
+                        TokenKind::Arrow => {
+                            return Err(syntax_error(
+                                "Unexpected '->' in expression. Arrow syntax is only valid in function signatures.",
+                                token_stream.current_location(),
+                                SyntaxDiagnosticConfig::new(
+                                    "Expression Parsing",
+                                    "Use '->' only in function signatures like '|args| -> Type:'",
+                                ),
+                                string_table,
+                            ));
+                        }
+
+                        _ => {}
+                    }
+                }
+
                 ast_log!("Breaking out of expression");
 
                 if consume_closing_parenthesis {
@@ -896,11 +927,35 @@ pub fn create_expression(
                 scope: context.scope.clone(),
             }),
 
+            TokenKind::Wildcard => {
+                return Err(syntax_error(
+                    "Unexpected wildcard '_' in expression. Wildcards are only valid in supported pattern positions.",
+                    token_stream.current_location(),
+                    SyntaxDiagnosticConfig::new(
+                        "Expression Parsing",
+                        "Use a concrete value/expression here, or use 'else:' for default match arms",
+                    ),
+                    string_table,
+                ));
+            }
+
+            TokenKind::TypeParameterBracket => {
+                return Err(syntax_error(
+                    "Unexpected '|' in expression. This token is only valid in function signatures and struct definitions.",
+                    token_stream.current_location(),
+                    SyntaxDiagnosticConfig::new(
+                        "Expression Parsing",
+                        "Remove the stray '|' or move it into a declaration signature",
+                    ),
+                    string_table,
+                ));
+            }
+
             // For mutating references
             TokenKind::AddAssign => {}
 
             _ => {
-                return_type_error!(
+                return_syntax_error!(
                     format!("Invalid token used in expression: '{:?}'", token),
                     token_stream.current_location().to_error_location(&string_table),
                     {

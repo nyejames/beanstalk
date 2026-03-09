@@ -416,3 +416,40 @@ fn function_signature_rejects_unknown_symbolic_return_syntax() {
             .contains("Unknown return declaration 'MissingType'")
     }));
 }
+
+#[test]
+fn function_signature_reports_missing_arrow_before_return_type() {
+    let result = parse_single_file_headers_with_entry(
+        "#f|x Int| Int:\n;\n",
+        "src/#page.bst",
+        "src/#page.bst",
+    );
+    assert!(
+        result.is_err(),
+        "missing arrow before return type must fail"
+    );
+    let errors = result.err().expect("expected parse errors");
+
+    assert!(errors.iter().any(|error| {
+        error
+            .msg
+            .contains("Expected '->' or ':' after function parameters")
+    }));
+}
+
+#[test]
+fn function_signature_reports_missing_colon_after_return_list() {
+    let result =
+        parse_single_file_headers_with_entry("#f|| -> Int\n;\n", "src/#page.bst", "src/#page.bst");
+    assert!(
+        result.is_err(),
+        "missing ':' after return declarations must fail"
+    );
+    let errors = result.err().expect("expected parse errors");
+
+    assert!(errors.iter().any(|error| {
+        error
+            .msg
+            .contains("Function return declarations must end with ':'")
+    }));
+}

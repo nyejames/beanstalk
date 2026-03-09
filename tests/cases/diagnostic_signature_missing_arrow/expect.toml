@@ -1,0 +1,3 @@
+mode = "failure"
+error_type = "Syntax"
+message_contains = ["Expected '->' or ':' after function parameters", "return declaration token"]

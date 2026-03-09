@@ -8,7 +8,7 @@ use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
-use crate::{ast_log, return_rule_error};
+use crate::{ast_log, return_rule_error, return_syntax_error};
 // IF STATEMENTS / MATCH STATEMENTS
 // Possibly will be expressions in the future too?
 // Example:
@@ -182,6 +182,18 @@ fn create_match_node(
 
                 token_stream.advance();
                 if token_stream.current_token_kind() != &TokenKind::Colon {
+                    if token_stream.current_token_kind() == &TokenKind::Arrow {
+                        return_syntax_error!(
+                            "Unexpected '->' after 'else' in a match statement. Match arms must use ':' to open the arm body.",
+                            token_stream.current_location().to_error_location(string_table),
+                            {
+                                CompilationStage => "Match Statement Parsing",
+                                PrimarySuggestion => "Replace '->' with ':' after 'else'",
+                                SuggestedReplacement => ":",
+                            }
+                        )
+                    }
+
                     return_rule_error!(
                         format!(
                             "Expected ':' after the else arm to open a new scope, found '{:?}' instead",
@@ -216,6 +228,17 @@ fn create_match_node(
                     }
                 )
             }
+            TokenKind::Wildcard => {
+                return_syntax_error!(
+                    "Wildcard '_' arms are not supported in source match syntax. Use 'else:' for the default arm.",
+                    token_stream.current_location().to_error_location(string_table),
+                    {
+                        CompilationStage => "Match Statement Parsing",
+                        PrimarySuggestion => "Replace '_' with 'else:' for the default match arm",
+                        SuggestedReplacement => "else:",
+                    }
+                )
+            }
             _ => {
                 if seen_else {
                     return_rule_error!(
@@ -238,6 +261,18 @@ fn create_match_node(
                 )?;
 
                 if token_stream.current_token_kind() != &TokenKind::Colon {
+                    if token_stream.current_token_kind() == &TokenKind::Arrow {
+                        return_syntax_error!(
+                            "Unexpected '->' in match arm. Match arms use ':' between the condition and body.",
+                            token_stream.current_location().to_error_location(string_table),
+                            {
+                                CompilationStage => "Match Statement Parsing",
+                                PrimarySuggestion => "Replace '->' with ':' in this match arm",
+                                SuggestedReplacement => ":",
+                            }
+                        )
+                    }
+
                     return_rule_error!(
                         format!(
                             "Expected ':' after the match condition to open a new scope, found '{:?}' instead",

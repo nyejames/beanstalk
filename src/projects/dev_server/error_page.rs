@@ -4,7 +4,9 @@
 //! remain connected to hot reload via the injected SSE client snippet.
 #![allow(dead_code)]
 
-use crate::compiler_frontend::compiler_errors::{CompilerMessages, error_type_to_str};
+use crate::compiler_frontend::compiler_errors::{
+    CompilerMessages, ErrorMetaDataKey, error_type_to_str,
+};
 use std::fmt::Write;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -57,6 +59,33 @@ pub fn format_compiler_messages(messages: &CompilerMessages) -> String {
                 error.location.start_pos.line_number + 1,
                 error.location.start_pos.char_column + 1
             );
+        }
+        if let Some(stage) = error.metadata.get(&ErrorMetaDataKey::CompilationStage) {
+            let _ = writeln!(output, "  stage: {stage}");
+        }
+        if let Some(help) = error.metadata.get(&ErrorMetaDataKey::PrimarySuggestion) {
+            let _ = writeln!(output, "  help: {help}");
+        }
+        if let Some(alternative) = error.metadata.get(&ErrorMetaDataKey::AlternativeSuggestion) {
+            let _ = writeln!(output, "  alternative: {alternative}");
+        }
+        if let Some(replacement) = error.metadata.get(&ErrorMetaDataKey::SuggestedReplacement) {
+            let _ = writeln!(output, "  suggested replacement: {replacement}");
+        }
+        match (
+            error.metadata.get(&ErrorMetaDataKey::SuggestedInsertion),
+            error.metadata.get(&ErrorMetaDataKey::SuggestedLocation),
+        ) {
+            (Some(insertion), Some(location)) => {
+                let _ = writeln!(output, "  suggested insertion: '{insertion}' {location}");
+            }
+            (Some(insertion), None) => {
+                let _ = writeln!(output, "  suggested insertion: '{insertion}'");
+            }
+            (None, Some(location)) => {
+                let _ = writeln!(output, "  suggested location: {location}");
+            }
+            (None, None) => {}
         }
     }
 

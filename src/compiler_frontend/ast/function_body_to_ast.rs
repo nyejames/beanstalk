@@ -3,6 +3,9 @@ use crate::compiler_frontend::ast::ast_nodes::AstNode;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::expressions::mutation::handle_mutation;
 use crate::compiler_frontend::ast::expressions::parse_expression::create_multiple_expressions;
+use crate::compiler_frontend::ast::parser_diagnostics::{
+    SyntaxDiagnosticConfig, syntax_error, unexpected_token,
+};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
@@ -21,9 +24,7 @@ use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::compiler_frontend::traits::ContainsReferences;
 use crate::projects::settings;
 use crate::projects::settings::TOP_LEVEL_TEMPLATE_NAME;
-use crate::{
-    ast_log, return_compiler_error, return_rule_error, return_syntax_error, return_type_error,
-};
+use crate::{ast_log, return_rule_error, return_syntax_error, return_type_error};
 
 fn is_return_terminator(token: &TokenKind) -> bool {
     matches!(token, TokenKind::Newline | TokenKind::End | TokenKind::Eof)
@@ -35,6 +36,85 @@ fn normalize_return_expression_type(data_type: &DataType) -> DataType {
     match data_type {
         DataType::Template | DataType::TemplateWrapper => DataType::StringSlice,
         _ => data_type.to_owned(),
+    }
+}
+
+fn unexpected_function_body_token_error(
+    token: &TokenKind,
+    token_stream: &FileTokens,
+    string_table: &StringTable,
+) -> CompilerError {
+    match token {
+        TokenKind::Comma => syntax_error(
+            "Unexpected ',' in function body. Commas only separate items in lists, arguments, or return declarations.",
+            token_stream.current_location(),
+            SyntaxDiagnosticConfig::new(
+                "AST Construction",
+                "Remove the comma or place it inside a list/argument context",
+            ),
+            string_table,
+        ),
+
+        TokenKind::CloseParenthesis => syntax_error(
+            "Unexpected ')' in function body. This usually means an earlier '(' was not parsed in a valid expression or call.",
+            token_stream.current_location(),
+            SyntaxDiagnosticConfig::new(
+                "AST Construction",
+                "Remove the stray ')' or complete the expression/call before this point",
+            ),
+            string_table,
+        ),
+
+        TokenKind::CloseCurly => syntax_error(
+            "Unexpected '}' in function body. Curly braces are only valid for collection syntax.",
+            token_stream.current_location(),
+            SyntaxDiagnosticConfig::new(
+                "AST Construction",
+                "Remove the stray '}' or use collection syntax in a valid expression context",
+            ),
+            string_table,
+        ),
+
+        TokenKind::TypeParameterBracket => syntax_error(
+            "Unexpected '|' in function body. '|' is only used in function signatures and struct field/type declarations.",
+            token_stream.current_location(),
+            SyntaxDiagnosticConfig::new(
+                "AST Construction",
+                "Remove the stray '|' or move it into a declaration signature",
+            ),
+            string_table,
+        ),
+
+        TokenKind::Arrow => syntax_error(
+            "Unexpected '->' in function body. Arrow syntax is only valid in function signatures.",
+            token_stream.current_location(),
+            SyntaxDiagnosticConfig::new(
+                "AST Construction",
+                "Use '->' only in a function signature like '|args| -> Type:'",
+            ),
+            string_table,
+        ),
+
+        TokenKind::Wildcard => syntax_error(
+            "Unexpected wildcard '_' in function body. Wildcards are not standalone statements.",
+            token_stream.current_location(),
+            SyntaxDiagnosticConfig::new(
+                "AST Construction",
+                "Use '_' only in supported pattern positions, or use 'else:' for default match arms",
+            ),
+            string_table,
+        ),
+
+        other => unexpected_token(
+            other,
+            "a function body",
+            token_stream.current_location(),
+            SyntaxDiagnosticConfig::new(
+                "AST Construction",
+                "Use a valid statement such as a declaration, assignment, call, control-flow block, or template",
+            ),
+            string_table,
+        ),
     }
 }
 
@@ -236,10 +316,17 @@ pub fn function_body_to_ast(
                 // -----------------------------------------
                 } else {
                     if token_stream.peek_next_token() == Some(&TokenKind::OpenParenthesis) {
-                        return_compiler_error!(format!(
-                            "Call target '{}' is not declared or registered as a host function.",
-                            string_table.resolve(id)
-                        ));
+                        return_rule_error!(
+                            format!(
+                                "Call target '{}' is not declared in this scope and is not a registered host function.",
+                                string_table.resolve(id)
+                            ),
+                            token_stream.current_location().to_error_location(string_table), {
+                                CompilationStage => "AST Construction",
+                                PrimarySuggestion => "Declare/import this function before calling it, or check the function name spelling",
+                                AlternativeSuggestion => "If this should be a host function, register it in the host registry for this backend",
+                            }
+                        );
                     }
 
                     let arg = new_declaration(token_stream, id, &context, warnings, string_table)?;
@@ -551,10 +638,11 @@ pub fn function_body_to_ast(
 
             // Or stuff that hasn't been implemented yet
             _ => {
-                return_compiler_error!(format!(
-                    "Unexpected token found in the body of a function. Could be unimplemented. Token: {:?}",
-                    token_stream.current_token_kind()
-                ))
+                return Err(unexpected_function_body_token_error(
+                    token_stream.current_token_kind(),
+                    token_stream,
+                    string_table,
+                ));
             }
         }
     }

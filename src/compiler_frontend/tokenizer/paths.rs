@@ -42,6 +42,7 @@ pub fn parse_file_path(
     let mut imports: Vec<InternedPath> = Vec::with_capacity(1);
     let mut grouped_imports = false;
     let mut closed_wrapped_path = false;
+    let mut closed_grouped_import = false;
 
     while let Some(c) = stream.peek().copied() {
         if !wrapped_in_parentheses && matches!(c, '\n' | '\r') {
@@ -134,6 +135,7 @@ pub fn parse_file_path(
                 }
 
                 stream.next();
+                closed_grouped_import = true;
                 break;
             }
 
@@ -193,6 +195,17 @@ pub fn parse_file_path(
                 expect_symbol = false;
             }
         }
+    }
+
+    if grouped_imports && !closed_grouped_import {
+        return_syntax_error!(
+            "Grouped import is missing a closing '}'",
+            stream.new_location().to_error_location(string_table), {
+                CompilationStage => "Tokenization",
+                PrimarySuggestion => "Close grouped imports with '}'",
+                SuggestedInsertion => "}",
+            }
+        )
     }
 
     if imports.is_empty() {
@@ -257,17 +270,26 @@ pub fn parse_import_clause_tokens(
     }
 
     let Some(path_token) = tokens.get(index) else {
-        return Err(CompilerError::new_syntax_error(
+        return_syntax_error!(
             "Expected a path after the 'import' keyword",
-            import_token.location.to_error_location(string_table),
-        ));
+            import_token.location.to_error_location(string_table), {
+                CompilationStage => "Header Parsing",
+                PrimarySuggestion => "Add an import path like '@(folder/file)' after 'import'",
+            }
+        );
     };
 
     let TokenKind::Path(paths) = &path_token.kind else {
-        return Err(CompilerError::new_syntax_error(
-            "Expected a path after the 'import' keyword",
-            path_token.location.to_error_location(string_table),
-        ));
+        return_syntax_error!(
+            format!(
+                "Expected a path after the 'import' keyword, found '{:?}'",
+                path_token.kind
+            ),
+            path_token.location.to_error_location(string_table), {
+                CompilationStage => "Header Parsing",
+                PrimarySuggestion => "Use import syntax like 'import @(folder/file)'",
+            }
+        );
     };
 
     Ok((paths.to_owned(), index + 1))

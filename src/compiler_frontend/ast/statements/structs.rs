@@ -68,6 +68,18 @@ pub fn parse_parameters(
                 )
             }
 
+            TokenKind::Arrow | TokenKind::Colon => {
+                return_syntax_error!(
+                    "Function/struct parameters are missing a closing '|'.",
+                    token_stream.current_location().to_error_location(string_table),
+                    {
+                        CompilationStage => "Struct/Parameter Parsing",
+                        PrimarySuggestion => "Close the parameter list with '|' before writing '->' or ':'",
+                        SuggestedInsertion => "|",
+                    }
+                )
+            }
+
             TokenKind::Symbol(arg_name) => {
                 if !next_in_list {
                     return_syntax_error!(
