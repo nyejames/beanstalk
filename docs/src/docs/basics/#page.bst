@@ -1,6 +1,6 @@
 -- ADD A HASH TO THIS FILE TO INCLUDE IT IN THE MODULES.
 -- FOR NOW THIS IS DISABLED FOR TESTING
-import @libs/html/{format, center}
+import @libs/html/{format, center, table}
 import @styles/docs/{navbar, footer, title, page, palette}
 
 #[page, $markdown:
@@ -8,7 +8,7 @@ import @styles/docs/{navbar, footer, title, page, palette}
 [navbar]
 
 [title, center: LANGUAGE BASICS]
-[[]]
+
 Every project has a #config.bst file. 
 
 If instead, you build or run a specific Beanstalk file,
@@ -159,7 +159,7 @@ But new statements must start after a newline.
 All data type keywords contain methods from the standard library for common manipulation of types.
 
 ## Numerical Types
-[format.table:
+[table:
     [: Type] [: Description]
 
     [: float ] [: 64 bit floating point number]
@@ -170,7 +170,7 @@ All data type keywords contain methods from the standard library for common mani
 ## String based Types
 These are all different ways to create strings.
 
-[$code("bst"):
+[table:
     [: Type] [: Description]
 
     [: string slice ] [: UTF-8]
@@ -192,7 +192,7 @@ Scenes are used instead of format strings.
 The 'is' keyword is used to check equality, not '=='. 
 The "and / or" keywords are used for logical and / or and 'not' is used to invert a truthy value to falsy or vice versa.
 
-[format.table:
+[table:
     [: Operator] [: Description]          [: Precedence]
     [: `^`]        [: Exponent]            [: 4]
     [: `//`]       [: Root]                [: 4]

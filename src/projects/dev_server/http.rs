@@ -10,7 +10,7 @@ use crate::projects::dev_server::static_files::{self, ResolvePathError};
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, Write};
 use std::net::TcpStream;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 pub fn handle_connection(mut stream: TcpStream, state: Arc<DevServerState>) -> io::Result<()> {
@@ -40,6 +40,32 @@ pub fn handle_connection(mut stream: TcpStream, state: Arc<DevServerState>) -> i
 struct HttpRequest {
     method: String,
     path: String,
+}
+
+enum PreparedResponse {
+    Text {
+        status_line: &'static str,
+        content_type: &'static str,
+        body: String,
+    },
+    File {
+        path: PathBuf,
+        content_type: &'static str,
+    },
+}
+
+impl PreparedResponse {
+    fn text(
+        status_line: &'static str,
+        content_type: &'static str,
+        body: impl Into<String>,
+    ) -> Self {
+        Self::Text {
+            status_line,
+            content_type,
+            body: body.into(),
+        }
+    }
 }
 
 fn parse_request(stream: &TcpStream) -> io::Result<Option<HttpRequest>> {
@@ -88,35 +114,28 @@ fn serve_static_request(
         .map_err(|_| io::Error::other("build state lock was poisoned"))?
         .clone();
 
-    if should_serve_error_page(request_path, &build_state) {
-        let error_page = build_state.last_error_html.unwrap_or_else(|| {
-            render_runtime_error_page(
-                "Build Failed",
-                "The latest build failed, but no diagnostics were stored.",
-                build_state.last_build_version,
-            )
-        });
-
-        return send_text_response(stream, "200 OK", "text/html; charset=utf-8", &error_page);
+    match prepare_static_response(request_path, &build_state) {
+        PreparedResponse::Text {
+            status_line,
+            content_type,
+            body,
+        } => send_text_response(stream, status_line, content_type, &body),
+        PreparedResponse::File { path, content_type } => {
+            stream_file_response(stream, &path, content_type)
+        }
     }
+}
 
+fn prepare_static_response(request_path: &str, build_state: &BuildState) -> PreparedResponse {
     let resolved_path = match static_files::resolve_request_path(
         request_path,
         &build_state.output_dir,
         build_state.entry_page_rel.as_deref(),
     ) {
-        Ok(path) => path,
-        Err(ResolvePathError::MissingEntryPage) if request_path == "/" => {
-            let error_page = render_runtime_error_page(
-                "Missing Entry Page",
-                "Build did not produce a HTML entry page for '/'.",
-                build_state.last_build_version,
-            );
-            return send_text_response(stream, "200 OK", "text/html; charset=utf-8", &error_page);
-        }
+        Ok(path) => Some(path),
+        Err(ResolvePathError::MissingEntryPage) if request_path == "/" => None,
         Err(ResolvePathError::InvalidPath) | Err(ResolvePathError::MissingEntryPage) => {
-            return send_text_response(
-                stream,
+            return PreparedResponse::text(
                 "404 NOT FOUND",
                 "text/plain; charset=utf-8",
                 "Not Found",
@@ -124,13 +143,34 @@ fn serve_static_request(
         }
     };
 
+    // Failed builds should replace stale HTML pages with diagnostics while still allowing
+    // supporting assets to load so the browser can keep the last successful shell intact.
+    if should_serve_failed_build_html(request_path, resolved_path.as_deref(), build_state) {
+        let error_page = build_state.last_error_html.clone().unwrap_or_else(|| {
+            render_runtime_error_page(
+                "Build Failed",
+                "The latest build failed, but no diagnostics were stored.",
+                build_state.last_build_version,
+            )
+        });
+
+        return PreparedResponse::text("200 OK", "text/html; charset=utf-8", error_page);
+    }
+
+    let resolved_path = match resolved_path {
+        Some(path) => path,
+        None => {
+            let error_page = render_runtime_error_page(
+                "Missing Entry Page",
+                "Build did not produce a HTML entry page for '/'.",
+                build_state.last_build_version,
+            );
+            return PreparedResponse::text("200 OK", "text/html; charset=utf-8", error_page);
+        }
+    };
+
     if !resolved_path.exists() || !resolved_path.is_file() {
-        return send_text_response(
-            stream,
-            "404 NOT FOUND",
-            "text/plain; charset=utf-8",
-            "Not Found",
-        );
+        return PreparedResponse::text("404 NOT FOUND", "text/plain; charset=utf-8", "Not Found");
     }
 
     let content_type = static_files::content_type_for_path(&resolved_path);
@@ -138,23 +178,29 @@ fn serve_static_request(
         let html = match std::fs::read_to_string(&resolved_path) {
             Ok(contents) => contents,
             Err(error) => {
-                return send_text_response(
-                    stream,
+                return PreparedResponse::text(
                     "500 INTERNAL SERVER ERROR",
                     "text/plain; charset=utf-8",
-                    &format!("Failed to read HTML file: {error}"),
+                    format!("Failed to read HTML file: {error}"),
                 );
             }
         };
 
         let injected_html = static_files::inject_dev_client(&html);
-        return send_text_response(stream, "200 OK", content_type, &injected_html);
+        return PreparedResponse::text("200 OK", content_type, injected_html);
     }
 
-    stream_file_response(stream, &resolved_path, content_type)
+    PreparedResponse::File {
+        path: resolved_path,
+        content_type,
+    }
 }
 
-fn should_serve_error_page(request_path: &str, build_state: &BuildState) -> bool {
+fn should_serve_failed_build_html(
+    request_path: &str,
+    resolved_path: Option<&Path>,
+    build_state: &BuildState,
+) -> bool {
     if build_state.last_build_ok {
         return false;
     }
@@ -163,11 +209,12 @@ fn should_serve_error_page(request_path: &str, build_state: &BuildState) -> bool
         return true;
     }
 
-    // Keep assets reachable during failed builds, but force the entry route to show diagnostics.
-    let Some(ref entry_page) = build_state.entry_page_rel else {
+    let Some(resolved_path) = resolved_path else {
         return false;
     };
-    static_files::entry_route(entry_page) == request_path
+
+    let content_type = static_files::content_type_for_path(resolved_path);
+    static_files::is_html_content_type(content_type)
 }
 
 fn stream_file_response(
@@ -215,3 +262,7 @@ fn send_response_headers(
     );
     stream.write_all(headers.as_bytes())
 }
+
+#[cfg(test)]
+#[path = "tests/http_tests.rs"]
+mod tests;

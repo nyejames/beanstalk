@@ -6,7 +6,7 @@ use saying::say;
 use std::path::{Path, PathBuf};
 use std::{env, fs};
 
-fn normalize_display_path(path: &Path) -> PathBuf {
+pub(crate) fn normalize_display_path(path: &Path) -> PathBuf {
     let path_string = path.to_string_lossy();
     if let Some(stripped) = path_string.strip_prefix(r"\\?\") {
         return PathBuf::from(stripped);
@@ -15,25 +15,49 @@ fn normalize_display_path(path: &Path) -> PathBuf {
     path.to_path_buf()
 }
 
-fn relative_display_path(scope: &Path) -> String {
+pub(crate) fn relative_display_path_from_root(scope: &Path, root: &Path) -> String {
     let normalized_scope = normalize_display_path(scope);
+    let normalized_root = normalize_display_path(root);
 
+    normalized_scope
+        .strip_prefix(&normalized_root)
+        .unwrap_or(&normalized_scope)
+        .to_string_lossy()
+        .to_string()
+}
+
+fn relative_display_path(scope: &Path) -> String {
     match env::current_dir() {
-        Ok(dir) => {
-            let normalized_dir = normalize_display_path(&dir);
-            normalized_scope
-                .strip_prefix(&normalized_dir)
-                .unwrap_or(&normalized_scope)
-                .to_string_lossy()
-                .to_string()
-        }
+        Ok(dir) => relative_display_path_from_root(scope, &dir),
         Err(err) => {
             say!(Red
                 "Compiler failed to find the file to give you the snippet. Another compiler_frontend developer skill issue. ",
                 err
             );
-            normalized_scope.to_string_lossy().to_string()
+            normalize_display_path(scope).to_string_lossy().to_string()
         }
+    }
+}
+
+pub(crate) fn resolve_source_file_path(scope: &Path) -> PathBuf {
+    let mut source_file = normalize_display_path(scope);
+
+    // Header diagnostics use a synthetic "file.bst/header_name.header" scope so the terminal and
+    // dev-server error pages both need to strip that suffix back to the original source file.
+    if source_file
+        .file_name()
+        .and_then(|file_name| file_name.to_str())
+        .is_some_and(|file_name| file_name.ends_with(".header"))
+    {
+        source_file = match source_file.parent() {
+            Some(parent) => parent.to_path_buf(),
+            None => source_file,
+        };
+    }
+
+    match fs::canonicalize(&source_file) {
+        Ok(canonical_path) => normalize_display_path(&canonical_path),
+        Err(_) => source_file,
     }
 }
 
@@ -91,13 +115,7 @@ pub fn print_formatted_error(e: CompilerError) {
 
     // Read the file and get the actual line as a string from the code
     // Strip the actual header at the end of the path (.header extension)
-    let mut actual_file = normalize_display_path(&e.location.scope);
-    if actual_file.ends_with(".header") {
-        actual_file = match actual_file.ancestors().nth(1) {
-            Some(p) => p.to_path_buf(),
-            None => actual_file,
-        }
-    }
+    let actual_file = resolve_source_file_path(&e.location.scope);
 
     let line = match fs::read_to_string(&actual_file) {
         Ok(file) => file

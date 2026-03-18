@@ -38,4 +38,3 @@ Palette = |
 |
 
 # palette = Palette()
-

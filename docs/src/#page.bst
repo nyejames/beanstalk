@@ -20,7 +20,7 @@ The source code for this website can be found on @https://github.com/nyejames/be
     *A full rewrite of the documentation using Beanstalk is in progress*
 ]
 
-- @/docs/basics.html (Basics)
+@/docs/basics.html (Basics)
 
 ]
 

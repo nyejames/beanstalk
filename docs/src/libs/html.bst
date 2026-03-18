@@ -25,14 +25,19 @@ Format = |
     -- Basic formatting
     underline String = [:<u style="[$slot("style")]">[$slot]</u>],
     strikethrough String = [:<s style="[$slot("style")]">[$slot]</s>],
-    table String = [:
-      <table style="[$slot("style")]">[$slot]</table>
-    ],
 |
 
 # format = Format()
 
 # link = [:<a href="[$slot("href")]">[$slot]</a>]
+
+# table = [:
+  <table style="[$slot("style")]">
+    <tr>
+      [$children([:<td></td>]):[$slot]]
+    </tr>
+  </table>
+]
 
 -- Inline Utility Styles
 # center String = [$insert("style"):text-align: center;]

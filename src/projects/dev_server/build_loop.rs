@@ -10,7 +10,7 @@ use crate::compiler_frontend::compiler_errors::{
     CompilerError, CompilerMessages, ErrorMetaDataKey, ErrorType, error_type_to_str,
 };
 use crate::projects::dev_server::error_page::{
-    format_compiler_messages, render_runtime_error_page,
+    format_compiler_messages, render_compiler_error_page, render_runtime_error_page,
 };
 use crate::projects::dev_server::sse;
 use crate::projects::dev_server::state::DevServerState;
@@ -33,7 +33,12 @@ struct BuildOutcome {
     build_succeeded: bool,
     entry_page_rel: Option<PathBuf>,
     diagnostics_summary: String,
-    error_title: Option<String>,
+    failed_build: Option<BuildFailure>,
+}
+
+enum BuildFailure {
+    CompilerMessages(CompilerMessages),
+    RuntimeError { title: String, details: String },
 }
 
 /// Adapter for build execution used by the dev loop.
@@ -97,6 +102,13 @@ pub fn run_single_build_cycle(
     };
 
     let build_outcome = build_once(executor, entry_file, flags, &output_dir);
+    let project_root = dev_server_project_root(entry_file);
+    let BuildOutcome {
+        build_succeeded,
+        entry_page_rel,
+        diagnostics_summary,
+        failed_build,
+    } = build_outcome;
 
     let version = {
         // If a previous dev-server task panicked while holding the lock, keep the latest state and
@@ -106,22 +118,30 @@ pub fn run_single_build_cycle(
             Err(poisoned) => poisoned.into_inner(),
         };
         build_state.last_build_version = build_state.last_build_version.saturating_add(1);
-        build_state.last_build_ok = build_outcome.build_succeeded;
-        build_state.last_build_messages_summary = build_outcome.diagnostics_summary.clone();
+        build_state.last_build_ok = build_succeeded;
+        build_state.last_build_messages_summary = diagnostics_summary;
 
-        if build_outcome.build_succeeded {
+        if build_succeeded {
             build_state.last_error_html = None;
-            build_state.entry_page_rel = build_outcome.entry_page_rel.clone();
+            build_state.entry_page_rel = entry_page_rel;
         } else {
-            let title = build_outcome
-                .error_title
-                .clone()
-                .unwrap_or_else(|| String::from("Build Failed"));
-            build_state.last_error_html = Some(render_runtime_error_page(
-                &title,
-                &build_outcome.diagnostics_summary,
-                build_state.last_build_version,
-            ));
+            // Render compiler diagnostics only after the version increments so the error page and
+            // the SSE reload event always point at the same build number.
+            build_state.last_error_html = Some(match failed_build {
+                Some(BuildFailure::CompilerMessages(messages)) => render_compiler_error_page(
+                    &messages,
+                    &project_root,
+                    build_state.last_build_version,
+                ),
+                Some(BuildFailure::RuntimeError { title, details }) => {
+                    render_runtime_error_page(&title, &details, build_state.last_build_version)
+                }
+                None => render_runtime_error_page(
+                    "Build Failed",
+                    "The latest build failed, but no diagnostics were stored.",
+                    build_state.last_build_version,
+                ),
+            });
         }
 
         build_state.last_build_version
@@ -130,7 +150,7 @@ pub fn run_single_build_cycle(
     let clients_notified = sse::broadcast_reload(state, version);
     BuildCycleReport {
         version,
-        build_ok: build_outcome.build_succeeded,
+        build_ok: build_succeeded,
         clients_notified,
     }
 }
@@ -262,7 +282,7 @@ fn build_once(
                 build_succeeded: false,
                 entry_page_rel: None,
                 diagnostics_summary: format_compiler_messages(&messages),
-                error_title: Some(String::from("Build Failed")),
+                failed_build: Some(BuildFailure::CompilerMessages(messages)),
             };
         }
     };
@@ -285,7 +305,7 @@ fn build_once(
             build_succeeded: true,
             entry_page_rel: Some(entry_page_rel),
             diagnostics_summary,
-            error_title: None,
+            failed_build: None,
         }
     } else {
         BuildOutcome {
@@ -294,8 +314,24 @@ fn build_once(
             diagnostics_summary: String::from(
                 "Build completed, but the project builder did not declare a dev entry page.",
             ),
-            error_title: Some(String::from("Missing Dev Entry")),
+            failed_build: Some(BuildFailure::RuntimeError {
+                title: String::from("Missing Dev Entry"),
+                details: String::from(
+                    "Build completed, but the project builder did not declare a dev entry page.",
+                ),
+            }),
         }
+    }
+}
+
+fn dev_server_project_root(entry_file: &Path) -> PathBuf {
+    if entry_file.is_dir() {
+        return entry_file.to_path_buf();
+    }
+
+    match entry_file.parent() {
+        Some(parent) => parent.to_path_buf(),
+        None => PathBuf::from("."),
     }
 }
 

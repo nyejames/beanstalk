@@ -60,11 +60,6 @@ pub fn is_html_content_type(content_type: &str) -> bool {
     content_type.starts_with("text/html")
 }
 
-pub fn entry_route(entry_page_rel: &Path) -> String {
-    let normalized = entry_page_rel.to_string_lossy().replace('\\', "/");
-    format!("/{normalized}")
-}
-
 pub fn resolve_request_path(
     request_path: &str,
     output_dir: &Path,
