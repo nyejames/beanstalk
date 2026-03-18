@@ -7,7 +7,6 @@ use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, Operator,
 };
 use crate::compiler_frontend::ast::expressions::struct_instance::parse_struct_constructor_expression;
-use crate::compiler_frontend::ast::parser_diagnostics::{SyntaxDiagnosticConfig, syntax_error};
 use crate::compiler_frontend::ast::statements::collections::new_collection;
 use crate::compiler_frontend::ast::statements::declarations::create_reference;
 use crate::compiler_frontend::ast::statements::functions::{
@@ -15,7 +14,7 @@ use crate::compiler_frontend::ast::statements::functions::{
 };
 use crate::compiler_frontend::ast::templates::create_template_node::Template;
 use crate::compiler_frontend::ast::templates::template::TemplateType;
-use crate::compiler_frontend::compiler_errors::CompilerError;
+use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorMetaDataKey};
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TextLocation, Token, TokenKind};
@@ -138,27 +137,39 @@ pub fn create_expression(
                 if expression.is_empty() {
                     match token {
                         TokenKind::Comma => {
-                            return Err(syntax_error(
+                            let mut error = CompilerError::new_syntax_error(
                                 "Unexpected ',' in expression. Commas separate list items, function arguments, or return declarations.",
-                                token_stream.current_location(),
-                                SyntaxDiagnosticConfig::new(
-                                    "Expression Parsing",
-                                    "Add a value before ',' or remove the comma",
-                                ),
-                                string_table,
-                            ));
+                                token_stream
+                                    .current_location()
+                                    .to_error_location(string_table),
+                            );
+                            error.new_metadata_entry(
+                                ErrorMetaDataKey::CompilationStage,
+                                "Expression Parsing",
+                            );
+                            error.new_metadata_entry(
+                                ErrorMetaDataKey::PrimarySuggestion,
+                                "Add a value before ',' or remove the comma",
+                            );
+                            return Err(error);
                         }
 
                         TokenKind::Arrow => {
-                            return Err(syntax_error(
+                            let mut error = CompilerError::new_syntax_error(
                                 "Unexpected '->' in expression. Arrow syntax is only valid in function signatures.",
-                                token_stream.current_location(),
-                                SyntaxDiagnosticConfig::new(
-                                    "Expression Parsing",
-                                    "Use '->' only in function signatures like '|args| -> Type:'",
-                                ),
-                                string_table,
-                            ));
+                                token_stream
+                                    .current_location()
+                                    .to_error_location(string_table),
+                            );
+                            error.new_metadata_entry(
+                                ErrorMetaDataKey::CompilationStage,
+                                "Expression Parsing",
+                            );
+                            error.new_metadata_entry(
+                                ErrorMetaDataKey::PrimarySuggestion,
+                                "Use '->' only in function signatures like '|args| -> Type:'",
+                            );
+                            return Err(error);
                         }
 
                         _ => {}
@@ -928,27 +939,33 @@ pub fn create_expression(
             }),
 
             TokenKind::Wildcard => {
-                return Err(syntax_error(
+                let mut error = CompilerError::new_syntax_error(
                     "Unexpected wildcard '_' in expression. Wildcards are only valid in supported pattern positions.",
-                    token_stream.current_location(),
-                    SyntaxDiagnosticConfig::new(
-                        "Expression Parsing",
-                        "Use a concrete value/expression here, or use 'else:' for default match arms",
-                    ),
-                    string_table,
-                ));
+                    token_stream
+                        .current_location()
+                        .to_error_location(string_table),
+                );
+                error.new_metadata_entry(ErrorMetaDataKey::CompilationStage, "Expression Parsing");
+                error.new_metadata_entry(
+                    ErrorMetaDataKey::PrimarySuggestion,
+                    "Use a concrete value/expression here, or use 'else:' for default match arms",
+                );
+                return Err(error);
             }
 
             TokenKind::TypeParameterBracket => {
-                return Err(syntax_error(
+                let mut error = CompilerError::new_syntax_error(
                     "Unexpected '|' in expression. This token is only valid in function signatures and struct definitions.",
-                    token_stream.current_location(),
-                    SyntaxDiagnosticConfig::new(
-                        "Expression Parsing",
-                        "Remove the stray '|' or move it into a declaration signature",
-                    ),
-                    string_table,
-                ));
+                    token_stream
+                        .current_location()
+                        .to_error_location(string_table),
+                );
+                error.new_metadata_entry(ErrorMetaDataKey::CompilationStage, "Expression Parsing");
+                error.new_metadata_entry(
+                    ErrorMetaDataKey::PrimarySuggestion,
+                    "Remove the stray '|' or move it into a declaration signature",
+                );
+                return Err(error);
             }
 
             // For mutating references

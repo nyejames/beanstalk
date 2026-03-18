@@ -3,10 +3,7 @@ use crate::compiler_frontend::ast::ast_nodes::AstNode;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::expressions::mutation::handle_mutation;
 use crate::compiler_frontend::ast::expressions::parse_expression::create_multiple_expressions;
-use crate::compiler_frontend::ast::parser_diagnostics::{
-    SyntaxDiagnosticConfig, syntax_error, unexpected_token,
-};
-use crate::compiler_frontend::compiler_errors::CompilerError;
+use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorMetaDataKey};
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 
@@ -45,76 +42,110 @@ fn unexpected_function_body_token_error(
     string_table: &StringTable,
 ) -> CompilerError {
     match token {
-        TokenKind::Comma => syntax_error(
-            "Unexpected ',' in function body. Commas only separate items in lists, arguments, or return declarations.",
-            token_stream.current_location(),
-            SyntaxDiagnosticConfig::new(
-                "AST Construction",
+        TokenKind::Comma => {
+            let mut error = CompilerError::new_syntax_error(
+                "Unexpected ',' in function body. Commas only separate items in lists, arguments, or return declarations.",
+                token_stream
+                    .current_location()
+                    .to_error_location(string_table),
+            );
+            error.new_metadata_entry(ErrorMetaDataKey::CompilationStage, "AST Construction");
+            error.new_metadata_entry(
+                ErrorMetaDataKey::PrimarySuggestion,
                 "Remove the comma or place it inside a list/argument context",
-            ),
-            string_table,
-        ),
+            );
+            error
+        }
 
-        TokenKind::CloseParenthesis => syntax_error(
-            "Unexpected ')' in function body. This usually means an earlier '(' was not parsed in a valid expression or call.",
-            token_stream.current_location(),
-            SyntaxDiagnosticConfig::new(
-                "AST Construction",
+        TokenKind::CloseParenthesis => {
+            let mut error = CompilerError::new_syntax_error(
+                "Unexpected ')' in function body. This usually means an earlier '(' was not parsed in a valid expression or call.",
+                token_stream
+                    .current_location()
+                    .to_error_location(string_table),
+            );
+            error.new_metadata_entry(ErrorMetaDataKey::CompilationStage, "AST Construction");
+            error.new_metadata_entry(
+                ErrorMetaDataKey::PrimarySuggestion,
                 "Remove the stray ')' or complete the expression/call before this point",
-            ),
-            string_table,
-        ),
+            );
+            error
+        }
 
-        TokenKind::CloseCurly => syntax_error(
-            "Unexpected '}' in function body. Curly braces are only valid for collection syntax.",
-            token_stream.current_location(),
-            SyntaxDiagnosticConfig::new(
-                "AST Construction",
+        TokenKind::CloseCurly => {
+            let mut error = CompilerError::new_syntax_error(
+                "Unexpected '}' in function body. Curly braces are only valid for collection syntax.",
+                token_stream
+                    .current_location()
+                    .to_error_location(string_table),
+            );
+            error.new_metadata_entry(ErrorMetaDataKey::CompilationStage, "AST Construction");
+            error.new_metadata_entry(
+                ErrorMetaDataKey::PrimarySuggestion,
                 "Remove the stray '}' or use collection syntax in a valid expression context",
-            ),
-            string_table,
-        ),
+            );
+            error
+        }
 
-        TokenKind::TypeParameterBracket => syntax_error(
-            "Unexpected '|' in function body. '|' is only used in function signatures and struct field/type declarations.",
-            token_stream.current_location(),
-            SyntaxDiagnosticConfig::new(
-                "AST Construction",
+        TokenKind::TypeParameterBracket => {
+            let mut error = CompilerError::new_syntax_error(
+                "Unexpected '|' in function body. '|' is only used in function signatures and struct field/type declarations.",
+                token_stream
+                    .current_location()
+                    .to_error_location(string_table),
+            );
+            error.new_metadata_entry(ErrorMetaDataKey::CompilationStage, "AST Construction");
+            error.new_metadata_entry(
+                ErrorMetaDataKey::PrimarySuggestion,
                 "Remove the stray '|' or move it into a declaration signature",
-            ),
-            string_table,
-        ),
+            );
+            error
+        }
 
-        TokenKind::Arrow => syntax_error(
-            "Unexpected '->' in function body. Arrow syntax is only valid in function signatures.",
-            token_stream.current_location(),
-            SyntaxDiagnosticConfig::new(
-                "AST Construction",
+        TokenKind::Arrow => {
+            let mut error = CompilerError::new_syntax_error(
+                "Unexpected '->' in function body. Arrow syntax is only valid in function signatures.",
+                token_stream
+                    .current_location()
+                    .to_error_location(string_table),
+            );
+            error.new_metadata_entry(ErrorMetaDataKey::CompilationStage, "AST Construction");
+            error.new_metadata_entry(
+                ErrorMetaDataKey::PrimarySuggestion,
                 "Use '->' only in a function signature like '|args| -> Type:'",
-            ),
-            string_table,
-        ),
+            );
+            error
+        }
 
-        TokenKind::Wildcard => syntax_error(
-            "Unexpected wildcard '_' in function body. Wildcards are not standalone statements.",
-            token_stream.current_location(),
-            SyntaxDiagnosticConfig::new(
-                "AST Construction",
+        TokenKind::Wildcard => {
+            let mut error = CompilerError::new_syntax_error(
+                "Unexpected wildcard '_' in function body. Wildcards are not standalone statements.",
+                token_stream
+                    .current_location()
+                    .to_error_location(string_table),
+            );
+            error.new_metadata_entry(ErrorMetaDataKey::CompilationStage, "AST Construction");
+            error.new_metadata_entry(
+                ErrorMetaDataKey::PrimarySuggestion,
                 "Use '_' only in supported pattern positions, or use 'else:' for default match arms",
-            ),
-            string_table,
-        ),
+            );
+            error
+        }
 
-        other => unexpected_token(
-            other,
-            "a function body",
-            token_stream.current_location(),
-            SyntaxDiagnosticConfig::new(
-                "AST Construction",
+        other => {
+            let mut error = CompilerError::new_syntax_error(
+                format!("Unexpected token '{other:?}' in a function body."),
+                token_stream
+                    .current_location()
+                    .to_error_location(string_table),
+            );
+            error.new_metadata_entry(ErrorMetaDataKey::CompilationStage, "AST Construction");
+            error.new_metadata_entry(
+                ErrorMetaDataKey::PrimarySuggestion,
                 "Use a valid statement such as a declaration, assignment, call, control-flow block, or template",
-            ),
-            string_table,
-        ),
+            );
+            error
+        }
     }
 }
 
