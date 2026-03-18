@@ -16,7 +16,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 #[derive(Clone, Debug, Default)]
 struct SlotSchema {
     has_default_slot: bool,
-    named_slots: FxHashSet<crate::compiler_frontend::string_interning::StringId>,
+    named_slots: FxHashSet<StringId>,
 }
 
 impl SlotSchema {
@@ -39,7 +39,7 @@ impl SlotSchema {
 #[derive(Clone, Debug, Default)]
 struct SlotContributions {
     default_atoms: Vec<TemplateAtom>,
-    named_atoms: FxHashMap<crate::compiler_frontend::string_interning::StringId, Vec<TemplateAtom>>,
+    named_atoms: FxHashMap<StringId, Vec<TemplateAtom>>,
 }
 
 impl SlotContributions {
@@ -47,11 +47,7 @@ impl SlotContributions {
         self.default_atoms.push(atom);
     }
 
-    fn extend_named_atoms(
-        &mut self,
-        name: crate::compiler_frontend::string_interning::StringId,
-        atoms: Vec<TemplateAtom>,
-    ) {
+    fn extend_named_atoms(&mut self, name: StringId, atoms: Vec<TemplateAtom>) {
         self.named_atoms.entry(name).or_default().extend(atoms);
     }
 

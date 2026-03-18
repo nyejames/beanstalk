@@ -11,7 +11,7 @@
         <meta name="viewport"content="width=device-width, initial-scale=1">
         <link rel="icon"href="">
 
-        <title> Beanstalk Documentation</title>
+        <title style=""> Beanstalk Documentation</title>
         <style>
     @charset "UTF-8";
     :root {
@@ -138,7 +138,6 @@
     }
 
     /* Common Styles */
-
     .bst-center {
       text-align: center;
     }
@@ -252,14 +251,12 @@
       </head>
     
 
-    <body class="container">
+    <body class="container" style="">
         
     <nav></nav>
-<br><div class="bst-center">
-     <h1 style="font-size: 2em;"> LANGUAGE BASICS</h1>
-</div><br><p>Every project has a #config.bst file. </p><p>If instead, you build or run a specific Beanstalk file, it will create a single Wasm module from that entry point and pull in all its dependencies. </p><p>From the config file you can define a Beanstalk file as the entry point of a program. </p><p>Web projects have their own directory based structure and config file also. </p><h1>Quick Syntax Summary</h1><p>For developers coming from most other languages,  here are some key idiosyncrasies from other C-like languages to note: </p><p>- Colon opens a scope, semicolon closes it. Semicolon does not end statements. - Square brackets are NOT used for arrays, curly braces are used instead.  Square brackets are only used for string templates. Items in collections are accessed via methods. - Equality and other logical operators use keywords like &quot;is&quot; and &quot;not&quot;  (you can&#39;t use == or ! for example) - ~ tilde symbol to indicate mutability (mutability must be explicit).  This comes before the type if there is an explicit type declaration. - Double dashes for single line comments (--) - Immutable Reference semantics are the default for all stack and heap allocated types.  - All copies have to be explicit unless they are used in part of a new expression.  Even for primitive types such as integers. </p><p>4 spaces are recommended for indentation. </p><p>- Types use UpperCamelCase - Everything else uses regular_snake_case </p><h1>Comments</h1><p>Comments use a double minus sign.  Documentation comments will eventually be created via special templates. </p><code class='codeblock'>
+ <h1 style="font-size: 2em;text-align: center;"> <p>LANGUAGE BASICS</p></h1><p>Every project has a #config.bst file.  </p><p>If instead, you build or run a specific Beanstalk file, it will create a single Wasm module from that entry point and pull in all its dependencies. </p><p>From the config file you can define a Beanstalk file as the entry point of a program. </p><p>Web projects have their own directory based structure and config file also. </p><h1>Quick Syntax Summary</h1><p>For developers coming from most other languages,  here are some key idiosyncrasies from other C-like languages to note: </p><p>- Colon opens a scope, semicolon closes it. Semicolon does not end statements. - Square brackets are NOT used for arrays, curly braces are used instead.  Square brackets are only used for string templates. Items in collections are accessed via methods. - Equality and other logical operators use keywords like &quot;is&quot; and &quot;not&quot;  (you can&#39;t use == or ! for example) - ~ tilde symbol to indicate mutability (mutability must be explicit).  This comes before the type if there is an explicit type declaration. - Double dashes for single line comments (--) - Immutable Reference semantics are the default for all stack and heap allocated types.  - All copies have to be explicit unless they are used in part of a new expression.  Even for primitive types such as integers. </p><p>4 spaces are recommended for indentation. </p><p>- Types use UpperCamelCase - Everything else uses regular_snake_case </p><h1>Comments</h1><p>Comments use a double minus sign.  Documentation comments will eventually be created via special templates. </p><code class='codeblock'>
 <span class='bst-code-comment'>-- normal comment</span>
-</code><br><h1>Variables</h1><p>Equals means assign. Tilde ~ means this is a mutable and can change. </p><p>All variables must be assigned a value when they are declared. </p><h2>Assignment</h2><h3>Variables</h3><code class='codeblock'>
+</code><h1>Variables</h1><p>Equals means assign. Tilde ~ means this is a mutable and can change. </p><p>All variables must be assigned a value when they are declared. </p><h2>Assignment</h2><h3>Variables</h3><code class='codeblock'>
 int <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-number'>0</span>
 float <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-number'>0.0</span>
 
@@ -285,7 +282,7 @@ instance <span class='bst-code-operator'>~</span><span class='bst-code-operator'
     value <span class='bst-code-operator'>=</span> <span class='bst-code-number'>1.2</span>, 
     another_value <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;hey&quot;</span>
 <span class='bst-code-parenthesis'>)</span>
-</code><br><code class='codeblock'>
+</code><code class='codeblock'>
 <span class='bst-code-comment'>-- 64 bit immutable float</span>
 number <span class='bst-code-operator'>=</span> <span class='bst-code-number'>420.69</span>
 
@@ -316,7 +313,7 @@ a_mutable_string <span class='bst-code-operator'>~</span><span class='bst-code-t
 <span class='bst-code-comment'>-- You can&#39;t use the &#39;+&#39; operator on strings,</span>
 <span class='bst-code-comment'>-- They can be concatenated using templates</span>
 concatenated_strings <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span>string_slice, a_mutable_string<span class='bst-code-parenthesis'>]</span>
-</code><br><p>All copies are explicit and must use the &#39;copy&#39; keyword in place of a type. </p><code class='codeblock'>
+</code><p>All copies are explicit and must use the &#39;copy&#39; keyword in place of a type. </p><code class='codeblock'>
 <span class='bst-code-comment'>-- Create a new collection of integers</span>
 a_collection <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-number'>1</span>, <span class='bst-code-number'>2</span>, <span class='bst-code-number'>3</span>, <span class='bst-code-number'>4</span>, <span class='bst-code-number'>5</span><span class='bst-code-parenthesis'>}</span>
 
@@ -335,7 +332,7 @@ io<span class='bst-code-parenthesis'>(</span>a_collection<span class='bst-code-p
 
 a_collection.pull<span class='bst-code-parenthesis'>(</span>a_collection.length<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>-</span> <span class='bst-code-number'>1</span><span class='bst-code-parenthesis'>)</span>
 io<span class='bst-code-parenthesis'>(</span>a_collection<span class='bst-code-parenthesis'>)</span> <span class='bst-code-comment'>-- {23.0}</span>
-</code><br><p>Expressions can span over multiple lines. </p><p>But new statements must start after a newline. </p><code class='codeblock'>
+</code><p>Expressions can span over multiple lines. </p><p>But new statements must start after a newline. </p><code class='codeblock'>
 <span class='bst-code-comment'>-- Valid</span>
 some_int <span class='bst-code-operator'>=</span>
     <span class='bst-code-number'>4</span> <span class='bst-code-operator'>+</span> <span class='bst-code-number'>5</span> <span class='bst-code-operator'>+</span> <span class='bst-code-number'>6</span> <span class='bst-code-operator'>+</span> <span class='bst-code-number'>7</span> <span class='bst-code-operator'>+</span> 
@@ -345,31 +342,19 @@ some_int <span class='bst-code-operator'>=</span>
 some_int <span class='bst-code-operator'>=</span>
     <span class='bst-code-number'>4</span> <span class='bst-code-operator'>+</span> <span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>5</span> <span class='bst-code-operator'>+</span> <span class='bst-code-number'>6</span><span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>*</span> <span class='bst-code-number'>7</span>
     <span class='bst-code-operator'>+</span> <span class='bst-code-number'>8</span> <span class='bst-code-operator'>/</span> <span class='bst-code-number'>9</span> <span class='bst-code-operator'>+</span> <span class='bst-code-number'>10</span>
-</code><br><h1>Data Types</h1><p>All data type keywords contain methods from the standard library for common manipulation of types. </p><h2>Numerical Types</h2>
-      <table>
-     Type  Description
-
-     float   64 bit floating point number
-
-     int    64 bit signed integer 
-</table>
-    <br><h2>String based Types</h2><p>These are all different ways to create strings. </p><code class='codeblock'>
-<span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>Type</span><span class='bst-code-parenthesis'>]</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>Description</span><span class='bst-code-parenthesis'>]</span>
-
-<span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> string slice <span class='bst-code-parenthesis'>]</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>UTF</span><span class='bst-code-operator'>-</span><span class='bst-code-number'>8</span><span class='bst-code-parenthesis'>]</span>
-
-<span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> template <span class='bst-code-parenthesis'>]</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>The</span> string templating syntax of <span class='bst-code-struct'>Beanstalk</span> for creating strings. <span class='bst-code-parenthesis'>]</span>
-</code><br><h1>Strings and String slices</h1><p>String is the keyword for string types in Beanstalk.  Double quotes are automatically string slices.  </p><p>`&quot;Double quotes for a UTF-8 string slice&quot;` </p><p>Backticks are used for RAW strings. To escape a backtick it must be preceded with a backslash . </p><p>Scenes are used instead of format strings. </p><h1>Logical Operators</h1><p>The &#39;is&#39; keyword is used to check equality, not &#39;==&#39;.  The &quot;and / or&quot; keywords are used for logical and / or and &#39;not&#39; is used to invert a truthy value to falsy or vice versa. </p><code class='codeblock'>
-<span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>Operator</span><span class='bst-code-parenthesis'>]</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>Description</span><span class='bst-code-parenthesis'>]</span>          <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>Precedence</span><span class='bst-code-parenthesis'>]</span>
-<span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-operator'>`</span><span class='bst-code-operator'>^</span><span class='bst-code-operator'>`</span><span class='bst-code-parenthesis'>]</span>        <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>Exponent</span><span class='bst-code-parenthesis'>]</span>            <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-number'>4</span><span class='bst-code-parenthesis'>]</span>
-<span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-operator'>`</span><span class='bst-code-operator'>/</span><span class='bst-code-operator'>/</span><span class='bst-code-operator'>`</span><span class='bst-code-parenthesis'>]</span>       <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>Root</span><span class='bst-code-parenthesis'>]</span>                <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-number'>4</span><span class='bst-code-parenthesis'>]</span>
-<span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-operator'>`</span><span class='bst-code-operator'>*</span><span class='bst-code-operator'>`</span><span class='bst-code-parenthesis'>]</span>        <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>Multiplication</span><span class='bst-code-parenthesis'>]</span>       <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-number'>3</span><span class='bst-code-parenthesis'>]</span>
-<span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-operator'>`</span><span class='bst-code-operator'>/</span><span class='bst-code-operator'>`</span><span class='bst-code-parenthesis'>]</span>        <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>Division</span><span class='bst-code-parenthesis'>]</span>             <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-number'>3</span><span class='bst-code-parenthesis'>]</span>
-<span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-operator'>%</span><span class='bst-code-parenthesis'>]</span>          <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>Modulo</span> <span class='bst-code-parenthesis'>(</span>truncated<span class='bst-code-parenthesis'>)</span><span class='bst-code-parenthesis'>]</span>   <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-number'>3</span><span class='bst-code-parenthesis'>]</span>
-<span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-operator'>%</span><span class='bst-code-operator'>%</span><span class='bst-code-parenthesis'>]</span>         <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>Remainder</span> <span class='bst-code-parenthesis'>(</span>floored<span class='bst-code-parenthesis'>)</span><span class='bst-code-parenthesis'>]</span>  <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-number'>3</span><span class='bst-code-parenthesis'>]</span>
-<span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-operator'>+</span><span class='bst-code-parenthesis'>]</span>          <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>Sum</span><span class='bst-code-parenthesis'>]</span>                  <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-number'>2</span><span class='bst-code-parenthesis'>]</span>
-<span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-operator'>`</span><span class='bst-code-operator'>-</span><span class='bst-code-operator'>`</span><span class='bst-code-parenthesis'>]</span>        <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>Subtraction</span><span class='bst-code-parenthesis'>]</span>          <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-number'>2</span><span class='bst-code-parenthesis'>]</span>
-</code><br>
+</code><h1>Data Types</h1><p>All data type keywords contain methods from the standard library for common manipulation of types. </p><h2>Numerical Types</h2>
+      <table style="">
+            <tr> <td> <p>Type</p></td> <td> <p>Description</p></td> </tr>     <tr> <td> <p>float </p></td> <td> <p>64 bit floating point number</p></td> </tr>    <tr> <td> <p>int </p></td> <td>  <p>64 bit signed integer </p></td> </tr>
+      </table>
+    <h2>String based Types</h2><p>These are all different ways to create strings. </p>
+      <table style="">
+            <tr> <td> <p>Type</p></td> <td> <p>Description</p></td> </tr>    <tr> <td> <p>string slice </p></td> <td> <p>UTF-8</p></td> </tr>    <tr> <td> <p>template </p></td> <td> <p>The string templating syntax of Beanstalk for creating strings. </p></td> </tr>
+      </table>
+    <h1>Strings and String slices</h1><p>String is the keyword for string types in Beanstalk.  Double quotes are automatically string slices.  </p><p>`&quot;Double quotes for a UTF-8 string slice&quot;` </p><p>Backticks are used for RAW strings. To escape a backtick it must be preceded with a backslash . </p><p>Scenes are used instead of format strings. </p><h1>Logical Operators</h1><p>The &#39;is&#39; keyword is used to check equality, not &#39;==&#39;.  The &quot;and / or&quot; keywords are used for logical and / or and &#39;not&#39; is used to invert a truthy value to falsy or vice versa. </p>
+      <table style="">
+            <tr> <td> <p>Operator</p></td> <td> <p>Description</p></td>          <td> <p>Precedence</p></td> </tr>    <tr> <td> <p>`^`</p></td>        <td> <p>Exponent</p></td>            <td> <p>4</p></td> </tr>    <tr> <td> <p>`//`</p></td>       <td> <p>Root</p></td>                <td> <p>4</p></td> </tr>    <tr> <td> <p>`*`</p></td>        <td> <p>Multiplication</p></td>       <td> <p>3</p></td> </tr>    <tr> <td> <p>`/`</p></td>        <td> <p>Division</p></td>             <td> <p>3</p></td> </tr>    <tr> <td> <p>%</p></td>          <td> <p>Modulo (truncated)</p></td>   <td> <p>3</p></td> </tr>    <tr> <td> <p>%%</p></td>         <td> <p>Remainder (floored)</p></td>  <td> <p>3</p></td> </tr>    <tr> <td> <p>+</p></td>          <td> <p>Sum</p></td>                  <td> <p>2</p></td> </tr>    <tr> <td> <p>`-`</p></td>        <td> <p>Subtraction</p></td>          <td> <p>2</p></td> </tr>
+      </table>
+    
     </body>
 
 <div id="bst-slot-0"></div>

@@ -754,6 +754,49 @@ fn build_project_const_slot_children_wrap_table_rows_and_cells_without_cross_app
 }
 
 #[test]
+fn build_project_markdown_page_reexported_table_keeps_rows_and_cells_inside_table() {
+    let root = temp_dir("markdown_page_reexported_table");
+    fs::create_dir_all(root.join("libs")).expect("should create libs root");
+    fs::create_dir_all(root.join("styles")).expect("should create styles root");
+    fs::write(
+        root.join("libs").join("html.bst"),
+        "Format = |\n  table String = [$children([:<tr>[$slot]</tr>]):\n    <table style=\"[$slot(\"style\")]\">\n      [$children([:<td>[$slot]</td>]):[$slot]]\n    </table>\n  ],\n|\n#format = Format()\n",
+    )
+    .expect("should write html library");
+    fs::write(
+        root.join("styles").join("docs.bst"),
+        "import @libs/html/{format}\n#page = [:\n  <body>[$slot]</body>\n]\n#table = [format.table]\n",
+    )
+    .expect("should write docs style library");
+    fs::write(
+        root.join("main.bst"),
+        "import @styles/docs/{page, table}\n[page, $markdown:\n[table:\n    [: [:Type] [:Description] ]\n    [: [:float] [:64 bit floating point number] ]\n]\n]\n",
+    )
+    .expect("should write source file");
+    let _cwd_guard = CurrentDirGuard::set_to(&root);
+
+    let builder = HtmlProjectBuilder::new();
+    let build_result = build_project(&builder, "main.bst", &[])
+        .expect("markdown page with re-exported table should build successfully");
+
+    let html = match build_result.project.output_files[0].file_kind() {
+        FileKind::Html(content) => content,
+        other => panic!(
+            "expected HTML output, got {:?}",
+            std::mem::discriminant(other)
+        ),
+    };
+
+    assert!(!html.contains('\u{FFFC}'));
+    assert_eq!(html.matches("<tr>").count(), 2);
+    assert!(html.contains("<td><p>Type</p></td>"));
+    assert!(html.contains("<td><p>Description</p></td>"));
+    assert_eq!(html.matches("<td>").count(), 4);
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
 fn build_project_struct_default_uses_imported_constant() {
     let root = temp_dir("struct_default_imported_constant");
     fs::create_dir_all(root.join("styles")).expect("should create temp root");

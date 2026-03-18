@@ -1099,6 +1099,13 @@ fn resolve_chain_layer(
     }
 
     let layer = &layers[layer_index];
+    if layer.fill_items.is_empty() {
+        // Head-only wrapper references like `[format.table]` must stay as unresolved
+        // wrapper templates so later use-sites can still fill their slots.
+        cache.insert(layer_index, layer.wrapper.to_owned());
+        return Ok(layer.wrapper.to_owned());
+    }
+
     let resolved_fill_atoms = resolve_pending_chain_items(&layer.fill_items, layers, cache)?;
     let resolved_fill = TemplateContent {
         atoms: resolved_fill_atoms,
@@ -1144,6 +1151,7 @@ fn fold_atoms(
 
         let protects_this_segment = should_protect_formatted_body
             && segment.origin == TemplateSegmentOrigin::Body
+            && !segment.is_child_template_output
             && matches!(segment.expression.kind, ExpressionKind::StringSlice(_));
         let protect_this_head_segment =
             protect_head_segments_from_markdown && segment.origin == TemplateSegmentOrigin::Head;
@@ -1581,7 +1589,11 @@ fn format_content_atoms(
                 formatter,
                 string_table,
             );
-            formatted_atoms.push(TemplateAtom::Content(segment));
+            formatted_atoms.push(TemplateAtom::Content(format_child_template_output_segment(
+                segment,
+                formatter,
+                string_table,
+            )));
             continue;
         }
 
@@ -1601,6 +1613,44 @@ fn format_content_atoms(
     );
 
     *atoms = formatted_atoms;
+}
+
+fn format_child_template_output_segment(
+    segment: TemplateSegment,
+    _formatter: &Formatter,
+    string_table: &mut StringTable,
+) -> TemplateSegment {
+    if segment.origin != TemplateSegmentOrigin::Body {
+        return segment;
+    }
+
+    let ExpressionKind::StringSlice(text) = &segment.expression.kind else {
+        return segment;
+    };
+
+    let Some(source_child_template) = segment.source_child_template.as_ref() else {
+        return segment;
+    };
+
+    let raw_text = string_table.resolve(*text);
+    if !raw_text.contains(TEMPLATE_SPECIAL_IGNORE_CHAR) {
+        return segment;
+    }
+
+    let formatted_text = raw_text.replace(TEMPLATE_SPECIAL_IGNORE_CHAR, "");
+
+    let interned = string_table.intern(&formatted_text);
+    let expression = Expression::string_slice(
+        interned,
+        segment.expression.location.clone(),
+        Ownership::ImmutableOwned,
+    );
+
+    TemplateSegment::from_child_template_output(
+        expression,
+        TemplateSegmentOrigin::Body,
+        source_child_template.as_ref().to_owned(),
+    )
 }
 
 fn flush_formatted_body_run(
