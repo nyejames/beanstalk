@@ -11,10 +11,10 @@ Document = |
         [$slot]
       </head>
     ],
-    title String = [:<title>[$slot]</title>],
+    title String = [:<title style="[$slot("style")]">[$slot]</title>],
     style String = [:<style>[default_style][$slot]</style>],
-    body String = [:<body class="container">[$slot]</body>],
-    div String = [:<div>[$slot]</div>],
+    body String = [:<body class="container" style="[$slot("style")]">[$slot]</body>],
+    div String = [:<div style="[$slot("style")]">[$slot]</div>],
 |
 
 -- Export a constant instance of Document
@@ -23,19 +23,21 @@ Document = |
 
 Format = |
     -- Basic formatting
-    underline String = [:<u>[$slot]</u>],
-    strikethrough String = [:<s>[$slot]</s>],
-
-    center String = [:<div class="bst-center">[$slot]</div>],
-
+    underline String = [:<u style="[$slot("style")]">[$slot]</u>],
+    strikethrough String = [:<s style="[$slot("style")]">[$slot]</s>],
     table String = [:
-      <table>[$slot]</table>
+      <table style="[$slot("style")]">[$slot]</table>
     ],
 |
 
 # format = Format()
 
 # link = [:<a href="[$slot("href")]">[$slot]</a>]
+
+-- Inline Utility Styles
+# center String = [$insert("style"):text-align: center;]
+# right String = [$insert("style"):text-align: right;]
+# left String = [$insert("style"):text-align: left;]
 
 -- A css reset and some classes for the built-in code formatter
 -- This is inspired by Pico.css, but is an even more minimal reset.
@@ -166,7 +168,6 @@ Format = |
     }
 
     /* Common Styles */
-
     .bst-center {
       text-align: center;
     }

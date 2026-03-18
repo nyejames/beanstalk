@@ -28,7 +28,7 @@ import @libs/html/doc
     <div></div>
 ]
 
-# title = [: <h1 style="font-size: 2em;">[$slot]</h1>]
+# title = [: <h1 style="font-size: 2em;[$slot("style")]">[$slot]</h1>]
 
 Palette = |
     -- Colors for the documentation website

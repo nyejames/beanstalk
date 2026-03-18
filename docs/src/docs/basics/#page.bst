@@ -1,15 +1,15 @@
 -- ADD A HASH TO THIS FILE TO INCLUDE IT IN THE MODULES.
 -- FOR NOW THIS IS DISABLED FOR TESTING
-import @libs/html/{format}
+import @libs/html/{format, center}
 import @styles/docs/{navbar, footer, title, page, palette}
+
 #[page, $markdown:
 
 [navbar]
-[format.center:
-    [title: LANGUAGE BASICS]
-]
 
-Every project has a #config.bst file.
+[title, center: LANGUAGE BASICS]
+[[]]
+Every project has a #config.bst file. 
 
 If instead, you build or run a specific Beanstalk file,
 it will create a single Wasm module from that entry point and pull in all its dependencies.
@@ -192,7 +192,7 @@ Scenes are used instead of format strings.
 The 'is' keyword is used to check equality, not '=='. 
 The "and / or" keywords are used for logical and / or and 'not' is used to invert a truthy value to falsy or vice versa.
 
-[$code("bst"):
+[format.table:
     [: Operator] [: Description]          [: Precedence]
     [: `^`]        [: Exponent]            [: 4]
     [: `//`]       [: Root]                [: 4]
