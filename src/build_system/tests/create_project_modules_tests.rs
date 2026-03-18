@@ -20,7 +20,7 @@ fn parses_config_constant_declarations() {
 
     fs::write(
         &config_path,
-        "#entry_root = \"src\"\n#output_folder = \"dist\"\n#name = \"docs\"\n#version = \"1.2.3\"\n#project = \"html\"\n#libraries = { @(libs), \"vendor\" }\n#custom_key = \"custom_value\"\n",
+        "#entry_root = \"src\"\n#dev_folder = \"dev\"\n#output_folder = \"release\"\n#name = \"docs\"\n#version = \"1.2.3\"\n#project = \"html\"\n#libraries = { @(libs), \"vendor\" }\n#custom_key = \"custom_value\"\n",
     )
     .expect("should write config");
 
@@ -28,7 +28,8 @@ fn parses_config_constant_declarations() {
     parse_project_config_file(&mut config, &config_path).expect("config should parse");
 
     assert_eq!(config.entry_root, PathBuf::from("src"));
-    assert_eq!(config.release_folder, PathBuf::from("dist"));
+    assert_eq!(config.dev_folder, PathBuf::from("dev"));
+    assert_eq!(config.release_folder, PathBuf::from("release"));
     assert_eq!(config.project_name, "docs");
     assert_eq!(config.version, "1.2.3");
     assert_eq!(config.settings.get("project"), Some(&"html".to_string()));

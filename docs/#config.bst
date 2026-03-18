@@ -1,6 +1,7 @@
 #project = "html"
 #entry_root = "src"
-#output_folder = "dist"
+#dev_folder = "dev"
+#output_folder = "release"
 #name = "html_project"
 #version = "0.1.0"
 #author = ""

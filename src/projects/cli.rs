@@ -94,31 +94,21 @@ pub fn start_cli() {
             let html_project_builder = HtmlProjectBuilder::new();
             match build::build_project(&html_project_builder, &path, &flags) {
                 Ok(build_result) => {
-                    let output_root = match env::current_dir() {
-                        Ok(path) => path,
-                        Err(error) => {
-                            print_compiler_messages(CompilerMessages {
-                                errors: vec![CompilerError::compiler_error(format!(
-                                    "Could not resolve current directory for build outputs: {error}"
-                                ))],
-                                warnings: build_result.warnings,
-                            });
-                            return;
-                        }
-                    };
                     let output_root = if build_result.config.entry_dir.is_dir() {
-                        if build_result.config.release_folder.is_absolute() {
-                            build_result.config.release_folder.clone()
-                        } else if build_result.config.release_folder.as_os_str().is_empty() {
-                            build_result.config.entry_dir.clone()
-                        } else {
-                            build_result
-                                .config
-                                .entry_dir
-                                .join(&build_result.config.release_folder)
-                        }
+                        build::resolve_project_output_root(&build_result.config, &flags)
                     } else {
-                        output_root
+                        match env::current_dir() {
+                            Ok(path) => path,
+                            Err(error) => {
+                                print_compiler_messages(CompilerMessages {
+                                    errors: vec![CompilerError::compiler_error(format!(
+                                        "Could not resolve current directory for build outputs: {error}"
+                                    ))],
+                                    warnings: build_result.warnings,
+                                });
+                                return;
+                            }
+                        }
                     };
 
                     let write_result = build::write_project_outputs(

@@ -31,7 +31,8 @@ pub fn create_html_project_template(
     let config_content = format!(
         "#project_name = \"{name}\"\n\
          #entry_root = \"src\"\n\
-         #output_folder = \"dist\"\n\
+         #dev_folder = \"dev\"\n\
+         #output_folder = \"release\"\n\
          #name = \"html_project\"\n\
          #version = \"0.1.0\"\n\
          #author = \"\"\n\

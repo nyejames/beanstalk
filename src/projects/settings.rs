@@ -47,8 +47,8 @@ impl Config {
             entry_dir: user_specified_path,
             // These Default to the same directory as the project
             entry_root: PathBuf::from(""),
-            dev_folder: PathBuf::from(""),
-            release_folder: PathBuf::from(""),
+            dev_folder: PathBuf::from("dev"),
+            release_folder: PathBuf::from("release"),
 
             libraries: Vec::new(), // All folders that are visible to all other files in this project
             project_name: String::new(),

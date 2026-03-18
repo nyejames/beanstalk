@@ -364,7 +364,8 @@ Example:
 ```beanstalk
 # project = "html"
 # entry_root = "src"
-# output_folder = "dist"
+# dev_folder = "dev"
+# output_folder = "release"
 # libraries = {"src/libs"}
 ```
 

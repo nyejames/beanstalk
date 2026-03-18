@@ -98,6 +98,29 @@ pub struct WriteOptions {
     pub output_root: PathBuf,
 }
 
+/// Resolve the output root for a directory project based on the build profile.
+///
+/// The config owns the default folder names. If a config explicitly clears a folder path, outputs
+/// fall back to the project root.
+pub fn resolve_project_output_root(config: &Config, flags: &[Flag]) -> PathBuf {
+    let release_build = flags.contains(&Flag::Release);
+    let configured_folder = if release_build {
+        &config.release_folder
+    } else {
+        &config.dev_folder
+    };
+
+    if configured_folder.is_absolute() {
+        return configured_folder.clone();
+    }
+
+    if configured_folder.as_os_str().is_empty() {
+        return config.entry_dir.clone();
+    }
+
+    config.entry_dir.join(configured_folder)
+}
+
 /// Build a Beanstalk project by running path validation, frontend compilation, and backend build.
 ///
 /// This function intentionally does not write output files so callers can decide where artifacts

@@ -2,7 +2,7 @@
 
 use super::{
     FileKind, OutputFile, Project, ProjectBuilder, WriteOptions, build_project,
-    write_project_outputs,
+    resolve_project_output_root, write_project_outputs,
 };
 use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages, ErrorLocation};
@@ -321,7 +321,50 @@ fn build_project_preserves_const_and_runtime_fragment_order() {
 }
 
 #[test]
-fn build_directory_project_emits_dist_index_and_404_and_ignores_unreachable_files() {
+fn resolve_project_output_root_defaults_to_dev_and_release_for_directory_builds() {
+    let root = temp_dir("output_defaults");
+    let config = Config::new(root.clone());
+
+    assert_eq!(resolve_project_output_root(&config, &[]), root.join("dev"));
+    assert_eq!(
+        resolve_project_output_root(&config, &[Flag::Release]),
+        root.join("release")
+    );
+}
+
+#[test]
+fn resolve_project_output_root_respects_configured_dev_and_release_folders() {
+    let root = temp_dir("output_overrides");
+    let mut config = Config::new(root.clone());
+    config.dev_folder = PathBuf::from("preview");
+    config.release_folder = PathBuf::from("public");
+
+    assert_eq!(
+        resolve_project_output_root(&config, &[]),
+        root.join("preview")
+    );
+    assert_eq!(
+        resolve_project_output_root(&config, &[Flag::Release]),
+        root.join("public")
+    );
+}
+
+#[test]
+fn resolve_project_output_root_uses_project_root_when_folder_is_explicitly_empty() {
+    let root = temp_dir("output_root_fallback");
+    let mut config = Config::new(root.clone());
+    config.dev_folder = PathBuf::new();
+    config.release_folder = PathBuf::new();
+
+    assert_eq!(resolve_project_output_root(&config, &[]), root);
+    assert_eq!(
+        resolve_project_output_root(&config, &[Flag::Release]),
+        config.entry_dir
+    );
+}
+
+#[test]
+fn build_directory_project_emits_index_and_404_and_ignores_unreachable_files() {
     let root = temp_dir("docs_like_project");
     let src = root.join("src");
     fs::create_dir_all(src.join("about")).expect("should create about folder");
@@ -330,7 +373,7 @@ fn build_directory_project_emits_dist_index_and_404_and_ignores_unreachable_file
 
     fs::write(
         root.join("#config.bst"),
-        "#entry_root = \"src\"\n#output_folder = \"dist\"\n",
+        "#entry_root = \"src\"\n#output_folder = \"release\"\n",
     )
     .expect("should write config");
     fs::write(src.join("#page.bst"), "#[:<h1>Home</h1>]\n").expect("should write #page");
@@ -360,16 +403,7 @@ fn build_directory_project_emits_dist_index_and_404_and_ignores_unreachable_file
         Some(PathBuf::from("index.html"))
     );
 
-    let output_root = if build_result.config.release_folder.is_absolute() {
-        build_result.config.release_folder.clone()
-    } else if build_result.config.release_folder.as_os_str().is_empty() {
-        build_result.config.entry_dir.clone()
-    } else {
-        build_result
-            .config
-            .entry_dir
-            .join(&build_result.config.release_folder)
-    };
+    let output_root = resolve_project_output_root(&build_result.config, &[]);
 
     write_project_outputs(
         &build_result.project,
@@ -395,7 +429,7 @@ fn build_directory_project_respects_custom_entry_root() {
 
     fs::write(
         root.join("#config.bst"),
-        "#entry_root = \"pages\"\n#output_folder = \"dist\"\n",
+        "#entry_root = \"pages\"\n#output_folder = \"release\"\n",
     )
     .expect("should write config");
     fs::write(pages.join("#page.bst"), "#[:<h1>Home</h1>]\n").expect("should write home");
@@ -410,10 +444,7 @@ fn build_directory_project_respects_custom_entry_root() {
     )
     .expect("directory build should succeed");
 
-    let output_root = build_result
-        .config
-        .entry_dir
-        .join(&build_result.config.release_folder);
+    let output_root = resolve_project_output_root(&build_result.config, &[]);
     write_project_outputs(
         &build_result.project,
         &WriteOptions {
@@ -436,7 +467,7 @@ fn build_directory_project_requires_root_page_in_configured_entry_root() {
 
     fs::write(
         root.join("#config.bst"),
-        "#entry_root = \"src\"\n#output_folder = \"dist\"\n",
+        "#entry_root = \"src\"\n#output_folder = \"release\"\n",
     )
     .expect("should write config");
     fs::write(src.join("about").join("#page.bst"), "#[:<h1>About</h1>]\n")
