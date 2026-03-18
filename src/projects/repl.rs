@@ -1,12 +1,8 @@
-// This is early prototype code, so ignore placeholder unused stuff for now
-#![allow(unused)]
-
-// For running Beanstalk string templates in the REPL,
-// Starts in the template head rather than body (unlike .mt files which will start in the body).
-// This will ALWAYS return a UTF-8 string
-
-// ONLY DOES COMPILE TIME TEMPLATE ATM.
-// Function templates are not yet supported
+//! Template-focused REPL helper for experimenting with Beanstalk template syntax.
+//!
+//! This is not the default CLI entrypoint and it is narrower than a full language REPL: input is
+//! tokenized from template-head mode and only compile-time template evaluation is supported today.
+#![allow(dead_code)]
 
 use crate::compiler_frontend::ast::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::ast::templates::create_template_node::Template;
@@ -35,9 +31,18 @@ pub fn start_repl_session() {
 
     loop {
         print!(">>> ");
-        io::stdout().flush().unwrap();
+        if let Err(error) = io::stdout().flush() {
+            say!(Red "Error flushing prompt: ", error);
+            break;
+        }
 
-        let current_dir = env::current_dir().unwrap();
+        let current_dir = match env::current_dir() {
+            Ok(path) => path,
+            Err(error) => {
+                say!(Red "Error resolving current directory: ", error);
+                break;
+            }
+        };
 
         let mut new_code = String::new();
         match io::stdin().read_line(&mut new_code) {
@@ -114,9 +119,8 @@ fn compile_beanstalk_to_string(
         &mut string_table,
     )?;
 
-    // TODO: INSTEAD OF ALL THIS WAIT UNTIL RUST INTERPRETER IS DONE
-
-    // This is super gross as we are interning then resolving immediately
+    // The helper only needs the final folded UTF-8 output, so resolve the interned result
+    // immediately instead of introducing a separate runtime representation here.
     let template_string = template.fold_into_stringid(&None, &mut string_table)?;
 
     Ok(string_table.resolve(template_string).to_string())

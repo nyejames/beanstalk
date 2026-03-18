@@ -593,40 +593,40 @@ fn code_without_argument_uses_generic_highlighting() {
     let rendered = folded_template_output("[$code:\nloop(x + 1)\n]");
 
     assert!(rendered.contains("<code class='codeblock'>"));
-    assert!(rendered.contains("<span class='bs-code-parenthesis'>(</span>"));
-    assert!(!rendered.contains("bs-code-keyword"));
+    assert!(rendered.contains("<span class='bst-code-parenthesis'>(</span>"));
+    assert!(!rendered.contains("bst-code-keyword"));
 }
 
 #[test]
 fn code_bst_argument_highlights_beanstalk_rules() {
     let rendered = folded_template_output("[$code(\"bst\"):\nloop x\n-- hi\n]");
 
-    assert!(rendered.contains("<span class='bs-code-keyword'>loop</span>"));
-    assert!(rendered.contains("<span class='bs-code-comment'>-- hi</span>"));
+    assert!(rendered.contains("<span class='bst-code-keyword'>loop</span>"));
+    assert!(rendered.contains("<span class='bst-code-comment'>-- hi</span>"));
 }
 
 #[test]
 fn code_javascript_argument_highlights_js_comments() {
     let rendered = folded_template_output("[$code(\"js\"):\nconst x = 1\n// hi\n]");
 
-    assert!(rendered.contains("<span class='bs-code-keyword'>const</span>"));
-    assert!(rendered.contains("<span class='bs-code-comment'>// hi</span>"));
+    assert!(rendered.contains("<span class='bst-code-keyword'>const</span>"));
+    assert!(rendered.contains("<span class='bst-code-comment'>// hi</span>"));
 }
 
 #[test]
 fn code_python_argument_highlights_python_comments() {
     let rendered = folded_template_output("[$code(\"py\"):\ndef run():\n# hi\n]");
 
-    assert!(rendered.contains("<span class='bs-code-keyword'>def</span>"));
-    assert!(rendered.contains("<span class='bs-code-comment'># hi</span>"));
+    assert!(rendered.contains("<span class='bst-code-keyword'>def</span>"));
+    assert!(rendered.contains("<span class='bst-code-comment'># hi</span>"));
 }
 
 #[test]
 fn code_typescript_argument_highlights_typescript_types() {
     let rendered = folded_template_output("[$code(\"ts\"):\ntype Name = string\n]");
 
-    assert!(rendered.contains("<span class='bs-code-keyword'>type</span>"));
-    assert!(rendered.contains("<span class='bs-code-type'>string</span>"));
+    assert!(rendered.contains("<span class='bst-code-keyword'>type</span>"));
+    assert!(rendered.contains("<span class='bst-code-type'>string</span>"));
 }
 
 #[test]
@@ -686,7 +686,7 @@ fn runtime_templates_with_code_format_only_static_body_strings() {
 
     let rendered = string_table.resolve(formatted_body);
     assert!(rendered.contains("<code class='codeblock'>"));
-    assert!(rendered.contains("<span class='bs-code-keyword'>loop</span>"));
+    assert!(rendered.contains("<span class='bst-code-keyword'>loop</span>"));
 }
 
 #[test]
@@ -699,8 +699,8 @@ fn code_templates_keep_nested_square_brackets_as_literal_body_text() {
     assert!(rendered.contains("concatenated_strings"));
     assert!(rendered.contains("string_slice"));
     assert!(rendered.contains("a_mutable_string"));
-    assert!(rendered.contains("<span class='bs-code-parenthesis'>[</span>"));
-    assert!(rendered.contains("<span class='bs-code-parenthesis'>]</span>"));
+    assert!(rendered.contains("<span class='bst-code-parenthesis'>[</span>"));
+    assert!(rendered.contains("<span class='bst-code-parenthesis'>]</span>"));
 }
 
 #[test]
@@ -1339,10 +1339,10 @@ fn template_with_slot_and_insert_contributes_upward_after_receiving_content() {
 fn generic_code_highlighter_marks_syntax_but_not_keywords() {
     let highlighted = highlight_code_html("loop(x + 1)", CodeLanguage::Generic);
 
-    assert!(highlighted.contains("<span class='bs-code-parenthesis'>(</span>"));
-    assert!(highlighted.contains("<span class='bs-code-operator'>+</span>"));
-    assert!(highlighted.contains("<span class='bs-code-number'>1</span>"));
-    assert!(!highlighted.contains("bs-code-keyword"));
+    assert!(highlighted.contains("<span class='bst-code-parenthesis'>(</span>"));
+    assert!(highlighted.contains("<span class='bst-code-operator'>+</span>"));
+    assert!(highlighted.contains("<span class='bst-code-number'>1</span>"));
+    assert!(!highlighted.contains("bst-code-keyword"));
     assert!(highlighted.contains("loop"));
 }
 
@@ -1350,32 +1350,32 @@ fn generic_code_highlighter_marks_syntax_but_not_keywords() {
 fn direct_beanstalk_highlighter_marks_comments_and_keywords() {
     let highlighted = highlight_code_html("loop x\n-- hi", CodeLanguage::Beanstalk);
 
-    assert!(highlighted.contains("<span class='bs-code-keyword'>loop</span>"));
-    assert!(highlighted.contains("<span class='bs-code-comment'>-- hi</span>"));
+    assert!(highlighted.contains("<span class='bst-code-keyword'>loop</span>"));
+    assert!(highlighted.contains("<span class='bst-code-comment'>-- hi</span>"));
 }
 
 #[test]
 fn direct_javascript_highlighter_marks_line_comments() {
     let highlighted = highlight_code_html("const x = 1\n// hi", CodeLanguage::JavaScript);
 
-    assert!(highlighted.contains("<span class='bs-code-keyword'>const</span>"));
-    assert!(highlighted.contains("<span class='bs-code-comment'>// hi</span>"));
+    assert!(highlighted.contains("<span class='bst-code-keyword'>const</span>"));
+    assert!(highlighted.contains("<span class='bst-code-comment'>// hi</span>"));
 }
 
 #[test]
 fn direct_python_highlighter_marks_hash_comments() {
     let highlighted = highlight_code_html("def run():\n# hi", CodeLanguage::Python);
 
-    assert!(highlighted.contains("<span class='bs-code-keyword'>def</span>"));
-    assert!(highlighted.contains("<span class='bs-code-comment'># hi</span>"));
+    assert!(highlighted.contains("<span class='bst-code-keyword'>def</span>"));
+    assert!(highlighted.contains("<span class='bst-code-comment'># hi</span>"));
 }
 
 #[test]
 fn direct_typescript_highlighter_marks_type_keywords() {
     let highlighted = highlight_code_html("type Name = string", CodeLanguage::TypeScript);
 
-    assert!(highlighted.contains("<span class='bs-code-keyword'>type</span>"));
-    assert!(highlighted.contains("<span class='bs-code-type'>string</span>"));
+    assert!(highlighted.contains("<span class='bst-code-keyword'>type</span>"));
+    assert!(highlighted.contains("<span class='bst-code-type'>string</span>"));
 }
 
 #[test]

@@ -159,7 +159,10 @@ impl TemplateContent {
         for atom in &self.atoms {
             match atom {
                 TemplateAtom::Slot(_) => segments.push(Vec::new()),
-                TemplateAtom::Content(_) => segments.last_mut().unwrap().push(atom.clone()),
+                TemplateAtom::Content(_) => segments
+                    .last_mut()
+                    .expect("slot splitting should always keep at least one output segment")
+                    .push(atom.clone()),
             }
         }
 

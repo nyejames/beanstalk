@@ -219,14 +219,22 @@ pub fn get_token_kind(
             )
         }
 
-        token_value.push(stream.next().unwrap());
+        token_value.push(
+            stream
+                .next()
+                .expect("validated style directive should still expose its first identifier char"),
+        );
 
         while let Some(&next_char) = stream.peek() {
             if !is_valid_var_char(&next_char) {
                 break;
             }
 
-            token_value.push(stream.next().unwrap());
+            token_value.push(
+                stream
+                    .next()
+                    .expect("peeked style directive character should remain available"),
+            );
         }
 
         let directive = string_table.intern(&token_value);
@@ -653,7 +661,11 @@ pub(crate) fn keyword_or_variable(
         if let Some(char) = stream.peek()
             && is_valid_var_char(char)
         {
-            token_value.push(stream.next().unwrap());
+            token_value.push(
+                stream
+                    .next()
+                    .expect("peeked identifier character should remain available"),
+            );
             continue;
         }
 
@@ -794,7 +806,11 @@ fn tokenize_template_body(
         }
 
         // Should always be a valid char
-        token_value.push(stream.next().unwrap());
+        token_value.push(
+            stream
+                .next()
+                .expect("string tokenization loop should only consume available characters"),
+        );
     }
 
     let interned_string = string_table.intern(&token_value);

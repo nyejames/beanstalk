@@ -88,7 +88,9 @@ pub fn constant_fold(
                 }
 
                 if matches!(op, Operator::Not) {
-                    let mut boolean = stack.pop().unwrap();
+                    let mut boolean = stack
+                        .pop()
+                        .expect("unary NOT should have one operand after the stack-length guard");
                     if !boolean.flip(string_table)? {
                         stack.push(boolean);
                         stack.push(node.to_owned());
@@ -99,8 +101,12 @@ pub fn constant_fold(
                     continue;
                 }
 
-                let rhs = stack.pop().unwrap();
-                let lhs = stack.pop().unwrap();
+                let rhs = stack
+                    .pop()
+                    .expect("binary operator should have a right operand after the length guard");
+                let lhs = stack
+                    .pop()
+                    .expect("binary operator should have a left operand after the length guard");
 
                 let (lhs_expr, rhs_expr) = match (&lhs.kind, &rhs.kind) {
                     (NodeKind::Rvalue(lhs_expr), NodeKind::Rvalue(rhs_expr))

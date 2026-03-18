@@ -640,9 +640,11 @@ fn create_constant_header_payload(
     context: &mut HeaderBuildContext<'_>,
     dependencies: &mut HashSet<InternedPath>,
 ) -> Result<ConstantHeaderPayload, CompilerError> {
-    let declaration_name = full_name
-        .name()
-        .expect("create_constant_header_payload called with empty declaration path");
+    let Some(declaration_name) = full_name.name() else {
+        return Err(CompilerError::compiler_error(
+            "Constant header path is missing its declaration name.",
+        ));
+    };
     let declaration_syntax =
         parse_declaration_syntax(token_stream, declaration_name, context.string_table)?;
     let declaration_tokens = declaration_syntax.to_tokens();

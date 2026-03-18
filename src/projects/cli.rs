@@ -66,7 +66,13 @@ pub fn start_cli() {
         }
 
         Command::NewHTMLProject(path) => {
-            let args = prompt_user_for_input("Project name: ");
+            let args = match prompt_user_for_input("Project name: ") {
+                Ok(args) => args,
+                Err(error) => {
+                    say!(error);
+                    return;
+                }
+            };
             let name_args = args.first();
 
             let project_name = match name_args {
@@ -167,7 +173,7 @@ fn get_command(args: &[String]) -> Result<Command, String> {
             // Check which type of project it is
             match args.get(1).map(String::as_str) {
                 Some("html") => {
-                    let dir = &prompt_user_for_input("Enter project path: ");
+                    let dir = prompt_user_for_input("Enter project path: ")?;
 
                     if dir.len() == 1 {
                         let dir = dir[0].to_string();
@@ -205,7 +211,8 @@ fn get_command(args: &[String]) -> Result<Command, String> {
 
         Some("tests") => Ok(Command::CompilerTests),
 
-        _ => Err(format!("Invalid command: '{}'", command.unwrap())),
+        Some(other) => Err(format!("Invalid command: '{other}'")),
+        None => Err(String::from("Missing command.")),
     }
 }
 
@@ -304,14 +311,18 @@ fn parse_dev_command(args: &[String]) -> Result<Command, String> {
     Ok(Command::Dev { path, options })
 }
 
-fn prompt_user_for_input(msg: &str) -> Vec<String> {
+fn prompt_user_for_input(msg: &str) -> Result<Vec<String>, String> {
     let mut input = String::new();
     print!("{msg}");
-    io::stdout().flush().unwrap(); // Make sure the prompt is immediately displayed
-    io::stdin().read_line(&mut input).unwrap();
+    io::stdout()
+        .flush()
+        .map_err(|error| format!("Failed to flush the prompt to stdout: {error}"))?;
+    io::stdin()
+        .read_line(&mut input)
+        .map_err(|error| format!("Failed to read input from stdin: {error}"))?;
     let args: Vec<String> = input.split_whitespace().map(String::from).collect();
 
-    args
+    Ok(args)
 }
 
 fn print_help(commands_only: bool) {
