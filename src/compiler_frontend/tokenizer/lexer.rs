@@ -203,7 +203,7 @@ pub fn get_token_kind(
                 stream.new_location().to_error_location(string_table),
                 {
                     CompilationStage => "Tokenization",
-                    PrimarySuggestion => "Use '$markdown', '$children(..)', '$ignore', '$slot', '$insert(..)', '$note', '$todo', '$doc', '$code', '$css', or '$formatter(...)' inside the template head",
+                    PrimarySuggestion => "Use '$markdown', '$children(..)', '$reset', '$slot', '$insert(..)', '$note', '$todo', '$doc', '$code', '$css', or '$formatter(...)' inside the template head",
                 }
             )
         };

@@ -421,7 +421,7 @@ pub enum TokenKind {
 
     /// Variable name
     Symbol(StringId),
-    // `$markdown`, `$ignore`, `$formatter`, etc. inside template heads.
+    // `$markdown`, `$reset`, `$formatter`, etc. inside template heads.
     StyleDirective(StringId),
 
     // Values

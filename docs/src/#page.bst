@@ -1,5 +1,4 @@
 import @styles/docs/{navbar, footer, page, palette}
-import @libs/html/{link}
 
 #[page, $markdown:
 

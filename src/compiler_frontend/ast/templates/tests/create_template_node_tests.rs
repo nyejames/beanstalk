@@ -327,10 +327,10 @@ fn runtime_templates_format_static_body_strings_only() {
 }
 
 #[test]
-fn ignore_clears_inherited_style_before_reapplying_markdown() {
+fn reset_clears_inherited_style_before_reapplying_markdown() {
     let mut string_table = StringTable::new();
     let mut token_stream =
-        template_tokens_from_source("[$ignore, $markdown:\n# Hello\n]", &mut string_table);
+        template_tokens_from_source("[$reset, $markdown:\n# Hello\n]", &mut string_table);
     let context = ScopeContext::new_constant(token_stream.src_path.to_owned());
 
     let mut inherited = Template::create_default(vec![]);
@@ -418,11 +418,70 @@ fn children_directive_rejects_runtime_values() {
 }
 
 #[test]
-fn inherited_children_wrappers_are_applied_to_nested_templates() {
+fn children_wrappers_are_applied_to_direct_children() {
     let rendered = folded_template_output("[$children([: pref[$slot]suf]): [: body]]");
     assert!(rendered.contains("pref"));
     assert!(rendered.contains("body"));
     assert!(rendered.contains("suf"));
+}
+
+#[test]
+fn children_wrappers_do_not_apply_to_grandchildren() {
+    let rendered = folded_template_output("[$children([:<wrap>[$slot]</wrap>]): [:[ : body]]]");
+
+    assert!(rendered.contains("body"));
+    assert_eq!(rendered.matches("<wrap>").count(), 1);
+}
+
+#[test]
+fn markdown_is_still_inherited_by_grandchildren() {
+    let rendered = folded_template_output("[$markdown:\n[: [: <b>grandchild-body</b> ]]\n]");
+
+    assert!(rendered.contains("&lt;b&gt;grandchild-body&lt;/b&gt;"));
+    assert!(!rendered.contains("<b>grandchild-body</b>"));
+}
+
+#[test]
+fn slot_children_wrappers_apply_table_rows_and_cells_without_cross_applying() {
+    let mut string_table = StringTable::new();
+    let wrapper_scope =
+        InternedPath::from_single_str("main.bst/#const_template0", &mut string_table);
+    let mut wrapper_tokens = template_tokens_from_source(
+        "[$children([:<tr>[$slot]</tr>]): <table>[$children([:<td>[$slot]</td>]):[$slot]]</table>]",
+        &mut string_table,
+    );
+    let wrapper_context = ScopeContext::new_constant(wrapper_tokens.src_path.to_owned());
+    let wrapper = Template::new(
+        &mut wrapper_tokens,
+        &wrapper_context,
+        vec![],
+        &mut string_table,
+    )
+    .expect("table wrapper should parse");
+
+    let declaration = Declaration {
+        id: wrapper_scope.append(string_table.intern("table_wrapper")),
+        value: Expression::template(wrapper, Ownership::ImmutableOwned),
+    };
+
+    let mut token_stream = template_tokens_from_source(
+        "[table_wrapper:\n    [: [:Type] [:Description] ]\n    [: [:float] [:64 bit floating point number] ]\n]",
+        &mut string_table,
+    );
+    let context = constant_template_context(&token_stream.src_path, &[declaration]);
+
+    let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
+        .expect("slot child wrapper application should parse");
+    let folded = template
+        .fold_into_stringid(&None, &mut string_table)
+        .expect("wrapped slot children should fold");
+    let rendered = string_table.resolve(folded);
+
+    assert_eq!(rendered.matches("<tr>").count(), 2);
+    assert!(rendered.contains("<td>Type</td>"));
+    assert!(rendered.contains("<td>Description</td>"));
+    assert!(rendered.contains("<td>float</td>"));
+    assert_eq!(rendered.matches("<td>").count(), 4);
 }
 
 #[test]
@@ -516,6 +575,14 @@ fn unknown_style_directives_error_cleanly() {
 
     assert!(error.msg.contains("Unsupported style directive"));
     assert!(error.msg.contains("$unknown"));
+}
+
+#[test]
+fn ignore_is_rejected_as_unsupported_style_directive() {
+    let error = template_parse_error("[$ignore: body]");
+
+    assert!(error.contains("Unsupported style directive"));
+    assert!(error.contains("$ignore"));
 }
 
 #[test]

@@ -35,6 +35,25 @@ pub struct Template {
     pub location: TextLocation,
 }
 
+#[derive(Clone, Debug, Default)]
+struct TemplateInheritance {
+    recursive_style: Option<Style>,
+    direct_child_wrappers: Vec<Template>,
+}
+
+impl TemplateInheritance {
+    fn from_legacy_templates(templates: Vec<Template>) -> Self {
+        let recursive_style = templates
+            .last()
+            .and_then(|template| recursive_inherited_style(&template.style));
+
+        Self {
+            recursive_style,
+            direct_child_wrappers: templates,
+        }
+    }
+}
+
 impl Template {
     pub fn new(
         token_stream: &mut FileTokens,
@@ -42,25 +61,20 @@ impl Template {
         templates_inherited: Vec<Template>,
         string_table: &mut StringTable,
     ) -> Result<Template, CompilerError> {
-        Self::new_with_doc_context(
-            token_stream,
-            context,
-            templates_inherited,
-            string_table,
-            false,
-        )
+        let inheritance = TemplateInheritance::from_legacy_templates(templates_inherited);
+        Self::new_with_doc_context(token_stream, context, inheritance, string_table, false)
     }
 
     fn new_with_doc_context(
         token_stream: &mut FileTokens,
         context: &ScopeContext,
-        templates_inherited: Vec<Template>,
+        inheritance: TemplateInheritance,
         string_table: &mut StringTable,
         doc_context: bool,
     ) -> Result<Template, CompilerError> {
-        let inherited_templates = templates_inherited.to_owned();
+        let direct_child_wrappers = inheritance.direct_child_wrappers.to_owned();
         // These are variables or special keywords passed into the template head
-        let mut template = Self::create_default(templates_inherited);
+        let mut template = Self::create_default_with_inherited_style(inheritance.recursive_style);
         // Capture the opening token location early so style/directive errors can
         // still point at the template even if parsing later advances deeply.
         template.location = token_stream.current_location();
@@ -101,10 +115,14 @@ impl Template {
                 }
 
                 TokenKind::TemplateHead => {
+                    let nested_inheritance = TemplateInheritance {
+                        recursive_style: recursive_inherited_style(&template.style),
+                        direct_child_wrappers: template.style.child_templates.to_owned(),
+                    };
                     let nested_template = Self::new_with_doc_context(
                         token_stream,
                         context,
-                        template.style.child_templates.to_owned(),
+                        nested_inheritance,
                         string_table,
                         matches!(
                             template.kind,
@@ -120,7 +138,7 @@ impl Template {
                         continue;
                     }
 
-                    match nested_template.kind {
+                    match &nested_template.kind {
                         TemplateType::String if !nested_template.has_unresolved_slots() => {
                             ast_log!(
                                 "Found a compile time foldable template inside a template. Folding into a string slice..."
@@ -134,10 +152,16 @@ impl Template {
                             let interned_child = nested_template
                                 .fold_into_stringid(&inherited_style, string_table)?;
 
-                            template.content.add(Expression::string_slice(
-                                interned_child,
-                                token_stream.current_location(),
-                                Ownership::ImmutableOwned,
+                            template.content.atoms.push(TemplateAtom::Content(
+                                TemplateSegment::from_child_template_output(
+                                    Expression::string_slice(
+                                        interned_child,
+                                        token_stream.current_location(),
+                                        Ownership::ImmutableOwned,
+                                    ),
+                                    TemplateSegmentOrigin::Body,
+                                    nested_template.clone(),
+                                ),
                             ));
 
                             continue;
@@ -153,7 +177,11 @@ impl Template {
 
                         TemplateType::String | TemplateType::SlotInsert(_) => {}
                         TemplateType::SlotDefinition(slot_key) => {
-                            template.content.push_slot(slot_key);
+                            template.content.push_slot_with_child_wrappers(
+                                slot_key.to_owned(),
+                                direct_child_wrappers.to_owned(),
+                                template.style.child_templates.to_owned(),
+                            );
                             continue;
                         }
                     }
@@ -205,7 +233,10 @@ impl Template {
             string_table,
         );
 
-        prepend_inherited_child_templates(&mut template.content, &inherited_templates);
+        template.content = apply_inherited_child_templates_to_content(
+            template.content,
+            &template.style.child_templates,
+        )?;
 
         template.content = compose_template_head_chain(&template.content, &mut foldable)?;
 
@@ -249,14 +280,13 @@ impl Template {
     }
 
     pub fn create_default(templates: Vec<Template>) -> Template {
-        let style = match templates.last() {
-            Some(t) => {
-                let mut inherited_style = t.style.clone();
-                inherited_style.child_templates = templates;
-                inherited_style
-            }
-            None => Style::default(),
-        };
+        let inheritance = TemplateInheritance::from_legacy_templates(templates);
+        Self::create_default_with_inherited_style(inheritance.recursive_style)
+    }
+
+    fn create_default_with_inherited_style(inherited_style: Option<Style>) -> Template {
+        let mut style = inherited_style.unwrap_or_else(Style::default);
+        style.child_templates.clear();
 
         Template {
             content: TemplateContent::default(),
@@ -328,6 +358,22 @@ impl Template {
             string_table,
         )
     }
+}
+
+fn recursive_inherited_style(style: &Style) -> Option<Style> {
+    let mut inherited = style.to_owned();
+    inherited.child_templates.clear();
+
+    if inherited.formatter.is_none()
+        && inherited.css_mode.is_none()
+        && inherited.formatter_precedence == -1
+        && inherited.override_precedence == -1
+        && inherited.id.is_empty()
+    {
+        return None;
+    }
+
+    Some(inherited)
 }
 
 // TODO: move these old formatters to the new trait style ones
@@ -787,24 +833,106 @@ fn push_template_head_expression(
     Ok(())
 }
 
-fn prepend_inherited_child_templates(
-    content: &mut TemplateContent,
+pub(crate) fn apply_inherited_child_templates_to_content(
+    content: TemplateContent,
     inherited_templates: &[Template],
-) {
+) -> Result<TemplateContent, CompilerError> {
     if inherited_templates.is_empty() {
-        return;
+        return Ok(content);
     }
 
-    let mut inherited_atoms = Vec::with_capacity(inherited_templates.len() + content.atoms.len());
-    for inherited in inherited_templates {
-        inherited_atoms.push(TemplateAtom::Content(TemplateSegment::new(
-            Expression::template(inherited.to_owned(), Ownership::ImmutableOwned),
-            TemplateSegmentOrigin::Head,
-        )));
+    let mut wrapped_atoms = Vec::with_capacity(content.atoms.len());
+
+    for atom in content.atoms {
+        if is_direct_child_template_atom(&atom) {
+            wrapped_atoms.push(wrap_direct_child_atom(&atom, inherited_templates)?);
+        } else {
+            wrapped_atoms.push(atom);
+        }
     }
 
-    inherited_atoms.extend(std::mem::take(&mut content.atoms));
-    content.atoms = inherited_atoms;
+    Ok(TemplateContent {
+        atoms: wrapped_atoms,
+    })
+}
+
+fn is_direct_child_template_atom(atom: &TemplateAtom) -> bool {
+    let TemplateAtom::Content(segment) = atom else {
+        return false;
+    };
+
+    if segment.origin != TemplateSegmentOrigin::Body {
+        return false;
+    }
+
+    if segment.is_child_template_output {
+        return true;
+    }
+
+    match &segment.expression.kind {
+        ExpressionKind::Template(template) => !template.has_unresolved_slots(),
+        _ => false,
+    }
+}
+
+fn wrap_direct_child_atom(
+    atom: &TemplateAtom,
+    inherited_templates: &[Template],
+) -> Result<TemplateAtom, CompilerError> {
+    let mut wrapped_atom = atom.to_owned();
+
+    for wrapper in inherited_templates.iter().rev() {
+        wrapped_atom = wrap_atom_in_child_template(&wrapped_atom, wrapper)?;
+    }
+
+    Ok(wrapped_atom)
+}
+
+fn wrap_atom_in_child_template(
+    atom: &TemplateAtom,
+    wrapper: &Template,
+) -> Result<TemplateAtom, CompilerError> {
+    let origin = match atom {
+        TemplateAtom::Content(segment) => segment.origin,
+        TemplateAtom::Slot(_) => TemplateSegmentOrigin::Body,
+    };
+
+    let wrapped_template = if wrapper.has_unresolved_slots() {
+        let fill_content = TemplateContent {
+            atoms: vec![atom.to_owned()],
+        };
+        let composed_content =
+            compose_template_with_slots(wrapper, &fill_content, &wrapper.location)?;
+
+        let mut wrapped_template = wrapper.to_owned();
+        wrapped_template.content = composed_content;
+        wrapped_template
+    } else {
+        let mut wrapped_template = Template::create_default(vec![]);
+        wrapped_template.location = wrapper.location.to_owned();
+        wrapped_template.content = TemplateContent {
+            atoms: vec![
+                TemplateAtom::Content(TemplateSegment::new(
+                    Expression::template(wrapper.to_owned(), Ownership::ImmutableOwned),
+                    TemplateSegmentOrigin::Body,
+                )),
+                atom.to_owned(),
+            ],
+        };
+        wrapped_template.kind = if wrapped_template.content.is_const_evaluable_value()
+            && !wrapped_template.content.contains_slot_insertions()
+        {
+            TemplateType::String
+        } else {
+            TemplateType::StringFunction
+        };
+        wrapped_template
+    };
+
+    Ok(TemplateAtom::Content(TemplateSegment::new(
+        Expression::template(wrapped_template, Ownership::ImmutableOwned),
+        origin,
+    )))
 }
 
 #[derive(Clone, Debug)]
@@ -1119,21 +1247,7 @@ fn fold_atoms(
 }
 
 fn effective_inherited_style_for_nested_templates(style: &Style) -> Option<Style> {
-    if style.formatter.is_some() {
-        return Some(Style {
-            id: style.id,
-            formatter: style.formatter.clone(),
-            formatter_precedence: style.formatter_precedence,
-            override_precedence: style.override_precedence,
-            child_templates: vec![],
-            css_mode: style.css_mode,
-        });
-    }
-
-    style
-        .child_templates
-        .last()
-        .map(|template| template.style.to_owned())
+    recursive_inherited_style(style)
 }
 
 fn push_folded_segment_str(output: &mut String, value: &str, protect_from_markdown: bool) {
@@ -1181,8 +1295,8 @@ fn parse_style_directive(
                 Ok(false)
             }
 
-            "ignore" => {
-                // `$ignore` wipes the inherited style state first, then later directives
+            "reset" => {
+                // `$reset` wipes the inherited style state first, then later directives
                 // in the same head can layer fresh settings back on top.
                 template.style = Style::default();
                 Ok(false)
@@ -1223,13 +1337,13 @@ fn parse_style_directive(
             other => {
                 return_syntax_error!(
                     format!(
-                        "Unsupported style directive '${other}'. Supported directives are '$markdown', '$children(..)', '$code', '$css', '$ignore', '$slot', '$insert(..)', '$note', '$todo', '$doc', and '$formatter(...)'."
+                        "Unsupported style directive '${other}'. Supported directives are '$markdown', '$children(..)', '$code', '$css', '$reset', '$slot', '$insert(..)', '$note', '$todo', '$doc', and '$formatter(...)'."
                     ),
                     token_stream
                         .current_location()
                         .to_error_location(string_table),
                     {
-                        PrimarySuggestion => "Use '$markdown', '$children(..)', '$code', '$css', '$ignore', '$slot', '$insert(..)', '$note', '$todo', '$doc', or '$formatter(...)' inside the template head",
+                        PrimarySuggestion => "Use '$markdown', '$children(..)', '$code', '$css', '$reset', '$slot', '$insert(..)', '$note', '$todo', '$doc', or '$formatter(...)' inside the template head",
                     }
                 )
             }
@@ -1429,8 +1543,8 @@ fn format_content_atoms(
                 formatter,
                 string_table,
             );
-            if let TemplateAtom::Slot(slot_key) = atom {
-                formatted_atoms.push(TemplateAtom::Slot(slot_key));
+            if let TemplateAtom::Slot(slot) = atom {
+                formatted_atoms.push(TemplateAtom::Slot(slot));
             }
             continue;
         };
@@ -1448,6 +1562,18 @@ fn format_content_atoms(
         };
 
         if segment.origin != TemplateSegmentOrigin::Body {
+            flush_formatted_body_run(
+                &mut formatted_atoms,
+                &mut buffered_text,
+                &mut buffer_location,
+                formatter,
+                string_table,
+            );
+            formatted_atoms.push(TemplateAtom::Content(segment));
+            continue;
+        }
+
+        if segment.is_child_template_output {
             flush_formatted_body_run(
                 &mut formatted_atoms,
                 &mut buffered_text,
@@ -1494,10 +1620,9 @@ fn flush_formatted_body_run(
 
     let interned = string_table.intern(buffered_text.as_str());
     let location = buffer_location.take().unwrap_or_default();
-    atoms.push(TemplateAtom::Content(TemplateSegment::new(
-        Expression::string_slice(interned, location, Ownership::ImmutableOwned),
-        TemplateSegmentOrigin::Body,
-    )));
+    let expression = Expression::string_slice(interned, location, Ownership::ImmutableOwned);
+    let segment = TemplateSegment::new(expression, TemplateSegmentOrigin::Body);
+    atoms.push(TemplateAtom::Content(segment));
 
     buffered_text.clear();
 }

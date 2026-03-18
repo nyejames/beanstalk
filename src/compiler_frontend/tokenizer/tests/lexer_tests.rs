@@ -23,7 +23,7 @@ fn find_token_index(tokens: &[Token], predicate: impl Fn(&TokenKind) -> bool) ->
 
 #[test]
 fn tokenizes_style_directives_inside_template_heads() {
-    let (file_tokens, string_table) = tokenize_source("[$markdown, $ignore: body]");
+    let (file_tokens, string_table) = tokenize_source("[$markdown, $reset: body]");
 
     let outer_head = find_token_index(&file_tokens.tokens, |kind| {
         matches!(kind, TokenKind::TemplateHead)
@@ -32,19 +32,19 @@ fn tokenizes_style_directives_inside_template_heads() {
         &file_tokens.tokens,
         |kind| matches!(kind, TokenKind::StyleDirective(id) if string_table.resolve(*id) == "markdown"),
     );
-    let ignore = find_token_index(
+    let reset = find_token_index(
         &file_tokens.tokens,
-        |kind| matches!(kind, TokenKind::StyleDirective(id) if string_table.resolve(*id) == "ignore"),
+        |kind| matches!(kind, TokenKind::StyleDirective(id) if string_table.resolve(*id) == "reset"),
     );
 
     assert!(outer_head < markdown);
-    assert!(markdown < ignore);
+    assert!(markdown < reset);
     assert!(matches!(
         file_tokens.tokens[markdown].kind,
         TokenKind::StyleDirective(..)
     ));
     assert!(matches!(
-        file_tokens.tokens[ignore].kind,
+        file_tokens.tokens[reset].kind,
         TokenKind::StyleDirective(..)
     ));
 }

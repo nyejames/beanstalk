@@ -70,6 +70,35 @@ impl TemplateConstValueKind {
 }
 
 #[derive(Clone, Debug)]
+pub struct SlotPlaceholder {
+    pub key: SlotKey,
+    pub applied_child_wrappers: Vec<Template>,
+    pub child_wrappers: Vec<Template>,
+}
+
+impl SlotPlaceholder {
+    pub fn new(key: SlotKey) -> Self {
+        Self {
+            key,
+            applied_child_wrappers: Vec::new(),
+            child_wrappers: Vec::new(),
+        }
+    }
+
+    pub fn with_child_wrappers(
+        key: SlotKey,
+        applied_child_wrappers: Vec<Template>,
+        child_wrappers: Vec<Template>,
+    ) -> Self {
+        Self {
+            key,
+            applied_child_wrappers,
+            child_wrappers,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct TemplateContent {
     // Slots are represented structurally so template composition can preserve the
     // authored order instead of juggling a fragile before/after split.
@@ -109,7 +138,22 @@ impl TemplateContent {
     }
 
     pub fn push_slot(&mut self, key: SlotKey) {
-        self.atoms.push(TemplateAtom::Slot(key));
+        self.atoms
+            .push(TemplateAtom::Slot(SlotPlaceholder::new(key)));
+    }
+
+    pub fn push_slot_with_child_wrappers(
+        &mut self,
+        key: SlotKey,
+        applied_child_wrappers: Vec<Template>,
+        child_wrappers: Vec<Template>,
+    ) {
+        self.atoms
+            .push(TemplateAtom::Slot(SlotPlaceholder::with_child_wrappers(
+                key,
+                applied_child_wrappers,
+                child_wrappers,
+            )));
     }
 
     pub fn slot_count(&self) -> usize {
@@ -122,13 +166,13 @@ impl TemplateContent {
     pub fn has_default_slot(&self) -> bool {
         self.atoms
             .iter()
-            .any(|atom| matches!(atom, TemplateAtom::Slot(SlotKey::Default)))
+            .any(|atom| matches!(atom, TemplateAtom::Slot(slot) if matches!(&slot.key, SlotKey::Default)))
     }
 
     pub fn has_named_slots(&self) -> bool {
         self.atoms
             .iter()
-            .any(|atom| matches!(atom, TemplateAtom::Slot(SlotKey::Named(_))))
+            .any(|atom| matches!(atom, TemplateAtom::Slot(slot) if matches!(&slot.key, SlotKey::Named(_))))
     }
 
     /// Count every unresolved slot marker reachable inside this content,
@@ -230,7 +274,7 @@ impl TemplateContent {
                 TemplateAtom::Content(segment) => {
                     TemplateAtom::Content(segment.with_origin(origin))
                 }
-                TemplateAtom::Slot(key) => TemplateAtom::Slot(key),
+                TemplateAtom::Slot(slot) => TemplateAtom::Slot(slot),
             }));
     }
 }
@@ -238,7 +282,7 @@ impl TemplateContent {
 #[derive(Clone, Debug)]
 pub enum TemplateAtom {
     Content(TemplateSegment),
-    Slot(SlotKey),
+    Slot(SlotPlaceholder),
 }
 
 impl TemplateAtom {
@@ -310,11 +354,31 @@ pub enum TemplateSegmentOrigin {
 pub struct TemplateSegment {
     pub expression: Expression,
     pub origin: TemplateSegmentOrigin,
+    pub is_child_template_output: bool,
+    pub source_child_template: Option<Box<Template>>,
 }
 
 impl TemplateSegment {
     pub fn new(expression: Expression, origin: TemplateSegmentOrigin) -> Self {
-        Self { expression, origin }
+        Self {
+            expression,
+            origin,
+            is_child_template_output: false,
+            source_child_template: None,
+        }
+    }
+
+    pub fn from_child_template_output(
+        expression: Expression,
+        origin: TemplateSegmentOrigin,
+        source_child_template: Template,
+    ) -> Self {
+        Self {
+            expression,
+            origin,
+            is_child_template_output: true,
+            source_child_template: Some(Box::new(source_child_template)),
+        }
     }
 
     pub fn with_origin(mut self, origin: TemplateSegmentOrigin) -> Self {
@@ -366,8 +430,8 @@ pub struct Style {
     // Overrides any inherited styles that have a lower precedence
     pub override_precedence: i32,
 
-    // Passes templates into the head of every child template of this template
-    // Wrappers can be overridden with parent overrides
+    // Passes templates into the head of each direct child template of this template.
+    // These wrappers do not automatically flow into grandchildren.
     pub child_templates: Vec<Template>,
     pub css_mode: Option<CssDirectiveMode>,
 }

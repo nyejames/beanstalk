@@ -1,4 +1,4 @@
-import @libs/html/doc
+import @libs/html/{doc, format}
 -- Some basic testing styles for the documentation website
 
 # page = [:
@@ -27,6 +27,8 @@ import @libs/html/doc
 # footer = [:
     <div></div>
 ]
+
+# table = [format.table]
 
 # title = [: <h1 style="font-size: 2em;[$slot("style")]">[$slot]</h1>]
 

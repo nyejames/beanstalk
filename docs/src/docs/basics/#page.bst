@@ -1,7 +1,7 @@
 -- ADD A HASH TO THIS FILE TO INCLUDE IT IN THE MODULES.
 -- FOR NOW THIS IS DISABLED FOR TESTING
-import @libs/html/{format, center, table}
-import @styles/docs/{navbar, footer, title, page, palette}
+import @libs/html/{format, center}
+import @styles/docs/{navbar, footer, title, page, palette, table}
 
 #[page, $markdown:
 
@@ -160,22 +160,22 @@ All data type keywords contain methods from the standard library for common mani
 
 ## Numerical Types
 [table:
-    [: Type] [: Description]
+    [: [: Type] [: Description] ] 
 
-    [: float ] [: 64 bit floating point number]
+    [: [: float ] [: 64 bit floating point number] ]
 
-    [: int ] [:  64 bit signed integer ]
+    [: [: int ] [:  64 bit signed integer ] ]
 ]
 
 ## String based Types
 These are all different ways to create strings.
 
 [table:
-    [: Type] [: Description]
+    [: [: Type] [: Description] ]
 
-    [: string slice ] [: UTF-8]
+    [: [: string slice ] [: UTF-8] ]
 
-    [: template ] [: The string templating syntax of Beanstalk for creating strings. ]
+    [: [: template ] [: The string templating syntax of Beanstalk for creating strings. ] ]
 ]
 
 # Strings and String slices
@@ -193,18 +193,17 @@ The 'is' keyword is used to check equality, not '=='.
 The "and / or" keywords are used for logical and / or and 'not' is used to invert a truthy value to falsy or vice versa.
 
 [table:
-    [: Operator] [: Description]          [: Precedence]
-    [: `^`]        [: Exponent]            [: 4]
-    [: `//`]       [: Root]                [: 4]
-    [: `*`]        [: Multiplication]       [: 3]
-    [: `/`]        [: Division]             [: 3]
-    [: %]          [: Modulo (truncated)]   [: 3]
-    [: %%]         [: Remainder (floored)]  [: 3]
-    [: +]          [: Sum]                  [: 2]
-    [: `-`]        [: Subtraction]          [: 2]
+    [: [: Operator] [: Description]          [: Precedence] ]
+    [: [: `^`]        [: Exponent]            [: 4] ]
+    [: [: `//`]       [: Root]                [: 4] ]
+    [: [: `*`]        [: Multiplication]       [: 3] ]
+    [: [: `/`]        [: Division]             [: 3] ]
+    [: [: %]          [: Modulo (truncated)]   [: 3] ]
+    [: [: %%]         [: Remainder (floored)]  [: 3] ]
+    [: [: +]          [: Sum]                  [: 2] ]
+    [: [: `-`]        [: Subtraction]          [: 2] ]
 ]
 
 ]-- end of page
 
 [footer]
-

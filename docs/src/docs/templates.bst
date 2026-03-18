@@ -44,6 +44,28 @@ When you pass a template into another template via the head, it's content can be
 
 Slots can be used to inform how a template merges into another template.
 
+`$children(..)` only applies to the direct child templates of the current template.
+It does not automatically apply to grandchildren.
+
+Formatting directives such as `$markdown` still inherit through nested descendants until a child explicitly changes or resets them.
+
+`$reset` clears inherited formatting and child-style state before later directives in the same head apply fresh settings.
+
+This lets nested child wrappers stay scoped cleanly. For example, a table helper can wrap each direct row in `<tr>` and then wrap each direct cell of that row in `<td>` without the row wrapper leaking into the cells:
+
+```beanstalk
+# table = [$children([:<tr>[$slot]</tr>]):
+  <table style="[$slot("style")]">
+    [$children([:<td>[$slot]</td>]):[$slot]]
+  </table>
+]
+
+[table:
+    [: [: Type] [: Description] ]
+    [: [: float ] [: 64 bit floating point number] ]
+]
+```
+
 If you pass a Style into a template (a built in Interface), the template will change its behavior and styling based on the Style passed in.
 When interfaces are implemented in the language, you will be able to implement your own Styles, by creating types that implement the Style interface. 
 

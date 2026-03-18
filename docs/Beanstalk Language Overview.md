@@ -134,13 +134,13 @@ Templates unlock the full power of Beanstalk's HTML / CSS generation capabilitie
 Templates can be used to build complex UI components. They can use slots to insert content from other templates and have **style metadata** attached to them.
 
 A template’s style is defined in the **template head** using `$` directives. 
-`$` introduces **compiler-handled settings** (so they don’t collide with normal variables and can be extended in the future), such as choosing a formatter, a precedence and default child templates that are automatically applied to nested templates.
+`$` introduces **compiler-handled settings** (so they don’t collide with normal variables and can be extended in the future), such as choosing a formatter, a precedence and default child templates that are automatically applied to direct child templates.
 
 ```beanstalk
 -- Define a template style
 [
   $markdown,                        
-  $children([: All children start with this prefix! ])    -- Applies to all children
+  $children([: All children start with this prefix! ])    -- Applies only to direct children
 :
   # Hello
   This template is parsed as markdown.
@@ -156,12 +156,12 @@ A template’s style is defined in the **template head** using `$` directives.
 **Built-in Style Directives**
 
 - $slot / $insert(..) - See slots below!
-- $ignore             - Ignores all inherited styles
+- $reset              - Clears inherited styles before applying new ones
 - $markdown           - Parses the template bodies with a custom flavour of Markdown
 - $css                - Provides some basic warnings for malformed CSS
 - $note / $todo       - Comments (ignored by final output)
 - $doc                - Turns the template into a documentation comment
-- $children(..)       - Accepts a template (or string slice) that will be applied to all templates inside this one
+- $children(..)       - Accepts a template (or string slice) that will be applied only to this template's direct child templates
 
 ### Template Slots
 
@@ -187,6 +187,23 @@ In this example, `blue` inserts `color: blue;` into the `style` slot of `title`,
 
 If a template has named slots but no default slot, loose body content is an error and content must be inserted explicitly into a named slot. 
 If a named slot receives no `$insert(...)` content, it expands to an empty string.
+
+Because `$children(..)` only applies to direct children, nested helpers can scope row and cell wrappers independently:
+
+```beanstalk
+# table = [$children([:<tr>[$slot]</tr>]):
+  <table style="[$slot("style")]">
+    [$children([:<td>[$slot]</td>]):[$slot]]
+  </table>
+]
+
+[table:
+    [: [: Type] [: Description] ]
+    [: [: float ] [: 64 bit floating point number] ]
+]
+```
+
+In that example, each direct child of `table` becomes a row, while each direct child of a row becomes a cell. The outer `<tr>` wrapper does not leak into the inner cell templates.
 
 **Control flow patterns:**
 

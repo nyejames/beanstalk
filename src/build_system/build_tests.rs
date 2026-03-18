@@ -717,6 +717,43 @@ fn build_project_rejects_slot_insertion_constant_without_active_wrapper() {
 }
 
 #[test]
+fn build_project_const_slot_children_wrap_table_rows_and_cells_without_cross_applying() {
+    let root = temp_dir("const_slot_children_cells");
+    fs::create_dir_all(root.join("libs")).expect("should create libs root");
+    fs::write(
+        root.join("libs").join("html.bst"),
+        "#table = [$children([:<tr>[$slot]</tr>]):\n  <table>\n    [$children([:<td>[$slot]</td>]):[$slot]]\n  </table>\n]\n",
+    )
+    .expect("should write html library");
+    fs::write(
+        root.join("main.bst"),
+        "import @libs/html/{table}\n[table:\n    [: [:Type] [:Description] ]\n    [: [:float] [:64 bit floating point number] ]\n]\n",
+    )
+    .expect("should write source file");
+    let _cwd_guard = CurrentDirGuard::set_to(&root);
+
+    let builder = HtmlProjectBuilder::new();
+    let build_result = build_project(&builder, "main.bst", &[])
+        .expect("slot child wrapper tables should build successfully");
+
+    let html = match build_result.project.output_files[0].file_kind() {
+        FileKind::Html(content) => content,
+        other => panic!(
+            "expected HTML output, got {:?}",
+            std::mem::discriminant(other)
+        ),
+    };
+
+    assert_eq!(html.matches("<tr>").count(), 2);
+    assert!(html.contains("<td>Type</td>"));
+    assert!(html.contains("<td>Description</td>"));
+    assert!(html.contains("<td>float</td>"));
+    assert_eq!(html.matches("<td>").count(), 4);
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
 fn build_project_struct_default_uses_imported_constant() {
     let root = temp_dir("struct_default_imported_constant");
     fs::create_dir_all(root.join("styles")).expect("should create temp root");

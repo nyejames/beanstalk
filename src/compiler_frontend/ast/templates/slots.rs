@@ -1,9 +1,13 @@
-use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
-use crate::compiler_frontend::ast::templates::create_template_node::Template;
+use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
+use crate::compiler_frontend::ast::templates::create_template_node::{
+    Template, apply_inherited_child_templates_to_content,
+};
 use crate::compiler_frontend::ast::templates::template::{
-    SlotKey, TemplateAtom, TemplateContent, TemplateSegment, TemplateType,
+    SlotKey, SlotPlaceholder, TemplateAtom, TemplateContent, TemplateSegment,
+    TemplateSegmentOrigin, TemplateType,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
+use crate::compiler_frontend::datatypes::Ownership;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TextLocation, TokenKind};
 use crate::{return_rule_error, return_syntax_error};
@@ -146,7 +150,7 @@ fn collect_slot_schema_atoms(
     // one deterministic pass.
     for atom in atoms {
         match atom {
-            TemplateAtom::Slot(SlotKey::Default) => {
+            TemplateAtom::Slot(slot) if matches!(&slot.key, SlotKey::Default) => {
                 if schema.has_default_slot {
                     return_rule_error!(
                         "Templates can only define one default '$slot'.",
@@ -155,8 +159,10 @@ fn collect_slot_schema_atoms(
                 }
                 schema.has_default_slot = true;
             }
-            TemplateAtom::Slot(SlotKey::Named(name)) => {
-                schema.named_slots.insert(*name);
+            TemplateAtom::Slot(slot) => {
+                if let SlotKey::Named(name) = &slot.key {
+                    schema.named_slots.insert(*name);
+                }
             }
             TemplateAtom::Content(segment) => {
                 if let ExpressionKind::Template(template) = &segment.expression.kind {
@@ -241,10 +247,10 @@ fn compose_wrapper_atoms_recursive(
 
     for atom in wrapper_atoms {
         match atom {
-            TemplateAtom::Slot(key) => {
+            TemplateAtom::Slot(slot) => {
                 // Slot replacement is intentionally non-consuming so duplicate named
                 // slot declarations replay the same aggregated contribution in each place.
-                composed.extend(contributions.atoms_for_slot(key));
+                composed.extend(expand_slot_placeholder(slot, contributions)?);
             }
             TemplateAtom::Content(segment) => {
                 // Nested templates can carry slot definitions too. Recursively resolve
@@ -275,6 +281,132 @@ fn compose_wrapper_atoms_recursive(
     }
 
     Ok(composed)
+}
+
+fn expand_slot_placeholder(
+    slot: &SlotPlaceholder,
+    contributions: &SlotContributions,
+) -> Result<Vec<TemplateAtom>, CompilerError> {
+    let slot_atoms = contributions.atoms_for_slot(&slot.key);
+    if slot.applied_child_wrappers.is_empty() && slot.child_wrappers.is_empty() {
+        return Ok(slot_atoms);
+    }
+
+    let mut expanded = Vec::with_capacity(slot_atoms.len());
+    for atom in slot_atoms {
+        let atom = if slot.child_wrappers.is_empty() {
+            atom
+        } else {
+            apply_child_wrappers_to_contribution_children(&atom, &slot.child_wrappers)?
+        };
+
+        if !slot.applied_child_wrappers.is_empty() && is_child_slot_contribution(&atom) {
+            expanded.push(wrap_child_slot_contribution(
+                &atom,
+                &slot.applied_child_wrappers,
+            )?);
+        } else {
+            expanded.push(atom);
+        }
+    }
+
+    Ok(expanded)
+}
+
+fn is_child_slot_contribution(atom: &TemplateAtom) -> bool {
+    let TemplateAtom::Content(segment) = atom else {
+        return false;
+    };
+
+    segment.is_child_template_output
+        || matches!(segment.expression.kind, ExpressionKind::Template(_))
+}
+
+fn wrap_child_slot_contribution(
+    atom: &TemplateAtom,
+    child_wrappers: &[Template],
+) -> Result<TemplateAtom, CompilerError> {
+    let wrapped_content = apply_inherited_child_templates_to_content(
+        TemplateContent {
+            atoms: vec![atom.to_owned()],
+        },
+        child_wrappers,
+    )?;
+
+    let origin = contribution_origin(atom);
+    let mut wrapped_template = Template::create_default(vec![]);
+    wrapped_template.content = wrapped_content;
+    refresh_template_kind(&mut wrapped_template);
+    wrapped_template.location = contribution_location(atom);
+
+    Ok(TemplateAtom::Content(TemplateSegment::new(
+        Expression::template(wrapped_template, Ownership::ImmutableOwned),
+        origin,
+    )))
+}
+
+fn apply_child_wrappers_to_contribution_children(
+    atom: &TemplateAtom,
+    child_wrappers: &[Template],
+) -> Result<TemplateAtom, CompilerError> {
+    let Some(mut contribution_template) = contribution_template(atom) else {
+        return Ok(atom.to_owned());
+    };
+
+    contribution_template.content =
+        apply_inherited_child_templates_to_content(contribution_template.content, child_wrappers)?;
+    refresh_template_kind(&mut contribution_template);
+
+    Ok(TemplateAtom::Content(TemplateSegment::new(
+        Expression::template(contribution_template, Ownership::ImmutableOwned),
+        contribution_origin(atom),
+    )))
+}
+
+fn contribution_template(atom: &TemplateAtom) -> Option<Template> {
+    let TemplateAtom::Content(segment) = atom else {
+        return None;
+    };
+
+    if let Some(source_child_template) = &segment.source_child_template {
+        return Some(source_child_template.as_ref().to_owned());
+    }
+
+    match &segment.expression.kind {
+        ExpressionKind::Template(template) => Some(template.as_ref().to_owned()),
+        _ => None,
+    }
+}
+
+fn refresh_template_kind(template: &mut Template) {
+    if matches!(
+        template.kind,
+        TemplateType::SlotInsert(_) | TemplateType::SlotDefinition(_) | TemplateType::Comment(_)
+    ) {
+        return;
+    }
+
+    template.kind = if template.content.is_const_evaluable_value()
+        && !template.content.contains_slot_insertions()
+    {
+        TemplateType::String
+    } else {
+        TemplateType::StringFunction
+    };
+}
+
+fn contribution_origin(atom: &TemplateAtom) -> TemplateSegmentOrigin {
+    match atom {
+        TemplateAtom::Content(segment) => segment.origin,
+        TemplateAtom::Slot(_) => TemplateSegmentOrigin::Body,
+    }
+}
+
+fn contribution_location(atom: &TemplateAtom) -> TextLocation {
+    match atom {
+        TemplateAtom::Content(segment) => segment.expression.location.to_owned(),
+        TemplateAtom::Slot(_) => TextLocation::default(),
+    }
 }
 
 fn slot_insert_from_atom(atom: &TemplateAtom) -> Option<(SlotKey, &TemplateContent)> {
