@@ -313,7 +313,11 @@ fn pop_higher_precedence(
         };
 
         if should_pop {
-            output_queue.push(operators_stack.pop().unwrap());
+            output_queue.push(
+                operators_stack
+                    .pop()
+                    .expect("operator stack should contain the operator returned by last()"),
+            );
         } else {
             break;
         }

@@ -99,10 +99,12 @@ pub fn run_single_build_cycle(
     let build_outcome = build_once(executor, entry_file, flags, &output_dir);
 
     let version = {
-        let mut build_state = state
-            .build_state
-            .lock()
-            .expect("build state should not be poisoned");
+        // If a previous dev-server task panicked while holding the lock, keep the latest state and
+        // continue serving rebuild results instead of crashing the entire watcher loop.
+        let mut build_state = match state.build_state.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        };
         build_state.last_build_version = build_state.last_build_version.saturating_add(1);
         build_state.last_build_ok = build_outcome.build_succeeded;
         build_state.last_build_messages_summary = build_outcome.diagnostics_summary.clone();

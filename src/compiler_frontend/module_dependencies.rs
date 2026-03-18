@@ -1,6 +1,7 @@
-// CURRENTLY REMOVED FROM COMPILER
-// Dependency resolution will have to happen at the module level.
-// Declarations will be parsed first in the tokenizer now.
+//! Stage 3 dependency ordering for parsed Beanstalk headers.
+//!
+//! This pass topologically sorts header definitions after header parsing so AST construction sees
+//! import, constant, and soft struct-default dependencies in a deterministic order.
 
 use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorLocation};
 use crate::compiler_frontend::headers::parse_file_headers::{Header, HeaderKind};
@@ -121,9 +122,12 @@ fn visit_node(
 
     // only proceed if not already permanently marked
     if !tracker.visited.contains(&resolved_path) {
-        let header = graph
-            .get(&resolved_path)
-            .expect("Resolved dependency path should exist in graph");
+        let Some(header) = graph.get(&resolved_path) else {
+            return Err(CompilerError::compiler_error(format!(
+                "Dependency ordering resolved '{}' but it was missing from the graph.",
+                resolved_path.to_portable_string(string_table)
+            )));
+        };
 
         // mark temporarily
         tracker.temp_mark.insert(resolved_path.to_owned());

@@ -458,7 +458,9 @@ impl<'a> HirBuilder<'a> {
             );
         }
 
-        let mut value = stack.pop().expect("checked above");
+        let mut value = stack
+            .pop()
+            .expect("validated runtime RPN expression should leave exactly one value on the stack");
         let expected_ty = self.lower_data_type(expr_type, location)?;
         value.ty = expected_ty;
 

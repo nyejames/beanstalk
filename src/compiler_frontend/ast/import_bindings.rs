@@ -282,7 +282,11 @@ fn resolve_import_target_path(
 
     match matches.len() {
         0 => ImportPathResolution::Missing,
-        1 => ImportPathResolution::Resolved(matches.pop().unwrap()),
+        1 => ImportPathResolution::Resolved(
+            matches
+                .pop()
+                .expect("exactly one import candidate should exist when matches.len() is 1"),
+        ),
         _ => ImportPathResolution::Ambiguous,
     }
 }

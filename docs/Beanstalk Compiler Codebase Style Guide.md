@@ -259,7 +259,7 @@ Failure cases should assert the intended `ErrorType` and, when practical, messag
 cargo run -- tests
 
 # Debugging a single file
-cargo run --features "detailed_timers,show_ast,show_hir" -- build tests/cases/test/input/main.bst
+cargo run --features "detailed_timers,show_ast,show_hir" -- build tests/cases/function_if_loop_smoke/input/#page.bst
 
 ```
 
