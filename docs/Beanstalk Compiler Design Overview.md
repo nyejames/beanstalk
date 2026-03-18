@@ -22,7 +22,6 @@ This style of memory management can be incrementally strengthened with region an
 ## Overview
 Build systems can create a function that implements the ProjectBuilder trait and pass that, along with a list of input files to the compiler's core build system.
 The project builder takes the output of the compiler's frontend (A list of Hir modules) and performs the backend compilation stages.
-The compiler's core build system then creates and writes the list of output files the project builder produced.
 
 ```rust
     /// Unified build interface for all project types
@@ -69,7 +68,7 @@ The Beanstalk compiler frontend and build system processes modules through these
 2. **Header Parsing** – Extract headers and identify the entry point. Separates function definitions, structs and constants from top-level code. Processes import statements so dependencies can be sorted after.
 3. **Dependency Sorting** – Order headers by import dependencies (including constant dependencies)
 4. **AST Construction** – Name resolution, type checking, constant resolution/folding and template lowering
-5. **HIR Generation** – Semantic lowering with explicit control flow and possible drop points inserted
+5. **HIR Generation** – Semantic lowering with explicit control flow
 6. **Borrow Validation** – An analysis pass to verify memory safety
 
 Project builders then perform:
@@ -342,31 +341,7 @@ Ensures all values that might own data eventually reach a drop site.
 - All types require explicit copy semantics when copying is needed
 - Most operations use borrowing instead of copying
 
-### 5. Unified ABI for Moves and Mutable References
-Beanstalk does not generate separate function bodies for “owned” vs “borrowed” arguments. 
-Function signatures make no distinction between a mutable reference or a move (owned value). Instead, all function calls use a single ABI:
-
-- Arguments that live in linear memory are passed as tagged pointers.
-- The lowest alignment-safe bit of the pointer is used as an ownership flag (1 = owned, 0 = borrowed).
-- The callee masks out the tag to recover the real pointer.
-- If the ownership bit is set, the callee is responsible for dropping the value before returning.
-- Borrow checker rules guarantee that the caller no longer uses owned arguments after the call.
-
-This ABI allows Beanstalk to defer ownership decisions without sacrificing safety or requiring duplicate function bodies.
-
-This design keeps dispatch static, avoids monomorphization and prevents binary-size growth on Wasm while still allowing the compiler to freely choose between moves and mutable references based on last-use analysis.
-
-Beanstalk inserts conditional drops and proves that *all paths are safe* for values that follow the borrow checker rules. If not, then they are managed by the fallback GC.
-
 ## Language Notes
 There are **no temporaries** at the language level. Compiler-introduced locals are treated exactly like user locals.
 
 **No Shadowing**: Beanstalk disallows variable shadowing, meaning each place name refers to exactly one memory location throughout its scope. This simplifies borrow checking significantly.
-
-# Future
-
-## Region-Based Memory Management
-Regions can be introduced as compile-time scopes that guarantee collective drop behavior, allowing the compiler to:
-- Elide runtime ownership checks
-- Bulk-free memory
-- Strengthen static guarantees incrementally
