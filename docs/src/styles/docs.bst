@@ -38,7 +38,7 @@ import @libs/html/{doc, format}
 ]
 
 # header_row = [:
-    <tr style="background-color: hsla(85, 66%, 54%, 0.14);">
+    <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
         [$reset, $children([:
             <th style="border: 1px solid; padding: 0.5em; text-align: left;">[$slot]</th>
         ]):[$slot]]
