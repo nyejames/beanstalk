@@ -4,7 +4,7 @@ import @libs/html/{doc, format}
 # page = [:
     [doc.prelude, doc.en]
     
-    [doc.head:
+    [doc.head, $html:
         <meta charset="UTF-8">
         <meta name="viewport"content="width=device-width, initial-scale=1">
         <link rel="icon"href="[$slot("favicon")]">
@@ -20,11 +20,11 @@ import @libs/html/{doc, format}
     ]
 ]
 
-# navbar = [:
+# navbar = [$html:
     <nav></nav>
 ]
 
-# footer = [:
+# footer = [$html:
     <div></div>
 ]
 
@@ -33,25 +33,25 @@ import @libs/html/{doc, format}
     [$slot]
 ]
 
-# row = [:
-    <tr style="border-bottom: 1px dotted grey;">[$reset, $children([:<td style="padding: 0.2em 0.5em;">[$slot]</td>]):[$slot]]</tr>
+# row = [$html:
+    <tr style="border-bottom: 1px dotted grey;">[$reset, $children([$html:<td style="padding: 0.2em 0.5em;">[$slot]</td>]):[$slot]]</tr>
 ]
 
-# header_row = [:
+# header_row = [$html:
     <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
-        [$reset, $children([:
+        [$reset, $children([$html:
             <th style="border: 1px solid; padding: 0.5em; text-align: left;">[$slot]</th>
         ]):[$slot]]
     </tr>
 ]
 
-# title = [: <h1 style="font-size: 2em;[$slot("style")]">[$slot]</h1>]
+# title = [$html: <h1 style="font-size: 2em;[$slot("style")]">[$slot]</h1>]
 
 Palette = |
     -- Colors for the documentation website
-    red String = [:<span style="color: hsl(0, 73%, 55%);">[$slot]</span>],
-    green String = [:<span style="color: green;">[$slot]</span>],
-    blue String = [:<span style="color: blue;">[$slot]</span>],
+    red String = [$html:<span style="color: hsl(0, 73%, 55%);">[$slot]</span>],
+    green String = [$html:<span style="color: green;">[$slot]</span>],
+    blue String = [$html:<span style="color: blue;">[$slot]</span>],
 |
 
 # palette = Palette()

@@ -239,9 +239,13 @@ impl Template {
         template.unformatted_content = apply_inherited_child_templates_to_content(
             template.content.to_owned(),
             &template.style.child_templates,
+            string_table,
         )?;
-        template.unformatted_content =
-            compose_template_head_chain(&template.unformatted_content, &mut foldable)?;
+        template.unformatted_content = compose_template_head_chain(
+            &template.unformatted_content,
+            &mut foldable,
+            string_table,
+        )?;
 
         // Formatting is normalized here, before any later folding/lowering stage.
         // This keeps runtime templates simple: only compile-time-known body strings
@@ -251,9 +255,11 @@ impl Template {
         template.content = apply_inherited_child_templates_to_content(
             template.content,
             &template.style.child_templates,
+            string_table,
         )?;
 
-        template.content = compose_template_head_chain(&template.content, &mut foldable)?;
+        template.content =
+            compose_template_head_chain(&template.content, &mut foldable, string_table)?;
         template.content_needs_formatting = false;
 
         if matches!(
@@ -276,7 +282,7 @@ impl Template {
         // left, any remaining `$insert(...)` is out of scope and must error.
         if !matches!(template.kind, TemplateType::SlotInsert(_)) && !template.has_unresolved_slots()
         {
-            ensure_no_slot_insertions_remain(&template.content, &template.location)?;
+            ensure_no_slot_insertions_remain(&template.content, &template.location, string_table)?;
         }
 
         if foldable
@@ -876,6 +882,7 @@ fn push_template_head_expression(
 pub(crate) fn apply_inherited_child_templates_to_content(
     content: TemplateContent,
     inherited_templates: &[Template],
+    string_table: &StringTable,
 ) -> Result<TemplateContent, CompilerError> {
     if inherited_templates.is_empty() {
         return Ok(content);
@@ -885,7 +892,11 @@ pub(crate) fn apply_inherited_child_templates_to_content(
 
     for atom in content.atoms {
         if is_direct_child_template_atom(&atom) {
-            wrapped_atoms.push(wrap_direct_child_atom(&atom, inherited_templates)?);
+            wrapped_atoms.push(wrap_direct_child_atom(
+                &atom,
+                inherited_templates,
+                string_table,
+            )?);
         } else {
             wrapped_atoms.push(atom);
         }
@@ -918,11 +929,12 @@ fn is_direct_child_template_atom(atom: &TemplateAtom) -> bool {
 fn wrap_direct_child_atom(
     atom: &TemplateAtom,
     inherited_templates: &[Template],
+    string_table: &StringTable,
 ) -> Result<TemplateAtom, CompilerError> {
     let mut wrapped_atom = atom.to_owned();
 
     for wrapper in inherited_templates.iter().rev() {
-        wrapped_atom = wrap_atom_in_child_template(&wrapped_atom, wrapper)?;
+        wrapped_atom = wrap_atom_in_child_template(&wrapped_atom, wrapper, string_table)?;
     }
 
     Ok(wrapped_atom)
@@ -931,6 +943,7 @@ fn wrap_direct_child_atom(
 fn wrap_atom_in_child_template(
     atom: &TemplateAtom,
     wrapper: &Template,
+    string_table: &StringTable,
 ) -> Result<TemplateAtom, CompilerError> {
     let origin = match atom {
         TemplateAtom::Content(segment) => segment.origin,
@@ -942,7 +955,7 @@ fn wrap_atom_in_child_template(
             atoms: vec![atom.to_owned()],
         };
         let composed_content =
-            compose_template_with_slots(wrapper, &fill_content, &wrapper.location)?;
+            compose_template_with_slots(wrapper, &fill_content, &wrapper.location, string_table)?;
 
         let mut wrapped_template = wrapper.to_owned();
         wrapped_template.content = composed_content;
@@ -996,6 +1009,7 @@ struct ChainLayer {
 fn compose_template_head_chain(
     content: &TemplateContent,
     foldable: &mut bool,
+    string_table: &StringTable,
 ) -> Result<TemplateContent, CompilerError> {
     let mut head_atoms = Vec::new();
     let mut body_atoms = Vec::new();
@@ -1065,7 +1079,7 @@ fn compose_template_head_chain(
     }
 
     let mut cache = rustc_hash::FxHashMap::default();
-    let atoms = resolve_pending_chain_items(&root_items, &layers, &mut cache)?;
+    let atoms = resolve_pending_chain_items(&root_items, &layers, &mut cache, string_table)?;
     Ok(TemplateContent { atoms })
 }
 
@@ -1110,6 +1124,7 @@ fn resolve_pending_chain_items(
     items: &[PendingChainItem],
     layers: &[ChainLayer],
     cache: &mut rustc_hash::FxHashMap<usize, Template>,
+    string_table: &StringTable,
 ) -> Result<Vec<TemplateAtom>, CompilerError> {
     let mut atoms = Vec::with_capacity(items.len());
 
@@ -1120,7 +1135,8 @@ fn resolve_pending_chain_items(
                 layer_index,
                 origin,
             } => {
-                let resolved_layer = resolve_chain_layer(*layer_index, layers, cache)?;
+                let resolved_layer =
+                    resolve_chain_layer(*layer_index, layers, cache, string_table)?;
                 atoms.push(TemplateAtom::Content(TemplateSegment::new(
                     Expression::template(resolved_layer, Ownership::ImmutableOwned),
                     *origin,
@@ -1136,6 +1152,7 @@ fn resolve_chain_layer(
     layer_index: usize,
     layers: &[ChainLayer],
     cache: &mut rustc_hash::FxHashMap<usize, Template>,
+    string_table: &StringTable,
 ) -> Result<Template, CompilerError> {
     if let Some(cached) = cache.get(&layer_index) {
         return Ok(cached.to_owned());
@@ -1149,12 +1166,17 @@ fn resolve_chain_layer(
         return Ok(layer.wrapper.to_owned());
     }
 
-    let resolved_fill_atoms = resolve_pending_chain_items(&layer.fill_items, layers, cache)?;
+    let resolved_fill_atoms =
+        resolve_pending_chain_items(&layer.fill_items, layers, cache, string_table)?;
     let resolved_fill = TemplateContent {
         atoms: resolved_fill_atoms,
     };
-    let composed_content =
-        compose_template_with_slots(&layer.wrapper, &resolved_fill, &layer.wrapper.location)?;
+    let composed_content = compose_template_with_slots(
+        &layer.wrapper,
+        &resolved_fill,
+        &layer.wrapper.location,
+        &string_table,
+    )?;
 
     let mut resolved_wrapper = layer.wrapper.to_owned();
     resolved_wrapper.content = composed_content;
@@ -1174,7 +1196,7 @@ fn fold_atoms(
     let mut inside_protected_body_run = false;
 
     // Body strings may already have been formatted by this template. If an inherited
-    // formatter would otherwise run over the same bytes again, wrap only those body
+    // formatter otherwise runs over the same bytes again, wrap only those body
     // runs in the invisible guard marker so the parent formatter skips them.
     let should_protect_formatted_body = inherited_style.as_ref().is_some_and(|inherited_style| {
         style.formatter.is_some()
@@ -1188,7 +1210,7 @@ fn fold_atoms(
     for atom in atoms {
         let TemplateAtom::Content(segment) = atom else {
             // When a slot-bearing template is rendered directly, unfilled slots are
-            // intentionally ignored so the surrounding authored content still renders.
+            // intentionally ignored, so the surrounding authored content still renders.
             continue;
         };
 

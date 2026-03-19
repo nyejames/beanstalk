@@ -2,8 +2,8 @@
 -- This contains a css reset and classes for some core beanstalk formatters
 Document = |
     prelude String = "<!DOCTYPE html>",
-    en String = [:<html lang="en">],
-    head String = [:
+    en String = [$html:<html lang="en">],
+    head String = [$html:
       <head>
         <meta charset="UTF-8">
         <meta name="viewport"content="width=device-width, initial-scale=1">
@@ -11,10 +11,10 @@ Document = |
         [$slot]
       </head>
     ],
-    title String = [:<title style="[$slot("style")]">[$slot]</title>],
-    style String = [:<style>[default_style][$slot]</style>],
-    body String = [:<body class="container" style="[$slot("style")]">[$slot]</body>],
-    div String = [:<div style="[$slot("style")]">[$slot]</div>],
+    title String = [$html:<title style="[$slot("style")]">[$slot]</title>],
+    style String = [$html:<style>[default_style][$slot]</style>],
+    body String = [$html:<body class="container" style="[$slot("style")]">[$slot]</body>],
+    div String = [$html:<div style="[$slot("style")]">[$slot]</div>],
 |
 
 -- Export a constant instance of Document
@@ -23,9 +23,9 @@ Document = |
 
 Format = |
     -- Basic formatting
-    underline String = [:<u style="[$slot("style")]">[$slot]</u>],
-    strikethrough String = [:<s style="[$slot("style")]">[$slot]</s>],
-    table String = [:
+    underline String = [$html:<u style="[$slot("style")]">[$slot]</u>],
+    strikethrough String = [$html:<s style="[$slot("style")]">[$slot]</s>],
+    table String = [$html:
       <table style="[$slot("style")]">
         [$slot]
       </table>

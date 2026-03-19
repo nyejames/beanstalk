@@ -6,7 +6,7 @@ use crate::compiler_frontend::ast::templates::template::{
     SlotKey, SlotPlaceholder, TemplateAtom, TemplateContent, TemplateSegment,
     TemplateSegmentOrigin, TemplateType,
 };
-use crate::compiler_frontend::compiler_errors::CompilerError;
+use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorLocation};
 use crate::compiler_frontend::datatypes::Ownership;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TextLocation, TokenKind};
@@ -64,9 +64,10 @@ impl SlotContributions {
 pub(crate) fn compose_template_with_slots(
     wrapper: &Template,
     fill_content: &TemplateContent,
-    error_location: &TextLocation,
+    location: &TextLocation,
+    string_table: &StringTable,
 ) -> Result<TemplateContent, CompilerError> {
-    let slot_schema = collect_slot_schema(wrapper, error_location)?;
+    let slot_schema = collect_slot_schema(wrapper, &location.to_error_location(string_table))?;
     if !slot_schema.has_any_slots() {
         return Err(CompilerError::compiler_error(
             "Internal template wrapper state error: expected at least one '$slot' while composing.",
@@ -87,7 +88,7 @@ pub(crate) fn compose_template_with_slots(
 
         for (target, inserted_atoms) in slot_inserts {
             if !slot_schema.accepts_target(&target) {
-                return unknown_slot_target_error(&target, error_location);
+                return unknown_slot_target_error(&target, &location.to_error_location(string_table));
             }
 
             match target {
@@ -102,25 +103,26 @@ pub(crate) fn compose_template_with_slots(
 
         if let Some(loose_atom) = loose_atom {
             if slot_schema.has_named_slots_without_default() {
-                return loose_content_without_default_slot_error(error_location);
+                return loose_content_without_default_slot_error(&location.to_error_location(string_table));
             }
 
             contributions.add_default_atom(loose_atom);
         }
     }
 
-    let atoms = compose_wrapper_atoms_recursive(&wrapper.content.atoms, &contributions)?;
+    let atoms = compose_wrapper_atoms_recursive(&wrapper.content.atoms, &contributions, string_table)?;
     Ok(TemplateContent { atoms })
 }
 
 pub(crate) fn ensure_no_slot_insertions_remain(
     content: &TemplateContent,
     location: &TextLocation,
+    string_table: &StringTable,
 ) -> Result<(), CompilerError> {
     if content.contains_slot_insertions() {
         return_rule_error!(
             "'$insert(...)' can only be used while filling an immediate parent template that defines matching '$slot' targets.",
-            location.to_owned().to_error_location_without_table()
+            location.to_error_location(string_table)
         );
     }
 
@@ -129,7 +131,7 @@ pub(crate) fn ensure_no_slot_insertions_remain(
 
 fn collect_slot_schema(
     wrapper: &Template,
-    error_location: &TextLocation,
+    error_location: &ErrorLocation,
 ) -> Result<SlotSchema, CompilerError> {
     let mut schema = SlotSchema::default();
     collect_slot_schema_atoms(&wrapper.content.atoms, &mut schema, error_location)?;
@@ -139,7 +141,7 @@ fn collect_slot_schema(
 fn collect_slot_schema_atoms(
     atoms: &[TemplateAtom],
     schema: &mut SlotSchema,
-    error_location: &TextLocation,
+    error_location: &ErrorLocation,
 ) -> Result<(), CompilerError> {
     // This recursive walk intentionally traverses nested template expressions so a
     // wrapper template can declare slots at any depth while still being resolved in
@@ -150,7 +152,7 @@ fn collect_slot_schema_atoms(
                 if schema.has_default_slot {
                     return_rule_error!(
                         "Templates can only define one default '$slot'.",
-                        error_location.to_owned().to_error_location_without_table()
+                        error_location.to_owned()
                     );
                 }
                 schema.has_default_slot = true;
@@ -238,15 +240,16 @@ pub fn parse_required_slot_name_argument(
 fn compose_wrapper_atoms_recursive(
     wrapper_atoms: &[TemplateAtom],
     contributions: &SlotContributions,
+    string_table: &StringTable,
 ) -> Result<Vec<TemplateAtom>, CompilerError> {
     let mut composed = Vec::with_capacity(wrapper_atoms.len());
 
     for atom in wrapper_atoms {
         match atom {
             TemplateAtom::Slot(slot) => {
-                // Slot replacement is intentionally non-consuming so duplicate named
+                // Slot replacement is intentionally non-consuming, so duplicate named
                 // slot declarations replay the same aggregated contribution in each place.
-                composed.extend(expand_slot_placeholder(slot, contributions)?);
+                composed.extend(expand_slot_placeholder(slot, contributions, string_table)?);
             }
             TemplateAtom::Content(segment) => {
                 // Nested templates can carry slot definitions too. Recursively resolve
@@ -259,6 +262,7 @@ fn compose_wrapper_atoms_recursive(
                         atoms: compose_wrapper_atoms_recursive(
                             &nested_template.content.atoms,
                             contributions,
+                            string_table,
                         )?,
                     };
 
@@ -282,6 +286,7 @@ fn compose_wrapper_atoms_recursive(
 fn expand_slot_placeholder(
     slot: &SlotPlaceholder,
     contributions: &SlotContributions,
+    string_table: &StringTable,
 ) -> Result<Vec<TemplateAtom>, CompilerError> {
     let slot_atoms = contributions.atoms_for_slot(&slot.key);
     if slot.applied_child_wrappers.is_empty()
@@ -302,9 +307,9 @@ fn expand_slot_placeholder(
         let atom = if slot.child_wrappers.is_empty() {
             atom
         } else if contribution_has_direct_child_templates(&atom) {
-            apply_child_wrappers_to_contribution_children(&atom, &slot.child_wrappers)?
+            apply_child_wrappers_to_contribution_children(&atom, &slot.child_wrappers, string_table)?
         } else if contribution_template(&atom).is_some() {
-            wrap_child_slot_contribution(&atom, &slot.child_wrappers)?
+            wrap_child_slot_contribution(&atom, &slot.child_wrappers, string_table)?
         } else {
             atom
         };
@@ -313,6 +318,7 @@ fn expand_slot_placeholder(
             expanded.push(wrap_child_slot_contribution(
                 &atom,
                 &slot.applied_child_wrappers,
+                string_table
             )?);
         } else {
             expanded.push(atom);
@@ -416,12 +422,14 @@ fn is_direct_child_template_atom(atom: &TemplateAtom) -> bool {
 fn wrap_child_slot_contribution(
     atom: &TemplateAtom,
     child_wrappers: &[Template],
+    string_table: &StringTable,
 ) -> Result<TemplateAtom, CompilerError> {
     let wrapped_content = apply_inherited_child_templates_to_content(
         TemplateContent {
             atoms: vec![atom.to_owned()],
         },
         child_wrappers,
+        string_table,
     )?;
 
     let origin = contribution_origin(atom);
@@ -440,13 +448,14 @@ fn wrap_child_slot_contribution(
 fn apply_child_wrappers_to_contribution_children(
     atom: &TemplateAtom,
     child_wrappers: &[Template],
+    string_table: &StringTable,
 ) -> Result<TemplateAtom, CompilerError> {
     let Some(mut contribution_template) = contribution_template(atom) else {
         return Ok(atom.to_owned());
     };
 
     contribution_template.content =
-        apply_inherited_child_templates_to_content(contribution_template.content, child_wrappers)?;
+        apply_inherited_child_templates_to_content(contribution_template.content, child_wrappers, string_table)?;
     contribution_template.unformatted_content = contribution_template.content.to_owned();
     contribution_template.content_needs_formatting = false;
     refresh_template_kind(&mut contribution_template);
@@ -582,29 +591,29 @@ fn collect_direct_slot_insert_contributions(
 }
 
 fn loose_content_without_default_slot_error(
-    location: &TextLocation,
+    location: &ErrorLocation,
 ) -> Result<TemplateContent, CompilerError> {
     return_rule_error!(
         "This template defines named '$slot(...)' targets without a default '$slot'. Loose content is not allowed here; use '$insert(\\\"name\\\")'.",
-        location.to_owned().to_error_location_without_table()
+        location.to_owned()
     );
 }
 
 fn unknown_slot_target_error(
     target: &SlotKey,
-    location: &TextLocation,
+    location: &ErrorLocation,
 ) -> Result<TemplateContent, CompilerError> {
     match target {
         SlotKey::Default => {
             return_rule_error!(
                 "'$insert' cannot target the default slot because the parent template does not define '$slot'.",
-                location.to_owned().to_error_location_without_table()
+                location.to_owned()
             )
         }
         SlotKey::Named(_) => {
             return_rule_error!(
                 "'$insert(\\\"name\\\")' targets a named slot that does not exist on the immediate parent template.",
-                location.to_owned().to_error_location_without_table()
+                location.to_owned()
             )
         }
     }
