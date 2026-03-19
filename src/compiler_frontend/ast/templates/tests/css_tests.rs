@@ -11,6 +11,16 @@ fn valid_block_css_emits_no_warnings() {
 }
 
 #[test]
+fn valid_block_css_ignores_comments_inside_statements() {
+    let warnings = validate_css_source(
+        ":root { /* Default Background Colours */ --bst-bg-lightmode: #fff; /* Code block colours */ --comment-dark: #838c86; }",
+        CssDirectiveMode::Block,
+    );
+
+    assert!(warnings.is_empty());
+}
+
+#[test]
 fn inline_css_rejects_selector_blocks() {
     let warnings = validate_css_source(".button { color: red; }", CssDirectiveMode::Inline);
     assert!(

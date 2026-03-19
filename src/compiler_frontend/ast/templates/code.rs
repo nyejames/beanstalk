@@ -85,6 +85,10 @@ pub(crate) fn configure_code_style(
     template.style.formatter = Some(code_formatter(language));
     template.style.formatter_precedence = 0;
     template.style.css_mode = None;
+    template.explicit_style.id = "code";
+    template.explicit_style.formatter = Some(code_formatter(language));
+    template.explicit_style.formatter_precedence = 0;
+    template.explicit_style.css_mode = None;
     Ok(())
 }
 

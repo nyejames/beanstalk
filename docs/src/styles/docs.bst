@@ -28,7 +28,22 @@ import @libs/html/{doc, format}
     <div></div>
 ]
 
-# table = [format.table]
+# table = [format.table:
+    [$insert("style"):border-collapse: collapse; border: 1px solid; padding: 1em;]
+    [$slot]
+]
+
+# row = [:
+    <tr style="border-bottom: 1px dotted grey;">[$reset, $children([:<td style="padding: 0.2em 0.5em;">[$slot]</td>]):[$slot]]</tr>
+]
+
+# header_row = [:
+    <tr style="background-color: hsla(85, 66%, 54%, 0.14);">
+        [$reset, $children([:
+            <th style="border: 1px solid; padding: 0.5em; text-align: left;">[$slot]</th>
+        ]):[$slot]]
+    </tr>
+]
 
 # title = [: <h1 style="font-size: 2em;[$slot("style")]">[$slot]</h1>]
 

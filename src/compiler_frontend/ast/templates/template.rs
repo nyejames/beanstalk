@@ -74,6 +74,7 @@ pub struct SlotPlaceholder {
     pub key: SlotKey,
     pub applied_child_wrappers: Vec<Template>,
     pub child_wrappers: Vec<Template>,
+    pub clear_inherited_style: bool,
 }
 
 impl SlotPlaceholder {
@@ -82,6 +83,7 @@ impl SlotPlaceholder {
             key,
             applied_child_wrappers: Vec::new(),
             child_wrappers: Vec::new(),
+            clear_inherited_style: false,
         }
     }
 
@@ -89,11 +91,13 @@ impl SlotPlaceholder {
         key: SlotKey,
         applied_child_wrappers: Vec<Template>,
         child_wrappers: Vec<Template>,
+        clear_inherited_style: bool,
     ) -> Self {
         Self {
             key,
             applied_child_wrappers,
             child_wrappers,
+            clear_inherited_style,
         }
     }
 }
@@ -147,12 +151,14 @@ impl TemplateContent {
         key: SlotKey,
         applied_child_wrappers: Vec<Template>,
         child_wrappers: Vec<Template>,
+        clear_inherited_style: bool,
     ) {
         self.atoms
             .push(TemplateAtom::Slot(SlotPlaceholder::with_child_wrappers(
                 key,
                 applied_child_wrappers,
                 child_wrappers,
+                clear_inherited_style,
             )));
     }
 
@@ -434,6 +440,7 @@ pub struct Style {
     // These wrappers do not automatically flow into grandchildren.
     pub child_templates: Vec<Template>,
     pub css_mode: Option<CssDirectiveMode>,
+    pub clear_inherited: bool,
 }
 
 impl Style {
@@ -445,6 +452,7 @@ impl Style {
             override_precedence: -1,
             child_templates: vec![],
             css_mode: None,
+            clear_inherited: false,
         }
     }
 }

@@ -67,6 +67,10 @@ pub(crate) fn configure_css_style(
     template.style.formatter = None;
     template.style.formatter_precedence = 0;
     template.style.css_mode = Some(mode);
+    template.explicit_style.id = "css";
+    template.explicit_style.formatter = None;
+    template.explicit_style.formatter_precedence = 0;
+    template.explicit_style.css_mode = Some(mode);
     Ok(())
 }
 
@@ -412,16 +416,26 @@ fn validate_statement_segment(
     let Some((text, trimmed_start, trimmed_end)) = trimmed_segment(chars, start, end) else {
         return;
     };
+    let normalized_text = strip_css_comments(&text);
+    let normalized_text = normalized_text.trim();
+    if normalized_text.is_empty() {
+        return;
+    }
 
     if depth == 0 {
         match mode {
             CssDirectiveMode::Inline => {
                 // In inline mode the whole body is declaration-only.
-                validate_declaration_statement(&text, trimmed_start, trimmed_end, warnings);
+                validate_declaration_statement(
+                    normalized_text,
+                    trimmed_start,
+                    trimmed_end,
+                    warnings,
+                );
             }
             CssDirectiveMode::Block => {
                 // At top-level block mode, bare declarations are not valid CSS unless in blocks.
-                if !text.starts_with('@') {
+                if !normalized_text.starts_with('@') {
                     push_warning(
                         warnings,
                         "Top-level CSS content should be selector blocks or at-rules.",
@@ -434,12 +448,12 @@ fn validate_statement_segment(
         return;
     }
 
-    if text.starts_with('@') {
+    if normalized_text.starts_with('@') {
         // At-rules can have custom grammar. Cheap validator treats them as acceptable here.
         return;
     }
 
-    validate_declaration_statement(&text, trimmed_start, trimmed_end, warnings);
+    validate_declaration_statement(normalized_text, trimmed_start, trimmed_end, warnings);
 }
 
 fn validate_declaration_statement(
@@ -662,6 +676,71 @@ fn matching_closer(open: char) -> char {
         '(' => ')',
         _ => open,
     }
+}
+
+fn strip_css_comments(text: &str) -> String {
+    let chars: Vec<char> = text.chars().collect();
+    let mut output = String::with_capacity(text.len());
+    let mut index = 0usize;
+    let mut state = ScanState::default();
+
+    while index < chars.len() {
+        let ch = chars[index];
+        let next = chars.get(index + 1).copied();
+
+        if state.in_comment {
+            if ch == '*' && next == Some('/') {
+                state.in_comment = false;
+                index += 2;
+            } else {
+                index += 1;
+            }
+            continue;
+        }
+
+        if state.in_single_quote {
+            if state.escaped {
+                state.escaped = false;
+            } else if ch == '\\' {
+                state.escaped = true;
+            } else if ch == '\'' {
+                state.in_single_quote = false;
+            }
+            output.push(ch);
+            index += 1;
+            continue;
+        }
+
+        if state.in_double_quote {
+            if state.escaped {
+                state.escaped = false;
+            } else if ch == '\\' {
+                state.escaped = true;
+            } else if ch == '"' {
+                state.in_double_quote = false;
+            }
+            output.push(ch);
+            index += 1;
+            continue;
+        }
+
+        if ch == '/' && next == Some('*') {
+            state.in_comment = true;
+            index += 2;
+            continue;
+        }
+
+        if ch == '\'' {
+            state.in_single_quote = true;
+        } else if ch == '"' {
+            state.in_double_quote = true;
+        }
+
+        output.push(ch);
+        index += 1;
+    }
+
+    output
 }
 
 fn advance_scan_state(state: &mut ScanState, chars: &[char], index: &mut usize) -> bool {

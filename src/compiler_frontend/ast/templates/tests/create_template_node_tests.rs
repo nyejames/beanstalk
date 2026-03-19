@@ -97,6 +97,66 @@ fn constant_template_context(scope: &InternedPath, declarations: &[Declaration])
     )
 }
 
+fn docs_style_wrapper_declarations(string_table: &mut StringTable) -> Vec<Declaration> {
+    let wrapper_scope = InternedPath::from_single_str("main.bst/#const_template0", string_table);
+
+    let mut table_tokens = template_tokens_from_source(
+        "[:
+      <table style=\"[$slot(\"style\")]\">
+        [$slot]
+      </table>
+    ]",
+        string_table,
+    );
+    let table_context = ScopeContext::new_constant(table_tokens.src_path.to_owned());
+    let table = Template::new(&mut table_tokens, &table_context, vec![], string_table)
+        .expect("table wrapper should parse");
+
+    let mut row_tokens = template_tokens_from_source(
+        "[:
+    <tr>[$reset, $children([:<td>[$slot]</td>]):[$slot]]</tr>
+]",
+        string_table,
+    );
+    let row_context = ScopeContext::new_constant(row_tokens.src_path.to_owned());
+    let row = Template::new(&mut row_tokens, &row_context, vec![], string_table)
+        .expect("row wrapper should parse");
+
+    let mut header_row_tokens = template_tokens_from_source(
+        "[:
+    <tr>
+        [$reset, $children([:
+            <th style=\"border: 1px solid; padding: 0.5em; text-align: left;\">[$slot]</th>
+        ]):[$slot]]
+    </tr>
+]",
+        string_table,
+    );
+    let header_row_context = ScopeContext::new_constant(header_row_tokens.src_path.to_owned());
+    let header_row = Template::new(
+        &mut header_row_tokens,
+        &header_row_context,
+        vec![],
+        string_table,
+    )
+    .expect("header row wrapper should parse");
+
+    vec![
+        Declaration {
+            id: wrapper_scope.append(string_table.intern("table")),
+            value: Expression::template(table, Ownership::ImmutableOwned),
+        },
+        Declaration {
+            id: wrapper_scope.append(string_table.intern("row")),
+            value: Expression::template(row, Ownership::ImmutableOwned),
+        },
+        Declaration {
+            id: wrapper_scope.append(string_table.intern("header_row")),
+            value: Expression::template(header_row, Ownership::ImmutableOwned),
+        },
+    ]
+}
+
 fn folded_template_output(source: &str) -> String {
     let mut string_table = StringTable::new();
     let mut token_stream = template_tokens_from_source(source, &mut string_table);
@@ -581,6 +641,59 @@ fn markdown_page_wrapper_keeps_table_rows_and_cells_inside_table() {
     assert!(!rendered.contains('\u{FFFC}'));
     assert_eq!(rendered.matches("<tr>").count(), 2);
     assert_eq!(rendered.matches("<td>").count(), 4);
+}
+
+#[test]
+fn markdown_parent_with_reset_row_wrapper_renders_plain_cells() {
+    let mut string_table = StringTable::new();
+    let declarations = docs_style_wrapper_declarations(&mut string_table);
+
+    let mut token_stream = template_tokens_from_source(
+        "[$markdown:\n[row: [: Type] [: Description] ]\n]",
+        &mut string_table,
+    );
+    let context = constant_template_context(&token_stream.src_path, &declarations);
+
+    let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
+        .expect("markdown row usage should parse");
+    let folded = template
+        .fold_into_stringid(&None, &mut string_table)
+        .expect("markdown row usage should fold");
+    let rendered = string_table.resolve(folded);
+
+    assert_eq!(rendered.matches("<td>").count(), 2);
+    assert!(rendered.contains("Type"));
+    assert!(rendered.contains("Description"));
+    assert!(!rendered.contains("<p>"));
+}
+
+#[test]
+fn markdown_parent_with_reset_header_row_wrapper_renders_plain_headers() {
+    let mut string_table = StringTable::new();
+    let declarations = docs_style_wrapper_declarations(&mut string_table);
+
+    let mut token_stream = template_tokens_from_source(
+        "[$markdown:\n[header_row: [: Type] [: Description] ]\n]",
+        &mut string_table,
+    );
+    let context = constant_template_context(&token_stream.src_path, &declarations);
+
+    let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
+        .expect("markdown header row usage should parse");
+    let folded = template
+        .fold_into_stringid(&None, &mut string_table)
+        .expect("markdown header row usage should fold");
+    let rendered = string_table.resolve(folded);
+
+    assert_eq!(
+        rendered
+            .matches("<th style=\"border: 1px solid; padding: 0.5em; text-align: left;\">")
+            .count(),
+        2
+    );
+    assert!(rendered.contains("Type</th>"));
+    assert!(rendered.contains("Description</th>"));
+    assert!(!rendered.contains("<p>"));
 }
 
 #[test]

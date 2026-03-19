@@ -284,16 +284,29 @@ fn expand_slot_placeholder(
     contributions: &SlotContributions,
 ) -> Result<Vec<TemplateAtom>, CompilerError> {
     let slot_atoms = contributions.atoms_for_slot(&slot.key);
-    if slot.applied_child_wrappers.is_empty() && slot.child_wrappers.is_empty() {
+    if slot.applied_child_wrappers.is_empty()
+        && slot.child_wrappers.is_empty()
+        && !slot.clear_inherited_style
+    {
         return Ok(slot_atoms);
     }
 
     let mut expanded = Vec::with_capacity(slot_atoms.len());
     for atom in slot_atoms {
+        let atom = if slot.clear_inherited_style {
+            revive_slot_contribution_atom(&atom)
+        } else {
+            atom
+        };
+
         let atom = if slot.child_wrappers.is_empty() {
             atom
-        } else {
+        } else if contribution_has_direct_child_templates(&atom) {
             apply_child_wrappers_to_contribution_children(&atom, &slot.child_wrappers)?
+        } else if contribution_template(&atom).is_some() {
+            wrap_child_slot_contribution(&atom, &slot.child_wrappers)?
+        } else {
+            atom
         };
 
         if !slot.applied_child_wrappers.is_empty() && is_child_slot_contribution(&atom) {
@@ -309,6 +322,57 @@ fn expand_slot_placeholder(
     Ok(expanded)
 }
 
+fn revive_slot_contribution_atom(atom: &TemplateAtom) -> TemplateAtom {
+    let TemplateAtom::Content(segment) = atom else {
+        return atom.to_owned();
+    };
+
+    if let Some(source_child_template) = &segment.source_child_template {
+        return TemplateAtom::Content(TemplateSegment::new(
+            Expression::template(
+                revive_child_template_outputs_in_template(
+                    source_child_template.as_ref().to_owned(),
+                ),
+                Ownership::ImmutableOwned,
+            ),
+            segment.origin,
+        ));
+    }
+
+    let ExpressionKind::Template(template) = &segment.expression.kind else {
+        return atom.to_owned();
+    };
+
+    let revived_template = revive_child_template_outputs_in_template(template.as_ref().to_owned());
+    TemplateAtom::Content(TemplateSegment::new(
+        Expression::template(revived_template, Ownership::ImmutableOwned),
+        segment.origin,
+    ))
+}
+
+fn revive_child_template_outputs_in_template(mut template: Template) -> Template {
+    template.unformatted_content =
+        revive_child_template_outputs_in_content(&template.unformatted_content);
+    if template.unformatted_content.is_empty() {
+        template.unformatted_content = revive_child_template_outputs_in_content(&template.content);
+    }
+    template.style = template.explicit_style.to_owned();
+    template.content = template.unformatted_content.to_owned();
+    template.content_needs_formatting = true;
+    refresh_template_kind(&mut template);
+    template
+}
+
+fn revive_child_template_outputs_in_content(content: &TemplateContent) -> TemplateContent {
+    TemplateContent {
+        atoms: content
+            .atoms
+            .iter()
+            .map(revive_slot_contribution_atom)
+            .collect(),
+    }
+}
+
 fn is_child_slot_contribution(atom: &TemplateAtom) -> bool {
     let TemplateAtom::Content(segment) = atom else {
         return false;
@@ -316,6 +380,37 @@ fn is_child_slot_contribution(atom: &TemplateAtom) -> bool {
 
     segment.is_child_template_output
         || matches!(segment.expression.kind, ExpressionKind::Template(_))
+}
+
+fn contribution_has_direct_child_templates(atom: &TemplateAtom) -> bool {
+    let Some(template) = contribution_template(atom) else {
+        return false;
+    };
+
+    template
+        .content
+        .atoms
+        .iter()
+        .any(is_direct_child_template_atom)
+}
+
+fn is_direct_child_template_atom(atom: &TemplateAtom) -> bool {
+    let TemplateAtom::Content(segment) = atom else {
+        return false;
+    };
+
+    if segment.origin != TemplateSegmentOrigin::Body {
+        return false;
+    }
+
+    if segment.is_child_template_output {
+        return true;
+    }
+
+    match &segment.expression.kind {
+        ExpressionKind::Template(template) => !template.has_unresolved_slots(),
+        _ => false,
+    }
 }
 
 fn wrap_child_slot_contribution(
@@ -332,6 +427,7 @@ fn wrap_child_slot_contribution(
     let origin = contribution_origin(atom);
     let mut wrapped_template = Template::create_default(vec![]);
     wrapped_template.content = wrapped_content;
+    wrapped_template.unformatted_content = wrapped_template.content.to_owned();
     refresh_template_kind(&mut wrapped_template);
     wrapped_template.location = contribution_location(atom);
 
@@ -351,6 +447,8 @@ fn apply_child_wrappers_to_contribution_children(
 
     contribution_template.content =
         apply_inherited_child_templates_to_content(contribution_template.content, child_wrappers)?;
+    contribution_template.unformatted_content = contribution_template.content.to_owned();
+    contribution_template.content_needs_formatting = false;
     refresh_template_kind(&mut contribution_template);
 
     Ok(TemplateAtom::Content(TemplateSegment::new(

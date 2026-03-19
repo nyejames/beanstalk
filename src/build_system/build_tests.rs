@@ -828,6 +828,57 @@ fn build_project_markdown_page_reexported_table_keeps_rows_and_cells_inside_tabl
 }
 
 #[test]
+fn build_project_markdown_docs_row_wrappers_render_plain_cells_and_headers() {
+    let root = temp_dir("markdown_docs_row_wrappers");
+    fs::create_dir_all(root.join("libs")).expect("should create libs root");
+    fs::create_dir_all(root.join("styles")).expect("should create styles root");
+    fs::write(
+        root.join("libs").join("html.bst"),
+        "Format = |\n    table String = [:\n      <table style=\"[$slot(\"style\")]\">\n        [$slot]\n      </table>\n    ],\n|\n#format = Format()\n",
+    )
+    .expect("should write html library");
+    fs::write(
+        root.join("styles").join("docs.bst"),
+        "import @libs/html/{format}\n#page = [:\n  <body>[$slot]</body>\n]\n#table = [format.table:\n    [$insert(\"style\"):border-collapse: collapse; border: 1px solid; padding: 0.5em;]\n    [$slot]\n]\n#row = [:\n    <tr>[$reset, $children([:<td>[$slot]</td>]):[$slot]]</tr>\n]\n#header_row = [:\n    <tr>\n        [$reset, $children([:\n            <th style=\"border: 1px solid; padding: 0.5em; text-align: left;\">[$slot]</th>\n        ]):[$slot]]\n    </tr>\n]\n",
+    )
+    .expect("should write docs style library");
+    fs::write(
+        root.join("main.bst"),
+        "import @styles/docs/{page, table, row, header_row}\n[page, $markdown:\n[table:\n    [header_row: [: Type] [: Description] ]\n\n    [row: [: float ] [: 64 bit floating point number] ]\n\n    [row: [: int ] [:  64 bit signed integer ] ]\n]\n]\n",
+    )
+    .expect("should write source file");
+    let _cwd_guard = CurrentDirGuard::set_to(&root);
+
+    let builder = HtmlProjectBuilder::new();
+    let build_result = build_project(&builder, "main.bst", &[])
+        .expect("markdown docs-style row wrappers should build successfully");
+
+    let html = match build_result.project.output_files[0].file_kind() {
+        FileKind::Html(content) => content,
+        other => panic!(
+            "expected HTML output, got {:?}",
+            std::mem::discriminant(other)
+        ),
+    };
+
+    assert!(!html.contains('\u{FFFC}'));
+    assert!(html.contains("border-collapse: collapse; border: 1px solid; padding: 0.5em;"));
+    assert_eq!(
+        html.matches("<th style=\"border: 1px solid; padding: 0.5em; text-align: left;\">")
+            .count(),
+        2
+    );
+    assert_eq!(html.matches("<td>").count(), 4);
+    assert!(html.contains("Type</th>"));
+    assert!(html.contains("Description</th>"));
+    assert!(html.contains("float"));
+    assert!(html.contains("64 bit floating point number"));
+    assert!(!html.contains("<p>"));
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
 fn build_project_struct_default_uses_imported_constant() {
     let root = temp_dir("struct_default_imported_constant");
     fs::create_dir_all(root.join("styles")).expect("should create temp root");

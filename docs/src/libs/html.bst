@@ -25,9 +25,9 @@ Format = |
     -- Basic formatting
     underline String = [:<u style="[$slot("style")]">[$slot]</u>],
     strikethrough String = [:<s style="[$slot("style")]">[$slot]</s>],
-    table String = [$children([:<tr>[$slot]</tr>]):
+    table String = [:
       <table style="[$slot("style")]">
-        [$children([:<td>[$slot]</td>]):[$slot]]
+        [$slot]
       </table>
     ],
 |
@@ -127,6 +127,7 @@ Format = |
         max-width: 510px;
         padding-right: var(--bst-spacing);
         padding-left: var(--bst-spacing);
+        padding-bottom: var(--bst-spacing);
       }
     }
     @media (min-width: 768px) {

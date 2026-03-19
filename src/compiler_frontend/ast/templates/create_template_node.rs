@@ -26,9 +26,12 @@ pub const TEMPLATE_SPECIAL_IGNORE_CHAR: char = '\u{FFFC}';
 #[derive(Clone, Debug)]
 pub struct Template {
     pub content: TemplateContent,
+    pub unformatted_content: TemplateContent,
+    pub content_needs_formatting: bool,
     pub kind: TemplateType,
     pub doc_children: Vec<Template>,
     pub style: Style,
+    pub explicit_style: Style,
     #[allow(dead_code)]
     pub control_flow: TemplateControlFlow,
     pub id: String,
@@ -181,6 +184,7 @@ impl Template {
                                 slot_key.to_owned(),
                                 direct_child_wrappers.to_owned(),
                                 template.style.child_templates.to_owned(),
+                                template.style.clear_inherited,
                             );
                             continue;
                         }
@@ -224,6 +228,13 @@ impl Template {
             token_stream.advance();
         }
 
+        template.unformatted_content = apply_inherited_child_templates_to_content(
+            template.content.to_owned(),
+            &template.style.child_templates,
+        )?;
+        template.unformatted_content =
+            compose_template_head_chain(&template.unformatted_content, &mut foldable)?;
+
         // Formatting is normalized here, before any later folding/lowering stage.
         // This keeps runtime templates simple: only compile-time-known body strings
         // are rewritten, while dynamic chunks remain untouched and keep their order.
@@ -239,6 +250,7 @@ impl Template {
         )?;
 
         template.content = compose_template_head_chain(&template.content, &mut foldable)?;
+        template.content_needs_formatting = false;
 
         if matches!(
             template.kind,
@@ -290,9 +302,12 @@ impl Template {
 
         Template {
             content: TemplateContent::default(),
+            unformatted_content: TemplateContent::default(),
+            content_needs_formatting: false,
             kind: TemplateType::StringFunction,
             doc_children: vec![],
             style,
+            explicit_style: Style::default(),
             control_flow: TemplateControlFlow::None,
             id: String::new(),
             location: TextLocation::default(),
@@ -351,12 +366,15 @@ impl Template {
         inherited_style: &Option<Style>,
         string_table: &mut StringTable,
     ) -> Result<StringId, CompilerError> {
-        fold_atoms(
-            &self.content.atoms,
-            inherited_style,
-            &self.style,
-            string_table,
-        )
+        let content = if self.content_needs_formatting {
+            let mut content = self.unformatted_content.to_owned();
+            apply_body_formatter(&mut content, &self.style.formatter, string_table);
+            content
+        } else {
+            self.content.to_owned()
+        };
+
+        fold_atoms(&content.atoms, inherited_style, &self.style, string_table)
     }
 }
 
@@ -369,6 +387,7 @@ fn recursive_inherited_style(style: &Style) -> Option<Style> {
         && inherited.formatter_precedence == -1
         && inherited.override_precedence == -1
         && inherited.id.is_empty()
+        && !inherited.clear_inherited
     {
         return None;
     }
@@ -906,6 +925,8 @@ fn wrap_atom_in_child_template(
 
         let mut wrapped_template = wrapper.to_owned();
         wrapped_template.content = composed_content;
+        wrapped_template.unformatted_content = wrapped_template.content.to_owned();
+        wrapped_template.content_needs_formatting = false;
         wrapped_template
     } else {
         let mut wrapped_template = Template::create_default(vec![]);
@@ -919,6 +940,7 @@ fn wrap_atom_in_child_template(
                 atom.to_owned(),
             ],
         };
+        wrapped_template.unformatted_content = wrapped_template.content.to_owned();
         wrapped_template.kind = if wrapped_template.content.is_const_evaluable_value()
             && !wrapped_template.content.contains_slot_insertions()
         {
@@ -1283,6 +1305,10 @@ fn parse_style_directive(
                 template.style.formatter = Some(markdown_formatter());
                 template.style.formatter_precedence = 0;
                 template.style.css_mode = None;
+                template.explicit_style.id = "markdown";
+                template.explicit_style.formatter = Some(markdown_formatter());
+                template.explicit_style.formatter_precedence = 0;
+                template.explicit_style.css_mode = None;
                 Ok(false)
             }
 
@@ -1307,6 +1333,9 @@ fn parse_style_directive(
                 // `$reset` wipes the inherited style state first, then later directives
                 // in the same head can layer fresh settings back on top.
                 template.style = Style::default();
+                template.style.clear_inherited = true;
+                template.explicit_style = Style::default();
+                template.explicit_style.clear_inherited = true;
                 Ok(false)
             }
 
@@ -1314,6 +1343,7 @@ fn parse_style_directive(
                 reject_directive_arguments(token_stream, "note", string_table)?;
                 template.kind = TemplateType::Comment(CommentDirectiveKind::Note);
                 template.style = Style::default();
+                template.explicit_style = Style::default();
                 Ok(false)
             }
 
@@ -1321,6 +1351,7 @@ fn parse_style_directive(
                 reject_directive_arguments(token_stream, "todo", string_table)?;
                 template.kind = TemplateType::Comment(CommentDirectiveKind::Todo);
                 template.style = Style::default();
+                template.explicit_style = Style::default();
                 Ok(false)
             }
 
@@ -1366,11 +1397,16 @@ fn parse_style_directive(
 fn apply_doc_comment_defaults(template: &mut Template) {
     template.kind = TemplateType::Comment(CommentDirectiveKind::Doc);
     template.style = Style::default();
+    template.explicit_style = Style::default();
     // Doc comments are parsed as markdown content by default.
     template.style.id = "markdown";
     template.style.formatter = Some(markdown_formatter());
     template.style.formatter_precedence = 0;
     template.style.css_mode = None;
+    template.explicit_style.id = "markdown";
+    template.explicit_style.formatter = Some(markdown_formatter());
+    template.explicit_style.formatter_precedence = 0;
+    template.explicit_style.css_mode = None;
 }
 
 fn emit_css_template_warnings(
@@ -1502,6 +1538,7 @@ fn parse_children_style_directive(
                 argument_location,
                 Ownership::ImmutableOwned,
             ));
+            wrapper.unformatted_content = wrapper.content.to_owned();
             wrapper
         }
 
@@ -1513,7 +1550,8 @@ fn parse_children_style_directive(
         }
     };
 
-    template.style.child_templates.push(normalized);
+    template.style.child_templates.push(normalized.to_owned());
+    template.explicit_style.child_templates.push(normalized);
     Ok(())
 }
 
