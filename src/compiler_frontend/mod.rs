@@ -59,6 +59,7 @@ pub enum Flag {
     Release, // Dev mode is default
     DisableWarnings,
     DisableTimers,
+    HtmlWasm,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

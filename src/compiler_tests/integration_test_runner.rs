@@ -41,6 +41,7 @@ struct TestCaseSpec {
     display_name: String,
     entry_path: PathBuf,
     fixture_root: PathBuf,
+    flags: Vec<Flag>,
     expected: ExpectedOutcome,
 }
 
@@ -95,6 +96,7 @@ struct ManifestCaseSpec {
 struct ParsedExpectationFile {
     mode: ExpectationMode,
     entry: Option<String>,
+    flags: Vec<Flag>,
     allow_panic: bool,
     warnings: WarningExpectation,
     error_type: Option<ErrorType>,
@@ -123,6 +125,8 @@ struct ManifestCaseToml {
 struct ExpectationToml {
     mode: ExpectationMode,
     entry: Option<String>,
+    #[serde(default)]
+    flags: Vec<String>,
     builder: Option<String>,
     #[serde(rename = "panic", default)]
     allow_panic: bool,
@@ -367,6 +371,7 @@ fn load_canonical_case(
         display_name: case_id,
         entry_path,
         fixture_root: fixture_root.to_path_buf(),
+        flags: parsed_expectation.flags,
         expected,
     })
 }
@@ -397,6 +402,7 @@ fn parse_expectation_file(path: &Path) -> Result<ParsedExpectationFile, String> 
 
     let warnings =
         parse_warning_expectation(parsed.warnings.as_deref(), parsed.warning_count, path)?;
+    let flags = parse_case_flags(&parsed.flags, path)?;
     let error_type = parsed
         .error_type
         .as_deref()
@@ -415,6 +421,7 @@ fn parse_expectation_file(path: &Path) -> Result<ParsedExpectationFile, String> 
     Ok(ParsedExpectationFile {
         mode: parsed.mode,
         entry: parsed.entry,
+        flags,
         allow_panic: parsed.allow_panic,
         warnings,
         error_type,
@@ -527,6 +534,27 @@ fn parse_warning_expectation(
     }
 }
 
+fn parse_case_flags(flag_names: &[String], path: &Path) -> Result<Vec<Flag>, String> {
+    let mut flags = Vec::with_capacity(flag_names.len());
+    for flag_name in flag_names {
+        let parsed = match flag_name.as_str() {
+            "release" => Flag::Release,
+            "hide_warnings" => Flag::DisableWarnings,
+            "hide_timers" => Flag::DisableTimers,
+            "html_wasm" => Flag::HtmlWasm,
+            other => {
+                return Err(format!(
+                    "Expectation file '{}' has unsupported flag '{}'.",
+                    path.display(),
+                    other
+                ));
+            }
+        };
+        flags.push(parsed);
+    }
+    Ok(flags)
+}
+
 fn resolve_case_entry_path(
     input_root: &Path,
     configured_entry: Option<&str>,
@@ -553,7 +581,8 @@ fn resolve_case_entry_path(
 
 fn execute_test_case(case: &TestCaseSpec) -> CaseExecutionResult {
     let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
-    let flags = vec![Flag::DisableTimers];
+    let mut flags = vec![Flag::DisableTimers];
+    flags.extend(case.flags.iter().cloned());
     let entry_path = case.entry_path.to_string_lossy().to_string();
 
     let execution = catch_unwind(AssertUnwindSafe(|| {

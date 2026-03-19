@@ -214,6 +214,7 @@ fn get_flags(args: &[String]) -> Vec<Flag> {
             "--release" => flags.push(Flag::Release),
             "--hide-warnings" => flags.push(Flag::DisableWarnings),
             "--hide-timers" => flags.push(Flag::DisableTimers),
+            "--html-wasm" => flags.push(Flag::HtmlWasm),
             _ => {}
         }
     }
@@ -277,7 +278,8 @@ fn parse_dev_command(args: &[String]) -> Result<Command, String> {
                 };
                 index += 2;
             }
-            "--release" | "--hide-warnings" | "--hide-timers" | "--show-warnings" => {
+            "--release" | "--hide-warnings" | "--hide-timers" | "--show-warnings"
+            | "--html-wasm" => {
                 index += 1;
             }
             _ if arg.starts_with("--") => {
@@ -337,6 +339,7 @@ fn print_help(commands_only: bool) {
     say!("  --hide-warnings");
     say!("  --hide-timers");
     say!("  --show-warnings");
+    say!("  --html-wasm");
     say!("\nDev command options:");
     say!("  --host <host>            (default: 127.0.0.1)");
     say!("  --port <port>            (default: 6342)");

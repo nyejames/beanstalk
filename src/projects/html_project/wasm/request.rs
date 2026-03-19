@@ -1,0 +1,59 @@
+//! Request-construction helpers for the generic Wasm backend contract.
+//!
+//! WHAT: converts builder-owned export planning into `WasmBackendRequest`.
+//! WHY: keeps backend contract translation in one place as request fields evolve.
+
+use crate::backends::wasm::request::{
+    WasmBackendRequest, WasmExportPolicy, WasmHelperExportPolicy,
+};
+use crate::compiler_frontend::hir::hir_nodes::FunctionId;
+use crate::projects::html_project::wasm::export_plan::HtmlWasmExportPlan;
+use rustc_hash::FxHashMap;
+
+/// Builds the generic backend request from HTML builder export planning.
+///
+/// WHAT: copies deterministic export IDs/names plus required helper exports.
+/// WHY: request-building stays centralized so builder policy is translated once.
+pub(crate) fn build_wasm_backend_request(export_plan: &HtmlWasmExportPlan) -> WasmBackendRequest {
+    let mut export_names = FxHashMap::default();
+    let mut exported_functions = Vec::with_capacity(export_plan.function_exports.len());
+
+    for function_export in &export_plan.function_exports {
+        exported_functions.push(function_export.function_id);
+        export_names.insert(
+            function_export.function_id,
+            function_export.export_name.clone(),
+        );
+    }
+
+    WasmBackendRequest {
+        export_policy: WasmExportPolicy {
+            exported_functions,
+            export_names,
+            helper_exports: WasmHelperExportPolicy {
+                export_memory: export_plan.helper_exports.export_memory,
+                export_str_ptr: export_plan.helper_exports.export_str_ptr,
+                export_str_len: export_plan.helper_exports.export_str_len,
+                export_release: export_plan.helper_exports.export_release,
+            },
+        },
+        ..WasmBackendRequest::default()
+    }
+}
+
+/// Creates a reverse lookup map used by JS bootstrap export binding.
+///
+/// WHAT: maps each function ID to its assigned stable Wasm export name.
+/// WHY: bootstrap codegen needs direct lookup while preserving builder naming policy.
+pub(crate) fn export_name_by_function_id(
+    export_plan: &HtmlWasmExportPlan,
+) -> FxHashMap<FunctionId, String> {
+    let mut names = FxHashMap::default();
+    for function_export in &export_plan.function_exports {
+        names.insert(
+            function_export.function_id,
+            function_export.export_name.clone(),
+        );
+    }
+    names
+}
