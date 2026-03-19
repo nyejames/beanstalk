@@ -3,13 +3,13 @@
 # Beanstalk
 
 <p><em>
-  A high level language that prioritises fast, confident development, safety and readability.
+  A high level language that prioritises modularity, safety and readability.
 </em></p>
 
 # 🌱
 
 <p>⚠️ This is a work in progress compiler ⚠️</p> 
-<p>The compiler backend is still under active development and evolving rapidly. See CONTRIBUTING.md if you're inspired to help out!</p>
+<p>The language is under rapid active development and evolving constantly. See CONTRIBUTING.md if you're inspired to help out!</p>
 </div>
 <br>
 <br>
@@ -19,7 +19,7 @@
 ## First Class String Template Syntax
 
 </div>
-<p>Beanstalk is designed first for the web, while being modular enough to be complete agnostic about the backend or platform. 
+<p>Beanstalk is designed first for the web, while being modular enough to be agnostic about the backend or platform. 
 It originated with the desire to never have to use TypeScript, web frameworks or bloated UI/web ecosystems again.</p>
 <p>Beanstalk is an attempt to make something fresh and carefully designed from the ground up.</p>
 <br>
@@ -80,11 +80,12 @@ post = create_post(date, [$markdown:
 </div>
 
 - String templates that can double up as a tiny compile time HTML/markup engine or anything else you want. Perfect for UI generation and string formatting.
-- Readability-first syntax. As modern, minimal, coherent and consistent as possible.
-- A modular compiler with Fast compile times for snappy tooling and fast development builds
-- An integrated build system for web projects and beyond
-- Simple, static and strong type system for confident development
+- Readability-first syntax. As modern, concise and consistent as possible.
+- Modular and fast for snappy tooling and fast development builds
+- Integrated build system and tooling for web projects and beyond
+- Simple, static and strong type system with a borrow checker for writing confident, safe and correct code
 - A memory model that can allow for future static optimizations – to the point of completely eliding the GC for non-GC platforms if needed.
+- Backend agnostic. Can be used to generate JS, Wasm or as a whole web framework. Extendable to any target in the future.
 
 <div align="center">
 
