@@ -1,2 +1,4 @@
 mode = "failure"
 message_contains = ["named '$slot(...)' targets", "Loose content is not allowed"]
+warnings = "forbid"
+error_type = "Rule"

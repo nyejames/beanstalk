@@ -1,2 +1,4 @@
 mode = "failure"
 error_type = "Rule"
+warnings = "forbid"
+message_contains = ["Undefined variable", "must be declared before use"]

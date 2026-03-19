@@ -1,2 +1,4 @@
 mode = "failure"
 message_contains = ["does not exist on the immediate parent template"]
+warnings = "forbid"
+error_type = "Rule"

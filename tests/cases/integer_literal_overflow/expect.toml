@@ -1,3 +1,4 @@
 mode = "failure"
 error_type = "Syntax"
 message_contains = ["Invalid integer literal"]
+warnings = "forbid"

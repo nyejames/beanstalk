@@ -1,2 +1,4 @@
 mode = "failure"
-message_contains = ["$insert(\"name\")", "does not exist on the immediate parent template"]
+message_contains = ["named slot that does not exist on the immediate parent template"]
+warnings = "forbid"
+error_type = "Rule"

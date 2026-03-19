@@ -8,7 +8,8 @@ use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::hir::hir_display::HirLocation;
 use crate::compiler_frontend::hir::hir_nodes::{
-    BlockId, HirExpression, HirExpressionKind, HirStatementKind, HirTerminator, HirValueId,
+    BlockId, HirExpression, HirExpressionKind, HirNodeId, HirPlace, HirStatement, HirStatementKind,
+    HirTerminator, HirValueId,
 };
 use crate::compiler_frontend::string_interning::StringTable;
 use rustc_hash::FxHashSet;
@@ -131,6 +132,195 @@ fn statement_terminator_and_value_facts_are_populated() {
             "value {value_id:?} should have side-table source mapping"
         );
     }
+}
+
+#[test]
+fn drop_statement_produces_statement_fact() {
+    let mut string_table = StringTable::new();
+    let (entry_path, start_name) = entry_and_start(&mut string_table);
+    let host_registry = default_host_registry(&mut string_table);
+
+    let value = symbol("value", &mut string_table);
+    let start_fn = function_node(
+        start_name,
+        FunctionSignature {
+            parameters: vec![],
+            returns: vec![],
+        },
+        vec![node(
+            NodeKind::VariableDeclaration(var(
+                value,
+                Expression::int(1, location(1), Ownership::MutableOwned),
+            )),
+            location(1),
+        )],
+        location(1),
+    );
+
+    let mut hir = lower_hir(build_ast(vec![start_fn], entry_path), &mut string_table);
+    let start = &hir.functions[hir.start_function.0 as usize];
+    let entry_block = &mut hir.blocks[start.entry.0 as usize];
+    let drop_local = entry_block
+        .locals
+        .first()
+        .expect("entry block should contain at least one local")
+        .id;
+
+    let next_statement_id = entry_block
+        .statements
+        .iter()
+        .map(|statement| statement.id.0)
+        .max()
+        .unwrap_or(0)
+        + 1;
+
+    entry_block.statements.push(HirStatement {
+        id: HirNodeId(next_statement_id),
+        kind: HirStatementKind::Drop(drop_local),
+        location: location(2),
+    });
+
+    let report = run_borrow_checker(&hir, &host_registry, &string_table)
+        .expect("borrow checking should succeed");
+
+    let fact = report
+        .analysis
+        .statement_fact(HirNodeId(next_statement_id))
+        .expect("drop statement should have a statement fact");
+    assert!(fact.shared_roots.is_empty());
+    assert!(fact.mutable_roots.is_empty());
+}
+
+#[test]
+fn statement_entry_state_reflects_last_use_reborrow_window() {
+    let mut string_table = StringTable::new();
+    let (entry_path, start_name) = entry_and_start(&mut string_table);
+    let host_registry = default_host_registry(&mut string_table);
+
+    let data = symbol("data", &mut string_table);
+    let first_ref = symbol("first_ref", &mut string_table);
+    let sink = symbol("sink", &mut string_table);
+    let second_ref = symbol("second_ref", &mut string_table);
+
+    let start_fn = function_node(
+        start_name,
+        FunctionSignature {
+            parameters: vec![],
+            returns: vec![],
+        },
+        vec![
+            node(
+                NodeKind::VariableDeclaration(var(
+                    data.clone(),
+                    Expression::int(7, location(1), Ownership::MutableOwned),
+                )),
+                location(1),
+            ),
+            node(
+                NodeKind::VariableDeclaration(var(
+                    first_ref.clone(),
+                    Expression::reference(
+                        data.clone(),
+                        DataType::Int,
+                        location(2),
+                        Ownership::MutableReference,
+                    ),
+                )),
+                location(2),
+            ),
+            node(
+                NodeKind::VariableDeclaration(var(
+                    sink,
+                    reference_expr(first_ref, DataType::Int, location(3)),
+                )),
+                location(3),
+            ),
+            node(
+                NodeKind::VariableDeclaration(var(
+                    second_ref,
+                    Expression::reference(
+                        data,
+                        DataType::Int,
+                        location(4),
+                        Ownership::MutableReference,
+                    ),
+                )),
+                location(4),
+            ),
+        ],
+        location(1),
+    );
+
+    let hir = lower_hir(build_ast(vec![start_fn], entry_path), &mut string_table);
+    let report = run_borrow_checker(&hir, &host_registry, &string_table)
+        .expect("reborrow after last-use should pass");
+
+    let second_statement_id = find_statement_id_for_line(&hir, 4)
+        .expect("should locate the reborrow statement by source line");
+    let data_local = find_assigned_local_for_line(&hir, 1)
+        .expect("should locate the source local by declaration line");
+    let entry_state = report
+        .analysis
+        .statement_entry_states
+        .get(&second_statement_id)
+        .expect("reborrow statement should have an entry snapshot");
+    let data_snapshot = entry_state
+        .locals
+        .iter()
+        .find(|snapshot| snapshot.local == data_local)
+        .expect("entry snapshot should include the data local");
+
+    assert!(
+        data_snapshot.alias_roots.is_empty(),
+        "data local should not retain live alias roots at the reborrow point"
+    );
+}
+
+fn find_statement_id_for_line(
+    hir: &crate::compiler_frontend::hir::hir_nodes::HirModule,
+    line: i32,
+) -> Option<HirNodeId> {
+    for block in &hir.blocks {
+        for statement in &block.statements {
+            let Some(source) = hir
+                .side_table
+                .hir_source_location_for_hir(HirLocation::Statement(statement.id))
+            else {
+                continue;
+            };
+            if source.start_pos.line_number == line {
+                return Some(statement.id);
+            }
+        }
+    }
+    None
+}
+
+fn find_assigned_local_for_line(
+    hir: &crate::compiler_frontend::hir::hir_nodes::HirModule,
+    line: i32,
+) -> Option<crate::compiler_frontend::hir::hir_nodes::LocalId> {
+    for block in &hir.blocks {
+        for statement in &block.statements {
+            let Some(source) = hir
+                .side_table
+                .hir_source_location_for_hir(HirLocation::Statement(statement.id))
+            else {
+                continue;
+            };
+            if source.start_pos.line_number != line {
+                continue;
+            }
+            if let HirStatementKind::Assign {
+                target: HirPlace::Local(local),
+                ..
+            } = &statement.kind
+            {
+                return Some(*local);
+            }
+        }
+    }
+    None
 }
 
 fn collect_reachable_blocks(

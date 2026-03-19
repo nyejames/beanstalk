@@ -1,0 +1,4 @@
+mode = "failure"
+error_type = "Rule"
+warnings = "forbid"
+message_contains = ["must be initialized with a value"]

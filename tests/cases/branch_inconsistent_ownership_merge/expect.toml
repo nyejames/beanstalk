@@ -1,3 +1,4 @@
 mode = "failure"
 error_type = "BorrowChecker"
 message_contains = ["Inconsistent ownership outcome"]
+warnings = "forbid"

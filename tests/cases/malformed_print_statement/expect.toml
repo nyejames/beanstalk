@@ -1,2 +1,4 @@
 mode = "failure"
 error_type = "Syntax"
+warnings = "forbid"
+message_contains = ["Expected closing parenthesis after arguments"]

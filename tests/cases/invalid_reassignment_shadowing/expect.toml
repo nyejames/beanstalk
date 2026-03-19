@@ -1,2 +1,4 @@
 mode = "failure"
 error_type = "Syntax"
+warnings = "forbid"
+message_contains = ["Invalid use of '~=' for reassignment", "Use '=' to mutate"]

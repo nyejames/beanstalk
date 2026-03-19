@@ -1,3 +1,4 @@
 mode = "failure"
 error_type = "Syntax"
 message_contains = ["Function return declarations must end with ':'"]
+warnings = "forbid"

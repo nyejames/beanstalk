@@ -13,6 +13,7 @@ use crate::compiler_frontend::compiler_messages::compiler_warnings::print_format
 use crate::compiler_frontend::display_messages::print_formatted_error;
 use crate::projects::html_project::html_project_builder::HtmlProjectBuilder;
 use saying::say;
+use serde::Deserialize;
 use std::any::Any;
 use std::collections::HashSet;
 use std::fs;
@@ -49,6 +50,13 @@ enum ExpectedOutcome {
     Failure(FailureExpectation),
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum ExpectationMode {
+    Success,
+    Failure,
+}
+
 #[derive(Clone)]
 struct SuccessExpectation {
     warnings: WarningExpectation,
@@ -59,7 +67,7 @@ struct SuccessExpectation {
 struct FailureExpectation {
     allow_panic: bool,
     warnings: WarningExpectation,
-    error_type: Option<ErrorType>,
+    error_type: ErrorType,
     message_contains: Vec<String>,
 }
 
@@ -81,14 +89,47 @@ struct CaseExecutionResult {
 struct ManifestCaseSpec {
     id: String,
     path: PathBuf,
+    _tags: Vec<String>,
 }
 
 struct ParsedExpectationFile {
-    mode: String,
+    mode: ExpectationMode,
     entry: Option<String>,
     allow_panic: bool,
     warnings: WarningExpectation,
     error_type: Option<ErrorType>,
+    message_contains: Vec<String>,
+    output_paths: Option<Vec<String>>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ManifestToml {
+    #[serde(default)]
+    case: Vec<ManifestCaseToml>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ManifestCaseToml {
+    id: String,
+    path: String,
+    #[serde(default)]
+    tags: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ExpectationToml {
+    mode: ExpectationMode,
+    entry: Option<String>,
+    builder: Option<String>,
+    #[serde(rename = "panic", default)]
+    allow_panic: bool,
+    warnings: Option<String>,
+    warning_count: Option<usize>,
+    error_type: Option<String>,
+    #[serde(default)]
     message_contains: Vec<String>,
     output_paths: Option<Vec<String>>,
 }
@@ -177,7 +218,10 @@ pub fn run_all_test_cases(show_warnings: bool) {
 }
 
 fn load_test_suite() -> Result<TestSuiteSpec, String> {
-    let root = Path::new(CANONICAL_TESTS_PATH);
+    load_test_suite_from_root(Path::new(CANONICAL_TESTS_PATH))
+}
+
+fn load_test_suite_from_root(root: &Path) -> Result<TestSuiteSpec, String> {
     let mut cases = Vec::new();
     let mut loaded_canonical_paths = HashSet::new();
 
@@ -236,8 +280,6 @@ fn load_test_suite() -> Result<TestSuiteSpec, String> {
         }
     }
 
-    cases.sort_by(|lhs, rhs| lhs.display_name.cmp(&rhs.display_name));
-
     Ok(TestSuiteSpec { cases })
 }
 
@@ -245,39 +287,32 @@ fn parse_manifest_file(path: &Path) -> Result<Vec<ManifestCaseSpec>, String> {
     let source = fs::read_to_string(path)
         .map_err(|error| format!("Failed to read manifest '{}': {error}", path.display()))?;
 
-    let mut cases = Vec::new();
-    let mut current_id: Option<String> = None;
-    let mut current_path: Option<PathBuf> = None;
+    let parsed: ManifestToml = toml::from_str(&source).map_err(|error| {
+        format!(
+            "Failed to parse manifest '{}' as TOML: {error}",
+            path.display()
+        )
+    })?;
 
-    for raw_line in source.lines() {
-        let line = raw_line.trim();
-        if line.is_empty() || line.starts_with('#') {
-            continue;
+    let mut cases = Vec::with_capacity(parsed.case.len());
+    for case in parsed.case {
+        if case.id.trim().is_empty() {
+            return Err(format!(
+                "Manifest '{}' has a case with an empty id",
+                path.display()
+            ));
+        }
+        if case.path.trim().is_empty() {
+            return Err(format!(
+                "Manifest '{}' has a case with an empty path",
+                path.display()
+            ));
         }
 
-        if line == "[[case]]" {
-            if let (Some(id), Some(case_path)) = (current_id.take(), current_path.take()) {
-                cases.push(ManifestCaseSpec {
-                    id,
-                    path: case_path,
-                });
-            }
-            continue;
-        }
-
-        if let Some((key, value)) = parse_key_value_line(line) {
-            match key {
-                "id" => current_id = Some(parse_required_string(value)?),
-                "path" => current_path = Some(PathBuf::from(parse_required_string(value)?)),
-                _ => {}
-            }
-        }
-    }
-
-    if let (Some(id), Some(case_path)) = (current_id.take(), current_path.take()) {
         cases.push(ManifestCaseSpec {
-            id,
-            path: case_path,
+            id: case.id,
+            path: PathBuf::from(case.path),
+            _tags: case.tags,
         });
     }
 
@@ -300,6 +335,7 @@ fn load_canonical_case(
     }
 
     let parsed_expectation = parse_expectation_file(&expect_path)?;
+    validate_fixture_contract(fixture_root, &parsed_expectation)?;
     let entry_path = resolve_case_entry_path(&input_root, parsed_expectation.entry.as_deref())?;
     let case_id = explicit_id.unwrap_or_else(|| {
         fixture_root
@@ -309,23 +345,22 @@ fn load_canonical_case(
             .to_string()
     });
 
-    let expected = match parsed_expectation.mode.as_str() {
-        "success" => ExpectedOutcome::Success(SuccessExpectation {
+    let expected = match parsed_expectation.mode {
+        ExpectationMode::Success => ExpectedOutcome::Success(SuccessExpectation {
             warnings: parsed_expectation.warnings,
             output_paths: parsed_expectation.output_paths,
         }),
-        "failure" => ExpectedOutcome::Failure(FailureExpectation {
+        ExpectationMode::Failure => ExpectedOutcome::Failure(FailureExpectation {
             allow_panic: parsed_expectation.allow_panic,
             warnings: parsed_expectation.warnings,
-            error_type: parsed_expectation.error_type,
+            error_type: parsed_expectation.error_type.ok_or_else(|| {
+                format!(
+                    "Canonical fixture '{}' is missing required 'error_type' for failure mode.",
+                    fixture_root.display()
+                )
+            })?,
             message_contains: parsed_expectation.message_contains,
         }),
-        other => {
-            return Err(format!(
-                "Canonical fixture '{}' has unsupported mode '{other}'",
-                fixture_root.display()
-            ));
-        }
     };
 
     Ok(TestCaseSpec {
@@ -344,85 +379,152 @@ fn parse_expectation_file(path: &Path) -> Result<ParsedExpectationFile, String> 
         )
     })?;
 
-    let mut mode = None;
-    let mut entry = None;
-    let mut allow_panic = false;
-    let mut warnings = WarningExpectation::Ignore;
-    let mut warning_count = None;
-    let mut error_type = None;
-    let mut message_contains = Vec::new();
-    let mut output_paths = None;
-
-    for raw_line in source.lines() {
-        let line = raw_line.trim();
-        if line.is_empty() || line.starts_with('#') {
-            continue;
-        }
-
-        let Some((key, value)) = parse_key_value_line(line) else {
-            continue;
-        };
-
-        match key {
-            "mode" => mode = Some(parse_required_string(value)?),
-            "entry" => entry = Some(parse_required_string(value)?),
-            "builder" => {
-                let builder = parse_required_string(value)?;
-                if builder != "html" {
-                    return Err(format!(
-                        "Expectation file '{}' only supports builder = \"html\" right now",
-                        path.display()
-                    ));
-                }
-            }
-            "panic" => allow_panic = parse_bool_value(value)?,
-            "warnings" => {
-                warnings = match parse_required_string(value)?.as_str() {
-                    "ignore" => WarningExpectation::Ignore,
-                    "forbid" => WarningExpectation::Forbid,
-                    "exact" => WarningExpectation::Exact(0),
-                    other => {
-                        return Err(format!(
-                            "Expectation file '{}' has unsupported warnings mode '{other}'",
-                            path.display()
-                        ));
-                    }
-                };
-            }
-            "warning_count" => warning_count = Some(parse_usize_value(value)?),
-            "error_type" => error_type = Some(parse_error_type(value)?),
-            "message_contains" => message_contains = parse_string_array_value(value)?,
-            "output_paths" => output_paths = Some(parse_string_array_value(value)?),
-            _ => {}
-        }
-    }
-
-    let mode = mode.ok_or_else(|| {
+    let parsed: ExpectationToml = toml::from_str(&source).map_err(|error| {
         format!(
-            "Expectation file '{}' is missing required key 'mode'",
+            "Failed to parse expectation file '{}' as TOML: {error}",
             path.display()
         )
     })?;
 
-    if let WarningExpectation::Exact(_) = warnings {
-        let expected_count = warning_count.ok_or_else(|| {
-            format!(
-                "Expectation file '{}' uses warnings = \"exact\" but is missing 'warning_count'",
-                path.display()
-            )
-        })?;
-        warnings = WarningExpectation::Exact(expected_count);
+    if let Some(builder) = &parsed.builder
+        && builder != "html"
+    {
+        return Err(format!(
+            "Expectation file '{}' only supports builder = \"html\" right now",
+            path.display()
+        ));
+    }
+
+    let warnings =
+        parse_warning_expectation(parsed.warnings.as_deref(), parsed.warning_count, path)?;
+    let error_type = parsed
+        .error_type
+        .as_deref()
+        .map(parse_error_type)
+        .transpose()?;
+
+    if let Some(paths) = &parsed.output_paths
+        && paths.is_empty()
+    {
+        return Err(format!(
+            "Expectation file '{}' provides an empty 'output_paths' array.",
+            path.display()
+        ));
     }
 
     Ok(ParsedExpectationFile {
-        mode,
-        entry,
-        allow_panic,
+        mode: parsed.mode,
+        entry: parsed.entry,
+        allow_panic: parsed.allow_panic,
         warnings,
         error_type,
-        message_contains,
-        output_paths,
+        message_contains: parsed.message_contains,
+        output_paths: parsed.output_paths,
     })
+}
+
+fn validate_fixture_contract(
+    fixture_root: &Path,
+    expectation: &ParsedExpectationFile,
+) -> Result<(), String> {
+    let has_golden_dir = fixture_root.join(GOLDEN_DIR_NAME).is_dir();
+    let has_output_paths = expectation
+        .output_paths
+        .as_ref()
+        .is_some_and(|paths| !paths.is_empty());
+
+    match expectation.mode {
+        ExpectationMode::Failure => {
+            if expectation.error_type.is_none() {
+                return Err(format!(
+                    "Fixture '{}' uses mode = \"failure\" but is missing required 'error_type'.",
+                    fixture_root.display()
+                ));
+            }
+            if expectation.message_contains.is_empty() {
+                return Err(format!(
+                    "Fixture '{}' uses mode = \"failure\" but is missing required 'message_contains'.",
+                    fixture_root.display()
+                ));
+            }
+            if expectation.output_paths.is_some() {
+                return Err(format!(
+                    "Fixture '{}' uses mode = \"failure\" and must not define 'output_paths'.",
+                    fixture_root.display()
+                ));
+            }
+        }
+        ExpectationMode::Success => {
+            if !has_output_paths && !has_golden_dir {
+                return Err(format!(
+                    "Fixture '{}' uses mode = \"success\" and must provide 'output_paths' and/or a '{}' directory.",
+                    fixture_root.display(),
+                    GOLDEN_DIR_NAME
+                ));
+            }
+            if expectation.allow_panic {
+                return Err(format!(
+                    "Fixture '{}' uses mode = \"success\" and cannot set panic = true.",
+                    fixture_root.display()
+                ));
+            }
+            if expectation.error_type.is_some() || !expectation.message_contains.is_empty() {
+                return Err(format!(
+                    "Fixture '{}' uses mode = \"success\" and must not set failure-only keys ('error_type'/'message_contains').",
+                    fixture_root.display()
+                ));
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn parse_warning_expectation(
+    warnings_mode: Option<&str>,
+    warning_count: Option<usize>,
+    path: &Path,
+) -> Result<WarningExpectation, String> {
+    let Some(mode) = warnings_mode else {
+        return Err(format!(
+            "Expectation file '{}' is missing required key 'warnings'.",
+            path.display()
+        ));
+    };
+
+    match mode {
+        "ignore" => {
+            if warning_count.is_some() {
+                return Err(format!(
+                    "Expectation file '{}' sets 'warning_count' but warnings != \"exact\".",
+                    path.display()
+                ));
+            }
+            Ok(WarningExpectation::Ignore)
+        }
+        "forbid" => {
+            if warning_count.is_some() {
+                return Err(format!(
+                    "Expectation file '{}' sets 'warning_count' but warnings != \"exact\".",
+                    path.display()
+                ));
+            }
+            Ok(WarningExpectation::Forbid)
+        }
+        "exact" => {
+            let expected_count = warning_count.ok_or_else(|| {
+                format!(
+                    "Expectation file '{}' uses warnings = \"exact\" but is missing 'warning_count'.",
+                    path.display()
+                )
+            })?;
+            Ok(WarningExpectation::Exact(expected_count))
+        }
+        other => Err(format!(
+            "Expectation file '{}' has unsupported warnings mode '{other}'.",
+            path.display()
+        )),
+    }
 }
 
 fn resolve_case_entry_path(
@@ -573,11 +675,10 @@ fn validate_failure_result(
         };
     }
 
-    if let Some(expected_type) = &expectation.error_type
-        && !messages
-            .errors
-            .iter()
-            .any(|error| &error.error_type == expected_type)
+    if !messages
+        .errors
+        .iter()
+        .any(|error| error.error_type == expectation.error_type)
     {
         return CaseExecutionResult {
             passed: false,
@@ -586,7 +687,7 @@ fn validate_failure_result(
             messages: Some(messages),
             failure_reason: Some(format!(
                 "Expected error type '{}', but it was not reported.",
-                error_type_to_str(expected_type)
+                error_type_to_str(&expectation.error_type)
             )),
         };
     }
@@ -792,60 +893,8 @@ fn format_panic_payload(payload: Box<dyn Any + Send>) -> String {
     }
 }
 
-fn parse_key_value_line(line: &str) -> Option<(&str, &str)> {
-    let (key, value) = line.split_once('=')?;
-    Some((key.trim(), value.trim()))
-}
-
-fn parse_required_string(value: &str) -> Result<String, String> {
-    let trimmed = value.trim();
-    let Some(stripped) = trimmed
-        .strip_prefix('"')
-        .and_then(|inner| inner.strip_suffix('"'))
-    else {
-        return Err(format!("Expected a quoted string value, got '{trimmed}'"));
-    };
-
-    Ok(stripped.to_string())
-}
-
-fn parse_bool_value(value: &str) -> Result<bool, String> {
-    match value.trim() {
-        "true" => Ok(true),
-        "false" => Ok(false),
-        other => Err(format!("Expected a boolean value, got '{other}'")),
-    }
-}
-
-fn parse_usize_value(value: &str) -> Result<usize, String> {
-    value
-        .trim()
-        .parse::<usize>()
-        .map_err(|error| format!("Expected an unsigned integer value: {error}"))
-}
-
-fn parse_string_array_value(value: &str) -> Result<Vec<String>, String> {
-    let trimmed = value.trim();
-    let Some(inner) = trimmed
-        .strip_prefix('[')
-        .and_then(|inner| inner.strip_suffix(']'))
-    else {
-        return Err(format!("Expected a string array, got '{trimmed}'"));
-    };
-
-    let inner = inner.trim();
-    if inner.is_empty() {
-        return Ok(Vec::new());
-    }
-
-    inner
-        .split(',')
-        .map(|item| parse_required_string(item.trim()))
-        .collect()
-}
-
 fn parse_error_type(value: &str) -> Result<ErrorType, String> {
-    let normalized = parse_required_string(value)?.to_ascii_lowercase();
+    let normalized = value.to_ascii_lowercase();
     match normalized.as_str() {
         "syntax" => Ok(ErrorType::Syntax),
         "type" => Ok(ErrorType::Type),
@@ -885,4 +934,126 @@ fn collect_files_recursive(root: &Path) -> Vec<PathBuf> {
     }
 
     discovered
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::SystemTime;
+
+    fn temp_dir(prefix: &str) -> PathBuf {
+        let unique = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .expect("time should be after unix epoch")
+            .as_nanos();
+        std::env::temp_dir().join(format!("beanstalk_integration_runner_{prefix}_{unique}"))
+    }
+
+    fn write_success_fixture(root: &Path, case_name: &str) {
+        let case_root = root.join(case_name);
+        let input_root = case_root.join(INPUT_DIR_NAME);
+        fs::create_dir_all(&input_root).expect("should create fixture input directory");
+        fs::write(input_root.join("#page.bst"), "#[:ok]\n").expect("should write fixture source");
+        fs::write(
+            case_root.join(EXPECT_FILE_NAME),
+            "mode = \"success\"\nwarnings = \"forbid\"\noutput_paths = [\"index.html\"]\n",
+        )
+        .expect("should write expect file");
+    }
+
+    #[test]
+    fn rejects_failure_fixture_without_message_contains() {
+        let root = temp_dir("failure_contract_missing_message");
+        let case_root = root.join("case");
+        let input_root = case_root.join(INPUT_DIR_NAME);
+        fs::create_dir_all(&input_root).expect("should create fixture input directory");
+        fs::write(input_root.join("#page.bst"), "x = 1\n").expect("should write fixture source");
+        fs::write(
+            case_root.join(EXPECT_FILE_NAME),
+            "mode = \"failure\"\nwarnings = \"forbid\"\nerror_type = \"rule\"\n",
+        )
+        .expect("should write expect file");
+
+        let error = match load_canonical_case(&case_root, None) {
+            Ok(_) => panic!("fixture should be rejected"),
+            Err(error) => error,
+        };
+        assert!(
+            error.contains("message_contains"),
+            "unexpected error: {error}"
+        );
+
+        fs::remove_dir_all(&root).expect("should clean up temp fixture root");
+    }
+
+    #[test]
+    fn rejects_success_fixture_without_output_assertions() {
+        let root = temp_dir("success_contract_missing_assertion");
+        let case_root = root.join("case");
+        let input_root = case_root.join(INPUT_DIR_NAME);
+        fs::create_dir_all(&input_root).expect("should create fixture input directory");
+        fs::write(input_root.join("#page.bst"), "#[:ok]\n").expect("should write fixture source");
+        fs::write(
+            case_root.join(EXPECT_FILE_NAME),
+            "mode = \"success\"\nwarnings = \"forbid\"\n",
+        )
+        .expect("should write expect file");
+
+        let error = match load_canonical_case(&case_root, None) {
+            Ok(_) => panic!("fixture should be rejected"),
+            Err(error) => error,
+        };
+        assert!(error.contains("output_paths"), "unexpected error: {error}");
+
+        fs::remove_dir_all(&root).expect("should clean up temp fixture root");
+    }
+
+    #[test]
+    fn accepts_success_fixture_with_golden_only_assertion() {
+        let root = temp_dir("success_contract_golden_assertion");
+        let case_root = root.join("case");
+        let input_root = case_root.join(INPUT_DIR_NAME);
+        let golden_root = case_root.join(GOLDEN_DIR_NAME);
+        fs::create_dir_all(&input_root).expect("should create fixture input directory");
+        fs::create_dir_all(&golden_root).expect("should create fixture golden directory");
+        fs::write(input_root.join("#page.bst"), "#[:ok]\n").expect("should write fixture source");
+        fs::write(golden_root.join("index.html"), "<h1>ok</h1>\n")
+            .expect("should write golden file");
+        fs::write(
+            case_root.join(EXPECT_FILE_NAME),
+            "mode = \"success\"\nwarnings = \"forbid\"\n",
+        )
+        .expect("should write expect file");
+
+        let case = load_canonical_case(&case_root, None).expect("fixture should be accepted");
+        assert_eq!(case.display_name, "case");
+
+        fs::remove_dir_all(&root).expect("should clean up temp fixture root");
+    }
+
+    #[test]
+    fn manifest_order_is_preserved_before_discovery_fallback() {
+        let root = temp_dir("manifest_order");
+        fs::create_dir_all(&root).expect("should create root");
+
+        write_success_fixture(&root, "case_a");
+        write_success_fixture(&root, "case_b");
+        write_success_fixture(&root, "case_c");
+
+        fs::write(
+            root.join(MANIFEST_FILE_NAME),
+            "[[case]]\nid = \"case_b\"\npath = \"case_b\"\n\n[[case]]\nid = \"case_a\"\npath = \"case_a\"\n",
+        )
+        .expect("should write manifest");
+
+        let suite = load_test_suite_from_root(&root).expect("suite should load");
+        let names = suite
+            .cases
+            .iter()
+            .map(|case| case.display_name.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(names, vec!["case_b", "case_a", "case_c"]);
+
+        fs::remove_dir_all(&root).expect("should clean up temp fixture root");
+    }
 }

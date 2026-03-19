@@ -301,13 +301,19 @@ fn parse_headers_in_file(
                 )?;
 
                 for path in paths {
-                    if let Some(name) = path.name() {
+                    let normalized_path = normalize_import_dependency_path(
+                        &path,
+                        &token_stream.src_path,
+                        context.string_table,
+                    );
+
+                    if let Some(name) = normalized_path.name() {
                         encountered_symbols.insert(name);
                     }
 
-                    if file_import_paths.insert(path.to_owned()) {
+                    if file_import_paths.insert(normalized_path.to_owned()) {
                         file_imports.push(FileImport {
-                            header_path: path,
+                            header_path: normalized_path,
                             location: current_location.clone(),
                         });
                     }
@@ -416,6 +422,37 @@ fn parse_headers_in_file(
     });
 
     Ok(headers)
+}
+
+fn normalize_import_dependency_path(
+    import_path: &InternedPath,
+    source_file: &InternedPath,
+    string_table: &StringTable,
+) -> InternedPath {
+    let mut import_components = import_path.as_components().iter().copied();
+    let Some(first) = import_components.next() else {
+        return import_path.to_owned();
+    };
+
+    let first_segment = string_table.resolve(first);
+    if first_segment != "." && first_segment != ".." {
+        return import_path.to_owned();
+    }
+
+    let mut resolved_components = source_file.as_components().to_vec();
+    resolved_components.pop();
+
+    for component in import_path.as_components() {
+        match string_table.resolve(*component) {
+            "." => {}
+            ".." => {
+                resolved_components.pop();
+            }
+            _ => resolved_components.push(*component),
+        }
+    }
+
+    InternedPath::from_components(resolved_components)
 }
 
 // Split a top-level declaration into a concrete header payload.

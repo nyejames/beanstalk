@@ -1,0 +1,4 @@
+mode = "failure"
+error_type = "Rule"
+warnings = "forbid"
+message_contains = ["Constants can't be mutable"]

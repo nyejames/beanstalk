@@ -1,3 +1,4 @@
 mode = "failure"
 error_type = "BorrowChecker"
 message_contains = ["immutable local"]
+warnings = "forbid"

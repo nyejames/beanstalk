@@ -250,17 +250,95 @@ fn resolve_graph_path(
         return Some(requested_path.to_owned());
     }
 
-    let mut matches = graph.keys().filter(|candidate| {
-        candidate.ends_with(requested_path)
-            || suffix_matches_with_optional_bst_extension(candidate, requested_path, string_table)
-    });
+    let normalized_requested = normalize_relative_dependency_path(requested_path, string_table);
 
-    let first_match = matches.next()?.to_owned();
-    if matches.next().is_some() {
+    let header_path_matches = graph
+        .keys()
+        .filter(|candidate| {
+            path_matches_candidate(candidate, requested_path, string_table)
+                || normalized_requested.as_ref().is_some_and(|normalized| {
+                    path_matches_candidate(candidate, normalized, string_table)
+                })
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+
+    match header_path_matches.as_slice() {
+        [single] => return Some(single.to_owned()),
+        [] => {}
+        _ => return None,
+    }
+
+    let mut source_file_matches = graph
+        .iter()
+        .filter(|(_, header)| {
+            path_matches_candidate(&header.source_file, requested_path, string_table)
+                || normalized_requested.as_ref().is_some_and(|normalized| {
+                    path_matches_candidate(&header.source_file, normalized, string_table)
+                })
+        })
+        .map(|(path, header)| {
+            (
+                path.to_owned(),
+                matches!(header.kind, HeaderKind::StartFunction),
+            )
+        })
+        .collect::<Vec<_>>();
+
+    if source_file_matches.is_empty() {
         return None;
     }
 
-    Some(first_match)
+    let start_function_matches = source_file_matches
+        .iter()
+        .filter(|(_, is_start)| *is_start)
+        .map(|(path, _)| path.to_owned())
+        .collect::<Vec<_>>();
+
+    if start_function_matches.len() == 1 {
+        return Some(start_function_matches[0].to_owned());
+    }
+    if start_function_matches.len() > 1 {
+        return None;
+    }
+
+    if source_file_matches.len() == 1 {
+        return source_file_matches.pop().map(|(path, _)| path);
+    }
+
+    None
+}
+
+fn path_matches_candidate(
+    candidate: &InternedPath,
+    requested: &InternedPath,
+    string_table: &StringTable,
+) -> bool {
+    candidate.ends_with(requested)
+        || suffix_matches_with_optional_bst_extension(candidate, requested, string_table)
+}
+
+fn normalize_relative_dependency_path(
+    requested: &InternedPath,
+    string_table: &StringTable,
+) -> Option<InternedPath> {
+    let components = requested.as_components();
+    let mut start = 0usize;
+
+    while start < components.len() {
+        let segment = string_table.resolve(components[start]);
+        if segment == "." || segment == ".." {
+            start += 1;
+            continue;
+        }
+        break;
+    }
+
+    if start == 0 || start >= components.len() {
+        return None;
+    }
+
+    Some(InternedPath::from_components(components[start..].to_vec()))
 }
 
 fn suffix_matches_with_optional_bst_extension(
@@ -291,3 +369,7 @@ fn suffix_matches_with_optional_bst_extension(
                 || requested_str.strip_suffix(".bst") == Some(candidate_str)
         })
 }
+
+#[cfg(test)]
+#[path = "tests/module_dependencies_tests.rs"]
+mod module_dependencies_tests;

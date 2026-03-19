@@ -1,2 +1,4 @@
 mode = "failure"
 message_contains = ["Unsupported style directive '$formatter'"]
+warnings = "forbid"
+error_type = "Syntax"

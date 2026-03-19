@@ -1,3 +1,4 @@
 mode = "failure"
 error_type = "Syntax"
 message_contains = ["Can't have more than one decimal point"]
+warnings = "forbid"

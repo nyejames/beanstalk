@@ -1,2 +1,4 @@
 mode = "failure"
 error_type = "Type"
+warnings = "forbid"
+message_contains = ["no return signature", "return' must be bare"]

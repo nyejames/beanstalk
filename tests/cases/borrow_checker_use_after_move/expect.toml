@@ -1,2 +1,4 @@
 mode = "failure"
 error_type = "BorrowChecker"
+warnings = "forbid"
+message_contains = ["Cannot read", "mutable alias"]

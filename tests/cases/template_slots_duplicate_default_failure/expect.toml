@@ -1,2 +1,4 @@
 mode = "failure"
 message_contains = ["only define one default '$slot'"]
+warnings = "forbid"
+error_type = "Rule"
