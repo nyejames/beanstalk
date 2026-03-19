@@ -384,8 +384,10 @@ fn synthesizes_export_wrappers_with_stable_names() {
         export_policy: WasmExportPolicy {
             exported_functions: vec![FunctionId(0)],
             export_names,
+            helper_exports: Default::default(),
         },
         target_features: Default::default(),
+        emit_options: Default::default(),
         debug_flags: WasmDebugFlags {
             show_wasm_exports: true,
             ..Default::default()
@@ -462,6 +464,7 @@ fn rejects_invalid_export_request_with_structured_diagnostic() {
         export_policy: WasmExportPolicy {
             exported_functions: vec![FunctionId(0)],
             export_names: FxHashMap::default(),
+            helper_exports: Default::default(),
         },
         ..Default::default()
     };

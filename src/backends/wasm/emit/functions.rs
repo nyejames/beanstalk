@@ -1,0 +1,384 @@
+//! Function and code section emission.
+
+use crate::backends::wasm::emit::instructions::{
+    LirBodyEmitContext, emit_statement, emit_terminator,
+};
+use crate::backends::wasm::emit::sections::{DefinedFunctionKey, WasmEmitPlan};
+use crate::backends::wasm::emit::types::abi_to_val_type;
+use crate::backends::wasm::lir::function::WasmLirFunction;
+use crate::backends::wasm::lir::types::{
+    WasmAbiType, WasmLirBlockId, WasmLirLocalId, WasmLocalRole,
+};
+use crate::backends::wasm::runtime::strings::WasmRuntimeHelper;
+use crate::compiler_frontend::compiler_messages::compiler_errors::{CompilerError, ErrorType};
+use rustc_hash::FxHashMap;
+use wasm_encoder::{CodeSection, Function, Instruction, MemArg, ValType};
+
+pub(crate) fn build_code_section(
+    lir_functions: &FxHashMap<u32, &WasmLirFunction>,
+    plan: &WasmEmitPlan,
+) -> Result<CodeSection, CompilerError> {
+    let mut section = CodeSection::new();
+
+    // WHAT: iterate using the preplanned defined-function order.
+    // WHY: function and code sections must stay index-aligned in Wasm binary encoding.
+    for key in &plan.defined_function_order {
+        let body = match key {
+            DefinedFunctionKey::Lir(function_id) => {
+                let function = lir_functions.get(&function_id.0).copied().ok_or_else(|| {
+                    CompilerError::compiler_error(format!(
+                        "Wasm emission missing lowered function body for {:?}",
+                        function_id
+                    ))
+                    .with_error_type(ErrorType::WasmGeneration)
+                })?;
+                emit_lir_function(function, plan)?
+            }
+            DefinedFunctionKey::Helper(helper) => emit_helper_function(*helper, plan)?,
+        };
+
+        section.function(&body);
+    }
+
+    Ok(section)
+}
+
+fn emit_lir_function(
+    function: &WasmLirFunction,
+    plan: &WasmEmitPlan,
+) -> Result<Function, CompilerError> {
+    // WHAT: build deterministic local declarations and local-id -> local-index maps.
+    // WHY: statement/terminator lowering depends on stable local index lookup.
+    let local_layout = build_local_layout(function)?;
+    let mut wasm_function = Function::new(local_layout.local_decls);
+
+    let mut ordered_blocks = function.blocks.iter().collect::<Vec<_>>();
+    ordered_blocks.sort_by_key(|block| block.id.0);
+
+    let mut block_index_by_id = FxHashMap::default();
+    for (index, block) in ordered_blocks.iter().enumerate() {
+        block_index_by_id.insert(block.id, index as u32);
+    }
+
+    let entry_block = determine_entry_block(function)?;
+    let entry_block_index = block_index_by_id
+        .get(&entry_block)
+        .copied()
+        .ok_or_else(|| {
+            CompilerError::compiler_error(format!(
+                "Wasm emission could not resolve entry block index for {:?} in {:?}",
+                entry_block, function.id
+            ))
+            .with_error_type(ErrorType::WasmGeneration)
+        })?;
+
+    wasm_function.instruction(&Instruction::I32Const(entry_block_index as i32));
+    wasm_function.instruction(&Instruction::LocalSet(local_layout.dispatch_local_index));
+    wasm_function.instruction(&Instruction::Block(wasm_encoder::BlockType::Empty));
+    wasm_function.instruction(&Instruction::Loop(wasm_encoder::BlockType::Empty));
+    // WHAT: use a dispatcher-loop CFG strategy.
+    // WHY: this supports arbitrary lowered CFG now while keeping a clean seam for a future
+    // direct structured pass (`if/else/loop` region construction).
+
+    let context = LirBodyEmitContext {
+        function_id: function.id,
+        local_index_by_id: &local_layout.local_index_by_id,
+        local_type_by_id: &local_layout.local_type_by_id,
+        block_index_by_id: &block_index_by_id,
+        dispatch_local_index: local_layout.dispatch_local_index,
+    };
+
+    for (index, block) in ordered_blocks.iter().enumerate() {
+        // WHAT: execute only the currently selected block in each loop iteration.
+        // WHY: the dispatch local acts as a program counter for structured Wasm control flow.
+        wasm_function.instruction(&Instruction::LocalGet(local_layout.dispatch_local_index));
+        wasm_function.instruction(&Instruction::I32Const(index as i32));
+        wasm_function.instruction(&Instruction::I32Eq);
+        wasm_function.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
+
+        for statement in &block.statements {
+            emit_statement(&mut wasm_function, statement, &context, plan)?;
+        }
+        emit_terminator(&mut wasm_function, &block.terminator, &context)?;
+
+        wasm_function.instruction(&Instruction::End);
+    }
+
+    // Keeps dispatcher alive for any invalid/unknown dispatch value without falling out
+    // of the loop and accidentally requiring an implicit function-end value.
+    wasm_function.instruction(&Instruction::Br(0));
+    wasm_function.instruction(&Instruction::End);
+    wasm_function.instruction(&Instruction::End);
+    wasm_function.instruction(&Instruction::Unreachable);
+    wasm_function.instruction(&Instruction::End);
+
+    Ok(wasm_function)
+}
+
+fn emit_helper_function(
+    helper: WasmRuntimeHelper,
+    plan: &WasmEmitPlan,
+) -> Result<Function, CompilerError> {
+    // WHAT: helpers share one bump-allocation/global model in phase-2.
+    // WHY: this is correctness-first runtime scaffolding until richer ownership/runtime logic lands.
+    let heap_top_global = plan.heap_top_global_index.ok_or_else(|| {
+        CompilerError::compiler_error(
+            "Wasm emission expected heap_top global while synthesizing runtime helpers",
+        )
+        .with_error_type(ErrorType::WasmGeneration)
+    })?;
+
+    let alloc_index = plan
+        .helper_indices
+        .get(&WasmRuntimeHelper::Alloc)
+        .copied()
+        .ok_or_else(|| {
+            CompilerError::compiler_error("Wasm emission missing rt_alloc helper index")
+                .with_error_type(ErrorType::WasmGeneration)
+        })?;
+
+    let mut function = match helper {
+        WasmRuntimeHelper::Alloc => Function::new(vec![(1, ValType::I32)]),
+        WasmRuntimeHelper::StringNewBuffer => Function::new(vec![(1, ValType::I32)]),
+        WasmRuntimeHelper::StringPushLiteral
+        | WasmRuntimeHelper::StringPushHandle
+        | WasmRuntimeHelper::StringFinish
+        | WasmRuntimeHelper::StringPtr
+        | WasmRuntimeHelper::StringLen
+        | WasmRuntimeHelper::Release
+        | WasmRuntimeHelper::DropIfOwned => Function::new(Vec::new()),
+    };
+
+    match helper {
+        WasmRuntimeHelper::Alloc => {
+            // WHAT: return current heap_top and then advance by requested size.
+            // WHY: phase-2 uses a simple monotonic bump allocator for runtime objects.
+            function.instruction(&Instruction::GlobalGet(heap_top_global));
+            function.instruction(&Instruction::LocalTee(1));
+            function.instruction(&Instruction::LocalGet(0));
+            function.instruction(&Instruction::I32Add);
+            function.instruction(&Instruction::GlobalSet(heap_top_global));
+            function.instruction(&Instruction::LocalGet(1));
+            function.instruction(&Instruction::Return);
+        }
+        WasmRuntimeHelper::StringNewBuffer => {
+            // WHAT: allocate and initialize an 8-byte `{ptr,len}` buffer header.
+            // WHY: this gives string-building helpers a stable in-memory shape.
+            function.instruction(&Instruction::I32Const(8));
+            function.instruction(&Instruction::Call(alloc_index));
+            function.instruction(&Instruction::LocalTee(0));
+            function.instruction(&Instruction::LocalGet(0));
+            function.instruction(&Instruction::I32Const(0));
+            function.instruction(&Instruction::I32Store(memarg(0)));
+            function.instruction(&Instruction::LocalGet(0));
+            function.instruction(&Instruction::I32Const(0));
+            function.instruction(&Instruction::I32Store(memarg(4)));
+            function.instruction(&Instruction::LocalGet(0));
+            function.instruction(&Instruction::Return);
+        }
+        WasmRuntimeHelper::StringPushLiteral => {
+            // WHAT: set `{ptr,len}` directly from static literal metadata.
+            // WHY: literals are already resident in static data; no byte copy is needed here.
+            function.instruction(&Instruction::LocalGet(0));
+            function.instruction(&Instruction::LocalGet(1));
+            function.instruction(&Instruction::I32Store(memarg(0)));
+            function.instruction(&Instruction::LocalGet(0));
+            function.instruction(&Instruction::LocalGet(2));
+            function.instruction(&Instruction::I32Store(memarg(4)));
+            function.instruction(&Instruction::Return);
+        }
+        WasmRuntimeHelper::StringPushHandle => {
+            // WHAT: copy `{ptr,len}` from one handle header into another.
+            // WHY: phase-2 keeps runtime string handling conservative and pointer-shaped.
+            function.instruction(&Instruction::LocalGet(0));
+            function.instruction(&Instruction::LocalGet(1));
+            function.instruction(&Instruction::I32Load(memarg(0)));
+            function.instruction(&Instruction::I32Store(memarg(0)));
+            function.instruction(&Instruction::LocalGet(0));
+            function.instruction(&Instruction::LocalGet(1));
+            function.instruction(&Instruction::I32Load(memarg(4)));
+            function.instruction(&Instruction::I32Store(memarg(4)));
+            function.instruction(&Instruction::Return);
+        }
+        WasmRuntimeHelper::StringFinish => {
+            // WHAT: return the buffer as the finalized string handle.
+            // WHY: phase-2 keeps string values and buffers ABI-compatible as `i32` handles.
+            function.instruction(&Instruction::LocalGet(0));
+            function.instruction(&Instruction::Return);
+        }
+        WasmRuntimeHelper::StringPtr => {
+            function.instruction(&Instruction::LocalGet(0));
+            function.instruction(&Instruction::I32Load(memarg(0)));
+            function.instruction(&Instruction::Return);
+        }
+        WasmRuntimeHelper::StringLen => {
+            function.instruction(&Instruction::LocalGet(0));
+            function.instruction(&Instruction::I32Load(memarg(4)));
+            function.instruction(&Instruction::Return);
+        }
+        WasmRuntimeHelper::Release | WasmRuntimeHelper::DropIfOwned => {
+            // WHAT: phase-2 release/drop helpers are conservative no-ops.
+            // WHY: ownership-eliding/free semantics are introduced incrementally after baseline correctness.
+            function.instruction(&Instruction::Return);
+        }
+    }
+
+    function.instruction(&Instruction::End);
+    Ok(function)
+}
+
+struct LocalLayout {
+    local_decls: Vec<(u32, ValType)>,
+    local_index_by_id: FxHashMap<WasmLirLocalId, u32>,
+    local_type_by_id: FxHashMap<WasmLirLocalId, WasmAbiType>,
+    dispatch_local_index: u32,
+}
+
+fn build_local_layout(function: &WasmLirFunction) -> Result<LocalLayout, CompilerError> {
+    // WHAT: local ids are sorted and mapped once for the entire function.
+    // WHY: all statement lowering can then use fast, deterministic lookups.
+    let mut sorted_locals = function.locals.iter().collect::<Vec<_>>();
+    sorted_locals.sort_by_key(|local| local.id.0);
+
+    let mut local_index_by_id = FxHashMap::default();
+    let mut local_type_by_id = FxHashMap::default();
+    for (index, local) in sorted_locals.iter().enumerate() {
+        local_index_by_id.insert(local.id, index as u32);
+        local_type_by_id.insert(local.id, local.ty);
+    }
+
+    let parameter_count = function.signature.params.len();
+    if parameter_count > sorted_locals.len() {
+        return Err(CompilerError::compiler_error(format!(
+            "Wasm emission found {} params in signature but only {} declared locals in {:?}",
+            parameter_count,
+            sorted_locals.len(),
+            function.id
+        ))
+        .with_error_type(ErrorType::WasmGeneration));
+    }
+
+    // WHAT: enforce Wasm local index contract: params first, then non-params.
+    // WHY: this keeps local index mapping explicit and avoids accidental ABI drift.
+    for (index, local) in sorted_locals.iter().enumerate() {
+        if index < parameter_count && local.role != WasmLocalRole::Param {
+            return Err(CompilerError::compiler_error(format!(
+                "Wasm emission expected local {:?} to be a parameter in {:?}",
+                local.id, function.id
+            ))
+            .with_error_type(ErrorType::WasmGeneration));
+        }
+        if index >= parameter_count && local.role == WasmLocalRole::Param {
+            return Err(CompilerError::compiler_error(format!(
+                "Wasm emission found parameter local {:?} after non-parameter locals in {:?}",
+                local.id, function.id
+            ))
+            .with_error_type(ErrorType::WasmGeneration));
+        }
+    }
+
+    let mut local_decls = Vec::new();
+    let mut current_type = None;
+    let mut current_count = 0u32;
+
+    for local in sorted_locals.iter().skip(parameter_count) {
+        let val_type = match local.ty {
+            WasmAbiType::Void => ValType::I32,
+            _ => abi_to_val_type(local.ty)?,
+        };
+
+        if current_type == Some(val_type) {
+            current_count += 1;
+        } else {
+            if let Some(previous_type) = current_type {
+                local_decls.push((current_count, previous_type));
+            }
+            current_type = Some(val_type);
+            current_count = 1;
+        }
+    }
+
+    if let Some(previous_type) = current_type {
+        local_decls.push((current_count, previous_type));
+    }
+
+    // Dispatcher-local used by dispatcher-loop CFG lowering.
+    local_decls.push((1, ValType::I32));
+    let dispatch_local_index = sorted_locals.len() as u32;
+
+    Ok(LocalLayout {
+        local_decls,
+        local_index_by_id,
+        local_type_by_id,
+        dispatch_local_index,
+    })
+}
+
+fn determine_entry_block(function: &WasmLirFunction) -> Result<WasmLirBlockId, CompilerError> {
+    // WHAT: prefer a unique zero-incoming root block as the entry block.
+    // WHY: this reflects canonical CFG roots when lowering produced one clear entry.
+    if function.blocks.is_empty() {
+        return Err(CompilerError::compiler_error(format!(
+            "Wasm emission requires at least one block for function {:?}",
+            function.id
+        ))
+        .with_error_type(ErrorType::WasmGeneration));
+    }
+
+    let mut incoming_counts = FxHashMap::default();
+    for block in &function.blocks {
+        incoming_counts.entry(block.id).or_insert(0u32);
+    }
+
+    for block in &function.blocks {
+        match block.terminator {
+            crate::backends::wasm::lir::instructions::WasmLirTerminator::Jump(target) => {
+                *incoming_counts.entry(target).or_insert(0) += 1;
+            }
+            crate::backends::wasm::lir::instructions::WasmLirTerminator::Branch {
+                then_block,
+                else_block,
+                ..
+            } => {
+                *incoming_counts.entry(then_block).or_insert(0) += 1;
+                *incoming_counts.entry(else_block).or_insert(0) += 1;
+            }
+            crate::backends::wasm::lir::instructions::WasmLirTerminator::Return { .. }
+            | crate::backends::wasm::lir::instructions::WasmLirTerminator::Trap => {}
+        }
+    }
+
+    let mut roots = incoming_counts
+        .iter()
+        .filter_map(|(block_id, incoming)| (*incoming == 0).then_some(*block_id))
+        .collect::<Vec<_>>();
+    roots.sort_by_key(|block_id| block_id.0);
+
+    if roots.len() == 1 {
+        return Ok(roots[0]);
+    }
+
+    if roots.is_empty() {
+        // WHAT: fall back to the smallest block id in cyclic/fully-connected CFGs.
+        // WHY: dispatcher-loop lowering can still execute correctly without a unique root.
+        let mut sorted_blocks = function.blocks.iter().collect::<Vec<_>>();
+        sorted_blocks.sort_by_key(|block| block.id.0);
+        return Ok(sorted_blocks[0].id);
+    }
+
+    Err(CompilerError::compiler_error(format!(
+        "Wasm emission found multiple entry-block candidates in {:?}: {:?}",
+        function.id, roots
+    ))
+    .with_error_type(ErrorType::WasmGeneration))
+}
+
+fn memarg(offset: u64) -> MemArg {
+    // WHAT: all helper runtime memory accesses target memory index 0 with 4-byte alignment.
+    // WHY: phase-2 uses one internal 32-bit linear memory and i32 load/store fields.
+    MemArg {
+        offset,
+        align: 2,
+        memory_index: 0,
+    }
+}

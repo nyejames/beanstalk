@@ -38,7 +38,7 @@ pub(crate) fn build_debug_outputs(
 fn render_plan_text(request: &WasmBackendRequest, module: &WasmLirModule) -> String {
     let mut out = String::new();
 
-    let _ = writeln!(out, "Wasm Phase-1 Lowering Plan");
+    let _ = writeln!(out, "Wasm Lowering/Emission Plan");
     let _ = writeln!(
         out,
         "  requested_exports={} imports={} functions={} static_data={}",
@@ -55,6 +55,14 @@ fn render_plan_text(request: &WasmBackendRequest, module: &WasmLirModule) -> Str
         request.target_features.enable_bulk_memory,
         request.target_features.enable_multi_value,
         request.target_features.enable_reference_types,
+    );
+    let _ = writeln!(
+        out,
+        "  emit_options: emit_wasm_module={} validate={} name_section={} cfg_strategy={:?}",
+        request.emit_options.emit_wasm_module,
+        request.emit_options.validate_emitted_module,
+        request.emit_options.emit_name_section,
+        request.emit_options.cfg_lowering_strategy,
     );
 
     out

@@ -1,0 +1,509 @@
+use crate::backends::wasm::backend::lower_hir_to_wasm_module;
+use crate::backends::wasm::emit::module::emit_lir_to_wasm_module;
+use crate::backends::wasm::lir::function::{WasmLirBlock, WasmLirFunction, WasmLirFunctionOrigin};
+use crate::backends::wasm::lir::instructions::{WasmCalleeRef, WasmLirStmt, WasmLirTerminator};
+use crate::backends::wasm::lir::linkage::{
+    WasmExport, WasmExportKind, WasmFunctionLinkage, WasmImport, WasmImportKind, WasmMemoryImport,
+};
+use crate::backends::wasm::lir::module::{WasmLirModule, WasmStaticData, WasmStaticDataKind};
+use crate::backends::wasm::lir::types::{
+    WasmAbiType, WasmImportId, WasmLirBlockId, WasmLirFunctionId, WasmLirLocal, WasmLirLocalId,
+    WasmLirSignature, WasmLocalRole, WasmStaticDataId,
+};
+use crate::backends::wasm::request::{
+    WasmBackendRequest, WasmCfgLoweringStrategy, WasmDebugFlags, WasmEmitOptions, WasmExportPolicy,
+    WasmHelperExportPolicy, WasmTargetFeatures,
+};
+use crate::backends::wasm::runtime::memory::WasmMemoryPlan;
+use crate::backends::wasm::tests::lowering::test_support::{
+    build_module, build_type_context, default_borrow_facts, int_expression,
+};
+use crate::compiler_frontend::compiler_messages::compiler_errors::ErrorType;
+use crate::compiler_frontend::hir::hir_nodes::{
+    BlockId, FunctionId, HirBlock, HirFunction, HirFunctionOrigin, HirTerminator, RegionId,
+};
+use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::string_interning::StringTable;
+use rustc_hash::FxHashMap;
+
+#[test]
+fn lowers_hir_to_wasm_module_bytes() {
+    let mut string_table = StringTable::new();
+    let (type_context, types) = build_type_context();
+    let start_path = InternedPath::from_single_str("main", &mut string_table);
+
+    let start_block = HirBlock {
+        id: BlockId(0),
+        region: RegionId(0),
+        locals: vec![],
+        statements: vec![],
+        terminator: HirTerminator::Return(int_expression(1, 7, types.int, RegionId(0))),
+    };
+    let start_function = HirFunction {
+        id: FunctionId(0),
+        entry: BlockId(0),
+        params: vec![],
+        return_type: types.int,
+        return_aliases: vec![],
+    };
+
+    let hir_module = build_module(
+        &mut string_table,
+        vec![(start_function, start_path, HirFunctionOrigin::EntryStart)],
+        vec![start_block],
+        type_context,
+        FunctionId(0),
+    );
+
+    let mut request = WasmBackendRequest::default();
+    request.emit_options.validate_emitted_module = false;
+    let result = lower_hir_to_wasm_module(&hir_module, &default_borrow_facts(), &request)
+        .expect("phase-2 lowering should emit wasm bytes");
+    let wasm_bytes = result.wasm_bytes.expect("wasm bytes should be available");
+    validate_wasm(&wasm_bytes);
+}
+
+#[test]
+fn emits_requested_helper_exports_and_valid_section_order() {
+    let lir_module = build_manual_lir_module();
+    let request = request_with_helper_exports();
+
+    let emit_result =
+        emit_lir_to_wasm_module(&lir_module, &request).expect("manual lir emission should succeed");
+    validate_wasm(&emit_result.wasm_bytes);
+
+    let exports = collect_export_names(&emit_result.wasm_bytes);
+    assert!(exports.contains(&"memory".to_owned()));
+    assert!(exports.contains(&"bst_str_ptr".to_owned()));
+    assert!(exports.contains(&"bst_str_len".to_owned()));
+    assert!(exports.contains(&"bst_release".to_owned()));
+    assert!(exports.contains(&"bst_call_0".to_owned()));
+
+    let order = collect_section_order(&emit_result.wasm_bytes);
+    assert_order(&order, "type", "import");
+    assert_order(&order, "import", "function");
+    assert_order(&order, "function", "memory");
+    assert_order(&order, "memory", "global");
+    assert_order(&order, "global", "export");
+    assert_order(&order, "export", "code");
+    assert_order(&order, "code", "data");
+}
+
+#[test]
+fn rejects_invalid_helper_export_policy() {
+    let mut request = WasmBackendRequest::default();
+    request.export_policy.helper_exports = WasmHelperExportPolicy {
+        export_memory: true,
+        export_str_ptr: true,
+        export_str_len: false,
+        export_release: false,
+    };
+
+    let mut string_table = StringTable::new();
+    let (type_context, types) = build_type_context();
+    let start_path = InternedPath::from_single_str("main", &mut string_table);
+    let start_block = HirBlock {
+        id: BlockId(0),
+        region: RegionId(0),
+        locals: vec![],
+        statements: vec![],
+        terminator: HirTerminator::Return(int_expression(1, 0, types.int, RegionId(0))),
+    };
+    let start_function = HirFunction {
+        id: FunctionId(0),
+        entry: BlockId(0),
+        params: vec![],
+        return_type: types.int,
+        return_aliases: vec![],
+    };
+    let hir_module = build_module(
+        &mut string_table,
+        vec![(start_function, start_path, HirFunctionOrigin::EntryStart)],
+        vec![start_block],
+        type_context,
+        FunctionId(0),
+    );
+
+    let error = lower_hir_to_wasm_module(&hir_module, &default_borrow_facts(), &request)
+        .expect_err("invalid helper policy should fail");
+    assert_eq!(error.errors[0].error_type, ErrorType::WasmGeneration);
+    assert!(error.errors[0].msg.contains("bst_str_ptr"));
+}
+
+#[test]
+fn rejects_unsupported_wasm_feature_flags() {
+    let mut request = WasmBackendRequest::default();
+    request.target_features.use_wasm_gc = true;
+
+    let mut string_table = StringTable::new();
+    let (type_context, types) = build_type_context();
+    let start_path = InternedPath::from_single_str("main", &mut string_table);
+    let start_block = HirBlock {
+        id: BlockId(0),
+        region: RegionId(0),
+        locals: vec![],
+        statements: vec![],
+        terminator: HirTerminator::Return(int_expression(1, 0, types.int, RegionId(0))),
+    };
+    let start_function = HirFunction {
+        id: FunctionId(0),
+        entry: BlockId(0),
+        params: vec![],
+        return_type: types.int,
+        return_aliases: vec![],
+    };
+    let hir_module = build_module(
+        &mut string_table,
+        vec![(start_function, start_path, HirFunctionOrigin::EntryStart)],
+        vec![start_block],
+        type_context,
+        FunctionId(0),
+    );
+
+    let error = lower_hir_to_wasm_module(&hir_module, &default_borrow_facts(), &request)
+        .expect_err("unsupported feature toggle should fail");
+    assert_eq!(error.errors[0].error_type, ErrorType::WasmGeneration);
+    assert!(error.errors[0].msg.contains("use_wasm_gc"));
+}
+
+#[test]
+fn rejects_unsupported_cfg_lowering_strategy() {
+    let mut request = WasmBackendRequest::default();
+    request.emit_options.cfg_lowering_strategy = WasmCfgLoweringStrategy::Structured;
+
+    let mut string_table = StringTable::new();
+    let (type_context, types) = build_type_context();
+    let start_path = InternedPath::from_single_str("main", &mut string_table);
+    let start_block = HirBlock {
+        id: BlockId(0),
+        region: RegionId(0),
+        locals: vec![],
+        statements: vec![],
+        terminator: HirTerminator::Return(int_expression(1, 0, types.int, RegionId(0))),
+    };
+    let start_function = HirFunction {
+        id: FunctionId(0),
+        entry: BlockId(0),
+        params: vec![],
+        return_type: types.int,
+        return_aliases: vec![],
+    };
+    let hir_module = build_module(
+        &mut string_table,
+        vec![(start_function, start_path, HirFunctionOrigin::EntryStart)],
+        vec![start_block],
+        type_context,
+        FunctionId(0),
+    );
+
+    let error = lower_hir_to_wasm_module(&hir_module, &default_borrow_facts(), &request)
+        .expect_err("unsupported cfg strategy should fail");
+    assert_eq!(error.errors[0].error_type, ErrorType::WasmGeneration);
+    assert!(error.errors[0].msg.contains("dispatcher-loop"));
+}
+
+#[test]
+fn rejects_non_function_imports_in_phase2_emission() {
+    let mut module = build_manual_lir_module();
+    module.imports.push(WasmImport {
+        id: WasmImportId(99),
+        module_name: "env".to_owned(),
+        item_name: "memory".to_owned(),
+        kind: WasmImportKind::Memory(WasmMemoryImport {
+            min_pages: 1,
+            max_pages: None,
+        }),
+    });
+
+    let error = emit_lir_to_wasm_module(&module, &WasmBackendRequest::default())
+        .expect_err("memory/global imports are out of scope for phase-2");
+    assert_eq!(error.error_type, ErrorType::WasmGeneration);
+    assert!(error.msg.contains("non-function imports"));
+}
+
+#[test]
+fn debug_output_reports_aligned_static_offsets() {
+    let mut module = build_manual_lir_module();
+    module.static_data.push(WasmStaticData {
+        id: WasmStaticDataId(1),
+        debug_name: "manual.literal.b".to_owned(),
+        bytes: b"abc".to_vec(),
+        kind: WasmStaticDataKind::Utf8StringBytes,
+    });
+
+    let mut request = WasmBackendRequest::default();
+    request.emit_options.validate_emitted_module = false;
+    let emit_result = emit_lir_to_wasm_module(&module, &request).expect("emit should succeed");
+    let text = emit_result.debug_outputs.data_layout_text;
+
+    let mut offsets = Vec::new();
+    for line in text.lines() {
+        if let Some(position) = line.find("offset=") {
+            let rest = &line[position + "offset=".len()..];
+            let digits = rest
+                .chars()
+                .take_while(|ch| ch.is_ascii_digit())
+                .collect::<String>();
+            if let Ok(offset) = digits.parse::<u32>() {
+                offsets.push(offset);
+            }
+        }
+    }
+
+    assert!(!offsets.is_empty());
+    assert!(offsets.into_iter().all(|offset| offset % 8 == 0));
+}
+
+fn validate_wasm(bytes: &[u8]) {
+    wasmparser::Validator::new()
+        .validate_all(bytes)
+        .expect("emitted bytes should validate");
+}
+
+fn collect_export_names(bytes: &[u8]) -> Vec<String> {
+    let mut names = Vec::new();
+    for payload in wasmparser::Parser::new(0).parse_all(bytes) {
+        let payload = payload.expect("payload should parse");
+        if let wasmparser::Payload::ExportSection(reader) = payload {
+            for export in reader {
+                let export = export.expect("export should parse");
+                names.push(export.name.to_owned());
+            }
+        }
+    }
+    names
+}
+
+fn collect_section_order(bytes: &[u8]) -> Vec<String> {
+    let mut order = Vec::new();
+    for payload in wasmparser::Parser::new(0).parse_all(bytes) {
+        let payload = payload.expect("payload should parse");
+        match payload {
+            wasmparser::Payload::TypeSection(_) => order.push("type".to_owned()),
+            wasmparser::Payload::ImportSection(_) => order.push("import".to_owned()),
+            wasmparser::Payload::FunctionSection(_) => order.push("function".to_owned()),
+            wasmparser::Payload::MemorySection(_) => order.push("memory".to_owned()),
+            wasmparser::Payload::GlobalSection(_) => order.push("global".to_owned()),
+            wasmparser::Payload::ExportSection(_) => order.push("export".to_owned()),
+            wasmparser::Payload::CodeSectionStart { .. } => order.push("code".to_owned()),
+            wasmparser::Payload::DataSection(_) => order.push("data".to_owned()),
+            _ => {}
+        }
+    }
+    order
+}
+
+fn assert_order(order: &[String], first: &str, second: &str) {
+    let first_index = order
+        .iter()
+        .position(|section| section == first)
+        .expect("first section should exist");
+    let second_index = order
+        .iter()
+        .position(|section| section == second)
+        .expect("second section should exist");
+    assert!(
+        first_index < second_index,
+        "{first} should appear before {second}"
+    );
+}
+
+fn request_with_helper_exports() -> WasmBackendRequest {
+    WasmBackendRequest {
+        export_policy: WasmExportPolicy {
+            exported_functions: vec![],
+            export_names: FxHashMap::default(),
+            helper_exports: WasmHelperExportPolicy {
+                export_memory: true,
+                export_str_ptr: true,
+                export_str_len: true,
+                export_release: true,
+            },
+        },
+        target_features: WasmTargetFeatures::default(),
+        emit_options: WasmEmitOptions {
+            emit_wasm_module: true,
+            validate_emitted_module: false,
+            emit_name_section: false,
+            cfg_lowering_strategy: WasmCfgLoweringStrategy::DispatcherLoop,
+        },
+        debug_flags: WasmDebugFlags {
+            show_wasm_data_layout: true,
+            show_wasm_indices: true,
+            show_wasm_sections: true,
+            show_wasm_validation: true,
+            ..Default::default()
+        },
+    }
+}
+
+fn build_manual_lir_module() -> WasmLirModule {
+    let callee = WasmLirFunction {
+        id: WasmLirFunctionId(0),
+        debug_name: "manual_callee".to_owned(),
+        origin: WasmLirFunctionOrigin::Normal,
+        signature: WasmLirSignature {
+            params: vec![],
+            results: vec![WasmAbiType::I32],
+        },
+        locals: vec![WasmLirLocal {
+            id: WasmLirLocalId(0),
+            name: Some("ret".to_owned()),
+            ty: WasmAbiType::I32,
+            role: WasmLocalRole::Temp,
+        }],
+        blocks: vec![WasmLirBlock {
+            id: WasmLirBlockId(0),
+            statements: vec![WasmLirStmt::ConstI32 {
+                dst: WasmLirLocalId(0),
+                value: 7,
+            }],
+            terminator: WasmLirTerminator::Return {
+                value: Some(WasmLirLocalId(0)),
+            },
+        }],
+        linkage: WasmFunctionLinkage::Internal,
+    };
+
+    let main = WasmLirFunction {
+        id: WasmLirFunctionId(1),
+        debug_name: "manual_main".to_owned(),
+        origin: WasmLirFunctionOrigin::EntryStart,
+        signature: WasmLirSignature {
+            params: vec![],
+            results: vec![],
+        },
+        locals: vec![
+            local(0, WasmAbiType::I32, "i32"),
+            local(1, WasmAbiType::I64, "i64"),
+            local(2, WasmAbiType::F32, "f32"),
+            local(3, WasmAbiType::F64, "f64"),
+            local(4, WasmAbiType::Handle, "buffer_a"),
+            local(5, WasmAbiType::Handle, "string_a"),
+            local(6, WasmAbiType::I32, "static_ptr"),
+            local(7, WasmAbiType::I32, "len"),
+            local(8, WasmAbiType::Handle, "buffer_b"),
+            local(9, WasmAbiType::Handle, "string_b"),
+            local(10, WasmAbiType::I32, "eq"),
+            local(11, WasmAbiType::I32, "ne"),
+            local(12, WasmAbiType::I32, "call_result"),
+        ],
+        blocks: vec![WasmLirBlock {
+            id: WasmLirBlockId(0),
+            statements: vec![
+                WasmLirStmt::ConstI32 {
+                    dst: WasmLirLocalId(0),
+                    value: 1,
+                },
+                WasmLirStmt::ConstI64 {
+                    dst: WasmLirLocalId(1),
+                    value: 2,
+                },
+                WasmLirStmt::ConstF32 {
+                    dst: WasmLirLocalId(2),
+                    value: 3.5,
+                },
+                WasmLirStmt::ConstF64 {
+                    dst: WasmLirLocalId(3),
+                    value: 4.5,
+                },
+                WasmLirStmt::ConstStaticPtr {
+                    dst: WasmLirLocalId(6),
+                    data: WasmStaticDataId(0),
+                },
+                WasmLirStmt::ConstLength {
+                    dst: WasmLirLocalId(7),
+                    value: 1,
+                },
+                WasmLirStmt::Copy {
+                    dst: WasmLirLocalId(10),
+                    src: WasmLirLocalId(0),
+                },
+                WasmLirStmt::Move {
+                    dst: WasmLirLocalId(11),
+                    src: WasmLirLocalId(10),
+                },
+                WasmLirStmt::Call {
+                    dst: Some(WasmLirLocalId(12)),
+                    callee: WasmCalleeRef::Function(WasmLirFunctionId(0)),
+                    args: vec![],
+                },
+                WasmLirStmt::StringNewBuffer {
+                    dst: WasmLirLocalId(4),
+                },
+                WasmLirStmt::StringPushLiteral {
+                    buffer: WasmLirLocalId(4),
+                    data: WasmStaticDataId(0),
+                },
+                WasmLirStmt::StringFinish {
+                    dst: WasmLirLocalId(5),
+                    buffer: WasmLirLocalId(4),
+                },
+                WasmLirStmt::StringNewBuffer {
+                    dst: WasmLirLocalId(8),
+                },
+                WasmLirStmt::StringPushHandle {
+                    buffer: WasmLirLocalId(8),
+                    handle: WasmLirLocalId(5),
+                },
+                WasmLirStmt::StringFinish {
+                    dst: WasmLirLocalId(9),
+                    buffer: WasmLirLocalId(8),
+                },
+                WasmLirStmt::Call {
+                    dst: None,
+                    callee: WasmCalleeRef::Import(WasmImportId(0)),
+                    args: vec![WasmLirLocalId(9)],
+                },
+                WasmLirStmt::DropIfOwned {
+                    value: WasmLirLocalId(9),
+                },
+                WasmLirStmt::IntEq {
+                    dst: WasmLirLocalId(10),
+                    lhs: WasmLirLocalId(0),
+                    rhs: WasmLirLocalId(0),
+                },
+                WasmLirStmt::IntNe {
+                    dst: WasmLirLocalId(11),
+                    lhs: WasmLirLocalId(0),
+                    rhs: WasmLirLocalId(10),
+                },
+            ],
+            terminator: WasmLirTerminator::Return { value: None },
+        }],
+        linkage: WasmFunctionLinkage::ExportedWrapper,
+    };
+
+    WasmLirModule {
+        functions: vec![callee, main],
+        imports: vec![WasmImport {
+            id: WasmImportId(0),
+            module_name: "host".to_owned(),
+            item_name: "log_string".to_owned(),
+            kind: WasmImportKind::Function(WasmLirSignature {
+                params: vec![WasmAbiType::Handle],
+                results: vec![],
+            }),
+        }],
+        exports: vec![WasmExport {
+            export_name: "bst_call_0".to_owned(),
+            kind: WasmExportKind::Function(WasmLirFunctionId(1)),
+        }],
+        static_data: vec![WasmStaticData {
+            id: WasmStaticDataId(0),
+            debug_name: "manual.literal.a".to_owned(),
+            bytes: b"x".to_vec(),
+            kind: WasmStaticDataKind::Utf8StringBytes,
+        }],
+        memory_plan: WasmMemoryPlan::default(),
+    }
+}
+
+fn local(id: u32, ty: WasmAbiType, name: &str) -> WasmLirLocal {
+    WasmLirLocal {
+        id: WasmLirLocalId(id),
+        name: Some(name.to_owned()),
+        ty,
+        role: WasmLocalRole::Temp,
+    }
+}

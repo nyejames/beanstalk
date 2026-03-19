@@ -1,12 +1,13 @@
-//! Wasm backend phase-1 entry points.
+//! Wasm backend entry points.
 //!
-//! This module defines a Wasm-oriented LIR and a HIR -> LIR lowering pipeline.
-//! It intentionally does not emit binary Wasm bytes in this phase.
-//! The API remains crate-internal while phase-1 scaffolding stabilizes.
+//! Phase-1 exposes HIR -> LIR lowering.
+//! Phase-2 adds deterministic LIR -> core Wasm emission.
+//! The API remains crate-internal while backend integration stabilizes.
 #![allow(dead_code)]
 
 pub(crate) mod backend;
 pub(crate) mod debug;
+pub(crate) mod emit;
 pub(crate) mod hir_to_lir;
 pub(crate) mod lir;
 pub(crate) mod request;
@@ -17,10 +18,11 @@ pub(crate) mod runtime;
 mod tests;
 
 #[allow(unused_imports)]
-pub(crate) use backend::lower_hir_to_wasm_lir;
+pub(crate) use backend::{lower_hir_to_wasm_lir, lower_hir_to_wasm_module};
 #[allow(unused_imports)]
 pub(crate) use request::{
-    WasmBackendRequest, WasmDebugFlags, WasmExportPolicy, WasmTargetFeatures,
+    WasmBackendRequest, WasmCfgLoweringStrategy, WasmDebugFlags, WasmEmitOptions, WasmExportPolicy,
+    WasmHelperExportPolicy, WasmTargetFeatures,
 };
 #[allow(unused_imports)]
 pub(crate) use result::{WasmDebugOutputs, WasmLirBackendResult};

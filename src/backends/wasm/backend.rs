@@ -1,12 +1,13 @@
-//! Top-level orchestration for HIR -> Wasm LIR lowering.
+//! Top-level orchestration for HIR -> LIR and optional LIR -> Wasm emission.
 
 use crate::backends::wasm::debug::build_debug_outputs;
+use crate::backends::wasm::emit::module::emit_lir_to_wasm_module;
 use crate::backends::wasm::hir_to_lir::module::lower_hir_module_to_lir;
-use crate::backends::wasm::request::WasmBackendRequest;
+use crate::backends::wasm::request::{WasmBackendRequest, WasmCfgLoweringStrategy};
 use crate::backends::wasm::result::WasmLirBackendResult;
 use crate::compiler_frontend::analysis::borrow_checker::BorrowFacts;
 use crate::compiler_frontend::compiler_messages::compiler_errors::{
-    CompilerError, CompilerMessages,
+    CompilerError, CompilerMessages, ErrorType,
 };
 use crate::compiler_frontend::hir::hir_nodes::{FunctionId, HirModule};
 use std::collections::HashSet;
@@ -28,17 +29,51 @@ pub(crate) fn lower_hir_to_wasm_lir(
 
     Ok(WasmLirBackendResult {
         lir_module,
+        wasm_bytes: None,
         debug_outputs,
     })
+}
+
+pub(crate) fn lower_hir_to_wasm_module(
+    hir_module: &HirModule,
+    borrow_facts: &BorrowFacts,
+    request: &WasmBackendRequest,
+) -> Result<WasmLirBackendResult, CompilerMessages> {
+    // WHAT: preserve the existing phase-1 lowering entry and layer emission on top.
+    // WHY: this keeps debug and diagnostics workflows stable while phase-2 expands output.
+    let mut result = lower_hir_to_wasm_lir(hir_module, borrow_facts, request)?;
+    if !request.emit_options.emit_wasm_module {
+        return Ok(result);
+    }
+
+    // WHAT: perform pure Wasm encoding from already-lowered LIR.
+    // WHY: emitter must stay backend-encoding focused and avoid reinterpreting frontend semantics.
+    let emit_result = emit_lir_to_wasm_module(&result.lir_module, request).map_err(single_error)?;
+    result.wasm_bytes = Some(emit_result.wasm_bytes);
+
+    if request.debug_flags.show_wasm_sections {
+        result.debug_outputs.wasm_sections_text = Some(emit_result.debug_outputs.sections_text);
+    }
+    if request.debug_flags.show_wasm_indices {
+        result.debug_outputs.wasm_indices_text = Some(emit_result.debug_outputs.indices_text);
+    }
+    if request.debug_flags.show_wasm_data_layout {
+        result.debug_outputs.wasm_data_layout_text =
+            Some(emit_result.debug_outputs.data_layout_text);
+    }
+    if request.debug_flags.show_wasm_validation {
+        result.debug_outputs.wasm_validation_text = emit_result.debug_outputs.validation_text;
+    }
+
+    Ok(result)
 }
 
 fn validate_request(
     hir_module: &HirModule,
     request: &WasmBackendRequest,
 ) -> Result<(), CompilerError> {
-    // Phase-1 note:
-    // This is strict by design even before Wasm emission exists. It prevents
-    // builder drift and makes export policy failures obvious immediately.
+    // WHAT: reject request/contract issues before any lowering or emission work.
+    // WHY: this guarantees deterministic diagnostics and prevents partial outputs.
     let mut seen = HashSet::new();
     let mut export_name_set = HashSet::new();
 
@@ -57,19 +92,13 @@ fn validate_request(
             )));
         }
 
-        if !request.export_policy.export_names.contains_key(function_id) {
+        let Some(export_name) = request.export_policy.export_names.get(function_id) else {
             return Err(CompilerError::lir_transformation(format!(
                 "Wasm backend request missing stable export name for {:?}",
                 function_id
             )));
-        }
-
-        let export_name = request
-            .export_policy
-            .export_names
-            .get(function_id)
-            .expect("checked contains_key above");
-        if !export_name_set.insert(export_name.clone()) {
+        };
+        if !export_name_set.insert(export_name.to_owned()) {
             return Err(CompilerError::lir_transformation(format!(
                 "Wasm backend request contains duplicate export name '{}'",
                 export_name
@@ -100,6 +129,10 @@ fn validate_request(
         }
     }
 
+    validate_feature_flags(request)?;
+    validate_emit_options(request)?;
+    validate_helper_export_policy(&mut export_name_set, request)?;
+
     Ok(())
 }
 
@@ -115,4 +148,99 @@ fn single_error(error: CompilerError) -> CompilerMessages {
         errors: vec![error],
         warnings: Vec::new(),
     }
+}
+
+fn validate_feature_flags(request: &WasmBackendRequest) -> Result<(), CompilerError> {
+    // WHAT: phase-gate feature toggles that would require a different emitter/runtime model.
+    // WHY: rejecting incompatible toggles early keeps backend behavior explicit and predictable.
+    if request.target_features.use_wasm_gc {
+        return Err(CompilerError::compiler_error(
+            "Wasm backend request enables use_wasm_gc, but phase-2 emits core linear-memory Wasm only",
+        )
+        .with_error_type(ErrorType::WasmGeneration));
+    }
+
+    if request.target_features.enable_multi_value {
+        return Err(CompilerError::compiler_error(
+            "Wasm backend request enables multi-value, but phase-2 ABI supports single-result only",
+        )
+        .with_error_type(ErrorType::WasmGeneration));
+    }
+
+    if request.target_features.enable_reference_types {
+        return Err(CompilerError::compiler_error(
+            "Wasm backend request enables reference types, but phase-2 targets core value types only",
+        )
+        .with_error_type(ErrorType::WasmGeneration));
+    }
+
+    if request.target_features.enable_bulk_memory {
+        return Err(CompilerError::compiler_error(
+            "Wasm backend request enables bulk memory, but phase-2 does not require bulk-memory instructions",
+        )
+        .with_error_type(ErrorType::WasmGeneration));
+    }
+
+    Ok(())
+}
+
+fn validate_emit_options(request: &WasmBackendRequest) -> Result<(), CompilerError> {
+    if matches!(
+        request.emit_options.cfg_lowering_strategy,
+        WasmCfgLoweringStrategy::Structured
+    ) {
+        return Err(CompilerError::compiler_error(
+            "Wasm backend request selected structured CFG lowering, but phase-2 currently implements dispatcher-loop CFG lowering only",
+        )
+        .with_error_type(ErrorType::WasmGeneration));
+    }
+
+    Ok(())
+}
+
+fn validate_helper_export_policy(
+    export_name_set: &mut HashSet<String>,
+    request: &WasmBackendRequest,
+) -> Result<(), CompilerError> {
+    // WHAT: enforce helper-export contract invariants required by phase-3 HTML/Wasm glue.
+    // WHY: keeping names/combinations strict here avoids backend-side guessing later.
+    let helpers = &request.export_policy.helper_exports;
+
+    if helpers.export_str_ptr != helpers.export_str_len {
+        return Err(CompilerError::compiler_error(
+            "Wasm helper exports must request both bst_str_ptr and bst_str_len together",
+        )
+        .with_error_type(ErrorType::WasmGeneration));
+    }
+
+    if (helpers.export_str_ptr || helpers.export_str_len) && !helpers.export_memory {
+        return Err(CompilerError::compiler_error(
+            "Wasm helper exports requesting string pointer/length must also export memory",
+        )
+        .with_error_type(ErrorType::WasmGeneration));
+    }
+
+    let mut add_reserved_export =
+        |enabled: bool, name: &'static str| -> Result<(), CompilerError> {
+            if !enabled {
+                return Ok(());
+            }
+
+            if !export_name_set.insert(name.to_owned()) {
+                return Err(CompilerError::compiler_error(format!(
+                    "Wasm helper export '{}' collides with an existing function export name",
+                    name
+                ))
+                .with_error_type(ErrorType::WasmGeneration));
+            }
+
+            Ok(())
+        };
+
+    add_reserved_export(helpers.export_memory, "memory")?;
+    add_reserved_export(helpers.export_str_ptr, "bst_str_ptr")?;
+    add_reserved_export(helpers.export_str_len, "bst_str_len")?;
+    add_reserved_export(helpers.export_release, "bst_release")?;
+
+    Ok(())
 }

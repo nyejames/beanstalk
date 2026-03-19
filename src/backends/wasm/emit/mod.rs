@@ -1,0 +1,34 @@
+//! LIR -> Wasm emission subsystem.
+//!
+//! This layer owns binary encoding only. It does not reinterpret frontend semantics.
+
+pub(crate) mod data;
+pub(crate) mod exports;
+pub(crate) mod functions;
+pub(crate) mod imports;
+pub(crate) mod instructions;
+pub(crate) mod module;
+pub(crate) mod names;
+pub(crate) mod sections;
+pub(crate) mod types;
+pub(crate) mod validate;
+
+#[derive(Debug, Clone, Default)]
+pub(crate) struct WasmEmitDebugOutputs {
+    /// Canonical section ordering/count summary.
+    pub sections_text: String,
+    /// Deterministic type/function/global/data index map summary.
+    pub indices_text: String,
+    /// Static-data placement and heap-base summary.
+    pub data_layout_text: String,
+    /// Validator output when in-process validation is enabled.
+    pub validation_text: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct WasmEmitResult {
+    /// Final `.wasm` bytes ready for host/runtime consumption.
+    pub wasm_bytes: Vec<u8>,
+    /// Text diagnostics controlled by backend debug flags.
+    pub debug_outputs: WasmEmitDebugOutputs,
+}
