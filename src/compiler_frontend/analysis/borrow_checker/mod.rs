@@ -10,7 +10,12 @@ mod transfer;
 mod types;
 
 #[allow(unused_imports)]
-pub(crate) use types::{BorrowAnalysis, BorrowCheckReport, BorrowCheckStats, LocalMode};
+pub(crate) use types::{
+    BorrowAnalysis, BorrowCheckReport, BorrowCheckStats, BorrowDropSite, BorrowDropSiteKind,
+    LocalMode,
+};
+#[allow(dead_code)]
+pub(crate) type BorrowFacts = BorrowAnalysis;
 
 use crate::borrow_log;
 use crate::compiler_frontend::analysis::borrow_checker::diagnostics::BorrowDiagnostics;
@@ -633,6 +638,8 @@ impl<'a> BorrowChecker<'a> {
             }
         }
 
+        self.record_advisory_drop_sites(function, &reachable_blocks, &layout, &out_states, report)?;
+
         report
             .analysis
             .function_summaries
@@ -771,6 +778,123 @@ impl<'a> BorrowChecker<'a> {
             may_use_from_block,
             must_use_from_block,
         }))
+    }
+
+    fn record_advisory_drop_sites(
+        &self,
+        function: &HirFunction,
+        reachable_blocks: &[BlockId],
+        layout: &FunctionLayout,
+        out_states: &FxHashMap<BlockId, BorrowState>,
+        report: &mut BorrowCheckReport,
+    ) -> Result<(), CompilerError> {
+        for block_id in reachable_blocks {
+            let Some(exit_state) = out_states.get(block_id) else {
+                continue;
+            };
+
+            let candidate_locals = self.drop_candidate_locals_from_state(exit_state, layout);
+            if candidate_locals.is_empty() {
+                continue;
+            }
+
+            let block = self.block_by_id_or_error(*block_id, function.id)?;
+            let mut block_sites = Vec::new();
+
+            match &block.terminator {
+                HirTerminator::Return(_) => {
+                    block_sites.push(BorrowDropSite {
+                        kind: BorrowDropSiteKind::Return,
+                        locals: candidate_locals.clone(),
+                    });
+                }
+                HirTerminator::Break { .. } => {
+                    block_sites.push(BorrowDropSite {
+                        kind: BorrowDropSiteKind::Break,
+                        locals: candidate_locals.clone(),
+                    });
+                }
+                _ => {}
+            }
+
+            if self.block_has_region_exit_edge(block.id, block.region, function.id)? {
+                block_sites.push(BorrowDropSite {
+                    kind: BorrowDropSiteKind::BlockExit,
+                    locals: candidate_locals,
+                });
+            }
+
+            if block_sites.is_empty() {
+                continue;
+            }
+
+            report
+                .analysis
+                .advisory_drop_sites
+                .entry(*block_id)
+                .or_default()
+                .extend(block_sites);
+        }
+
+        for sites in report.analysis.advisory_drop_sites.values_mut() {
+            sites.sort_by_key(|site| match site.kind {
+                BorrowDropSiteKind::BlockExit => 0u8,
+                BorrowDropSiteKind::Return => 1u8,
+                BorrowDropSiteKind::Break => 2u8,
+            });
+        }
+
+        Ok(())
+    }
+
+    fn drop_candidate_locals_from_state(
+        &self,
+        state: &BorrowState,
+        layout: &FunctionLayout,
+    ) -> Vec<LocalId> {
+        let mut locals = Vec::new();
+
+        for (index, local_id) in layout.local_ids.iter().enumerate() {
+            let local_state = state.local_state(index);
+            if local_state.mode.contains(LocalMode::SLOT) {
+                locals.push(*local_id);
+            }
+        }
+
+        locals.sort_by_key(|local| local.0);
+        locals.dedup_by_key(|local| local.0);
+        locals
+    }
+
+    fn block_has_region_exit_edge(
+        &self,
+        block_id: BlockId,
+        block_region: RegionId,
+        function_id: FunctionId,
+    ) -> Result<bool, CompilerError> {
+        let block = self.block_by_id_or_error(block_id, function_id)?;
+
+        for successor in successors(&block.terminator) {
+            let successor_block = self.block_by_id_or_error(successor, function_id)?;
+            if !self.is_same_or_descendant_region(successor_block.region, block_region) {
+                return Ok(true);
+            }
+        }
+
+        Ok(false)
+    }
+
+    fn is_same_or_descendant_region(&self, region: RegionId, ancestor: RegionId) -> bool {
+        let mut current = Some(region);
+        while let Some(region_id) = current {
+            if region_id == ancestor {
+                return true;
+            }
+
+            current = self.region_parent_by_id.get(&region_id).copied().flatten();
+        }
+
+        false
     }
 
     fn build_visibility_masks(

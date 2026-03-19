@@ -10,8 +10,9 @@ use crate::compiler_frontend::hir::hir_datatypes::{HirTypeKind, TypeId};
 use crate::compiler_frontend::hir::hir_display::HirLocation;
 use crate::compiler_frontend::hir::hir_nodes::{
     BlockId, FieldId, FunctionId, HirConstValue, HirDocFragmentKind, HirExpression,
-    HirExpressionKind, HirMatchArm, HirModule, HirPattern, HirPlace, HirStatement,
-    HirStatementKind, HirTerminator, LocalId, RegionId, StartFragment, StructId, ValueKind,
+    HirExpressionKind, HirFunctionOrigin, HirMatchArm, HirModule, HirPattern, HirPlace,
+    HirStatement, HirStatementKind, HirTerminator, LocalId, RegionId, StartFragment, StructId,
+    ValueKind,
 };
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::TextLocation;
@@ -65,6 +66,7 @@ impl<'a> HirValidator<'a> {
         self.collect_definition_ids()?;
         self.validate_region_graph()?;
         self.validate_start_function()?;
+        self.validate_function_origins()?;
         self.validate_start_fragments()?;
         self.validate_doc_fragments()?;
         self.validate_module_constants()?;
@@ -189,6 +191,64 @@ impl<'a> HirValidator<'a> {
                 ),
                 Some(HirLocation::Function(self.module.start_function)),
             ));
+        }
+
+        Ok(())
+    }
+
+    fn validate_function_origins(&self) -> Result<(), CompilerError> {
+        // WHAT: enforce complete and consistent function-origin coverage.
+        // WHY: backends rely on this map to preserve entry/runtime semantics.
+        if self.module.function_origins.len() != self.module.functions.len() {
+            return Err(self.error_with_hir(
+                format!(
+                    "HIR function_origins contains {} entries, but module has {} functions",
+                    self.module.function_origins.len(),
+                    self.module.functions.len()
+                ),
+                None,
+            ));
+        }
+
+        for function in &self.module.functions {
+            if !self.module.function_origins.contains_key(&function.id) {
+                return Err(self.error_with_hir(
+                    format!("HIR function {:?} is missing an origin entry", function.id),
+                    Some(HirLocation::Function(function.id)),
+                ));
+            }
+        }
+
+        if !matches!(
+            self.module
+                .function_origins
+                .get(&self.module.start_function),
+            Some(HirFunctionOrigin::EntryStart)
+        ) {
+            return Err(self.error_with_hir(
+                format!(
+                    "HIR start function {:?} must be tagged as EntryStart",
+                    self.module.start_function
+                ),
+                Some(HirLocation::Function(self.module.start_function)),
+            ));
+        }
+
+        for fragment in &self.module.start_fragments {
+            if let StartFragment::RuntimeStringFn(function_id) = fragment
+                && !matches!(
+                    self.module.function_origins.get(function_id),
+                    Some(HirFunctionOrigin::RuntimeTemplate)
+                )
+            {
+                return Err(self.error_with_hir(
+                    format!(
+                        "Runtime start fragment function {:?} must be tagged as RuntimeTemplate",
+                        function_id
+                    ),
+                    Some(HirLocation::Function(*function_id)),
+                ));
+            }
         }
 
         Ok(())

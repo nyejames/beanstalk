@@ -10,8 +10,7 @@ mod compiler_frontend;
 
 mod backends {
     pub(crate) mod js;
-    // pub mod lir;
-    // pub(crate) mod wasm;
+    pub(crate) mod wasm;
 }
 
 pub mod projects {

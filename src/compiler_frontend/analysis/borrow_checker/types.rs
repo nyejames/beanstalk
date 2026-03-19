@@ -11,6 +11,12 @@ pub(crate) struct BorrowCheckReport {
     pub stats: BorrowCheckStats,
 }
 
+impl BorrowCheckReport {
+    pub(crate) fn borrow_facts(&self) -> &BorrowAnalysis {
+        &self.analysis
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 pub(crate) struct BorrowAnalysis {
     pub function_summaries: FxHashMap<FunctionId, FunctionBorrowSummary>,
@@ -20,6 +26,11 @@ pub(crate) struct BorrowAnalysis {
     pub statement_facts: FxHashMap<HirNodeId, StatementBorrowFact>,
     pub terminator_facts: FxHashMap<BlockId, TerminatorBorrowFact>,
     pub value_facts: FxHashMap<HirValueId, ValueBorrowFact>,
+    /// Advisory drop insertion points for later lowering stages.
+    ///
+    /// WHY: borrow checking must not mutate HIR, but lowering still needs
+    /// deterministic drop-site guidance for ownership-aware optimizations.
+    pub advisory_drop_sites: FxHashMap<BlockId, Vec<BorrowDropSite>>,
 }
 
 impl BorrowAnalysis {
@@ -39,6 +50,11 @@ impl BorrowAnalysis {
 
     pub(crate) fn value_fact(&self, id: HirValueId) -> Option<&ValueBorrowFact> {
         self.value_facts.get(&id)
+    }
+
+    pub(crate) fn drop_sites_for_block(&self, block: BlockId) -> Option<&[BorrowDropSite]> {
+        // Exposed as a read-only view so downstream phases cannot mutate facts.
+        self.advisory_drop_sites.get(&block).map(Vec::as_slice)
     }
 }
 
@@ -166,4 +182,22 @@ impl LocalMode {
 pub(crate) enum AccessKind {
     Shared,
     Mutable,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) enum BorrowDropSiteKind {
+    /// Edge leaves current lexical region scope.
+    BlockExit,
+    /// Function return path.
+    Return,
+    /// Loop break path.
+    Break,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct BorrowDropSite {
+    /// Control-flow reason this site exists.
+    pub kind: BorrowDropSiteKind,
+    /// Candidate locals sorted by local id for deterministic lowering.
+    pub locals: Vec<LocalId>,
 }

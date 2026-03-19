@@ -25,6 +25,7 @@ use crate::compiler_frontend::hir::hir_validation::validate_hir_module;
 use crate::compiler_frontend::hir::{hir_datatypes::*, hir_nodes::*};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
+use crate::projects::settings::IMPLICIT_START_FUNC_NAME;
 use crate::return_hir_transformation_error;
 use rustc_hash::{FxHashMap, FxHashSet};
 
@@ -198,6 +199,13 @@ impl<'a> HirBuilder<'a> {
             }
         }
 
+        if let Err(error) = self.assign_function_origins() {
+            return Err(CompilerMessages {
+                errors: vec![error],
+                warnings: self.module.warnings.clone(),
+            });
+        }
+
         self.module.type_context = self.type_context;
         self.module.side_table = self.side_table;
 
@@ -209,6 +217,66 @@ impl<'a> HirBuilder<'a> {
         }
 
         Ok(self.module)
+    }
+
+    fn assign_function_origins(&mut self) -> Result<(), CompilerError> {
+        // WHAT: classify every lowered function with a semantic origin tag.
+        // WHY: downstream lowering needs explicit role data to avoid heuristic drift.
+        self.module.function_origins.clear();
+
+        // Default all functions to user-defined; override specific categories below.
+        for function in &self.module.functions {
+            self.module
+                .function_origins
+                .insert(function.id, HirFunctionOrigin::Normal);
+        }
+
+        self.module
+            .function_origins
+            .insert(self.module.start_function, HirFunctionOrigin::EntryStart);
+
+        // Runtime template fragment functions come from ordered start fragments.
+        for fragment in &self.module.start_fragments {
+            if let StartFragment::RuntimeStringFn(function_id) = fragment {
+                self.module
+                    .function_origins
+                    .insert(*function_id, HirFunctionOrigin::RuntimeTemplate);
+            }
+        }
+
+        for function in &self.module.functions {
+            let Some(function_path) = self.side_table.function_name_path(function.id) else {
+                return_hir_transformation_error!(
+                    format!(
+                        "Missing function symbol path for {:?} while assigning function origins",
+                        function.id
+                    ),
+                    TextLocation::default().to_error_location(self.string_table)
+                );
+            };
+
+            let is_implicit_start = function_path
+                .name_str(self.string_table)
+                .map(|name| name == IMPLICIT_START_FUNC_NAME)
+                .unwrap_or(false);
+            if !is_implicit_start {
+                continue;
+            }
+
+            if matches!(
+                self.module.function_origins.get(&function.id),
+                Some(HirFunctionOrigin::EntryStart | HirFunctionOrigin::RuntimeTemplate)
+            ) {
+                continue;
+            }
+
+            // Remaining implicit-start functions belong to imported files.
+            self.module
+                .function_origins
+                .insert(function.id, HirFunctionOrigin::FileStart);
+        }
+
+        Ok(())
     }
 
     fn resolve_start_fragments(&mut self, ast: &Ast) -> Result<(), CompilerError> {

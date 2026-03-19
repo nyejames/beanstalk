@@ -1,3 +1,4 @@
 mod hir_expression_lowering_tests;
+mod hir_function_origin_tests;
 mod hir_statement_lowering_tests;
 mod hir_validation_tests;

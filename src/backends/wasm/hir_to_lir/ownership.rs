@@ -1,0 +1,67 @@
+//! Ownership-scaffolding lowering helpers.
+
+use crate::backends::wasm::hir_to_lir::context::WasmFunctionLoweringContext;
+use crate::backends::wasm::lir::instructions::WasmLirStmt;
+use crate::backends::wasm::lir::types::WasmAbiType;
+use crate::compiler_frontend::analysis::borrow_checker::BorrowDropSiteKind;
+use crate::compiler_frontend::hir::hir_nodes::BlockId;
+use std::collections::BTreeSet;
+
+pub(crate) fn insert_advisory_drops(
+    context: &WasmFunctionLoweringContext<'_, '_>,
+    block_id: BlockId,
+    statements: &mut Vec<WasmLirStmt>,
+) {
+    // WHAT: project borrow checker advisory sites into concrete `DropIfOwned` statements.
+    // WHY: phase-1 keeps GC-first correctness while preserving ownership-optimization hooks.
+    //
+    // Phase-1 note:
+    // this is intentionally conservative and handle-only.
+    let Some(drop_sites) = context
+        .module_context
+        .borrow_facts
+        .drop_sites_for_block(block_id)
+    else {
+        return;
+    };
+
+    let mut emitted_locals = BTreeSet::new();
+
+    for drop_site in drop_sites {
+        if !matches!(
+            drop_site.kind,
+            BorrowDropSiteKind::BlockExit | BorrowDropSiteKind::Return | BorrowDropSiteKind::Break
+        ) {
+            continue;
+        }
+
+        for local_id in &drop_site.locals {
+            let Some(lir_local_id) = context.local_map.get(local_id).copied() else {
+                continue;
+            };
+            if !is_handle_local(context, lir_local_id) {
+                continue;
+            }
+            if !emitted_locals.insert(lir_local_id.0) {
+                continue;
+            }
+
+            statements.push(WasmLirStmt::DropIfOwned {
+                value: lir_local_id,
+            });
+        }
+    }
+}
+
+fn is_handle_local(
+    context: &WasmFunctionLoweringContext<'_, '_>,
+    local_id: crate::backends::wasm::lir::types::WasmLirLocalId,
+) -> bool {
+    context
+        .lir_function
+        .locals
+        .iter()
+        .find(|local| local.id == local_id)
+        .map(|local| matches!(local.ty, WasmAbiType::Handle))
+        .unwrap_or(false)
+}

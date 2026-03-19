@@ -92,6 +92,18 @@ pub enum StartFragment {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum HirFunctionOrigin {
+    /// Regular user-declared function.
+    Normal,
+    /// Implicit start function for the module entry file.
+    EntryStart,
+    /// Implicit start function for non-entry imported file.
+    FileStart,
+    /// Runtime template fragment function synthesized from top-level templates.
+    RuntimeTemplate,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum HirDocFragmentKind {
     Doc,
 }
@@ -142,6 +154,11 @@ pub struct HirModule {
 
     /// Entry point for execution.
     pub start_function: FunctionId,
+    /// Classification for every function in the module.
+    ///
+    /// WHY: backends/builders need explicit semantic role tagging to keep
+    /// entry/runtime-template behavior stable across lowering passes.
+    pub function_origins: rustc_hash::FxHashMap<FunctionId, HirFunctionOrigin>,
 
     /// Ordered start-fragment stream consumed by project builders.
     pub start_fragments: Vec<StartFragment>,
@@ -165,6 +182,7 @@ impl HirModule {
             type_context: TypeContext::default(),
             side_table: HirSideTable::default(),
             start_function: FunctionId(0),
+            function_origins: rustc_hash::FxHashMap::default(),
             start_fragments: vec![],
             const_string_pool: vec![],
             doc_fragments: vec![],
