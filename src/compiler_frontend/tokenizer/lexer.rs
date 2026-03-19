@@ -74,6 +74,9 @@ pub fn get_token_kind(
             TemplateBodyMode::DiscardBalanced => {
                 return tokenize_discard_template_body(current_char, stream);
             }
+            TemplateBodyMode::HtmlHybrid => {
+                return tokenize_html_template_body(current_char, stream, string_table);
+            }
             TemplateBodyMode::Normal => {
                 if current_char != ']' && current_char != '[' {
                     return tokenize_template_body(current_char, stream, string_table);
@@ -823,6 +826,100 @@ fn tokenize_template_body(
 
     let interned_string = string_table.intern(&token_value);
     return_token!(TokenKind::StringSliceLiteral(interned_string), stream);
+}
+
+fn tokenize_html_template_body(
+    current_char: char,
+    stream: &mut TokenStream<'_>,
+    string_table: &mut StringTable,
+) -> Result<Token, CompilerError> {
+    if current_char == '['
+        && html_body_bracket_starts_nested_template(
+            stream,
+            peek_next_non_whitespace_char(stream, 0),
+        )
+    {
+        stream.push_template_mode(TokenizeMode::TemplateHead);
+        return_token!(TokenKind::TemplateHead, stream);
+    }
+
+    if current_char == ']' && html_body_bracket_closes_template(stream) {
+        stream.pop_template_mode();
+        return_token!(TokenKind::TemplateClose, stream);
+    }
+
+    let mut token_value = String::new();
+    append_html_template_body_char(current_char, &mut token_value, stream);
+
+    while let Some(&ch) = stream.peek() {
+        if ch == '['
+            && html_body_bracket_starts_nested_template(
+                stream,
+                peek_next_non_whitespace_char(stream, 1),
+            )
+        {
+            break;
+        }
+
+        if ch == ']' && html_body_bracket_closes_template(stream) {
+            break;
+        }
+
+        token_value.push(
+            stream
+                .next()
+                .expect("html template body tokenization should only consume available chars"),
+        );
+        stream.register_template_body_quote_char(ch);
+    }
+
+    let interned_string = string_table.intern(&token_value);
+    return_token!(TokenKind::StringSliceLiteral(interned_string), stream);
+}
+
+fn peek_next_non_whitespace_char(stream: &TokenStream<'_>, mut offset: usize) -> Option<char> {
+    loop {
+        let next_char = stream.peek_nth_char(offset)?;
+        if next_char.is_whitespace() {
+            offset = offset.saturating_add(1);
+            continue;
+        }
+        return Some(next_char);
+    }
+}
+
+fn html_body_bracket_starts_nested_template(
+    stream: &TokenStream<'_>,
+    next_non_whitespace: Option<char>,
+) -> bool {
+    let Some(next_char) = next_non_whitespace else {
+        return false;
+    };
+
+    if matches!(next_char, '$' | ':') {
+        return true;
+    }
+
+    // `$html` body mode keeps bracket lists in quoted text literal, but still allows
+    // regular wrapper/reference templates in normal body text.
+    if stream.is_inside_template_body_quotes() {
+        return false;
+    }
+
+    next_char.is_alphabetic() || next_char == '_'
+}
+
+fn html_body_bracket_closes_template(stream: &TokenStream<'_>) -> bool {
+    !stream.is_inside_template_body_quotes()
+}
+
+fn append_html_template_body_char(
+    ch: char,
+    token_value: &mut String,
+    stream: &mut TokenStream<'_>,
+) {
+    token_value.push(ch);
+    stream.register_template_body_quote_char(ch);
 }
 
 fn tokenize_code_template_body(

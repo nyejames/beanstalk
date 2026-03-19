@@ -64,6 +64,7 @@ pub struct SlotPlaceholder {
 }
 
 impl SlotPlaceholder {
+    #[allow(dead_code)] // Used only in tests
     pub fn new(key: SlotKey) -> Self {
         Self {
             key,
@@ -96,7 +97,7 @@ pub struct TemplateContent {
 }
 
 impl TemplateContent {
-    #[allow(dead_code)]
+    #[allow(dead_code)] // todo
     pub fn new(content: Vec<Expression>) -> TemplateContent {
         TemplateContent {
             atoms: content
@@ -126,12 +127,6 @@ impl TemplateContent {
     pub fn add_with_origin(&mut self, content: Expression, origin: TemplateSegmentOrigin) {
         self.atoms
             .push(TemplateAtom::Content(TemplateSegment::new(content, origin)));
-    }
-
-    #[allow(dead_code)] // Used only in tests
-    pub fn push_slot(&mut self, key: SlotKey) {
-        self.atoms
-            .push(TemplateAtom::Slot(SlotPlaceholder::new(key)));
     }
 
     pub fn push_slot_with_child_wrappers(
@@ -283,7 +278,7 @@ impl std::fmt::Debug for dyn TemplateFormatter {
 }
 
 #[derive(Clone, Debug)]
-#[allow(dead_code)]
+#[allow(dead_code)] // todo
 pub struct Formatter {
     pub id: &'static str,
 
@@ -344,7 +339,7 @@ impl Style {
 // A trait for how the content of a template should be parsed
 // This is used for Markdown, codeblocks, comments
 // THESE ARE ORDERED BY PRECEDENCE (LOWEST TO HIGHEST)
-#[allow(dead_code)] // Will be used by frontend template system
+#[allow(dead_code)] // todo
 #[derive(Clone, Debug, PartialEq, PartialOrd, Eq, Ord)]
 pub enum StyleFormat {
     Markdown = 0,
@@ -357,7 +352,7 @@ pub enum StyleFormat {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-#[allow(dead_code)]
+#[allow(dead_code)] // todo
 pub enum TemplateControlFlow {
     None,
     If,

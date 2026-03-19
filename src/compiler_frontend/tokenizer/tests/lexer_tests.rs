@@ -350,6 +350,69 @@ fn html_template_body_keeps_attribute_brackets_as_literal_text() {
 }
 
 #[test]
+fn html_template_body_tokenizes_slot_templates_inside_quoted_attributes() {
+    let (file_tokens, string_table) =
+        tokenize_source("[$html:\n<h1 style=\"font-size: 2em;[$slot(\"style\")]\">[$slot]</h1>\n]");
+
+    let template_heads = file_tokens
+        .tokens
+        .iter()
+        .filter(|token| matches!(token.kind, TokenKind::TemplateHead))
+        .count();
+    let template_closes = file_tokens
+        .tokens
+        .iter()
+        .filter(|token| matches!(token.kind, TokenKind::TemplateClose))
+        .count();
+
+    assert_eq!(
+        template_heads, 3,
+        "html bodies should still open nested templates for explicit slot directives"
+    );
+    assert_eq!(template_closes, 3);
+
+    let slot_directives = file_tokens
+        .tokens
+        .iter()
+        .filter(|token| {
+            matches!(token.kind, TokenKind::StyleDirective(id) if string_table.resolve(id) == "slot")
+        })
+        .count();
+    assert_eq!(slot_directives, 2);
+}
+
+#[test]
+fn html_template_body_tokenizes_symbol_wrappers_outside_quotes() {
+    let (file_tokens, string_table) = tokenize_source("[$html:\n[title, center: LANGUAGE BASICS]\n]");
+
+    let template_heads = file_tokens
+        .tokens
+        .iter()
+        .filter(|token| matches!(token.kind, TokenKind::TemplateHead))
+        .count();
+    let template_closes = file_tokens
+        .tokens
+        .iter()
+        .filter(|token| matches!(token.kind, TokenKind::TemplateClose))
+        .count();
+
+    assert_eq!(
+        template_heads, 2,
+        "html bodies should open nested wrappers when symbolic template syntax is used in body text"
+    );
+    assert_eq!(template_closes, 2);
+
+    assert!(file_tokens
+        .tokens
+        .iter()
+        .any(|token| matches!(token.kind, TokenKind::Symbol(id) if string_table.resolve(id) == "title")));
+    assert!(file_tokens
+        .tokens
+        .iter()
+        .any(|token| matches!(token.kind, TokenKind::Symbol(id) if string_table.resolve(id) == "center")));
+}
+
+#[test]
 fn custom_balanced_directive_uses_general_balanced_mode() {
     let directives = vec![StyleDirectiveSpec::new(
         "highlight",

@@ -41,7 +41,7 @@ impl FunctionReturn {
         }
     }
 
-    #[allow(dead_code)]
+    #[allow(dead_code)] // todo
     pub fn is_alias(&self) -> bool {
         matches!(self, FunctionReturn::AliasCandidates { .. })
     }
@@ -631,7 +631,7 @@ pub fn create_function_call_arguments(
 
 /// Coerce an expression to a string at compile time if possible
 /// This handles compile-time constant folding for CoerceToString parameters
-#[allow(dead_code)]
+#[allow(dead_code)] // todo
 fn coerce_to_string_at_compile_time(
     expr: &Expression,
     string_table: &mut StringTable,

@@ -9,8 +9,10 @@ pub(crate) enum WasmFunctionLinkage {
     /// Synthetic exported wrapper function.
     ExportedWrapper,
     /// Reserved runtime helper linkage (phase-2+).
+    #[allow(dead_code)] // todo
     RuntimeHelper,
     /// Imported host function thunk/placeholder.
+    #[allow(dead_code)] // todo
     ImportedHost,
 }
 
@@ -27,8 +29,10 @@ pub(crate) enum WasmImportKind {
     /// Function import with explicit signature.
     Function(WasmLirSignature),
     /// Reserved for future memory imports.
+    #[allow(dead_code)] // todo
     Memory(WasmMemoryImport),
     /// Reserved for future global imports.
+    #[allow(dead_code)] // todo
     Global(WasmGlobalImport),
 }
 
@@ -54,5 +58,6 @@ pub(crate) enum WasmExportKind {
     /// Exported function symbol.
     Function(WasmLirFunctionId),
     /// Reserved for memory export integration.
+    #[allow(dead_code)] // todo
     Memory,
 }

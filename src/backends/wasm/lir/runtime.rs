@@ -6,6 +6,7 @@
 
 use crate::backends::wasm::runtime::memory::{HeapBaseStrategy, WasmMemoryPlan};
 
+#[allow(dead_code)] // todo
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct WasmRuntimeLayoutSummary {
     pub memory_plan: WasmMemoryPlan,

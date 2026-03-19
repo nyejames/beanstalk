@@ -271,20 +271,6 @@ impl<'a> HirBuilder<'a> {
         Ok(lowered)
     }
 
-    #[allow(dead_code)]
-    pub(crate) fn lower_expression_and_emit(
-        &mut self,
-        expr: &Expression,
-    ) -> Result<HirExpression, CompilerError> {
-        let lowered = self.lower_expression(expr)?;
-
-        for statement in lowered.prelude {
-            self.emit_statement_to_current_block(statement, &expr.location)?;
-        }
-
-        Ok(lowered.value)
-    }
-
     pub(crate) fn lower_runtime_rpn_expression(
         &mut self,
         nodes: &[AstNode],
@@ -1017,27 +1003,6 @@ impl<'a> HirBuilder<'a> {
         }
 
         Ok(Some(lowered_constant.value))
-    }
-
-    // AST enforces module-wide unique InternedPath symbols and disallows shadowing.
-    // HIR therefore resolves locals/functions by full path identity, not leaf names.
-    #[allow(dead_code)]
-    pub(crate) fn resolve_local_id_or_error(
-        &self,
-        name: &InternedPath,
-        location: &TextLocation,
-    ) -> Result<LocalId, CompilerError> {
-        let Some(local_id) = self.locals_by_name.get(name).copied() else {
-            return_hir_transformation_error!(
-                format!(
-                    "Unresolved local '{}' during HIR expression lowering",
-                    self.symbol_name_for_diagnostics(name)
-                ),
-                self.hir_error_location(location)
-            );
-        };
-
-        Ok(local_id)
     }
 
     pub(crate) fn resolve_function_id_or_error(

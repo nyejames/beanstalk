@@ -54,7 +54,7 @@ pub enum TopLevelTemplateKind {
     RuntimeTemplate,
 }
 
-#[allow(dead_code)]
+#[allow(dead_code)] // todo
 #[derive(Clone, Debug)]
 pub enum HeaderKind {
     Function { signature: FunctionSignature },
@@ -75,7 +75,7 @@ pub enum HeaderKind {
     StartFunction,
 }
 
-#[allow(dead_code)]
+#[allow(dead_code)] // todo
 #[derive(Clone, Debug)]
 pub struct ConstantHeaderMetadata {
     pub declaration_syntax: DeclarationSyntax,
@@ -84,7 +84,7 @@ pub struct ConstantHeaderMetadata {
     pub symbol_dependencies: HashSet<InternedPath>,
 }
 
-#[allow(dead_code)]
+#[allow(dead_code)] // todo
 #[derive(Clone, Debug)]
 pub struct StructHeaderMetadata {
     pub default_value_dependencies: HashSet<InternedPath>,

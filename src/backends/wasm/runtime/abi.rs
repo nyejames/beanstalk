@@ -1,5 +1,6 @@
 //! Runtime ABI constants and helper enums.
 
+#[allow(dead_code)] // todo
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum RuntimeHandleKind {
     /// Generic runtime-owned value handle.

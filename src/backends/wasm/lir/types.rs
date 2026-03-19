@@ -31,6 +31,7 @@ pub(crate) struct WasmLirSignature {
 pub(crate) enum WasmAbiType {
     I32,
     I64,
+    #[allow(dead_code)] // todo
     F32,
     F64,
     Handle,
@@ -62,7 +63,9 @@ pub(crate) enum WasmLocalRole {
     /// Runtime value/string handle.
     ValueHandle,
     /// Reserved for phase-2 static pointer materialization.
+    #[allow(dead_code)] // todo
     StaticPtr,
     /// Reserved for phase-2 static length materialization.
+    #[allow(dead_code)] // todo
     Length,
 }

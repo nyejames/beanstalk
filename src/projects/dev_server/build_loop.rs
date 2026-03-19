@@ -2,8 +2,6 @@
 //!
 //! This module delegates compilation and artifact writing to the core build APIs, then translates
 //! build outcomes into dev-server state updates and SSE reload broadcasts.
-#![allow(dead_code)]
-
 use crate::build_system::build::{self, BuildResult, ProjectBuilder, WriteOptions};
 use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::compiler_errors::{
@@ -343,6 +341,7 @@ pub fn dev_server_error_messages(path: &Path, msg: impl Into<String>) -> Compile
     }
 }
 
+#[allow(dead_code)] // Used only in tests
 pub fn format_error_messages(messages: &CompilerMessages) -> String {
     let mut formatted = String::new();
     for error in &messages.errors {

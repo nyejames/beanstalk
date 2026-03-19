@@ -1270,16 +1270,6 @@ impl<'a> HirBuilder<'a> {
         matches!(self.type_context.get(ty).kind, HirTypeKind::Unit)
     }
 
-    #[allow(dead_code)]
-    fn is_string_type(&self, ty: crate::compiler_frontend::hir::hir_datatypes::TypeId) -> bool {
-        matches!(self.type_context.get(ty).kind, HirTypeKind::String)
-    }
-
-    #[allow(dead_code)]
-    fn is_start_function(&self, function_id: FunctionId) -> bool {
-        function_id == self.module.start_function
-    }
-
     fn log_statement_input(&self, _node: &AstNode) {
         hir_log!(format!("[HIR][Stmt] Lowering {:?}", _node.kind));
     }

@@ -14,7 +14,6 @@ pub(crate) use types::{
     BorrowAnalysis, BorrowCheckReport, BorrowCheckStats, BorrowDropSite, BorrowDropSiteKind,
     LocalMode,
 };
-#[allow(dead_code)]
 pub(crate) type BorrowFacts = BorrowAnalysis;
 
 use crate::borrow_log;

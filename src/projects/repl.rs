@@ -2,8 +2,6 @@
 //!
 //! This is not the default CLI entrypoint and it is narrower than a full language REPL: input is
 //! tokenized from template-head mode and only compile-time template evaluation is supported today.
-#![allow(dead_code)]
-
 use crate::compiler_frontend::ast::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::ast::templates::create_template_node::Template;
 use crate::compiler_frontend::compiler_errors::CompilerError;
@@ -18,6 +16,7 @@ use std::io::{self, Write};
 use std::path::Path;
 
 /// Start the REPL session
+#[allow(dead_code)] // todo
 pub fn start_repl_session() {
     say!("Beanstalk string template REPL");
     say!(Green "Enter Beanstalk template snippets.");
@@ -84,6 +83,7 @@ pub fn start_repl_session() {
 }
 
 /// Compile Beanstalk source code to a string
+#[allow(dead_code)] // todo
 fn compile_beanstalk_to_string(
     source_code: &str,
     source_path: &Path,

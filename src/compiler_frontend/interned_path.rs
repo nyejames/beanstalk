@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use crate::compiler_frontend::basic_utility_functions::is_valid_var_char;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use std::path::{Path, PathBuf};
@@ -29,6 +27,7 @@ impl InternedPath {
         }
     }
 
+    #[allow(dead_code)] // todo
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             components: Vec::with_capacity(capacity),
@@ -77,6 +76,7 @@ impl InternedPath {
     }
 
     /// Push a new component to the end of this path
+    #[allow(dead_code)] // todo
     pub fn push(&mut self, component: StringId) {
         self.components.push(component);
     }
@@ -88,6 +88,7 @@ impl InternedPath {
     }
 
     /// Remove and return the last component of this path
+    #[allow(dead_code)] // todo
     pub fn pop(&mut self) -> Option<StringId> {
         self.components.pop()
     }
@@ -107,6 +108,7 @@ impl InternedPath {
     }
 
     /// Join this path with another path
+    #[allow(dead_code)] // todo
     pub fn join(&self, other: &InternedPath) -> InternedPath {
         let mut new_components = self.components.clone();
         new_components.extend_from_slice(&other.components);
@@ -135,6 +137,7 @@ impl InternedPath {
     }
 
     /// Check if this path is empty (root path)
+    #[allow(dead_code)] // todo
     pub fn is_empty(&self) -> bool {
         self.components.is_empty()
     }
@@ -150,6 +153,7 @@ impl InternedPath {
     }
 
     /// Get an iterator over the components
+    #[allow(dead_code)] // todo
     pub fn components(&self) -> impl Iterator<Item = StringId> + '_ {
         self.components.iter().copied()
     }
@@ -186,6 +190,7 @@ impl InternedPath {
 
     /// Create a relative path from this path to the target path
     /// Returns None if no relative path can be constructed
+    #[allow(dead_code)] // todo
     pub fn relative_to(&self, base: &InternedPath) -> Option<InternedPath> {
         if !self.starts_with(base) {
             return None;
@@ -200,6 +205,7 @@ impl InternedPath {
     /// Compare this path with a PathBuf efficiently
     /// Note: This creates a temporary StringTable for comparison, which is not ideal
     /// but necessary since we can't mutate the provided StringTable
+    #[allow(dead_code)] // todo
     pub fn eq_path_buf(&self, other: &Path, string_table: &StringTable) -> bool {
         // For now, convert self to PathBuf and compare
         // This is less efficient but avoids the need to mutate string_table
@@ -223,6 +229,7 @@ impl InternedPath {
         self.to_portable_string(string_table)
     }
 
+    #[allow(dead_code)] // todo
     pub fn to_interned_string(&self, string_table: &mut StringTable) -> StringId {
         let path_str = self.to_string(string_table);
         string_table.get_or_intern(path_str)
@@ -231,6 +238,7 @@ impl InternedPath {
     /// Extract the simple name from a header path by creating a name from the components,
     /// removing any invalid characters
     /// For a path like "file.bst/function_name.header", returns StringId for "file_function_name"
+    #[allow(dead_code)] // todo
     pub fn extract_header_name(&self, string_table: &mut StringTable) -> StringId {
         // Combine each part of the path with underscores to create a unique name for the header
         let mut name = String::with_capacity(self.len() * 2);

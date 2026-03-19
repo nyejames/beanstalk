@@ -1,4 +1,3 @@
-#![allow(clippy::needless_borrow)]
 
 use super::eval_expression::evaluate_expression;
 use crate::compiler_frontend::ast::ast::{ContextKind, ScopeContext};
@@ -60,7 +59,7 @@ pub fn create_multiple_expressions(
                         context.expected_result_types.len(),
                         expressions.len()
                     ),
-                    token_stream.current_location().to_error_location(&string_table),
+                    token_stream.current_location().to_error_location(string_table),
                     {
                         CompilationStage => "Expression Parsing",
                         PrimarySuggestion => "Add missing arguments to match the expected count",
@@ -79,7 +78,7 @@ pub fn create_multiple_expressions(
                     "Expected closing parenthesis after arguments, found '{:?}'",
                     token_stream.current_token_kind()
                 ),
-                token_stream.current_location().to_error_location(&string_table),
+                token_stream.current_location().to_error_location(string_table),
                 {
                     CompilationStage => "Expression Parsing",
                     PrimarySuggestion => "Add ')' after the final argument",
@@ -181,7 +180,7 @@ pub fn create_expression(
                 if consume_closing_parenthesis {
                     return_syntax_error!(
                         format!("Unexpected token: '{:?}'. Seems to be missing a closing parenthesis at the end of this expression.", token),
-                        token_stream.current_location().to_error_location(&string_table),
+                        token_stream.current_location().to_error_location(string_table),
                         {
                             CompilationStage => "Expression Parsing",
                             PrimarySuggestion => "Add a closing parenthesis ')' at the end of the expression",
@@ -273,7 +272,7 @@ pub fn create_expression(
                     _ => {
                         return_type_error!(
                             format!("Expected a collection, but assigned variable with a literal type of: {:?}", &data_type),
-                            token_stream.current_location().to_error_location(&string_table),
+                            token_stream.current_location().to_error_location(string_table),
                             {
                                 ExpectedType => "Collection",
                                 CompilationStage => "Expression Parsing",
@@ -489,7 +488,7 @@ pub fn create_expression(
                                     string_table.resolve(*id),
                                     string_table.resolve(*id),
                                 ),
-                                token_stream.current_location().to_error_location(&string_table),
+                                token_stream.current_location().to_error_location(string_table),
                                 {
                                     CompilationStage => "Expression Parsing",
                                     PrimarySuggestion => "Import exports directly with '@(path/to/file/symbol)' or '@(path/to/file/{a, b})'",
@@ -504,7 +503,7 @@ pub fn create_expression(
                                     string_table.resolve(*id),
                                     string_table.resolve(*id),
                                 ),
-                                token_stream.current_location().to_error_location(&string_table),
+                                token_stream.current_location().to_error_location(string_table),
                                 {
                                     CompilationStage => "Expression Parsing",
                                     PrimarySuggestion => "Call the file start function with 'file()' or import specific exports directly",
@@ -527,7 +526,7 @@ pub fn create_expression(
                                 "Constants cannot call host functions. '{}' is a runtime host call.",
                                 string_table.resolve(*id)
                             ),
-                            token_stream.current_location().to_error_location(&string_table),
+                            token_stream.current_location().to_error_location(string_table),
                             {
                                 CompilationStage => "Expression Parsing",
                                 PrimarySuggestion => "Use only compile-time constant values inside constants and const templates",
@@ -575,7 +574,7 @@ pub fn create_expression(
                     Box::leak(string_table.resolve(*id).to_string().into_boxed_str());
                 return_rule_error!(
                     format!("Undefined variable '{}'. Variable must be declared before use.", var_name_static),
-                    token_stream.current_location().to_error_location(&string_table),
+                    token_stream.current_location().to_error_location(string_table),
                     {
                         VariableName => var_name_static,
                         CompilationStage => "Expression Parsing",
@@ -643,7 +642,7 @@ pub fn create_expression(
                         if context.kind.is_constant_context() {
                             return_rule_error!(
                                 "Constants and const templates require compile-time template folding. This template is runtime.",
-                                token_stream.current_location().to_error_location(&string_table),
+                                token_stream.current_location().to_error_location(string_table),
                                 {
                                     CompilationStage => "Expression Parsing",
                                     PrimarySuggestion => "Remove runtime values from this template so it can fold at compile time",
@@ -699,7 +698,7 @@ pub fn create_expression(
                     TemplateType::SlotDefinition(_) => {
                         return_rule_error!(
                             "'$slot' markers are only valid as direct nested templates inside template bodies.",
-                            token_stream.current_location().to_error_location(&string_table),
+                            token_stream.current_location().to_error_location(string_table),
                             {
                                 CompilationStage => "Expression Parsing",
                                 PrimarySuggestion => "Use '$slot' inside a template body where it defines a receiving slot",
@@ -735,7 +734,7 @@ pub fn create_expression(
                 if token_stream.peek_next_token() != Some(&TokenKind::TemplateHead) {
                     return_type_error!(
                         "Unexpected '#' in expression. '#' is only valid before a template head.",
-                        token_stream.current_location().to_error_location(&string_table),
+                        token_stream.current_location().to_error_location(string_table),
                         {
                             CompilationStage => "Expression Parsing",
                             PrimarySuggestion => "Remove '#' or place it directly before a template expression",
@@ -856,7 +855,7 @@ pub fn create_expression(
                         if expression.len() > 1 {
                             return_type_error!(
                                 format!("Match statements can only have one value to match against. Found: {}", expression.len()),
-                                token_stream.current_location().to_error_location(&string_table),
+                                token_stream.current_location().to_error_location(string_table),
                                 {
                                     CompilationStage => "Expression Parsing",
                                     PrimarySuggestion => "Simplify the expression to a single value before the 'is:' match",
@@ -974,7 +973,7 @@ pub fn create_expression(
             _ => {
                 return_syntax_error!(
                     format!("Invalid token used in expression: '{:?}'", token),
-                    token_stream.current_location().to_error_location(&string_table),
+                    token_stream.current_location().to_error_location(string_table),
                     {
                         CompilationStage => "Expression Parsing",
                         PrimarySuggestion => "Remove or replace this token with a valid expression element",

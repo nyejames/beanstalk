@@ -19,6 +19,7 @@ pub(crate) enum WasmLirStmt {
         dst: WasmLirLocalId,
         value: i64,
     },
+    #[allow(dead_code)] // todo
     ConstF32 {
         dst: WasmLirLocalId,
         value: f32,
@@ -27,10 +28,12 @@ pub(crate) enum WasmLirStmt {
         dst: WasmLirLocalId,
         value: f64,
     },
+    #[allow(dead_code)] // todo
     ConstStaticPtr {
         dst: WasmLirLocalId,
         data: WasmStaticDataId,
     },
+    #[allow(dead_code)] // todo
     ConstLength {
         dst: WasmLirLocalId,
         value: u32,
@@ -70,6 +73,7 @@ pub(crate) enum WasmLirStmt {
         value: WasmLirLocalId,
     },
     /// Reserved for future ownership tuning.
+    #[allow(dead_code)] // todo
     RetainHandle {
         value: WasmLirLocalId,
     },

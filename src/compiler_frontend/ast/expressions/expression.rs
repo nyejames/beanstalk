@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration};
-use crate::compiler_frontend::ast::statements::functions::{FunctionReturn, FunctionSignature};
+use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::ast::templates::create_template_node::Template;
 use crate::compiler_frontend::ast::templates::template::TemplateConstValueKind;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
@@ -184,55 +184,6 @@ impl Expression {
         }
     }
 
-    pub fn function_without_signature(body: Vec<AstNode>, location: TextLocation) -> Self {
-        Self {
-            data_type: DataType::Inferred,
-            kind: ExpressionKind::Function(
-                FunctionSignature {
-                    parameters: vec![],
-                    returns: vec![],
-                },
-                body,
-            ),
-            location,
-            ownership: Ownership::ImmutableReference,
-        }
-    }
-    pub fn function_without_return(
-        args: Vec<Declaration>,
-        body: Vec<AstNode>,
-        location: TextLocation,
-    ) -> Self {
-        let signature = FunctionSignature {
-            parameters: args,
-            returns: vec![],
-        };
-        Self {
-            data_type: DataType::Inferred,
-            kind: ExpressionKind::Function(signature, body),
-            location,
-            ownership: Ownership::ImmutableReference,
-        }
-    }
-    pub fn function_without_args(
-        body: Vec<AstNode>,
-        result_types: Vec<DataType>,
-        location: TextLocation,
-    ) -> Self {
-        let signature = FunctionSignature {
-            parameters: vec![],
-            returns: result_types
-                .into_iter()
-                .map(FunctionReturn::Value)
-                .collect(),
-        };
-        Self {
-            data_type: DataType::Inferred,
-            kind: ExpressionKind::Function(signature, body),
-            location,
-            ownership: Ownership::ImmutableReference,
-        }
-    }
 
     // Function calls
     pub fn function_call(
@@ -375,10 +326,6 @@ impl Expression {
         matches!(self.kind, ExpressionKind::None)
     }
 
-    pub fn is_constant(&self) -> bool {
-        self.const_value_kind().is_compile_time_value()
-    }
-
     pub fn is_compile_time_constant(&self) -> bool {
         self.const_value_kind().is_compile_time_value()
     }
@@ -478,12 +425,6 @@ pub enum ExpressionKind {
 }
 
 impl ExpressionKind {
-    pub fn get_function_nodes(&self) -> &[AstNode] {
-        match self {
-            ExpressionKind::Function(_, nodes, ..) => nodes,
-            _ => &[],
-        }
-    }
 
     pub fn is_foldable(&self) -> bool {
         matches!(

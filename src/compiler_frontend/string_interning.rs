@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use crate::projects::settings::MINIMUM_STRING_TABLE_CAPACITY;
 use rustc_hash::FxHashMap;
 
@@ -11,12 +9,14 @@ pub struct StringId(u32);
 impl StringId {
     /// Convert the StringId to its underlying u32 value for serialization
     #[inline]
+    #[allow(dead_code)] // todo
     pub fn as_u32(self) -> u32 {
         self.0
     }
 
     /// Create a StringId from a u32 value for deserialization
     #[inline]
+    #[allow(dead_code)] // todo
     pub fn from_u32(id: u32) -> Self {
         Self(id)
     }
@@ -26,6 +26,7 @@ impl StringId {
     ///
     /// Time complexity: O(1) for ID resolution + O(n) for string comparison
     #[inline]
+    #[allow(dead_code)] // todo
     pub fn eq_str(self, table: &StringTable, other: &str) -> bool {
         table.strings[self.0 as usize].as_ref() == other
     }
@@ -35,6 +36,7 @@ impl StringId {
     ///
     /// Time complexity: O(1)
     #[inline]
+    #[allow(dead_code)] // todo
     pub fn resolve(self, table: &StringTable) -> &str {
         table.resolve(self)
     }
@@ -183,6 +185,7 @@ impl StringTable {
     ///
     /// Time complexity: O(1)
     #[inline]
+    #[allow(dead_code)] // todo
     pub fn try_resolve(&self, id: StringId) -> Option<&str> {
         self.strings.get(id.0 as usize).map(|s| s.as_ref())
     }
@@ -192,6 +195,7 @@ impl StringTable {
     ///
     /// Time complexity: O(1) average case
     #[inline]
+    #[allow(dead_code)] // todo
     pub fn get_existing(&self, s: &str) -> Option<StringId> {
         self.string_to_id.get(s).copied()
     }
@@ -204,11 +208,13 @@ impl StringTable {
 
     /// Check if the string table is empty
     #[inline]
+    #[allow(dead_code)] // todo
     pub fn is_empty(&self) -> bool {
         self.strings.is_empty()
     }
 
     /// Calculate detailed memory usage statistics
+    #[allow(dead_code)] // todo
     pub fn memory_usage(&self) -> MemoryStats {
         let string_content_bytes: usize = self.strings.iter().map(|s| s.len()).sum();
 
@@ -232,6 +238,7 @@ impl StringTable {
 
     /// Dump all strings in the table for debugging purposes
     #[cfg(debug_assertions)]
+    #[allow(dead_code)] // todo
     pub fn dump_strings(&self) -> Vec<(StringId, &str)> {
         self.strings
             .iter()
@@ -251,11 +258,13 @@ pub struct MemoryStats {
     /// Memory used by data structure overhead in bytes
     pub overhead_bytes: usize,
     /// Number of unique strings stored
+    #[allow(dead_code)] // todo
     pub unique_strings: usize,
 }
 
 impl MemoryStats {
     /// Calculate the overhead percentage
+    #[allow(dead_code)] // todo
     pub fn overhead_percentage(&self) -> f64 {
         if self.total_bytes == 0 {
             0.0
@@ -265,6 +274,7 @@ impl MemoryStats {
     }
 
     /// Calculate the efficiency ratio (content vs total)
+    #[allow(dead_code)] // todo
     pub fn efficiency_ratio(&self) -> f64 {
         if self.total_bytes == 0 {
             0.0

@@ -5,8 +5,11 @@ pub(crate) enum WasmHostFunction {
     /// Generic host log output used by `io`-style calls in phase-1.
     LogString,
     /// Reserved DOM helper imports for upcoming HTML/Wasm integration phases.
+    #[allow(dead_code)] // todo
     DomCreateText,
+    #[allow(dead_code)] // todo
     DomSetText,
+    #[allow(dead_code)] // todo
     DomSetHtml,
 }
 

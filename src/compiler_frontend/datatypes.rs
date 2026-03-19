@@ -20,26 +20,6 @@ impl Ownership {
     pub fn is_mutable(&self) -> bool {
         matches!(self, Ownership::MutableOwned | Ownership::MutableReference)
     }
-    pub fn is_reference(&self) -> bool {
-        matches!(
-            self,
-            Ownership::MutableReference | Ownership::ImmutableReference
-        )
-    }
-
-    #[allow(clippy::wrong_self_convention)]
-    pub fn to_reference(&mut self) {
-        match self {
-            Ownership::MutableOwned => {
-                *self = Ownership::MutableReference;
-            }
-            Ownership::ImmutableOwned => {
-                *self = Ownership::ImmutableReference;
-            }
-            _ => {}
-        }
-    }
-
     pub fn get_owned(&self) -> Ownership {
         match self {
             Ownership::MutableReference => Ownership::MutableOwned,
@@ -178,48 +158,6 @@ impl DataType {
         matches!(self, DataType::Float | DataType::Int | DataType::Decimal)
     }
 
-    // Special Types that might change (basically the same as rust with more syntax sugar)
-    #[allow(clippy::wrong_self_convention)]
-    pub fn to_option(self) -> DataType {
-        match self {
-            DataType::Bool => DataType::Option(Box::new(DataType::Bool)),
-            DataType::Float => DataType::Option(Box::new(DataType::Float)),
-            DataType::Int => DataType::Option(Box::new(DataType::Int)),
-            DataType::Decimal => DataType::Option(Box::new(DataType::Decimal)),
-            DataType::StringSlice => DataType::Option(Box::new(DataType::StringSlice)),
-            DataType::Char => DataType::Option(Box::new(DataType::Char)),
-            DataType::Collection(inner_type, ownership) => {
-                DataType::Option(Box::new(DataType::Collection(inner_type, ownership)))
-            }
-            DataType::Parameters(args) => DataType::Option(Box::new(DataType::Parameters(args))),
-            DataType::Returns(returns) => DataType::Option(Box::new(DataType::Returns(returns))),
-            DataType::Struct(args, ownership) => {
-                DataType::Option(Box::new(DataType::Struct(args, ownership)))
-            }
-            DataType::Function(reciever, signature) => {
-                DataType::Option(Box::new(DataType::Function(reciever, signature)))
-            }
-            DataType::Template => DataType::Option(Box::new(DataType::Template)),
-            DataType::TemplateWrapper => DataType::Option(Box::new(DataType::TemplateWrapper)),
-            DataType::Inferred => DataType::Option(Box::new(DataType::Inferred)),
-            DataType::CoerceToString => DataType::Option(Box::new(DataType::CoerceToString)),
-            DataType::True => DataType::Option(Box::new(DataType::True)),
-            DataType::False => DataType::Option(Box::new(DataType::False)),
-            DataType::Choices(inner_types) => {
-                DataType::Option(Box::new(DataType::Choices(inner_types)))
-            }
-
-            DataType::Reference(inner_type) => {
-                DataType::Option(Box::new(DataType::Reference(inner_type)))
-            }
-
-            // TODO: Probably should error for these
-            DataType::None => DataType::Option(Box::new(DataType::None)),
-            DataType::Range => DataType::Option(Box::new(DataType::Range)),
-            DataType::Option(_) => DataType::Option(Box::new(DataType::Option(Box::new(self)))),
-        }
-    }
-
     pub fn is_iterable(&self) -> bool {
         match self {
             DataType::Range => true,
@@ -231,13 +169,6 @@ impl DataType {
             DataType::Decimal => true,
             DataType::Inferred => true, // Will need to be type checked later
             _ => false,
-        }
-    }
-
-    pub fn get_iterable_type(&self) -> DataType {
-        match self {
-            DataType::Collection(inner_type, ..) => *inner_type.to_owned(),
-            _ => self.to_owned(),
         }
     }
 

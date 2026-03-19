@@ -3,7 +3,7 @@ use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, Operator,
 };
 use crate::compiler_frontend::ast::templates::create_template_node::Template;
-use crate::compiler_frontend::ast::templates::template::SlotKey;
+use crate::compiler_frontend::ast::templates::template::{SlotKey, SlotPlaceholder, TemplateAtom};
 use crate::compiler_frontend::compiler_errors::ErrorType;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
@@ -130,7 +130,10 @@ fn unresolved_slots_are_ignored_when_lowering_runtime_templates() {
         location.clone(),
         Ownership::ImmutableOwned,
     ));
-    template.content.push_slot(SlotKey::Default);
+    template
+        .content
+        .atoms
+        .push(TemplateAtom::Slot(SlotPlaceholder::new(SlotKey::Default)));
     template.content.add(Expression::string_slice(
         after,
         location,
@@ -1029,7 +1032,10 @@ fn field_access_from_module_constant_base_materializes_temp_place() {
         location.clone(),
         Ownership::ImmutableOwned,
     ));
-    wrapper_template.content.push_slot(SlotKey::Default);
+    wrapper_template
+        .content
+        .atoms
+        .push(TemplateAtom::Slot(SlotPlaceholder::new(SlotKey::Default)));
     wrapper_template.content.add(Expression::string_slice(
         after,
         location.clone(),

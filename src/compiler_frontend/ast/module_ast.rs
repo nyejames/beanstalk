@@ -3,7 +3,7 @@ use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::function_body_to_ast::function_body_to_ast;
 use crate::compiler_frontend::ast::import_bindings::{
-    parse_constant_header_declaration, resolve_file_import_bindings,
+    ConstantHeaderParseContext, parse_constant_header_declaration, resolve_file_import_bindings,
 };
 use crate::compiler_frontend::ast::statements::functions::{FunctionReturn, FunctionSignature};
 use crate::compiler_frontend::ast::statements::structs::create_struct_definition;
@@ -34,7 +34,7 @@ pub use crate::compiler_frontend::ast::templates::top_level_templates::{
 
 static CONTROL_FLOW_SCOPE_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
-#[allow(dead_code)]
+#[allow(dead_code)] // Used only in tests
 pub struct ModuleExport {
     pub id: StringId,
     pub signature: FunctionSignature,
@@ -51,7 +51,7 @@ pub struct Ast {
     // Exported out of the final compiled wasm module
     // Functions must use explicit 'export' syntax Token::Export to be exported
     // The only exception is the Main function, which is the start function of the entry point file
-    #[allow(dead_code)]
+    #[allow(dead_code)] // Used only in tests
     pub external_exports: Vec<ModuleExport>,
     pub start_template_items: Vec<AstStartTemplateItem>,
     pub warnings: Vec<CompilerWarning>,
@@ -214,13 +214,15 @@ impl Ast {
                 HeaderKind::Constant { .. } => {
                     let declaration = match parse_constant_header_declaration(
                         header,
-                        &declarations,
-                        &bindings.visible_symbol_paths,
-                        &bindings.start_aliases,
-                        host_registry,
-                        build_profile,
-                        &mut warnings,
-                        string_table,
+                        ConstantHeaderParseContext {
+                            declarations: &declarations,
+                            visible_declaration_ids: &bindings.visible_symbol_paths,
+                            start_import_aliases: &bindings.start_aliases,
+                            host_registry,
+                            build_profile,
+                            warnings: &mut warnings,
+                            string_table,
+                        },
                     ) {
                         Ok(declaration) => declaration,
                         Err(error) => {
@@ -787,9 +789,9 @@ macro_rules! new_config_context {
             expected_result_types: vec![],
             host_registry: $registry,
             style_directives:
-                crate::compiler_frontend::style_directives::StyleDirectiveRegistry::built_ins(),
+                $crate::compiler_frontend::style_directives::StyleDirectiveRegistry::built_ins(),
             loop_depth: 0,
-            build_profile: crate::compiler_frontend::FrontendBuildProfile::Dev,
+            build_profile: $crate::compiler_frontend::FrontendBuildProfile::Dev,
             emitted_warnings: std::rc::Rc::new(std::cell::RefCell::new(Vec::new())),
         }
     }};
@@ -812,9 +814,9 @@ macro_rules! new_condition_context {
             expected_result_types: vec![], //Empty because conditions are always booleans
             host_registry: $registry,
             style_directives:
-                crate::compiler_frontend::style_directives::StyleDirectiveRegistry::built_ins(),
+                $crate::compiler_frontend::style_directives::StyleDirectiveRegistry::built_ins(),
             loop_depth: 0,
-            build_profile: crate::compiler_frontend::FrontendBuildProfile::Dev,
+            build_profile: $crate::compiler_frontend::FrontendBuildProfile::Dev,
             emitted_warnings: std::rc::Rc::new(std::cell::RefCell::new(Vec::new())),
         }
     }};

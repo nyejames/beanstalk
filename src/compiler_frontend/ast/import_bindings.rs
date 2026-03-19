@@ -211,16 +211,33 @@ pub(crate) fn resolve_file_import_bindings(
     Ok(bindings_by_file)
 }
 
+/// WHAT: Carries all mutable/immutable context needed to parse one constant header.
+/// WHY: Grouping these parameters keeps the resolver call sites explicit while avoiding
+/// overly-wide function signatures that are harder to maintain.
+pub(crate) struct ConstantHeaderParseContext<'a> {
+    pub declarations: &'a [Declaration],
+    pub visible_declaration_ids: &'a FxHashSet<InternedPath>,
+    pub start_import_aliases: &'a FxHashMap<StringId, InternedPath>,
+    pub host_registry: &'a HostRegistry,
+    pub build_profile: FrontendBuildProfile,
+    pub warnings: &'a mut Vec<CompilerWarning>,
+    pub string_table: &'a mut StringTable,
+}
+
 pub(crate) fn parse_constant_header_declaration(
     header: &Header,
-    declarations: &[Declaration],
-    visible_declaration_ids: &FxHashSet<InternedPath>,
-    start_import_aliases: &FxHashMap<StringId, InternedPath>,
-    host_registry: &HostRegistry,
-    build_profile: FrontendBuildProfile,
-    warnings: &mut Vec<CompilerWarning>,
-    string_table: &mut StringTable,
+    context: ConstantHeaderParseContext<'_>,
 ) -> Result<Declaration, CompilerError> {
+    let ConstantHeaderParseContext {
+        declarations,
+        visible_declaration_ids,
+        start_import_aliases,
+        host_registry,
+        build_profile,
+        warnings,
+        string_table,
+    } = context;
+
     let HeaderKind::Constant { metadata } = &header.kind else {
         return Err(CompilerError::compiler_error(
             "Constant header resolver called for a non-constant header.",

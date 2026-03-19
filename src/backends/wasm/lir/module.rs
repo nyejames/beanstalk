@@ -5,7 +5,7 @@ use crate::backends::wasm::lir::linkage::{WasmExport, WasmImport};
 use crate::backends::wasm::lir::types::WasmStaticDataId;
 use crate::backends::wasm::runtime::memory::WasmMemoryPlan;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub(crate) struct WasmLirModule {
     /// Lowered function bodies (including export wrappers).
     pub functions: Vec<WasmLirFunction>,
@@ -17,18 +17,6 @@ pub(crate) struct WasmLirModule {
     pub static_data: Vec<WasmStaticData>,
     /// Planned linear-memory layout for future Wasm emission.
     pub memory_plan: WasmMemoryPlan,
-}
-
-impl Default for WasmLirModule {
-    fn default() -> Self {
-        Self {
-            functions: Vec::new(),
-            imports: Vec::new(),
-            exports: Vec::new(),
-            static_data: Vec::new(),
-            memory_plan: WasmMemoryPlan::default(),
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -46,5 +34,6 @@ pub(crate) enum WasmStaticDataKind {
     /// UTF-8 encoded string payload.
     Utf8StringBytes,
     /// Reserved for arbitrary binary payloads in later phases.
+    #[allow(dead_code)] // todo
     RawBytes,
 }

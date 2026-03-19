@@ -42,12 +42,14 @@ pub(crate) struct WasmEmitPlan {
     /// Static-data segment lengths cached for literal helper calls.
     pub data_lengths: FxHashMap<WasmStaticDataId, u32>,
     /// Deterministic static-data emission order.
+    #[allow(dead_code)] // todo
     pub data_order: Vec<WasmStaticDataId>,
     /// First aligned address available for dynamic heap allocation.
     pub heap_base: u32,
     /// `heap_top` mutable global index when runtime helpers are emitted.
     pub heap_top_global_index: Option<u32>,
     /// Indicates whether helper functions/global should be emitted at all.
+    #[allow(dead_code)] // todo
     pub should_emit_helpers: bool,
 }
 
@@ -352,17 +354,16 @@ fn module_uses_runtime_helpers(module: &WasmLirModule) -> bool {
     false
 }
 
+type StaticDataLayoutPlan = (
+    FxHashMap<WasmStaticDataId, u32>,
+    FxHashMap<WasmStaticDataId, u32>,
+    Vec<WasmStaticDataId>,
+    u32,
+);
+
 fn plan_static_data_layout(
     module: &WasmLirModule,
-) -> Result<
-    (
-        FxHashMap<WasmStaticDataId, u32>,
-        FxHashMap<WasmStaticDataId, u32>,
-        Vec<WasmStaticDataId>,
-        u32,
-    ),
-    CompilerError,
-> {
+) -> Result<StaticDataLayoutPlan, CompilerError> {
     // WHAT: place static segments by stable `WasmStaticDataId`, aligned to 8 bytes.
     // WHY: deterministic layout keeps literal pointer tests reproducible and preserves
     // handle/pointer alignment assumptions for runtime helpers.

@@ -21,6 +21,7 @@ pub enum TemplateBodyMode {
     Normal,
     Balanced,
     DiscardBalanced,
+    HtmlHybrid,
 }
 
 impl TemplateBodyMode {
@@ -243,6 +244,8 @@ pub struct TemplateModeFrame {
     pub body_mode: TemplateBodyMode,
     pub body_open_square_brackets: usize,
     pub body_closed_square_brackets: usize,
+    pub body_inside_single_quote: bool,
+    pub body_inside_double_quote: bool,
 }
 
 impl TemplateModeFrame {
@@ -252,6 +255,8 @@ impl TemplateModeFrame {
             body_mode: TemplateBodyMode::Normal,
             body_open_square_brackets: 0,
             body_closed_square_brackets: 0,
+            body_inside_single_quote: false,
+            body_inside_double_quote: false,
         }
     }
 }
@@ -339,6 +344,8 @@ impl<'a> TokenStream<'a> {
     pub fn mark_current_template_body_mode(&mut self, body_mode: TemplateBodyMode) {
         if let Some(current_mode) = self.template_mode_stack.last_mut() {
             current_mode.body_mode = body_mode;
+            current_mode.body_inside_single_quote = false;
+            current_mode.body_inside_double_quote = false;
             if current_mode.mode == TokenizeMode::TemplateBody && body_mode.is_balanced_mode() {
                 current_mode.body_open_square_brackets = 1;
                 current_mode.body_closed_square_brackets = 0;
@@ -384,6 +391,36 @@ impl<'a> TokenStream<'a> {
 
         current_mode.body_closed_square_brackets.saturating_add(1)
             == current_mode.body_open_square_brackets
+    }
+
+    pub fn is_inside_template_body_quotes(&self) -> bool {
+        self.template_mode_stack.last().is_some_and(|frame| {
+            frame.body_inside_single_quote || frame.body_inside_double_quote
+        })
+    }
+
+    pub fn register_template_body_quote_char(&mut self, ch: char) {
+        let Some(current_mode) = self.template_mode_stack.last_mut() else {
+            return;
+        };
+
+        match ch {
+            '\'' if !current_mode.body_inside_double_quote => {
+                current_mode.body_inside_single_quote = !current_mode.body_inside_single_quote;
+            }
+            '"' if !current_mode.body_inside_single_quote => {
+                current_mode.body_inside_double_quote = !current_mode.body_inside_double_quote;
+            }
+            _ => {}
+        }
+    }
+
+    pub fn peek_nth_char(&self, n: usize) -> Option<char> {
+        let mut chars = self.chars.clone();
+        for _ in 0..n {
+            chars.next()?;
+        }
+        chars.next()
     }
 }
 

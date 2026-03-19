@@ -26,7 +26,6 @@ pub const TOKEN_TO_DECLARATION_RATIO: usize = 20; // (Maybe) About 1/20 tokens f
 pub const TOKEN_TO_NODE_RATIO: usize = 10; // (Maybe) About 1/10 tokens to AstNode ratio
 pub const MINIMUM_LIKELY_DECLARATIONS: usize = 10; // (Maybe) How many symbols the smallest common Ast blocks will likely have
 
-#[allow(dead_code)]
 #[derive(Clone)]
 pub struct Config {
     pub project_name: String,

@@ -4,7 +4,7 @@ use crate::compiler_frontend::string_interning::StringId;
 
 pub trait ContainsReferences {
     fn get_reference(&self, name: &StringId) -> Option<&Declaration>;
-    #[allow(dead_code)]
+    #[allow(dead_code)] // todo
     fn get_reference_mut(&mut self, name: &StringId) -> Option<&mut Declaration>;
 }
 

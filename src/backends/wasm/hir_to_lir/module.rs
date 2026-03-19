@@ -49,13 +49,10 @@ fn register_function_maps(context: &mut WasmLirLoweringContext<'_>) -> Result<()
     // Phase-1 note:
     // this mapping is intentionally explicit scaffolding so later phases can
     // reuse identical ids for code section ordering and debug correlation.
-    let mut next_id = 0u32;
-
-    for function in &context.hir_module.functions {
+    for (next_id, function) in context.hir_module.functions.iter().enumerate() {
         context
             .function_map
-            .insert(function.id, WasmLirFunctionId(next_id));
-        next_id += 1;
+            .insert(function.id, WasmLirFunctionId(next_id as u32));
 
         let Some(path) = context
             .hir_module

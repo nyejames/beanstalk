@@ -2,8 +2,6 @@
 //!
 //! Compiler diagnostics are converted into escaped HTML so failed builds still render safely and
 //! remain connected to hot reload via the injected SSE client snippet.
-#![allow(dead_code)]
-
 use crate::compiler_frontend::compiler_errors::{
     CompilerError, CompilerMessages, ErrorMetaDataKey, error_type_to_str,
 };

@@ -20,11 +20,11 @@ use crate::compiler_frontend::tokenizer::tokens::TextLocation;
 use crate::projects::settings::{IMPLICIT_START_FUNC_NAME, TOP_LEVEL_TEMPLATE_NAME};
 use rustc_hash::{FxHashMap, FxHashSet};
 
-#[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub enum AstStartTemplateItem {
     ConstString {
         value: StringId,
+        #[allow(dead_code)] // todo
         location: TextLocation,
     },
     RuntimeStringFunction {

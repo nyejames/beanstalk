@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::statements::functions::{FunctionReturn, FunctionSignature};
@@ -12,9 +10,11 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 pub const IO_FUNC_NAME: &str = "io";
+#[allow(dead_code)] // todo
 pub const ALLOC_FUNC_NAME: &str = "alloc";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)] // todo
 pub enum BackendKind {
     Js,
     Wasm,
@@ -41,9 +41,12 @@ impl CallTarget {
 /// Backend-agnostic ABI values that cross the host boundary.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum HostAbiType {
+    #[allow(dead_code)] // todo
     I32,
+    #[allow(dead_code)] // todo
     F64,
     Utf8Str,
+    #[allow(dead_code)] // todo
     OpaquePtr,
     Void,
 }
@@ -54,6 +57,7 @@ pub struct HostParameter {
     /// What the Beanstalk language accepts.
     pub language_type: DataType,
     /// What crosses the ABI boundary.
+    #[allow(dead_code)] // todo
     pub abi_type: HostAbiType,
     /// Borrow access mode required for this argument.
     pub access_kind: HostAccessKind,
@@ -62,12 +66,14 @@ pub struct HostParameter {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum HostAccessKind {
     Shared,
+    #[allow(dead_code)] // todo
     Mutable,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum HostReturnAlias {
     Fresh,
+    #[allow(dead_code)] // todo
     AliasArgs(Vec<usize>),
 }
 
@@ -77,12 +83,16 @@ pub struct HostFunctionDef {
     pub parameters: Vec<HostParameter>,
     pub return_type: HostAbiType,
     pub return_alias: HostReturnAlias,
+    #[allow(dead_code)] // todo
     pub ownership: Ownership,
+    #[allow(dead_code)] // todo
     pub error_handling: ErrorHandling,
+    #[allow(dead_code)] // todo
     pub description: String,
 }
 
 impl HostFunctionDef {
+    #[allow(dead_code)] // todo
     pub fn as_function_type(&self, string_table: &mut StringTable) -> DataType {
         DataType::Function(Box::new(None), self.params_to_signature(string_table))
     }
@@ -142,12 +152,15 @@ impl HostFunctionDef {
 
 #[derive(Debug, Clone)]
 pub struct JsHostBinding {
+    #[allow(dead_code)] // todo
     pub js_path: String,
 }
 
 #[derive(Debug, Clone)]
 pub struct WasmHostBinding {
+    #[allow(dead_code)] // todo
     pub module: String,
+    #[allow(dead_code)] // todo
     pub import_name: String,
 }
 
@@ -186,6 +199,7 @@ impl HostRegistry {
         registry
     }
 
+    #[allow(dead_code)] // Used only in tests
     pub fn register_function(&mut self, function: HostFunctionDef) -> Result<(), CompilerError> {
         if self.functions.contains_key(&function.name) {
             return_compiler_error!("Host function '{:?}' is already registered.", function.name);
@@ -195,6 +209,7 @@ impl HostRegistry {
         Ok(())
     }
 
+    #[allow(dead_code)] // todo
     pub fn register_bindings(&mut self, name: &'static str, bindings: HostBindings) {
         self.bindings.insert(name, bindings);
     }
@@ -203,14 +218,17 @@ impl HostRegistry {
         self.functions.get(name)
     }
 
+    #[allow(dead_code)] // todo
     pub fn get_bindings(&self, id: &str) -> Option<&HostBindings> {
         self.bindings.get(id)
     }
 
+    #[allow(dead_code)] // todo
     pub fn list_functions(&self) -> impl Iterator<Item = &HostFunctionDef> {
         self.functions.values()
     }
 
+    #[allow(dead_code)] // todo
     pub fn validate_required_hosts(&self, required: &[&'static str]) -> Result<(), CompilerError> {
         for id in required {
             if !self.functions.contains_key(id) {
@@ -221,6 +239,7 @@ impl HostRegistry {
         Ok(())
     }
 
+    #[allow(dead_code)] // todo
     pub fn validate_backend_bindings(&self, backend: BackendKind) -> Result<(), CompilerError> {
         for id in self.functions.keys() {
             let bindings = self.bindings.get(id).ok_or_else(|| {
@@ -247,6 +266,7 @@ impl HostRegistry {
         Ok(())
     }
 
+    #[allow(dead_code)] // todo
     pub fn validate_for_backend(
         &self,
         backend: BackendKind,
@@ -261,6 +281,8 @@ impl HostRegistry {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ErrorHandling {
     None,
+    #[allow(dead_code)] // todo
     ReturnsError,
+    #[allow(dead_code)] // todo
     Panics,
 }

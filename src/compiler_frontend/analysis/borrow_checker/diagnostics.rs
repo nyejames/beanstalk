@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use crate::compiler_frontend::analysis::borrow_checker::state::{BorrowState, FunctionLayout};
 use crate::compiler_frontend::compiler_errors::ErrorLocation;
 use crate::compiler_frontend::hir::hir_display::HirLocation;
@@ -101,6 +99,7 @@ impl<'a> BorrowDiagnostics<'a> {
             .unwrap_or(fallback)
     }
 
+    #[allow(dead_code)] // todo
     pub(super) fn conflicting_local_for_root(
         &self,
         layout: &FunctionLayout,

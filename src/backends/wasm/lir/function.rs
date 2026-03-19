@@ -34,6 +34,7 @@ pub(crate) enum WasmLirFunctionOrigin {
     /// Synthetic wrapper created by export policy.
     ExportWrapper,
     /// Reserved for runtime helper functions (phase-2+).
+    #[allow(dead_code)] // todo
     RuntimeHelper,
 }
 

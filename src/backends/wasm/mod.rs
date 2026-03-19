@@ -3,8 +3,6 @@
 //! Phase-1 exposes HIR -> LIR lowering.
 //! Phase-2 adds deterministic LIR -> core Wasm emission.
 //! The API remains crate-internal while backend integration stabilizes.
-#![allow(dead_code)]
-
 pub(crate) mod backend;
 pub(crate) mod debug;
 pub(crate) mod emit;

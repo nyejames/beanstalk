@@ -197,7 +197,7 @@ fn compiler_messages_from_error(error: CompilerError) -> CompilerMessages {
     }
 }
 
-#[allow(dead_code)]
+#[allow(dead_code)] // todo
 #[derive(Clone)]
 pub struct HTMLMeta {
     pub site_title: String,

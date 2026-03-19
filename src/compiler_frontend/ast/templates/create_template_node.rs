@@ -40,7 +40,7 @@ pub struct Template {
     pub doc_children: Vec<Template>,
     pub style: Style,
     pub explicit_style: Style,
-    #[allow(dead_code)]
+    #[allow(dead_code)] // todo
     pub control_flow: TemplateControlFlow,
     pub id: String,
     pub location: TextLocation,
@@ -1175,7 +1175,7 @@ fn resolve_chain_layer(
         &layer.wrapper,
         &resolved_fill,
         &layer.wrapper.location,
-        &string_table,
+        string_table,
     )?;
 
     let mut resolved_wrapper = layer.wrapper.to_owned();

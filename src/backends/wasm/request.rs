@@ -58,10 +58,11 @@ pub(crate) enum WasmCfgLoweringStrategy {
     #[default]
     DispatcherLoop,
     /// Reserved for future direct structured lowering (if/else/loop region construction).
+    #[allow(dead_code)] // todo
     Structured,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub(crate) struct WasmTargetFeatures {
     /// Placeholder for future GC proposal-specific codegen branches.
     pub use_wasm_gc: bool,
@@ -74,18 +75,6 @@ pub(crate) struct WasmTargetFeatures {
     pub enable_multi_value: bool,
     /// Reserved for reference-type-capable host/runtime ABIs.
     pub enable_reference_types: bool,
-}
-
-impl Default for WasmTargetFeatures {
-    fn default() -> Self {
-        Self {
-            use_wasm_gc: false,
-            enable_runtime_ownership: false,
-            enable_bulk_memory: false,
-            enable_multi_value: false,
-            enable_reference_types: false,
-        }
-    }
 }
 
 #[derive(Debug, Clone)]

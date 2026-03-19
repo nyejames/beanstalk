@@ -833,6 +833,60 @@ fn build_project_markdown_page_reexported_table_keeps_rows_and_cells_inside_tabl
 }
 
 #[test]
+fn build_project_docs_style_title_and_center_slot_chain_compiles() {
+    let root = temp_dir("docs_title_center_slot_chain");
+    fs::create_dir_all(root.join("src/libs")).expect("should create libs root");
+    fs::create_dir_all(root.join("src/styles")).expect("should create styles root");
+
+    fs::write(
+        root.join("#config.bst"),
+        "#project = \"html\"\n#entry_root = \"src\"\n#output_folder = \"release\"\n#libraries = {\n    @(libs),\n}\n",
+    )
+    .expect("should write config file");
+    fs::write(
+        root.join("src/libs").join("html.bst"),
+        "#center String = [$insert(\"style\"):text-align: center;]\n",
+    )
+    .expect("should write html helper library");
+    fs::write(
+        root.join("src/styles").join("docs.bst"),
+        "#title = [$html: <h1 style=\"font-size: 2em;[$slot(\"style\")]\">[$slot]</h1>]\n",
+    )
+    .expect("should write docs style library");
+    fs::write(
+        root.join("src").join("#page.bst"),
+        "import @libs/html/{center}\nimport @styles/docs/{title}\n#[title, center: LANGUAGE BASICS]\n",
+    )
+    .expect("should write source file");
+
+    let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
+    let build_result = build_project(&builder, &root.to_string_lossy(), &[])
+        .expect("docs-style title+center chain should compile successfully");
+
+    // Find the generated route HTML so assertions stay stable even if file ordering changes.
+    let html = build_result
+        .project
+        .output_files
+        .iter()
+        .find_map(|output| match output.file_kind() {
+            FileKind::Html(content)
+                if output.relative_output_path().to_string_lossy() == "index.html" =>
+            {
+                Some(content)
+            }
+            _ => None,
+        })
+        .expect("should emit index.html output");
+
+    assert!(html.contains("text-align: center;"));
+    assert!(html.contains("LANGUAGE BASICS"));
+    assert!(!html.contains("$slot("));
+    assert!(!html.contains("$insert("));
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
 fn build_project_markdown_docs_row_wrappers_render_plain_cells_and_headers() {
     let root = temp_dir("markdown_docs_row_wrappers");
     fs::create_dir_all(root.join("libs")).expect("should create libs root");

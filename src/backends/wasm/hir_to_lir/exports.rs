@@ -106,12 +106,11 @@ pub(crate) fn synthesize_export_wrappers(
             local_id
         });
 
-        let mut statements = Vec::new();
-        statements.push(WasmLirStmt::Call {
+        let statements = vec![WasmLirStmt::Call {
             dst: result_local,
             callee: WasmCalleeRef::Function(target_lir_id),
             args,
-        });
+        }];
 
         let wrapper_function_id = WasmLirFunctionId(wrapper_id);
         wrapper_id += 1;

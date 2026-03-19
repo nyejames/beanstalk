@@ -147,7 +147,7 @@ fn parse_file_path_rejects_grouped_import_missing_closing_brace() {
         &mut string_table,
     );
     assert!(result.is_err(), "missing grouped-import '}}' should fail");
-    let error = result.err().expect("expected tokenizer error");
+    let error = result.expect_err("expected tokenizer error");
     assert!(error.msg.contains("missing a closing '}'"));
 }
 
@@ -168,7 +168,7 @@ fn parse_file_path_rejects_grouped_import_missing_closing_parenthesis() {
         result.is_err(),
         "missing closing parenthesis after grouped import should fail"
     );
-    let error = result.err().expect("expected tokenizer error");
+    let error = result.expect_err("expected tokenizer error");
     assert!(error.msg.contains("closing parenthesis"));
 }
 

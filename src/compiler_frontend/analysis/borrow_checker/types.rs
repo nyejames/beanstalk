@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use crate::compiler_frontend::hir::hir_nodes::{
     BlockId, FunctionId, HirNodeId, HirValueId, LocalId,
 };
@@ -40,14 +38,17 @@ impl BorrowAnalysis {
             + self.statement_entry_states.len()
     }
 
+    #[allow(dead_code)] // Used only in tests
     pub(crate) fn statement_fact(&self, id: HirNodeId) -> Option<&StatementBorrowFact> {
         self.statement_facts.get(&id)
     }
 
+    #[allow(dead_code)] // Used only in tests
     pub(crate) fn terminator_fact(&self, block: BlockId) -> Option<&TerminatorBorrowFact> {
         self.terminator_facts.get(&block)
     }
 
+    #[allow(dead_code)] // Used only in tests
     pub(crate) fn value_fact(&self, id: HirValueId) -> Option<&ValueBorrowFact> {
         self.value_facts.get(&id)
     }
@@ -70,12 +71,15 @@ pub(crate) struct BorrowCheckStats {
 
 #[derive(Debug, Clone)]
 pub(crate) struct FunctionBorrowSummary {
+    #[allow(dead_code)] // todo
     pub entry_block: Option<BlockId>,
     pub reachable_blocks: usize,
     pub mutable_call_sites: usize,
     pub alias_heavy_blocks: Vec<BlockId>,
     pub worklist_iterations: usize,
+    #[allow(dead_code)] // todo
     pub param_mutability: Vec<bool>,
+    #[allow(dead_code)] // todo
     pub return_alias: FunctionReturnAliasSummary,
 }
 
@@ -161,6 +165,7 @@ impl LocalMode {
     pub(crate) const SLOT: Self = Self(0b010);
     pub(crate) const ALIAS: Self = Self(0b100);
 
+    #[allow(dead_code)] // todo
     pub(crate) const fn bits(self) -> u8 {
         self.0
     }
