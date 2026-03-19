@@ -1,13 +1,34 @@
 use super::*;
 use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::style_directives::{StyleDirectiveRegistry, StyleDirectiveSpec};
 
 fn tokenize_source(source: &str) -> (FileTokens, StringTable) {
     let mut string_table = StringTable::new();
+    let style_directives = StyleDirectiveRegistry::built_ins();
     let source_path = InternedPath::from_single_str("test.bst", &mut string_table);
     let file_tokens = tokenize(
         source,
         &source_path,
         TokenizeMode::Normal,
+        &style_directives,
+        &mut string_table,
+    )
+    .expect("tokenization should succeed");
+    (file_tokens, string_table)
+}
+
+fn tokenize_source_with_directives(
+    source: &str,
+    directives: &[StyleDirectiveSpec],
+) -> (FileTokens, StringTable) {
+    let mut string_table = StringTable::new();
+    let source_path = InternedPath::from_single_str("test.bst", &mut string_table);
+    let registry = StyleDirectiveRegistry::merged(directives);
+    let file_tokens = tokenize(
+        source,
+        &source_path,
+        TokenizeMode::Normal,
+        &registry,
         &mut string_table,
     )
     .expect("tokenization should succeed");
@@ -117,12 +138,14 @@ fn tokenizes_children_directive_with_template_argument() {
 #[test]
 fn rejects_legacy_style_child_template_prefix_syntax() {
     let mut string_table = StringTable::new();
+    let style_directives = StyleDirectiveRegistry::built_ins();
     let source_path = InternedPath::from_single_str("test.bst", &mut string_table);
 
     let result = tokenize(
         "[$[:prefix], $markdown:\nhello\n]",
         &source_path,
         TokenizeMode::Normal,
+        &style_directives,
         &mut string_table,
     );
     assert!(
@@ -134,18 +157,38 @@ fn rejects_legacy_style_child_template_prefix_syntax() {
 #[test]
 fn rejects_style_directives_outside_template_heads() {
     let mut string_table = StringTable::new();
+    let style_directives = StyleDirectiveRegistry::built_ins();
     let source_path = InternedPath::from_single_str("test.bst", &mut string_table);
 
     let result = tokenize(
         "$markdown\n",
         &source_path,
         TokenizeMode::Normal,
+        &style_directives,
         &mut string_table,
     );
     assert!(
         result.is_err(),
         "style directives outside template heads should fail"
     );
+}
+
+#[test]
+fn unknown_style_directives_fail_under_strict_registry() {
+    let mut string_table = StringTable::new();
+    let style_directives = StyleDirectiveRegistry::built_ins();
+    let source_path = InternedPath::from_single_str("test.bst", &mut string_table);
+
+    let result = tokenize(
+        "[$unknown: value]",
+        &source_path,
+        TokenizeMode::Normal,
+        &style_directives,
+        &mut string_table,
+    );
+    let error = result.expect_err("unknown directive should fail during tokenization");
+    assert!(error.msg.contains("Unsupported style directive"));
+    assert!(error.msg.contains("$unknown"));
 }
 
 #[test]
@@ -177,12 +220,14 @@ fn tokenizes_slot_and_insert_directives_inside_template_heads() {
 #[test]
 fn rejects_numeric_slot_directive_prefixes() {
     let mut string_table = StringTable::new();
+    let style_directives = StyleDirectiveRegistry::built_ins();
     let source_path = InternedPath::from_single_str("test.bst", &mut string_table);
 
     let result = tokenize(
         "[wrapper: [$1: first]]",
         &source_path,
         TokenizeMode::Normal,
+        &style_directives,
         &mut string_table,
     );
     assert!(
@@ -265,6 +310,42 @@ fn css_template_body_keeps_selector_brackets_as_literal_text() {
         .expect("expected css template body text to include selector brackets");
 
     assert!(body_literal.contains(".button"));
+}
+
+#[test]
+fn custom_balanced_directive_uses_general_balanced_mode() {
+    let directives = vec![StyleDirectiveSpec::new(
+        "highlight",
+        TemplateBodyMode::Balanced,
+    )];
+    let (file_tokens, string_table) =
+        tokenize_source_with_directives("[$highlight:\n[data-kind=\"cta\"]\n]", &directives);
+
+    let template_heads = file_tokens
+        .tokens
+        .iter()
+        .filter(|token| matches!(token.kind, TokenKind::TemplateHead))
+        .count();
+    let template_closes = file_tokens
+        .tokens
+        .iter()
+        .filter(|token| matches!(token.kind, TokenKind::TemplateClose))
+        .count();
+
+    assert_eq!(template_heads, 1);
+    assert_eq!(template_closes, 1);
+    let body_literal = file_tokens
+        .tokens
+        .iter()
+        .find_map(|token| match token.kind {
+            TokenKind::StringSliceLiteral(id) => {
+                let value = string_table.resolve(id);
+                value.contains("[data-kind=\"cta\"]").then_some(value)
+            }
+            _ => None,
+        })
+        .expect("expected balanced directive body to keep brackets as literal text");
+    assert!(body_literal.contains("data-kind"));
 }
 
 #[test]

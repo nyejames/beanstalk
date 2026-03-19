@@ -1,5 +1,6 @@
 pub(crate) mod ast;
 pub(crate) mod headers;
+pub(crate) mod style_directives;
 pub(crate) mod tokenizer;
 pub(crate) mod optimizers {
     pub(crate) mod constant_folding;
@@ -44,6 +45,7 @@ use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::module_dependencies::resolve_module_dependencies;
 use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::tokenizer::tokenizer::tokenize;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenizeMode};
 use crate::projects::settings::Config;
@@ -67,16 +69,22 @@ pub enum FrontendBuildProfile {
 
 pub struct CompilerFrontend {
     pub(crate) host_function_registry: HostRegistry,
+    pub(crate) style_directives: StyleDirectiveRegistry,
     pub(crate) string_table: StringTable,
 }
 
 impl CompilerFrontend {
-    pub(crate) fn new(_project_config: &Config, mut string_table: StringTable) -> Self {
+    pub(crate) fn new(
+        _project_config: &Config,
+        mut string_table: StringTable,
+        style_directives: StyleDirectiveRegistry,
+    ) -> Self {
         // Create a builtin host function registry with print and other host functions
         let host_function_registry = HostRegistry::new(&mut string_table);
 
         Self {
             host_function_registry,
+            style_directives,
             string_table,
         }
     }
@@ -96,6 +104,7 @@ impl CompilerFrontend {
             source_code,
             interned_path,
             tokenizer_mode,
+            &self.style_directives,
             &mut self.string_table,
         ) {
             Ok(tokens) => Ok(tokens),
@@ -164,6 +173,7 @@ impl CompilerFrontend {
             headers,
             top_level_template_items,
             &self.host_function_registry,
+            &self.style_directives,
             &mut self.string_table,
             interned_entry_dir,
             build_profile,

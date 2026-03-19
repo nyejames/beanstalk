@@ -42,7 +42,7 @@ impl Default for DevServerOptions {
 }
 
 pub fn run_dev_server(
-    builder: Box<dyn ProjectBuilder + Send>,
+    builder: ProjectBuilder,
     entry_path: &str,
     flags: &[Flag],
     options: DevServerOptions,

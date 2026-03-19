@@ -113,8 +113,10 @@ fn discover_modules_uses_reachable_files_only() {
     let mut config = Config::new(root.clone());
     parse_project_config_file(&mut config, &root.join(settings::CONFIG_FILE_NAME))
         .expect("config parse");
+    let style_directives = StyleDirectiveRegistry::built_ins();
 
-    let modules = discover_all_modules_in_project(&config).expect("module discovery should pass");
+    let modules = discover_all_modules_in_project(&config, &style_directives)
+        .expect("module discovery should pass");
 
     assert_eq!(modules.len(), 2);
 

@@ -55,11 +55,11 @@ pub trait DevBuildExecutor: Send {
 }
 
 pub struct ProjectBuildExecutor {
-    builder: Box<dyn ProjectBuilder + Send>,
+    builder: ProjectBuilder,
 }
 
 impl ProjectBuildExecutor {
-    pub fn new(builder: Box<dyn ProjectBuilder + Send>) -> Self {
+    pub fn new(builder: ProjectBuilder) -> Self {
         Self { builder }
     }
 }
@@ -78,7 +78,7 @@ impl DevBuildExecutor for ProjectBuildExecutor {
             )
         })?;
 
-        let build_result = build::build_project(self.builder.as_ref(), entry_path, flags)?;
+        let build_result = build::build_project(&self.builder, entry_path, flags)?;
         build::write_project_outputs(
             &build_result.project,
             &WriteOptions {

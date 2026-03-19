@@ -63,14 +63,12 @@ pub(crate) fn configure_css_style(
     // WHAT: parse the directive-local argument syntax only.
     // WHY: keep `$css(...)` parsing isolated from the general expression parser.
     let mode = parse_css_mode_argument(token_stream, string_table)?;
-    template.style.id = "css";
-    template.style.formatter = None;
-    template.style.formatter_precedence = 0;
-    template.style.css_mode = Some(mode);
-    template.explicit_style.id = "css";
-    template.explicit_style.formatter = None;
-    template.explicit_style.formatter_precedence = 0;
-    template.explicit_style.css_mode = Some(mode);
+    template.apply_style_updates(|style| {
+        style.id = "css";
+        style.formatter = None;
+        style.formatter_precedence = 0;
+        style.css_mode = Some(mode);
+    });
     Ok(())
 }
 
@@ -805,5 +803,5 @@ fn advance_scan_state(state: &mut ScanState, chars: &[char], index: &mut usize) 
 }
 
 #[cfg(test)]
-#[path = "tests/css_tests.rs"]
+#[path = "../tests/css_tests.rs"]
 mod css_tests;

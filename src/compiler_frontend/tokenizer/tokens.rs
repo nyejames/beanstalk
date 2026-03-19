@@ -19,20 +19,15 @@ pub enum TokenizeMode {
 pub enum TemplateBodyMode {
     #[default]
     Normal,
-    CodeBalanced,
-    CssBalanced,
+    Balanced,
     DiscardBalanced,
-    DocBalanced,
 }
 
 impl TemplateBodyMode {
     pub fn is_balanced_mode(self) -> bool {
         matches!(
             self,
-            TemplateBodyMode::CodeBalanced
-                | TemplateBodyMode::CssBalanced
-                | TemplateBodyMode::DiscardBalanced
-                | TemplateBodyMode::DocBalanced
+            TemplateBodyMode::Balanced | TemplateBodyMode::DiscardBalanced
         )
     }
 }
@@ -421,7 +416,7 @@ pub enum TokenKind {
 
     /// Variable name
     Symbol(StringId),
-    // `$markdown`, `$reset`, `$formatter`, etc. inside template heads.
+    // `$markdown`, `$reset`, and builder-registered directives inside template heads.
     StyleDirective(StringId),
 
     // Values

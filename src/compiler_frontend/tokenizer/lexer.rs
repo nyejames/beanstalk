@@ -2,6 +2,7 @@ use crate::compiler_frontend::basic_utility_functions::is_valid_var_char;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::tokenizer::paths::parse_file_path;
 use crate::compiler_frontend::tokenizer::tokens::{
     FileTokens, TemplateBodyMode, TextLocation, Token, TokenKind, TokenStream, TokenizeMode,
@@ -22,6 +23,7 @@ pub fn tokenize(
     source_code: &str,
     src_path: &InternedPath,
     mode: TokenizeMode,
+    style_directives: &StyleDirectiveRegistry,
     string_table: &mut StringTable,
 ) -> Result<FileTokens, CompilerError> {
     // About 1/6 of the source code seems to be tokens roughly from some very small preliminary tests
@@ -40,7 +42,7 @@ pub fn tokenize(
         }
 
         tokens.push(token);
-        token = get_token_kind(&mut stream, string_table)?;
+        token = get_token_kind(&mut stream, style_directives, string_table)?;
     }
 
     tokens.push(token);
@@ -51,6 +53,7 @@ pub fn tokenize(
 
 pub fn get_token_kind(
     stream: &mut TokenStream<'_>,
+    style_directives: &StyleDirectiveRegistry,
     string_table: &mut StringTable,
 ) -> Result<Token, CompilerError> {
     let mut current_char = match stream.next() {
@@ -65,13 +68,13 @@ pub fn get_token_kind(
     // nested template begins or the current template closes.
     if stream.mode == TokenizeMode::TemplateBody {
         match stream.current_template_body_mode() {
-            TemplateBodyMode::CodeBalanced | TemplateBodyMode::CssBalanced => {
+            TemplateBodyMode::Balanced => {
                 return tokenize_code_template_body(current_char, stream, string_table);
             }
             TemplateBodyMode::DiscardBalanced => {
                 return tokenize_discard_template_body(current_char, stream);
             }
-            TemplateBodyMode::DocBalanced | TemplateBodyMode::Normal => {
+            TemplateBodyMode::Normal => {
                 if current_char != ']' && current_char != '[' {
                     return tokenize_template_body(current_char, stream, string_table);
                 }
@@ -203,7 +206,7 @@ pub fn get_token_kind(
                 stream.new_location().to_error_location(string_table),
                 {
                     CompilationStage => "Tokenization",
-                    PrimarySuggestion => "Use '$markdown', '$children(..)', '$reset', '$slot', '$insert(..)', '$note', '$todo', '$doc', '$code', '$css', or '$formatter(...)' inside the template head",
+                    PrimarySuggestion => "Use one of the registered style directives in the template head",
                 }
             )
         };
@@ -238,17 +241,22 @@ pub fn get_token_kind(
         }
 
         let directive = string_table.intern(&token_value);
-        match token_value.as_str() {
-            "code" => stream.mark_current_template_body_mode(TemplateBodyMode::CodeBalanced),
-            "css" => stream.mark_current_template_body_mode(TemplateBodyMode::CssBalanced),
-            "note" | "todo" => {
-                stream.mark_current_template_body_mode(TemplateBodyMode::DiscardBalanced)
-            }
-            "doc" => stream.mark_current_template_body_mode(TemplateBodyMode::DocBalanced),
-            _ => {}
-        }
-        // The parser validates which directives are currently supported. The lexer
-        // only has to preserve the directive identifier as a distinct token.
+        let Some(body_mode) = style_directives.body_mode_for(&token_value) else {
+            return_syntax_error!(
+                format!(
+                    "Unsupported style directive '${}'. Registered directives are {}.",
+                    token_value,
+                    style_directives.supported_directives_for_diagnostic(),
+                ),
+                stream.new_location().to_error_location(string_table),
+                {
+                    CompilationStage => "Tokenization",
+                    PrimarySuggestion => "Register this directive in the project builder frontend_style_directives list or use a supported built-in directive",
+                }
+            )
+        };
+
+        stream.mark_current_template_body_mode(body_mode);
         return_token!(TokenKind::StyleDirective(directive), stream);
     }
 
@@ -363,7 +371,7 @@ pub fn get_token_kind(
             }
 
             // Do not add any token to the stream, call this function again
-            return get_token_kind(stream, string_table);
+            return get_token_kind(stream, style_directives, string_table);
         }
 
         // Subtraction / Negative / Return / Subtract Assign

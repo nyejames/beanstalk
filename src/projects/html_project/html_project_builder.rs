@@ -3,7 +3,7 @@
 // Builds Beanstalk projects for web deployment by lowering HIR to JavaScript,
 // then embedding the generated runtime into HTML output pages.
 use crate::backends::js::{JsLoweringConfig, lower_hir_to_js};
-use crate::build_system::build::{FileKind, Module, OutputFile, Project, ProjectBuilder};
+use crate::build_system::build::{BackendBuilder, FileKind, Module, OutputFile, Project};
 use crate::build_system::create_project_modules::resolve_project_entry_root;
 use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::analysis::borrow_checker::BorrowCheckReport;
@@ -25,7 +25,7 @@ impl HtmlProjectBuilder {
     }
 }
 
-impl ProjectBuilder for HtmlProjectBuilder {
+impl BackendBuilder for HtmlProjectBuilder {
     fn build_backend(
         &self,
         modules: Vec<Module>,

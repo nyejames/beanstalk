@@ -3,10 +3,10 @@ use crate::compiler_frontend::ast::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
-use crate::compiler_frontend::ast::templates::code::{
+use crate::compiler_frontend::ast::templates::styles::code::{
     CodeLanguage, code_formatter, highlight_code_html,
 };
-use crate::compiler_frontend::ast::templates::markdown::markdown_formatter;
+use crate::compiler_frontend::ast::templates::styles::markdown::markdown_formatter;
 use crate::compiler_frontend::ast::templates::template::{
     CommentDirectiveKind, CssDirectiveMode, TemplateAtom, TemplateSegment, TemplateSegmentOrigin,
     TemplateType,
@@ -16,9 +16,10 @@ use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::style_directives::{StyleDirectiveRegistry, StyleDirectiveSpec};
 use crate::compiler_frontend::tokenizer::tokenizer::tokenize;
 use crate::compiler_frontend::tokenizer::tokens::{
-    CharPosition, FileTokens, TextLocation, Token, TokenKind,
+    CharPosition, FileTokens, TemplateBodyMode, TextLocation, Token, TokenKind,
 };
 
 fn token(kind: TokenKind, line: i32) -> Token {
@@ -40,10 +41,37 @@ fn token(kind: TokenKind, line: i32) -> Token {
 
 fn template_tokens_from_source(source: &str, string_table: &mut StringTable) -> FileTokens {
     let scope = InternedPath::from_single_str("main.bst/#const_template0", string_table);
+    let style_directives = StyleDirectiveRegistry::built_ins();
     let mut tokens = tokenize(
         source,
         &scope,
         crate::compiler_frontend::tokenizer::tokens::TokenizeMode::Normal,
+        &style_directives,
+        string_table,
+    )
+    .expect("tokenization should succeed");
+
+    tokens.index = tokens
+        .tokens
+        .iter()
+        .position(|token| matches!(token.kind, TokenKind::TemplateHead))
+        .expect("expected a template opener");
+
+    tokens
+}
+
+fn template_tokens_from_source_with_directives(
+    source: &str,
+    directives: &[StyleDirectiveSpec],
+    string_table: &mut StringTable,
+) -> FileTokens {
+    let scope = InternedPath::from_single_str("main.bst/#const_template0", string_table);
+    let registry = StyleDirectiveRegistry::merged(directives);
+    let mut tokens = tokenize(
+        source,
+        &scope,
+        crate::compiler_frontend::tokenizer::tokens::TokenizeMode::Normal,
+        &registry,
         string_table,
     )
     .expect("tokenization should succeed");
@@ -173,7 +201,23 @@ fn folded_template_output(source: &str) -> String {
 
 fn template_parse_error(source: &str) -> String {
     let mut string_table = StringTable::new();
-    let mut token_stream = template_tokens_from_source(source, &mut string_table);
+    let style_directives = StyleDirectiveRegistry::built_ins();
+    let scope = InternedPath::from_single_str("main.bst/#const_template0", &mut string_table);
+    let mut token_stream = match tokenize(
+        source,
+        &scope,
+        crate::compiler_frontend::tokenizer::tokens::TokenizeMode::Normal,
+        &style_directives,
+        &mut string_table,
+    ) {
+        Ok(tokens) => tokens,
+        Err(error) => return error.msg,
+    };
+    token_stream.index = token_stream
+        .tokens
+        .iter()
+        .position(|token| matches!(token.kind, TokenKind::TemplateHead))
+        .expect("expected a template opener");
     let context = ScopeContext::new_constant(token_stream.src_path.to_owned());
 
     Template::new(&mut token_stream, &context, vec![], &mut string_table)
@@ -763,30 +807,19 @@ fn nested_templates_inside_doc_are_collected_as_doc_children() {
 }
 
 #[test]
-fn formatter_directive_errors_until_implemented() {
-    let mut string_table = StringTable::new();
-    let mut token_stream =
-        template_tokens_from_source("[$formatter(markdown, 10): body]", &mut string_table);
-    let context = ScopeContext::new_constant(token_stream.src_path.to_owned());
+fn formatter_directive_is_unknown_without_builder_registration() {
+    let error = template_parse_error("[$formatter(markdown, 10): body]");
 
-    let error = Template::new(&mut token_stream, &context, vec![], &mut string_table)
-        .expect_err("$formatter should not be implemented yet");
-
-    assert!(error.msg.contains("$formatter"));
-    assert!(error.msg.contains("not implemented yet"));
+    assert!(error.contains("Unsupported style directive"));
+    assert!(error.contains("$formatter"));
 }
 
 #[test]
 fn unknown_style_directives_error_cleanly() {
-    let mut string_table = StringTable::new();
-    let mut token_stream = template_tokens_from_source("[$unknown: body]", &mut string_table);
-    let context = ScopeContext::new_constant(token_stream.src_path.to_owned());
+    let error = template_parse_error("[$unknown: body]");
 
-    let error = Template::new(&mut token_stream, &context, vec![], &mut string_table)
-        .expect_err("unknown directives should fail");
-
-    assert!(error.msg.contains("Unsupported style directive"));
-    assert!(error.msg.contains("$unknown"));
+    assert!(error.contains("Unsupported style directive"));
+    assert!(error.contains("$unknown"));
 }
 
 #[test]
@@ -795,6 +828,46 @@ fn ignore_is_rejected_as_unsupported_style_directive() {
 
     assert!(error.contains("Unsupported style directive"));
     assert!(error.contains("$ignore"));
+}
+
+#[test]
+fn builder_registered_style_directive_parses_as_noop_scaffold() {
+    let mut string_table = StringTable::new();
+    let directives = vec![StyleDirectiveSpec::new("brand", TemplateBodyMode::Normal)];
+    let registry = StyleDirectiveRegistry::merged(&directives);
+    let mut token_stream = template_tokens_from_source_with_directives(
+        "[$brand(unknown_symbol): body]",
+        &directives,
+        &mut string_table,
+    );
+    let context = ScopeContext::new_constant(token_stream.src_path.to_owned())
+        .with_style_directives(&registry);
+
+    let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
+        .expect("builder-registered directives should parse in scaffold mode");
+
+    assert_eq!(template.style.id, "");
+    assert!(matches!(template.kind, TemplateType::String));
+}
+
+#[test]
+fn builder_directive_can_override_builtin_slot_name() {
+    let mut string_table = StringTable::new();
+    let directives = vec![StyleDirectiveSpec::new("slot", TemplateBodyMode::Normal)];
+    let registry = StyleDirectiveRegistry::merged(&directives);
+    let mut token_stream = template_tokens_from_source_with_directives(
+        "[$slot(\"name\"): body]",
+        &directives,
+        &mut string_table,
+    );
+    let context = ScopeContext::new_constant(token_stream.src_path.to_owned())
+        .with_style_directives(&registry);
+
+    let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
+        .expect("builder override should disable built-in slot parsing semantics");
+
+    assert!(matches!(template.kind, TemplateType::String));
+    assert!(!template.has_unresolved_slots());
 }
 
 #[test]

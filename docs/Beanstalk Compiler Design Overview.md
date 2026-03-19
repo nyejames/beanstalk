@@ -20,12 +20,12 @@ At runtime, ownership is resolved via tagged pointers, allowing a single calling
 This style of memory management can be incrementally strengthened with region analysis, stricter static lifetimes or place-based tracking in future iterations of the compiler without having to change the language semantics.
 
 ## Overview
-Build systems can create a function that implements the ProjectBuilder trait and pass that, along with a list of input files to the compiler's core build system.
-The project builder takes the output of the compiler's frontend (A list of Hir modules) and performs the backend compilation stages.
+Build systems create a `BackendBuilder` implementation and wrap it in a `ProjectBuilder` struct.
+`ProjectBuilder` also carries any frontend style directives the build system wants to register.
+The frontend compiles modules up to HIR first, then the backend builder consumes those modules.
 
 ```rust
-    /// Unified build interface for all project types
-    pub trait ProjectBuilder {
+pub trait BackendBuilder {
     /// Build the project with the given configuration
     fn build_backend(
         &self,
@@ -34,9 +34,14 @@ The project builder takes the output of the compiler's frontend (A list of Hir m
         flags: &[Flag],       // Settings only relevant to this build
     ) -> Result<Project, CompilerMessages>;
     
-        /// Validate the project configuration
-        fn validate_project_config(&self, config: &Config) -> Result<(), CompilerError>;
-    }
+    /// Validate the project configuration
+    fn validate_project_config(&self, config: &Config) -> Result<(), CompilerError>;
+}
+
+pub struct ProjectBuilder {
+    pub backend: Box<dyn BackendBuilder + Send>,
+    pub frontend_style_directives: Vec<StyleDirectiveSpec>,
+}
 ```
 
 Project builders:
@@ -44,6 +49,12 @@ Project builders:
 - Decide how output files are structured
 - Select and run backend code generation
 - Emit artefacts (HTML, JS, Wasm, tooling output, etc.)
+- Optionally register additional frontend style directives
+
+Frontend style directives:
+- Compiler built-ins are always available.
+- Build systems can provide additional directives (or override a built-in name) via `frontend_style_directives`.
+- Tokenizer and template parsing use the same merged registry and reject unknown directives strictly.
 
 Project builders do **not**:
 - Parse files

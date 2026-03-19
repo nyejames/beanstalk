@@ -5,7 +5,7 @@
 //! - converting compile-time body string runs into highlighted HTML
 
 use crate::compiler_frontend::ast::templates::create_template_node::Template;
-use crate::compiler_frontend::ast::templates::markdown::HIDDEN_SKIP_CHAR;
+use crate::compiler_frontend::ast::templates::styles::TEMPLATE_FORMAT_GUARD_CHAR;
 use crate::compiler_frontend::ast::templates::template::{Formatter, TemplateFormatter};
 use crate::compiler_frontend::basic_utility_functions::NumericalParsing;
 use crate::compiler_frontend::compiler_errors::CompilerError;
@@ -81,14 +81,12 @@ pub(crate) fn configure_code_style(
         parse_code_language_argument(token_stream, string_table)?
     };
 
-    template.style.id = "code";
-    template.style.formatter = Some(code_formatter(language));
-    template.style.formatter_precedence = 0;
-    template.style.css_mode = None;
-    template.explicit_style.id = "code";
-    template.explicit_style.formatter = Some(code_formatter(language));
-    template.explicit_style.formatter_precedence = 0;
-    template.explicit_style.css_mode = None;
+    template.apply_style_updates(|style| {
+        style.id = "code";
+        style.formatter = Some(code_formatter(language));
+        style.formatter_precedence = 0;
+        style.css_mode = None;
+    });
     Ok(())
 }
 
@@ -105,14 +103,14 @@ pub(crate) fn highlight_code_html(source: &str, language: CodeLanguage) -> Strin
     while index < chars.len() {
         let current = chars[index];
 
-        if current == HIDDEN_SKIP_CHAR {
+        if current == TEMPLATE_FORMAT_GUARD_CHAR {
             flush_word(&mut highlighted, &mut word, language);
             index += 1;
 
             // Nested templates can already contain formatted HTML spans. Those sections
             // are wrapped in the shared hidden guard char so parent formatters copy them
             // through without trying to tokenize the generated markup again.
-            while index < chars.len() && chars[index] != HIDDEN_SKIP_CHAR {
+            while index < chars.len() && chars[index] != TEMPLATE_FORMAT_GUARD_CHAR {
                 highlighted.push(chars[index]);
                 index += 1;
             }

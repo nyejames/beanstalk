@@ -2,18 +2,21 @@ use super::*;
 use crate::compiler_frontend::ast::statements::functions::{FunctionReturn, FunctionSignature};
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::host_functions::HostRegistry;
+use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::tokenizer::tokenizer::tokenize;
 use crate::compiler_frontend::tokenizer::tokens::TokenizeMode;
 use std::path::PathBuf;
 
 fn parse_single_file_headers(source: &str) -> Headers {
     let mut string_table = StringTable::new();
+    let style_directives = StyleDirectiveRegistry::built_ins();
     let file_path = PathBuf::from("src/#page.bst");
     let interned_path = InternedPath::from_path_buf(&file_path, &mut string_table);
     let file_tokens = tokenize(
         source,
         &interned_path,
         TokenizeMode::Normal,
+        &style_directives,
         &mut string_table,
     )
     .expect("tokenization should succeed");
@@ -37,6 +40,7 @@ fn parse_single_file_headers_with_entry(
     entry_file_path: &str,
 ) -> Result<Headers, Vec<CompilerError>> {
     let mut string_table = StringTable::new();
+    let style_directives = StyleDirectiveRegistry::built_ins();
     let file_path = PathBuf::from(file_path);
     let entry_file_path = PathBuf::from(entry_file_path);
     let interned_path = InternedPath::from_path_buf(&file_path, &mut string_table);
@@ -44,6 +48,7 @@ fn parse_single_file_headers_with_entry(
         source,
         &interned_path,
         TokenizeMode::Normal,
+        &style_directives,
         &mut string_table,
     )
     .expect("tokenization should succeed");

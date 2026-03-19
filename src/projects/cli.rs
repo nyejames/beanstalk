@@ -91,8 +91,8 @@ pub fn start_cli() {
         }
 
         Command::Build(path) => {
-            let html_project_builder = HtmlProjectBuilder::new();
-            match build::build_project(&html_project_builder, &path, &flags) {
+            let project_builder = build::ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
+            match build::build_project(&project_builder, &path, &flags) {
                 Ok(build_result) => {
                     let output_root = if build_result.config.entry_dir.is_dir() {
                         build::resolve_project_output_root(&build_result.config, &flags)
@@ -140,8 +140,8 @@ pub fn start_cli() {
         // }
         Command::Dev { path, options } => {
             say!("\nStarting dev server...");
-            let html_project_builder = Box::new(HtmlProjectBuilder::new());
-            match dev_server::run_dev_server(html_project_builder, &path, &flags, options) {
+            let project_builder = build::ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
+            match dev_server::run_dev_server(project_builder, &path, &flags, options) {
                 Ok(_) => {}
                 Err(messages) => print_compiler_messages(messages),
             }

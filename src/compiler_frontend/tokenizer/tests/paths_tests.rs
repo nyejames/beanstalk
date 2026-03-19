@@ -1,15 +1,18 @@
 use super::*;
 use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::tokenizer::tokenizer::tokenize;
 use crate::compiler_frontend::tokenizer::tokens::TokenizeMode;
 
 fn first_path_token_values(source: &str) -> Vec<String> {
     let mut string_table = StringTable::new();
+    let style_directives = StyleDirectiveRegistry::built_ins();
     let source_path = InternedPath::from_single_str("test.bst", &mut string_table);
     let file_tokens = tokenize(
         source,
         &source_path,
         TokenizeMode::Normal,
+        &style_directives,
         &mut string_table,
     )
     .expect("tokenization should succeed");
@@ -33,11 +36,13 @@ fn first_path_token_values(source: &str) -> Vec<String> {
 
 fn collect_import_path_values(source: &str) -> Vec<String> {
     let mut string_table = StringTable::new();
+    let style_directives = StyleDirectiveRegistry::built_ins();
     let source_path = InternedPath::from_single_str("test.bst", &mut string_table);
     let file_tokens = tokenize(
         source,
         &source_path,
         TokenizeMode::Normal,
+        &style_directives,
         &mut string_table,
     )
     .expect("tokenization should succeed");
@@ -112,12 +117,14 @@ fn parse_file_path_accepts_backslash_separator() {
 #[test]
 fn parse_file_path_rejects_malformed_grouped_imports() {
     let mut string_table = StringTable::new();
+    let style_directives = StyleDirectiveRegistry::built_ins();
     let source_path = InternedPath::from_single_str("test.bst", &mut string_table);
 
     let malformed_double_comma = tokenize(
         "import @(styles/docs/{footer,,navbar})\n",
         &source_path,
         TokenizeMode::Normal,
+        &style_directives,
         &mut string_table,
     );
     assert!(
@@ -129,12 +136,14 @@ fn parse_file_path_rejects_malformed_grouped_imports() {
 #[test]
 fn parse_file_path_rejects_grouped_import_missing_closing_brace() {
     let mut string_table = StringTable::new();
+    let style_directives = StyleDirectiveRegistry::built_ins();
     let source_path = InternedPath::from_single_str("test.bst", &mut string_table);
 
     let result = tokenize(
         "import @(styles/docs/{footer,navbar\n",
         &source_path,
         TokenizeMode::Normal,
+        &style_directives,
         &mut string_table,
     );
     assert!(result.is_err(), "missing grouped-import '}}' should fail");
@@ -145,12 +154,14 @@ fn parse_file_path_rejects_grouped_import_missing_closing_brace() {
 #[test]
 fn parse_file_path_rejects_grouped_import_missing_closing_parenthesis() {
     let mut string_table = StringTable::new();
+    let style_directives = StyleDirectiveRegistry::built_ins();
     let source_path = InternedPath::from_single_str("test.bst", &mut string_table);
 
     let result = tokenize(
         "import @(styles/docs/{footer,navbar}\n",
         &source_path,
         TokenizeMode::Normal,
+        &style_directives,
         &mut string_table,
     );
     assert!(
@@ -170,11 +181,13 @@ fn collect_import_paths_from_tokens_supports_newline_after_import() {
 #[test]
 fn collect_import_paths_from_tokens_rejects_missing_path() {
     let mut string_table = StringTable::new();
+    let style_directives = StyleDirectiveRegistry::built_ins();
     let source_path = InternedPath::from_single_str("test.bst", &mut string_table);
     let file_tokens = tokenize(
         "import\nfooter\n",
         &source_path,
         TokenizeMode::Normal,
+        &style_directives,
         &mut string_table,
     )
     .expect("tokenization should succeed");

@@ -1,7 +1,18 @@
+//! Built-in `$markdown` template style support.
+//!
+//! WHAT:
+//! - Converts template body text into a narrow, deterministic HTML-flavoured markdown output.
+//! - Preserves nested pre-formatted segments using a shared hidden guard marker.
+//!
+//! WHY:
+//! - Templates need lightweight markdown support without adding a full markdown dependency.
+//! - Nested template formatting must not be reparsed by parent markdown runs.
+
+use crate::compiler_frontend::ast::templates::styles::TEMPLATE_FORMAT_GUARD_CHAR;
 use crate::compiler_frontend::ast::templates::template::{Formatter, TemplateFormatter};
 use std::sync::Arc;
 
-// Custom-flavoured Markdown parser
+/// Parser/render context for the lightweight markdown formatter.
 #[derive(PartialEq, Debug, Clone)]
 pub enum MarkdownContext {
     None,
@@ -13,7 +24,8 @@ pub enum MarkdownContext {
     Em(i32),
 }
 
-pub const HIDDEN_SKIP_CHAR: char = '\u{FFFC}';
+/// Backward-compatible alias used by existing markdown tests/helpers.
+pub const HIDDEN_SKIP_CHAR: char = TEMPLATE_FORMAT_GUARD_CHAR;
 
 #[derive(Debug)]
 pub struct MarkdownTemplateFormatter;
@@ -447,5 +459,5 @@ fn em_tag_strength(strength: i32, closing: bool) -> &'static str {
 }
 
 #[cfg(test)]
-#[path = "tests/markdown_tests.rs"]
+#[path = "../tests/markdown_tests.rs"]
 mod markdown_tests;

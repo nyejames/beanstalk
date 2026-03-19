@@ -9,6 +9,7 @@ use crate::compiler_frontend::ast::templates::create_template_node::Template;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::display_messages::print_formatted_error;
 use crate::compiler_frontend::host_functions::HostRegistry;
+use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::tokenizer::tokenizer::tokenize;
 use crate::compiler_frontend::tokenizer::tokens::TokenizeMode;
 use saying::say;
@@ -97,10 +98,12 @@ fn compile_beanstalk_to_string(
     let interned_path = InternedPath::from_path_buf(source_path, &mut string_table);
 
     // Tokenize the source code
+    let style_directives = StyleDirectiveRegistry::built_ins();
     let mut tokenizer_output = tokenize(
         source_code,
         &interned_path,
         TokenizeMode::TemplateHead,
+        &style_directives,
         &mut string_table,
     )?;
     let ast_context = ScopeContext::new(

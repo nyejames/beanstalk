@@ -134,7 +134,12 @@ Templates unlock the full power of Beanstalk's HTML / CSS generation capabilitie
 Templates can be used to build complex UI components. They can use slots to insert content from other templates and have **style metadata** attached to them.
 
 A template’s style is defined in the **template head** using `$` directives. 
-`$` introduces **compiler-handled settings** (so they don’t collide with normal variables and can be extended in the future), such as choosing a formatter, a precedence and default child templates that are automatically applied to direct child templates.
+`$` introduces **compiler-handled directives** (so they don’t collide with normal variables and can be extended in the future), such as formatter-like built-ins, precedence controls, and default child templates that are automatically applied to direct child templates.
+
+Directive availability is frontend-registry based:
+- Compiler built-ins are available by default (`$markdown`, `$code`, `$css`, slots, etc.).
+- Project builders can register additional directives using the same `$name` syntax.
+- Unknown directives fail as syntax/rule errors unless they are registered.
 
 ```beanstalk
 -- Define a template style

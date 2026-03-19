@@ -12,6 +12,7 @@ use crate::compiler_frontend::headers::parse_file_headers::{Header, HeaderKind, 
 use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::style_directives::{StyleDirectiveRegistry, StyleDirectiveSpec};
 use crate::compiler_frontend::tokenizer::paths::collect_import_paths_from_tokens;
 use crate::compiler_frontend::tokenizer::tokenizer::tokenize;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, Token, TokenKind, TokenizeMode};
@@ -41,7 +42,10 @@ struct ParsedImportPaths {
 pub fn compile_project_frontend(
     config: &mut Config,
     flags: &[Flag],
+    frontend_style_directives: &[StyleDirectiveSpec],
 ) -> Result<Vec<Module>, CompilerMessages> {
+    let style_directives = StyleDirectiveRegistry::merged(frontend_style_directives);
+
     let build_profile = if flags.contains(&Flag::Release) {
         FrontendBuildProfile::Release
     } else {
@@ -77,6 +81,7 @@ pub fn compile_project_frontend(
                     &source_root,
                     &library_roots,
                     &source_root,
+                    &style_directives,
                 ) {
                     Ok(files) => files,
                     Err(error) => return_err_as_messages!(error),
@@ -95,7 +100,13 @@ pub fn compile_project_frontend(
                     });
                 }
 
-                let module = compile_module(input_files, config, &entry_path, build_profile)?;
+                let module = compile_module(
+                    input_files,
+                    config,
+                    &entry_path,
+                    build_profile,
+                    &style_directives,
+                )?;
                 return Ok(vec![module]);
             }
 
@@ -138,7 +149,7 @@ pub fn compile_project_frontend(
     // -------------------------------------
     // Root module entries are #*.bst files (excluding #config.bst).
     // Each entry compiles as its own frontend module with reachable-only inputs.
-    let discovered_modules = match discover_all_modules_in_project(config) {
+    let discovered_modules = match discover_all_modules_in_project(config, &style_directives) {
         Ok(modules) => modules,
         Err(error) => return_err_as_messages!(error),
     };
@@ -150,6 +161,7 @@ pub fn compile_project_frontend(
             config,
             &discovered.entry_point,
             build_profile,
+            &style_directives,
         )?;
         compiled_modules.push(module);
     }
@@ -163,6 +175,7 @@ pub fn compile_module(
     config: &Config,
     entry_file_path: &Path,
     build_profile: FrontendBuildProfile,
+    style_directives: &StyleDirectiveRegistry,
 ) -> Result<Module, CompilerMessages> {
     // Module capacity heuristic
     // Just a guess of how many strings we might need to intern per file
@@ -172,7 +185,7 @@ pub fn compile_module(
     let string_table = StringTable::with_capacity(module.len() * FILE_MIN_UNIQUE_SYMBOLS_CAPACITY);
 
     // Create the compiler_frontend instance
-    let mut compiler = CompilerFrontend::new(config, string_table);
+    let mut compiler = CompilerFrontend::new(config, string_table, style_directives.to_owned());
 
     let _time = Instant::now();
 
@@ -328,6 +341,7 @@ pub fn compile_module(
 
 fn discover_all_modules_in_project(
     config: &Config,
+    style_directives: &StyleDirectiveRegistry,
 ) -> Result<Vec<DiscoveredModule>, CompilerError> {
     let source_root = resolve_project_entry_root(config);
     if !source_root.exists() {
@@ -365,6 +379,7 @@ fn discover_all_modules_in_project(
             &source_root,
             &library_roots,
             &config.entry_dir,
+            style_directives,
         )?;
 
         let mut input_files = Vec::with_capacity(reachable_files.len());
@@ -475,6 +490,7 @@ fn discover_reachable_files(
     source_root: &Path,
     library_roots: &[PathBuf],
     project_root: &Path,
+    style_directives: &StyleDirectiveRegistry,
 ) -> Result<Vec<PathBuf>, CompilerError> {
     let source_root = fs::canonicalize(source_root).map_err(|error| {
         CompilerError::file_error(
@@ -499,7 +515,7 @@ fn discover_reachable_files(
             continue;
         }
 
-        let import_paths = extract_import_paths(&canonical_file)?;
+        let import_paths = extract_import_paths(&canonical_file, style_directives)?;
         for import_path in &import_paths.paths {
             let resolved = resolve_import_to_file(
                 import_path,
@@ -518,7 +534,10 @@ fn discover_reachable_files(
     Ok(reachable.into_iter().collect())
 }
 
-fn extract_import_paths(file_path: &Path) -> Result<ParsedImportPaths, CompilerError> {
+fn extract_import_paths(
+    file_path: &Path,
+    style_directives: &StyleDirectiveRegistry,
+) -> Result<ParsedImportPaths, CompilerError> {
     let source = extract_source_code(file_path)?;
     let mut string_table = StringTable::new();
     let interned_path = InternedPath::from_path_buf(file_path, &mut string_table);
@@ -526,6 +545,7 @@ fn extract_import_paths(file_path: &Path) -> Result<ParsedImportPaths, CompilerE
         &source,
         &interned_path,
         TokenizeMode::Normal,
+        style_directives,
         &mut string_table,
     )
     .map_err(|error| error.with_file_path(file_path.to_path_buf()))?;
@@ -649,11 +669,13 @@ fn with_bst_extension(path: PathBuf) -> PathBuf {
 fn parse_project_config_file(config: &mut Config, config_path: &Path) -> Result<(), CompilerError> {
     let source = extract_source_code(config_path)?;
     let mut string_table = StringTable::new();
+    let style_directives = StyleDirectiveRegistry::built_ins();
     let interned_path = InternedPath::from_path_buf(config_path, &mut string_table);
     let token_stream = tokenize(
         &source,
         &interned_path,
         TokenizeMode::Normal,
+        &style_directives,
         &mut string_table,
     )
     .map_err(|error| error.with_file_path(config_path.to_path_buf()))?;

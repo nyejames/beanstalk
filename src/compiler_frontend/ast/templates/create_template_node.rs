@@ -1,13 +1,16 @@
 use crate::compiler_frontend::ast::ast::ScopeContext;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
-use crate::compiler_frontend::ast::templates::code::configure_code_style;
-use crate::compiler_frontend::ast::templates::css::{configure_css_style, validate_css_template};
-use crate::compiler_frontend::ast::templates::markdown::markdown_formatter;
 use crate::compiler_frontend::ast::templates::slots::{
     compose_template_with_slots, ensure_no_slot_insertions_remain,
     parse_optional_slot_name_argument, parse_required_slot_name_argument,
 };
+use crate::compiler_frontend::ast::templates::styles::TEMPLATE_FORMAT_GUARD_CHAR;
+use crate::compiler_frontend::ast::templates::styles::code::configure_code_style;
+use crate::compiler_frontend::ast::templates::styles::css::{
+    configure_css_style, validate_css_template,
+};
+use crate::compiler_frontend::ast::templates::styles::markdown::markdown_formatter;
 use crate::compiler_frontend::ast::templates::template::{
     CommentDirectiveKind, Formatter, SlotKey, Style, TemplateAtom, TemplateConstValueKind,
     TemplateContent, TemplateControlFlow, TemplateSegment, TemplateSegmentOrigin, TemplateType,
@@ -16,12 +19,11 @@ use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::{CompilerWarning, WarningKind};
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
+use crate::compiler_frontend::style_directives::StyleDirectiveSource;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TextLocation, TokenKind};
 use crate::compiler_frontend::traits::ContainsReferences;
 use crate::projects::settings::BS_VAR_PREFIX;
 use crate::{ast_log, return_compiler_error, return_syntax_error};
-
-pub const TEMPLATE_SPECIAL_IGNORE_CHAR: char = '\u{FFFC}';
 
 #[derive(Clone, Debug)]
 pub struct Template {
@@ -314,6 +316,16 @@ impl Template {
         }
     }
 
+    pub(crate) fn apply_style(&mut self, style: Style) {
+        self.style = style.to_owned();
+        self.explicit_style = style;
+    }
+
+    pub(crate) fn apply_style_updates(&mut self, mut update: impl FnMut(&mut Style)) {
+        update(&mut self.style);
+        update(&mut self.explicit_style);
+    }
+
     pub fn has_unresolved_slots(&self) -> bool {
         self.content.has_unresolved_slots()
     }
@@ -395,21 +407,6 @@ fn recursive_inherited_style(style: &Style) -> Option<Style> {
     Some(inherited)
 }
 
-// TODO: move these old formatters to the new trait style ones
-
-// StyleFormat::Markdown => {
-// let default_tag = "p";
-// final_string.push_str(&to_markdown(&content, default_tag));
-//
-// StyleFormat::Codeblock => {
-// final_string.push_str(&highlight_html_code_block(
-// &content,
-// BEANSTALK_FILE_EXTENSION,
-// ));
-//
-
-// }
-
 // ---------------------
 // TEMPLATE HEAD PARSING
 // ---------------------
@@ -427,7 +424,8 @@ pub fn parse_template_head(
     foldable: &mut bool,
     string_table: &mut StringTable,
 ) -> Result<(), CompilerError> {
-    // TODO: Add control flow parsing
+    // Control-flow directives in template heads are intentionally deferred.
+    // Current head parsing accepts style/settings directives and expressions only.
 
     template.id = format!("{BS_VAR_PREFIX}templateID_{}", token_stream.index);
 
@@ -667,56 +665,74 @@ pub fn parse_template_head(
                 // Template directives share the `$name` token shape with style directives.
                 // Parse `$slot` / `$insert` first, then fall back to style handling.
                 let directive_name = string_table.resolve(directive);
-                match directive_name {
-                    "slot" => {
-                        if saw_meaningful_head_item {
-                            return_syntax_error!(
-                                "Slot helper template heads can only contain '$slot' before the optional body.",
-                                token_stream
-                                    .current_location()
-                                    .to_error_location(string_table)
-                            );
-                        }
-
-                        let slot_name =
-                            parse_optional_slot_name_argument(token_stream, string_table)?;
-                        template.kind = TemplateType::SlotDefinition(match slot_name {
-                            Some(name) => SlotKey::named(name),
-                            None => SlotKey::Default,
-                        });
-                        saw_meaningful_head_item = true;
-                    }
-                    "insert" => {
-                        if saw_meaningful_head_item {
-                            return_syntax_error!(
-                                "Slot helper template heads can only contain '$insert(\"name\")' before the optional body.",
-                                token_stream
-                                    .current_location()
-                                    .to_error_location(string_table)
-                            );
-                        }
-
-                        let slot_name =
-                            parse_required_slot_name_argument(token_stream, string_table)?;
-                        template.kind = TemplateType::SlotInsert(SlotKey::named(slot_name));
-                        saw_meaningful_head_item = true;
-                    }
-                    _ => {
-                        if saw_meaningful_head_item
-                            && matches!(directive_name, "note" | "todo" | "doc")
+                let Some(spec) = context.style_directives.find(directive_name) else {
+                    return_syntax_error!(
+                        format!(
+                            "Unsupported style directive '${directive_name}'. Registered directives are {}.",
+                            context.style_directives.supported_directives_for_diagnostic()
+                        ),
+                        token_stream
+                            .current_location()
+                            .to_error_location(string_table),
                         {
-                            return_syntax_error!(
-                                "Comment template heads cannot mix '$note', '$todo', or '$doc' with other head expressions/directives.",
-                                token_stream
-                                    .current_location()
-                                    .to_error_location(string_table)
-                            );
+                            PrimarySuggestion => "Register this directive in the project builder frontend_style_directives list or use a supported built-in directive",
                         }
+                    )
+                };
 
-                        defer_separator_token =
-                            parse_style_directive(token_stream, context, template, string_table)?;
-                        saw_meaningful_head_item = true;
+                let mut handled_slot_insert = false;
+
+                if spec.source == StyleDirectiveSource::BuiltIn && directive_name == "slot" {
+                    if saw_meaningful_head_item {
+                        return_syntax_error!(
+                            "Slot helper template heads can only contain '$slot' before the optional body.",
+                            token_stream
+                                .current_location()
+                                .to_error_location(string_table)
+                        );
                     }
+
+                    let slot_name = parse_optional_slot_name_argument(token_stream, string_table)?;
+                    template.kind = TemplateType::SlotDefinition(match slot_name {
+                        Some(name) => SlotKey::named(name),
+                        None => SlotKey::Default,
+                    });
+                    saw_meaningful_head_item = true;
+                    handled_slot_insert = true;
+                } else if spec.source == StyleDirectiveSource::BuiltIn && directive_name == "insert"
+                {
+                    if saw_meaningful_head_item {
+                        return_syntax_error!(
+                            "Slot helper template heads can only contain '$insert(\"name\")' before the optional body.",
+                            token_stream
+                                .current_location()
+                                .to_error_location(string_table)
+                        );
+                    }
+
+                    let slot_name = parse_required_slot_name_argument(token_stream, string_table)?;
+                    template.kind = TemplateType::SlotInsert(SlotKey::named(slot_name));
+                    saw_meaningful_head_item = true;
+                    handled_slot_insert = true;
+                }
+
+                if !handled_slot_insert
+                    && saw_meaningful_head_item
+                    && spec.source == StyleDirectiveSource::BuiltIn
+                    && matches!(directive_name, "note" | "todo" | "doc")
+                {
+                    return_syntax_error!(
+                        "Comment template heads cannot mix '$note', '$todo', or '$doc' with other head expressions/directives.",
+                        token_stream
+                            .current_location()
+                            .to_error_location(string_table)
+                    );
+                }
+
+                if !handled_slot_insert {
+                    defer_separator_token =
+                        parse_style_directive(token_stream, context, template, string_table)?;
+                    saw_meaningful_head_item = true;
                 }
             }
 
@@ -1179,10 +1195,10 @@ fn fold_atoms(
             protect_head_segments_from_markdown && segment.origin == TemplateSegmentOrigin::Head;
 
         if protects_this_segment && !inside_protected_body_run {
-            final_string.push(TEMPLATE_SPECIAL_IGNORE_CHAR);
+            final_string.push(TEMPLATE_FORMAT_GUARD_CHAR);
             inside_protected_body_run = true;
         } else if !protects_this_segment && inside_protected_body_run {
-            final_string.push(TEMPLATE_SPECIAL_IGNORE_CHAR);
+            final_string.push(TEMPLATE_FORMAT_GUARD_CHAR);
             inside_protected_body_run = false;
         }
 
@@ -1222,11 +1238,11 @@ fn fold_atoms(
 
             ExpressionKind::Char(value) => {
                 if protect_this_head_segment {
-                    final_string.push(TEMPLATE_SPECIAL_IGNORE_CHAR);
+                    final_string.push(TEMPLATE_FORMAT_GUARD_CHAR);
                 }
                 final_string.push(*value);
                 if protect_this_head_segment {
-                    final_string.push(TEMPLATE_SPECIAL_IGNORE_CHAR);
+                    final_string.push(TEMPLATE_FORMAT_GUARD_CHAR);
                 }
             }
 
@@ -1268,7 +1284,7 @@ fn fold_atoms(
     }
 
     if inside_protected_body_run {
-        final_string.push(TEMPLATE_SPECIAL_IGNORE_CHAR);
+        final_string.push(TEMPLATE_FORMAT_GUARD_CHAR);
     }
 
     ast_log!("Folded template into: ", final_string);
@@ -1282,11 +1298,11 @@ fn effective_inherited_style_for_nested_templates(style: &Style) -> Option<Style
 
 fn push_folded_segment_str(output: &mut String, value: &str, protect_from_markdown: bool) {
     if protect_from_markdown {
-        output.push(TEMPLATE_SPECIAL_IGNORE_CHAR);
+        output.push(TEMPLATE_FORMAT_GUARD_CHAR);
     }
     output.push_str(value);
     if protect_from_markdown {
-        output.push(TEMPLATE_SPECIAL_IGNORE_CHAR);
+        output.push(TEMPLATE_FORMAT_GUARD_CHAR);
     }
 }
 
@@ -1296,117 +1312,144 @@ fn parse_style_directive(
     template: &mut Template,
     string_table: &mut StringTable,
 ) -> Result<bool, CompilerError> {
-    match token_stream.current_token_kind().clone() {
-        TokenKind::StyleDirective(directive) => match string_table.resolve(directive) {
-            "markdown" => {
-                // Built-in formatter sugar. Full `$formatter(...)` support comes later,
-                // but this gives the AST a concrete style object to carry right now.
-                template.style.id = "markdown";
-                template.style.formatter = Some(markdown_formatter());
-                template.style.formatter_precedence = 0;
-                template.style.css_mode = None;
-                template.explicit_style.id = "markdown";
-                template.explicit_style.formatter = Some(markdown_formatter());
-                template.explicit_style.formatter_precedence = 0;
-                template.explicit_style.css_mode = None;
-                Ok(false)
-            }
-
-            "code" => {
-                // Keep the directive-specific parsing in the code formatter module so
-                // this general template parser does not accumulate every built-in style.
-                configure_code_style(token_stream, template, string_table)?;
-                Ok(false)
-            }
-
-            "css" => {
-                configure_css_style(token_stream, template, string_table)?;
-                Ok(false)
-            }
-
-            "children" => {
-                parse_children_style_directive(token_stream, context, template, string_table)?;
-                Ok(false)
-            }
-
-            "reset" => {
-                // `$reset` wipes the inherited style state first, then later directives
-                // in the same head can layer fresh settings back on top.
-                template.style = Style::default();
-                template.style.clear_inherited = true;
-                template.explicit_style = Style::default();
-                template.explicit_style.clear_inherited = true;
-                Ok(false)
-            }
-
-            "note" => {
-                reject_directive_arguments(token_stream, "note", string_table)?;
-                template.kind = TemplateType::Comment(CommentDirectiveKind::Note);
-                template.style = Style::default();
-                template.explicit_style = Style::default();
-                Ok(false)
-            }
-
-            "todo" => {
-                reject_directive_arguments(token_stream, "todo", string_table)?;
-                template.kind = TemplateType::Comment(CommentDirectiveKind::Todo);
-                template.style = Style::default();
-                template.explicit_style = Style::default();
-                Ok(false)
-            }
-
-            "doc" => {
-                reject_directive_arguments(token_stream, "doc", string_table)?;
-                apply_doc_comment_defaults(template);
-                Ok(false)
-            }
-
-            "formatter" => {
-                return_syntax_error!(
-                    "The '$formatter(...)' template style directive is not implemented yet.",
-                    token_stream
-                        .current_location()
-                        .to_error_location(string_table),
-                    {
-                        PrimarySuggestion => "Use '$markdown' or '$code' for now, or remove '$formatter(...)' until formatter callbacks are implemented",
-                    }
-                )
-            }
-
-            other => {
-                return_syntax_error!(
-                    format!(
-                        "Unsupported style directive '${other}'. Supported directives are '$markdown', '$children(..)', '$code', '$css', '$reset', '$slot', '$insert(..)', '$note', '$todo', '$doc', and '$formatter(...)'."
-                    ),
-                    token_stream
-                        .current_location()
-                        .to_error_location(string_table),
-                    {
-                        PrimarySuggestion => "Use '$markdown', '$children(..)', '$code', '$css', '$reset', '$slot', '$insert(..)', '$note', '$todo', '$doc', or '$formatter(...)' inside the template head",
-                    }
-                )
-            }
-        },
-
+    let directive_name = match token_stream.current_token_kind().clone() {
+        TokenKind::StyleDirective(directive) => string_table.resolve(directive).to_owned(),
         _ => {
             return_compiler_error!("Tried to parse a style directive while not positioned at one.")
+        }
+    };
+
+    let Some(spec) = context.style_directives.find(&directive_name) else {
+        return_syntax_error!(
+            format!(
+                "Unsupported style directive '${directive_name}'. Registered directives are {}.",
+                context.style_directives.supported_directives_for_diagnostic(),
+            ),
+            token_stream
+                .current_location()
+                .to_error_location(string_table),
+            {
+                PrimarySuggestion => "Register this directive in the project builder frontend_style_directives list or use a supported built-in directive",
+            }
+        )
+    };
+
+    if spec.source == StyleDirectiveSource::Builder {
+        consume_optional_directive_arguments(token_stream, &directive_name, string_table)?;
+        return Ok(false);
+    }
+
+    match directive_name.as_str() {
+        "markdown" => {
+            apply_markdown_style(template);
+            Ok(false)
+        }
+
+        "code" => {
+            // Keep the directive-specific parsing in the code formatter module so
+            // this general template parser does not accumulate every built-in style.
+            configure_code_style(token_stream, template, string_table)?;
+            Ok(false)
+        }
+
+        "css" => {
+            configure_css_style(token_stream, template, string_table)?;
+            Ok(false)
+        }
+
+        "children" => {
+            parse_children_style_directive(token_stream, context, template, string_table)?;
+            Ok(false)
+        }
+
+        "reset" => {
+            // `$reset` wipes the inherited style state first, then later directives
+            // in the same head can layer fresh settings back on top.
+            template.apply_style(Style::default());
+            template.apply_style_updates(|style| style.clear_inherited = true);
+            Ok(false)
+        }
+
+        "note" => {
+            reject_directive_arguments(token_stream, "note", string_table)?;
+            template.kind = TemplateType::Comment(CommentDirectiveKind::Note);
+            template.apply_style(Style::default());
+            Ok(false)
+        }
+
+        "todo" => {
+            reject_directive_arguments(token_stream, "todo", string_table)?;
+            template.kind = TemplateType::Comment(CommentDirectiveKind::Todo);
+            template.apply_style(Style::default());
+            Ok(false)
+        }
+
+        "doc" => {
+            reject_directive_arguments(token_stream, "doc", string_table)?;
+            apply_doc_comment_defaults(template);
+            Ok(false)
+        }
+
+        other => {
+            return_compiler_error!(
+                "Built-in style directive '${}' reached AST parsing but has no built-in handler.",
+                other
+            )
         }
     }
 }
 
 fn apply_doc_comment_defaults(template: &mut Template) {
     template.kind = TemplateType::Comment(CommentDirectiveKind::Doc);
-    template.style = Style::default();
-    template.explicit_style = Style::default();
+    template.apply_style(Style::default());
     // Doc comments are parsed as markdown content by default.
-    template.style.id = "markdown";
-    template.style.formatter = Some(markdown_formatter());
-    template.style.formatter_precedence = 0;
-    template.style.css_mode = None;
-    template.explicit_style.id = "markdown";
-    template.explicit_style.formatter = Some(markdown_formatter());
-    template.explicit_style.formatter_precedence = 0;
-    template.explicit_style.css_mode = None;
+    apply_markdown_style(template);
+}
+
+fn apply_markdown_style(template: &mut Template) {
+    template.apply_style_updates(|style| {
+        style.id = "markdown";
+        style.formatter = Some(markdown_formatter());
+        style.formatter_precedence = 0;
+        style.css_mode = None;
+    });
+}
+
+fn consume_optional_directive_arguments(
+    token_stream: &mut FileTokens,
+    directive_name: &str,
+    string_table: &StringTable,
+) -> Result<(), CompilerError> {
+    if token_stream.peek_next_token() != Some(&TokenKind::OpenParenthesis) {
+        return Ok(());
+    }
+
+    // Move from '$directive' to the opening parenthesis.
+    token_stream.advance();
+    let mut parenthesis_depth = 1usize;
+
+    while parenthesis_depth > 0 {
+        token_stream.advance();
+        match token_stream.current_token_kind() {
+            TokenKind::OpenParenthesis => parenthesis_depth = parenthesis_depth.saturating_add(1),
+            TokenKind::CloseParenthesis => parenthesis_depth = parenthesis_depth.saturating_sub(1),
+            TokenKind::Eof => {
+                return_syntax_error!(
+                    format!(
+                        "Unexpected end of template head while parsing '${directive_name}(...)'. Missing ')' to close the directive arguments."
+                    ),
+                    token_stream.current_location().to_error_location(string_table),
+                    {
+                        PrimarySuggestion => "Close the directive argument list with ')'",
+                        SuggestedInsertion => ")",
+                    }
+                )
+            }
+            _ => {}
+        }
+    }
+
+    Ok(())
 }
 
 fn emit_css_template_warnings(
@@ -1671,11 +1714,11 @@ fn format_child_template_output_segment(
     };
 
     let raw_text = string_table.resolve(*text);
-    if !raw_text.contains(TEMPLATE_SPECIAL_IGNORE_CHAR) {
+    if !raw_text.contains(TEMPLATE_FORMAT_GUARD_CHAR) {
         return segment;
     }
 
-    let formatted_text = raw_text.replace(TEMPLATE_SPECIAL_IGNORE_CHAR, "");
+    let formatted_text = raw_text.replace(TEMPLATE_FORMAT_GUARD_CHAR, "");
 
     let interned = string_table.intern(&formatted_text);
     let expression = Expression::string_slice(

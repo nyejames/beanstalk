@@ -1,7 +1,7 @@
 //! Tests for the core build orchestration and output writer APIs.
 
 use super::{
-    FileKind, OutputFile, Project, ProjectBuilder, WriteOptions, build_project,
+    BackendBuilder, FileKind, OutputFile, Project, ProjectBuilder, WriteOptions, build_project,
     resolve_project_output_root, write_project_outputs,
 };
 use crate::compiler_frontend::Flag;
@@ -54,7 +54,7 @@ fn current_dir_test_lock() -> &'static Mutex<()> {
 
 struct WarningBuilder;
 
-impl ProjectBuilder for WarningBuilder {
+impl BackendBuilder for WarningBuilder {
     fn build_backend(
         &self,
         _modules: Vec<super::Module>,
@@ -88,7 +88,7 @@ fn build_project_returns_result_without_writing_files() {
     let entry_file = root.join("main.bst");
     fs::write(&entry_file, "value = 1\n").expect("should write source file");
 
-    let builder = HtmlProjectBuilder::new();
+    let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
     let result = build_project(
         &builder,
         entry_file
@@ -124,7 +124,7 @@ fn build_single_file_project_includes_reachable_import_files() {
     .expect("should write helper file");
     let _cwd_guard = CurrentDirGuard::set_to(&root);
 
-    let builder = HtmlProjectBuilder::new();
+    let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
     let result = build_project(&builder, "main.bst", &[]).expect("build should succeed");
 
     assert!(
@@ -235,7 +235,12 @@ fn build_project_preserves_builder_warnings_in_build_result() {
     fs::write(root.join("main.bst"), "value = 1\n").expect("should write source file");
     let _cwd_guard = CurrentDirGuard::set_to(&root);
 
-    let result = build_project(&WarningBuilder, "main.bst", &[]).expect("build should succeed");
+    let result = build_project(
+        &ProjectBuilder::new(Box::new(WarningBuilder)),
+        "main.bst",
+        &[],
+    )
+    .expect("build should succeed");
 
     assert!(
         result
@@ -259,7 +264,7 @@ fn build_project_emits_runtime_fragment_with_captured_start_local() {
     .expect("should write source file");
     let _cwd_guard = CurrentDirGuard::set_to(&root);
 
-    let builder = HtmlProjectBuilder::new();
+    let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
     let build_result = build_project(&builder, "main.bst", &[]).expect("build should succeed");
 
     let html = match build_result.project.output_files[0].file_kind() {
@@ -294,7 +299,7 @@ fn build_project_preserves_const_and_runtime_fragment_order() {
     .expect("should write source file");
     let _cwd_guard = CurrentDirGuard::set_to(&root);
 
-    let builder = HtmlProjectBuilder::new();
+    let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
     let build_result = build_project(&builder, "main.bst", &[]).expect("build should succeed");
 
     let html = match build_result.project.output_files[0].file_kind() {
@@ -391,7 +396,7 @@ fn build_directory_project_emits_index_and_404_and_ignores_unreachable_files() {
     )
     .expect("should write unreachable invalid file");
 
-    let builder = HtmlProjectBuilder::new();
+    let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
     let build_result = build_project(
         &builder,
         root.to_str().expect("root path should be valid UTF-8"),
@@ -436,7 +441,7 @@ fn build_directory_project_respects_custom_entry_root() {
     fs::write(pages.join("docs").join("#page.bst"), "#[:<h1>Docs</h1>]\n")
         .expect("should write docs");
 
-    let builder = HtmlProjectBuilder::new();
+    let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
     let build_result = build_project(
         &builder,
         root.to_str().expect("root path should be valid UTF-8"),
@@ -473,7 +478,7 @@ fn build_directory_project_requires_root_page_in_configured_entry_root() {
     fs::write(src.join("about").join("#page.bst"), "#[:<h1>About</h1>]\n")
         .expect("should write about");
 
-    let builder = HtmlProjectBuilder::new();
+    let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
     let result = build_project(
         &builder,
         root.to_str().expect("root path should be valid UTF-8"),
@@ -504,7 +509,7 @@ fn build_project_allows_const_record_coercion_with_all_defaults() {
     .expect("should write source file");
     let _cwd_guard = CurrentDirGuard::set_to(&root);
 
-    let builder = HtmlProjectBuilder::new();
+    let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
     let result = build_project(&builder, "main.bst", &[]);
     assert!(
         result.is_ok(),
@@ -525,7 +530,7 @@ fn build_project_allows_const_record_coercion_with_constant_arguments() {
     .expect("should write source file");
     let _cwd_guard = CurrentDirGuard::set_to(&root);
 
-    let builder = HtmlProjectBuilder::new();
+    let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
     let result = build_project(&builder, "main.bst", &[]);
     assert!(
         result.is_ok(),
@@ -546,7 +551,7 @@ fn build_project_runtime_struct_constructor_supports_partial_defaults() {
     .expect("should write source file");
     let _cwd_guard = CurrentDirGuard::set_to(&root);
 
-    let builder = HtmlProjectBuilder::new();
+    let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
     let build_result = build_project(&builder, "main.bst", &[])
         .expect("runtime struct constructor with defaults should compile");
 
@@ -576,7 +581,7 @@ fn build_project_struct_default_uses_same_file_constant_declared_later() {
     .expect("should write source file");
     let _cwd_guard = CurrentDirGuard::set_to(&root);
 
-    let builder = HtmlProjectBuilder::new();
+    let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
     let build_result = build_project(&builder, "main.bst", &[])
         .expect("struct default should resolve same-file constants declared later");
 
@@ -606,7 +611,7 @@ fn build_project_constant_can_reference_same_file_struct_declared_later() {
     .expect("should write source file");
     let _cwd_guard = CurrentDirGuard::set_to(&root);
 
-    let builder = HtmlProjectBuilder::new();
+    let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
     let build_result = build_project(&builder, "main.bst", &[])
         .expect("constant should resolve same-file struct declared later");
 
@@ -636,7 +641,7 @@ fn build_project_typed_constant_template_head_can_reference_prior_constant() {
     .expect("should write source file");
     let _cwd_guard = CurrentDirGuard::set_to(&root);
 
-    let builder = HtmlProjectBuilder::new();
+    let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
     let build_result = build_project(&builder, "main.bst", &[])
         .expect("typed constant should remain visible to later constants");
 
@@ -666,7 +671,7 @@ fn build_project_const_struct_template_field_can_fill_template_slots() {
     .expect("should write source file");
     let _cwd_guard = CurrentDirGuard::set_to(&root);
 
-    let builder = HtmlProjectBuilder::new();
+    let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
     let build_result = build_project(&builder, "main.bst", &[])
         .expect("const struct template field should remain foldable in const template heads");
 
@@ -696,7 +701,7 @@ fn build_project_const_slot_insertion_constant_is_composed_at_use_site() {
     .expect("should write source file");
     let _cwd_guard = CurrentDirGuard::set_to(&root);
 
-    let builder = HtmlProjectBuilder::new();
+    let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
     let build_result = build_project(&builder, "main.bst", &[])
         .expect("slot insertion constants should fold when consumed by wrapper templates");
 
@@ -726,7 +731,7 @@ fn build_project_rejects_slot_insertion_constant_without_active_wrapper() {
     .expect("should write source file");
     let _cwd_guard = CurrentDirGuard::set_to(&root);
 
-    let builder = HtmlProjectBuilder::new();
+    let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
     let result = build_project(&builder, "main.bst", &[]);
     assert!(
         result.is_err(),
@@ -763,7 +768,7 @@ fn build_project_const_slot_children_wrap_table_rows_and_cells_without_cross_app
     .expect("should write source file");
     let _cwd_guard = CurrentDirGuard::set_to(&root);
 
-    let builder = HtmlProjectBuilder::new();
+    let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
     let build_result = build_project(&builder, "main.bst", &[])
         .expect("slot child wrapper tables should build successfully");
 
@@ -806,7 +811,7 @@ fn build_project_markdown_page_reexported_table_keeps_rows_and_cells_inside_tabl
     .expect("should write source file");
     let _cwd_guard = CurrentDirGuard::set_to(&root);
 
-    let builder = HtmlProjectBuilder::new();
+    let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
     let build_result = build_project(&builder, "main.bst", &[])
         .expect("markdown page with re-exported table should build successfully");
 
@@ -849,7 +854,7 @@ fn build_project_markdown_docs_row_wrappers_render_plain_cells_and_headers() {
     .expect("should write source file");
     let _cwd_guard = CurrentDirGuard::set_to(&root);
 
-    let builder = HtmlProjectBuilder::new();
+    let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
     let build_result = build_project(&builder, "main.bst", &[])
         .expect("markdown docs-style row wrappers should build successfully");
 
@@ -891,7 +896,7 @@ fn build_project_struct_default_uses_imported_constant() {
         .expect("should write imported constant source file");
     let _cwd_guard = CurrentDirGuard::set_to(&root);
 
-    let builder = HtmlProjectBuilder::new();
+    let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
     let build_result = build_project(&builder, "main.bst", &[])
         .expect("struct default should resolve imported constants");
 
@@ -921,7 +926,7 @@ fn build_project_rejects_const_record_with_non_constant_argument() {
     .expect("should write source file");
     let _cwd_guard = CurrentDirGuard::set_to(&root);
 
-    let builder = HtmlProjectBuilder::new();
+    let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
     let result = build_project(&builder, "main.bst", &[]);
     assert!(
         result.is_err(),
@@ -953,7 +958,7 @@ fn build_project_rejects_const_record_when_required_fields_are_missing() {
     .expect("should write source file");
     let _cwd_guard = CurrentDirGuard::set_to(&root);
 
-    let builder = HtmlProjectBuilder::new();
+    let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
     let result = build_project(&builder, "main.bst", &[]);
     assert!(
         result.is_err(),
@@ -986,7 +991,7 @@ fn build_project_rejects_struct_constructor_with_too_many_arguments() {
     .expect("should write source file");
     let _cwd_guard = CurrentDirGuard::set_to(&root);
 
-    let builder = HtmlProjectBuilder::new();
+    let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
     let result = build_project(&builder, "main.bst", &[]);
     assert!(
         result.is_err(),

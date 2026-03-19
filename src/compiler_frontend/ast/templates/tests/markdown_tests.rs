@@ -126,7 +126,7 @@ fn malformed_links_still_escape_literal_html_characters() {
 fn hidden_skip_runs_remain_unescaped() {
     let source = format!(
         "prefix{marker}<strong>&\"'</strong>{marker}suffix",
-        marker = crate::compiler_frontend::ast::templates::markdown::HIDDEN_SKIP_CHAR
+        marker = crate::compiler_frontend::ast::templates::styles::markdown::HIDDEN_SKIP_CHAR
     );
 
     let rendered = to_markdown(&source, "p");

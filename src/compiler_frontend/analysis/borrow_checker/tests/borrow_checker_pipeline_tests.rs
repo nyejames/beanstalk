@@ -10,6 +10,7 @@ use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::compiler_errors::ErrorType;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::projects::settings::Config;
 
 #[test]
@@ -61,7 +62,8 @@ fn frontend_check_borrows_propagates_failures() {
     let hir = lower_hir(build_ast(vec![start_fn], entry_path), &mut string_table);
 
     let config = Config::default();
-    let frontend = CompilerFrontend::new(&config, string_table);
+    let frontend =
+        CompilerFrontend::new(&config, string_table, StyleDirectiveRegistry::built_ins());
     let messages = frontend
         .check_borrows(&hir)
         .expect_err("borrow checking should fail");

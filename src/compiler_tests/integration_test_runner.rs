@@ -4,7 +4,7 @@
 //! - canonical self-contained case folders under `tests/cases/<case>/`
 //! - optional manifest-driven case ordering
 
-use crate::build_system::build::{BuildResult, FileKind, build_project};
+use crate::build_system::build::{BuildResult, FileKind, ProjectBuilder, build_project};
 use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::compiler_messages::compiler_errors::{
     CompilerMessages, ErrorType, error_type_to_str,
@@ -450,7 +450,7 @@ fn resolve_case_entry_path(
 }
 
 fn execute_test_case(case: &TestCaseSpec) -> CaseExecutionResult {
-    let builder = HtmlProjectBuilder::new();
+    let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
     let flags = vec![Flag::DisableTimers];
     let entry_path = case.entry_path.to_string_lossy().to_string();
 

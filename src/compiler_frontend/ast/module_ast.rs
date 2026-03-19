@@ -21,6 +21,7 @@ use crate::compiler_frontend::headers::parse_file_headers::{
 use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
+use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::projects::settings::{self, IMPLICIT_START_FUNC_NAME};
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::cell::RefCell;
@@ -61,6 +62,7 @@ impl Ast {
         sorted_headers: Vec<Header>,
         top_level_template_items: Vec<TopLevelTemplateItem>,
         host_registry: &HostRegistry,
+        style_directives: &StyleDirectiveRegistry,
         string_table: &mut StringTable,
         entry_dir: InternedPath,
         build_profile: FrontendBuildProfile,
@@ -240,6 +242,7 @@ impl Ast {
                         host_registry.clone(),
                         vec![],
                     )
+                    .with_style_directives(style_directives)
                     .with_build_profile(build_profile)
                     .with_visible_declarations(bindings.visible_symbol_paths.to_owned())
                     .with_start_import_aliases(bindings.start_aliases.to_owned());
@@ -299,6 +302,7 @@ impl Ast {
                         host_registry.clone(),
                         signature.return_data_types(),
                     )
+                    .with_style_directives(style_directives)
                     .with_build_profile(build_profile)
                     .with_visible_declarations(visible_declarations)
                     .with_start_import_aliases(bindings.start_aliases.to_owned());
@@ -345,6 +349,7 @@ impl Ast {
                         host_registry.clone(),
                         vec![],
                     )
+                    .with_style_directives(style_directives)
                     .with_build_profile(build_profile)
                     .with_visible_declarations(bindings.visible_symbol_paths.to_owned())
                     .with_start_import_aliases(bindings.start_aliases.to_owned());
@@ -443,6 +448,7 @@ impl Ast {
                         host_registry.clone(),
                         vec![],
                     )
+                    .with_style_directives(style_directives)
                     .with_build_profile(build_profile)
                     .with_visible_declarations(bindings.visible_symbol_paths.to_owned())
                     .with_start_import_aliases(bindings.start_aliases.to_owned());
@@ -543,6 +549,7 @@ pub struct ScopeContext {
     pub start_import_aliases: FxHashMap<StringId, InternedPath>,
     pub expected_result_types: Vec<DataType>,
     pub host_registry: HostRegistry,
+    pub style_directives: StyleDirectiveRegistry,
     pub loop_depth: usize,
     pub build_profile: FrontendBuildProfile,
     pub(crate) emitted_warnings: Rc<RefCell<Vec<CompilerWarning>>>,
@@ -586,6 +593,7 @@ impl ScopeContext {
             start_import_aliases: FxHashMap::default(),
             expected_result_types,
             host_registry,
+            style_directives: StyleDirectiveRegistry::built_ins(),
             loop_depth: 0,
             build_profile: FrontendBuildProfile::Dev,
             emitted_warnings: Rc::new(RefCell::new(Vec::new())),
@@ -657,6 +665,7 @@ impl ScopeContext {
             start_import_aliases: self.start_import_aliases.clone(),
             expected_result_types: vec![],
             host_registry: self.host_registry.clone(),
+            style_directives: self.style_directives.clone(),
             loop_depth: self.loop_depth,
             build_profile: self.build_profile,
             emitted_warnings: self.emitted_warnings.clone(),
@@ -673,6 +682,7 @@ impl ScopeContext {
             start_import_aliases: FxHashMap::default(),
             expected_result_types: Vec::new(),
             host_registry: HostRegistry::default(),
+            style_directives: StyleDirectiveRegistry::built_ins(),
             loop_depth: 0,
             build_profile: FrontendBuildProfile::Dev,
             emitted_warnings: Rc::new(RefCell::new(Vec::new())),
@@ -696,6 +706,14 @@ impl ScopeContext {
         aliases: FxHashMap<StringId, InternedPath>,
     ) -> ScopeContext {
         self.start_import_aliases = aliases;
+        self
+    }
+
+    pub fn with_style_directives(
+        mut self,
+        style_directives: &StyleDirectiveRegistry,
+    ) -> ScopeContext {
+        self.style_directives = style_directives.clone();
         self
     }
 
@@ -744,6 +762,7 @@ macro_rules! new_template_context {
             start_import_aliases: $context.start_import_aliases.clone(),
             expected_result_types: vec![],
             host_registry: $context.host_registry.clone(),
+            style_directives: $context.style_directives.clone(),
             loop_depth: $context.loop_depth,
             build_profile: $context.build_profile,
             emitted_warnings: $context.emitted_warnings.clone(),
@@ -767,6 +786,8 @@ macro_rules! new_config_context {
             start_import_aliases: rustc_hash::FxHashMap::default(),
             expected_result_types: vec![],
             host_registry: $registry,
+            style_directives:
+                crate::compiler_frontend::style_directives::StyleDirectiveRegistry::built_ins(),
             loop_depth: 0,
             build_profile: crate::compiler_frontend::FrontendBuildProfile::Dev,
             emitted_warnings: std::rc::Rc::new(std::cell::RefCell::new(Vec::new())),
@@ -790,6 +811,8 @@ macro_rules! new_condition_context {
             start_import_aliases: rustc_hash::FxHashMap::default(),
             expected_result_types: vec![], //Empty because conditions are always booleans
             host_registry: $registry,
+            style_directives:
+                crate::compiler_frontend::style_directives::StyleDirectiveRegistry::built_ins(),
             loop_depth: 0,
             build_profile: crate::compiler_frontend::FrontendBuildProfile::Dev,
             emitted_warnings: std::rc::Rc::new(std::cell::RefCell::new(Vec::new())),

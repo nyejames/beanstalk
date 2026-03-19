@@ -12,6 +12,7 @@ use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages}
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::hir::hir_nodes::HirModule;
 use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::style_directives::StyleDirectiveSpec;
 use crate::projects::settings::Config;
 use saying::say;
 use std::fs;
@@ -27,7 +28,7 @@ pub struct Module {
 }
 
 /// Unified build interface for all project types
-pub trait ProjectBuilder {
+pub trait BackendBuilder {
     /// Build the project with the given configuration
     fn build_backend(
         &self,
@@ -38,6 +39,28 @@ pub trait ProjectBuilder {
 
     /// Validate the project configuration
     fn validate_project_config(&self, config: &Config) -> Result<(), CompilerError>;
+}
+
+pub struct ProjectBuilder {
+    pub backend: Box<dyn BackendBuilder + Send>,
+    pub frontend_style_directives: Vec<StyleDirectiveSpec>,
+}
+
+impl ProjectBuilder {
+    pub fn new(backend: Box<dyn BackendBuilder + Send>) -> Self {
+        Self {
+            backend,
+            frontend_style_directives: Vec::new(),
+        }
+    }
+
+    pub fn with_frontend_style_directives(
+        mut self,
+        frontend_style_directives: Vec<StyleDirectiveSpec>,
+    ) -> Self {
+        self.frontend_style_directives = frontend_style_directives;
+        self
+    }
 }
 
 pub struct InputFile {
@@ -126,7 +149,7 @@ pub fn resolve_project_output_root(config: &Config, flags: &[Flag]) -> PathBuf {
 /// This function intentionally does not write output files so callers can decide where artifacts
 /// should be emitted.
 pub fn build_project(
-    project_builder: &dyn ProjectBuilder,
+    project_builder: &ProjectBuilder,
     entry_path: &str,
     flags: &[Flag],
 ) -> Result<BuildResult, CompilerMessages> {
@@ -140,14 +163,21 @@ pub fn build_project(
     // This discovers all the modules, parses the config,
     // and compiles each module to HIR for backend lowering.
     let mut config = Config::new(valid_path);
-    let modules = compile_project_frontend(&mut config, flags)?;
+    let modules = compile_project_frontend(
+        &mut config,
+        flags,
+        &project_builder.frontend_style_directives,
+    )?;
     let mut warnings = collect_frontend_warnings(&modules);
 
     // --------------------------------------------
     // BUILD PROJECT USING THE APPROPRIATE BUILDER
     // --------------------------------------------
     let start = Instant::now();
-    let project = match project_builder.build_backend(modules, &config, flags) {
+    let project = match project_builder
+        .backend
+        .build_backend(modules, &config, flags)
+    {
         Ok(project) => {
             let duration = start.elapsed();
             say!(
