@@ -74,6 +74,20 @@ is used to define the content of the template. This is a string.
 
 Inside the body of a template, you can nest more templates using square brackets. 
 
+By default, template body strings are whitespace-normalized:
+- one initial leading newline block is trimmed
+- common indentation is removed using the indentation after that initial newline
+- consecutive blank lines are preserved
+- trailing whitespace is trimmed only when it starts at the final newline
+
+Use `$raw` to preserve authored whitespace exactly.
+
+`$escape_html` escapes body text HTML-sensitive characters (`&`, `<`, `>`, `"`, `'`).
+
+`$html` marks templates as HTML-oriented, keeps balanced body tokenization like `$css`,
+and enables cheap safety warnings for risky constructs such as `<script>`,
+inline `on*=` handlers, and `javascript:` URLs.
+
 
 ## Template example
 

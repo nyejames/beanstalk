@@ -10,7 +10,13 @@ use crate::compiler_frontend::ast::templates::styles::code::configure_code_style
 use crate::compiler_frontend::ast::templates::styles::css::{
     configure_css_style, validate_css_template,
 };
+use crate::compiler_frontend::ast::templates::styles::escape_html::configure_escape_html_style;
+use crate::compiler_frontend::ast::templates::styles::html::{
+    configure_html_style, validate_html_template,
+};
 use crate::compiler_frontend::ast::templates::styles::markdown::markdown_formatter;
+use crate::compiler_frontend::ast::templates::styles::raw::configure_raw_style;
+use crate::compiler_frontend::ast::templates::styles::whitespace::normalize_template_body_whitespace;
 use crate::compiler_frontend::ast::templates::template::{
     CommentDirectiveKind, Formatter, SlotKey, Style, TemplateAtom, TemplateConstValueKind,
     TemplateContent, TemplateControlFlow, TemplateSegment, TemplateSegmentOrigin, TemplateType,
@@ -240,11 +246,7 @@ impl Template {
         // Formatting is normalized here, before any later folding/lowering stage.
         // This keeps runtime templates simple: only compile-time-known body strings
         // are rewritten, while dynamic chunks remain untouched and keep their order.
-        apply_body_formatter(
-            &mut template.content,
-            &template.style.formatter,
-            string_table,
-        );
+        apply_body_formatter(&mut template.content, &template.style, string_table);
 
         template.content = apply_inherited_child_templates_to_content(
             template.content,
@@ -289,6 +291,7 @@ impl Template {
         }
 
         emit_css_template_warnings(&template, context, string_table);
+        emit_html_template_warnings(&template, context, string_table);
 
         Ok(template)
     }
@@ -380,7 +383,7 @@ impl Template {
     ) -> Result<StringId, CompilerError> {
         let content = if self.content_needs_formatting {
             let mut content = self.unformatted_content.to_owned();
-            apply_body_formatter(&mut content, &self.style.formatter, string_table);
+            apply_body_formatter(&mut content, &self.style, string_table);
             content
         } else {
             self.content.to_owned()
@@ -400,6 +403,8 @@ fn recursive_inherited_style(style: &Style) -> Option<Style> {
         && inherited.override_precedence == -1
         && inherited.id.is_empty()
         && !inherited.clear_inherited
+        && !inherited.disable_default_body_whitespace_normalization
+        && !inherited.html_mode
     {
         return None;
     }
@@ -1357,6 +1362,21 @@ fn parse_style_directive(
             Ok(false)
         }
 
+        "html" => {
+            configure_html_style(token_stream, template, string_table)?;
+            Ok(false)
+        }
+
+        "raw" => {
+            configure_raw_style(template);
+            Ok(false)
+        }
+
+        "escape_html" => {
+            configure_escape_html_style(template);
+            Ok(false)
+        }
+
         "children" => {
             parse_children_style_directive(token_stream, context, template, string_table)?;
             Ok(false)
@@ -1412,6 +1432,7 @@ fn apply_markdown_style(template: &mut Template) {
         style.formatter = Some(markdown_formatter());
         style.formatter_precedence = 0;
         style.css_mode = None;
+        style.html_mode = false;
     });
 }
 
@@ -1468,6 +1489,27 @@ fn emit_css_template_warnings(
             &diagnostic.message,
             diagnostic.location.to_error_location(string_table),
             WarningKind::MalformedCssTemplate,
+            file_path,
+        ));
+    }
+}
+
+fn emit_html_template_warnings(
+    template: &Template,
+    context: &ScopeContext,
+    string_table: &StringTable,
+) {
+    if !template.is_const_renderable_string() {
+        return;
+    }
+
+    let diagnostics = validate_html_template(template, string_table);
+    for diagnostic in diagnostics {
+        let file_path = diagnostic.location.scope.to_path_buf(string_table);
+        context.emit_warning(CompilerWarning::new(
+            &diagnostic.message,
+            diagnostic.location.to_error_location(string_table),
+            WarningKind::MalformedHtmlTemplate,
             file_path,
         ));
     }
@@ -1600,21 +1642,32 @@ fn parse_children_style_directive(
 
 fn apply_body_formatter(
     content: &mut TemplateContent,
-    formatter: &Option<Formatter>,
+    style: &Style,
     string_table: &mut StringTable,
 ) {
-    let Some(formatter) = formatter else {
-        return;
-    };
+    let should_apply_default_whitespace_normalization =
+        !style.disable_default_body_whitespace_normalization;
+    let formatter = style.formatter.as_ref();
 
-    // The formatter only runs over compile-time body strings. Head segments and
-    // dynamic expressions are preserved as-is and act as hard boundaries.
-    format_content_atoms(&mut content.atoms, formatter, string_table);
+    if !should_apply_default_whitespace_normalization && formatter.is_none() {
+        return;
+    }
+
+    // Body processing always keeps head/dynamic atoms as hard boundaries. Compile-time
+    // body runs first go through default whitespace normalization, then optional style
+    // formatter rewriting (for directives like `$markdown`, `$code`, `$escape_html`).
+    format_content_atoms(
+        &mut content.atoms,
+        formatter,
+        should_apply_default_whitespace_normalization,
+        string_table,
+    );
 }
 
 fn format_content_atoms(
     atoms: &mut Vec<TemplateAtom>,
-    formatter: &Formatter,
+    formatter: Option<&Formatter>,
+    should_apply_default_whitespace_normalization: bool,
     string_table: &mut StringTable,
 ) {
     let mut formatted_atoms = Vec::with_capacity(atoms.len());
@@ -1630,6 +1683,7 @@ fn format_content_atoms(
                 &mut buffered_text,
                 &mut buffer_location,
                 formatter,
+                should_apply_default_whitespace_normalization,
                 string_table,
             );
             if let TemplateAtom::Slot(slot) = atom {
@@ -1644,6 +1698,7 @@ fn format_content_atoms(
                 &mut buffered_text,
                 &mut buffer_location,
                 formatter,
+                should_apply_default_whitespace_normalization,
                 string_table,
             );
             formatted_atoms.push(TemplateAtom::Content(segment));
@@ -1656,6 +1711,7 @@ fn format_content_atoms(
                 &mut buffered_text,
                 &mut buffer_location,
                 formatter,
+                should_apply_default_whitespace_normalization,
                 string_table,
             );
             formatted_atoms.push(TemplateAtom::Content(segment));
@@ -1668,13 +1724,17 @@ fn format_content_atoms(
                 &mut buffered_text,
                 &mut buffer_location,
                 formatter,
+                should_apply_default_whitespace_normalization,
                 string_table,
             );
-            formatted_atoms.push(TemplateAtom::Content(format_child_template_output_segment(
-                segment,
-                formatter,
-                string_table,
-            )));
+            if formatter.is_some() {
+                formatted_atoms.push(TemplateAtom::Content(format_child_template_output_segment(
+                    segment,
+                    string_table,
+                )));
+            } else {
+                formatted_atoms.push(TemplateAtom::Content(segment));
+            }
             continue;
         }
 
@@ -1690,6 +1750,7 @@ fn format_content_atoms(
         &mut buffered_text,
         &mut buffer_location,
         formatter,
+        should_apply_default_whitespace_normalization,
         string_table,
     );
 
@@ -1698,7 +1759,6 @@ fn format_content_atoms(
 
 fn format_child_template_output_segment(
     segment: TemplateSegment,
-    _formatter: &Formatter,
     string_table: &mut StringTable,
 ) -> TemplateSegment {
     if segment.origin != TemplateSegmentOrigin::Body {
@@ -1738,16 +1798,28 @@ fn flush_formatted_body_run(
     atoms: &mut Vec<TemplateAtom>,
     buffered_text: &mut String,
     buffer_location: &mut Option<TextLocation>,
-    formatter: &Formatter,
+    formatter: Option<&Formatter>,
+    should_apply_default_whitespace_normalization: bool,
     string_table: &mut StringTable,
 ) {
     if buffered_text.is_empty() {
         return;
     }
 
-    // Format once per contiguous body run, then collapse it back into a single
-    // string-slice segment so later stages do not need any special formatter logic.
-    formatter.formatter.format(buffered_text);
+    if should_apply_default_whitespace_normalization {
+        normalize_template_body_whitespace(buffered_text);
+    }
+
+    if let Some(formatter) = formatter {
+        // Format once per contiguous body run, then collapse it back into a single
+        // string-slice segment so later stages do not need any special formatter logic.
+        formatter.formatter.format(buffered_text);
+    }
+
+    if buffered_text.is_empty() {
+        buffer_location.take();
+        return;
+    }
 
     let interned = string_table.intern(buffered_text.as_str());
     let location = buffer_location.take().unwrap_or_default();

@@ -398,6 +398,130 @@ fn non_markdown_templates_do_not_escape_html_body_text() {
 }
 
 #[test]
+fn default_whitespace_normalizer_trims_initial_newline_and_dedents() {
+    let rendered = folded_template_output("[:\n    Hello\n    World\n]");
+    assert_eq!(rendered, "Hello\nWorld");
+}
+
+#[test]
+fn default_whitespace_normalizer_preserves_consecutive_blank_lines() {
+    let rendered = folded_template_output("[:\n    Hello\n\n    World\n]");
+    assert_eq!(rendered, "Hello\n\nWorld");
+}
+
+#[test]
+fn default_whitespace_normalizer_trims_only_from_final_newline() {
+    let rendered = folded_template_output("[:\n    Hello   \n]");
+    assert_eq!(rendered, "Hello   ");
+}
+
+#[test]
+fn default_whitespace_normalizer_preserves_leading_spaces_without_initial_newline() {
+    let rendered = folded_template_output("[: world]");
+    assert_eq!(rendered, " world");
+}
+
+#[test]
+fn raw_directive_preserves_authored_whitespace() {
+    let rendered = folded_template_output("[$raw:\n    Hello\n    World\n]");
+    assert_eq!(rendered, "\n    Hello\n    World\n");
+}
+
+#[test]
+fn escape_html_escapes_body_html_sensitive_characters() {
+    let rendered = folded_template_output("[$escape_html:\n    <b>Hello & \"World\" 'x'</b>\n]");
+
+    assert!(rendered.contains("&lt;b&gt;Hello &amp; &quot;World&quot; &#39;x&#39;&lt;/b&gt;"));
+    assert!(!rendered.contains("<b>Hello"));
+}
+
+#[test]
+fn escape_html_preserves_runtime_head_references() {
+    let mut string_table = StringTable::new();
+    let mut token_stream = template_tokens_from_source(
+        "[value, $escape_html:\n    <b>body</b>\n]",
+        &mut string_table,
+    );
+    let context = runtime_template_context(&token_stream.src_path, &mut string_table);
+
+    let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
+        .expect("template should parse");
+
+    assert!(template_segments(&template).iter().any(|segment| {
+        segment.origin == TemplateSegmentOrigin::Head
+            && matches!(segment.expression.kind, ExpressionKind::Reference(_))
+    }));
+
+    let escaped_body = template_segments(&template)
+        .into_iter()
+        .find_map(
+            |segment| match (&segment.origin, &segment.expression.kind) {
+                (TemplateSegmentOrigin::Body, ExpressionKind::StringSlice(text)) => Some(*text),
+                _ => None,
+            },
+        )
+        .expect("expected escaped body string segment");
+
+    assert_eq!(
+        string_table.resolve(escaped_body),
+        "&lt;b&gt;body&lt;/b&gt;"
+    );
+}
+
+#[test]
+fn html_directive_rejects_arguments() {
+    let error = template_parse_error("[$html(\"inline\"):\n<div>Hello</div>\n]");
+    assert!(error.contains("does not accept arguments"));
+}
+
+#[test]
+fn html_directive_sets_html_mode() {
+    let mut string_table = StringTable::new();
+    let mut token_stream = template_tokens_from_source(
+        "[$html:\n<div data-tags=\"[one,two]\">x</div>\n]",
+        &mut string_table,
+    );
+    let context = ScopeContext::new_constant(token_stream.src_path.to_owned());
+
+    let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
+        .expect("html template should parse");
+
+    assert!(template.style.html_mode);
+}
+
+#[test]
+fn const_html_template_emits_sanitation_warnings() {
+    let warnings = template_warnings(
+        "[$html:\n<script>alert(1)</script>\n<div onclick=\"run()\"></div>\n<a href=\"javascript:alert(1)\">x</a>\n]",
+        false,
+    );
+
+    assert!(!warnings.is_empty());
+    assert!(
+        warnings
+            .iter()
+            .all(|warning| { matches!(warning.warning_kind, WarningKind::MalformedHtmlTemplate) })
+    );
+    assert!(
+        warnings
+            .iter()
+            .any(|warning| warning.msg.contains("<script"))
+    );
+    assert!(warnings.iter().any(|warning| warning.msg.contains("on*=")));
+    assert!(
+        warnings
+            .iter()
+            .any(|warning| warning.msg.contains("javascript:"))
+    );
+}
+
+#[test]
+fn runtime_html_templates_do_not_emit_compile_time_warnings() {
+    let warnings = template_warnings("[value, $html:\n<script>alert(1)</script>\n]", true);
+    assert!(warnings.is_empty());
+}
+
+#[test]
 fn runtime_templates_format_static_body_strings_only() {
     let mut string_table = StringTable::new();
     let mut token_stream =

@@ -84,6 +84,9 @@ impl StyleDirectiveRegistry {
                 StyleDirectiveSpec::built_in("doc", TemplateBodyMode::Normal),
                 StyleDirectiveSpec::built_in("code", TemplateBodyMode::Balanced),
                 StyleDirectiveSpec::built_in("css", TemplateBodyMode::Balanced),
+                StyleDirectiveSpec::built_in("html", TemplateBodyMode::Balanced),
+                StyleDirectiveSpec::built_in("raw", TemplateBodyMode::Normal),
+                StyleDirectiveSpec::built_in("escape_html", TemplateBodyMode::Normal),
             ],
         }
     }
