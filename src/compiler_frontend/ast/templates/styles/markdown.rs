@@ -169,7 +169,7 @@ pub fn to_markdown(content: &str, default_tag: &str) -> String {
         // Don't switch context to heading until finished getting strength.
         // Once a heading marker sequence starts at the beginning of a line,
         // keep consuming consecutive '#' characters for strengths like '##'.
-        if ch == '#' && (newlines > 0 || heading_strength > 0) {
+        if ch == '#' && (index == 0 || newlines > 0 || heading_strength > 0) {
             heading_strength += 1;
             prev_whitespace = false;
             newlines = 0;
@@ -223,21 +223,21 @@ pub fn to_markdown(content: &str, default_tag: &str) -> String {
             em_strength = 0;
         }
 
-        if ch == '@' {
-            if let Some(link) = try_parse_link_at(&chars, index) {
-                ensure_default_context(&mut output, &mut context, default_tag);
-                flush_pending_markers(&mut output, &mut heading_strength, &mut em_strength);
+        if ch == '@'
+            && let Some(link) = try_parse_link_at(&chars, index)
+        {
+            ensure_default_context(&mut output, &mut context, default_tag);
+            flush_pending_markers(&mut output, &mut heading_strength, &mut em_strength);
 
-                newlines = 0;
-                prev_whitespace = false;
-                output.push_str("<a href=\"");
-                push_escaped_html_text(&mut output, &link.target);
-                output.push_str("\">");
-                push_escaped_html_text(&mut output, &link.label);
-                output.push_str("</a>");
-                index += link.consumed_chars;
-                continue;
-            }
+            newlines = 0;
+            prev_whitespace = false;
+            output.push_str("<a href=\"");
+            push_escaped_html_text(&mut output, &link.target);
+            output.push_str("\">");
+            push_escaped_html_text(&mut output, &link.label);
+            output.push_str("</a>");
+            index += link.consumed_chars;
+            continue;
         }
 
         // If nothing else special has happened, and we are not inside a P tag

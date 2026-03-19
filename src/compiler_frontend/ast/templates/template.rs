@@ -440,7 +440,9 @@ pub struct Style {
     // These wrappers do not automatically flow into grandchildren.
     pub child_templates: Vec<Template>,
     pub css_mode: Option<CssDirectiveMode>,
+    pub html_mode: bool,
     pub clear_inherited: bool,
+    pub disable_default_body_whitespace_normalization: bool,
 }
 
 impl Style {
@@ -452,7 +454,9 @@ impl Style {
             override_precedence: -1,
             child_templates: vec![],
             css_mode: None,
+            html_mode: false,
             clear_inherited: false,
+            disable_default_body_whitespace_normalization: false,
         }
     }
 }

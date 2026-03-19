@@ -313,6 +313,43 @@ fn css_template_body_keeps_selector_brackets_as_literal_text() {
 }
 
 #[test]
+fn html_template_body_keeps_attribute_brackets_as_literal_text() {
+    let (file_tokens, string_table) =
+        tokenize_source("[$html:\n<div data-tags=\"[one,two]\">Hello</div>\n]");
+
+    let template_heads = file_tokens
+        .tokens
+        .iter()
+        .filter(|token| matches!(token.kind, TokenKind::TemplateHead))
+        .count();
+    let template_closes = file_tokens
+        .tokens
+        .iter()
+        .filter(|token| matches!(token.kind, TokenKind::TemplateClose))
+        .count();
+
+    assert_eq!(
+        template_heads, 1,
+        "html template bodies should not tokenize attribute brackets as nested templates"
+    );
+    assert_eq!(template_closes, 1);
+
+    let body_literal = file_tokens
+        .tokens
+        .iter()
+        .find_map(|token| match token.kind {
+            TokenKind::StringSliceLiteral(id) => {
+                let value = string_table.resolve(id);
+                value.contains("data-tags=\"[one,two]\"").then_some(value)
+            }
+            _ => None,
+        })
+        .expect("expected html template body text to include literal attribute brackets");
+
+    assert!(body_literal.contains("<div"));
+}
+
+#[test]
 fn custom_balanced_directive_uses_general_balanced_mode() {
     let directives = vec![StyleDirectiveSpec::new(
         "highlight",
