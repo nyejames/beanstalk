@@ -1,4 +1,3 @@
-
 use super::eval_expression::evaluate_expression;
 use crate::compiler_frontend::ast::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};

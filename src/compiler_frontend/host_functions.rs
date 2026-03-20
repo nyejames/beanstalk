@@ -27,6 +27,7 @@ pub enum CallTarget {
 }
 
 impl CallTarget {
+    #[allow(dead_code)] // todo
     pub fn as_string(&self, string_table: &StringTable) -> String {
         let path = match self {
             CallTarget::UserFunction(path) | CallTarget::HostFunction(path) => path,

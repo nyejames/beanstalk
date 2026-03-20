@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, Operator,
 };
@@ -44,9 +42,11 @@ pub struct ForLoopRange {
 pub enum NodeKind {
     // Warning Message
     // This could be stuff like unused variables, possible race conditions, etc
+    #[allow(dead_code)] // todo
     Warning(String), // Message, Start pos, End pos
 
     // Config settings
+    #[allow(dead_code)] // todo
     Config(Vec<Declaration>), // Settings,
 
     // Control Flow
@@ -76,6 +76,7 @@ pub enum NodeKind {
     },
 
     // For method calls: obj.method(args)
+    #[allow(dead_code)] // todo
     MethodCall {
         base: Box<AstNode>,
         method: StringId,
@@ -118,16 +119,22 @@ pub enum NodeKind {
     // Currently used for function calls and struct accesses
     Rvalue(Expression),
 
+    #[allow(dead_code)] // todo
     Template(Expression),
+    #[allow(dead_code)] // todo
     TopLevelTemplate(Expression),
+    #[allow(dead_code)] // todo
     Slot,
+    #[allow(dead_code)] // todo
     Empty, //
 
     // Operators
     // Operator, Precedence
     Operator(Operator), // Operator,
 
+    #[allow(dead_code)] // todo
     Newline,
+    #[allow(dead_code)] // todo
     Spaces(u32),
 }
 

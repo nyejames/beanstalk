@@ -3,8 +3,6 @@
 //! Responsible for providing a way to get location and variable name information back from HIR.
 //!
 //! This will be used to help the rest of the HIR and borrow checker stages to create and return useful errors and warnings.
-#![allow(dead_code)]
-
 //! (CompilerMessages)
 //! It will also enable printing out Hir structures for easy debugging also.
 
@@ -23,6 +21,7 @@ use rustc_hash::FxHashMap;
 use std::fmt::{Display, Formatter, Result as FmtResult, Write as _};
 
 const MAX_TYPE_RENDER_DEPTH: usize = 24;
+#[allow(dead_code)] // todo
 const EMPTY_HIR_LOCATIONS: [HirLocation; 0] = [];
 
 // ============================================================================
@@ -146,6 +145,7 @@ pub(crate) struct HirSideTable {
     field_names: FxHashMap<FieldId, InternedPath>,
 }
 
+#[allow(dead_code)] // todo
 impl HirSideTable {
     pub(crate) fn new() -> Self {
         Self::default()
@@ -460,7 +460,9 @@ pub(crate) struct HirDisplayOptions {
     pub include_ids: bool,
     pub include_types: bool,
     pub include_value_kinds: bool,
+    #[allow(dead_code)] // todo
     pub include_regions: bool,
+    #[allow(dead_code)] // todo
     pub include_locations: bool,
     pub multiline_match_arms: bool,
 }
@@ -486,6 +488,7 @@ pub(crate) struct HirDisplayContext<'a> {
     options: HirDisplayOptions,
 }
 
+#[allow(dead_code)] // todo
 impl<'a> HirDisplayContext<'a> {
     pub(crate) fn new(string_table: &'a StringTable) -> Self {
         Self {
@@ -1226,6 +1229,7 @@ impl<'a> HirDisplayContext<'a> {
 // Convenience Display Hooks
 // ============================================================================
 
+#[allow(dead_code)] // todo
 impl HirModule {
     pub(crate) fn display_with_table(&self, string_table: &StringTable) -> String {
         HirDisplayContext::new(string_table).render_module(self)
@@ -1240,24 +1244,28 @@ impl HirModule {
     }
 }
 
+#[allow(dead_code)] // todo
 impl HirBlock {
     pub(crate) fn display_with_context(&self, display: &HirDisplayContext<'_>) -> String {
         display.render_block(self)
     }
 }
 
+#[allow(dead_code)] // todo
 impl HirFunction {
     pub(crate) fn display_with_context(&self, display: &HirDisplayContext<'_>) -> String {
         display.render_function(self)
     }
 }
 
+#[allow(dead_code)] // todo
 impl HirStruct {
     pub(crate) fn display_with_context(&self, display: &HirDisplayContext<'_>) -> String {
         display.render_struct(self)
     }
 }
 
+#[allow(dead_code)] // todo
 impl HirStatement {
     pub(crate) fn display_with_context(&self, display: &HirDisplayContext<'_>) -> String {
         display.render_statement(self)
@@ -1276,18 +1284,21 @@ impl HirExpression {
     }
 }
 
+#[allow(dead_code)] // todo
 impl HirPlace {
     pub(crate) fn display_with_context(&self, display: &HirDisplayContext<'_>) -> String {
         display.render_place(self)
     }
 }
 
+#[allow(dead_code)] // todo
 impl HirPattern {
     pub(crate) fn display_with_context(&self, display: &HirDisplayContext<'_>) -> String {
         display.render_pattern(self)
     }
 }
 
+#[allow(dead_code)] // todo
 impl HirMatchArm {
     pub(crate) fn display_with_context(&self, display: &HirDisplayContext<'_>) -> String {
         display.render_match_arm(self)

@@ -1,22 +1,18 @@
-#![allow(dead_code)]
-
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::string_interning::StringTable;
 use std::fmt::Display;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub enum Ownership {
     MutableOwned,
     MutableReference,
+    #[default]
     ImmutableOwned,
     ImmutableReference,
 }
 
 impl Ownership {
-    pub fn default() -> Ownership {
-        Ownership::ImmutableOwned
-    }
     pub fn is_mutable(&self) -> bool {
         matches!(self, Ownership::MutableOwned | Ownership::MutableReference)
     }
@@ -36,6 +32,7 @@ impl Ownership {
         }
     }
 
+    #[allow(dead_code)] // todo
     pub fn as_string(&self) -> String {
         match &self {
             Ownership::MutableOwned => String::from("mutable"),
@@ -60,8 +57,11 @@ pub enum DataType {
 
     // Immutable Data Types
     // In practice, these types should not be deliberately used much at all
+    #[allow(dead_code)] // todo
     None, // The None result of an option, or empty argument
+    #[allow(dead_code)] // todo
     True,
+    #[allow(dead_code)] // todo
     False,
 
     // Strings
@@ -78,11 +78,13 @@ pub enum DataType {
     Template,
 
     // Foldable template with a slot (becomes two string slices)
+    #[allow(dead_code)] // todo
     TemplateWrapper,
 
     // Numbers
     Float,
     Int,
+    #[allow(dead_code)] // todo
     Decimal,
 
     // Collections.
@@ -90,6 +92,7 @@ pub enum DataType {
     Collection(Box<DataType>, Ownership),
 
     // Structs
+    #[allow(dead_code)] // todo
     Parameters(Vec<Declaration>), // Struct definitions and parameters
     Struct(Vec<Declaration>, Ownership), // Struct instance
 
@@ -103,8 +106,10 @@ pub enum DataType {
 
     // TODO: IS THIS JUST MULTIPLE TYPES FOR FUNCTION RETURNS?
     // Choices should actually just be enums for now
+    #[allow(dead_code)] // todo
     Choices(Vec<Declaration>), // Union of types
-    Option(Box<DataType>),     // Shorthand for a choice of a type or None
+    #[allow(dead_code)] // todo
+    Option(Box<DataType>), // Shorthand for a choice of a type or None
 }
 
 impl DataType {
@@ -158,6 +163,7 @@ impl DataType {
         matches!(self, DataType::Float | DataType::Int | DataType::Decimal)
     }
 
+    #[allow(dead_code)] // todo
     pub fn is_iterable(&self) -> bool {
         match self {
             DataType::Range => true,

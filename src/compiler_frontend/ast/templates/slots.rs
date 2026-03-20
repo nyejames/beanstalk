@@ -88,7 +88,10 @@ pub(crate) fn compose_template_with_slots(
 
         for (target, inserted_atoms) in slot_inserts {
             if !slot_schema.accepts_target(&target) {
-                return unknown_slot_target_error(&target, &location.to_error_location(string_table));
+                return unknown_slot_target_error(
+                    &target,
+                    &location.to_error_location(string_table),
+                );
             }
 
             match target {
@@ -103,14 +106,17 @@ pub(crate) fn compose_template_with_slots(
 
         if let Some(loose_atom) = loose_atom {
             if slot_schema.has_named_slots_without_default() {
-                return loose_content_without_default_slot_error(&location.to_error_location(string_table));
+                return loose_content_without_default_slot_error(
+                    &location.to_error_location(string_table),
+                );
             }
 
             contributions.add_default_atom(loose_atom);
         }
     }
 
-    let atoms = compose_wrapper_atoms_recursive(&wrapper.content.atoms, &contributions, string_table)?;
+    let atoms =
+        compose_wrapper_atoms_recursive(&wrapper.content.atoms, &contributions, string_table)?;
     Ok(TemplateContent { atoms })
 }
 
@@ -307,7 +313,11 @@ fn expand_slot_placeholder(
         let atom = if slot.child_wrappers.is_empty() {
             atom
         } else if contribution_has_direct_child_templates(&atom) {
-            apply_child_wrappers_to_contribution_children(&atom, &slot.child_wrappers, string_table)?
+            apply_child_wrappers_to_contribution_children(
+                &atom,
+                &slot.child_wrappers,
+                string_table,
+            )?
         } else if contribution_template(&atom).is_some() {
             wrap_child_slot_contribution(&atom, &slot.child_wrappers, string_table)?
         } else {
@@ -318,7 +328,7 @@ fn expand_slot_placeholder(
             expanded.push(wrap_child_slot_contribution(
                 &atom,
                 &slot.applied_child_wrappers,
-                string_table
+                string_table,
             )?);
         } else {
             expanded.push(atom);
@@ -454,8 +464,11 @@ fn apply_child_wrappers_to_contribution_children(
         return Ok(atom.to_owned());
     };
 
-    contribution_template.content =
-        apply_inherited_child_templates_to_content(contribution_template.content, child_wrappers, string_table)?;
+    contribution_template.content = apply_inherited_child_templates_to_content(
+        contribution_template.content,
+        child_wrappers,
+        string_table,
+    )?;
     contribution_template.unformatted_content = contribution_template.content.to_owned();
     contribution_template.content_needs_formatting = false;
     refresh_template_kind(&mut contribution_template);

@@ -451,9 +451,7 @@ fn wasm_flag_emits_html_js_and_wasm_artifacts() {
         .output_files
         .iter()
         .find_map(|file| match file.file_kind() {
-            FileKind::Html(content) if file.relative_output_path() == "index.html" => {
-                Some(content)
-            }
+            FileKind::Html(content) if file.relative_output_path() == "index.html" => Some(content),
             _ => None,
         })
         .expect("index html should exist");
@@ -463,9 +461,7 @@ fn wasm_flag_emits_html_js_and_wasm_artifacts() {
         .output_files
         .iter()
         .find_map(|file| match file.file_kind() {
-            FileKind::Js(content) if file.relative_output_path() == "page.js" => {
-                Some(content)
-            }
+            FileKind::Js(content) if file.relative_output_path() == "page.js" => Some(content),
             _ => None,
         })
         .expect("page.js should exist");
@@ -527,9 +523,7 @@ fn wasm_mode_bootstrap_calls_wrapper_exports_not_internal_names() {
         .output_files
         .iter()
         .find_map(|file| match file.file_kind() {
-            FileKind::Js(content) if file.relative_output_path() == "page.js" => {
-                Some(content)
-            }
+            FileKind::Js(content) if file.relative_output_path() == "page.js" => Some(content),
             _ => None,
         })
         .expect("page.js should be emitted");

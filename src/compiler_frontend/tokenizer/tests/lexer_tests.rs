@@ -383,7 +383,8 @@ fn html_template_body_tokenizes_slot_templates_inside_quoted_attributes() {
 
 #[test]
 fn html_template_body_tokenizes_symbol_wrappers_outside_quotes() {
-    let (file_tokens, string_table) = tokenize_source("[$html:\n[title, center: LANGUAGE BASICS]\n]");
+    let (file_tokens, string_table) =
+        tokenize_source("[$html:\n[title, center: LANGUAGE BASICS]\n]");
 
     let template_heads = file_tokens
         .tokens
@@ -402,14 +403,12 @@ fn html_template_body_tokenizes_symbol_wrappers_outside_quotes() {
     );
     assert_eq!(template_closes, 2);
 
-    assert!(file_tokens
-        .tokens
-        .iter()
-        .any(|token| matches!(token.kind, TokenKind::Symbol(id) if string_table.resolve(id) == "title")));
-    assert!(file_tokens
-        .tokens
-        .iter()
-        .any(|token| matches!(token.kind, TokenKind::Symbol(id) if string_table.resolve(id) == "center")));
+    assert!(file_tokens.tokens.iter().any(
+        |token| matches!(token.kind, TokenKind::Symbol(id) if string_table.resolve(id) == "title")
+    ));
+    assert!(file_tokens.tokens.iter().any(
+        |token| matches!(token.kind, TokenKind::Symbol(id) if string_table.resolve(id) == "center")
+    ));
 }
 
 #[test]

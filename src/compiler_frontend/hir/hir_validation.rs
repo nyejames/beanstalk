@@ -3,8 +3,6 @@
 //! Always-on structural validation for new HIR modules.
 //! This pass enforces core invariants so downstream analysis/backends can
 //! rely on a consistent IR contract.
-#![allow(dead_code)]
-
 use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorLocation, ErrorType};
 use crate::compiler_frontend::hir::hir_datatypes::{HirTypeKind, TypeId};
 use crate::compiler_frontend::hir::hir_display::HirLocation;
@@ -966,18 +964,6 @@ impl<'a> HirValidator<'a> {
         }
 
         Err(self.error_with_hir(format!("Unknown HIR block id {:?}", block_id), anchor))
-    }
-
-    fn require_function_id(
-        &self,
-        function_id: FunctionId,
-        anchor: Option<HirLocation>,
-    ) -> Result<(), CompilerError> {
-        if self.function_ids.contains(&function_id) {
-            return Ok(());
-        }
-
-        Err(self.error_with_hir(format!("Unknown HIR function id {:?}", function_id), anchor))
     }
 
     fn require_struct_id(

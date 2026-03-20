@@ -3,8 +3,6 @@
 // ============================================================
 //
 // This is the canonical type representation used by HIR.
-#![allow(dead_code)]
-
 // All types are fully resolved and interned.
 // No inference, no AST residue, no surface syntax artifacts.
 //
@@ -62,6 +60,7 @@ impl TypeContext {
         (id.0 as usize) < self.types.len()
     }
 
+    #[allow(dead_code)] // todo
     pub fn len(&self) -> usize {
         self.types.len()
     }
@@ -124,6 +123,7 @@ pub enum HirTypeKind {
 
     /// Result wraps any type (including Tuple)
     /// fn || -> Int, String!  becomes  Result { ok: Tuple { ... }, err: ErrorType }
+    #[allow(dead_code)] // todo
     Result {
         ok: TypeId,
         err: TypeId,

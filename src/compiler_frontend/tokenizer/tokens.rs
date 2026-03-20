@@ -394,9 +394,9 @@ impl<'a> TokenStream<'a> {
     }
 
     pub fn is_inside_template_body_quotes(&self) -> bool {
-        self.template_mode_stack.last().is_some_and(|frame| {
-            frame.body_inside_single_quote || frame.body_inside_double_quote
-        })
+        self.template_mode_stack
+            .last()
+            .is_some_and(|frame| frame.body_inside_single_quote || frame.body_inside_double_quote)
     }
 
     pub fn register_template_body_quote_char(&mut self, ch: char) {

@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration};
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::ast::templates::create_template_node::Template;
@@ -93,6 +91,7 @@ impl Expression {
             ownership,
         }
     }
+    #[allow(dead_code)] // todo
     pub fn none() -> Self {
         Self {
             data_type: DataType::None,
@@ -183,7 +182,6 @@ impl Expression {
             ownership: Ownership::ImmutableReference,
         }
     }
-
 
     // Function calls
     pub fn function_call(
@@ -280,6 +278,7 @@ impl Expression {
         }
     }
 
+    #[allow(dead_code)] // todo
     pub fn range(
         lower: Expression,
         upper: Expression,
@@ -294,6 +293,7 @@ impl Expression {
         }
     }
 
+    #[allow(dead_code)] // todo
     pub fn parameter(
         name: InternedPath,
         data_type: DataType,
@@ -322,6 +322,7 @@ impl Expression {
         }
     }
 
+    #[allow(dead_code)] // todo
     pub fn is_none(&self) -> bool {
         matches!(self.kind, ExpressionKind::None)
     }
@@ -425,7 +426,6 @@ pub enum ExpressionKind {
 }
 
 impl ExpressionKind {
-
     pub fn is_foldable(&self) -> bool {
         matches!(
             self,
@@ -437,6 +437,7 @@ impl ExpressionKind {
         )
     }
 
+    #[allow(dead_code)] // todo
     pub fn is_iterable(&self) -> bool {
         matches!(
             self,
@@ -456,6 +457,7 @@ pub enum Operator {
     Divide,
     Modulus,
     // Remainder,
+    #[allow(dead_code)] // todo
     Root,
     Exponent,
 
