@@ -289,8 +289,8 @@ pub struct Formatter {
     // This allows directive-owned formatters (for example `$markdown`) to opt into
     // shared dedent/trim behavior while still operating over raw template body text.
     pub pre_format_whitespace_passes: Vec<TemplateWhitespacePassProfile>,
-    // Shared ownership keeps formatters cheap to clone as styles are inherited or
-    // copied into nested templates during AST construction.
+    // Shared ownership keeps formatters cheap to clone when template styles are
+    // copied or explicitly inherited during AST construction.
     pub formatter: Arc<dyn TemplateFormatter>,
     // Post-format passes run after formatter output is generated.
     pub post_format_whitespace_passes: Vec<TemplateWhitespacePassProfile>,

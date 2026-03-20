@@ -161,12 +161,15 @@ Directive availability is frontend-registry based:
 **Built-in Style Directives**
 
 - $slot / $insert(..) - See slots below!
-- $reset              - Clears inherited styles before applying new ones
+- $reset              - Clears inherited style state before applying new directives in the same head
 - $markdown           - Parses the template bodies with a custom flavour of Markdown
 - $css                - Provides some basic warnings for malformed CSS
 - $note / $todo       - Comments (ignored by final output)
 - $doc                - Turns the template into a documentation comment
 - $children(..)       - Accepts a template (or string slice) that will be applied only to this template's direct child templates
+
+Formatting directives do not automatically flow into nested child templates.
+If a child template should keep using a formatter such as `$markdown`, redeclare it in that child template's head.
 
 ### Template Slots
 

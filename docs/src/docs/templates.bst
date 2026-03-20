@@ -47,9 +47,10 @@ Slots can be used to inform how a template merges into another template.
 `$children(..)` only applies to the direct child templates of the current template.
 It does not automatically apply to grandchildren.
 
-Formatting directives such as `$markdown` still inherit through nested descendants until a child explicitly changes or resets them.
+Formatting directives such as `$markdown` do not inherit into nested child templates by default.
+If a child template should keep using a formatter, redeclare that formatter in the child's head.
 
-`$reset` clears inherited formatting and child-style state before later directives in the same head apply fresh settings.
+`$reset` clears inherited style state and child-style state before later directives in the same head apply fresh settings.
 
 This lets nested child wrappers stay scoped cleanly. For example, a table helper can wrap each direct row in `<tr>` and then wrap each direct cell of that row in `<td>` without the row wrapper leaking into the cells:
 

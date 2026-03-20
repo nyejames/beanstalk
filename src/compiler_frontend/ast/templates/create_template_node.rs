@@ -57,6 +57,10 @@ struct TemplateInheritance {
 
 impl TemplateInheritance {
     fn from_legacy_templates(templates: Vec<Template>) -> Self {
+        // WHAT: preserve the explicit legacy "inherit from provided wrapper templates"
+        // entry-point behavior for callers that pass template state in manually.
+        // WHY: automatic nested-template inheritance is now more explicit, but the
+        // public constructor still needs to honor deliberate inherited inputs.
         let recursive_style = templates
             .last()
             .and_then(|template| recursive_inherited_style(&template.style));
@@ -130,7 +134,9 @@ impl Template {
 
                 TokenKind::TemplateHead => {
                     let nested_inheritance = TemplateInheritance {
-                        recursive_style: recursive_inherited_style(&template.style),
+                        recursive_style: inherited_style_for_nested_child_templates(
+                            &template.style,
+                        ),
                         direct_child_wrappers: template.style.child_templates.to_owned(),
                     };
                     let nested_template = Self::new_with_doc_context(
@@ -1323,7 +1329,14 @@ fn fold_atoms(
 }
 
 fn effective_inherited_style_for_nested_templates(style: &Style) -> Option<Style> {
-    recursive_inherited_style(style)
+    inherited_style_for_nested_child_templates(style)
+}
+
+fn inherited_style_for_nested_child_templates(_style: &Style) -> Option<Style> {
+    // WHAT: nested templates start with no inherited formatter/style state.
+    // WHY: formatters such as `$markdown` must now be redeclared explicitly on
+    // each nested template that wants formatter-controlled body parsing.
+    None
 }
 
 fn push_folded_segment_str(output: &mut String, value: &str, protect_from_markdown: bool) {

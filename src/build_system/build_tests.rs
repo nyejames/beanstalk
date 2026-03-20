@@ -969,9 +969,10 @@ fn build_project_markdown_page_reexported_table_keeps_rows_and_cells_inside_tabl
 
     assert!(!html.contains('\u{FFFC}'));
     assert_eq!(html.matches("<tr>").count(), 2);
-    assert!(html.contains("<td><p>Type</p></td>"));
-    assert!(html.contains("<td><p>Description</p></td>"));
+    assert!(html.contains("<td>Type</td>"));
+    assert!(html.contains("<td>Description</td>"));
     assert_eq!(html.matches("<td>").count(), 4);
+    assert!(!html.contains("<p>"));
 
     fs::remove_dir_all(&root).expect("should remove temp dir");
 }

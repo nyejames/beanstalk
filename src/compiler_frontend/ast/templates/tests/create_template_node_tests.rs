@@ -372,13 +372,26 @@ fn markdown_does_not_escape_html_inserted_from_template_head() {
 }
 
 #[test]
-fn markdown_escapes_child_body_but_not_child_head_insertions() {
+fn markdown_does_not_reformat_plain_child_template_bodies() {
     let rendered =
         folded_template_output("[$markdown:\n[\"<i>child-head</i>\": <b>child-body</b>]\n]");
 
     assert!(rendered.contains("<i>child-head</i>"));
     assert!(!rendered.contains("&lt;i&gt;child-head&lt;/i&gt;"));
+    assert!(rendered.contains("<b>child-body</b>"));
+    assert!(!rendered.contains("&lt;b&gt;child-body&lt;/b&gt;"));
+}
+
+#[test]
+fn markdown_redeclaration_formats_child_template_bodies() {
+    let rendered = folded_template_output(
+        "[$markdown:\n[\"<i>child-head</i>\", $markdown: <b>child-body</b>]\n]",
+    );
+
+    assert!(rendered.contains("<i>child-head</i>"));
+    assert!(!rendered.contains("&lt;i&gt;child-head&lt;/i&gt;"));
     assert!(rendered.contains("&lt;b&gt;child-body&lt;/b&gt;"));
+    assert!(!rendered.contains("<b>child-body</b>"));
 }
 
 #[test]
@@ -724,8 +737,18 @@ fn children_wrappers_do_not_apply_to_grandchildren() {
 }
 
 #[test]
-fn markdown_is_still_inherited_by_grandchildren() {
+fn markdown_is_not_inherited_by_grandchildren() {
     let rendered = folded_template_output("[$markdown:\n[: [: <b>grandchild-body</b> ]]\n]");
+
+    assert!(rendered.contains("<b>grandchild-body</b>"));
+    assert!(!rendered.contains("&lt;b&gt;grandchild-body&lt;/b&gt;"));
+}
+
+#[test]
+fn markdown_must_be_redeclared_at_each_nested_template_level() {
+    let rendered = folded_template_output(
+        "[$markdown:\n[$markdown:\n[$markdown: <b>grandchild-body</b>]\n]\n]",
+    );
 
     assert!(rendered.contains("&lt;b&gt;grandchild-body&lt;/b&gt;"));
     assert!(!rendered.contains("<b>grandchild-body</b>"));

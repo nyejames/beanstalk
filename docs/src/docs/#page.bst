@@ -12,6 +12,13 @@ import @styles/docs/{navbar, footer, title, section, header, body, palette, tabl
     This website is built using Beanstalk's built in HTML project builder, and all the content you see here is written in Beanstalk code.
 
     You can find the source code for this website on @https://github.com/nyejames/beanstalk/tree/main/docs (Github).
+
+    ## Documentation
+    [palette.red, $markdown:
+        *A full rewrite of the documentation using Beanstalk is in progress*
+    ]
+
+    @/docs/basics.html (Basics)
 ]
 
 ] -- end of body
