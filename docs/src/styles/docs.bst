@@ -45,6 +45,14 @@ import @libs/html/{doc, format}
     </tr>
 ]
 
+# codeblock = [$html:
+    <pre style="background-color: hsla(0, 0%, 42%, 0.12); padding: 1em; border-radius: 5px; overflow-x: auto;">
+        <code style="font-family: var(--bst-font-family-monospace);">
+            [$slot]
+        </code>
+    </pre>
+]
+
 # title = [$html: <h1 style="font-size: 2em;[$slot("style")]">[$slot]</h1>]
 
 Palette = |

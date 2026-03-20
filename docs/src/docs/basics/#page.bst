@@ -1,7 +1,7 @@
 -- ADD A HASH TO THIS FILE TO INCLUDE IT IN THE MODULES.
 -- FOR NOW THIS IS DISABLED FOR TESTING
 import @libs/html/{format, center}
-import @styles/docs/{navbar, footer, title, page, palette, table, row, header_row}
+import @styles/docs/{navbar, footer, title, page, palette, table, row, header_row, codeblock}
 
 #[page, $markdown:
 
@@ -43,7 +43,7 @@ Even for primitive types such as integers.
 Comments use a double minus sign. 
 Documentation comments will eventually be created via special templates.
 
-[$code("bst"):
+[codeblock, $code("bst"):
     -- normal comment
 ]
 
@@ -55,7 +55,7 @@ All variables must be assigned a value when they are declared.
 ## Assignment
 
 ### Variables
-[$code("bst"):
+[codeblock, $code("bst"):
     int ~= 0
     float ~= 0.0
 
@@ -81,9 +81,7 @@ All variables must be assigned a value when they are declared.
         value = 1.2, 
         another_value = "hey"
     )
-]
 
-[$code("bst"):
     -- 64 bit immutable float
     number = 420.69
 
@@ -118,7 +116,7 @@ All variables must be assigned a value when they are declared.
 
 All copies are explicit and must use the 'copy' keyword in place of a type.
 
-[$code("bst"):
+[codeblock, $code("bst"):
     -- Create a new collection of integers
     a_collection ~= {1, 2, 3, 4, 5}
     
@@ -143,7 +141,7 @@ Expressions can span over multiple lines.
 
 But new statements must start after a newline.
 
-[$code("bst"):
+[codeblock, $code("bst"):
     -- Valid
     some_int =
         4 + 5 + 6 + 7 + 
