@@ -1,3 +1,2 @@
 mode = "success"
-output_paths = ["index.html"]
 warnings = "forbid"

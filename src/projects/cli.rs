@@ -7,7 +7,9 @@ use crate::build_system::build;
 use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::display_messages::print_compiler_messages;
-use crate::compiler_tests::integration_test_runner::run_all_test_cases;
+use crate::compiler_tests::integration_test_runner::{
+    run_all_test_cases, run_all_test_cases_with_backend_filter,
+};
 use crate::projects::dev_server::{self, DevServerOptions};
 use crate::projects::html_project::html_project_builder::HtmlProjectBuilder;
 use crate::projects::html_project::new_html_project;
@@ -33,7 +35,9 @@ enum Command {
     },
 
     Help,
-    CompilerTests, // Runs all the compiler_frontend integration tests for Beanstalk compiler_frontend development
+    CompilerTests {
+        backend_filter: Option<String>,
+    }, // Runs all compiler integration tests, optionally filtered by backend
 }
 
 pub fn start_cli() {
@@ -147,8 +151,12 @@ pub fn start_cli() {
             }
         }
 
-        Command::CompilerTests => {
-            run_all_test_cases(true);
+        Command::CompilerTests { backend_filter } => {
+            if let Some(backend_filter) = backend_filter.as_deref() {
+                run_all_test_cases_with_backend_filter(true, Some(backend_filter));
+            } else {
+                run_all_test_cases(true);
+            }
         }
     }
 }
@@ -199,7 +207,7 @@ fn get_command(args: &[String]) -> Result<Command, String> {
         // },
         Some("dev") => parse_dev_command(args),
 
-        Some("tests") => Ok(Command::CompilerTests),
+        Some("tests") => parse_tests_command(args),
 
         Some(other) => Err(format!("Invalid command: '{other}'")),
         None => Err(String::from("Missing command.")),
@@ -220,6 +228,49 @@ fn get_flags(args: &[String]) -> Vec<Flag> {
     }
 
     flags
+}
+
+fn parse_tests_command(args: &[String]) -> Result<Command, String> {
+    // Parse optional backend filtering flags for integration tests so local loops can
+    // focus on one backend profile without changing fixture contracts.
+    let mut backend_filter = None;
+    let mut index = 1usize;
+
+    while let Some(arg) = args.get(index) {
+        match arg.as_str() {
+            "--backend" => {
+                let Some(backend_value) = args.get(index + 1) else {
+                    return Err(String::from(
+                        "Missing value for --backend. Supported values: html, html_wasm.",
+                    ));
+                };
+                if backend_value.starts_with("--") {
+                    return Err(String::from(
+                        "Missing value for --backend. Supported values: html, html_wasm.",
+                    ));
+                }
+                if backend_filter.is_some() {
+                    return Err(String::from(
+                        "Tests command accepts at most one --backend value.",
+                    ));
+                }
+                backend_filter = Some(backend_value.to_owned());
+                index += 2;
+            }
+            _ if arg.starts_with("--") => {
+                return Err(format!(
+                    "Unknown tests flag: '{arg}'. Supported tests flag is --backend <html|html_wasm>."
+                ));
+            }
+            _ => {
+                return Err(String::from(
+                    "Tests command does not accept positional arguments.",
+                ));
+            }
+        }
+    }
+
+    Ok(Command::CompilerTests { backend_filter })
 }
 
 fn parse_dev_command(args: &[String]) -> Result<Command, String> {
@@ -332,7 +383,7 @@ fn print_help(commands_only: bool) {
     say!("  run <path>        - JITs a file");
     say!("  build <path>      - Builds a project");
     say!("  dev <path>        - Runs the hot reloading dev server");
-    say!("  tests             - Runs the test suite");
+    say!("  tests [--backend <id>] - Runs the integration test suite");
 
     say!(Green Bold "\nFlags:");
     say!("  --release");
@@ -340,6 +391,8 @@ fn print_help(commands_only: bool) {
     say!("  --hide-timers");
     say!("  --show-warnings");
     say!("  --html-wasm");
+    say!("\nTests command options:");
+    say!("  --backend <id>         (supported: html, html_wasm)");
     say!("\nDev command options:");
     say!("  --host <host>            (default: 127.0.0.1)");
     say!("  --port <port>            (default: 6342)");

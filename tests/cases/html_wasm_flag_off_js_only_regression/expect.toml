@@ -1,4 +1,3 @@
 mode = "success"
 entry = "."
-output_paths = ["index.html"]
 warnings = "forbid"

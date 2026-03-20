@@ -1,4 +1,4 @@
-//! Tests for CLI dev-command parsing and validation.
+//! Tests for CLI command parsing and validation.
 
 use super::{Command, get_command};
 use crate::projects::dev_server::DevServerOptions;
@@ -101,4 +101,41 @@ fn dev_command_supports_path_and_flag_ordering() {
             },
         }
     );
+}
+
+#[test]
+fn tests_command_uses_default_backend_selection() {
+    let command = get_command(&args(&["tests"])).expect("tests command should parse");
+    assert_eq!(
+        command,
+        Command::CompilerTests {
+            backend_filter: None,
+        }
+    );
+}
+
+#[test]
+fn tests_command_parses_backend_filter() {
+    let command = get_command(&args(&["tests", "--backend", "html_wasm"]))
+        .expect("tests backend filter should parse");
+    assert_eq!(
+        command,
+        Command::CompilerTests {
+            backend_filter: Some(String::from("html_wasm")),
+        }
+    );
+}
+
+#[test]
+fn tests_command_rejects_missing_backend_value() {
+    let error =
+        get_command(&args(&["tests", "--backend"])).expect_err("missing backend value should fail");
+    assert!(error.contains("Missing value for --backend"));
+}
+
+#[test]
+fn tests_command_rejects_unknown_flags() {
+    let error =
+        get_command(&args(&["tests", "--wat"])).expect_err("unknown tests flag should fail");
+    assert!(error.contains("Unknown tests flag"));
 }

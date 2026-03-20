@@ -242,12 +242,36 @@ tests/cases/
     │   └── helper.bst            # Additional source files for the same case
     ├── expect.toml               # Required outcome contract
     └── golden/
-        └── index.html            # Optional exact output assertions
+        ├── html/                 # Backend golden assertions (html)
+        └── html_wasm/            # Backend-matrix golden assertions (html_wasm)
 ```
 
 Canonical integration cases should be self-contained directories that describe one scenario each.
 Multi-file fixtures should stay inside a single case folder so helper files are not counted as standalone tests.
 Failure cases should assert the intended `ErrorType` and, when practical, message fragments that prove the compiler failed for the right reason.
+
+**Backend Matrix Expectations**:
+- Use a single `expect.toml` with one input fixture and backend-specific assertion blocks:
+
+```toml
+entry = "."
+
+[backends.html]
+mode = "success"
+warnings = "forbid"
+
+[backends.html_wasm]
+mode = "success"
+warnings = "forbid"
+
+[[backends.html_wasm.artifact_assertions]]
+path = "page.wasm"
+kind = "wasm"
+validate_wasm = true
+must_export = ["memory", "bst_str_ptr", "bst_str_len", "bst_release"]
+```
+
+- Matrix-mode goldens should be stored in `golden/<backend>/...` so the same input fixture can assert different backend outputs.
 
 **No user-input panics**:
 - Active frontend stages must reject unsupported syntax and malformed input with structured diagnostics, not `panic!`, `todo!`, or user-data-driven `.unwrap()`.
@@ -257,6 +281,9 @@ Failure cases should assert the intended `ErrorType` and, when practical, messag
 ```bash
 # Use the compiler's test runner to run all integration tests
 cargo run -- tests
+
+# Run only one backend profile from matrix fixtures
+cargo run -- tests --backend html_wasm
 
 # Debugging a single file
 cargo run --features "detailed_timers,show_ast,show_hir" -- build tests/cases/function_if_loop_smoke/input/#page.bst

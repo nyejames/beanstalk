@@ -19,3 +19,7 @@ test_output/
 test.html
 main.html
 index.html
+
+# Integration golden snapshots should remain versionable even when they
+# contain index.html artifacts.
+!tests/cases/**/golden/**

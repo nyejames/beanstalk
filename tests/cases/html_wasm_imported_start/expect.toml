@@ -1,5 +1,4 @@
 mode = "success"
 entry = "."
 flags = ["html_wasm"]
-output_paths = ["index.html", "page.js", "page.wasm"]
 warnings = "forbid"
