@@ -10,6 +10,7 @@ use crate::projects::html_project::js_path::{compile_html_module_js, html_output
 use crate::projects::html_project::wasm::artifacts::{
     CompiledHtmlWasmModule, compile_html_module_wasm,
 };
+use crate::projects::routing::parse_html_routing_config;
 use crate::projects::settings::Config;
 use std::collections::HashSet;
 use std::fs;
@@ -154,8 +155,11 @@ impl BackendBuilder for HtmlProjectBuilder {
         })
     }
 
-    fn validate_project_config(&self, _config: &Config) -> Result<(), CompilerError> {
-        // Validate HTML-specific configuration.
+    fn validate_project_config(&self, config: &Config) -> Result<(), CompilerError> {
+        // Validate HTML-specific configuration up front so build/dev runtime behavior stays
+        // deterministic and all routing-policy mistakes are surfaced as config errors.
+        parse_html_routing_config(config)?;
+
         // Empty dev/release folders are allowed and resolved by core build output logic.
         Ok(())
     }

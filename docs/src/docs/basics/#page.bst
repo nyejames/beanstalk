@@ -1,207 +1,234 @@
--- ADD A HASH TO THIS FILE TO INCLUDE IT IN THE MODULES.
--- FOR NOW THIS IS DISABLED FOR TESTING
-import @libs/html/{format, center}
-import @styles/docs/{navbar, footer, title, page, palette, table, row, header_row, codeblock}
+import @html/{format, center}
+import @styles/docs/{navbar, footer, title, section, header, body, palette, table, row, header_row, codeblock}
 
-#[page, $markdown:
-
+#[header]
+#[body:
 [navbar]
-
 [title, center: LANGUAGE BASICS]
 
-Every project has a #config.bst file. 
+[section, $markdown:
+    Every project has a #config.bst file. 
 
-If instead, you build or run a specific Beanstalk file,
-it will create a single Wasm module from that entry point and pull in all its dependencies.
+    If instead, you build or run a specific Beanstalk file,
+    it will create a single module from that entry point and pull in all the file's dependencies.
 
-From the config file you can define a Beanstalk file as the entry point of a program.
+    From the config file you can define a Beanstalk file as the entry point of a program.
 
-Web projects have their own directory based structure and config file also.
+    Web projects have their own directory based structure and config file also.
 
-# Quick Syntax Summary
-For developers coming from most other languages, 
-here are some key idiosyncrasies from other C-like languages to note:
+    [codeblock, $code("bst"):
+        import @libs/html/doc
 
-- Colon opens a scope, semicolon closes it. Semicolon does not end statements.
-- Square brackets are NOT used for arrays, curly braces are used instead. 
-Square brackets are only used for string templates. Items in collections are accessed via methods.
-- Equality and other logical operators use keywords like "is" and "not" 
-(you can't use == or ! for example)
-- ~ tilde symbol to indicate mutability (mutability must be explicit). 
-This comes before the type if there is an explicit type declaration.
-- Double dashes for single line comments (--)
-- Immutable Reference semantics are the default for all stack and heap allocated types. 
-- All copies have to be explicit unless they are used in part of a new expression. 
-Even for primitive types such as integers.
-
-## Formatting
-- 4 spaces are recommended for indentation.
-- Types use UpperCamelCase
-- Everything else uses regular_snake_case
-
-# Comments
-Comments use a double minus sign. 
-Documentation comments will eventually be created via special templates.
-
-[codeblock, $code("bst"):
-    -- normal comment
-]
-
-# Variables
-Equals means assign. Tilde ~ means this is a mutable and can change.
-
-All variables must be assigned a value when they are declared.
-
-## Assignment
-
-### Variables
-[codeblock, $code("bst"):
-    int ~= 0
-    float ~= 0.0
-
-    string_slice ~= "wow!"
-    char ~= '😊'
-    raw_string_slice ~= `hi`
-
-    string_template ~= [:
-        This is the Beanstalk programming language
+        say_hello || -> String:
+            return "Hi, welcome to Beanstalk"
+        ;
+        
+        -- Say hello in an HTML document
+        [doc.prelude, doc.body:
+            [say_hello()]
+        ]
     ]
 
-    bool ~= true
+    # Quick Syntax Summary
+    For developers coming from most other languages, 
+    here are some key idiosyncrasies from other C-like languages to note:
 
-    mutable_collection ~= {}
-    immutable_collection = {}
+    - Colon opens a scope, semicolon closes it. Semicolon does not end statements
 
-    NewStruct = |
-        value Float,
-        another_value String,
-    |
-    
-    instance ~= NewStruct(
-        value = 1.2, 
-        another_value = "hey"
-    )
+    - Square brackets are NOT used for arrays, curly braces are used instead
+    Square brackets are only used for string templates. Items in collections are accessed via methods
 
-    -- 64 bit immutable float
-    number = 420.69
+    - Equality and other logical operators use keywords like "is" and "not" 
+    (you can't use == or ! for example)
 
-    -- Becomes an immutable reference to the value
-    -- For primitives this is actually just an immutable copy,
-    -- But the behaviour is consistent for all datatypes, including heap allocated ones
-    another_number = number
+    - ~ tilde symbol to indicate mutability (mutability must be explicit). 
+    This comes before the type if there is an explicit type declaration.
 
-    -- Becomes a mutable reference to the number
-    -- or moves the value if it isn't used again later in the scope
-    another_mutable_number ~= number
+    - Double dashes for single line comments (--)
 
-    -- Even with primative stack types,
-    -- Copying is still explicit
-    a_copy_of_a_number ~Copy = another_mutable_number
+    - Immutable Reference semantics are the default for all stack and heap allocated types. 
 
-    -- Type error (number is not mutable)
-    number = 1
+    - All copies have to be explicit unless they are used in part of a new expression. 
+    Even for primitive types such as integers.
 
-    -- Type error (another_mutable_number is a float type)
-    another_mutable_number ~= "Not a number"
+    ## Formatting
+    - 4 spaces are recommended for indentation.
+    - Types use UpperCamelCase
+    - Everything else uses regular_snake_case
 
-    -- Explicit type declarations
-    a_float ~Float = 84
-    string_slice = "Hello "
-    a_mutable_string ~String = [:World!]
+    # Comments
+    Comments use a double minus sign. 
+    Documentation comments will eventually be created via special templates.
 
-    -- You can't use the '+' operator on strings,
-    -- They can be concatenated using templates
-    concatenated_strings = [string_slice, a_mutable_string]
+    [codeblock, $code("bst"):
+        -- normal comment
+    ]
+
 ]
 
-All copies are explicit and must use the 'copy' keyword in place of a type.
+[section, $markdown:
+    # Variables
+    Equals means assign. Tilde ~ means this is a mutable and can change.
 
-[codeblock, $code("bst"):
-    -- Create a new collection of integers
-    a_collection ~= {1, 2, 3, 4, 5}
-    
-    -- Deep mutable copy of a collection
-    a_copy ~= copy a_collection
+    All variables must be assigned a value when they are declared.
 
-    -- Immutable reference to a_collection
-    a_reference = a_collection
+    [codeblock, $code("bst"):
+        int ~= 0
+        float ~= 0.0
 
-    -- Ownership passed or mutable reference depending on context
-    a_reference ~= a_collection
+        string_slice ~= "wow!"
+        char ~= '😊'
+        raw_string_slice ~= `hi`
 
-    -- a_reference is still a reference to the original collection
-    a_reference.push(5)
-    io(a_collection) -- {1, 2, 3, 4, 5, 5}
+        string_template ~= [:
+            This is the Beanstalk programming language
+        ]
 
-    a_collection.pull(a_collection.length() - 1)
-    io(a_collection) -- {23.0}
+        bool ~= true
+
+        mutable_collection ~= {}
+        immutable_collection = {}
+
+        NewStruct = |
+            value Float,
+            another_value String,
+        |
+        
+        instance ~= NewStruct(
+            value = 1.2, 
+            another_value = "hey"
+        )
+    ]
+
+    By default, Beanstalk code will create immutable references to values.
+    **This is true for all types.**
+
+    The compiler might decide to make an immutable copy of a primative value,
+    but the assignment will **always** behave the same way no matter what the type is.
+
+
+    [codeblock, $code("bst"):
+        -- 64 bit immutable float
+        number = 420.69
+
+        -- Becomes an immutable reference to the value
+        another_number = number
+
+        -- Becomes a mutable reference to the number
+        -- or moves the value if it isn't used again later in the scope
+        another_mutable_number ~= number
+
+        -- Even with primative stack types,
+        -- Copying is still explicit
+        a_copy_of_a_number ~Copy = another_mutable_number
+
+        -- Type error (number is not mutable)
+        number = 1
+
+        -- Type error (another_mutable_number is a float type)
+        another_mutable_number ~= "A string instead. Whoops."
+
+        -- Explicit type declarations
+        a_float ~Float = 84
+        string_slice = "Hello "
+        a_mutable_string ~String = [:World!]
+
+        -- You can't use the '+' operator on strings,
+        -- They can be concatenated using templates
+        concatenated_strings = [string_slice, a_mutable_string]
+    ]
+
+    All copies are explicit and must use the 'copy' keyword in place of a type.
+
+    [codeblock, $code("bst"):
+        -- Create a new collection of integers
+        a_collection ~= {1, 2, 3, 4, 5}
+        
+        -- Deep mutable copy of a collection
+        a_copy ~= copy a_collection
+
+        -- Immutable reference to a_collection
+        a_reference = a_collection
+
+        -- Ownership passed or mutable reference depending on context
+        a_reference ~= a_collection
+
+        -- a_reference is still a reference to the original collection
+        a_reference.push(5)
+        io(a_collection) -- {1, 2, 3, 4, 5, 5}
+
+        a_collection.pull(a_collection.length() - 1)
+        io(a_collection) -- {23.0}
+    ]
+
+    Expressions can span over multiple lines.
+
+    But new statements must start after a newline.
+
+    [codeblock, $code("bst"):
+        -- Valid
+        some_int =
+            4 + 5 + 6 + 7 + 
+            8 + 9 + 10
+
+        -- Also valid
+        some_int =
+            4 + (5 + 6) * 7
+            + 8 / 9 + 10
+    ]
 ]
 
-Expressions can span over multiple lines.
+[section, $markdown:
+    # Data Types
+    Beanstalk data type keywords use UpperCamelCase.
+    Mutibility can change the underlaying data type but is not actually part of the type.
 
-But new statements must start after a newline.
+    [table:
+        [header_row: [: Type] [: Description] ] 
 
-[codeblock, $code("bst"):
-    -- Valid
-    some_int =
-        4 + 5 + 6 + 7 + 
-        8 + 9 + 10
+        [row: [: Float ] [: 64-bit floating point number] ]
 
-    -- Also valid
-    some_int =
-        4 + (5 + 6) * 7
-        + 8 / 9 + 10
+        [row: [: Int ] [:  64-bit signed integer ] ]
+
+        [row: [: String ] [: UTF-8 string slice or string template] ]
+    ]
+
+    ## Numerical Types
+    These will be extended to smaller sized and unsigned variants in the future.
+    By default, "Float" and "Int" will become 64 bit signed types.
+
+    The language currently supports a small set of core types but may be extended in the future.
+
+    # Strings and String slices
+    String is the keyword for string types in Beanstalk. 
+    Double quotes are automatically string slices. 
+
+    `"Double quotes for a UTF-8 string slice"`
+
+    Backticks are used for RAW strings. To escape a backtick it must be preceded with a backslash \.
+
+    Scenes are used instead of format strings.
+
+    # Operators
+
+    ## Logical and Comparison Operators
+    The 'is' keyword is used to check equality. 
+    The "and / or" keywords are used for logical and / or and 'not' is used to invert a truthy value to falsy or vice versa.
+
+    ## Mathematical Operators
+    [table:
+        [header_row: [: Operator] [: Description]          [: Precedence] ]
+        [row: [: ^]        [: Exponent]            [: 4] ]
+        [row: [: //]       [: Root]                [: 4] ]
+        [row: [: *]        [: Multiplication]       [: 3] ]
+        [row: [: /]        [: Division]             [: 3] ]
+        [row: [: %]          [: Modulo (truncated)]   [: 3] ]
+        [row: [: %%]         [: Remainder (floored)]  [: 3] ]
+        [row: [: +]          [: Sum]                  [: 2] ]
+        [row: [: -]        [: Subtraction]          [: 2] ]
+    ]
 ]
 
-# Data Types
-All data type keywords contain methods from the standard library for common manipulation of types.
-
-## Numerical Types
-[table:
-    [header_row: [: Type] [: Description] ] 
-
-    [row: [: float ] [: 64 bit floating point number] ]
-
-    [row: [: int ] [:  64 bit signed integer ] ]
-]
-
-## String based Types
-These are all different ways to create strings.
-
-[table:
-    [header_row: [: Type] [: Description] ]
-
-    [row: [: string slice ] [: UTF-8] ]
-
-    [row: [: template ] [: The string templating syntax of Beanstalk for creating strings. ] ]
-]
-
-# Strings and String slices
-String is the keyword for string types in Beanstalk. 
-Double quotes are automatically string slices. 
-
-`"Double quotes for a UTF-8 string slice"`
-
-Backticks are used for RAW strings. To escape a backtick it must be preceded with a backslash \.
-
-Scenes are used instead of format strings.
-
-# Logical Operators
-The 'is' keyword is used to check equality, not '=='. 
-The "and / or" keywords are used for logical and / or and 'not' is used to invert a truthy value to falsy or vice versa.
-
-[table:
-    [header_row: [: Operator] [: Description]          [: Precedence] ]
-    [row: [: `^`]        [: Exponent]            [: 4] ]
-    [row: [: `//`]       [: Root]                [: 4] ]
-    [row: [: `*`]        [: Multiplication]       [: 3] ]
-    [row: [: `/`]        [: Division]             [: 3] ]
-    [row: [: %]          [: Modulo (truncated)]   [: 3] ]
-    [row: [: %%]         [: Remainder (floored)]  [: 3] ]
-    [row: [: +]          [: Sum]                  [: 2] ]
-    [row: [: `-`]        [: Subtraction]          [: 2] ]
-]
-
-]-- end of page
+]-- end of body
 
 [footer]

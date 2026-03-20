@@ -1273,12 +1273,14 @@ impl HirStatement {
 }
 
 impl HirTerminator {
+    #[allow(dead_code)] // Used for tests
     pub(crate) fn display_with_context(&self, display: &HirDisplayContext<'_>) -> String {
         display.render_terminator(self)
     }
 }
 
 impl HirExpression {
+    #[allow(dead_code)] // Todo
     pub(crate) fn display_with_context(&self, display: &HirDisplayContext<'_>) -> String {
         display.render_expression(self)
     }

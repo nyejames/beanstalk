@@ -6,14 +6,14 @@ Document = |
     head String = [$html:
       <head>
         <meta charset="UTF-8">
-        <meta name="viewport"content="width=device-width, initial-scale=1">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="color-scheme" content="light dark" />
         [$slot]
       </head>
     ],
     title String = [$html:<title style="[$slot("style")]">[$slot]</title>],
     style String = [$html:<style>[default_style][$slot]</style>],
-    body String = [$html:<body class="container" style="[$slot("style")]">[$slot]</body>],
+    body String = [$html:<body style="[$slot("style")]">[$slot]</body>],
     div String = [$html:<div style="[$slot("style")]">[$slot]</div>],
 |
 
@@ -39,11 +39,13 @@ Format = |
 # right String = [$insert("style"):text-align: right;]
 # left String = [$insert("style"):text-align: left;]
 
+-- Basic HTML components
+# img String = [$html:<img src="[$slot("src")]" style="[$slot("style")]" alt="[$slot]">]
+
 -- A css reset and some classes for the built-in code formatter
 -- This is inspired by Pico.css, but is an even more minimal reset.
 -- Actual style systems are intended to be built on top of this easily.
 # default_style = [$css:
-    @charset "UTF-8";
     :root {
       color-scheme: light dark;
 
@@ -110,7 +112,7 @@ Format = |
 
     }
 
-    /* Container mostly provides default padding */
+    /* Container mostly provides default padding for content sections */
     .container {
       width: 100%;
       margin-right: auto;

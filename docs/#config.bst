@@ -1,12 +1,16 @@
-#project = "html"
-#entry_root = "src"
-#dev_folder = "dev"
-#output_folder = "release"
-#name = "html_project"
-#version = "0.1.0"
-#author = ""
-#license = "MIT"
+# project = "html"
+# entry_root = "src"
+# dev_folder = "dev"
+# output_folder = "release"
+# page_url_style = "trailing_slash"
+# redirect_index_html = true
+# name = "html_project"
+# version = "0.1.0"
+# author = ""
+# license = "MIT"
 
-#libraries = {
-    @(libs),
+# libraries = {
+    @libs,
 }
+
+# assets = "assets"

@@ -1283,7 +1283,6 @@ fn fold_atoms(
 
                 if matches!(template.kind, TemplateType::SlotInsert(_))
                     || template.content.contains_slot_insertions()
-                    || template.has_unresolved_slots()
                 {
                     return_compiler_error!(
                         "Invalid template content reached string folding: unresolved slot insertions cannot be rendered directly."
@@ -1292,6 +1291,7 @@ fn fold_atoms(
 
                 // If nested templates become fully resolved only after wrapper composition,
                 // fold them here so authored nesting order is preserved in the final string.
+                // Unfilled nested slots intentionally fold to empty strings.
                 let nested_inherited_style = effective_inherited_style_for_nested_templates(style);
                 let folded_nested =
                     template.fold_into_stringid(&nested_inherited_style, string_table)?;

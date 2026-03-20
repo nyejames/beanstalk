@@ -102,7 +102,7 @@ post = create_post(date, [$markdown:
 </li>
 <br>
 <li>
-<a href="https://github.com/nyejames/beanstalk/blob/main/docs/Beanstalk%20Memory%20Management.md">A breakdown of the memory management strategy</a>
+<a href="https://github.com/nyejames/beanstalk/blob/main/docs/Beanstalk%20Memory%20Management.md">The memory management strategy</a>
 </li>
 <br>
 <li>
@@ -124,7 +124,9 @@ post = create_post(date, [$markdown:
 
 </div>
 
-Current focus: stabilising the JS backend and HTML project build system for static page generation and JS output.
+Current focus: stabilising the JS and Wasm backend and HTML project build system for static website generation.
+
+<a href="https://nyejames.github.io/beanstalk/">The documentation site for this language is being written in Beanstalk.</a>
 
 The syntax and some constructs (e.g. closures, interfaces, async) are still evolving in their design before full pipeline support.
 

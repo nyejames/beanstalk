@@ -2,6 +2,7 @@
 
 use super::{PreparedResponse, prepare_static_response, should_serve_failed_build_html};
 use crate::projects::dev_server::state::BuildState;
+use crate::projects::dev_server::static_files::ResolvedRequestKind;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
@@ -32,20 +33,12 @@ fn failed_build_html_helper_targets_root_and_nested_html_only() {
     let mut build_state = BuildState::new(PathBuf::from("dev"));
     build_state.last_build_ok = false;
 
-    assert!(should_serve_failed_build_html("/", None, &build_state));
     assert!(should_serve_failed_build_html(
-        "/docs/basics.html",
-        Some(Path::new("dev/docs/basics.html")),
+        ResolvedRequestKind::PageHtml,
         &build_state
     ));
     assert!(!should_serve_failed_build_html(
-        "/styles/site.css",
-        Some(Path::new("dev/styles/site.css")),
-        &build_state
-    ));
-    assert!(!should_serve_failed_build_html(
-        "/docs/basics.html",
-        None,
+        ResolvedRequestKind::Asset,
         &build_state
     ));
 }
@@ -54,9 +47,9 @@ fn failed_build_html_helper_targets_root_and_nested_html_only() {
 fn nested_html_request_uses_stored_error_page_during_failed_build() {
     let root = temp_dir("nested_html");
     let output_dir = root.join("dev");
-    fs::create_dir_all(output_dir.join("docs")).expect("should create docs output dir");
+    fs::create_dir_all(output_dir.join("docs/basics")).expect("should create docs output dir");
     fs::write(
-        output_dir.join("docs/basics.html"),
+        output_dir.join("docs/basics/index.html"),
         "<html><body>stale success</body></html>",
     )
     .expect("should write stale html");
@@ -65,7 +58,7 @@ fn nested_html_request_uses_stored_error_page_during_failed_build() {
     let build_state =
         configure_failed_build_state(&output_dir, error_html, Some(PathBuf::from("index.html")));
 
-    match prepare_static_response("/docs/basics.html", &build_state) {
+    match prepare_static_response("/docs/basics/", None, &build_state) {
         PreparedResponse::Text {
             status_line,
             content_type,
@@ -78,6 +71,9 @@ fn nested_html_request_uses_stored_error_page_during_failed_build() {
         }
         PreparedResponse::File { .. } => {
             panic!("nested html route should render stored error page")
+        }
+        PreparedResponse::Redirect { .. } => {
+            panic!("nested html route should not redirect in this scenario")
         }
     }
 
@@ -103,7 +99,7 @@ fn failed_build_keeps_css_js_and_image_assets_reachable() {
         Some(PathBuf::from("index.html")),
     );
 
-    match prepare_static_response("/styles/site.css", &build_state) {
+    match prepare_static_response("/styles/site.css", None, &build_state) {
         PreparedResponse::File { path, content_type } => {
             assert_eq!(content_type, "text/css; charset=utf-8");
             assert_eq!(
@@ -112,9 +108,10 @@ fn failed_build_keeps_css_js_and_image_assets_reachable() {
             );
         }
         PreparedResponse::Text { .. } => panic!("css request should keep serving the asset"),
+        PreparedResponse::Redirect { .. } => panic!("css request should not redirect"),
     }
 
-    match prepare_static_response("/scripts/app.js", &build_state) {
+    match prepare_static_response("/scripts/app.js", None, &build_state) {
         PreparedResponse::File { path, content_type } => {
             assert_eq!(content_type, "application/javascript; charset=utf-8");
             assert_eq!(
@@ -123,9 +120,10 @@ fn failed_build_keeps_css_js_and_image_assets_reachable() {
             );
         }
         PreparedResponse::Text { .. } => panic!("js request should keep serving the asset"),
+        PreparedResponse::Redirect { .. } => panic!("js request should not redirect"),
     }
 
-    match prepare_static_response("/images/icon.png", &build_state) {
+    match prepare_static_response("/images/icon.png", None, &build_state) {
         PreparedResponse::File { path, content_type } => {
             assert_eq!(content_type, "image/png");
             assert_eq!(
@@ -134,6 +132,7 @@ fn failed_build_keeps_css_js_and_image_assets_reachable() {
             );
         }
         PreparedResponse::Text { .. } => panic!("image request should keep serving the asset"),
+        PreparedResponse::Redirect { .. } => panic!("image request should not redirect"),
     }
 
     fs::remove_dir_all(&root).expect("should remove temp dir");
@@ -150,7 +149,7 @@ fn failed_build_traversal_request_still_returns_not_found() {
         Some(PathBuf::from("index.html")),
     );
 
-    match prepare_static_response("/../secret.txt", &build_state) {
+    match prepare_static_response("/../secret.txt", None, &build_state) {
         PreparedResponse::Text {
             status_line,
             content_type,
@@ -161,6 +160,7 @@ fn failed_build_traversal_request_still_returns_not_found() {
             assert_eq!(body, "Not Found");
         }
         PreparedResponse::File { .. } => panic!("traversal request should return not found"),
+        PreparedResponse::Redirect { .. } => panic!("traversal request should not redirect"),
     }
 
     fs::remove_dir_all(&root).expect("should remove temp dir");
@@ -174,7 +174,7 @@ fn root_request_uses_failed_build_error_page_without_entry_page() {
     let build_state =
         configure_failed_build_state(&output_dir, "<html><body>root error</body></html>", None);
 
-    match prepare_static_response("/", &build_state) {
+    match prepare_static_response("/", None, &build_state) {
         PreparedResponse::Text {
             status_line,
             content_type,
@@ -185,6 +185,39 @@ fn root_request_uses_failed_build_error_page_without_entry_page() {
             assert!(body.contains("root error"));
         }
         PreparedResponse::File { .. } => panic!("root request should render the failed-build page"),
+        PreparedResponse::Redirect { .. } => panic!("root request should not redirect"),
+    }
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
+fn redirects_are_returned_even_during_failed_build() {
+    let root = temp_dir("failed_build_redirect");
+    let output_dir = root.join("dev");
+    fs::create_dir_all(output_dir.join("about")).expect("should create about output dir");
+    fs::write(
+        output_dir.join("about/index.html"),
+        "<html><body>about</body></html>",
+    )
+    .expect("should write page");
+    let build_state = configure_failed_build_state(
+        &output_dir,
+        "<html><body>build failed</body></html>",
+        Some(PathBuf::from("index.html")),
+    );
+
+    match prepare_static_response("/about", Some("x=1"), &build_state) {
+        PreparedResponse::Redirect {
+            status_line,
+            location,
+        } => {
+            assert_eq!(status_line, "302 FOUND");
+            assert_eq!(location, "/about/?x=1");
+        }
+        PreparedResponse::Text { .. } | PreparedResponse::File { .. } => {
+            panic!("canonical page redirects should run before failed-build html substitution")
+        }
     }
 
     fs::remove_dir_all(&root).expect("should remove temp dir");

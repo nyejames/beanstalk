@@ -20,7 +20,7 @@ fn parses_config_constant_declarations() {
 
     fs::write(
         &config_path,
-        "#entry_root = \"src\"\n#dev_folder = \"dev\"\n#output_folder = \"release\"\n#name = \"docs\"\n#version = \"1.2.3\"\n#project = \"html\"\n#libraries = { @(libs), \"vendor\" }\n#custom_key = \"custom_value\"\n",
+        "#entry_root = \"src\"\n#dev_folder = \"dev\"\n#output_folder = \"release\"\n#name = \"docs\"\n#version = \"1.2.3\"\n#project = \"html\"\n#page_url_style = \"trailing_slash\"\n#redirect_index_html = true\n#libraries = { @(libs), \"vendor\" }\n#custom_key = \"custom_value\"\n",
     )
     .expect("should write config");
 
@@ -33,6 +33,14 @@ fn parses_config_constant_declarations() {
     assert_eq!(config.project_name, "docs");
     assert_eq!(config.version, "1.2.3");
     assert_eq!(config.settings.get("project"), Some(&"html".to_string()));
+    assert_eq!(
+        config.settings.get("page_url_style"),
+        Some(&"trailing_slash".to_string())
+    );
+    assert_eq!(
+        config.settings.get("redirect_index_html"),
+        Some(&"true".to_string())
+    );
     assert_eq!(
         config.settings.get("custom_key"),
         Some(&"custom_value".to_string())

@@ -468,23 +468,30 @@ impl Ast {
                         }
                     };
 
-                    if !template.is_const_renderable_string() {
-                        let error_message = match template.const_value_kind() {
-                            crate::compiler_frontend::ast::templates::template::TemplateConstValueKind::WrapperTemplate => {
-                                "Top-level const templates can use slots only when they resolve fully at compile time. This slot remained unresolved."
-                            }
-                            crate::compiler_frontend::ast::templates::template::TemplateConstValueKind::SlotInsertHelper => {
-                                "Top-level const templates cannot evaluate to '$insert(...)' helpers. Apply this insert while filling an immediate parent '$slot' template."
-                            }
-                            _ => "Top-level const templates must be fully foldable at compile time.",
-                        };
-                        return Err(CompilerMessages {
-                            errors: vec![CompilerError::new_rule_error(
-                                error_message,
-                                template.location.to_error_location(string_table),
-                            )],
-                            warnings,
-                        });
+                    match template.const_value_kind() {
+                        // WHAT: top-level const templates can be direct strings or wrapper
+                        // templates with optional, unfilled slots.
+                        // WHY: unfilled slots are rendered as empty strings at compile time.
+                        crate::compiler_frontend::ast::templates::template::TemplateConstValueKind::RenderableString
+                        | crate::compiler_frontend::ast::templates::template::TemplateConstValueKind::WrapperTemplate => {}
+                        crate::compiler_frontend::ast::templates::template::TemplateConstValueKind::SlotInsertHelper => {
+                            return Err(CompilerMessages {
+                                errors: vec![CompilerError::new_rule_error(
+                                    "Top-level const templates cannot evaluate to '$insert(...)' helpers. Apply this insert while filling an immediate parent '$slot' template.",
+                                    template.location.to_error_location(string_table),
+                                )],
+                                warnings,
+                            });
+                        }
+                        crate::compiler_frontend::ast::templates::template::TemplateConstValueKind::NonConst => {
+                            return Err(CompilerMessages {
+                                errors: vec![CompilerError::new_rule_error(
+                                    "Top-level const templates must be fully foldable at compile time.",
+                                    template.location.to_error_location(string_table),
+                                )],
+                                warnings,
+                            });
+                        }
                     }
 
                     let html = match template.fold_into_stringid(&None, string_table) {

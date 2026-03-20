@@ -6,7 +6,7 @@
 use crate::projects::dev_server::error_page::render_runtime_error_page;
 use crate::projects::dev_server::sse;
 use crate::projects::dev_server::state::{BuildState, DevServerState};
-use crate::projects::dev_server::static_files::{self, ResolvePathError};
+use crate::projects::dev_server::static_files::{self, ResolvedRequest, ResolvedRequestKind};
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, Write};
 use std::net::TcpStream;
@@ -27,13 +27,13 @@ pub fn handle_connection(mut stream: TcpStream, state: Arc<DevServerState>) -> i
         );
     }
 
-    let request_path = strip_query_string(&request.path);
+    let (request_path, request_query) = split_path_and_query(&request.path);
     match request_path {
         "/__beanstalk/events" => sse::handle_sse_connection(stream, state),
         "/__beanstalk/ping" => {
             send_text_response(&mut stream, "200 OK", "text/plain; charset=utf-8", "ok")
         }
-        _ => serve_static_request(&mut stream, request_path, &state),
+        _ => serve_static_request(&mut stream, request_path, request_query, &state),
     }
 }
 
@@ -51,6 +51,10 @@ enum PreparedResponse {
     File {
         path: PathBuf,
         content_type: &'static str,
+    },
+    Redirect {
+        status_line: &'static str,
+        location: String,
     },
 }
 
@@ -99,13 +103,17 @@ fn parse_request(stream: &TcpStream) -> io::Result<Option<HttpRequest>> {
     }))
 }
 
-fn strip_query_string(path: &str) -> &str {
-    path.split('?').next().unwrap_or(path)
+fn split_path_and_query(path: &str) -> (&str, Option<&str>) {
+    match path.split_once('?') {
+        Some((request_path, request_query)) => (request_path, Some(request_query)),
+        None => (path, None),
+    }
 }
 
 fn serve_static_request(
     stream: &mut TcpStream,
     request_path: &str,
+    request_query: Option<&str>,
     state: &Arc<DevServerState>,
 ) -> io::Result<()> {
     let build_state = state
@@ -114,7 +122,7 @@ fn serve_static_request(
         .map_err(|_| io::Error::other("build state lock was poisoned"))?
         .clone();
 
-    match prepare_static_response(request_path, &build_state) {
+    match prepare_static_response(request_path, request_query, &build_state) {
         PreparedResponse::Text {
             status_line,
             content_type,
@@ -123,29 +131,34 @@ fn serve_static_request(
         PreparedResponse::File { path, content_type } => {
             stream_file_response(stream, &path, content_type)
         }
+        PreparedResponse::Redirect {
+            status_line,
+            location,
+        } => send_redirect_response(stream, status_line, &location),
     }
 }
 
-fn prepare_static_response(request_path: &str, build_state: &BuildState) -> PreparedResponse {
-    let resolved_path = match static_files::resolve_request_path(
+fn prepare_static_response(
+    request_path: &str,
+    request_query: Option<&str>,
+    build_state: &BuildState,
+) -> PreparedResponse {
+    let resolved_request = static_files::resolve_request(
         request_path,
+        request_query,
         &build_state.output_dir,
         build_state.entry_page_rel.as_deref(),
-    ) {
-        Ok(path) => Some(path),
-        Err(ResolvePathError::MissingEntryPage) if request_path == "/" => None,
-        Err(ResolvePathError::InvalidPath) | Err(ResolvePathError::MissingEntryPage) => {
-            return PreparedResponse::text(
-                "404 NOT FOUND",
-                "text/plain; charset=utf-8",
-                "Not Found",
-            );
-        }
-    };
+        build_state.html_routing,
+    );
 
-    // Failed builds should replace stale HTML pages with diagnostics while still allowing
-    // supporting assets to load so the browser can keep the last successful shell intact.
-    if should_serve_failed_build_html(request_path, resolved_path.as_deref(), build_state) {
+    if let ResolvedRequest::Redirect { location } = resolved_request {
+        return PreparedResponse::Redirect {
+            status_line: "302 FOUND",
+            location,
+        };
+    }
+
+    if matches!(resolved_request, ResolvedRequest::MissingEntryPage) && !build_state.last_build_ok {
         let error_page = build_state.last_error_html.clone().unwrap_or_else(|| {
             render_runtime_error_page(
                 "Build Failed",
@@ -157,9 +170,9 @@ fn prepare_static_response(request_path: &str, build_state: &BuildState) -> Prep
         return PreparedResponse::text("200 OK", "text/html; charset=utf-8", error_page);
     }
 
-    let resolved_path = match resolved_path {
-        Some(path) => path,
-        None => {
+    let (resolved_path, resolved_kind) = match resolved_request {
+        ResolvedRequest::File { path, kind } => (path, kind),
+        ResolvedRequest::MissingEntryPage => {
             let error_page = render_runtime_error_page(
                 "Missing Entry Page",
                 "Build did not produce a HTML entry page for '/'.",
@@ -167,14 +180,40 @@ fn prepare_static_response(request_path: &str, build_state: &BuildState) -> Prep
             );
             return PreparedResponse::text("200 OK", "text/html; charset=utf-8", error_page);
         }
+        ResolvedRequest::NotFound | ResolvedRequest::InvalidPath => {
+            return PreparedResponse::text(
+                "404 NOT FOUND",
+                "text/plain; charset=utf-8",
+                "Not Found",
+            );
+        }
+        ResolvedRequest::Redirect { .. } => {
+            return PreparedResponse::text(
+                "500 INTERNAL SERVER ERROR",
+                "text/plain; charset=utf-8",
+                "Internal Server Error",
+            );
+        }
     };
 
-    if !resolved_path.exists() || !resolved_path.is_file() {
-        return PreparedResponse::text("404 NOT FOUND", "text/plain; charset=utf-8", "Not Found");
+    // Failed builds replace resolved page HTML requests with diagnostics while still allowing
+    // supporting assets to load so the browser can keep the previous shell alive.
+    if should_serve_failed_build_html(resolved_kind, build_state) {
+        let error_page = build_state.last_error_html.clone().unwrap_or_else(|| {
+            render_runtime_error_page(
+                "Build Failed",
+                "The latest build failed, but no diagnostics were stored.",
+                build_state.last_build_version,
+            )
+        });
+
+        return PreparedResponse::text("200 OK", "text/html; charset=utf-8", error_page);
     }
 
     let content_type = static_files::content_type_for_path(&resolved_path);
-    if static_files::is_html_content_type(content_type) {
+    if resolved_kind == ResolvedRequestKind::PageHtml
+        || static_files::is_html_content_type(content_type)
+    {
         let html = match std::fs::read_to_string(&resolved_path) {
             Ok(contents) => contents,
             Err(error) => {
@@ -197,24 +236,10 @@ fn prepare_static_response(request_path: &str, build_state: &BuildState) -> Prep
 }
 
 fn should_serve_failed_build_html(
-    request_path: &str,
-    resolved_path: Option<&Path>,
+    resolved_kind: ResolvedRequestKind,
     build_state: &BuildState,
 ) -> bool {
-    if build_state.last_build_ok {
-        return false;
-    }
-
-    if request_path == "/" {
-        return true;
-    }
-
-    let Some(resolved_path) = resolved_path else {
-        return false;
-    };
-
-    let content_type = static_files::content_type_for_path(resolved_path);
-    static_files::is_html_content_type(content_type)
+    !build_state.last_build_ok && resolved_kind == ResolvedRequestKind::PageHtml
 }
 
 fn stream_file_response(
@@ -261,6 +286,18 @@ fn send_response_headers(
         "HTTP/1.1 {status_line}\r\nContent-Type: {content_type}\r\nContent-Length: {content_length}\r\nConnection: close\r\n\r\n"
     );
     stream.write_all(headers.as_bytes())
+}
+
+fn send_redirect_response(
+    stream: &mut TcpStream,
+    status_line: &str,
+    location: &str,
+) -> io::Result<()> {
+    let headers = format!(
+        "HTTP/1.1 {status_line}\r\nLocation: {location}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+    );
+    stream.write_all(headers.as_bytes())?;
+    stream.flush()
 }
 
 #[cfg(test)]

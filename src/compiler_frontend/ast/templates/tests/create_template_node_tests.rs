@@ -1279,6 +1279,45 @@ fn slot_wrappers_remain_compile_time_templates_until_filled() {
 }
 
 #[test]
+fn folding_nested_wrapper_constant_with_unfilled_named_slots_renders_empty_strings() {
+    let mut string_table = StringTable::new();
+    let scope = InternedPath::from_single_str("main.bst/#const_template0", &mut string_table);
+
+    let mut wrapper_tokens = template_tokens_from_source(
+        "[:<link rel=\"icon\" href=\"[$slot(\"favicon\")]\"><style>[$slot(\"css\")]</style>]",
+        &mut string_table,
+    );
+    let wrapper_context = ScopeContext::new_constant(wrapper_tokens.src_path.to_owned());
+    let wrapper = Template::new(
+        &mut wrapper_tokens,
+        &wrapper_context,
+        vec![],
+        &mut string_table,
+    )
+    .expect("wrapper template should parse");
+
+    let declarations = vec![Declaration {
+        id: scope.append(string_table.intern("header")),
+        value: Expression::template(wrapper, Ownership::ImmutableOwned),
+    }];
+
+    let mut token_stream = template_tokens_from_source("[header]", &mut string_table);
+    let context = constant_template_context(&token_stream.src_path, &declarations);
+    let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
+        .expect("template using wrapper constant should parse");
+
+    let folded = template
+        .fold_into_stringid(&None, &mut string_table)
+        .expect("unfilled named slots should fold as empty strings");
+    let rendered = string_table.resolve(folded);
+
+    assert!(rendered.contains("rel=\"icon\""));
+    assert!(rendered.contains("href=\"\""));
+    assert!(rendered.contains("<style></style>"));
+    assert!(!rendered.contains("$slot("));
+}
+
+#[test]
 fn wrapper_templates_with_runtime_references_are_not_compile_time_constants() {
     let mut string_table = StringTable::new();
     let mut token_stream =

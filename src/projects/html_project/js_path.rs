@@ -205,15 +205,16 @@ fn html_output_path_from_entry_root(
             return Ok(PathBuf::from("index.html"));
         }
 
-        return Ok(parent.with_extension("html"));
+        return Ok(parent.join("index.html"));
     }
 
     let route_name = file_stem.strip_prefix('#').unwrap_or(file_stem);
-    let mut output_path = if parent.as_os_str().is_empty() {
-        PathBuf::new()
+    // Directory projects emit folder-backed page routes by default so dev/prod routing semantics
+    // match and every page has one canonical `.../index.html` backing file.
+    let route_base = if parent.as_os_str().is_empty() {
+        PathBuf::from(route_name)
     } else {
-        parent.to_path_buf()
+        parent.join(route_name)
     };
-    output_path.push(format!("{route_name}.html"));
-    Ok(output_path)
+    Ok(route_base.join("index.html"))
 }

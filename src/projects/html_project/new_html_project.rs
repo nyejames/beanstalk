@@ -33,6 +33,8 @@ pub fn create_html_project_template(
          #entry_root = \"src\"\n\
          #dev_folder = \"dev\"\n\
          #output_folder = \"release\"\n\
+         #page_url_style = \"trailing_slash\"\n\
+         #redirect_index_html = true\n\
          #name = \"html_project\"\n\
          #version = \"0.1.0\"\n\
          #author = \"\"\n\

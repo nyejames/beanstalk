@@ -345,9 +345,9 @@ fn directory_build_maps_routes_relative_to_entry_root() {
         .collect::<Vec<_>>();
 
     assert!(output_paths.contains(&PathBuf::from("index.html")));
-    assert!(output_paths.contains(&PathBuf::from("about.html")));
-    assert!(output_paths.contains(&PathBuf::from("docs/basics.html")));
-    assert!(output_paths.contains(&PathBuf::from("blog/404.html")));
+    assert!(output_paths.contains(&PathBuf::from("about/index.html")));
+    assert!(output_paths.contains(&PathBuf::from("docs/basics/index.html")));
+    assert!(output_paths.contains(&PathBuf::from("blog/404/index.html")));
     assert_eq!(project.entry_page_rel, Some(PathBuf::from("index.html")));
 
     fs::remove_dir_all(&root).expect("should remove temp dir");
@@ -381,7 +381,7 @@ fn directory_build_supports_custom_entry_root_names() {
         .collect::<Vec<_>>();
 
     assert!(output_paths.contains(&PathBuf::from("index.html")));
-    assert!(output_paths.contains(&PathBuf::from("docs.html")));
+    assert!(output_paths.contains(&PathBuf::from("docs/index.html")));
     assert_eq!(project.entry_page_rel, Some(PathBuf::from("index.html")));
 
     fs::remove_dir_all(&root).expect("should remove temp dir");

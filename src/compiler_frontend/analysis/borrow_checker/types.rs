@@ -32,6 +32,7 @@ pub(crate) struct BorrowAnalysis {
 }
 
 impl BorrowAnalysis {
+    #[allow(dead_code)] // Todo
     pub(crate) fn total_state_snapshots(&self) -> usize {
         self.block_entry_states.len()
             + self.block_exit_states.len()

@@ -5,7 +5,9 @@ use super::{
     resolve_project_output_root, write_project_outputs,
 };
 use crate::compiler_frontend::Flag;
-use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages, ErrorLocation};
+use crate::compiler_frontend::compiler_errors::{
+    CompilerError, CompilerMessages, ErrorLocation, ErrorType,
+};
 use crate::compiler_frontend::compiler_warnings::{CompilerWarning, WarningKind};
 use crate::projects::html_project::html_project_builder::HtmlProjectBuilder;
 use crate::projects::settings::Config;
@@ -419,9 +421,9 @@ fn build_directory_project_emits_index_and_404_and_ignores_unreachable_files() {
     .expect("should write project outputs");
 
     assert!(output_root.join("index.html").exists());
-    assert!(output_root.join("404.html").exists());
-    assert!(output_root.join("about.html").exists());
-    assert!(output_root.join("docs/basics.html").exists());
+    assert!(output_root.join("404/index.html").exists());
+    assert!(output_root.join("about/index.html").exists());
+    assert!(output_root.join("docs/basics/index.html").exists());
 
     fs::remove_dir_all(&root).expect("should remove temp dir");
 }
@@ -459,7 +461,7 @@ fn build_directory_project_respects_custom_entry_root() {
     .expect("should write project outputs");
 
     assert!(output_root.join("index.html").exists());
-    assert!(output_root.join("docs.html").exists());
+    assert!(output_root.join("docs/index.html").exists());
 
     fs::remove_dir_all(&root).expect("should remove temp dir");
 }
@@ -493,6 +495,87 @@ fn build_directory_project_requires_root_page_in_configured_entry_root() {
             .iter()
             .any(|error| error.msg.contains("require a '#page.bst' homepage")),
         "expected homepage error message"
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
+fn build_directory_project_rejects_invalid_page_url_style() {
+    let root = temp_dir("invalid_page_url_style");
+    let src = root.join("src");
+    fs::create_dir_all(&src).expect("should create source folder");
+    fs::write(
+        root.join("#config.bst"),
+        "#entry_root = \"src\"\n#output_folder = \"release\"\n#page_url_style = \"slashy\"\n",
+    )
+    .expect("should write config");
+    fs::write(src.join("#page.bst"), "#[:<h1>Home</h1>]\n").expect("should write home page");
+
+    let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
+    let result = build_project(
+        &builder,
+        root.to_str().expect("root path should be valid UTF-8"),
+        &[],
+    );
+
+    assert!(result.is_err(), "invalid page url style should fail build");
+    let messages = result.err().expect("expected config error");
+    assert!(
+        messages
+            .errors
+            .iter()
+            .any(|error| error.error_type == ErrorType::Config),
+        "expected config-classified error"
+    );
+    assert!(
+        messages
+            .errors
+            .iter()
+            .any(|error| error.msg.contains("#page_url_style")),
+        "expected page_url_style validation message"
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
+fn build_directory_project_rejects_invalid_redirect_index_html() {
+    let root = temp_dir("invalid_redirect_index");
+    let src = root.join("src");
+    fs::create_dir_all(&src).expect("should create source folder");
+    fs::write(
+        root.join("#config.bst"),
+        "#entry_root = \"src\"\n#output_folder = \"release\"\n#redirect_index_html = \"yes\"\n",
+    )
+    .expect("should write config");
+    fs::write(src.join("#page.bst"), "#[:<h1>Home</h1>]\n").expect("should write home page");
+
+    let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
+    let result = build_project(
+        &builder,
+        root.to_str().expect("root path should be valid UTF-8"),
+        &[],
+    );
+
+    assert!(
+        result.is_err(),
+        "invalid redirect_index_html should fail build"
+    );
+    let messages = result.err().expect("expected config error");
+    assert!(
+        messages
+            .errors
+            .iter()
+            .any(|error| error.error_type == ErrorType::Config),
+        "expected config-classified error"
+    );
+    assert!(
+        messages
+            .errors
+            .iter()
+            .any(|error| error.msg.contains("#redirect_index_html")),
+        "expected redirect_index_html validation message"
     );
 
     fs::remove_dir_all(&root).expect("should remove temp dir");
@@ -715,6 +798,67 @@ fn build_project_const_slot_insertion_constant_is_composed_at_use_site() {
     assert!(
         html.contains("<section>") && html.contains("Hello world") && html.contains("</section>"),
         "slot insertion constant should be resolved at the wrapper use-site",
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
+fn build_project_const_top_level_header_with_unfilled_named_slots_folds_to_empty_strings() {
+    let root = temp_dir("const_top_level_header_unfilled_named_slots");
+    fs::create_dir_all(&root).expect("should create temp root");
+    fs::write(
+        root.join("main.bst"),
+        r#"Document = |
+    prelude String = "<!DOCTYPE html>",
+    en String = [$html:<html lang="en">],
+    head String = [$html:
+        <head>[$slot]</head>
+    ],
+    title String = [$html:<title>[$slot]</title>],
+    style String = [$html:<style>[$slot]</style>],
+|
+#doc = Document()
+
+# header = [:
+    [doc.prelude, doc.en]
+    [doc.head, $html:
+        <meta charset="UTF-8">
+        <link rel="icon" href="[$slot("favicon")]">
+        [doc.title: Beanstalk Documentation]
+        [doc.style:
+            [$slot("css")]
+        ]
+    ]
+]
+#[header]
+"#,
+    )
+    .expect("should write source file");
+    let _cwd_guard = CurrentDirGuard::set_to(&root);
+
+    let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
+    let build_result = build_project(&builder, "main.bst", &[])
+        .expect("top-level const wrappers should fold even when named slots are unfilled");
+
+    let html = match build_result.project.output_files[0].file_kind() {
+        FileKind::Html(content) => content,
+        other => panic!(
+            "expected HTML output, got {:?}",
+            std::mem::discriminant(other)
+        ),
+    };
+    assert!(
+        html.contains("rel=\"icon\"") && html.contains("href=\"\""),
+        "unfilled named slots should render as empty strings instead of failing compile-time folding",
+    );
+    assert!(
+        html.contains("<meta charset=\"UTF-8\">"),
+        "expected folded header content to remain present in output",
+    );
+    assert!(
+        !html.contains("$slot(") && !html.contains("$insert("),
+        "slot markers should not leak into folded output",
     );
 
     fs::remove_dir_all(&root).expect("should remove temp dir");

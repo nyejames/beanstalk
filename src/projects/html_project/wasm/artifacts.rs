@@ -224,10 +224,21 @@ fn render_wasm_html_document(entry_fragment_html: &str) -> String {
 fn wasm_output_paths_for_html_route(
     logical_html_output_path: &Path,
 ) -> Result<HtmlWasmOutputPaths, CompilerError> {
-    // Convert route logical path into per-page folder layout required by HTML Wasm mode.
-    let is_root_index = logical_html_output_path == Path::new("index.html");
-    let route_base = if is_root_index {
+    // Convert route logical paths into per-page folder artifacts:
+    // - `index.html` -> `index.html`, `page.js`, `page.wasm`
+    // - `about/index.html` -> `about/index.html`, `about/page.js`, `about/page.wasm`
+    // - legacy `about.html` -> `about/index.html`, `about/page.js`, `about/page.wasm`
+    let route_base = if logical_html_output_path == Path::new("index.html") {
         PathBuf::new()
+    } else if logical_html_output_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        == Some("index.html")
+    {
+        logical_html_output_path
+            .parent()
+            .map(Path::to_path_buf)
+            .unwrap_or_default()
     } else {
         if logical_html_output_path
             .extension()

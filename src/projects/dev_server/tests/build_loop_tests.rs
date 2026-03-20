@@ -49,7 +49,7 @@ fn multi_page_html_build_result() -> BuildResult {
                     FileKind::Html(String::from("<html><body>Home</body></html>")),
                 ),
                 OutputFile::new(
-                    PathBuf::from("docs/basics.html"),
+                    PathBuf::from("docs/basics/index.html"),
                     FileKind::Html(String::from("<html><body>Docs</body></html>")),
                 ),
             ],
@@ -209,7 +209,7 @@ fn successful_multi_page_build_uses_declared_entry_page() {
         build_state.entry_page_rel,
         Some(PathBuf::from("index.html"))
     );
-    assert!(output_dir.join("docs/basics.html").exists());
+    assert!(output_dir.join("docs/basics/index.html").exists());
 
     fs::remove_dir_all(&root).expect("should remove temp dir");
 }
