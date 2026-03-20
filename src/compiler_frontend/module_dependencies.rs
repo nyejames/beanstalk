@@ -252,6 +252,23 @@ fn resolve_graph_path(
 
     let normalized_requested = normalize_relative_dependency_path(requested_path, string_table);
 
+    let exact_header_path_matches = graph
+        .keys()
+        .filter(|candidate| {
+            exact_path_matches_candidate(candidate, requested_path, string_table)
+                || normalized_requested.as_ref().is_some_and(|normalized| {
+                    exact_path_matches_candidate(candidate, normalized, string_table)
+                })
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+
+    match exact_header_path_matches.as_slice() {
+        [single] => return Some(single.to_owned()),
+        [] => {}
+        _ => return None,
+    }
+
     let header_path_matches = graph
         .keys()
         .filter(|candidate| {
@@ -267,6 +284,43 @@ fn resolve_graph_path(
         [single] => return Some(single.to_owned()),
         [] => {}
         _ => return None,
+    }
+
+    let mut exact_source_file_matches = graph
+        .iter()
+        .filter(|(_, header)| {
+            exact_path_matches_candidate(&header.source_file, requested_path, string_table)
+                || normalized_requested.as_ref().is_some_and(|normalized| {
+                    exact_path_matches_candidate(&header.source_file, normalized, string_table)
+                })
+        })
+        .map(|(path, header)| {
+            (
+                path.to_owned(),
+                matches!(header.kind, HeaderKind::StartFunction),
+            )
+        })
+        .collect::<Vec<_>>();
+
+    if !exact_source_file_matches.is_empty() {
+        let start_function_matches = exact_source_file_matches
+            .iter()
+            .filter(|(_, is_start)| *is_start)
+            .map(|(path, _)| path.to_owned())
+            .collect::<Vec<_>>();
+
+        if start_function_matches.len() == 1 {
+            return Some(start_function_matches[0].to_owned());
+        }
+        if start_function_matches.len() > 1 {
+            return None;
+        }
+
+        if exact_source_file_matches.len() == 1 {
+            return exact_source_file_matches.pop().map(|(path, _)| path);
+        }
+
+        return None;
     }
 
     let mut source_file_matches = graph
@@ -307,6 +361,18 @@ fn resolve_graph_path(
     }
 
     None
+}
+
+fn exact_path_matches_candidate(
+    candidate: &InternedPath,
+    requested: &InternedPath,
+    string_table: &StringTable,
+) -> bool {
+    components_match_with_optional_bst_extension(
+        candidate.as_components(),
+        requested.as_components(),
+        string_table,
+    )
 }
 
 fn path_matches_candidate(
@@ -354,7 +420,23 @@ fn suffix_matches_with_optional_bst_extension(
     let requested_components = requested.as_components();
     let start_index = candidate_components.len() - requested_components.len();
 
-    candidate_components[start_index..]
+    components_match_with_optional_bst_extension(
+        &candidate_components[start_index..],
+        requested_components,
+        string_table,
+    )
+}
+
+fn components_match_with_optional_bst_extension(
+    candidate_components: &[crate::compiler_frontend::string_interning::StringId],
+    requested_components: &[crate::compiler_frontend::string_interning::StringId],
+    string_table: &StringTable,
+) -> bool {
+    if candidate_components.len() != requested_components.len() {
+        return false;
+    }
+
+    candidate_components
         .iter()
         .zip(requested_components.iter())
         .all(|(candidate_component, requested_component)| {

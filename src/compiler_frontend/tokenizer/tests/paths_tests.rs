@@ -103,6 +103,18 @@ fn parse_file_path_bare_grouped_imports_accept_whitespace_before_group() {
 }
 
 #[test]
+fn parse_file_path_stops_before_config_list_comma() {
+    let paths = first_path_token_values("#root_folders = { @lib, @assets }\n");
+    assert_eq!(paths, vec!["lib".to_string()]);
+}
+
+#[test]
+fn parse_file_path_stops_before_config_list_closing_brace() {
+    let paths = first_path_token_values("#root_folders = { @assets}\n");
+    assert_eq!(paths, vec!["assets".to_string()]);
+}
+
+#[test]
 fn parse_file_path_bare_syntax_stops_at_whitespace_without_group() {
     let paths = first_path_token_values("import @styles/docs/footer trailing_symbol\n");
     assert_eq!(paths, vec!["styles/docs/footer".to_string()]);

@@ -1,4 +1,4 @@
-import @html/{format, center}
+import @lib/html/{format, center}
 import @styles/docs/{navbar, footer, title, section, header, body, palette, table, row, header_row, codeblock}
 
 #[header]
@@ -17,7 +17,7 @@ import @styles/docs/{navbar, footer, title, section, header, body, palette, tabl
     Web projects have their own directory based structure and config file also.
 
     [codeblock, $code("bst"):
-        import @libs/html/doc
+        import @lib/html/doc
 
         say_hello || -> String:
             return "Hi, welcome to Beanstalk"

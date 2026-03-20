@@ -9,6 +9,7 @@ use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::paths::parse_import_clause_tokens;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TextLocation, Token, TokenKind};
+use crate::projects::path_resolution::ProjectPathResolver;
 use crate::projects::settings::{
     MINIMUM_LIKELY_DECLARATIONS, TOKEN_TO_DECLARATION_RATIO, TOKEN_TO_HEADER_RATIO,
     TOP_LEVEL_CONST_TEMPLATE_NAME,
@@ -27,6 +28,7 @@ struct HeaderParseContext<'a> {
     host_function_registry: &'a HostRegistry,
     warnings: &'a mut Vec<CompilerWarning>,
     is_entry_file: bool,
+    project_path_resolver: Option<&'a ProjectPathResolver>,
     string_table: &'a mut StringTable,
     const_template_number: &'a mut usize,
     top_level_template_order: &'a mut usize,
@@ -130,6 +132,24 @@ pub fn parse_headers(
     entry_file_path: &Path,
     string_table: &mut StringTable,
 ) -> Result<Headers, Vec<CompilerError>> {
+    parse_headers_with_path_resolver(
+        tokenized_files,
+        host_registry,
+        warnings,
+        entry_file_path,
+        None,
+        string_table,
+    )
+}
+
+pub fn parse_headers_with_path_resolver(
+    tokenized_files: Vec<FileTokens>,
+    host_registry: &HostRegistry,
+    warnings: &mut Vec<CompilerWarning>,
+    entry_file_path: &Path,
+    project_path_resolver: Option<&ProjectPathResolver>,
+    string_table: &mut StringTable,
+) -> Result<Headers, Vec<CompilerError>> {
     let mut headers: Vec<Header> = Vec::new();
     let mut errors: Vec<CompilerError> = Vec::new();
     let mut const_template_count = 0;
@@ -143,6 +163,7 @@ pub fn parse_headers(
             host_function_registry: host_registry,
             warnings,
             is_entry_file,
+            project_path_resolver,
             string_table,
             const_template_number: &mut const_template_count,
             top_level_template_order: &mut top_level_template_order,
@@ -304,8 +325,9 @@ fn parse_headers_in_file(
                     let normalized_path = normalize_import_dependency_path(
                         &path,
                         &token_stream.src_path,
+                        context.project_path_resolver,
                         context.string_table,
-                    );
+                    )?;
 
                     if let Some(name) = normalized_path.name() {
                         encountered_symbols.insert(name);
@@ -427,16 +449,21 @@ fn parse_headers_in_file(
 fn normalize_import_dependency_path(
     import_path: &InternedPath,
     source_file: &InternedPath,
-    string_table: &StringTable,
-) -> InternedPath {
+    project_path_resolver: Option<&ProjectPathResolver>,
+    string_table: &mut StringTable,
+) -> Result<InternedPath, CompilerError> {
+    if let Some(project_path_resolver) = project_path_resolver {
+        return project_path_resolver.normalize_import_path(import_path, source_file, string_table);
+    }
+
     let mut import_components = import_path.as_components().iter().copied();
     let Some(first) = import_components.next() else {
-        return import_path.to_owned();
+        return Ok(import_path.to_owned());
     };
 
     let first_segment = string_table.resolve(first);
     if first_segment != "." && first_segment != ".." {
-        return import_path.to_owned();
+        return Ok(import_path.to_owned());
     }
 
     let mut resolved_components = source_file.as_components().to_vec();
@@ -452,7 +479,7 @@ fn normalize_import_dependency_path(
         }
     }
 
-    InternedPath::from_components(resolved_components)
+    Ok(InternedPath::from_components(resolved_components))
 }
 
 // Split a top-level declaration into a concrete header payload.

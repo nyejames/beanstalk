@@ -37,7 +37,7 @@ use crate::compiler_frontend::ast::ast::Ast;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::headers::parse_file_headers::{
-    Header, Headers, TopLevelTemplateItem, parse_headers,
+    Header, Headers, TopLevelTemplateItem, parse_headers_with_path_resolver,
 };
 use crate::compiler_frontend::hir::hir_builder::lower_module;
 use crate::compiler_frontend::hir::hir_nodes::HirModule;
@@ -48,6 +48,7 @@ use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::tokenizer::tokenizer::tokenize;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenizeMode};
+use crate::projects::path_resolution::ProjectPathResolver;
 use crate::projects::settings::Config;
 use std::path::{Path, PathBuf};
 
@@ -72,6 +73,7 @@ pub struct CompilerFrontend {
     pub(crate) host_function_registry: HostRegistry,
     pub(crate) style_directives: StyleDirectiveRegistry,
     pub(crate) string_table: StringTable,
+    pub(crate) project_path_resolver: Option<ProjectPathResolver>,
 }
 
 impl CompilerFrontend {
@@ -79,6 +81,7 @@ impl CompilerFrontend {
         _project_config: &Config,
         mut string_table: StringTable,
         style_directives: StyleDirectiveRegistry,
+        project_path_resolver: Option<ProjectPathResolver>,
     ) -> Self {
         // Create a builtin host function registry with print and other host functions
         let host_function_registry = HostRegistry::new(&mut string_table);
@@ -87,6 +90,7 @@ impl CompilerFrontend {
             host_function_registry,
             style_directives,
             string_table,
+            project_path_resolver,
         }
     }
 
@@ -129,11 +133,12 @@ impl CompilerFrontend {
         warnings: &mut Vec<CompilerWarning>,
         entry_file_path: &Path,
     ) -> Result<Headers, Vec<CompilerError>> {
-        parse_headers(
+        parse_headers_with_path_resolver(
             files,
             &self.host_function_registry,
             warnings,
             entry_file_path,
+            self.project_path_resolver.as_ref(),
             &mut self.string_table,
         )
     }

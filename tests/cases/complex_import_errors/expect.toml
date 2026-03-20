@@ -1,4 +1,4 @@
 mode = "failure"
 error_type = "Syntax"
 warnings = "forbid"
-message_contains = ["import"]
+message_contains = ["Expected a parameter type declaration"]

@@ -33,7 +33,7 @@ pub struct Config {
     pub entry_root: PathBuf,
     pub dev_folder: PathBuf,
     pub release_folder: PathBuf,
-    pub libraries: Vec<PathBuf>, // All folders that any file in this project can import from
+    pub root_folders: Vec<PathBuf>, // Top-level project folders that non-relative imports can target explicitly
     pub version: String,
     pub author: String,
     pub license: String,
@@ -49,7 +49,7 @@ impl Config {
             dev_folder: PathBuf::from("dev"),
             release_folder: PathBuf::from("release"),
 
-            libraries: Vec::new(), // All folders that are visible to all other files in this project
+            root_folders: Vec::new(), // Explicitly-visible top-level project folders for imports and future path validation
             project_name: String::new(),
             version: String::from("0.1.0"),
             author: String::new(),
@@ -68,7 +68,7 @@ impl Default for Config {
             entry_root: PathBuf::from("src"),
             dev_folder: PathBuf::from("dev"),
             release_folder: PathBuf::from("release"),
-            libraries: Vec::new(),
+            root_folders: Vec::new(),
             project_name: String::from("html_project"),
             version: String::from("0.1.0"),
             author: String::new(),

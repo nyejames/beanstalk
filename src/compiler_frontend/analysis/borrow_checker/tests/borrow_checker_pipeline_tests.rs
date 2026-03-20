@@ -62,8 +62,12 @@ fn frontend_check_borrows_propagates_failures() {
     let hir = lower_hir(build_ast(vec![start_fn], entry_path), &mut string_table);
 
     let config = Config::default();
-    let frontend =
-        CompilerFrontend::new(&config, string_table, StyleDirectiveRegistry::built_ins());
+    let frontend = CompilerFrontend::new(
+        &config,
+        string_table,
+        StyleDirectiveRegistry::built_ins(),
+        None,
+    );
     let messages = frontend
         .check_borrows(&hir)
         .expect_err("borrow checking should fail");

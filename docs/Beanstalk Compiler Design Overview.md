@@ -97,14 +97,14 @@ Project builders then perform:
 - Discovers module entry files (`#*.bst`, excluding `#config.bst`)
 - Expands each module to reachable `.bst` files via recursive import resolution
 - Parses and validates project config constants
-- Determines what libraries are available for import
+- Determines which top-level root folders are visible to imports and future path resolution
 - Provides the project builder with the file name and path to each module's entry point file
 
 **`#config.bst`**
 - A project-level configuration file
 - Always located at the project root
 - Parsed using normal Beanstalk declaration syntax
-- Stage 0 reads top-level constants from it for build settings (`#entry_root`, `#output_folder`, `#libraries`, project metadata, and custom keys)
+- Stage 0 reads top-level constants from it for build settings (`#entry_root`, `#output_folder`, `#root_folders`, project metadata, and custom keys)
 - Provides a unified configuration map for all build systems
 
 **`#*` Files and Modules**

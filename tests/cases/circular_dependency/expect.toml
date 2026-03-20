@@ -1,4 +1,4 @@
 mode = "failure"
-error_type = "Syntax"
+error_type = "Rule"
 warnings = "forbid"
-message_contains = ["import"]
+message_contains = ["Circular dependency detected"]

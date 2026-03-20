@@ -1,5 +1,4 @@
 -- Test circular dependency detection
-#import @helper
+import @a
 
-io("Main starting")
-helper.do_something()
+a()

@@ -284,6 +284,24 @@ fn resolve_import_target_path(
     candidates: &FxHashSet<InternedPath>,
     string_table: &StringTable,
 ) -> ImportPathResolution {
+    let mut exact_matches = candidates
+        .iter()
+        .filter(|candidate| exact_path_matches_candidate(candidate, requested_path, string_table))
+        .cloned()
+        .collect::<Vec<_>>();
+
+    match exact_matches.len() {
+        1 => {
+            return ImportPathResolution::Resolved(
+                exact_matches
+                    .pop()
+                    .expect("exactly one exact import candidate should exist"),
+            );
+        }
+        2.. => return ImportPathResolution::Ambiguous,
+        _ => {}
+    }
+
     let mut matches = candidates
         .iter()
         .filter(|candidate| {
@@ -308,6 +326,18 @@ fn resolve_import_target_path(
     }
 }
 
+fn exact_path_matches_candidate(
+    candidate: &InternedPath,
+    requested: &InternedPath,
+    string_table: &StringTable,
+) -> bool {
+    components_match_with_optional_bst_extension(
+        candidate.as_components(),
+        requested.as_components(),
+        string_table,
+    )
+}
+
 fn suffix_matches_with_optional_bst_extension(
     candidate: &InternedPath,
     requested: &InternedPath,
@@ -321,7 +351,23 @@ fn suffix_matches_with_optional_bst_extension(
     let requested_components = requested.as_components();
     let start_index = candidate_components.len() - requested_components.len();
 
-    candidate_components[start_index..]
+    components_match_with_optional_bst_extension(
+        &candidate_components[start_index..],
+        requested_components,
+        string_table,
+    )
+}
+
+fn components_match_with_optional_bst_extension(
+    candidate_components: &[StringId],
+    requested_components: &[StringId],
+    string_table: &StringTable,
+) -> bool {
+    if candidate_components.len() != requested_components.len() {
+        return false;
+    }
+
+    candidate_components
         .iter()
         .zip(requested_components.iter())
         .all(|(candidate_component, requested_component)| {

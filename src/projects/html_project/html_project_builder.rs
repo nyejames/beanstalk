@@ -3,13 +3,13 @@
 // WHAT: coordinates module output-path resolution, homepage checks, and backend selection.
 // WHY: project builders own artifact assembly policy while compiler backends stay generic.
 use crate::build_system::build::{BackendBuilder, Module, OutputFile, Project};
-use crate::build_system::create_project_modules::resolve_project_entry_root;
 use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages, ErrorType};
 use crate::projects::html_project::js_path::{compile_html_module_js, html_output_path};
 use crate::projects::html_project::wasm::artifacts::{
     CompiledHtmlWasmModule, compile_html_module_wasm,
 };
+use crate::projects::path_resolution::resolve_project_entry_root;
 use crate::projects::routing::parse_html_routing_config;
 use crate::projects::settings::Config;
 use std::collections::HashSet;

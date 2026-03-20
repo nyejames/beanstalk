@@ -371,7 +371,7 @@ Example:
 # entry_root = "src"
 # dev_folder = "dev"
 # output_folder = "release"
-# libraries = {"src/libs"}
+# root_folders = { @lib, @assets }
 ```
 
 **Import syntax:**
@@ -406,7 +406,8 @@ another_func() -- Call imported exported symbol directly
 
 **Import resolution rules:**
 - Relative imports (`@(./x)` / `@(..)`) resolve from the importing file's directory
-- Non-relative imports resolve from the configured module source root first, then configured library roots
+- Non-relative imports whose first segment matches `#root_folders` resolve from the project root
+- Other non-relative imports resolve from the configured module entry root
 - Grouped imports are expanded into individual dependency edges
 - Circular imports are detected and cause compilation errors
 

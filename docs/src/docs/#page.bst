@@ -1,4 +1,4 @@
-import @html/{format, center, img}
+import @lib/html/{format, center, img}
 import @styles/docs/{navbar, footer, title, section, header, body, palette, table, row, header_row, codeblock}
 
 #[header]

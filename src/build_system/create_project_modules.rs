@@ -5,9 +5,7 @@
 // This is because both a Wasm and JS backend must be supported, so it is agnostic about what happens after that.
 
 use crate::build_system::build::{InputFile, Module};
-use crate::compiler_frontend::compiler_errors::{
-    CompilerError, CompilerMessages, ErrorLocation, ErrorType,
-};
+use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages, ErrorType};
 use crate::compiler_frontend::headers::parse_file_headers::{Header, HeaderKind, parse_headers};
 use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
@@ -17,11 +15,11 @@ use crate::compiler_frontend::tokenizer::paths::collect_import_paths_from_tokens
 use crate::compiler_frontend::tokenizer::tokenizer::tokenize;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, Token, TokenKind, TokenizeMode};
 use crate::compiler_frontend::{CompilerFrontend, Flag, FrontendBuildProfile};
+use crate::projects::path_resolution::{ProjectPathResolver, resolve_project_entry_root};
 use crate::projects::settings;
 use crate::projects::settings::{BEANSTALK_FILE_EXTENSION, Config};
 use crate::{borrow_log, return_err_as_messages, return_file_error, timer_log};
 use std::collections::{BTreeSet, HashSet, VecDeque};
-use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -75,12 +73,17 @@ pub fn compile_project_frontend(
                     Some(parent) => parent.to_path_buf(),
                     None => PathBuf::from("."),
                 };
-                let library_roots = resolve_library_roots(config, &source_root);
+                let project_path_resolver = match ProjectPathResolver::new(
+                    source_root.clone(),
+                    source_root.clone(),
+                    &config.root_folders,
+                ) {
+                    Ok(resolver) => resolver,
+                    Err(error) => return_err_as_messages!(error),
+                };
                 let reachable_files = match discover_reachable_files(
                     &entry_path,
-                    &source_root,
-                    &library_roots,
-                    &source_root,
+                    &project_path_resolver,
                     &style_directives,
                 ) {
                     Ok(files) => files,
@@ -105,6 +108,7 @@ pub fn compile_project_frontend(
                     config,
                     &entry_path,
                     build_profile,
+                    Some(project_path_resolver.clone()),
                     &style_directives,
                 )?;
                 return Ok(vec![module]);
@@ -149,10 +153,48 @@ pub fn compile_project_frontend(
     // -------------------------------------
     // Root module entries are #*.bst files (excluding #config.bst).
     // Each entry compiles as its own frontend module with reachable-only inputs.
-    let discovered_modules = match discover_all_modules_in_project(config, &style_directives) {
-        Ok(modules) => modules,
-        Err(error) => return_err_as_messages!(error),
+    let project_root = match fs::canonicalize(&config.entry_dir) {
+        Ok(path) => path,
+        Err(error) => {
+            let file_error = CompilerError::file_error(
+                &config.entry_dir,
+                format!("Failed to canonicalize project root: {error}"),
+            );
+            return_err_as_messages!(file_error);
+        }
     };
+    let entry_root = resolve_project_entry_root(config);
+    if !entry_root.exists() {
+        let file_error = CompilerError::file_error(
+            &entry_root,
+            format!(
+                "Configured entry root '{}' does not exist",
+                entry_root.display()
+            ),
+        );
+        return_err_as_messages!(file_error);
+    }
+    let entry_root = match fs::canonicalize(&entry_root) {
+        Ok(path) => path,
+        Err(error) => {
+            let file_error = CompilerError::file_error(
+                &entry_root,
+                format!("Failed to canonicalize configured entry root: {error}"),
+            );
+            return_err_as_messages!(file_error);
+        }
+    };
+    let project_path_resolver =
+        match ProjectPathResolver::new(project_root, entry_root, &config.root_folders) {
+            Ok(resolver) => resolver,
+            Err(error) => return_err_as_messages!(error),
+        };
+
+    let discovered_modules =
+        match discover_all_modules_in_project(config, &project_path_resolver, &style_directives) {
+            Ok(modules) => modules,
+            Err(error) => return_err_as_messages!(error),
+        };
 
     let mut compiled_modules = Vec::with_capacity(discovered_modules.len());
     for discovered in discovered_modules {
@@ -161,6 +203,7 @@ pub fn compile_project_frontend(
             config,
             &discovered.entry_point,
             build_profile,
+            Some(project_path_resolver.clone()),
             &style_directives,
         )?;
         compiled_modules.push(module);
@@ -175,6 +218,7 @@ pub fn compile_module(
     config: &Config,
     entry_file_path: &Path,
     build_profile: FrontendBuildProfile,
+    project_path_resolver: Option<ProjectPathResolver>,
     style_directives: &StyleDirectiveRegistry,
 ) -> Result<Module, CompilerMessages> {
     // Module capacity heuristic
@@ -185,7 +229,12 @@ pub fn compile_module(
     let string_table = StringTable::with_capacity(module.len() * FILE_MIN_UNIQUE_SYMBOLS_CAPACITY);
 
     // Create the compiler_frontend instance
-    let mut compiler = CompilerFrontend::new(config, string_table, style_directives.to_owned());
+    let mut compiler = CompilerFrontend::new(
+        config,
+        string_table,
+        style_directives.to_owned(),
+        project_path_resolver,
+    );
 
     let _time = Instant::now();
 
@@ -341,6 +390,7 @@ pub fn compile_module(
 
 fn discover_all_modules_in_project(
     config: &Config,
+    project_path_resolver: &ProjectPathResolver,
     style_directives: &StyleDirectiveRegistry,
 ) -> Result<Vec<DiscoveredModule>, CompilerError> {
     let source_root = resolve_project_entry_root(config);
@@ -358,10 +408,12 @@ fn discover_all_modules_in_project(
         );
     }
 
-    let entry_points = discover_root_entry_files(&source_root)?;
+    project_path_resolver.validate_entry_root_collisions()?;
+
+    let entry_points = discover_root_entry_files(project_path_resolver.entry_root())?;
     if entry_points.is_empty() {
         return_file_error!(
-            &source_root,
+            project_path_resolver.entry_root(),
             "No root module entries were found. Expected at least one '#*.bst' file under the configured entry root.",
             {
                 CompilationStage => "Project Structure",
@@ -370,17 +422,10 @@ fn discover_all_modules_in_project(
         );
     }
 
-    let library_roots = resolve_library_roots(config, &source_root);
-
     let mut modules = Vec::with_capacity(entry_points.len());
     for entry_point in entry_points {
-        let reachable_files = discover_reachable_files(
-            &entry_point,
-            &source_root,
-            &library_roots,
-            &config.entry_dir,
-            style_directives,
-        )?;
+        let reachable_files =
+            discover_reachable_files(&entry_point, project_path_resolver, style_directives)?;
 
         let mut input_files = Vec::with_capacity(reachable_files.len());
         for source_path in reachable_files {
@@ -397,40 +442,6 @@ fn discover_all_modules_in_project(
     }
 
     Ok(modules)
-}
-
-pub(crate) fn resolve_project_entry_root(config: &Config) -> PathBuf {
-    if config.entry_root.as_os_str().is_empty() {
-        return config.entry_dir.clone();
-    }
-
-    if config.entry_root.is_absolute() {
-        config.entry_root.clone()
-    } else {
-        config.entry_dir.join(&config.entry_root)
-    }
-}
-
-fn resolve_library_roots(config: &Config, source_root: &Path) -> Vec<PathBuf> {
-    let mut roots = Vec::with_capacity(config.libraries.len());
-    for library in &config.libraries {
-        if library.as_os_str().is_empty() {
-            continue;
-        }
-
-        if library.is_absolute() {
-            roots.push(library.clone());
-            continue;
-        }
-
-        let from_source = source_root.join(library);
-        if from_source.exists() {
-            roots.push(from_source);
-        } else {
-            roots.push(config.entry_dir.join(library));
-        }
-    }
-    roots
 }
 
 fn discover_root_entry_files(source_root: &Path) -> Result<Vec<PathBuf>, CompilerError> {
@@ -460,7 +471,9 @@ fn discover_root_entry_files(source_root: &Path) -> Result<Vec<PathBuf>, Compile
                 continue;
             }
 
-            if path.extension() != Some(OsStr::new(BEANSTALK_FILE_EXTENSION)) {
+            if path.extension().and_then(|extension| extension.to_str())
+                != Some(BEANSTALK_FILE_EXTENSION)
+            {
                 continue;
             }
 
@@ -487,18 +500,9 @@ fn discover_root_entry_files(source_root: &Path) -> Result<Vec<PathBuf>, Compile
 
 fn discover_reachable_files(
     entry_point: &Path,
-    source_root: &Path,
-    library_roots: &[PathBuf],
-    project_root: &Path,
+    project_path_resolver: &ProjectPathResolver,
     style_directives: &StyleDirectiveRegistry,
 ) -> Result<Vec<PathBuf>, CompilerError> {
-    let source_root = fs::canonicalize(source_root).map_err(|error| {
-        CompilerError::file_error(
-            source_root,
-            format!("Failed to canonicalize configured entry root: {error}"),
-        )
-    })?;
-
     let mut reachable = BTreeSet::new();
     let mut queue = VecDeque::new();
     queue.push_back(entry_point.to_path_buf());
@@ -517,12 +521,9 @@ fn discover_reachable_files(
 
         let import_paths = extract_import_paths(&canonical_file, style_directives)?;
         for import_path in &import_paths.paths {
-            let resolved = resolve_import_to_file(
+            let resolved = project_path_resolver.resolve_import_to_file(
                 import_path,
                 &canonical_file,
-                &source_root,
-                library_roots,
-                project_root,
                 &import_paths.string_table,
             )?;
             if !reachable.contains(&resolved) {
@@ -558,112 +559,6 @@ fn extract_import_paths(
         string_table,
     })
 }
-
-fn resolve_import_to_file(
-    import_path: &InternedPath,
-    importer_file: &Path,
-    source_root: &Path,
-    library_roots: &[PathBuf],
-    project_root: &Path,
-    string_table: &StringTable,
-) -> Result<PathBuf, CompilerError> {
-    let importer_dir = importer_file.parent().ok_or_else(|| {
-        CompilerError::file_error(
-            importer_file,
-            "Could not determine parent directory for importing file.",
-        )
-    })?;
-
-    if import_path.as_components().is_empty() {
-        return_file_error!(
-            importer_file,
-            "Import path cannot be empty",
-            {
-                CompilationStage => "Project Structure",
-                PrimarySuggestion => "Use a path like @(folder/file) after import",
-            }
-        );
-    }
-
-    let is_relative = matches!(
-        import_path
-            .as_components()
-            .first()
-            .map(|component| string_table.resolve(*component)),
-        Some(".") | Some("..")
-    );
-
-    let mut search_roots = Vec::new();
-    if is_relative {
-        search_roots.push(importer_dir.to_path_buf());
-    } else {
-        search_roots.push(source_root.to_path_buf());
-        search_roots.extend(library_roots.iter().cloned());
-    }
-
-    for root in search_roots {
-        for candidate in candidate_import_files(&root, import_path, string_table) {
-            if candidate.is_file() {
-                return fs::canonicalize(candidate).map_err(|error| {
-                    CompilerError::file_error(
-                        importer_file,
-                        format!(
-                            "Failed to canonicalize resolved import from '{}': {error}",
-                            import_path.to_portable_string(string_table)
-                        ),
-                    )
-                });
-            }
-        }
-    }
-
-    Err(CompilerError::new_syntax_error(
-        format!(
-            "Could not resolve import '{}'. Tried entry root '{}' and configured library roots.",
-            import_path.to_portable_string(string_table),
-            source_root
-                .strip_prefix(project_root)
-                .unwrap_or(source_root)
-                .display(),
-        ),
-        ErrorLocation::default(),
-    )
-    .with_file_path(importer_file.to_path_buf()))
-}
-
-fn candidate_import_files(
-    root: &Path,
-    import_path: &InternedPath,
-    string_table: &StringTable,
-) -> Vec<PathBuf> {
-    let components = import_path.as_components();
-    let mut candidates = Vec::with_capacity(2);
-
-    let mut exact = root.to_path_buf();
-    for component in components {
-        exact.push(string_table.resolve(*component));
-    }
-    candidates.push(with_bst_extension(exact));
-
-    if components.len() > 1 {
-        let mut parent = root.to_path_buf();
-        for component in &components[..components.len() - 1] {
-            parent.push(string_table.resolve(*component));
-        }
-        candidates.push(with_bst_extension(parent));
-    }
-
-    candidates
-}
-
-fn with_bst_extension(path: PathBuf) -> PathBuf {
-    if path.extension() == Some(OsStr::new(BEANSTALK_FILE_EXTENSION)) {
-        path
-    } else {
-        path.with_extension(BEANSTALK_FILE_EXTENSION)
-    }
-}
-
 // `#config.bst` follows regular Beanstalk syntax. Stage 0 only extracts top-level
 // constant headers from it and maps the values that builders care about.
 fn parse_project_config_file(config: &mut Config, config_path: &Path) -> Result<(), CompilerError> {
@@ -788,7 +683,15 @@ fn apply_config_constants_from_headers(
         skip_newlines(&initializer_tokens, &mut value_index);
 
         if key == "libraries" {
-            config.libraries = parse_libraries_value(
+            return Err(CompilerError::new(
+                "Config key '#libraries' has been replaced. Use '#root_folders' instead.",
+                header.name_location.to_error_location(string_table),
+                ErrorType::Config,
+            ));
+        }
+
+        if key == "root_folders" {
+            config.root_folders = parse_root_folders_value(
                 &initializer_tokens,
                 &mut value_index,
                 string_table,
@@ -826,15 +729,15 @@ fn apply_config_constants_from_headers(
     Ok(())
 }
 
-fn parse_libraries_value(
+fn parse_root_folders_value(
     tokens: &[Token],
     index: &mut usize,
     string_table: &StringTable,
     config_path: &Path,
 ) -> Result<Vec<PathBuf>, CompilerError> {
-    let mut libraries = Vec::new();
+    let mut root_folders = Vec::new();
     let Some(start_token) = tokens.get(*index) else {
-        return Ok(libraries);
+        return Ok(root_folders);
     };
 
     if matches!(start_token.kind, TokenKind::OpenCurly) {
@@ -847,26 +750,38 @@ fn parse_libraries_value(
                 }
                 TokenKind::Path(paths) => {
                     for path in paths {
-                        libraries.push(PathBuf::from(path.to_string(string_table)));
+                        root_folders.push(validate_root_folder_path(
+                            PathBuf::from(path.to_string(string_table)),
+                            token,
+                            string_table,
+                        )?);
                     }
                 }
                 TokenKind::StringSliceLiteral(value) | TokenKind::RawStringLiteral(value) => {
-                    libraries.push(PathBuf::from(string_table.resolve(*value)));
+                    root_folders.push(validate_root_folder_path(
+                        PathBuf::from(string_table.resolve(*value)),
+                        token,
+                        string_table,
+                    )?);
                 }
                 TokenKind::Symbol(value) => {
-                    libraries.push(PathBuf::from(string_table.resolve(*value)));
+                    root_folders.push(validate_root_folder_path(
+                        PathBuf::from(string_table.resolve(*value)),
+                        token,
+                        string_table,
+                    )?);
                 }
                 TokenKind::Comma | TokenKind::Newline => {}
                 TokenKind::Eof => {
                     return Err(CompilerError::new(
-                        "Unterminated '#libraries' block. Missing closing '}'.",
+                        "Unterminated '#root_folders' block. Missing closing '}'.",
                         token.location.to_error_location(string_table),
                         ErrorType::Config,
                     ));
                 }
                 _ => {
                     return Err(CompilerError::new(
-                        "Unsupported value in '#libraries' block.",
+                        "Unsupported value in '#root_folders' block.",
                         token.location.to_error_location(string_table),
                         ErrorType::Config,
                     ));
@@ -874,41 +789,102 @@ fn parse_libraries_value(
             }
             *index += 1;
         }
-        dedupe_paths(&mut libraries);
-        return Ok(libraries);
+        dedupe_paths(&mut root_folders);
+        return Ok(root_folders);
     }
 
     match &start_token.kind {
         TokenKind::Path(paths) => {
             for path in paths {
-                libraries.push(PathBuf::from(path.to_string(string_table)));
+                root_folders.push(validate_root_folder_path(
+                    PathBuf::from(path.to_string(string_table)),
+                    start_token,
+                    string_table,
+                )?);
             }
         }
         TokenKind::StringSliceLiteral(value) | TokenKind::RawStringLiteral(value) => {
-            libraries.push(PathBuf::from(string_table.resolve(*value)));
+            root_folders.push(validate_root_folder_path(
+                PathBuf::from(string_table.resolve(*value)),
+                start_token,
+                string_table,
+            )?);
         }
         TokenKind::Symbol(value) => {
-            libraries.push(PathBuf::from(string_table.resolve(*value)));
+            root_folders.push(validate_root_folder_path(
+                PathBuf::from(string_table.resolve(*value)),
+                start_token,
+                string_table,
+            )?);
         }
         _ => {
             return Err(CompilerError::new(
-                "Unsupported '#libraries' value. Use a path, string, or '{ ... }' block.",
+                "Unsupported '#root_folders' value. Use a path, string, or '{ ... }' block.",
                 start_token.location.to_error_location(string_table),
                 ErrorType::Config,
             ));
         }
     }
 
-    if libraries.is_empty() {
+    if root_folders.is_empty() {
         return Err(CompilerError::file_error(
             config_path,
-            "Expected at least one library path in '#libraries'.",
+            "Expected at least one root folder in '#root_folders'.",
         ));
     }
 
     *index += 1;
-    dedupe_paths(&mut libraries);
-    Ok(libraries)
+    dedupe_paths(&mut root_folders);
+    Ok(root_folders)
+}
+
+/// WHAT: validates one '#root_folders' entry and normalizes it to the stored path form.
+/// WHY: only single top-level project folders are legal explicit import roots.
+fn validate_root_folder_path(
+    root_folder: PathBuf,
+    token: &Token,
+    string_table: &StringTable,
+) -> Result<PathBuf, CompilerError> {
+    if root_folder.as_os_str().is_empty() {
+        return Err(CompilerError::new(
+            "Invalid '#root_folders' entry. Root folders cannot be empty.",
+            token.location.to_error_location(string_table),
+            ErrorType::Config,
+        ));
+    }
+
+    if root_folder.is_absolute() {
+        return Err(CompilerError::new(
+            format!(
+                "Invalid '#root_folders' entry '{}'. Root folders must be relative to the project root.",
+                root_folder.display()
+            ),
+            token.location.to_error_location(string_table),
+            ErrorType::Config,
+        ));
+    }
+
+    let mut components = root_folder.components();
+    let Some(first) = components.next() else {
+        return Err(CompilerError::new(
+            "Invalid '#root_folders' entry. Root folders cannot be empty.",
+            token.location.to_error_location(string_table),
+            ErrorType::Config,
+        ));
+    };
+
+    if !matches!(first, std::path::Component::Normal(_)) || components.next().is_some() {
+        return Err(CompilerError::new(
+            format!(
+                "Invalid '#root_folders' entry '{}'. Root folders must be a single top-level folder name such as '@lib'.",
+                root_folder.display()
+            ),
+            token.location.to_error_location(string_table),
+            ErrorType::Config,
+        ));
+    }
+
+    Ok(root_folder)
 }
 
 fn parse_config_scalar_value(kind: &TokenKind, string_table: &StringTable) -> Option<String> {

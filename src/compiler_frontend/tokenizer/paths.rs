@@ -64,6 +64,13 @@ pub fn parse_file_path(
                 break;
             }
 
+            // Config lists use bare path syntax like `@lib, @assets`.
+            // Stop before delimiters so the lexer can emit the comma/brace separately.
+            ',' | '}' if !wrapped_in_parentheses => {
+                push_segment_if_non_empty(&mut base_components, &mut segment, string_table);
+                break;
+            }
+
             _ if !wrapped_in_parentheses && c.is_non_newline_whitespace() => {
                 push_segment_if_non_empty(&mut base_components, &mut segment, string_table);
                 consume_non_newline_whitespace(stream);

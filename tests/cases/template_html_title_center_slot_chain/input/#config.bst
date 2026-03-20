@@ -1,6 +1,6 @@
 #project = "html"
 #entry_root = "src"
 #output_folder = "release"
-#libraries = {
-    @(libs),
+#root_folders = {
+    @lib,
 }

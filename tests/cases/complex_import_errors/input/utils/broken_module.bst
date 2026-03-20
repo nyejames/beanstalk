@@ -1,6 +1,4 @@
 -- Broken module with syntax errors
-export broken_function |param|:  -- Missing type
+export broken_function |param|:
     ["This has syntax errors"]
-;  -- Missing closing parenthesis
-
--- Missing semicolon after function
+;

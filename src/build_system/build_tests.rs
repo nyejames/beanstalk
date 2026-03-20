@@ -979,16 +979,16 @@ fn build_project_markdown_page_reexported_table_keeps_rows_and_cells_inside_tabl
 #[test]
 fn build_project_docs_style_title_and_center_slot_chain_compiles() {
     let root = temp_dir("docs_title_center_slot_chain");
-    fs::create_dir_all(root.join("src/libs")).expect("should create libs root");
+    fs::create_dir_all(root.join("lib")).expect("should create lib root");
     fs::create_dir_all(root.join("src/styles")).expect("should create styles root");
 
     fs::write(
         root.join("#config.bst"),
-        "#project = \"html\"\n#entry_root = \"src\"\n#output_folder = \"release\"\n#libraries = {\n    @(libs),\n}\n",
+        "#project = \"html\"\n#entry_root = \"src\"\n#output_folder = \"release\"\n#root_folders = {\n    @lib,\n}\n",
     )
     .expect("should write config file");
     fs::write(
-        root.join("src/libs").join("html.bst"),
+        root.join("lib").join("html.bst"),
         "#center String = [$insert(\"style\"):text-align: center;]\n",
     )
     .expect("should write html helper library");
@@ -999,7 +999,7 @@ fn build_project_docs_style_title_and_center_slot_chain_compiles() {
     .expect("should write docs style library");
     fs::write(
         root.join("src").join("#page.bst"),
-        "import @libs/html/{center}\nimport @styles/docs/{title}\n#[title, center: LANGUAGE BASICS]\n",
+        "import @lib/html/{center}\nimport @styles/docs/{title}\n#[title, center: LANGUAGE BASICS]\n",
     )
     .expect("should write source file");
 

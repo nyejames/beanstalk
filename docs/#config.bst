@@ -9,8 +9,7 @@
 # author = ""
 # license = "MIT"
 
-# libraries = {
-    @libs,
+# root_folders = {
+    @lib,
+    @assets,
 }
-
-# assets = "assets"
