@@ -9,7 +9,7 @@
 # 🌱
 
 <p>⚠️ This is a work in progress compiler ⚠️</p> 
-<p>The language is under rapid active development and evolving constantly. See CONTRIBUTING.md if you're inspired to help out!</p>
+<p>The language is under rapid active development and evolving constantly. See <a href="https://github.com/nyejames/beanstalk/blob/main/CONTRIBUTING.md">CONTRIBUTING</a> if you're inspired to help out!</p>
 </div>
 <br>
 <br>

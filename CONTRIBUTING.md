@@ -1,14 +1,17 @@
 # Contributing to this project
 This project is at a very early stage with long term goals.
 
-The current goal is compiling the documentation in the language itself using the HTML project builder without errors. This is still a solo project as of now.
-
-This is a slow process as I'm writing the docs how in the way I want them to look like in Beanstalk code, then implement features I feel are missing or fix bugs along the way.
-
 If you are interested in compilers/programming languages or the goals of this language 
 and want to contribute or make suggestions, please get in touch or open a discussion on GitHub.
 
-Any suggestions or questions about the future / design of this language are welcome.
+Any questions about the future / design of this language are welcome.
+Just open a discussion on Github if you're curious.
+
+## The Current Goal
+
+The current goal is compiling the documentation in the language itself using the HTML project builder without errors. This is still a solo project as of now.
+
+This is a slow process as I'm writing the docs in an ideal form of Beanstalk code, then implement the missing features or fix bugs along the way to get that code to work correctly without test regressions.
 
 See `docs/Beanstalk Language Overview.md` and `docs/Beanstalk Compiler Development Guide.md` for more in depth details.
 
