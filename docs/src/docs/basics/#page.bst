@@ -34,8 +34,8 @@ This comes before the type if there is an explicit type declaration.
 - All copies have to be explicit unless they are used in part of a new expression. 
 Even for primitive types such as integers.
 
-4 spaces are recommended for indentation.
-
+## Formatting
+- 4 spaces are recommended for indentation.
 - Types use UpperCamelCase
 - Everything else uses regular_snake_case
 

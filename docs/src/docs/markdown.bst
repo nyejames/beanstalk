@@ -52,6 +52,10 @@ Beanstalk files can still import additional HTML, CSS, JS or Beanstalk files to 
     HTML characters are escaped in markdown bodies, so tags are treated as text.
     Use raw strings or compose custom templates when you need literal HTML output.
 
+    Markdown list markers are supported with indentation-based nesting:
+    - Unordered: '-', '*', '+'
+    - Ordered: '1.' and '1)'
+
     ]
 ```
 

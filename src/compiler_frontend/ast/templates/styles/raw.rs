@@ -8,9 +8,10 @@
 //! - `$raw` provides an explicit opt-out for templates that must preserve authored bytes.
 
 use crate::compiler_frontend::ast::templates::create_template_node::Template;
+use crate::compiler_frontend::ast::templates::template::BodyWhitespacePolicy;
 
 pub(crate) fn configure_raw_style(template: &mut Template) {
     template.apply_style_updates(|style| {
-        style.disable_default_body_whitespace_normalization = true;
+        style.body_whitespace_policy = BodyWhitespacePolicy::StyleDirectiveControlled;
     });
 }

@@ -9,13 +9,99 @@
 
 use crate::compiler_frontend::basic_utility_functions::NumericalParsing;
 
-/// Normalizes one contiguous compile-time body run using the default template rules.
-///
-/// Control-flow summary:
-/// 1) Trim initial whitespace, including one leading newline and the indentation after it.
-/// 2) Dedent every post-newline run by the indentation captured in step 1.
-/// 3) Trim trailing whitespace only when it starts at the final newline.
-pub(crate) fn normalize_template_body_whitespace(content: &mut String) {
+/// Shared whitespace passes that template formatters and default template parsing can run.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum TemplateWhitespacePass {
+    /// The compiler's default template dedent/trim pass.
+    DefaultTemplateBody,
+}
+
+/// Position of the current body run within the whole template stream.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum TemplateBodyRunPosition {
+    Only,
+    First,
+    Middle,
+    Last,
+}
+
+impl TemplateBodyRunPosition {
+    /// `true` when this run is at the start boundary of the template body stream.
+    pub(crate) fn is_first(self) -> bool {
+        matches!(self, Self::Only | Self::First)
+    }
+
+    /// `true` when this run is at the end boundary of the template body stream.
+    pub(crate) fn is_last(self) -> bool {
+        matches!(self, Self::Only | Self::Last)
+    }
+}
+
+/// Configuration for running one whitespace pass.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct TemplateWhitespacePassProfile {
+    pub pass: TemplateWhitespacePass,
+    pub trim_leading_boundary: bool,
+    pub trim_trailing_boundary: bool,
+}
+
+impl TemplateWhitespacePassProfile {
+    pub(crate) const fn new(
+        pass: TemplateWhitespacePass,
+        trim_leading_boundary: bool,
+        trim_trailing_boundary: bool,
+    ) -> Self {
+        Self {
+            pass,
+            trim_leading_boundary,
+            trim_trailing_boundary,
+        }
+    }
+
+    /// Default template dedent/trim profile used by plain templates and markdown pre-pass.
+    pub(crate) const fn default_template_body() -> Self {
+        Self::new(TemplateWhitespacePass::DefaultTemplateBody, true, true)
+    }
+}
+
+/// Runs each configured pass in order for the provided body-run position.
+pub(crate) fn apply_whitespace_passes(
+    content: &mut String,
+    passes: &[TemplateWhitespacePassProfile],
+    run_position: TemplateBodyRunPosition,
+) {
+    for pass in passes {
+        apply_whitespace_pass(content, *pass, run_position);
+    }
+}
+
+/// Runs one whitespace pass while respecting run-boundary controls.
+pub(crate) fn apply_whitespace_pass(
+    content: &mut String,
+    pass: TemplateWhitespacePassProfile,
+    run_position: TemplateBodyRunPosition,
+) {
+    if content.is_empty() {
+        return;
+    }
+
+    let trim_leading_boundary = pass.trim_leading_boundary && run_position.is_first();
+    let trim_trailing_boundary = pass.trim_trailing_boundary && run_position.is_last();
+
+    match pass.pass {
+        TemplateWhitespacePass::DefaultTemplateBody => normalize_default_template_body_whitespace(
+            content,
+            trim_leading_boundary,
+            trim_trailing_boundary,
+        ),
+    }
+}
+
+fn normalize_default_template_body_whitespace(
+    content: &mut String,
+    trim_leading_boundary: bool,
+    trim_trailing_boundary: bool,
+) {
     if content.is_empty() {
         return;
     }
@@ -23,11 +109,14 @@ pub(crate) fn normalize_template_body_whitespace(content: &mut String) {
     let chars: Vec<char> = content.chars().collect();
     let mut cursor = 0usize;
 
-    let mut dedent_width = 0usize;
+    // Capture one leading newline block (optional leading spaces + newline + indentation)
+    // so dedent width stays stable even when this run is in the middle of a template.
     while cursor < chars.len() && chars[cursor].is_non_newline_whitespace() {
         cursor += 1;
     }
 
+    let mut dedent_width = 0usize;
+    let mut leading_trim_end = 0usize;
     if cursor < chars.len() && chars[cursor] == '\n' {
         cursor += 1;
         let dedent_start = cursor;
@@ -37,18 +126,26 @@ pub(crate) fn normalize_template_body_whitespace(content: &mut String) {
         }
 
         dedent_width = cursor.saturating_sub(dedent_start);
-    } else {
-        // Without an initial newline block, leading spaces are authored content and
-        // should be preserved (for example, explicit spacing in inline templates).
-        cursor = 0;
+        leading_trim_end = cursor;
     }
 
-    let mut normalized: String = chars[cursor..].iter().collect();
+    // Leading boundary trimming is only applied to the first body run. Middle runs
+    // keep their newline boundary while dedenting still strips indentation after it.
+    let start_cursor = if trim_leading_boundary && leading_trim_end > 0 {
+        leading_trim_end
+    } else {
+        0
+    };
+
+    let mut normalized: String = chars[start_cursor..].iter().collect();
     if dedent_width > 0 {
         normalized = dedent_after_newlines(&normalized, dedent_width);
     }
 
-    trim_trailing_whitespace_from_final_newline(&mut normalized);
+    if trim_trailing_boundary {
+        trim_trailing_whitespace_from_final_newline(&mut normalized);
+    }
+
     *content = normalized;
 }
 

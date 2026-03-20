@@ -398,6 +398,38 @@ fn non_markdown_templates_do_not_escape_html_body_text() {
 }
 
 #[test]
+fn markdown_renders_unordered_and_ordered_lists() {
+    let rendered = folded_template_output("[$markdown:\n- first\n- second\n1. third\n2) fourth\n]");
+
+    assert_eq!(
+        rendered,
+        "<ul><li>first</li><li>second</li></ul><ol><li>third</li><li>fourth</li></ol>"
+    );
+}
+
+#[test]
+fn markdown_list_items_absorb_immediate_newline_text() {
+    let rendered = folded_template_output(
+        "[$markdown:\n- Square brackets are NOT used for arrays, curly braces are used instead.\nSquare brackets are only used for string templates. Items in collections are accessed via methods.\n- Equality and other logical operators use keywords like \"is\" and \"not\"\n(you can't use == or ! for example)\n]",
+    );
+
+    assert_eq!(
+        rendered,
+        "<ul><li>Square brackets are NOT used for arrays, curly braces are used instead. Square brackets are only used for string templates. Items in collections are accessed via methods.</li><li>Equality and other logical operators use keywords like &quot;is&quot; and &quot;not&quot; (you can&#39;t use == or ! for example)</li></ul>"
+    );
+}
+
+#[test]
+fn markdown_list_breaks_immediately_on_heading_line() {
+    let rendered = folded_template_output("[$markdown:\n- first\n## Heading\nplain paragraph\n]");
+
+    assert_eq!(
+        rendered,
+        "<ul><li>first</li></ul><h2>Heading</h2><p>plain paragraph</p>"
+    );
+}
+
+#[test]
 fn default_whitespace_normalizer_trims_initial_newline_and_dedents() {
     let rendered = folded_template_output("[:\n    Hello\n    World\n]");
     assert_eq!(rendered, "Hello\nWorld");
@@ -419,6 +451,36 @@ fn default_whitespace_normalizer_trims_only_from_final_newline() {
 fn default_whitespace_normalizer_preserves_leading_spaces_without_initial_newline() {
     let rendered = folded_template_output("[: world]");
     assert_eq!(rendered, " world");
+}
+
+#[test]
+fn default_whitespace_normalizer_preserves_middle_run_newline_boundaries() {
+    let mut string_table = StringTable::new();
+    let mut token_stream = template_tokens_from_source(
+        "[:\n    before\n    [value]\n    after\n]",
+        &mut string_table,
+    );
+    let context = runtime_template_context(&token_stream.src_path, &mut string_table);
+
+    let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
+        .expect("template should parse");
+
+    let body_slices: Vec<String> = template_segments(&template)
+        .iter()
+        .filter_map(
+            |segment| match (&segment.origin, &segment.expression.kind) {
+                (TemplateSegmentOrigin::Body, ExpressionKind::StringSlice(text)) => {
+                    Some(string_table.resolve(*text).to_owned())
+                }
+                _ => None,
+            },
+        )
+        .collect();
+
+    assert_eq!(
+        body_slices,
+        vec!["before\n".to_string(), "\nafter".to_string()]
+    );
 }
 
 #[test]
@@ -464,7 +526,7 @@ fn escape_html_preserves_runtime_head_references() {
 
     assert_eq!(
         string_table.resolve(escaped_body),
-        "&lt;b&gt;body&lt;/b&gt;"
+        "\n    &lt;b&gt;body&lt;/b&gt;\n"
     );
 }
 
@@ -972,6 +1034,28 @@ fn builder_registered_style_directive_parses_as_noop_scaffold() {
 
     assert_eq!(template.style.id, "");
     assert!(matches!(template.kind, TemplateType::String));
+}
+
+#[test]
+fn builder_registered_style_directive_preserves_raw_body_whitespace() {
+    let mut string_table = StringTable::new();
+    let directives = vec![StyleDirectiveSpec::new("brand", TemplateBodyMode::Normal)];
+    let registry = StyleDirectiveRegistry::merged(&directives);
+    let mut token_stream = template_tokens_from_source_with_directives(
+        "[$brand:\n    Hello\n    World\n]",
+        &directives,
+        &mut string_table,
+    );
+    let context = ScopeContext::new_constant(token_stream.src_path.to_owned())
+        .with_style_directives(&registry);
+
+    let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
+        .expect("builder-registered directives should parse in scaffold mode");
+    let folded = template
+        .fold_into_stringid(&None, &mut string_table)
+        .expect("template should fold");
+
+    assert_eq!(string_table.resolve(folded), "\n    Hello\n    World\n");
 }
 
 #[test]

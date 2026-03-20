@@ -74,13 +74,16 @@ is used to define the content of the template. This is a string.
 
 Inside the body of a template, you can nest more templates using square brackets. 
 
-By default, template body strings are whitespace-normalized:
+When a template has no style directive, body strings use the default whitespace normalization:
 - one initial leading newline block is trimmed
 - common indentation is removed using the indentation after that initial newline
 - consecutive blank lines are preserved
 - trailing whitespace is trimmed only when it starts at the final newline
 
-Use `$raw` to preserve authored whitespace exactly.
+When a style directive is present, that directive controls whitespace behavior and receives raw body content by default.
+Formatters can opt into shared whitespace passes when needed (for example `$markdown` applies the default dedent/trim pass before markdown parsing).
+
+Use `$raw` when you want explicit raw-body behavior in template heads.
 
 `$escape_html` escapes body text HTML-sensitive characters (`&`, `<`, `>`, `"`, `'`).
 

@@ -1,5 +1,6 @@
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::templates::create_template_node::Template;
+use crate::compiler_frontend::ast::templates::styles::whitespace::TemplateWhitespacePassProfile;
 use crate::compiler_frontend::string_interning::StringId;
 use std::sync::Arc;
 
@@ -284,9 +285,24 @@ pub struct Formatter {
 
     // This formatter will be skipped if there is already a formatter for the template
     pub skip_if_already_formatted: bool,
+    // Pre-format whitespace passes are run before parser-specific formatting.
+    // This allows directive-owned formatters (for example `$markdown`) to opt into
+    // shared dedent/trim behavior while still operating over raw template body text.
+    pub pre_format_whitespace_passes: Vec<TemplateWhitespacePassProfile>,
     // Shared ownership keeps formatters cheap to clone as styles are inherited or
     // copied into nested templates during AST construction.
     pub formatter: Arc<dyn TemplateFormatter>,
+    // Post-format passes run after formatter output is generated.
+    pub post_format_whitespace_passes: Vec<TemplateWhitespacePassProfile>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BodyWhitespacePolicy {
+    // Plain templates (no style directive) keep the historical default dedent/trim flow.
+    DefaultTemplateBehavior,
+    // Style directives own body whitespace behavior and receive raw body text unless
+    // their formatter explicitly opts into shared whitespace passes.
+    StyleDirectiveControlled,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -317,7 +333,7 @@ pub struct Style {
     pub css_mode: Option<CssDirectiveMode>,
     pub html_mode: bool,
     pub clear_inherited: bool,
-    pub disable_default_body_whitespace_normalization: bool,
+    pub body_whitespace_policy: BodyWhitespacePolicy,
 }
 
 impl Style {
@@ -331,7 +347,7 @@ impl Style {
             css_mode: None,
             html_mode: false,
             clear_inherited: false,
-            disable_default_body_whitespace_normalization: false,
+            body_whitespace_policy: BodyWhitespacePolicy::DefaultTemplateBehavior,
         }
     }
 }

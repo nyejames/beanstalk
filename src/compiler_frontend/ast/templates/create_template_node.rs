@@ -16,10 +16,13 @@ use crate::compiler_frontend::ast::templates::styles::html::{
 };
 use crate::compiler_frontend::ast::templates::styles::markdown::markdown_formatter;
 use crate::compiler_frontend::ast::templates::styles::raw::configure_raw_style;
-use crate::compiler_frontend::ast::templates::styles::whitespace::normalize_template_body_whitespace;
+use crate::compiler_frontend::ast::templates::styles::whitespace::{
+    TemplateBodyRunPosition, TemplateWhitespacePassProfile, apply_whitespace_passes,
+};
 use crate::compiler_frontend::ast::templates::template::{
-    CommentDirectiveKind, Formatter, SlotKey, Style, TemplateAtom, TemplateConstValueKind,
-    TemplateContent, TemplateControlFlow, TemplateSegment, TemplateSegmentOrigin, TemplateType,
+    BodyWhitespacePolicy, CommentDirectiveKind, Formatter, SlotKey, Style, TemplateAtom,
+    TemplateConstValueKind, TemplateContent, TemplateControlFlow, TemplateSegment,
+    TemplateSegmentOrigin, TemplateType,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::{CompilerWarning, WarningKind};
@@ -409,7 +412,7 @@ fn recursive_inherited_style(style: &Style) -> Option<Style> {
         && inherited.override_precedence == -1
         && inherited.id.is_empty()
         && !inherited.clear_inherited
-        && !inherited.disable_default_body_whitespace_normalization
+        && inherited.body_whitespace_policy == BodyWhitespacePolicy::DefaultTemplateBehavior
         && !inherited.html_mode
     {
         return None;
@@ -1363,10 +1366,11 @@ fn parse_style_directive(
 
     if spec.source == StyleDirectiveSource::Builder {
         consume_optional_directive_arguments(token_stream, &directive_name, string_table)?;
+        mark_template_body_whitespace_style_controlled(template);
         return Ok(false);
     }
 
-    match directive_name.as_str() {
+    let parse_result = match directive_name.as_str() {
         "markdown" => {
             apply_markdown_style(template);
             Ok(false)
@@ -1438,7 +1442,22 @@ fn parse_style_directive(
                 other
             )
         }
+    };
+
+    if parse_result.is_ok() {
+        // Any explicit style directive switches the template into style-controlled
+        // whitespace mode. Individual formatters can opt into shared whitespace
+        // passes explicitly via `Formatter` pre/post pass profiles.
+        mark_template_body_whitespace_style_controlled(template);
     }
+
+    parse_result
+}
+
+fn mark_template_body_whitespace_style_controlled(template: &mut Template) {
+    template.apply_style_updates(|style| {
+        style.body_whitespace_policy = BodyWhitespacePolicy::StyleDirectiveControlled;
+    });
 }
 
 fn apply_doc_comment_defaults(template: &mut Template) {
@@ -1667,21 +1686,23 @@ fn apply_body_formatter(
     style: &Style,
     string_table: &mut StringTable,
 ) {
-    let should_apply_default_whitespace_normalization =
-        !style.disable_default_body_whitespace_normalization;
     let formatter = style.formatter.as_ref();
+    let implicit_default_whitespace_pass = (style.body_whitespace_policy
+        == BodyWhitespacePolicy::DefaultTemplateBehavior
+        && formatter.is_none())
+    .then_some(TemplateWhitespacePassProfile::default_template_body());
 
-    if !should_apply_default_whitespace_normalization && formatter.is_none() {
+    if implicit_default_whitespace_pass.is_none() && formatter.is_none() {
         return;
     }
 
-    // Body processing always keeps head/dynamic atoms as hard boundaries. Compile-time
-    // body runs first go through default whitespace normalization, then optional style
-    // formatter rewriting (for directives like `$markdown`, `$code`, `$escape_html`).
+    // Body processing always keeps head/dynamic atoms as hard boundaries. Plain
+    // templates run the implicit default whitespace pass, while style directives
+    // receive raw body text unless their formatter declares reusable passes.
     format_content_atoms(
         &mut content.atoms,
         formatter,
-        should_apply_default_whitespace_normalization,
+        implicit_default_whitespace_pass,
         string_table,
     );
 }
@@ -1689,12 +1710,13 @@ fn apply_body_formatter(
 fn format_content_atoms(
     atoms: &mut Vec<TemplateAtom>,
     formatter: Option<&Formatter>,
-    should_apply_default_whitespace_normalization: bool,
+    implicit_default_whitespace_pass: Option<TemplateWhitespacePassProfile>,
     string_table: &mut StringTable,
 ) {
     let mut formatted_atoms = Vec::with_capacity(atoms.len());
     let mut buffered_text = String::new();
     let mut buffer_location: Option<TextLocation> = None;
+    let mut has_emitted_body_runs = false;
 
     // Coalesce adjacent body string slices so the formatter sees the same text a
     // user wrote contiguously in the source, rather than one token at a time.
@@ -1705,7 +1727,9 @@ fn format_content_atoms(
                 &mut buffered_text,
                 &mut buffer_location,
                 formatter,
-                should_apply_default_whitespace_normalization,
+                implicit_default_whitespace_pass,
+                &mut has_emitted_body_runs,
+                false,
                 string_table,
             );
             if let TemplateAtom::Slot(slot) = atom {
@@ -1720,7 +1744,9 @@ fn format_content_atoms(
                 &mut buffered_text,
                 &mut buffer_location,
                 formatter,
-                should_apply_default_whitespace_normalization,
+                implicit_default_whitespace_pass,
+                &mut has_emitted_body_runs,
+                false,
                 string_table,
             );
             formatted_atoms.push(TemplateAtom::Content(segment));
@@ -1733,7 +1759,9 @@ fn format_content_atoms(
                 &mut buffered_text,
                 &mut buffer_location,
                 formatter,
-                should_apply_default_whitespace_normalization,
+                implicit_default_whitespace_pass,
+                &mut has_emitted_body_runs,
+                false,
                 string_table,
             );
             formatted_atoms.push(TemplateAtom::Content(segment));
@@ -1746,7 +1774,9 @@ fn format_content_atoms(
                 &mut buffered_text,
                 &mut buffer_location,
                 formatter,
-                should_apply_default_whitespace_normalization,
+                implicit_default_whitespace_pass,
+                &mut has_emitted_body_runs,
+                false,
                 string_table,
             );
             if formatter.is_some() {
@@ -1772,7 +1802,9 @@ fn format_content_atoms(
         &mut buffered_text,
         &mut buffer_location,
         formatter,
-        should_apply_default_whitespace_normalization,
+        implicit_default_whitespace_pass,
+        &mut has_emitted_body_runs,
+        true,
         string_table,
     );
 
@@ -1821,21 +1853,44 @@ fn flush_formatted_body_run(
     buffered_text: &mut String,
     buffer_location: &mut Option<TextLocation>,
     formatter: Option<&Formatter>,
-    should_apply_default_whitespace_normalization: bool,
+    implicit_default_whitespace_pass: Option<TemplateWhitespacePassProfile>,
+    has_emitted_body_runs: &mut bool,
+    is_final_flush: bool,
     string_table: &mut StringTable,
 ) {
     if buffered_text.is_empty() {
         return;
     }
 
-    if should_apply_default_whitespace_normalization {
-        normalize_template_body_whitespace(buffered_text);
+    let run_position = match (*has_emitted_body_runs, is_final_flush) {
+        (false, true) => TemplateBodyRunPosition::Only,
+        (false, false) => TemplateBodyRunPosition::First,
+        (true, true) => TemplateBodyRunPosition::Last,
+        (true, false) => TemplateBodyRunPosition::Middle,
+    };
+
+    if let Some(default_pass) = implicit_default_whitespace_pass {
+        apply_whitespace_passes(
+            buffered_text,
+            std::slice::from_ref(&default_pass),
+            run_position,
+        );
     }
 
     if let Some(formatter) = formatter {
+        apply_whitespace_passes(
+            buffered_text,
+            &formatter.pre_format_whitespace_passes,
+            run_position,
+        );
         // Format once per contiguous body run, then collapse it back into a single
         // string-slice segment so later stages do not need any special formatter logic.
         formatter.formatter.format(buffered_text);
+        apply_whitespace_passes(
+            buffered_text,
+            &formatter.post_format_whitespace_passes,
+            run_position,
+        );
     }
 
     if buffered_text.is_empty() {
@@ -1848,6 +1903,7 @@ fn flush_formatted_body_run(
     let expression = Expression::string_slice(interned, location, Ownership::ImmutableOwned);
     let segment = TemplateSegment::new(expression, TemplateSegmentOrigin::Body);
     atoms.push(TemplateAtom::Content(segment));
+    *has_emitted_body_runs = true;
 
     buffered_text.clear();
 }
