@@ -11,6 +11,7 @@ use crate::compiler_frontend::ast::templates::template::{
     CommentDirectiveKind, CssDirectiveMode, TemplateAtom, TemplateSegment, TemplateSegmentOrigin,
     TemplateType,
 };
+use crate::compiler_frontend::ast::templates::template_render_plan::RenderPiece;
 use crate::compiler_frontend::compiler_warnings::WarningKind;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::host_functions::HostRegistry;
@@ -254,6 +255,31 @@ fn template_segments(template: &Template) -> Vec<&TemplateSegment> {
         .collect()
 }
 
+/// Collects the resolved text strings from all body-origin text pieces in the
+/// template's render plan. This is the correct way to inspect formatted body
+/// content after parsing, since formatting is applied to the render plan rather
+/// than rewritten back into `template.content`.
+fn collect_body_text_from_render_plan(
+    template: &Template,
+    string_table: &StringTable,
+) -> Vec<String> {
+    use crate::compiler_frontend::ast::templates::template_render_plan::TemplateRenderPlan;
+
+    let plan = template
+        .render_plan
+        .as_ref()
+        .cloned()
+        .unwrap_or_else(|| TemplateRenderPlan::from_content(&template.content));
+
+    plan.pieces
+        .iter()
+        .filter_map(|piece| match piece {
+            RenderPiece::Text(p) => Some(string_table.resolve(p.text).to_owned()),
+            _ => None,
+        })
+        .collect()
+}
+
 fn collect_static_template_fragments(
     atoms: &[TemplateAtom],
     string_table: &StringTable,
@@ -478,17 +504,9 @@ fn default_whitespace_normalizer_preserves_middle_run_newline_boundaries() {
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("template should parse");
 
-    let body_slices: Vec<String> = template_segments(&template)
-        .iter()
-        .filter_map(
-            |segment| match (&segment.origin, &segment.expression.kind) {
-                (TemplateSegmentOrigin::Body, ExpressionKind::StringSlice(text)) => {
-                    Some(string_table.resolve(*text).to_owned())
-                }
-                _ => None,
-            },
-        )
-        .collect();
+    // Formatting is applied to the render plan, not written back into template.content.
+    // Read the whitespace-normalised body text slices from render_plan pieces directly.
+    let body_slices = collect_body_text_from_render_plan(&template, &string_table);
 
     assert_eq!(
         body_slices,
@@ -522,25 +540,20 @@ fn escape_html_preserves_runtime_head_references() {
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("template should parse");
 
+    // Head references remain in template.content — check there.
     assert!(template_segments(&template).iter().any(|segment| {
         segment.origin == TemplateSegmentOrigin::Head
             && matches!(segment.expression.kind, ExpressionKind::Reference(_))
     }));
 
-    let escaped_body = template_segments(&template)
+    // Formatted body text is in render_plan after the escape pass — check there.
+    let body_texts = collect_body_text_from_render_plan(&template, &string_table);
+    let escaped_body = body_texts
         .into_iter()
-        .find_map(
-            |segment| match (&segment.origin, &segment.expression.kind) {
-                (TemplateSegmentOrigin::Body, ExpressionKind::StringSlice(text)) => Some(*text),
-                _ => None,
-            },
-        )
-        .expect("expected escaped body string segment");
+        .find(|text| !text.is_empty())
+        .expect("expected escaped body text in render plan");
 
-    assert_eq!(
-        string_table.resolve(escaped_body),
-        "\n    &lt;b&gt;body&lt;/b&gt;\n"
-    );
+    assert_eq!(escaped_body, "\n    &lt;b&gt;body&lt;/b&gt;\n");
 }
 
 #[test]
@@ -607,25 +620,19 @@ fn runtime_templates_format_static_body_strings_only() {
         .expect("template should parse");
 
     assert!(matches!(template.kind, TemplateType::StringFunction));
+    // Head references remain in template.content — check there.
     assert!(template_segments(&template).iter().any(|segment| {
         segment.origin == TemplateSegmentOrigin::Head
             && matches!(segment.expression.kind, ExpressionKind::Reference(_))
     }));
 
-    let formatted_body = template_segments(&template)
-        .into_iter()
-        .find_map(
-            |segment| match (&segment.origin, &segment.expression.kind) {
-                (TemplateSegmentOrigin::Body, ExpressionKind::StringSlice(text)) => Some(*text),
-                _ => None,
-            },
-        )
-        .expect("expected a formatted body segment");
-
+    // Formatted body text (after $markdown pass) lives in render_plan, not template.content.
+    let body_texts = collect_body_text_from_render_plan(&template, &string_table);
     assert!(
-        string_table
-            .resolve(formatted_body)
-            .contains("<h1>Hello</h1>")
+        body_texts
+            .iter()
+            .any(|text| text.contains("<h1>Hello</h1>")),
+        "expected formatted body text to contain markdown-rendered heading in render_plan"
     );
 }
 
@@ -914,6 +921,7 @@ fn markdown_parent_with_reset_row_wrapper_renders_plain_cells() {
         .expect("markdown row usage should fold");
     let rendered = string_table.resolve(folded);
 
+    println!("RENDERED: {}", rendered);
     assert_eq!(rendered.matches("<td>").count(), 2);
     assert!(rendered.contains("Type"));
     assert!(rendered.contains("Description"));
@@ -933,10 +941,15 @@ fn markdown_parent_with_reset_header_row_wrapper_renders_plain_headers() {
 
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("markdown header row usage should parse");
+
+    println!("PARENT RENDER PLAN: {:#?}", template.render_plan);
+
     let folded = template
         .fold_into_stringid(&None, &mut string_table)
         .expect("markdown header row usage should fold");
     let rendered = string_table.resolve(folded);
+
+    println!("RENDERED: {}", rendered);
 
     assert_eq!(
         rendered
@@ -1252,24 +1265,26 @@ fn runtime_templates_with_code_format_only_static_body_strings() {
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("template should parse");
 
+    // Head references remain in template.content — check there.
     assert!(template_segments(&template).iter().any(|segment| {
         segment.origin == TemplateSegmentOrigin::Head
             && matches!(segment.expression.kind, ExpressionKind::Reference(_))
     }));
 
-    let formatted_body = template_segments(&template)
-        .into_iter()
-        .find_map(
-            |segment| match (&segment.origin, &segment.expression.kind) {
-                (TemplateSegmentOrigin::Body, ExpressionKind::StringSlice(text)) => Some(*text),
-                _ => None,
-            },
-        )
-        .expect("expected a formatted body segment");
-
-    let rendered = string_table.resolve(formatted_body);
-    assert!(rendered.contains("<code class='codeblock'>"));
-    assert!(rendered.contains("<span class='bst-code-keyword'>loop</span>"));
+    // Formatted body text (after $code pass) lives in render_plan, not template.content.
+    let body_texts = collect_body_text_from_render_plan(&template, &string_table);
+    assert!(
+        body_texts
+            .iter()
+            .any(|text| text.contains("<code class='codeblock'>")),
+        "expected code HTML block in render_plan body text"
+    );
+    assert!(
+        body_texts
+            .iter()
+            .any(|text| text.contains("<span class='bst-code-keyword'>loop</span>")),
+        "expected highlighted keyword span in render_plan body text"
+    );
 }
 
 #[test]
@@ -2026,10 +2041,19 @@ fn direct_code_highlighter_escapes_html_sensitive_content() {
 
 #[test]
 fn code_formatter_wrapper_preserves_newlines_after_dedent() {
+    let mut string_table = StringTable::new();
     let formatter = code_formatter(CodeLanguage::Generic);
-    let mut content = String::from("    x\n    y");
 
-    formatter.formatter.format(&mut content);
+    let id = string_table.intern("    x\n    y");
+    let input = crate::compiler_frontend::ast::templates::template_render_plan::FormatterInput {
+        pieces: vec![crate::compiler_frontend::ast::templates::template_render_plan::FormatterInputPiece::Text(id)],
+    };
+
+    let output = formatter.formatter.format(input, &mut string_table);
+    let content = match &output.pieces[0] {
+        crate::compiler_frontend::ast::templates::template_render_plan::FormatterOutputPiece::Text(t) => t,
+        _ => panic!("Expected text output"),
+    };
 
     assert!(content.starts_with("<code class='codeblock'>"));
     assert!(content.ends_with("</code>"));

@@ -270,7 +270,11 @@ impl TemplateSegment {
 }
 
 pub trait TemplateFormatter {
-    fn format(&self, content: &mut String);
+    fn format(
+        &self,
+        input: crate::compiler_frontend::ast::templates::template_render_plan::FormatterInput,
+        string_table: &mut crate::compiler_frontend::string_interning::StringTable,
+    ) -> crate::compiler_frontend::ast::templates::template_render_plan::FormatterOutput;
 }
 
 impl std::fmt::Debug for dyn TemplateFormatter {

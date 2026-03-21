@@ -62,15 +62,18 @@ struct MarkdownListLevel {
     has_open_item: bool,
 }
 
-/// Backward-compatible alias used by existing markdown tests/helpers.
-pub const HIDDEN_SKIP_CHAR: char = TEMPLATE_FORMAT_GUARD_CHAR;
-
 #[derive(Debug)]
 pub struct MarkdownTemplateFormatter;
 
 impl TemplateFormatter for MarkdownTemplateFormatter {
-    fn format(&self, content: &mut String) {
-        *content = to_markdown(content, "p");
+    fn format(
+        &self,
+        input: crate::compiler_frontend::ast::templates::template_render_plan::FormatterInput,
+        string_table: &mut crate::compiler_frontend::string_interning::StringTable,
+    ) -> crate::compiler_frontend::ast::templates::template_render_plan::FormatterOutput {
+        input.invoke_legacy_formatter(string_table, |content| {
+            *content = to_markdown(content, "p");
+        })
     }
 }
 
@@ -86,12 +89,6 @@ pub fn markdown_formatter() -> Formatter {
 }
 
 pub fn to_markdown(content: &str, default_tag: &str) -> String {
-    // Block parsing handles list structure first, while non-list blocks keep the
-    // existing inline markdown behavior for headings/emphasis/links/escaping.
-    to_markdown_with_lists(content, default_tag)
-}
-
-fn to_markdown_with_lists(content: &str, default_tag: &str) -> String {
     let lines: Vec<&str> = content.split('\n').collect();
     let mut index = 0usize;
     let mut output = String::new();
@@ -141,6 +138,15 @@ fn flush_plain_block(output: &mut String, plain_buffer: &mut String, default_tag
     plain_buffer.clear();
 }
 
+/// Parses and renders consecutive list items into nested HTML `<ul>` and `<ol>` runs.
+///
+/// WHAT:
+/// - Consumes lines starting from the first recognised list item up to a blank line or heading.
+/// - Tracks indentation width to detect nested sub-lists and closing prior levels.
+/// - Concatenates list item continuation lines that don't have their own marker into the open item's buffer.
+///
+/// WHY:
+/// - Lists are the only block structures in this markdown flavour that span multiple lines and need stateful hierarchical parsing across those lines.
 fn render_list_block(lines: &[&str], default_tag: &str) -> (String, usize) {
     let mut output = String::new();
     let mut list_stack: Vec<MarkdownListLevel> = Vec::new();
@@ -426,6 +432,15 @@ fn unwrap_single_default_tag_block(rendered: String, default_tag: &str) -> Strin
     rendered[open_tag.len()..rendered.len() - close_tag.len()].to_owned()
 }
 
+/// Consumes a block of markdown text and converts inline spans into HTML tags.
+///
+/// WHAT:
+/// - A character-at-a-time state machine that interprets inline emphasis (`*`), headings (`#`), and custom implicit links (`@(/path Label)`).
+/// - Accumulates unstyled text into standard wrapper block elements like `<p>`.
+/// - Ignores markdown formatting within spans guarded by `TEMPLATE_FORMAT_GUARD_CHAR`.
+///
+/// WHY:
+/// - This handles the core conversion from plaintext characters into HTML, avoiding heavy regex passes and letting it correctly handle overlapping state changes in one tight pass.
 fn to_markdown_inline(content: &str, default_tag: &str) -> String {
     let mut context = MarkdownContext::None;
     const NEWLINES_BEFORE_NEW_P: usize = 2;
@@ -452,9 +467,10 @@ fn to_markdown_inline(content: &str, default_tag: &str) -> String {
         let ch = chars[index];
 
         // Special object replace character that signals to ignore parsing a section
-        // into markdown. This preserves nested formatted template segments.
-        if ch == HIDDEN_SKIP_CHAR {
+        // into Markdown. This preserves nested formatted template segments.
+        if ch == TEMPLATE_FORMAT_GUARD_CHAR {
             skip_parsing = !skip_parsing;
+            output.push(ch); // The parser no longer consumes Guard char
             index += 1;
             continue;
         }
@@ -637,7 +653,7 @@ fn try_parse_link_at(chars: &[char], at_index: usize) -> Option<ParsedMarkdownLi
 
     if at_index > 0 {
         let prev = chars[at_index - 1];
-        if prev != HIDDEN_SKIP_CHAR && !prev.is_whitespace() {
+        if prev != TEMPLATE_FORMAT_GUARD_CHAR && !prev.is_whitespace() {
             return None;
         }
     }

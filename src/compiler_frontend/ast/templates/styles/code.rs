@@ -54,9 +54,15 @@ struct CodeTemplateFormatter {
 }
 
 impl TemplateFormatter for CodeTemplateFormatter {
-    fn format(&self, content: &mut String) {
-        let highlighted = highlight_code_html(content, self.language);
-        *content = format!("<code>{highlighted}</code>");
+    fn format(
+        &self,
+        input: crate::compiler_frontend::ast::templates::template_render_plan::FormatterInput,
+        string_table: &mut crate::compiler_frontend::string_interning::StringTable,
+    ) -> crate::compiler_frontend::ast::templates::template_render_plan::FormatterOutput {
+        input.invoke_legacy_formatter(string_table, |content| {
+            let highlighted = highlight_code_html(content, self.language);
+            *content = format!("<code class='codeblock'>{highlighted}</code>");
+        })
     }
 }
 
@@ -93,6 +99,17 @@ pub(crate) fn configure_code_style(
     Ok(())
 }
 
+/// Converts raw source code into highlighted HTML markup.
+///
+/// WHAT:
+/// - Strips shared formatting indentation from the code string.
+/// - Iterates over characters to identify structural boundaries (strings, numbers, comments, symbols, keywords) without a full lexer pass.
+/// - Wraps the matched runs in span classes for CSS styling.
+/// - Passes nested, already-formatted template regions through untouched via the `TEMPLATE_FORMAT_GUARD_CHAR`.
+///
+/// WHY:
+/// - Provides simple syntax highlighting for documentation without the binary weight of a full parsing dependency like syn/tree-sitter.
+/// - Gracefully falls back to plain text for unknown symbols via the `Generic` language profile.
 pub(crate) fn highlight_code_html(source: &str, language: CodeLanguage) -> String {
     // Normalise indentation first so the highlighted output reflects the code the user
     // meant to show, not the template indentation needed to keep the source tidy.
@@ -192,6 +209,15 @@ pub(crate) fn highlight_code_html(source: &str, language: CodeLanguage) -> Strin
     highlighted
 }
 
+/// Extracts the language profile argument from a `$code("language")` template style directive.
+///
+/// WHAT:
+/// - Consumes tokens from `(` through the string literal and up to `)`.
+/// - Validates the language name alias (e.g., "bst", "ts") into a typed `CodeLanguage`.
+/// - Returns syntax diagnostics with suggestions if the argument is malformed or unsupported.
+///
+/// WHY:
+/// - Standard template head parsing keeps style directives generic. Code styles specifically need a narrow inner parser to validate their typed argument payload.
 fn parse_code_language_argument(
     token_stream: &mut FileTokens,
     string_table: &StringTable,
@@ -290,6 +316,15 @@ fn parse_code_language_argument(
     }
 }
 
+/// Normalizes the minimum indentation of a block of text.
+///
+/// WHAT:
+/// - Scans a block to find the smallest number of leading whitespace characters across all non-empty lines.
+/// - Returns a new string with that exact minimum shared indentation stripped from the start of every line.
+///
+/// WHY:
+/// - Template strings often inherit the indentation of their surrounding AST scope to keep the user's code visually tidy.
+/// - Preserves the *relative* formatting of code structures within the block while removing the artificial absolute padding.
 fn dedent_code_block(source: &str) -> String {
     let mut min_indent: Option<usize> = None;
 

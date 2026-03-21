@@ -15,21 +15,27 @@ use std::sync::Arc;
 struct EscapeHtmlTemplateFormatter;
 
 impl TemplateFormatter for EscapeHtmlTemplateFormatter {
-    fn format(&self, content: &mut String) {
-        let mut escaped = String::with_capacity(content.len());
+    fn format(
+        &self,
+        input: crate::compiler_frontend::ast::templates::template_render_plan::FormatterInput,
+        string_table: &mut crate::compiler_frontend::string_interning::StringTable,
+    ) -> crate::compiler_frontend::ast::templates::template_render_plan::FormatterOutput {
+        input.invoke_legacy_formatter(string_table, |content| {
+            let mut escaped = String::with_capacity(content.len());
 
-        for ch in content.chars() {
-            match ch {
-                '&' => escaped.push_str("&amp;"),
-                '<' => escaped.push_str("&lt;"),
-                '>' => escaped.push_str("&gt;"),
-                '"' => escaped.push_str("&quot;"),
-                '\'' => escaped.push_str("&#39;"),
-                _ => escaped.push(ch),
+            for ch in content.chars() {
+                match ch {
+                    '&' => escaped.push_str("&amp;"),
+                    '<' => escaped.push_str("&lt;"),
+                    '>' => escaped.push_str("&gt;"),
+                    '"' => escaped.push_str("&quot;"),
+                    '\'' => escaped.push_str("&#39;"),
+                    _ => escaped.push(ch),
+                }
             }
-        }
 
-        *content = escaped;
+            *content = escaped;
+        })
     }
 }
 

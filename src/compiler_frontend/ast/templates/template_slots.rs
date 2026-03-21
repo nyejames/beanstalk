@@ -1,11 +1,10 @@
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
-use crate::compiler_frontend::ast::templates::create_template_node::{
-    Template, apply_inherited_child_templates_to_content,
-};
+use crate::compiler_frontend::ast::templates::create_template_node::Template;
 use crate::compiler_frontend::ast::templates::template::{
     SlotKey, SlotPlaceholder, TemplateAtom, TemplateContent, TemplateSegment,
     TemplateSegmentOrigin, TemplateType,
 };
+use crate::compiler_frontend::ast::templates::template_composition::apply_inherited_child_templates_to_content;
 use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorLocation};
 use crate::compiler_frontend::datatypes::Ownership;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
@@ -71,8 +70,17 @@ impl SlotContributions {
     }
 }
 
-// Slot application is kept in one module so the template parser can stay focused on
-// token-to-node parsing, while this file owns the wrapper-filling state machine.
+/// Composes a wrapper template by filling its slots with the provided content.
+///
+/// WHAT:
+/// - Scans the wrapper for available slot targets (`Default`, `Named`, `Positional`).
+/// - Partitions the authored `fill_content` into explicit `$insert` contributions and loose atoms.
+/// - Routes loose atoms to positional slots first, then the default slot.
+/// - Recursively replaces `SlotPlaceholder` atoms inside the wrapper with the matched contributions.
+///
+/// WHY:
+/// - Connects the structural AST nodes generated during parsing into their final composed tree,
+///   handling inheritance, ordering, and validation in one centralized pass.
 pub(crate) fn compose_template_with_slots(
     wrapper: &Template,
     fill_content: &TemplateContent,
@@ -187,13 +195,21 @@ fn flush_pending_loose_atoms(
 }
 
 fn is_top_level_template_contribution(atom: &TemplateAtom) -> bool {
-    // Only direct child template outputs and head arguments become independent positional contributions.
-    // Loose text, nested expressions etc coalesced together.
+    // Folded child template outputs and explicit template expressions each represent
+    // a separate positional contribution. Text that was authored inline (newlines,
+    // whitespace, raw strings) is loose content that coalesces between contributions.
     let TemplateAtom::Content(segment) = atom else {
         return false;
     };
 
     if segment.origin == TemplateSegmentOrigin::Head {
+        return true;
+    }
+
+    // A child template that was folded into a string slice at parse time must still
+    // be treated as its own contribution, so `$children(..)` wrappers are applied
+    // to each child individually rather than to the merged text.
+    if segment.is_child_template_output {
         return true;
     }
 
@@ -409,6 +425,9 @@ fn compose_wrapper_atoms_recursive(
                             string_table,
                         )?,
                     };
+                    nested_template.unformatted_content = nested_template.content.to_owned();
+                    nested_template.content_needs_formatting = false;
+                    nested_template.render_plan = None;
 
                     let mut nested_expression = segment.expression.to_owned();
                     nested_expression.kind = ExpressionKind::Template(Box::new(nested_template));
@@ -451,12 +470,18 @@ fn expand_slot_placeholder(
         let atom = if slot.child_wrappers.is_empty() {
             atom
         } else if contribution_has_direct_child_templates(&atom) {
+            // Contribution is a template with direct child templates inside — apply
+            // the child wrappers to those inner children.
             apply_child_wrappers_to_contribution_children(
                 &atom,
                 &slot.child_wrappers,
                 string_table,
             )?
-        } else if contribution_template(&atom).is_some() {
+        } else if contribution_is_child_template_output(&atom)
+            || contribution_template(&atom).is_some()
+        {
+            // Contribution is either a folded child template string slice or an
+            // unfolded template — wrap the whole contribution in the child wrapper.
             wrap_child_slot_contribution(&atom, &slot.child_wrappers, string_table)?
         } else {
             atom
@@ -609,6 +634,9 @@ fn apply_child_wrappers_to_contribution_children(
     )?;
     contribution_template.unformatted_content = contribution_template.content.to_owned();
     contribution_template.content_needs_formatting = false;
+    // Clear the stale render plan so fold_into_stringid rebuilds it from the
+    // now-modified content (which includes the freshly-applied child wrappers).
+    contribution_template.render_plan = None;
     refresh_template_kind(&mut contribution_template);
 
     Ok(TemplateAtom::Content(TemplateSegment::new(
@@ -630,6 +658,16 @@ fn contribution_template(atom: &TemplateAtom) -> Option<Template> {
         ExpressionKind::Template(template) => Some(template.as_ref().to_owned()),
         _ => None,
     }
+}
+
+/// Returns true when the atom is a child template output that was folded into a
+/// string slice at parse time. These must be treated like template contributions
+/// for the purpose of applying `$children(..)` wrappers in slot expansion.
+fn contribution_is_child_template_output(atom: &TemplateAtom) -> bool {
+    let TemplateAtom::Content(segment) = atom else {
+        return false;
+    };
+    segment.is_child_template_output
 }
 
 fn refresh_template_kind(template: &mut Template) {

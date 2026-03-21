@@ -1,4 +1,5 @@
 use super::to_markdown;
+use crate::compiler_frontend::ast::templates::styles::TEMPLATE_FORMAT_GUARD_CHAR;
 
 #[test]
 fn parses_links_for_all_supported_target_prefixes() {
@@ -126,11 +127,17 @@ fn malformed_links_still_escape_literal_html_characters() {
 fn hidden_skip_runs_remain_unescaped() {
     let source = format!(
         "prefix{marker}<strong>&\"'</strong>{marker}suffix",
-        marker = crate::compiler_frontend::ast::templates::styles::markdown::HIDDEN_SKIP_CHAR
+        marker = TEMPLATE_FORMAT_GUARD_CHAR
     );
 
     let rendered = to_markdown(&source, "p");
-    assert_eq!(rendered, "<p>prefix<strong>&\"'</strong>suffix</p>");
+    assert_eq!(
+        rendered,
+        format!(
+            "<p>prefix{marker}<strong>&\"'</strong>{marker}suffix</p>",
+            marker = TEMPLATE_FORMAT_GUARD_CHAR
+        )
+    );
 }
 
 #[test]
@@ -201,13 +208,16 @@ fn heading_line_breaks_out_of_list_without_blank_line() {
 fn continuation_lines_preserve_hidden_skip_segments() {
     let source = format!(
         "- prefix\n{marker}<strong>&\"'</strong>{marker}\n- next",
-        marker = crate::compiler_frontend::ast::templates::styles::markdown::HIDDEN_SKIP_CHAR
+        marker = TEMPLATE_FORMAT_GUARD_CHAR
     );
 
     let rendered = to_markdown(&source, "p");
     assert_eq!(
         rendered,
-        "<ul><li>prefix <strong>&\"'</strong></li><li>next</li></ul>"
+        format!(
+            "<ul><li>prefix {marker}<strong>&\"'</strong>{marker}</li><li>next</li></ul>",
+            marker = TEMPLATE_FORMAT_GUARD_CHAR
+        )
     );
 }
 

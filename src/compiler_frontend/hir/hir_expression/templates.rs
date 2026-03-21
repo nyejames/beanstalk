@@ -44,7 +44,17 @@ impl<'a> HirBuilder<'a> {
 
         // Unfilled slots are rendered as empty strings when templates are used directly.
         // Keep lowering focused on the authored content atoms that carry expressions.
-        let chunks = template.content.flatten_expressions();
+        // Fall back to building a plan from raw content for templates that bypassed
+        // the full parser pipeline (e.g. test helpers or slot wrappers without formatting).
+        let fallback_plan;
+        let plan = match &template.render_plan {
+            Some(plan) => plan,
+            None => {
+                fallback_plan = crate::compiler_frontend::ast::templates::template_render_plan::TemplateRenderPlan::from_content(&template.content);
+                &fallback_plan
+            }
+        };
+        let chunks = plan.flatten_expressions();
         let chunk_types: Vec<DataType> =
             chunks.iter().map(|chunk| chunk.data_type.clone()).collect();
         let template_function = self.create_runtime_template_function(&chunk_types, location)?;
