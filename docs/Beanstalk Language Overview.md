@@ -177,6 +177,19 @@ Template slots let one template receive content from another template. The defau
 
 Named slots can also be declared with `[$slot("name")]`. These allow helper templates to insert content into a specific part of another template using `$insert("name")`.
 
+Positional slots can be declared using positive integers, such as `[$slot(1)]`, `[$slot(2)]`, etc. Loose contributions (those not explicitly targetting a named slot) are assigned to positional slots first, in ascending numeric order. Any remaining loose contributions go to the default slot if it exists.
+
+```beanstalk
+img = [:
+    <img src="[$slot(1)]" alt="[$slot]">
+]
+
+[img, "logo.png": Site logo]
+````
+
+In this example, `"logo.png"` fills the first positional slot `[$slot(1)]`, and `"Site logo"` fills the default slot `[$slot]`.
+
+Named inserts:
 ```beanstalk
 title = [:
     <h1 style="[$slot("style")]">
@@ -193,8 +206,9 @@ blue = [$insert("style"): color: blue;]
 
 In this example, `blue` inserts `color: blue;` into the `style` slot of `title`, while `Hello world` is inserted into the default slot.
 
-If a template has named slots but no default slot, loose body content is an error and content must be inserted explicitly into a named slot. 
-If a named slot receives no `$insert(...)` content, it expands to an empty string.
+If a template has named or positional slots but no default slot, any loose body content that cannot be assigned to a positional slot is an error. 
+If a slot receives no content, it expands to an empty string.
+Repeated slots, such as two occurrences of `[$slot(1)]`, will replay the same content in both places.
 
 Because `$children(..)` only applies to direct children, nested helpers can scope row and cell wrappers independently:
 

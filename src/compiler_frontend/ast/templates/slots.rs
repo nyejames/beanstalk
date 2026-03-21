@@ -12,27 +12,30 @@ use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TextLocation, TokenKind};
 use crate::{return_rule_error, return_syntax_error};
 use rustc_hash::{FxHashMap, FxHashSet};
+use std::collections::BTreeSet;
 
 #[derive(Clone, Debug, Default)]
 struct SlotSchema {
     has_default_slot: bool,
     named_slots: FxHashSet<StringId>,
+    positional_slots: BTreeSet<usize>,
 }
 
 impl SlotSchema {
     fn has_any_slots(&self) -> bool {
-        self.has_default_slot || !self.named_slots.is_empty()
+        self.has_default_slot || !self.named_slots.is_empty() || !self.positional_slots.is_empty()
     }
 
     fn accepts_target(&self, target: &SlotKey) -> bool {
         match target {
             SlotKey::Default => self.has_default_slot,
             SlotKey::Named(name) => self.named_slots.contains(name),
+            SlotKey::Positional(index) => self.positional_slots.contains(index),
         }
     }
 
-    fn has_named_slots_without_default(&self) -> bool {
-        !self.has_default_slot && !self.named_slots.is_empty()
+    fn ordered_positional_slots(&self) -> impl Iterator<Item = &usize> {
+        self.positional_slots.iter()
     }
 }
 
@@ -40,21 +43,30 @@ impl SlotSchema {
 struct SlotContributions {
     default_atoms: Vec<TemplateAtom>,
     named_atoms: FxHashMap<StringId, Vec<TemplateAtom>>,
+    positional_atoms: FxHashMap<usize, Vec<TemplateAtom>>,
 }
 
 impl SlotContributions {
-    fn add_default_atom(&mut self, atom: TemplateAtom) {
-        self.default_atoms.push(atom);
-    }
-
     fn extend_named_atoms(&mut self, name: StringId, atoms: Vec<TemplateAtom>) {
         self.named_atoms.entry(name).or_default().extend(atoms);
+    }
+
+    fn extend_positional_atoms(&mut self, index: usize, atoms: Vec<TemplateAtom>) {
+        self.positional_atoms
+            .entry(index)
+            .or_default()
+            .extend(atoms);
     }
 
     fn atoms_for_slot(&self, key: &SlotKey) -> Vec<TemplateAtom> {
         match key {
             SlotKey::Default => self.default_atoms.clone(),
             SlotKey::Named(name) => self.named_atoms.get(name).cloned().unwrap_or_default(),
+            SlotKey::Positional(index) => self
+                .positional_atoms
+                .get(index)
+                .cloned()
+                .unwrap_or_default(),
         }
     }
 }
@@ -75,14 +87,11 @@ pub(crate) fn compose_template_with_slots(
     }
 
     let mut contributions = SlotContributions::default();
+    let mut loose_atoms = Vec::new();
 
     // Walk authored fill content exactly once and bucket each atom either as:
     // 1) one or more explicit `$insert(...)` contributors, or
-    // 2) loose content that should flow into the default slot.
-    //
-    // A fill atom can legally do both at once (template has `$slot` + `$insert`):
-    // - it renders as loose/default content for this wrapper
-    // - and it contributes named content upward to this wrapper.
+    // 2) loose content that should flow into positional or default slots.
     for atom in &fill_content.atoms {
         let (loose_atom, slot_inserts) = split_fill_atom_for_composition(atom);
 
@@ -101,23 +110,94 @@ pub(crate) fn compose_template_with_slots(
                 SlotKey::Named(name) => {
                     contributions.extend_named_atoms(name, inserted_atoms);
                 }
+                SlotKey::Positional(index) => {
+                    contributions.extend_positional_atoms(index, inserted_atoms);
+                }
             }
         }
 
         if let Some(loose_atom) = loose_atom {
-            if slot_schema.has_named_slots_without_default() {
-                return loose_content_without_default_slot_error(
-                    &location.to_error_location(string_table),
-                );
-            }
-
-            contributions.add_default_atom(loose_atom);
+            loose_atoms.push(loose_atom);
         }
+    }
+
+    // Route loose content to positional slots first, then to the default slot.
+    let loose_contributions = collect_loose_contributions(loose_atoms);
+    let ordered_positional_slots: Vec<usize> =
+        slot_schema.ordered_positional_slots().cloned().collect();
+
+    for (contribution_index, contribution) in loose_contributions.into_iter().enumerate() {
+        if let Some(slot_index) = ordered_positional_slots.get(contribution_index) {
+            contributions.extend_positional_atoms(*slot_index, contribution.atoms);
+            continue;
+        }
+
+        if slot_schema.has_default_slot {
+            contributions.default_atoms.extend(contribution.atoms);
+            continue;
+        }
+
+        if !slot_schema.positional_slots.is_empty() {
+            return extra_loose_content_without_default_slot_error(
+                &location.to_error_location(string_table),
+            );
+        }
+
+        return loose_content_without_default_slot_error(&location.to_error_location(string_table));
     }
 
     let atoms =
         compose_wrapper_atoms_recursive(&wrapper.content.atoms, &contributions, string_table)?;
     Ok(TemplateContent { atoms })
+}
+
+struct LooseContribution {
+    atoms: Vec<TemplateAtom>,
+}
+
+fn collect_loose_contributions(atoms: Vec<TemplateAtom>) -> Vec<LooseContribution> {
+    let mut contributions = Vec::new();
+    let mut pending_loose_atoms = Vec::new();
+
+    for atom in atoms {
+        if is_top_level_template_contribution(&atom) {
+            flush_pending_loose_atoms(&mut pending_loose_atoms, &mut contributions);
+            contributions.push(LooseContribution { atoms: vec![atom] });
+        } else {
+            pending_loose_atoms.push(atom);
+        }
+    }
+
+    flush_pending_loose_atoms(&mut pending_loose_atoms, &mut contributions);
+    contributions
+}
+
+fn flush_pending_loose_atoms(
+    pending: &mut Vec<TemplateAtom>,
+    contributions: &mut Vec<LooseContribution>,
+) {
+    if pending.is_empty() {
+        return;
+    }
+
+    // Coalesce contiguous loose atoms into a single contribution group
+    contributions.push(LooseContribution {
+        atoms: std::mem::take(pending),
+    });
+}
+
+fn is_top_level_template_contribution(atom: &TemplateAtom) -> bool {
+    // Only direct child template outputs and head arguments become independent positional contributions.
+    // Loose text, nested expressions etc coalesced together.
+    let TemplateAtom::Content(segment) = atom else {
+        return false;
+    };
+
+    if segment.origin == TemplateSegmentOrigin::Head {
+        return true;
+    }
+
+    matches!(segment.expression.kind, ExpressionKind::Template(_))
 }
 
 pub(crate) fn ensure_no_slot_insertions_remain(
@@ -154,20 +234,23 @@ fn collect_slot_schema_atoms(
     // one deterministic pass.
     for atom in atoms {
         match atom {
-            TemplateAtom::Slot(slot) if matches!(&slot.key, SlotKey::Default) => {
-                if schema.has_default_slot {
-                    return_rule_error!(
-                        "Templates can only define one default '$slot'.",
-                        error_location.to_owned()
-                    );
+            TemplateAtom::Slot(slot) => match &slot.key {
+                SlotKey::Default => {
+                    if schema.has_default_slot {
+                        return_rule_error!(
+                            "Templates can only define one default '$slot'.",
+                            error_location.to_owned()
+                        );
+                    }
+                    schema.has_default_slot = true;
                 }
-                schema.has_default_slot = true;
-            }
-            TemplateAtom::Slot(slot) => {
-                if let SlotKey::Named(name) = &slot.key {
+                SlotKey::Named(name) => {
                     schema.named_slots.insert(*name);
                 }
-            }
+                SlotKey::Positional(index) => {
+                    schema.positional_slots.insert(*index);
+                }
+            },
             TemplateAtom::Content(segment) => {
                 if let ExpressionKind::Template(template) = &segment.expression.kind {
                     collect_slot_schema_atoms(&template.content.atoms, schema, error_location)?;
@@ -179,24 +262,38 @@ fn collect_slot_schema_atoms(
     Ok(())
 }
 
-pub fn parse_optional_slot_name_argument(
+pub fn parse_slot_definition_target_argument(
     token_stream: &mut FileTokens,
     string_table: &StringTable,
-) -> Result<Option<StringId>, CompilerError> {
+) -> Result<SlotKey, CompilerError> {
     if token_stream.peek_next_token() != Some(&TokenKind::OpenParenthesis) {
-        return Ok(None);
+        return Ok(SlotKey::Default);
     }
 
-    // Move from `StyleDirective("slot")`/`StyleDirective("insert")` to the
-    // directive argument and leave the parser positioned at `)` on success.
+    // Move from `StyleDirective("slot")` to the directive argument
+    // and leave the parser positioned at `)` on success.
     token_stream.advance();
     token_stream.advance();
 
-    let slot_name = match token_stream.current_token_kind() {
-        TokenKind::StringSliceLiteral(name) => *name,
+    let target = match token_stream.current_token_kind() {
+        TokenKind::StringSliceLiteral(name) => SlotKey::Named(*name),
+        TokenKind::IntLiteral(index) => {
+            if *index <= 0 {
+                return_syntax_error!(
+                    format!(
+                        "'$slot({})' is invalid. Positional slots start at 1.",
+                        index
+                    ),
+                    token_stream
+                        .current_location()
+                        .to_error_location(string_table)
+                );
+            }
+            SlotKey::Positional(*index as usize)
+        }
         TokenKind::CloseParenthesis => {
             return_syntax_error!(
-                "'$slot()' and '$insert()' cannot use empty parentheses. Use '$slot' for default or quoted names like '$slot(\"style\")'.",
+                "'$slot()' cannot use empty parentheses. Use '$slot' for default, a quoted name like '$slot(\"style\")', or a positive integer like '$slot(1)'.",
                 token_stream
                     .current_location()
                     .to_error_location(string_table)
@@ -204,7 +301,7 @@ pub fn parse_optional_slot_name_argument(
         }
         _ => {
             return_syntax_error!(
-                "'$slot(...)' and '$insert(...)' only accept quoted string literal names.",
+                "'$slot(...)' only accepts a quoted string literal name or a positive integer.",
                 token_stream
                     .current_location()
                     .to_error_location(string_table)
@@ -223,22 +320,63 @@ pub fn parse_optional_slot_name_argument(
         );
     }
 
-    Ok(Some(slot_name))
+    Ok(target)
 }
 
-pub fn parse_required_slot_name_argument(
+pub fn parse_required_named_slot_insert_argument(
     token_stream: &mut FileTokens,
     string_table: &StringTable,
 ) -> Result<StringId, CompilerError> {
-    let slot_name = parse_optional_slot_name_argument(token_stream, string_table)?;
-    let Some(slot_name) = slot_name else {
+    if token_stream.peek_next_token() != Some(&TokenKind::OpenParenthesis) {
         return_syntax_error!(
             "'$insert' requires a quoted named target like '$insert(\"style\")'.",
             token_stream
                 .current_location()
                 .to_error_location(string_table)
         );
+    }
+
+    token_stream.advance();
+    token_stream.advance();
+
+    let slot_name = match token_stream.current_token_kind() {
+        TokenKind::StringSliceLiteral(name) => *name,
+        TokenKind::IntLiteral(_) => {
+            return_syntax_error!(
+                "'$insert(...)' only accepts quoted string literal names.",
+                token_stream
+                    .current_location()
+                    .to_error_location(string_table)
+            );
+        }
+        TokenKind::CloseParenthesis => {
+            return_syntax_error!(
+                "'$insert()' cannot use empty parentheses. Use quoted names like '$insert(\"style\")'.",
+                token_stream
+                    .current_location()
+                    .to_error_location(string_table)
+            );
+        }
+        _ => {
+            return_syntax_error!(
+                "'$insert(...)' only accepts quoted string literal names.",
+                token_stream
+                    .current_location()
+                    .to_error_location(string_table)
+            );
+        }
     };
+
+    token_stream.advance();
+    if token_stream.current_token_kind() != &TokenKind::CloseParenthesis {
+        return_syntax_error!(
+            "Expected ')' after template insert directive argument.",
+            token_stream.current_location().to_error_location(string_table),
+            {
+                SuggestedInsertion => ")",
+            }
+        );
+    }
 
     Ok(slot_name)
 }
@@ -603,11 +741,20 @@ fn collect_direct_slot_insert_contributions(
     (sanitized, extracted)
 }
 
+fn extra_loose_content_without_default_slot_error(
+    location: &ErrorLocation,
+) -> Result<TemplateContent, CompilerError> {
+    return_rule_error!(
+        "This template defines positional '$slot(n)' targets but no default '$slot'. There is more loose content than positional slots available.",
+        location.to_owned()
+    );
+}
+
 fn loose_content_without_default_slot_error(
     location: &ErrorLocation,
 ) -> Result<TemplateContent, CompilerError> {
     return_rule_error!(
-        "This template defines named '$slot(...)' targets without a default '$slot'. Loose content is not allowed here; use '$insert(\\\"name\\\")'.",
+        "This template defines named '$slot(...)' targets without a default '$slot'. Loose content is not allowed here; use '$insert(\"name\")'.",
         location.to_owned()
     );
 }
@@ -625,9 +772,22 @@ fn unknown_slot_target_error(
         }
         SlotKey::Named(_) => {
             return_rule_error!(
-                "'$insert(\\\"name\\\")' targets a named slot that does not exist on the immediate parent template.",
+                "'$insert(\"name\")' targets a named slot that does not exist on the immediate parent template.",
+                location.to_owned()
+            )
+        }
+        SlotKey::Positional(index) => {
+            return_rule_error!(
+                format!(
+                    "'$insert' targets positional slot '{}' which does not exist on the immediate parent template.",
+                    index
+                ),
                 location.to_owned()
             )
         }
     }
 }
+
+#[cfg(test)]
+#[path = "tests/slots_tests.rs"]
+mod slots_tests;

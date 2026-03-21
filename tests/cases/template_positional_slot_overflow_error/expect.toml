@@ -1,0 +1,4 @@
+mode = "failure"
+message_contains = ["more loose content than positional slots"]
+warnings = "forbid"
+error_type = "Rule"

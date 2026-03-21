@@ -8,6 +8,7 @@ use std::sync::Arc;
 pub enum SlotKey {
     Default,
     Named(StringId),
+    Positional(usize),
 }
 
 impl SlotKey {

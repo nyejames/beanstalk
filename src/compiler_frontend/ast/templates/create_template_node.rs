@@ -3,7 +3,7 @@ use crate::compiler_frontend::ast::expressions::expression::{Expression, Express
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
 use crate::compiler_frontend::ast::templates::slots::{
     compose_template_with_slots, ensure_no_slot_insertions_remain,
-    parse_optional_slot_name_argument, parse_required_slot_name_argument,
+    parse_required_named_slot_insert_argument, parse_slot_definition_target_argument,
 };
 use crate::compiler_frontend::ast::templates::styles::TEMPLATE_FORMAT_GUARD_CHAR;
 use crate::compiler_frontend::ast::templates::styles::code::configure_code_style;
@@ -712,11 +712,9 @@ pub fn parse_template_head(
                         );
                     }
 
-                    let slot_name = parse_optional_slot_name_argument(token_stream, string_table)?;
-                    template.kind = TemplateType::SlotDefinition(match slot_name {
-                        Some(name) => SlotKey::named(name),
-                        None => SlotKey::Default,
-                    });
+                    let slot_key =
+                        parse_slot_definition_target_argument(token_stream, string_table)?;
+                    template.kind = TemplateType::SlotDefinition(slot_key);
                     saw_meaningful_head_item = true;
                     handled_slot_insert = true;
                 } else if spec.source == StyleDirectiveSource::BuiltIn && directive_name == "insert"
@@ -730,7 +728,8 @@ pub fn parse_template_head(
                         );
                     }
 
-                    let slot_name = parse_required_slot_name_argument(token_stream, string_table)?;
+                    let slot_name =
+                        parse_required_named_slot_insert_argument(token_stream, string_table)?;
                     template.kind = TemplateType::SlotInsert(SlotKey::named(slot_name));
                     saw_meaningful_head_item = true;
                     handled_slot_insert = true;
