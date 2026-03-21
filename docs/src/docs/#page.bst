@@ -7,18 +7,17 @@ import @styles/docs/{navbar, footer, title, section, header, body, palette, tabl
 [title, center: THE DOCS]
 
 [section, $markdown:
-    Welcome to the Beanstalk documentation [img: [$insert("src"): /assets/seedling_icon.png] Beanstalk logo]
+    Welcome to the Beanstalk documentation [img: [$insert("src"):/assets/seedling_icon.png] Beanstalk logo]
 
     This website is built using Beanstalk's built in HTML project builder, and all the content you see here is written in Beanstalk code.
 
     You can find the source code for this website on @https://github.com/nyejames/beanstalk/tree/main/docs (Github).
 
     ## Documentation
-    [palette.red, $markdown:
-        *A full rewrite of the documentation using Beanstalk is in progress*
-    ]
+    The documentation is currently being written in Beanstalk one file at a time.
 
-    @/docs/basics.html (Basics)
+    - @./basics (Basics)
+    - @./functions (Functions)
 ]
 
 ] -- end of body
