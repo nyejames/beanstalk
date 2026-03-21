@@ -3,7 +3,7 @@
 use super::{
     ResolvedRequest, ResolvedRequestKind, content_type_for_path, inject_dev_client, resolve_request,
 };
-use crate::projects::routing::{HtmlRoutingConfig, PageUrlStyle};
+use crate::projects::routing::{HtmlSiteConfig, PageUrlStyle};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
@@ -16,8 +16,9 @@ fn temp_dir(prefix: &str) -> PathBuf {
     std::env::temp_dir().join(format!("beanstalk_dev_server_static_{prefix}_{unique}"))
 }
 
-fn routing(page_url_style: PageUrlStyle, redirect_index_html: bool) -> HtmlRoutingConfig {
-    HtmlRoutingConfig {
+fn site_config(page_url_style: PageUrlStyle, redirect_index_html: bool) -> HtmlSiteConfig {
+    HtmlSiteConfig {
+        origin: String::from("/"),
         page_url_style,
         redirect_index_html,
     }
@@ -26,7 +27,7 @@ fn routing(page_url_style: PageUrlStyle, redirect_index_html: bool) -> HtmlRouti
 #[test]
 fn injection_happens_before_closing_body_once() {
     let html = "<html><body><h1>Hello</h1></body></html>";
-    let injected = inject_dev_client(html);
+    let injected = inject_dev_client(html, "/");
     assert!(injected.contains("EventSource('/__beanstalk/events')"));
     assert_eq!(
         injected
@@ -36,7 +37,7 @@ fn injection_happens_before_closing_body_once() {
     );
     assert!(injected.find("</body>").expect("should contain body close") > 0);
 
-    let reinjected = inject_dev_client(&injected);
+    let reinjected = inject_dev_client(&injected, "/");
     assert_eq!(
         reinjected
             .matches("EventSource('/__beanstalk/events')")
@@ -67,7 +68,7 @@ fn resolve_path_rejects_traversal() {
         None,
         output_dir,
         Some(Path::new("index.html")),
-        HtmlRoutingConfig::default(),
+        HtmlSiteConfig::default(),
     );
     assert_eq!(resolved, ResolvedRequest::InvalidPath);
 }
@@ -84,7 +85,7 @@ fn root_uses_entry_page_when_available() {
         None,
         &output_dir,
         Some(Path::new("index.html")),
-        HtmlRoutingConfig::default(),
+        HtmlSiteConfig::default(),
     );
 
     assert_eq!(
@@ -105,7 +106,7 @@ fn trailing_slash_mode_redirects_non_canonical_page_forms() {
     fs::create_dir_all(output_dir.join("about")).expect("should create about dir");
     fs::write(output_dir.join("about/index.html"), "<h1>about</h1>").expect("should write page");
 
-    let cfg = routing(PageUrlStyle::TrailingSlash, true);
+    let cfg = site_config(PageUrlStyle::TrailingSlash, true);
 
     assert_eq!(
         resolve_request(
@@ -113,7 +114,7 @@ fn trailing_slash_mode_redirects_non_canonical_page_forms() {
             None,
             &output_dir,
             Some(Path::new("index.html")),
-            cfg
+            cfg.clone()
         ),
         ResolvedRequest::Redirect {
             location: String::from("/about/"),
@@ -125,7 +126,7 @@ fn trailing_slash_mode_redirects_non_canonical_page_forms() {
             Some("x=1"),
             &output_dir,
             Some(Path::new("index.html")),
-            cfg
+            cfg.clone()
         ),
         ResolvedRequest::Redirect {
             location: String::from("/about/?x=1"),
@@ -155,7 +156,7 @@ fn no_trailing_slash_mode_redirects_trailing_page_form() {
     fs::create_dir_all(output_dir.join("about")).expect("should create about dir");
     fs::write(output_dir.join("about/index.html"), "<h1>about</h1>").expect("should write page");
 
-    let cfg = routing(PageUrlStyle::NoTrailingSlash, true);
+    let cfg = site_config(PageUrlStyle::NoTrailingSlash, true);
 
     assert_eq!(
         resolve_request(
@@ -163,7 +164,7 @@ fn no_trailing_slash_mode_redirects_trailing_page_form() {
             None,
             &output_dir,
             Some(Path::new("index.html")),
-            cfg
+            cfg.clone()
         ),
         ResolvedRequest::Redirect {
             location: String::from("/about"),
@@ -175,7 +176,7 @@ fn no_trailing_slash_mode_redirects_trailing_page_form() {
             None,
             &output_dir,
             Some(Path::new("index.html")),
-            cfg
+            cfg.clone()
         ),
         ResolvedRequest::File {
             path: output_dir.join("about/index.html"),
@@ -205,7 +206,7 @@ fn ignore_mode_serves_both_slash_forms_but_can_still_redirect_index_alias() {
     fs::create_dir_all(output_dir.join("about")).expect("should create about dir");
     fs::write(output_dir.join("about/index.html"), "<h1>about</h1>").expect("should write page");
 
-    let cfg = routing(PageUrlStyle::Ignore, true);
+    let cfg = site_config(PageUrlStyle::Ignore, true);
 
     assert_eq!(
         resolve_request(
@@ -213,7 +214,7 @@ fn ignore_mode_serves_both_slash_forms_but_can_still_redirect_index_alias() {
             None,
             &output_dir,
             Some(Path::new("index.html")),
-            cfg
+            cfg.clone()
         ),
         ResolvedRequest::File {
             path: output_dir.join("about/index.html"),
@@ -226,7 +227,7 @@ fn ignore_mode_serves_both_slash_forms_but_can_still_redirect_index_alias() {
             None,
             &output_dir,
             Some(Path::new("index.html")),
-            cfg
+            cfg.clone()
         ),
         ResolvedRequest::File {
             path: output_dir.join("about/index.html"),
@@ -259,7 +260,7 @@ fn exact_assets_are_served_without_page_canonicalization() {
         .expect("should write png");
     fs::write(output_dir.join("CNAME"), "example.com").expect("should write extensionless file");
 
-    let cfg = HtmlRoutingConfig::default();
+    let cfg = HtmlSiteConfig::default();
 
     assert_eq!(
         resolve_request(
@@ -267,7 +268,7 @@ fn exact_assets_are_served_without_page_canonicalization() {
             None,
             &output_dir,
             Some(Path::new("index.html")),
-            cfg
+            cfg.clone()
         ),
         ResolvedRequest::File {
             path: output_dir.join("app.js"),
@@ -280,7 +281,7 @@ fn exact_assets_are_served_without_page_canonicalization() {
             None,
             &output_dir,
             Some(Path::new("index.html")),
-            cfg
+            cfg.clone()
         ),
         ResolvedRequest::NotFound
     );
@@ -290,7 +291,7 @@ fn exact_assets_are_served_without_page_canonicalization() {
             None,
             &output_dir,
             Some(Path::new("index.html")),
-            cfg
+            cfg.clone()
         ),
         ResolvedRequest::NotFound
     );
@@ -304,6 +305,57 @@ fn exact_assets_are_served_without_page_canonicalization() {
         ),
         ResolvedRequest::File {
             path: output_dir.join("CNAME"),
+            kind: ResolvedRequestKind::Asset,
+        }
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
+fn origin_aware_resolution_and_redirects() {
+    let root = temp_dir("origin_aware");
+    let output_dir = root.join("dev");
+    fs::create_dir_all(output_dir.join("docs")).expect("should create docs dir");
+    fs::write(output_dir.join("docs/index.html"), "<h1>docs</h1>").expect("should write page");
+    fs::write(output_dir.join("site.css"), "body {}").expect("should write asset");
+
+    let cfg = HtmlSiteConfig {
+        origin: String::from("/beanstalk"),
+        page_url_style: PageUrlStyle::TrailingSlash,
+        redirect_index_html: true,
+    };
+
+    // 1. Request inside origin - page
+    assert_eq!(
+        resolve_request("/docs/", None, &output_dir, None, cfg.clone()),
+        ResolvedRequest::File {
+            path: output_dir.join("docs/index.html"),
+            kind: ResolvedRequestKind::PageHtml,
+        }
+    );
+
+    // 2. Request inside origin - redirect to canonical slash
+    assert_eq!(
+        resolve_request("/docs", None, &output_dir, None, cfg.clone()),
+        ResolvedRequest::Redirect {
+            location: String::from("/beanstalk/docs/"),
+        }
+    );
+
+    // 3. Request inside origin - index.html alias redirect
+    assert_eq!(
+        resolve_request("/docs/index.html", None, &output_dir, None, cfg.clone()),
+        ResolvedRequest::Redirect {
+            location: String::from("/beanstalk/docs/"),
+        }
+    );
+
+    // 4. Request inside origin - asset
+    assert_eq!(
+        resolve_request("/site.css", None, &output_dir, None, cfg.clone()),
+        ResolvedRequest::File {
+            path: output_dir.join("site.css"),
             kind: ResolvedRequestKind::Asset,
         }
     );

@@ -607,3 +607,26 @@ fn wasm_export_plan_wires_required_helper_exports() {
     assert!(helper.export_str_len);
     assert!(helper.export_release);
 }
+
+#[test]
+fn builder_rejects_invalid_origin_config() {
+    let builder = HtmlProjectBuilder::new();
+    let mut config = Config::new(PathBuf::from("."));
+    config
+        .settings
+        .insert(String::from("origin"), String::from("not-a-slash"));
+
+    let module = create_test_module(PathBuf::from("#page.bst"));
+    let result = builder.build_backend(vec![module], &config, &[]);
+
+    assert!(result.is_err());
+    let messages = match result {
+        Err(m) => m,
+        Ok(_) => unreachable!(),
+    };
+    assert!(
+        messages.errors[0]
+            .msg
+            .contains("'#origin' must start with '/'")
+    );
+}

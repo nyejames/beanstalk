@@ -10,7 +10,7 @@ use crate::projects::html_project::wasm::artifacts::{
     CompiledHtmlWasmModule, compile_html_module_wasm,
 };
 use crate::projects::path_resolution::resolve_project_entry_root;
-use crate::projects::routing::parse_html_routing_config;
+use crate::projects::routing::parse_html_site_config;
 use crate::projects::settings::Config;
 use std::collections::HashSet;
 use std::fs;
@@ -36,9 +36,10 @@ impl BackendBuilder for HtmlProjectBuilder {
         config: &Config,
         flags: &[Flag],
     ) -> Result<Project, CompilerMessages> {
-        if let Err(error) = self.validate_project_config(config) {
-            return Err(compiler_messages_from_error(error));
-        }
+        let html_site_config = match parse_html_site_config(config) {
+            Ok(config) => config,
+            Err(error) => return Err(compiler_messages_from_error(error)),
+        };
 
         if modules.is_empty() {
             return Err(compiler_messages_from_error(CompilerError::compiler_error(
@@ -87,6 +88,7 @@ impl BackendBuilder for HtmlProjectBuilder {
                     &module.string_table,
                     &logical_html_output_path,
                     release_build,
+                    &html_site_config,
                 )?;
                 CompiledHtmlModuleArtifacts::from_wasm(compiled_wasm)
             } else {
@@ -96,6 +98,7 @@ impl BackendBuilder for HtmlProjectBuilder {
                     &module.string_table,
                     logical_html_output_path.clone(),
                     release_build,
+                    &html_site_config,
                 )
                 .map_err(compiler_messages_from_error)?;
 
@@ -158,7 +161,7 @@ impl BackendBuilder for HtmlProjectBuilder {
     fn validate_project_config(&self, config: &Config) -> Result<(), CompilerError> {
         // Validate HTML-specific configuration up front so build/dev runtime behavior stays
         // deterministic and all routing-policy mistakes are surfaced as config errors.
-        parse_html_routing_config(config)?;
+        parse_html_site_config(config)?;
 
         // Empty dev/release folders are allowed and resolved by core build output logic.
         Ok(())
@@ -217,6 +220,7 @@ pub struct HTMLMeta {
     pub page_twitter_large_image: String,
     pub page_canonical_url: String,
     pub page_root_url: String,
+    pub origin: String,
     pub image_folder_url: String,
     pub favicons_folder_url: String,
     pub theme_color_light: String,
@@ -241,6 +245,7 @@ impl Default for HTMLMeta {
             page_twitter_large_image: String::from(""),
             page_canonical_url: String::from(""),
             page_root_url: String::from("./"),
+            origin: String::from("/"),
             image_folder_url: String::from("images"),
             favicons_folder_url: String::from("images/favicons"),
             theme_color_light: String::from("#fafafa"),

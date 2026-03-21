@@ -9,7 +9,7 @@
 # author = ""
 # license = "MIT"
 
-# origin = "/beanstalk/"
+# origin = "/beanstalk"
 # root_folders = {
     @lib,
     @assets,

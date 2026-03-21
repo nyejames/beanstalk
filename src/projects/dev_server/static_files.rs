@@ -4,7 +4,7 @@
 //! EventSource client into HTML responses.
 
 use crate::projects::dev_server::error_page::DEV_CLIENT_MARKER;
-use crate::projects::routing::{HtmlRoutingConfig, PageUrlStyle};
+use crate::projects::routing::{HtmlSiteConfig, PageUrlStyle, prefix_origin};
 use std::path::{Component, Path, PathBuf};
 
 /// Classification used to keep page-routing behavior separate from exact asset serving behavior.
@@ -29,18 +29,19 @@ pub enum ResolvedRequest {
     InvalidPath,
 }
 
-pub fn dev_client_snippet() -> String {
+pub fn dev_client_snippet(origin: &str) -> String {
+    let sse_path = prefix_origin(origin, "/__beanstalk/events");
     format!(
-        "\n{DEV_CLIENT_MARKER}\n<script>\n  (() => {{\n    const source = new EventSource('/__beanstalk/events');\n    source.addEventListener('reload', () => window.location.reload());\n  }})();\n</script>\n"
+        "\n{DEV_CLIENT_MARKER}\n<script>\n  (() => {{\n    const source = new EventSource('{sse_path}');\n    source.addEventListener('reload', () => window.location.reload());\n  }})();\n</script>\n"
     )
 }
 
-pub fn inject_dev_client(html: &str) -> String {
+pub fn inject_dev_client(html: &str, origin: &str) -> String {
     if html.contains(DEV_CLIENT_MARKER) {
         return html.to_owned();
     }
 
-    let snippet = dev_client_snippet();
+    let snippet = dev_client_snippet(origin);
     if let Some(body_index) = html.rfind("</body>") {
         let mut injected = String::with_capacity(html.len() + snippet.len());
         injected.push_str(&html[..body_index]);
@@ -86,7 +87,7 @@ pub fn resolve_request(
     request_query: Option<&str>,
     output_dir: &Path,
     entry_page_rel: Option<&Path>,
-    routing: HtmlRoutingConfig,
+    config: HtmlSiteConfig,
 ) -> ResolvedRequest {
     if request_path == "/" {
         let Some(entry_page) = entry_page_rel else {
@@ -119,8 +120,9 @@ pub fn resolve_request(
             return ResolvedRequest::NotFound;
         }
 
-        if routing.redirect_index_html {
-            let redirect_target = index_alias_redirect_target(&page_base, routing.page_url_style);
+        if config.redirect_index_html {
+            let redirect_target =
+                index_alias_redirect_target(&page_base, config.page_url_style, &config.origin);
             return ResolvedRequest::Redirect {
                 location: with_query_string(redirect_target, request_query),
             };
@@ -161,9 +163,12 @@ pub fn resolve_request(
         return ResolvedRequest::NotFound;
     }
 
-    if let Some(canonical) =
-        canonical_redirect_target(request_path, &page_base, routing.page_url_style)
-    {
+    if let Some(canonical) = canonical_redirect_target(
+        request_path,
+        &page_base,
+        config.page_url_style,
+        &config.origin,
+    ) {
         return ResolvedRequest::Redirect {
             location: with_query_string(canonical, request_query),
         };
@@ -221,23 +226,24 @@ fn page_file_relative_path(page_base: &str) -> PathBuf {
 }
 
 fn canonical_redirect_target(
-    request_path: &str,
+    site_local_request_path: &str,
     page_base: &str,
     style: PageUrlStyle,
+    origin: &str,
 ) -> Option<String> {
     if style == PageUrlStyle::Ignore {
         return None;
     }
 
-    let canonical = canonical_page_url(page_base, style);
-    if request_path == canonical {
+    let site_local_canonical = site_local_canonical_page_url(page_base, style);
+    if site_local_request_path == site_local_canonical {
         None
     } else {
-        Some(canonical)
+        Some(prefix_origin(origin, &site_local_canonical))
     }
 }
 
-fn canonical_page_url(page_base: &str, style: PageUrlStyle) -> String {
+fn site_local_canonical_page_url(page_base: &str, style: PageUrlStyle) -> String {
     if page_base == "/" {
         return String::from("/");
     }
@@ -248,13 +254,15 @@ fn canonical_page_url(page_base: &str, style: PageUrlStyle) -> String {
     }
 }
 
-fn index_alias_redirect_target(page_base: &str, style: PageUrlStyle) -> String {
-    match style {
+fn index_alias_redirect_target(page_base: &str, style: PageUrlStyle, origin: &str) -> String {
+    let site_local_target = match style {
         PageUrlStyle::Ignore => directory_url(page_base),
         PageUrlStyle::TrailingSlash | PageUrlStyle::NoTrailingSlash => {
-            canonical_page_url(page_base, style)
+            site_local_canonical_page_url(page_base, style)
         }
-    }
+    };
+
+    prefix_origin(origin, &site_local_target)
 }
 
 fn directory_url(page_base: &str) -> String {

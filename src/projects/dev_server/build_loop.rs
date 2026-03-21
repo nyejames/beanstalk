@@ -13,7 +13,7 @@ use crate::projects::dev_server::error_page::{
 use crate::projects::dev_server::sse;
 use crate::projects::dev_server::state::DevServerState;
 use crate::projects::dev_server::watch;
-use crate::projects::routing::{HtmlRoutingConfig, parse_html_routing_config};
+use crate::projects::routing::{HtmlSiteConfig, parse_html_site_config};
 use saying::say;
 use std::collections::HashMap;
 use std::io;
@@ -31,7 +31,7 @@ pub struct BuildCycleReport {
 struct BuildOutcome {
     build_succeeded: bool,
     entry_page_rel: Option<PathBuf>,
-    html_routing: Option<HtmlRoutingConfig>,
+    html_site_config: Option<HtmlSiteConfig>,
     diagnostics_summary: String,
     failed_build: Option<BuildFailure>,
 }
@@ -106,7 +106,7 @@ pub fn run_single_build_cycle(
     let BuildOutcome {
         build_succeeded,
         entry_page_rel,
-        html_routing,
+        html_site_config,
         diagnostics_summary,
         failed_build,
     } = build_outcome;
@@ -125,8 +125,8 @@ pub fn run_single_build_cycle(
         if build_succeeded {
             build_state.last_error_html = None;
             build_state.entry_page_rel = entry_page_rel;
-            if let Some(html_routing) = html_routing {
-                build_state.html_routing = html_routing;
+            if let Some(html_site_config) = html_site_config {
+                build_state.html_site_config = html_site_config;
             }
         } else {
             // Render compiler diagnostics only after the version increments so the error page and
@@ -285,15 +285,15 @@ fn build_once(
             return BuildOutcome {
                 build_succeeded: false,
                 entry_page_rel: None,
-                html_routing: None,
+                html_site_config: None,
                 diagnostics_summary: format_compiler_messages(&messages),
                 failed_build: Some(BuildFailure::CompilerMessages(messages)),
             };
         }
     };
 
-    let html_routing = match parse_html_routing_config(&build_result.config) {
-        Ok(routing) => routing,
+    let html_site_config = match parse_html_site_config(&build_result.config) {
+        Ok(config) => config,
         Err(error) => {
             let messages = CompilerMessages {
                 errors: vec![error],
@@ -302,7 +302,7 @@ fn build_once(
             return BuildOutcome {
                 build_succeeded: false,
                 entry_page_rel: None,
-                html_routing: None,
+                html_site_config: None,
                 diagnostics_summary: format_compiler_messages(&messages),
                 failed_build: Some(BuildFailure::CompilerMessages(messages)),
             };
@@ -326,7 +326,7 @@ fn build_once(
         BuildOutcome {
             build_succeeded: true,
             entry_page_rel: Some(entry_page_rel),
-            html_routing: Some(html_routing),
+            html_site_config: Some(html_site_config),
             diagnostics_summary,
             failed_build: None,
         }
@@ -334,7 +334,7 @@ fn build_once(
         BuildOutcome {
             build_succeeded: false,
             entry_page_rel: None,
-            html_routing: None,
+            html_site_config: None,
             diagnostics_summary: String::from(
                 "Build completed, but the project builder did not declare a dev entry page.",
             ),

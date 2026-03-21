@@ -18,6 +18,7 @@ use crate::projects::html_project::wasm::export_plan::{
 };
 use crate::projects::html_project::wasm::js_bootstrap::generate_wasm_bootstrap_js;
 use crate::projects::html_project::wasm::request::build_wasm_backend_request;
+use crate::projects::routing::HtmlSiteConfig;
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
@@ -88,6 +89,7 @@ pub(crate) fn compile_html_module_wasm(
     string_table: &StringTable,
     logical_html_output_path: &Path,
     release_build: bool,
+    _config: &HtmlSiteConfig,
 ) -> Result<CompiledHtmlWasmModule, CompilerMessages> {
     // Convert logical route output (`about.html`) into route-folder artifacts (`about/index.html` etc).
     let output_paths =

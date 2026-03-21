@@ -10,6 +10,7 @@ use crate::compiler_frontend::analysis::borrow_checker::BorrowCheckReport;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::hir::hir_nodes::{FunctionId, HirModule, StartFragment};
 use crate::compiler_frontend::string_interning::StringTable;
+use crate::projects::routing::HtmlSiteConfig;
 use std::collections::HashMap;
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
@@ -32,6 +33,7 @@ pub(crate) fn compile_html_module_js(
     string_table: &StringTable,
     output_path: PathBuf,
     release_build: bool,
+    _config: &HtmlSiteConfig,
 ) -> Result<OutputFile, CompilerError> {
     let js_lowering_config = JsLoweringConfig {
         pretty: !release_build,

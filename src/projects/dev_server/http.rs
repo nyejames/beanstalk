@@ -7,6 +7,7 @@ use crate::projects::dev_server::error_page::render_runtime_error_page;
 use crate::projects::dev_server::sse;
 use crate::projects::dev_server::state::{BuildState, DevServerState};
 use crate::projects::dev_server::static_files::{self, ResolvedRequest, ResolvedRequestKind};
+use crate::projects::routing::{origin_root_url, strip_origin_prefix};
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, Write};
 use std::net::TcpStream;
@@ -28,12 +29,42 @@ pub fn handle_connection(mut stream: TcpStream, state: Arc<DevServerState>) -> i
     }
 
     let (request_path, request_query) = split_path_and_query(&request.path);
-    match request_path {
+
+    let build_state = state
+        .build_state
+        .lock()
+        .map_err(|_| io::Error::other("build state lock was poisoned"))?
+        .clone();
+
+    let origin = &build_state.html_site_config.origin;
+
+    // Layer A - origin mount matching
+    if request_path == "/" && origin != "/" {
+        let location = origin_root_url(origin);
+        return send_redirect_response(&mut stream, "302 FOUND", &location);
+    }
+
+    let Some(site_local_path) = strip_origin_prefix(request_path, origin) else {
+        return send_text_response(
+            &mut stream,
+            "404 NOT FOUND",
+            "text/plain; charset=utf-8",
+            "Not Found (Outside Origin)",
+        );
+    };
+
+    match site_local_path.as_str() {
         "/__beanstalk/events" => sse::handle_sse_connection(stream, state),
         "/__beanstalk/ping" => {
             send_text_response(&mut stream, "200 OK", "text/plain; charset=utf-8", "ok")
         }
-        _ => serve_static_request(&mut stream, request_path, request_query, &state),
+        _ => serve_static_request(
+            &mut stream,
+            &site_local_path,
+            request_query,
+            &build_state,
+            &state,
+        ),
     }
 }
 
@@ -112,17 +143,12 @@ fn split_path_and_query(path: &str) -> (&str, Option<&str>) {
 
 fn serve_static_request(
     stream: &mut TcpStream,
-    request_path: &str,
+    site_local_path: &str,
     request_query: Option<&str>,
-    state: &Arc<DevServerState>,
+    build_state: &BuildState,
+    _state: &Arc<DevServerState>,
 ) -> io::Result<()> {
-    let build_state = state
-        .build_state
-        .lock()
-        .map_err(|_| io::Error::other("build state lock was poisoned"))?
-        .clone();
-
-    match prepare_static_response(request_path, request_query, &build_state) {
+    match prepare_static_response(site_local_path, request_query, build_state) {
         PreparedResponse::Text {
             status_line,
             content_type,
@@ -148,7 +174,7 @@ fn prepare_static_response(
         request_query,
         &build_state.output_dir,
         build_state.entry_page_rel.as_deref(),
-        build_state.html_routing,
+        build_state.html_site_config.clone(),
     );
 
     if let ResolvedRequest::Redirect { location } = resolved_request {
@@ -225,7 +251,8 @@ fn prepare_static_response(
             }
         };
 
-        let injected_html = static_files::inject_dev_client(&html);
+        let injected_html =
+            static_files::inject_dev_client(&html, &build_state.html_site_config.origin);
         return PreparedResponse::text("200 OK", content_type, injected_html);
     }
 

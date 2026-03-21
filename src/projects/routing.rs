@@ -17,34 +17,89 @@ pub enum PageUrlStyle {
     Ignore,
 }
 
-/// Effective HTML routing settings used by builders and the dev server.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct HtmlRoutingConfig {
+/// Effective HTML site configuration used by builders and the dev server.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HtmlSiteConfig {
+    pub origin: String,
     pub page_url_style: PageUrlStyle,
     pub redirect_index_html: bool,
 }
 
-impl Default for HtmlRoutingConfig {
+impl Default for HtmlSiteConfig {
     fn default() -> Self {
         Self {
+            origin: String::from("/"),
             page_url_style: PageUrlStyle::TrailingSlash,
             redirect_index_html: true,
         }
     }
 }
 
-/// Parse and validate routing-related HTML config keys from the project config map.
+/// Parse and validate HTML site config keys from the project config map.
 ///
 /// WHAT: resolves defaults plus optional overrides from `#config.bst`.
-/// WHY: HTML routing policy must be explicit and strict so all runtime/build tooling stays aligned.
-pub fn parse_html_routing_config(config: &Config) -> Result<HtmlRoutingConfig, CompilerError> {
+/// WHY: site configuration must be explicit and strict so all runtime/build tooling stays aligned.
+pub fn parse_html_site_config(config: &Config) -> Result<HtmlSiteConfig, CompilerError> {
+    let origin = parse_origin(config)?;
     let page_url_style = parse_page_url_style(config)?;
     let redirect_index_html = parse_redirect_index_html(config)?;
 
-    Ok(HtmlRoutingConfig {
+    Ok(HtmlSiteConfig {
+        origin,
         page_url_style,
         redirect_index_html,
     })
+}
+
+fn parse_origin(config: &Config) -> Result<String, CompilerError> {
+    let Some(raw_value) = config.settings.get("origin") else {
+        return Ok(String::from("/"));
+    };
+
+    validate_origin(config, raw_value)?;
+
+    Ok(raw_value.to_owned())
+}
+
+fn validate_origin(config: &Config, origin: &str) -> Result<(), CompilerError> {
+    if origin.is_empty() {
+        return Err(config_error(
+            config,
+            String::from("'#origin' cannot be empty."),
+        ));
+    }
+
+    if !origin.starts_with('/') {
+        return Err(config_error(
+            config,
+            format!("'#origin' must start with '/'. Found: '{origin}'"),
+        ));
+    }
+
+    if origin.len() > 1 && origin.ends_with('/') {
+        return Err(config_error(
+            config,
+            format!("'#origin' must not end with '/' unless it is exactly '/'. Found: '{origin}'"),
+        ));
+    }
+
+    if origin.contains('?') || origin.contains('#') {
+        return Err(config_error(
+            config,
+            format!(
+                "'#origin' must not contain query (?) or fragment (#) characters. Found: '{origin}'"
+            ),
+        ));
+    }
+
+    if origin.contains('\\') {
+        return Err(config_error(
+            config,
+            format!("'#origin' must not contain backslashes. Found: '{origin}'"),
+        ));
+    }
+
+    Ok(())
 }
 
 fn parse_page_url_style(config: &Config) -> Result<PageUrlStyle, CompilerError> {
@@ -85,6 +140,71 @@ fn parse_redirect_index_html(config: &Config) -> Result<bool, CompilerError> {
 fn config_error(config: &Config, message: String) -> CompilerError {
     let config_path = config.entry_dir.join(CONFIG_FILE_NAME);
     CompilerError::file_error(&config_path, message).with_error_type(ErrorType::Config)
+}
+
+// --- Public Path Helpers ---
+
+/// Prefixes a site-local path with the given origin.
+pub fn prefix_origin(origin: &str, site_path: &str) -> String {
+    if origin == "/" {
+        return site_path.to_owned();
+    }
+
+    if site_path == "/" {
+        return format!("{origin}/");
+    }
+
+    format!("{origin}{site_path}")
+}
+
+/// Strips the origin prefix from a public path, returning the site-local path.
+pub fn strip_origin_prefix(public_path: &str, origin: &str) -> Option<String> {
+    if origin == "/" {
+        return Some(public_path.to_owned());
+    }
+
+    // Origin is like "/beanstalk"
+    // Public path must start with "/beanstalk"
+    if !public_path.starts_with(origin) {
+        return None;
+    }
+
+    let stripped = &public_path[origin.len()..];
+
+    // If public_path was "/beanstalk", stripped is ""
+    // If public_path was "/beanstalk/", stripped is "/"
+    // If public_path was "/beanstalk/about", stripped is "/about"
+    if stripped.is_empty() {
+        return Some(String::from("/"));
+    }
+
+    if stripped.starts_with('/') {
+        Some(stripped.to_owned())
+    } else {
+        // This handles cases like "/beanstalkish" when origin is "/beanstalk"
+        None
+    }
+}
+
+/// Returns the canonical public URL for the site root.
+pub fn origin_root_url(origin: &str) -> String {
+    if origin == "/" {
+        String::from("/")
+    } else {
+        format!("{origin}/")
+    }
+}
+
+/// Converts a site-local page URL to a public URL including the origin.
+#[allow(dead_code)] // Prepared for future path-coercion use
+pub fn public_page_url(site_local_page_url: &str, origin: &str) -> String {
+    prefix_origin(origin, site_local_page_url)
+}
+
+/// Converts a site-local asset path to a public URL including the origin.
+#[allow(dead_code)] // Prepared for future path-coercion use
+pub fn public_asset_url(site_local_asset_path: &str, origin: &str) -> String {
+    prefix_origin(origin, site_local_asset_path)
 }
 
 #[cfg(test)]
