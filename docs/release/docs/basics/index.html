@@ -1,0 +1,661 @@
+<!DOCTYPE html><html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="color-scheme" content="light dark" />
+        
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" href="">
+        <title style=""> Beanstalk Documentation</title>
+        <style>
+    :root {
+      color-scheme: light dark;
+
+      --bst-font-size: 100%;
+
+      /* Default Background Colours */
+      --bst-bg-lightmode: #fff;
+      --bst-bg-darkmode: #13171f;
+      --bst-text-lightmode: #373c44;
+      --bst-text-darkmode: #e0e3e7;
+
+      --bst-font-family-emoji: "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+      --bst-font-family-sans-serif: system-ui, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, Helvetica, Arial, "Helvetica Neue", sans-serif, var(--bst-font-family-emoji);
+      --bst-font-family-monospace: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace, var(--bst-font-family-emoji);
+      --bst-font-family: var(--bst-font-family-sans-serif);
+
+      --bst-line-height: 1.5;
+      --bst-font-weight: 400;
+      --bst-font-size: 100%;
+      --bst-text-underline-offset: 0.1rem;
+      --bst-border-radius: 0.25rem;
+      --bst-border-width: 0.0625rem;
+      --bst-outline-width: 0.125rem;
+      --bst-transition: 0.2s ease-in-out;
+
+      --bst-spacing: 1rem;
+      --bst-spacing-small: 0.5rem;
+
+      /* Code block colours */
+      --comment-dark: #838c86;
+      --comment-light: #759061;
+      --keyword-dark: #ea943e;
+      --keyword-light: #ad590e;
+      --string-dark: #4fba11;
+      --string-light: #007130;
+      --number-dark: #96b5ed;
+      --number-light: #073f85;
+      --operator-dark: #9ec1ff;
+      --operator-light: #2b476a;
+      --struct-dark: #a17fbd;
+      --struct-light: #ac2187;
+      --type-dark: #54c5d3;
+      --type-light: #0d8db3;
+      --parenthesis-dark: #bcac52;
+      --parenthesis-light: #ad7e0d;
+    }
+
+    /* where: is used here for less specificity, allowing easier overriding */
+    :where(:root) {
+      -webkit-tap-highlight-color: transparent;
+      -webkit-text-size-adjust: 100%;
+      -moz-text-size-adjust: 100%;
+      text-size-adjust: 100%;
+      font-weight: var(--bst-font-weight);
+      font-size: var(--bst-font-size);
+      line-height: var(--bst-line-height);
+      font-family: var(--bst-font-family);
+      text-underline-offset: var(--bst-text-underline-offset);
+      text-rendering: optimizeLegibility;
+      overflow-wrap: break-word;
+      -moz-tab-size: 4;
+      -o-tab-size: 4;
+      tab-size: 4;
+
+    }
+
+    /* Container mostly provides default padding for content sections */
+    .container {
+      width: 100%;
+      margin-right: auto;
+      margin-left: auto;
+      padding-right: var(--bst-spacing-small);
+      padding-left: var(--bst-spacing-small);
+    }
+
+    @media (min-width: 576px) {
+      :root {
+        --bst-font-size: 106.25%;
+      }
+      .container {
+        max-width: 510px;
+        padding-right: var(--bst-spacing);
+        padding-left: var(--bst-spacing);
+        padding-bottom: var(--bst-spacing);
+      }
+    }
+    @media (min-width: 768px) {
+      :root {
+        --bst-font-size: 112.5%;
+      }
+      .container {
+        max-width: 700px;
+      }
+    }
+    @media (min-width: 1024px) {
+      :root {
+        --bst-font-size: 118.75%;
+      }
+      .container {
+        max-width: 950px;
+      }
+    }
+    @media (min-width: 1280px) {
+      :root {
+        --bst-font-size: 125%;
+      }
+      .container {
+        max-width: 1200px;
+      }
+    }
+    @media (min-width: 1536px) {
+      :root {
+        --bst-font-size: 131.25%;
+      }
+      .container {
+        max-width: 1450px;
+      }
+    }
+
+    body {
+      width: 100%;
+      margin: 0;
+    }
+
+    /* Common Styles */
+    .bst-center {
+      text-align: center;
+    }
+
+    /* Nav Style */
+    .bst-nav-0 {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1rem;
+    }
+    .bst-nav-1 {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom-color: grey;
+      border-bottom-style: solid;
+      border-bottom-width: 1px;
+      padding: 0rem 2rem 0rem 2rem;
+    }
+
+    /* Title Style */
+    .bst-title-0 {
+      font-size: 3.5rem;
+      font-weight: bold;
+      letter-spacing: 0.4rem;
+      word-spacing: 0.5rem;
+      margin: 1.5rem 0 1.4rem 0;
+      line-height: 3.7rem;
+    }
+    .bst-title-1 {
+      font-size: 3rem;
+      font-weight: bold;
+      letter-spacing: 0.3rem;
+      word-spacing: 0.4rem;
+      margin: 1.3rem 0 1.2rem 0;
+      line-height: 3.5rem;
+    }
+    .bst-title-2 {
+      font-size: 2.5rem;
+      font-weight: bold;
+      letter-spacing: 0.3rem;
+      word-spacing: 0.35rem;
+      margin: 1.2rem 0 1rem 0;
+      line-height: 3.3rem;
+    }
+
+    /* Code Style */
+    .codeblock {
+      color: #222222;
+      color: light-dark(#222222, #ddd);
+      font-family: var(--bst-font-family-monospace);
+      white-space: break-spaces;
+      tab-size: 4;
+    }
+    .bst-code-comment {
+      color: var(--comment-light);
+      color:light-dark(var(--comment-light), var(--comment-dark))
+    }
+    .bst-code-keyword {
+      color: var(--keyword-light);
+      color:light-dark( var(--keyword-light), var(--keyword-dark))
+    }
+    .bst-code-string {
+      color: var(--string-light);
+      color:light-dark( var(--string-light), var(--string-dark))
+    }
+    .bst-code-number {
+      color: var(--number-light);
+      color:light-dark( var(--number-light), var(--number-dark))
+    }
+    .bst-code-operator {
+      color: var(--operator-light);
+      color:light-dark( var(--operator-light), var(--operator-dark))
+    }
+    .bst-code-struct {
+      color: var(--struct-light);
+      color:light-dark( var(--struct-light), var(--struct-dark))
+    }
+    .bst-code-type {
+      color: var(--type-light);
+      color:light-dark( var(--type-light), var(--type-dark))
+    }
+    .bst-code-parenthesis {
+      color: var(--parenthesis-light);
+      color:light-dark( var(--parenthesis-light), var(--parenthesis-dark))
+    }
+
+    /* BASIC CSS RESET STUFF */
+
+    /**
+     * Document
+     * Content-box & Responsive typography
+    */
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      background-repeat: no-repeat;
+    }
+
+    ::before,
+    ::after {
+      text-decoration: inherit;
+      vertical-align: inherit;
+    }
+</style>
+    
+      </head>
+    
+<body style="">
+    <nav class="bst-nav-1" aria-label="Primary">
+        <a
+            href="/"
+            style="
+                display: flex;
+                align-items: center;
+                gap: 0.6rem;
+                padding: 0.9rem 0;
+                color: light-dark(var(--bst-text-lightmode), var(--bst-text-darkmode));
+                text-decoration: none;
+                font-weight: 700;
+                letter-spacing: 0.04rem;
+            "
+        >
+            <span
+                aria-hidden="true"
+                style="
+                    font-family: var(--bst-font-family-emoji);
+                    font-size: 1.4rem;
+                    line-height: 1;
+                "
+            >🌱</span>
+
+            <span>Beanstalk</span>
+        </a>
+
+        <div
+            style="
+                display: flex;
+                align-items: center;
+                gap: 1rem;
+            "
+        >
+            <a
+                href="/beanstalk/docs"
+                style="
+                    color: light-dark(var(--bst-text-lightmode), var(--bst-text-darkmode));
+                    text-decoration: none;
+                    font-weight: 500;
+                    padding: 0.35rem 0;
+                "
+            >
+                Docs
+            </a>
+
+            <a
+                href="https://github.com/nyejames/beanstalk"
+                target="_blank"
+                rel="noreferrer"
+                aria-label="Beanstalk GitHub repository"
+                style="
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                    color: light-dark(var(--bst-text-lightmode), var(--bst-text-darkmode));
+                    padding: 0.35rem 0;
+                "
+            >
+                <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 16 16"
+                    width="22"
+                    height="22"
+                    fill="currentColor"
+                    aria-hidden="true"
+                >
+                    <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38
+                    0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52
+                    -.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07
+                    -1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21
+                    2.2.82a7.65 7.65 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82
+                    1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2
+                    0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/>
+                </svg>
+            </a>
+        </div>
+    </nav>
+ <h1 style="font-size: 2em;text-align: center;"> LANGUAGE BASICS</h1>
+
+    <section class="container"><p>Every project has a #config.bst file.  </p><p>If instead, you build or run a specific Beanstalk file, it will create a single module from that entry point and pull in all the file&#39;s dependencies. </p><p>From the config file you can define a Beanstalk file as the entry point of a program. </p><p>Web projects have their own directory based structure and config file also. </p>
+    <pre style="background-color: hsla(0, 0%, 42%, 0.12); padding-left: 1em; border-radius: 5px; max-width: 100%; white-space: pre; overflow-x: auto;">
+        <code>
+import <span class='bst-code-operator'>@</span>lib<span class='bst-code-operator'>/</span>html<span class='bst-code-operator'>/</span>doc
+
+say_hello <span class='bst-code-operator'>|</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
+    <span class='bst-code-keyword'>return</span> <span class='bst-code-string'>&quot;Hi, welcome to Beanstalk&quot;</span>
+;
+
+<span class='bst-code-comment'>-- Say hello in an HTML document</span>
+<span class='bst-code-parenthesis'>[</span>doc.prelude, doc.body<span class='bst-code-operator'>:</span>
+    <span class='bst-code-parenthesis'>[</span>say_hello<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-parenthesis'>]</span>
+<span class='bst-code-parenthesis'>]</span>
+</code>
+    </pre>
+    <h1>Quick Syntax Summary</h1>    <p>For developers coming from most other languages,      here are some key idiosyncrasies from other C-like languages to note: </p><ul><li>Colon opens a scope, semicolon closes it. Semicolon does not end statements</li></ul><ul><li>Square brackets are NOT used for arrays, curly braces are used instead Square brackets are only used for string templates. Items in collections are accessed via methods</li></ul><ul><li>Equality and other logical operators use keywords like &quot;is&quot; and &quot;not&quot; (you can&#39;t use == or ! for example)</li></ul><ul><li>~ tilde symbol to indicate mutability (mutability must be explicit). This comes before the type if there is an explicit type declaration.</li></ul><ul><li>Double dashes for single line comments (--)</li></ul><ul><li>Immutable Reference semantics are the default for all stack and heap allocated types.</li></ul><ul><li>All copies have to be explicit unless they are used in part of a new expression. Even for primitive types such as integers.</li></ul>    <h2>Formatting</h2><ul><li>4 spaces are recommended for indentation.</li><li>Types use UpperCamelCase</li><li>Everything else uses regular_snake_case</li></ul>    <h1>Comments</h1>    <p>Comments use a double minus sign.      Documentation comments will eventually be created via special templates. </p>    
+    <pre style="background-color: hsla(0, 0%, 42%, 0.12); padding-left: 1em; border-radius: 5px; max-width: 100%; white-space: pre; overflow-x: auto;">
+        <code>
+<span class='bst-code-comment'>-- normal comment</span>
+</code>
+    </pre>
+</section>
+
+
+
+    <section class="container"><h1>Variables</h1><p>Equals means assign. Tilde ~ means this is a mutable and can change. </p><p>All variables must be assigned a value when they are declared. </p>
+    <pre style="background-color: hsla(0, 0%, 42%, 0.12); padding-left: 1em; border-radius: 5px; max-width: 100%; white-space: pre; overflow-x: auto;">
+        <code>
+int <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-number'>0</span>
+float <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-number'>0.0</span>
+
+string_slice <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;wow!&quot;</span>
+char <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-string'>&#39;😊&#39;</span>
+raw_string_slice <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-operator'>`</span>hi<span class='bst-code-operator'>`</span>
+
+string_template <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span>
+    <span class='bst-code-struct'>This</span> is the <span class='bst-code-struct'>Beanstalk</span> programming language
+<span class='bst-code-parenthesis'>]</span>
+
+bool <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> true
+
+mutable_collection <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-parenthesis'>}</span>
+immutable_collection <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-parenthesis'>}</span>
+
+<span class='bst-code-struct'>NewStruct</span> <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>|</span>
+    value <span class='bst-code-struct'>Float,</span>
+    another_value <span class='bst-code-struct'>String,</span>
+<span class='bst-code-operator'>|</span>
+
+instance <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-struct'>NewStruct</span><span class='bst-code-parenthesis'>(</span>
+    value <span class='bst-code-operator'>=</span> <span class='bst-code-number'>1.2</span>, 
+    another_value <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;hey&quot;</span>
+<span class='bst-code-parenthesis'>)</span>
+</code>
+    </pre>
+    <p>By default, Beanstalk code will create immutable references to values.     <strong>This is true for all types.</strong> </p>    <p>The compiler might decide to make an immutable copy of a primative value,     but the assignment will <strong>always</strong> behave the same way no matter what the type is. </p><br>    
+    <pre style="background-color: hsla(0, 0%, 42%, 0.12); padding-left: 1em; border-radius: 5px; max-width: 100%; white-space: pre; overflow-x: auto;">
+        <code>
+<span class='bst-code-comment'>-- 64 bit immutable float</span>
+number <span class='bst-code-operator'>=</span> <span class='bst-code-number'>420.69</span>
+
+<span class='bst-code-comment'>-- Becomes an immutable reference to the value</span>
+another_number <span class='bst-code-operator'>=</span> number
+
+<span class='bst-code-comment'>-- Becomes a mutable reference to the number</span>
+<span class='bst-code-comment'>-- or moves the value if it isn&#39;t used again later in the scope</span>
+another_mutable_number <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> number
+
+<span class='bst-code-comment'>-- Even with primative stack types,</span>
+<span class='bst-code-comment'>-- Copying is still explicit</span>
+a_copy_of_a_number <span class='bst-code-operator'>~</span><span class='bst-code-struct'>Copy</span> <span class='bst-code-operator'>=</span> another_mutable_number
+
+<span class='bst-code-comment'>-- Type error (number is not mutable)</span>
+number <span class='bst-code-operator'>=</span> <span class='bst-code-number'>1</span>
+
+<span class='bst-code-comment'>-- Type error (another_mutable_number is a float type)</span>
+another_mutable_number <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;A string instead. Whoops.&quot;</span>
+
+<span class='bst-code-comment'>-- Explicit type declarations</span>
+a_float <span class='bst-code-operator'>~</span><span class='bst-code-type'>Float</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>84</span>
+string_slice <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;Hello &quot;</span>
+a_mutable_string <span class='bst-code-operator'>~</span><span class='bst-code-type'>String</span> <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>World</span><span class='bst-code-operator'>!</span><span class='bst-code-parenthesis'>]</span>
+
+<span class='bst-code-comment'>-- You can&#39;t use the &#39;+&#39; operator on strings,</span>
+<span class='bst-code-comment'>-- They can be concatenated using templates</span>
+concatenated_strings <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span>string_slice, a_mutable_string<span class='bst-code-parenthesis'>]</span>
+</code>
+    </pre>
+    <p>All copies are explicit and must use the &#39;copy&#39; keyword in place of a type. </p>    
+    <pre style="background-color: hsla(0, 0%, 42%, 0.12); padding-left: 1em; border-radius: 5px; max-width: 100%; white-space: pre; overflow-x: auto;">
+        <code>
+<span class='bst-code-comment'>-- Create a new collection of integers</span>
+a_collection <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-number'>1</span>, <span class='bst-code-number'>2</span>, <span class='bst-code-number'>3</span>, <span class='bst-code-number'>4</span>, <span class='bst-code-number'>5</span><span class='bst-code-parenthesis'>}</span>
+
+<span class='bst-code-comment'>-- Deep mutable copy of a collection</span>
+a_copy <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-keyword'>copy</span> a_collection
+
+<span class='bst-code-comment'>-- Immutable reference to a_collection</span>
+a_reference <span class='bst-code-operator'>=</span> a_collection
+
+<span class='bst-code-comment'>-- Ownership passed or mutable reference depending on context</span>
+a_reference <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> a_collection
+
+<span class='bst-code-comment'>-- a_reference is still a reference to the original collection</span>
+a_reference.push<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>5</span><span class='bst-code-parenthesis'>)</span>
+io<span class='bst-code-parenthesis'>(</span>a_collection<span class='bst-code-parenthesis'>)</span> <span class='bst-code-comment'>-- {1, 2, 3, 4, 5, 5}</span>
+
+a_collection.pull<span class='bst-code-parenthesis'>(</span>a_collection.length<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>-</span> <span class='bst-code-number'>1</span><span class='bst-code-parenthesis'>)</span>
+io<span class='bst-code-parenthesis'>(</span>a_collection<span class='bst-code-parenthesis'>)</span> <span class='bst-code-comment'>-- {23.0}</span>
+</code>
+    </pre>
+    <p>Expressions can span over multiple lines. </p>    <p>But new statements must start after a newline. </p>    
+    <pre style="background-color: hsla(0, 0%, 42%, 0.12); padding-left: 1em; border-radius: 5px; max-width: 100%; white-space: pre; overflow-x: auto;">
+        <code>
+<span class='bst-code-comment'>-- Valid</span>
+some_int <span class='bst-code-operator'>=</span>
+    <span class='bst-code-number'>4</span> <span class='bst-code-operator'>+</span> <span class='bst-code-number'>5</span> <span class='bst-code-operator'>+</span> <span class='bst-code-number'>6</span> <span class='bst-code-operator'>+</span> <span class='bst-code-number'>7</span> <span class='bst-code-operator'>+</span> 
+    <span class='bst-code-number'>8</span> <span class='bst-code-operator'>+</span> <span class='bst-code-number'>9</span> <span class='bst-code-operator'>+</span> <span class='bst-code-number'>10</span>
+
+<span class='bst-code-comment'>-- Also valid</span>
+some_int <span class='bst-code-operator'>=</span>
+    <span class='bst-code-number'>4</span> <span class='bst-code-operator'>+</span> <span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>5</span> <span class='bst-code-operator'>+</span> <span class='bst-code-number'>6</span><span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>*</span> <span class='bst-code-number'>7</span>
+    <span class='bst-code-operator'>+</span> <span class='bst-code-number'>8</span> <span class='bst-code-operator'>/</span> <span class='bst-code-number'>9</span> <span class='bst-code-operator'>+</span> <span class='bst-code-number'>10</span>
+</code>
+    </pre>
+</section>
+
+
+
+    <section class="container"><h1>Data Types</h1><p>Beanstalk data type keywords use UpperCamelCase. Mutibility can change the underlaying data type but is not actually part of the type. </p>
+      <table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+        
+    <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
+         
+            <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Type</th>
+         
+            <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Description</th>
+         
+    </tr>
+
+        
+    <tr style="border-bottom: 1px dotted grey;"> <td style="padding: 0.2em 0.5em;"> Float </td> <td style="padding: 0.2em 0.5em;"> 64-bit floating point number</td> </tr>
+
+
+        
+    <tr style="border-bottom: 1px dotted grey;"> <td style="padding: 0.2em 0.5em;"> Int </td> <td style="padding: 0.2em 0.5em;">  64-bit signed integer </td> </tr>
+
+
+        
+    <tr style="border-bottom: 1px dotted grey;"> <td style="padding: 0.2em 0.5em;"> String </td> <td style="padding: 0.2em 0.5em;"> UTF-8 string slice or string template</td> </tr>
+
+      </table>
+        <h2>Numerical Types</h2>    <p>These will be extended to smaller sized and unsigned variants in the future.     By default, &quot;Float&quot; and &quot;Int&quot; will become 64 bit signed types. </p>    <p>The language currently supports a small set of core types but may be extended in the future. </p>    <h1>Strings and String slices</h1>    <p>String is the keyword for string types in Beanstalk.      Double quotes are automatically string slices.  </p>    <p>`&quot;Double quotes for a UTF-8 string slice&quot;` </p>    <p>Backticks are used for RAW strings. To escape a backtick it must be preceded with a backslash . </p>    <p>Scenes are used instead of format strings. </p>    <h1>Operators</h1>    <h2>Logical and Comparison Operators</h2>    <p>The &#39;is&#39; keyword is used to check equality.      The &quot;and / or&quot; keywords are used for logical and / or and &#39;not&#39; is used to invert a truthy value to falsy or vice versa. </p>    <h2>Mathematical Operators</h2>    
+      <table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+        
+    <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
+         
+            <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Operator</th>
+         
+            <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Description</th>
+                  
+            <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Precedence</th>
+         
+    </tr>
+
+    <tr style="border-bottom: 1px dotted grey;"> <td style="padding: 0.2em 0.5em;"> ^</td>        <td style="padding: 0.2em 0.5em;"> Exponent</td>            <td style="padding: 0.2em 0.5em;"> 4</td> </tr>
+
+    <tr style="border-bottom: 1px dotted grey;"> <td style="padding: 0.2em 0.5em;"> //</td>       <td style="padding: 0.2em 0.5em;"> Root</td>                <td style="padding: 0.2em 0.5em;"> 4</td> </tr>
+
+    <tr style="border-bottom: 1px dotted grey;"> <td style="padding: 0.2em 0.5em;"> *</td>        <td style="padding: 0.2em 0.5em;"> Multiplication</td>       <td style="padding: 0.2em 0.5em;"> 3</td> </tr>
+
+    <tr style="border-bottom: 1px dotted grey;"> <td style="padding: 0.2em 0.5em;"> /</td>        <td style="padding: 0.2em 0.5em;"> Division</td>             <td style="padding: 0.2em 0.5em;"> 3</td> </tr>
+
+    <tr style="border-bottom: 1px dotted grey;"> <td style="padding: 0.2em 0.5em;"> %</td>          <td style="padding: 0.2em 0.5em;"> Modulo (truncated)</td>   <td style="padding: 0.2em 0.5em;"> 3</td> </tr>
+
+    <tr style="border-bottom: 1px dotted grey;"> <td style="padding: 0.2em 0.5em;"> %%</td>         <td style="padding: 0.2em 0.5em;"> Remainder (floored)</td>  <td style="padding: 0.2em 0.5em;"> 3</td> </tr>
+
+    <tr style="border-bottom: 1px dotted grey;"> <td style="padding: 0.2em 0.5em;"> +</td>          <td style="padding: 0.2em 0.5em;"> Sum</td>                  <td style="padding: 0.2em 0.5em;"> 2</td> </tr>
+
+    <tr style="border-bottom: 1px dotted grey;"> <td style="padding: 0.2em 0.5em;"> -</td>        <td style="padding: 0.2em 0.5em;"> Subtraction</td>          <td style="padding: 0.2em 0.5em;"> 2</td> </tr>
+
+      </table>
+    </section>
+
+</body>
+<div id="bst-slot-0"></div>
+<script>
+function __bs_is_ref(value) {
+return value !== null && typeof value === "object" && value.__bs_ref === true;
+}
+
+function __bs_binding(value) {
+return { __bs_ref: true, __bs_kind: "binding", __bs_mode: "slot", __bs_slot: { value }, __bs_target: null };
+}
+
+function __bs_param_binding(value) {
+if (!__bs_is_ref(value)) {
+return __bs_binding(value);
+}
+if (value.__bs_kind === "binding") {
+return value;
+}
+const binding = __bs_binding(undefined);
+binding.__bs_mode = "alias";
+binding.__bs_target = value;
+return binding;
+}
+
+function __bs_resolve(ref) {
+while (ref.__bs_kind === "binding" && ref.__bs_mode === "alias") {
+ref = ref.__bs_target;
+}
+return ref;
+}
+
+function __bs_read(ref) {
+const resolved = __bs_resolve(ref);
+return resolved.__bs_kind === "binding" ? resolved.__bs_slot.value : resolved.__bs_get();
+}
+
+function __bs_write(ref, value) {
+const resolved = __bs_resolve(ref);
+if (resolved.__bs_kind === "binding") {
+resolved.__bs_slot.value = value;
+} else {
+resolved.__bs_set(value);
+}
+return value;
+}
+
+function __bs_assign_borrow(binding, ref) {
+if (binding.__bs_mode === "alias") {
+return __bs_write(binding, __bs_read(ref));
+}
+binding.__bs_mode = "alias";
+binding.__bs_target = ref;
+return binding;
+}
+
+function __bs_assign_value(binding, value) {
+if (binding.__bs_mode === "alias") {
+return __bs_write(binding, value);
+}
+binding.__bs_mode = "slot";
+binding.__bs_target = null;
+binding.__bs_slot.value = value;
+return binding;
+}
+
+function __bs_field(baseRef, field) {
+return {
+__bs_ref: true,
+__bs_kind: "computed",
+__bs_get() {
+return __bs_read(baseRef)[field];
+},
+__bs_set(value) {
+__bs_read(baseRef)[field] = value;
+}
+};
+}
+
+function __bs_index(baseRef, index) {
+return {
+__bs_ref: true,
+__bs_kind: "computed",
+__bs_get() {
+return __bs_read(baseRef)[index];
+},
+__bs_set(value) {
+__bs_read(baseRef)[index] = value;
+}
+};
+}
+
+function __bs_clone_value(value) {
+if (Array.isArray(value)) {
+return value.map(__bs_clone_value);
+}
+if (value !== null && typeof value === "object") {
+const result = {};
+for (const key of Object.keys(value)) {
+result[key] = __bs_clone_value(value[key]);
+}
+return result;
+}
+return value;
+}
+
+function _Users_aneirinjames_projects_beanstalk_beanstalk_docs_lib_html_bst_start() {
+
+return "";
+}
+
+function _Users_aneirinjames_projects_beanstalk_beanstalk_docs_src_docs_basics__page_bst_start() {
+
+return "";
+}
+
+function _Users_aneirinjames_projects_beanstalk_beanstalk_docs_src_styles_docs_bst_start() {
+
+return "";
+}
+
+function _Users_aneirinjames_projects_beanstalk_beanstalk_docs_src_docs_basics__page_bst___bst_frag_0() {
+let __hir_tmp_0 = __bs_binding(undefined);
+
+__bs_assign_value(__hir_tmp_0, _Users_aneirinjames_projects_beanstalk_beanstalk_docs_src_docs_basics__page_bst___bst_frag_0___template_fn_0(__bs_binding("\n    <div></div>\n")));
+return __bs_clone_value(__bs_read(__hir_tmp_0));
+}
+
+function _Users_aneirinjames_projects_beanstalk_beanstalk_docs_src_docs_basics__page_bst___bst_frag_0___template_fn_0(chunk_0) {
+
+chunk_0 = __bs_param_binding(chunk_0);
+
+return ("" + __bs_read(chunk_0));
+}
+
+</script>
+<script>
+(function () {
+  const slots = [
+    ["bst-slot-0", _Users_aneirinjames_projects_beanstalk_beanstalk_docs_src_docs_basics__page_bst___bst_frag_0],
+  ];
+
+  for (const [id, fn] of slots) {
+    const el = document.getElementById(id);
+    if (!el) throw new Error("Missing runtime mount slot: " + id);
+    el.insertAdjacentHTML("beforeend", fn());
+  }
+
+  // start() remains the lifecycle entrypoint and runs after fragment hydration.
+  if (typeof _Users_aneirinjames_projects_beanstalk_beanstalk_docs_src_docs_basics__page_bst_start === "function") _Users_aneirinjames_projects_beanstalk_beanstalk_docs_src_docs_basics__page_bst_start();
+})();
+</script>

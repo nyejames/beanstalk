@@ -499,7 +499,7 @@ fn to_markdown_inline(content: &str, default_tag: &str) -> String {
                 newlines = 1;
             }
 
-            // Stop making our heading and return to default context.
+            // Stop making our heading and return to the default context.
             if let MarkdownContext::Heading(strength) = context {
                 output.push_str(&format!("</h{}>", strength));
                 context = MarkdownContext::None;

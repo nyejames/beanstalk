@@ -18,6 +18,7 @@ import @styles/docs/{navbar, footer, title, section, header, body, palette, tabl
 
     - @./basics (Basics)
     - @./functions (Functions)
+    - @./templates (Templates)
 ]
 
 ] -- end of body

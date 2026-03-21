@@ -56,7 +56,7 @@ struct CodeTemplateFormatter {
 impl TemplateFormatter for CodeTemplateFormatter {
     fn format(&self, content: &mut String) {
         let highlighted = highlight_code_html(content, self.language);
-        *content = format!("<code class='codeblock'>{highlighted}</code>");
+        *content = format!("<code>{highlighted}</code>");
     }
 }
 
@@ -94,7 +94,7 @@ pub(crate) fn configure_code_style(
 }
 
 pub(crate) fn highlight_code_html(source: &str, language: CodeLanguage) -> String {
-    // Normalise indentation first so highlighted output reflects the code the user
+    // Normalise indentation first so the highlighted output reflects the code the user
     // meant to show, not the template indentation needed to keep the source tidy.
     let normalized_source = dedent_code_block(source);
     let chars: Vec<char> = normalized_source.chars().collect();

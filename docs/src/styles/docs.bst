@@ -59,7 +59,7 @@ import @lib/html/{doc, format}
             "
         >
             <a
-                href="/docs"
+                href="/beanstalk/docs"
                 style="
                     color: light-dark(var(--bst-text-lightmode), var(--bst-text-darkmode));
                     text-decoration: none;
@@ -127,9 +127,7 @@ import @lib/html/{doc, format}
 
 # codeblock = [$html:
     <pre style="background-color: hsla(0, 0%, 42%, 0.12); padding-left: 1em; border-radius: 5px; max-width: 100%; white-space: pre; overflow-x: auto;">
-        <code style="font-family: var(--bst-font-family-monospace);">
-            [$slot]
-        </code>
+        [$slot]
     </pre>
 ]
 
