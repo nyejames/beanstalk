@@ -3,11 +3,13 @@ This guide covers the structure, goals and best practices for Beanstalk's compil
 New and refactored code should ALWAYS follow these guidelines.
 Always run `cargo check`, `cargo test` (unit tests) and `cargo run tests` (integration tests) to check for regressions.
 
-Beanstalk makes deliberate tradeoffs for compilation speed:
-- **Early constant folding** at AST stage eliminates optimisation passes
-- **External optimisation** delegates complex transforms to WASM tooling, which will be used for release builds only
+Readability and modularity are highest priority for new code in this codebase.
 
 ## Best Practices
+
+### No user-input panics
+- Active frontend stages must reject unsupported syntax and malformed input with structured diagnostics, not `panic!`, `todo!`, or user-data-driven `.unwrap()`.
+- Use panic paths only for proven internal invariants that indicate a compiler bug.
 
 ### Variables and Functions
 - Use descriptive, full names—avoid abbreviations except for simple iterators (`i`, `j`)
@@ -164,24 +166,7 @@ return_compiler_error!(
 return_rule_error!(location, "Match expressions not supported"); // Should be hir_transformation_error!
 ```
 
-### Assignment Operations
-```beanstalk
-data = [:hello]           -- data owns the immutable string
-
--- SHARED REFERENCES (default)
-ref1 = data             -- ref1 references data (shared)
-ref2 = data             -- ref2 also references data (shared) - OK
-result = ref1           -- result references ref1 (which references data)
-
--- MUTABLE ACCESS (explicit with ~)
-mut_ref ~= data         -- mut_ref gets mutable access to data
--- Compiler determines: reference or ownership based on data's future usage
--- ERROR: mut_ref conflicts with existing shared references (ref1, ref2)
-```
-
 ## Development Commands and Feature Flags
-
-### Basic Development Commands
 
 ```bash
 # Compile and build a single file
@@ -197,9 +182,6 @@ cargo run -- tests
 cargo run -- build tests/cases/basic_print_statement/input/main.bst
 ```
 
-### Feature Flags for Debugging
-See the Cargo.toml for all feature flags.
-
 **Compilation Pipeline Debugging**:
 - `show_tokens` - Display tokenization output
 - `show_headers` - Display parsed headers and dependencies
@@ -209,11 +191,12 @@ See the Cargo.toml for all feature flags.
 **Performance Analysis**:
 - `detailed_timers` - Show timing for each compilation stage
 
+See the Cargo.toml for all feature flags.
+
 ## Testing Workflow
 The primary goal is to get the language working end-to-end. Focus on real-world usage patterns and language features.
 
 ### Unit Testing
-Unit testing should be used only to check new compiler features work as expected but not used extensively.
 Tests should NEVER be kept in the same files as actual code.
 
 Otherwise, tests specific to a module should go inside their own folder inside that module's directory. 
@@ -272,22 +255,3 @@ must_export = ["memory", "bst_str_ptr", "bst_str_len", "bst_release"]
 ```
 
 - Matrix-mode goldens should be stored in `golden/<backend>/...` so the same input fixture can assert different backend outputs.
-
-**No user-input panics**:
-- Active frontend stages must reject unsupported syntax and malformed input with structured diagnostics, not `panic!`, `todo!`, or user-data-driven `.unwrap()`.
-- Use panic paths only for proven internal invariants that indicate a compiler bug.
-
-**Running Integration Tests**:
-```bash
-# Use the compiler's test runner to run all integration tests
-cargo run -- tests
-
-# Run only one backend profile from matrix fixtures
-cargo run -- tests --backend html_wasm
-
-# Debugging a single file
-cargo run --features "detailed_timers,show_ast,show_hir" -- build tests/cases/function_if_loop_smoke/input/#page.bst
-
-```
-
-Once an integration test case has been fixed, it should be added as a new test to the list of cases if there isn't already a similar integration test.
