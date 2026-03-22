@@ -11,12 +11,14 @@ mod state;
 mod static_files;
 mod watch;
 
-use crate::build_system::build::ProjectBuilder;
+use crate::build_system::build::{ProjectBuilder, resolve_project_output_root};
+use crate::build_system::create_project_modules::load_project_config;
 use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::basic_utility_functions::check_if_valid_path;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages, ErrorType};
 use crate::projects::dev_server::build_loop::{ProjectBuildExecutor, dev_server_error_messages};
 use crate::projects::dev_server::state::DevServerState;
+use crate::projects::settings::Config;
 use saying::say;
 use std::net::TcpListener;
 use std::path::{Path, PathBuf};
@@ -56,7 +58,18 @@ pub fn run_dev_server(
             .map(Path::to_path_buf)
             .unwrap_or_else(|| PathBuf::from("."))
     };
-    let output_dir = watch_root.join("dev");
+    
+    // WHAT: Resolve output directory using the same config-driven logic as core compilation.
+    // WHY: Dev server and core compilation must use consistent output root policy for directory projects.
+    let output_dir = if entry_target.is_dir() {
+        // Directory project: load config early and use canonical output root resolution
+        let mut config = Config::new(entry_target.clone());
+        load_project_config(&mut config)?;
+        resolve_project_output_root(&config, flags)
+    } else {
+        // Single-file build: preserve existing fallback behavior (parent dir + "dev")
+        watch_root.join("dev")
+    };
 
     let state = Arc::new(DevServerState::new(output_dir.clone()));
     let mut executor = ProjectBuildExecutor::new(builder);

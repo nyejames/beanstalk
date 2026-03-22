@@ -270,15 +270,14 @@ pub fn evaluate_expression(
             }
 
             if stack.is_empty() {
-                let expected_type_static: &'static str =
-                    Box::leak(format!("{}", current_type).into_boxed_str());
+                let expected_type_str = format!("{}", current_type);
                 return_syntax_error!(
                     "Invalid expression: no valid operands found during evaluation.",
                     ErrorLocation::default(),
                     {
-                        ExpectedType => expected_type_static,
-                        CompilationStage => "Expression Evaluation",
-                        PrimarySuggestion => "Ensure the expression contains valid operands and operators",
+                        ExpectedType => expected_type_str,
+                        CompilationStage => String::from("Expression Evaluation"),
+                        PrimarySuggestion => String::from("Ensure the expression contains valid operands and operators"),
                     }
                 );
             }

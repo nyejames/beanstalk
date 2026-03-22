@@ -83,6 +83,53 @@ impl BackendBuilder for WarningBuilder {
     }
 }
 
+struct ValidationTrackingBuilder {
+    validated: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    built: std::sync::Arc<std::sync::atomic::AtomicBool>,
+}
+
+impl BackendBuilder for ValidationTrackingBuilder {
+    fn build_backend(
+        &self,
+        _modules: Vec<super::Module>,
+        _config: &Config,
+        _flags: &[Flag],
+    ) -> Result<Project, CompilerMessages> {
+        self.built.store(true, std::sync::atomic::Ordering::SeqCst);
+        Ok(Project {
+            output_files: vec![],
+            entry_page_rel: None,
+            warnings: vec![],
+        })
+    }
+
+    fn validate_project_config(&self, _config: &Config) -> Result<(), CompilerError> {
+        self.validated.store(true, std::sync::atomic::Ordering::SeqCst);
+        Ok(())
+    }
+}
+
+struct FailingValidationBuilder;
+
+impl BackendBuilder for FailingValidationBuilder {
+    fn build_backend(
+        &self,
+        _modules: Vec<super::Module>,
+        _config: &Config,
+        _flags: &[Flag],
+    ) -> Result<Project, CompilerMessages> {
+        panic!("should not call build_backend if validation fails");
+    }
+
+    fn validate_project_config(&self, _config: &Config) -> Result<(), CompilerError> {
+        Err(CompilerError::new(
+            "Fake config error",
+            ErrorLocation::default(),
+            ErrorType::Config,
+        ))
+    }
+}
+
 #[test]
 fn build_project_returns_result_without_writing_files() {
     let root = temp_dir("build_only");
@@ -251,6 +298,48 @@ fn build_project_preserves_builder_warnings_in_build_result() {
             .any(|warning| warning.msg == "builder warning"),
         "build result should include backend warnings"
     );
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
+fn build_project_calls_validate_project_config() {
+    let root = temp_dir("validation_tracking");
+    fs::create_dir_all(&root).expect("should create temp root");
+    fs::write(root.join("main.bst"), "value = 1\n").expect("should write source file");
+    let _cwd_guard = CurrentDirGuard::set_to(&root);
+
+    let validated = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let built = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+
+    let builder = ProjectBuilder::new(Box::new(ValidationTrackingBuilder {
+        validated: validated.clone(),
+        built: built.clone(),
+    }));
+
+    build_project(&builder, "main.bst", &[]).expect("build should succeed");
+
+    assert!(validated.load(std::sync::atomic::Ordering::SeqCst), "build_project should call validate_project_config");
+    assert!(built.load(std::sync::atomic::Ordering::SeqCst), "build_project should call build_backend");
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
+fn build_project_fails_if_validation_fails_before_compilation() {
+    let root = temp_dir("failing_validation");
+    fs::create_dir_all(&root).expect("should create temp root");
+    // Invalid frontend syntax to prove it fails BEFORE frontend compilation
+    fs::write(root.join("main.bst"), "invalid syntax;;;;;").expect("should write source file");
+    let _cwd_guard = CurrentDirGuard::set_to(&root);
+
+    let builder = ProjectBuilder::new(Box::new(FailingValidationBuilder));
+    let result = build_project(&builder, "main.bst", &[]);
+
+    assert!(result.is_err(), "build_project should fail if config validation fails");
+    let messages = result.unwrap_err();
+    assert_eq!(messages.errors[0].msg, "Fake config error");
+    assert_eq!(messages.errors[0].error_type, ErrorType::Config);
 
     fs::remove_dir_all(&root).expect("should remove temp dir");
 }

@@ -130,9 +130,9 @@ impl ProjectPathResolver {
                     name
                 ),
                 {
-                    CompilationStage => "Project Structure",
-                    PrimarySuggestion => "Rename the folder inside '#entry_root' to a different name so imports can reach it through the entry-root fallback.",
-                    AlternativeSuggestion => "If that folder should be the explicit project-root import target instead, rename the '#root_folders' entry to a different top-level name.",
+                    CompilationStage => String::from("Project Structure"),
+                    PrimarySuggestion => String::from("Rename the folder inside '#entry_root' to a different name so imports can reach it through the entry-root fallback."),
+                    AlternativeSuggestion => String::from("If that folder should be the explicit project-root import target instead, rename the '#root_folders' entry to a different top-level name."),
                 }
             );
         }

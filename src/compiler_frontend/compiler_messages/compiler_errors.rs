@@ -232,7 +232,7 @@ pub struct CompilerError {
 
     // This is for creating more structured and detailed error messages
     // Optimized for LLMs to understand exactly what went wrong
-    pub metadata: HashMap<ErrorMetaDataKey, &'static str>,
+    pub metadata: HashMap<ErrorMetaDataKey, String>,
 }
 
 impl CompilerError {
@@ -259,7 +259,7 @@ impl CompilerError {
         self
     }
 
-    pub fn new_metadata_entry(&mut self, key: ErrorMetaDataKey, value: &'static str) {
+    pub fn new_metadata_entry(&mut self, key: ErrorMetaDataKey, value: String) {
         self.metadata.insert(key, value);
     }
 
@@ -287,7 +287,7 @@ impl CompilerError {
     pub fn new_rule_error_with_metadata(
         msg: impl Into<String>,
         location: ErrorLocation,
-        metadata: HashMap<ErrorMetaDataKey, &'static str>,
+        metadata: HashMap<ErrorMetaDataKey, String>,
     ) -> Self {
         CompilerError {
             msg: msg.into(),
@@ -342,7 +342,7 @@ impl CompilerError {
     pub fn new_borrow_checker_error(
         msg: impl Into<String>,
         location: ErrorLocation,
-        metadata: HashMap<ErrorMetaDataKey, &'static str>,
+        metadata: HashMap<ErrorMetaDataKey, String>,
     ) -> Self {
         CompilerError {
             msg: msg.into(),
@@ -370,7 +370,7 @@ impl CompilerError {
     pub fn new_file_error(
         path: &std::path::Path,
         msg: impl Into<String>,
-        metadata: HashMap<ErrorMetaDataKey, &'static str>,
+        metadata: HashMap<ErrorMetaDataKey, String>,
     ) -> Self {
         CompilerError {
             msg: msg.into(),
@@ -463,7 +463,7 @@ macro_rules! return_syntax_error {
             metadata: {
                 let mut map = std::collections::HashMap::new();
                 $(
-                    map.insert($crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::$key, $value);
+                    map.insert($crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::$key, $value.into());
                 )*
                 map
             },
@@ -488,7 +488,7 @@ macro_rules! return_type_error {
             error_type: $crate::compiler_frontend::compiler_errors::ErrorType::Type,
             metadata: {
                 let mut map = std::collections::HashMap::new();
-                $( map.insert($crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::$key, $value); )*
+                $( map.insert($crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::$key, $value.into()); )*
                 map
             },
         })
@@ -522,7 +522,7 @@ macro_rules! return_rule_error {
             error_type: $crate::compiler_frontend::compiler_errors::ErrorType::Rule,
             metadata: {
                 let mut map = std::collections::HashMap::new();
-                $( map.insert($crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::$key, $value); )*
+                $( map.insert($crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::$key, $value.into()); )*
                 map
             },
         })
@@ -549,7 +549,7 @@ macro_rules! return_file_error {
             $msg,
             {
                 let mut map = std::collections::HashMap::new();
-                $( map.insert($crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::$key, $value); )*
+                $( map.insert($crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::$key, $value.into()); )*
                 map
             },
         ));
@@ -575,7 +575,7 @@ macro_rules! return_config_error {
             error_type: $crate::compiler_frontend::compiler_errors::ErrorType::Config,
             metadata: {
                 let mut map = std::collections::HashMap::new();
-                $( map.insert($crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::$key, $value); )*
+                $( map.insert($crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::$key, $value.into()); )*
                 map
             },
         })
@@ -605,7 +605,7 @@ macro_rules! return_compiler_error {
             error_type: $crate::compiler_frontend::compiler_errors::ErrorType::Compiler,
             metadata: {
                 let mut map = std::collections::HashMap::new();
-                $( map.insert($crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::$key, $value); )*
+                $( map.insert($crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::$key, $value.into()); )*
                 map
             },
         });
@@ -627,7 +627,7 @@ macro_rules! return_compiler_error {
             error_type: $crate::compiler_frontend::compiler_errors::ErrorType::Compiler,
             metadata: {
                 let mut map = std::collections::HashMap::new();
-                $( map.insert($crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::$key, $value); )*
+                $( map.insert($crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::$key, $value.into()); )*
                 map
             },
         });
@@ -644,41 +644,30 @@ macro_rules! return_compiler_error {
 }
 
 /// Returns a new CompileError for development server issues.
-/// INSIDE A VEC ALREADY.
 ///
-/// Usage: `return_dev_server_error!("message")` or `return_dev_server_error!(path, "message", args...)`;
+/// Usage: `return_dev_server_error!("message", location, { metadata })`;
 #[macro_export]
 macro_rules! return_dev_server_error {
-    // With path, format string, and arguments
-    ($path:expr, $fmt:expr, $($arg:expr),+) => {
-        return Err($crate::compiler_frontend::compiler_errors::CompilerMessages {
-            errors: vec![$crate::compiler_frontend::compiler_errors::CompilerError::file_error(
-                &$path,
-                &format!($fmt, $($arg),+),
-            ).with_error_type($crate::compiler_frontend::compiler_errors::ErrorType::DevServer)],
-            warnings: Vec::new(),
+    // With metadata
+    ($msg:expr, $location:expr, { $( $key:ident => $value:expr ),* $(,)? }) => {
+        return Err($crate::compiler_frontend::compiler_errors::CompilerError {
+            msg: $msg.into(),
+            location: $location,
+            error_type: $crate::compiler_frontend::compiler_errors::ErrorType::DevServer,
+            metadata: {
+                let mut map = std::collections::HashMap::new();
+                $( map.insert($crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::$key, $value.into()); )*
+                map
+            },
         })
     };
-    // With path and message (no format args)
-    ($path:expr, $msg:expr) => {
-        return Err($crate::compiler_frontend::compiler_errors::CompilerMessages {
-            errors: vec![$crate::compiler_frontend::compiler_errors::CompilerError::file_error(
-                &$path,
-                $msg,
-            ).with_error_type($crate::compiler_frontend::compiler_errors::ErrorType::DevServer)],
-            warnings: Vec::new(),
-        })
-    };
-    // Message only (location defaults)
-    ($msg:expr) => {
-        return Err($crate::compiler_frontend::compiler_errors::CompilerMessages {
-            errors: vec![$crate::compiler_frontend::compiler_errors::CompilerError {
-                msg: $msg.into(),
-                location: $crate::compiler_frontend::parsers::tokenizer::tokens::TextLocation::default(),
-                error_type: $crate::compiler_frontend::compiler_errors::ErrorType::DevServer,
-                metadata: std::collections::HashMap::new(),
-            }],
-            warnings: Vec::new(),
+    // Simple
+    ($msg:expr, $location:expr) => {
+        return Err($crate::compiler_frontend::compiler_errors::CompilerError {
+            msg: $msg.into(),
+            location: $location,
+            error_type: $crate::compiler_frontend::compiler_errors::ErrorType::DevServer,
+            metadata: std::collections::HashMap::new(),
         })
     };
 }
@@ -700,7 +689,7 @@ macro_rules! return_borrow_checker_error {
             error_type: $crate::compiler_frontend::compiler_errors::ErrorType::BorrowChecker,
             metadata: {
                 let mut map = std::collections::HashMap::new();
-                $( map.insert($crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::$key, $value); )*
+                $( map.insert($crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::$key, $value.into()); )*
                 map
             },
         })
@@ -725,7 +714,7 @@ macro_rules! return_borrow_checker_error {
 #[macro_export]
 macro_rules! create_multiple_mutable_borrows_error {
     ($place:expr, $existing_location:expr, $new_location:expr) => {{
-        let place_str: &'static str = Box::leak(format!("{:?}", $place).into_boxed_str());
+        let place_str = format!("{:?}", $place);
 
         $crate::compiler_frontend::compiler_errors::CompilerError {
             msg: format!(
@@ -738,11 +727,11 @@ macro_rules! create_multiple_mutable_borrows_error {
                 let mut map = std::collections::HashMap::new();
                 map.insert(
                     $crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::VariableName,
-                    place_str,
+                    place_str.clone(),
                 );
                 map.insert(
                     $crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::BorrowKind,
-                    "Mutable",
+                    String::from("Mutable"),
                 );
                 map.insert(
                     $crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::ConflictingVariable,
@@ -750,15 +739,15 @@ macro_rules! create_multiple_mutable_borrows_error {
                 );
                 map.insert(
                     $crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::CompilationStage,
-                    "Borrow Checking",
+                    String::from("Borrow Checking"),
                 );
                 map.insert(
                     $crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
-                    "Ensure the first mutable borrow is no longer used before creating the second",
+                    String::from("Ensure the first mutable borrow is no longer used before creating the second"),
                 );
                 map.insert(
                     $crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::LifetimeHint,
-                    "Only one mutable borrow can exist at a time",
+                    String::from("Only one mutable borrow can exist at a time"),
                 );
                 map
             },
@@ -792,14 +781,14 @@ macro_rules! return_multiple_mutable_borrows_error {
 #[macro_export]
 macro_rules! create_shared_mutable_conflict_error {
     ($place:expr, $existing_kind:expr, $new_kind:expr, $existing_location:expr, $new_location:expr) => {{
-        let place_str: &'static str = Box::leak(format!("{:?}", $place).into_boxed_str());
-        let existing_kind_str: &'static str = match $existing_kind {
+        let place_str = format!("{:?}", $place);
+        let existing_kind_str = match $existing_kind {
             BorrowKind::Shared => "Shared",
             BorrowKind::Mutable => "Mutable",
             BorrowKind::CandidateMove => "Mutable", // Treat as mutable for error reporting
             BorrowKind::Move => "Move",
         };
-        let new_kind_str: &'static str = match $new_kind {
+        let new_kind_str = match $new_kind {
             BorrowKind::Shared => "Shared",
             BorrowKind::Mutable => "Mutable",
             BorrowKind::CandidateMove => "Mutable", // Treat as mutable for error reporting
@@ -835,12 +824,9 @@ macro_rules! create_shared_mutable_conflict_error {
             ),
         };
 
-        let existing_borrow_info: &'static str = Box::leak(
-            format!(
-                "Existing {} borrow conflicts with new {} borrow",
-                existing_kind_str, new_kind_str
-            )
-            .into_boxed_str(),
+        let existing_borrow_info = format!(
+            "Existing {} borrow conflicts with new {} borrow",
+            existing_kind_str, new_kind_str
         );
 
         $crate::compiler_frontend::compiler_errors::CompilerError {
@@ -851,11 +837,11 @@ macro_rules! create_shared_mutable_conflict_error {
                 let mut map = std::collections::HashMap::new();
                 map.insert(
                     $crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::VariableName,
-                    place_str,
+                    place_str.clone(),
                 );
                 map.insert(
                     $crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::BorrowKind,
-                    new_kind_str,
+                    String::from(new_kind_str),
                 );
                 map.insert(
                     $crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::ConflictingVariable,
@@ -863,15 +849,15 @@ macro_rules! create_shared_mutable_conflict_error {
                 );
                 map.insert(
                     $crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::CompilationStage,
-                    "Borrow Checking",
+                    String::from("Borrow Checking"),
                 );
                 map.insert(
                     $crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
-                    suggestion,
+                    String::from(suggestion),
                 );
                 map.insert(
                     $crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::LifetimeHint,
-                    lifetime_hint,
+                    String::from(lifetime_hint),
                 );
                 map.insert(
                     $crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::AlternativeSuggestion,
@@ -908,7 +894,7 @@ macro_rules! return_shared_mutable_conflict_error {
 #[macro_export]
 macro_rules! create_use_after_move_error {
     ($place:expr, $move_location:expr, $use_location:expr) => {{
-        let place_str: &'static str = Box::leak(format!("{:?}", $place).into_boxed_str());
+        let place_str = format!("{:?}", $place);
 
         $crate::compiler_frontend::compiler_errors::CompilerError {
             msg: format!("borrow of moved value: `{:?}`", $place),
@@ -916,12 +902,12 @@ macro_rules! create_use_after_move_error {
             error_type: $crate::compiler_frontend::compiler_errors::ErrorType::BorrowChecker,
             metadata: {
                 let mut map = std::collections::HashMap::new();
-                map.insert($crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::VariableName, place_str);
+                map.insert($crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::VariableName, place_str.clone());
                 map.insert($crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::MovedVariable, place_str);
-                map.insert($crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::CompilationStage, "Borrow Checking");
-                map.insert($crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::PrimarySuggestion, "Consider using a reference instead of moving the value");
-                map.insert($crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::AlternativeSuggestion, "Clone the value before moving if you need to use it later");
-                map.insert($crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::LifetimeHint, "Once a value is moved, ownership transfers and the original variable can no longer be used");
+                map.insert($crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::CompilationStage, String::from("Borrow Checking"));
+                map.insert($crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::PrimarySuggestion, String::from("Consider using a reference instead of moving the value"));
+                map.insert($crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::AlternativeSuggestion, String::from("Clone the value before moving if you need to use it later"));
+                map.insert($crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::LifetimeHint, String::from("Once a value is moved, ownership transfers and the original variable can no longer be used"));
                 map
             },
         }
@@ -951,8 +937,8 @@ macro_rules! return_use_after_move_error {
 #[macro_export]
 macro_rules! create_move_while_borrowed_error {
     ($place:expr, $borrow_kind:expr, $borrow_location:expr, $move_location:expr) => {{
-        let place_str: &'static str = Box::leak(format!("{:?}", $place).into_boxed_str());
-        let borrow_kind_str: &'static str = match $borrow_kind {
+        let place_str = format!("{:?}", $place);
+        let borrow_kind_str = match $borrow_kind {
             BorrowKind::Shared => "Shared",
             BorrowKind::Mutable => "Mutable",
             BorrowKind::CandidateMove => "Mutable", // Treat as mutable for error reporting
@@ -977,7 +963,7 @@ macro_rules! create_move_while_borrowed_error {
                 let mut map = std::collections::HashMap::new();
                 map.insert(
                     $crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::VariableName,
-                    place_str,
+                    place_str.clone(),
                 );
                 map.insert(
                     $crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::BorrowedVariable,
@@ -985,23 +971,23 @@ macro_rules! create_move_while_borrowed_error {
                 );
                 map.insert(
                     $crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::BorrowKind,
-                    borrow_kind_str,
+                    String::from(borrow_kind_str),
                 );
                 map.insert(
                     $crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::CompilationStage,
-                    "Borrow Checking",
+                    String::from("Borrow Checking"),
                 );
                 map.insert(
                     $crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
-                    "Ensure all borrows are finished before moving the value",
+                    String::from("Ensure all borrows are finished before moving the value"),
                 );
                 map.insert(
                     $crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::AlternativeSuggestion,
-                    "Use references instead of moving the value",
+                    String::from("Use references instead of moving the value"),
                 );
                 map.insert(
                     $crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::LifetimeHint,
-                    "Cannot move a value while it has active borrows - the borrows must end first",
+                    String::from("Cannot move a value while it has active borrows - the borrows must end first"),
                 );
                 map
             },
@@ -1033,9 +1019,8 @@ macro_rules! return_move_while_borrowed_error {
 #[macro_export]
 macro_rules! create_whole_object_borrow_error {
     ($whole_place:expr, $part_place:expr, $part_location:expr, $whole_location:expr) => {{
-        let whole_place_str: &'static str =
-            Box::leak(format!("{:?}", $whole_place).into_boxed_str());
-        let part_place_str: &'static str = Box::leak(format!("{:?}", $part_place).into_boxed_str());
+        let whole_place_str = format!("{:?}", $whole_place);
+        let part_place_str = format!("{:?}", $part_place);
 
         $crate::compiler_frontend::compiler_errors::CompilerError::new_borrow_checker_error(
             format!(
@@ -1055,11 +1040,11 @@ macro_rules! create_whole_object_borrow_error {
                 );
                 map.insert(
                     $crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::ConflictType,
-                    "WholeObjectBorrowingViolation",
+                    String::from("WholeObjectBorrowingViolation"),
                 );
                 map.insert(
                     $crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
-                    "Consider using the existing borrow of the part, or end the part borrow first",
+                    String::from("Consider using the existing borrow of the part, or end the part borrow first"),
                 );
                 map
             },
@@ -1096,7 +1081,7 @@ macro_rules! create_borrow_checker_error {
             $location,
             {
                 let mut map = std::collections::HashMap::new();
-                $( map.insert($crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::$key, $value); )*
+                $( map.insert($crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::$key, $value.into()); )*
                 map
             }
         )
@@ -1144,7 +1129,7 @@ macro_rules! return_hir_transformation_error {
             error_type: $crate::compiler_frontend::compiler_errors::ErrorType::HirTransformation,
             metadata: {
                 let mut map = std::collections::HashMap::new();
-                $( map.insert($crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::$key, $value); )*
+                $( map.insert($crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::$key, $value.into()); )*
                 map
             },
         })
@@ -1176,7 +1161,7 @@ macro_rules! return_lir_transformation_error {
             error_type: $crate::compiler_frontend::compiler_errors::ErrorType::LirTransformation,
             metadata: {
                 let mut map = std::collections::HashMap::new();
-                $( map.insert($crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::$key, $value); )*
+                $( map.insert($crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::$key, $value.into()); )*
                 map
             },
         })
@@ -1198,7 +1183,7 @@ macro_rules! return_lir_transformation_error {
             error_type: $crate::compiler_frontend::compiler_errors::ErrorType::LirTransformation,
             metadata: {
                 let mut map = std::collections::HashMap::new();
-                $( map.insert($crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::$key, $value); )*
+                $( map.insert($crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::$key, $value.into()); )*
                 map
             },
         })
@@ -1231,7 +1216,7 @@ macro_rules! return_wasm_generation_error {
             error_type: $crate::compiler_frontend::compiler_errors::ErrorType::WasmGeneration,
             metadata: {
                 let mut map = std::collections::HashMap::new();
-                $( map.insert($crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::$key, $value); )*
+                $( map.insert($crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::$key, $value.into()); )*
                 map
             },
         })
@@ -1253,7 +1238,7 @@ macro_rules! return_wasm_generation_error {
             error_type: $crate::compiler_frontend::compiler_errors::ErrorType::WasmGeneration,
             metadata: {
                 let mut map = std::collections::HashMap::new();
-                $( map.insert($crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::$key, $value); )*
+                $( map.insert($crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::$key, $value.into()); )*
                 map
             },
         })

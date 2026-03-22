@@ -52,12 +52,9 @@ fn create_conditional_loop(
     )?;
 
     if !is_boolean_expression(&condition) {
-        let found_type: &'static str = Box::leak(
-            condition
-                .data_type
-                .display_with_table(string_table)
-                .into_boxed_str(),
-        );
+        let found_type = condition
+            .data_type
+            .display_with_table(string_table);
         return_syntax_error!(
             format!(
                 "Loop condition must be a boolean expression. Found '{}'",

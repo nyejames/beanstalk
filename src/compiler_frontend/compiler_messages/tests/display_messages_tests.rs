@@ -4,11 +4,11 @@ use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorLocation, Er
 #[test]
 fn guidance_lines_include_stage_and_suggestions_when_present() {
     let mut error = CompilerError::new_syntax_error("bad syntax", ErrorLocation::default());
-    error.new_metadata_entry(ErrorMetaDataKey::CompilationStage, "Expression Parsing");
-    error.new_metadata_entry(ErrorMetaDataKey::PrimarySuggestion, "Do the thing");
-    error.new_metadata_entry(ErrorMetaDataKey::AlternativeSuggestion, "Try another thing");
-    error.new_metadata_entry(ErrorMetaDataKey::SuggestedInsertion, "->");
-    error.new_metadata_entry(ErrorMetaDataKey::SuggestedLocation, "after token X");
+    error.new_metadata_entry(ErrorMetaDataKey::CompilationStage, String::from("Expression Parsing"));
+    error.new_metadata_entry(ErrorMetaDataKey::PrimarySuggestion, String::from("Do the thing"));
+    error.new_metadata_entry(ErrorMetaDataKey::AlternativeSuggestion, String::from("Try another thing"));
+    error.new_metadata_entry(ErrorMetaDataKey::SuggestedInsertion, String::from("->"));
+    error.new_metadata_entry(ErrorMetaDataKey::SuggestedLocation, String::from("after token X"));
 
     let lines = format_error_guidance_lines(&error);
 

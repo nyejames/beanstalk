@@ -143,11 +143,11 @@ pub fn create_expression(
                             );
                             error.new_metadata_entry(
                                 ErrorMetaDataKey::CompilationStage,
-                                "Expression Parsing",
+                                String::from("Expression Parsing"),
                             );
                             error.new_metadata_entry(
                                 ErrorMetaDataKey::PrimarySuggestion,
-                                "Add a value before ',' or remove the comma",
+                                String::from("Add a value before ',' or remove the comma"),
                             );
                             return Err(error);
                         }
@@ -161,11 +161,11 @@ pub fn create_expression(
                             );
                             error.new_metadata_entry(
                                 ErrorMetaDataKey::CompilationStage,
-                                "Expression Parsing",
+                                String::from("Expression Parsing"),
                             );
                             error.new_metadata_entry(
                                 ErrorMetaDataKey::PrimarySuggestion,
-                                "Use '->' only in function signatures like '|args| -> Type:'",
+                                String::from("Use '->' only in function signatures like '|args| -> Type:'"),
                             );
                             return Err(error);
                         }
@@ -569,13 +569,12 @@ pub fn create_expression(
                     }
                 }
 
-                let var_name_static: &'static str =
-                    Box::leak(string_table.resolve(*id).to_string().into_boxed_str());
+                let var_name = string_table.resolve(*id).to_string();
                 return_rule_error!(
-                    format!("Undefined variable '{}'. Variable must be declared before use.", var_name_static),
+                    format!("Undefined variable '{}'. Variable must be declared before use.", var_name),
                     token_stream.current_location().to_error_location(string_table),
                     {
-                        VariableName => var_name_static,
+                        VariableName => var_name,
                         CompilationStage => "Expression Parsing",
                         PrimarySuggestion => "Declare the variable before using it in this expression",
                     }
@@ -943,10 +942,10 @@ pub fn create_expression(
                         .current_location()
                         .to_error_location(string_table),
                 );
-                error.new_metadata_entry(ErrorMetaDataKey::CompilationStage, "Expression Parsing");
+                error.new_metadata_entry(ErrorMetaDataKey::CompilationStage, String::from("Expression Parsing"));
                 error.new_metadata_entry(
                     ErrorMetaDataKey::PrimarySuggestion,
-                    "Use a concrete value/expression here, or use 'else:' for default match arms",
+                    String::from("Use a concrete value/expression here, or use 'else:' for default match arms"),
                 );
                 return Err(error);
             }
@@ -958,10 +957,10 @@ pub fn create_expression(
                         .current_location()
                         .to_error_location(string_table),
                 );
-                error.new_metadata_entry(ErrorMetaDataKey::CompilationStage, "Expression Parsing");
+                error.new_metadata_entry(ErrorMetaDataKey::CompilationStage, String::from("Expression Parsing"));
                 error.new_metadata_entry(
                     ErrorMetaDataKey::PrimarySuggestion,
-                    "Remove the stray '|' or move it into a declaration signature",
+                    String::from("Remove the stray '|' or move it into a declaration signature"),
                 );
                 return Err(error);
             }

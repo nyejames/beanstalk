@@ -4,7 +4,7 @@
 //! writer (`write_project_outputs`). Build tools can compile once and choose where artifacts are
 //! written without reimplementing frontend/backend orchestration.
 
-use crate::build_system::create_project_modules::compile_project_frontend;
+use crate::build_system::create_project_modules::{compile_project_frontend, load_project_config};
 use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::analysis::borrow_checker::BorrowCheckReport;
 use crate::compiler_frontend::basic_utility_functions::check_if_valid_path;
@@ -163,6 +163,18 @@ pub fn build_project(
     // This discovers all the modules, parses the config,
     // and compiles each module to HIR for backend lowering.
     let mut config = Config::new(valid_path);
+    
+    // WHAT: Load and validate project config before compilation begins (Stage 0)
+    // WHY: Config must be validated early so backends can reject invalid settings before any work
+    load_project_config(&mut config)?;
+    
+    // WHAT: Validate backend-specific config requirements before compilation
+    // WHY: Backend validation must occur after Stage 0 loading but before any compilation work
+    project_builder
+        .backend
+        .validate_project_config(&config)
+        .map_err(compiler_messages_from_error)?;
+    
     let modules = compile_project_frontend(
         &mut config,
         flags,

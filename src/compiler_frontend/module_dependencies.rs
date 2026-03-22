@@ -104,11 +104,7 @@ fn visit_node(
 
     // cycle?
     if tracker.temp_mark.contains(&resolved_path) {
-        let path_str: &'static str = Box::leak(
-            resolved_path
-                .to_portable_string(string_table)
-                .into_boxed_str(),
-        );
+        let path_str = resolved_path.to_portable_string(string_table);
         return_rule_error!(
             format!("Circular dependency detected at {}", path_str),
             ErrorLocation::default(),

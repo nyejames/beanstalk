@@ -74,9 +74,11 @@ fn rejects_legacy_config_assignment_syntax() {
     fs::write(&config_path, "#output_folder dist\n").expect("should write config");
 
     let mut config = Config::new(root.clone());
-    let error =
+    let messages =
         parse_project_config_file(&mut config, &config_path).expect_err("config should fail");
 
+    assert!(!messages.errors.is_empty(), "should have at least one error");
+    let error = &messages.errors[0];
     assert!(
         error
             .msg
@@ -97,9 +99,11 @@ fn rejects_deprecated_src_config_key() {
     fs::write(&config_path, "#src = \"src\"\n").expect("should write config");
 
     let mut config = Config::new(root.clone());
-    let error =
+    let messages =
         parse_project_config_file(&mut config, &config_path).expect_err("config should fail");
 
+    assert!(!messages.errors.is_empty(), "should have at least one error");
+    let error = &messages.errors[0];
     assert!(
         error.msg.contains("#entry_root"),
         "unexpected error message: {}",
@@ -118,9 +122,11 @@ fn rejects_legacy_libraries_config_key() {
     fs::write(&config_path, "#libraries = { @lib }\n").expect("should write config");
 
     let mut config = Config::new(root.clone());
-    let error =
+    let messages =
         parse_project_config_file(&mut config, &config_path).expect_err("config should fail");
 
+    assert!(!messages.errors.is_empty(), "should have at least one error");
+    let error = &messages.errors[0];
     assert!(
         error.msg.contains("#root_folders"),
         "unexpected error message: {}",
@@ -139,9 +145,11 @@ fn rejects_invalid_root_folder_entries() {
     fs::write(&config_path, "#root_folders = { @(core/html) }\n").expect("should write config");
 
     let mut config = Config::new(root.clone());
-    let error =
+    let messages =
         parse_project_config_file(&mut config, &config_path).expect_err("config should fail");
 
+    assert!(!messages.errors.is_empty(), "should have at least one error");
+    let error = &messages.errors[0];
     assert!(
         error.msg.contains("single top-level folder name"),
         "unexpected error message: {}",
@@ -466,6 +474,36 @@ fn rejects_entry_root_folder_that_conflicts_with_root_folder_name() {
             .is_some_and(|suggestion| suggestion.contains("Rename")),
         "expected rename suggestion metadata: {error:?}"
     );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn detects_duplicate_config_keys() {
+    // Duplicate constants are caught by the header parser during parsing.
+    // This test verifies that config parsing properly reports the duplicate key error.
+    let root = temp_dir("config_duplicate_keys");
+    fs::create_dir_all(&root).expect("should create root dir");
+    let config_path = root.join(settings::CONFIG_FILE_NAME);
+
+    fs::write(
+        &config_path,
+        "#entry_root = \"src\"\n#dev_folder = \"dev\"\n#entry_root = \"other\"\n",
+    )
+    .expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let messages =
+        parse_project_config_file(&mut config, &config_path).expect_err("config should fail");
+
+    assert!(!messages.errors.is_empty(), "should have at least one error");
+    
+    // Find the duplicate key error
+    let duplicate_error = messages.errors.iter().find(|e| e.msg.contains("Duplicate config key"));
+    assert!(duplicate_error.is_some(), "should have a duplicate config key error");
+    
+    let error = duplicate_error.unwrap();
+    assert_eq!(error.error_type, ErrorType::Config, "duplicate config key error should use ErrorType::Config");
 
     fs::remove_dir_all(&root).expect("should remove temp root");
 }

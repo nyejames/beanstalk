@@ -108,15 +108,20 @@ impl BackendBuilder for HtmlProjectBuilder {
             for output_file in compiled_artifacts.output_files {
                 let output_path = output_file.relative_output_path().to_path_buf();
                 if !output_paths.insert(output_path.clone()) {
+                    let mut error = CompilerError::file_error(
+                        &module.entry_point,
+                        format!(
+                            "HTML builder produced duplicate output path '{}'. Ensure each '#*.bst' entry maps to a unique page output.",
+                            output_path.display(),
+                        ),
+                    )
+                    .with_error_type(ErrorType::Config);
+                    error.metadata.insert(
+                        crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
+                        "Check your page routing configuration to ensure unique output paths".to_string()
+                    );
                     return Err(CompilerMessages {
-                        errors: vec![CompilerError::file_error(
-                            &module.entry_point,
-                            format!(
-                                "HTML builder produced duplicate output path '{}'. Ensure each '#*.bst' entry maps to a unique page output.",
-                                output_path.display(),
-                            ),
-                        )
-                        .with_error_type(ErrorType::Config)],
+                        errors: vec![error],
                         warnings: Vec::new(),
                     });
                 }
@@ -138,15 +143,20 @@ impl BackendBuilder for HtmlProjectBuilder {
             let entry_root = resolved_entry_root
                 .as_deref()
                 .unwrap_or_else(|| Path::new("."));
+            let mut error = CompilerError::file_error(
+                &config.entry_dir,
+                format!(
+                    "HTML project builds require a '#page.bst' homepage at the root of the configured entry root '{}'.",
+                    entry_root.display(),
+                ),
+            )
+            .with_error_type(ErrorType::Config);
+            error.metadata.insert(
+                crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
+                format!("Create a '#page.bst' file in '{}'", entry_root.display())
+            );
             return Err(CompilerMessages {
-                errors: vec![CompilerError::file_error(
-                    &config.entry_dir,
-                    format!(
-                        "HTML project builds require a '#page.bst' homepage at the root of the configured entry root '{}'.",
-                        entry_root.display(),
-                    ),
-                )
-                .with_error_type(ErrorType::Config)],
+                errors: vec![error],
                 warnings: Vec::new(),
             });
         }
