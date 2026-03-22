@@ -13,6 +13,7 @@ use crate::compiler_frontend::ast::templates::template::{CommentDirectiveKind, T
 use crate::compiler_frontend::ast::templates::template_body_parser::parse_template_body;
 use crate::compiler_frontend::ast::templates::template_composition::compose_template_head_chain;
 use crate::compiler_frontend::ast::templates::template_formatting::apply_body_formatter;
+use crate::compiler_frontend::ast::templates::template_render_plan::TemplateRenderPlan;
 use crate::compiler_frontend::ast::templates::template_head_parser::{
     apply_doc_comment_defaults, emit_css_template_warnings, emit_html_template_warnings,
     parse_template_head,
@@ -96,7 +97,30 @@ impl Template {
             string_table,
         )?;
 
-        // Stage 3: Composition — apply child wrappers and resolve head-chain
+        // Stage 3: Composition + Formatting
+        // Match the main-branch pipeline ordering: save unformatted composed content,
+        // then format content in-place before a second composition pass.
+        // The unformatted_content preserves the pre-formatting state for deferred
+        // reformatting (e.g. after slot composition revives child outputs).
+        template.unformatted_content = apply_inherited_child_templates_to_content(
+            template.content.clone(),
+            &template.style.child_templates,
+            string_table,
+        )?;
+        template.unformatted_content =
+            compose_template_head_chain(&template.unformatted_content, &mut foldable, string_table)?;
+
+        // Stage 4: Formatting — normalize body content before folding/lowering.
+        // This keeps runtime templates simple: only compile-time-known body strings
+        // are rewritten, while dynamic chunks remain untouched and keep their order.
+        let render_plan = apply_body_formatter(
+            &template.content,
+            &template.style,
+            string_table,
+        );
+
+        // Rebuild formatted content from the render plan, then compose.
+        template.content = render_plan.rebuild_content();
         template.content = apply_inherited_child_templates_to_content(
             template.content,
             &template.style.child_templates,
@@ -104,18 +128,9 @@ impl Template {
         )?;
         template.content =
             compose_template_head_chain(&template.content, &mut foldable, string_table)?;
-        template.unformatted_content = template.content.clone();
+        template.render_plan = Some(TemplateRenderPlan::from_content(&template.content));
 
         template.content_needs_formatting = false;
-
-        // Stage 4: Formatting — normalize body content before folding/lowering.
-        // This keeps runtime templates simple: only compile-time-known body strings
-        // are rewritten, while dynamic chunks remain untouched and keep their order.
-        template.render_plan = Some(apply_body_formatter(
-            &template.content,
-            &template.style,
-            string_table,
-        ));
 
         // Stage 5: Post-parse validation
         if matches!(

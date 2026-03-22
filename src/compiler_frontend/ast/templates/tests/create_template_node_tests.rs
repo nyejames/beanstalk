@@ -1265,10 +1265,12 @@ fn runtime_templates_with_code_format_only_static_body_strings() {
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("template should parse");
 
-    // Head references remain in template.content — check there.
+    // Head values remain in template.content — check there.
+    // The head reference may resolve to a StringSlice during AST construction
+    // when the value is known and will be copied or moved.
     assert!(template_segments(&template).iter().any(|segment| {
         segment.origin == TemplateSegmentOrigin::Head
-            && matches!(segment.expression.kind, ExpressionKind::Reference(_))
+            && matches!(segment.expression.kind, ExpressionKind::Reference(_) | ExpressionKind::StringSlice(_))
     }));
 
     // Formatted body text (after $code pass) lives in render_plan, not template.content.

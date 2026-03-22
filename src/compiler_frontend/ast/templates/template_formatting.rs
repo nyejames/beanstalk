@@ -22,7 +22,7 @@ use crate::compiler_frontend::tokenizer::tokens::TextLocation;
 
 use crate::compiler_frontend::ast::templates::template_render_plan::{
     FormatterAnchorId, FormatterInput, FormatterInputPiece, FormatterOutputPiece,
-    FormatterTextPiece, RenderPiece, RenderTextPiece, TemplateRenderPlan,
+    FormatterTextPiece, RenderExpressionPiece, RenderPiece, RenderTextPiece, TemplateRenderPlan,
 };
 
 /// Applies the body formatter and whitespace passes to a template's content.
@@ -143,14 +143,17 @@ pub(crate) fn apply_body_formatter(
 
     let mut is_first_run = true;
     for piece in std::mem::take(&mut plan.pieces) {
-        match piece {
+        match &piece {
             // Body text and non-head non-slot content forms contiguous formatter runs.
             RenderPiece::Text(_)
             | RenderPiece::ChildTemplate(_)
-            | RenderPiece::DynamicExpression(_) => {
+            | RenderPiece::DynamicExpression(RenderExpressionPiece {
+                origin: crate::compiler_frontend::ast::templates::template::TemplateSegmentOrigin::Body,
+                ..
+            }) => {
                 current_run.push(piece);
             }
-            other => {
+            _other => {
                 if !current_run.is_empty() {
                     let run_position = if is_first_run {
                         TemplateBodyRunPosition::First
@@ -164,7 +167,7 @@ pub(crate) fn apply_body_formatter(
                         string_table,
                     ));
                 }
-                new_plan_pieces.push(other);
+                new_plan_pieces.push(piece);
             }
         }
     }

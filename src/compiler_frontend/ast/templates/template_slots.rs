@@ -538,6 +538,7 @@ fn revive_child_template_outputs_in_template(mut template: Template) -> Template
     template.style = template.explicit_style.to_owned();
     template.content = template.unformatted_content.to_owned();
     template.content_needs_formatting = true;
+    template.render_plan = None;
     refresh_template_kind(&mut template);
     template
 }

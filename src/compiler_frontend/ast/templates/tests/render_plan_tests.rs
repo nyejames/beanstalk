@@ -3,7 +3,7 @@ mod render_plan_tests {
     use crate::compiler_frontend::ast::expressions::expression::Expression;
     use crate::compiler_frontend::ast::templates::template::{
         SlotKey, SlotPlaceholder, TemplateAtom, TemplateContent, TemplateSegment,
-        TemplateSegmentOrigin, TemplateType,
+        TemplateSegmentOrigin,
     };
     use crate::compiler_frontend::ast::templates::template_render_plan::{
         RenderPiece, TemplateRenderPlan,
