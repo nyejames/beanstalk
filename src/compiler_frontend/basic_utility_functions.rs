@@ -22,7 +22,7 @@ pub fn check_if_valid_path(path: &str) -> Result<PathBuf, CompilerError> {
     // Check if the path exists
     if !path.exists() {
         return_file_error!(path, "Path does not exist", {
-            CompilationStage => "Build system path checking"
+            CompilationStage => String::from("Build system path checking")
         });
     }
 

@@ -5,7 +5,9 @@
 // This is because both a Wasm and JS backend must be supported, so it is agnostic about what happens after that.
 
 use crate::build_system::build::{InputFile, Module};
-use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages, ErrorType};
+use crate::compiler_frontend::compiler_errors::{
+    CompilerError, CompilerMessages, ErrorMetaDataKey, ErrorType,
+};
 use crate::compiler_frontend::headers::parse_file_headers::{Header, HeaderKind, parse_headers};
 use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
@@ -19,7 +21,7 @@ use crate::projects::path_resolution::{ProjectPathResolver, resolve_project_entr
 use crate::projects::settings;
 use crate::projects::settings::{BEANSTALK_FILE_EXTENSION, Config};
 use crate::{borrow_log, return_err_as_messages, return_file_error, timer_log};
-use std::collections::{BTreeSet, HashSet, VecDeque};
+use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -136,16 +138,6 @@ pub fn compile_project_frontend(
             ),
         );
         return_err_as_messages!(err);
-    }
-
-    // --------------------
-    //   PARSE THE CONFIG
-    // --------------------
-    let config_path = config.entry_dir.join(settings::CONFIG_FILE_NAME);
-    if config_path.exists()
-        && let Err(error) = parse_project_config_file(config, &config_path)
-    {
-        return_err_as_messages!(error);
     }
 
     // -------------------------------------
@@ -402,8 +394,8 @@ fn discover_all_modules_in_project(
                 source_root.display()
             ),
             {
-                CompilationStage => "Project Structure",
-                PrimarySuggestion => "Set '#entry_root' in #config.bst to an existing directory",
+                CompilationStage => String::from("Project Structure"),
+                PrimarySuggestion => String::from("Set '#entry_root' in #config.bst to an existing directory"),
             }
         );
     }
@@ -416,8 +408,8 @@ fn discover_all_modules_in_project(
             project_path_resolver.entry_root(),
             "No root module entries were found. Expected at least one '#*.bst' file under the configured entry root.",
             {
-                CompilationStage => "Project Structure",
-                PrimarySuggestion => "Add at least one entry file like '#page.bst' under the configured entry root",
+                CompilationStage => String::from("Project Structure"),
+                PrimarySuggestion => String::from("Add at least one entry file like '#page.bst' under the configured entry root"),
             }
         );
     }
@@ -559,47 +551,132 @@ fn extract_import_paths(
         string_table,
     })
 }
-// `#config.bst` follows regular Beanstalk syntax. Stage 0 only extracts top-level
-// constant headers from it and maps the values that builders care about.
-fn parse_project_config_file(config: &mut Config, config_path: &Path) -> Result<(), CompilerError> {
-    let source = extract_source_code(config_path)?;
+/// WHAT: loads and validates project config from #config.bst before compilation begins.
+/// WHY: config must be validated early so backends can reject invalid settings before any work.
+///
+/// This function is part of Stage 0 (project structure discovery) and executes before
+/// frontend compilation. It checks if a config file exists and delegates to
+/// parse_project_config_file if present. Missing config files are allowed (returns Ok).
+pub fn load_project_config(config: &mut Config) -> Result<(), CompilerMessages> {
+    let config_path = config.entry_dir.join(settings::CONFIG_FILE_NAME);
+
+    if !config_path.exists() {
+        return Ok(()); // Config file is optional
+    }
+
+    parse_project_config_file(config, &config_path)
+}
+
+/// WHAT: parses #config.bst and extracts top-level constant declarations into the Config struct.
+/// WHY: config follows regular Beanstalk syntax; Stage 0 extracts constant headers and validates them.
+///
+/// Error handling: tokenization and header parsing errors are collected and returned together.
+/// Value-level validation (apply_config_constants_from_headers) uses first-error semantics.
+fn parse_project_config_file(
+    config: &mut Config,
+    config_path: &Path,
+) -> Result<(), CompilerMessages> {
+    let mut errors = Vec::new();
+
+    let source = extract_source_code(config_path).map_err(compiler_messages_from_error)?;
     let mut string_table = StringTable::new();
     let style_directives = StyleDirectiveRegistry::built_ins();
     let interned_path = InternedPath::from_path_buf(config_path, &mut string_table);
-    let token_stream = tokenize(
+
+    // Tokenization errors are fatal
+    let token_stream = match tokenize(
         &source,
         &interned_path,
         TokenizeMode::Normal,
         &style_directives,
         &mut string_table,
-    )
-    .map_err(|error| error.with_file_path(config_path.to_path_buf()))?;
+    ) {
+        Ok(tokens) => tokens,
+        Err(error) => {
+            errors.push(error.with_file_path(config_path.to_path_buf()));
+            return Err(CompilerMessages {
+                errors,
+                warnings: Vec::new(),
+            });
+        }
+    };
 
-    // Explicitly reject legacy config assignment shorthand (`#key value`).
-    validate_config_hash_assignments(&token_stream.tokens, &string_table)?;
+    // Check for deprecated '#key value' syntax (should be '#key = value')
+    let legacy_errors = validate_config_hash_assignments(&token_stream.tokens, &string_table);
+    errors.extend(legacy_errors);
 
     let host_registry = HostRegistry::new(&mut string_table);
     let mut warnings = Vec::new();
-    let parsed_headers = parse_headers(
+
+    // Header parsing - for config files, we handle duplicate detection separately
+    let parsed_headers = match parse_headers(
         vec![token_stream],
         &host_registry,
         &mut warnings,
         config_path,
         &mut string_table,
-    )
-    .map_err(|errors| {
-        errors.into_iter().next().unwrap_or_else(|| {
-            CompilerError::file_error(config_path, "Failed to parse project config headers.")
-        })
-    })?;
+    ) {
+        Ok(headers) => headers,
+        Err(header_errors) => {
+            // Preserve all header parsing errors
+            // Convert duplicate constant errors from ErrorType::Rule to ErrorType::Config
+            // for consistency with config file error reporting
+            for error in header_errors {
+                if error.msg.contains("already a constant") || error.msg.contains("shadow") {
+                    // Convert Rule error to Config error for config files
+                    // Use a clearer message for config context while preserving location and metadata
+                    let mut config_error = error.clone();
+                    config_error.error_type = ErrorType::Config;
+                    config_error.msg =
+                        "Duplicate config key found. Each config key must be unique.".to_string();
+                    errors.push(config_error);
+                } else {
+                    // Preserve all other header errors as-is
+                    errors.push(error);
+                }
+            }
+            return Err(CompilerMessages {
+                errors,
+                warnings: Vec::new(),
+            });
+        }
+    };
 
-    apply_config_constants_from_headers(config, &parsed_headers.headers, &string_table, config_path)
+    // Detect duplicate config keys with Config error type
+    // This handles cases where parse_headers succeeded but there are still duplicates
+    if let Some(duplicate_errors) =
+        detect_duplicate_config_keys(&parsed_headers.headers, &string_table)
+    {
+        errors.extend(duplicate_errors);
+    }
+
+    // Apply config values - collect all value-level errors
+    if let Err(config_errors) = apply_config_constants_from_headers(
+        config,
+        &parsed_headers.headers,
+        &string_table,
+        config_path,
+    ) {
+        errors.extend(config_errors);
+    }
+
+    if !errors.is_empty() {
+        return Err(CompilerMessages {
+            errors,
+            warnings: Vec::new(),
+        });
+    }
+
+    Ok(())
 }
 
+/// WHAT: validates that config uses standard constant syntax, not legacy shorthand.
+/// WHY: collect all legacy syntax violations so users can fix them in one iteration.
 fn validate_config_hash_assignments(
     tokens: &[Token],
     string_table: &StringTable,
-) -> Result<(), CompilerError> {
+) -> Vec<CompilerError> {
+    let mut errors = Vec::new();
     let mut index = 0usize;
 
     while index < tokens.len() {
@@ -646,87 +723,138 @@ fn validate_config_hash_assignments(
                 | TokenKind::OpenCurly
         ) {
             let name = string_table.resolve(name_id);
-            return Err(CompilerError::new(
+            let mut error = CompilerError::new(
                 format!(
                     "Invalid config declaration '#{name} ...'. Use standard constant syntax: '#{name} = value'."
                 ),
                 next_token.location.to_error_location(string_table),
                 ErrorType::Config,
-            ));
+            );
+            error.metadata.insert(
+                crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
+                format!("Add '=' between '#{name}' and the value"),
+            );
+            errors.push(error);
         }
     }
 
-    Ok(())
+    errors
 }
 
+/// WHAT: extracts config key-value pairs from parsed headers and stores them in the Config struct.
+/// WHY: config constants must be applied to the Config struct with precise location tracking
+///      for accurate error reporting; deprecated keys are detected and rejected here.
+///      All errors are collected to enable multi-error reporting.
 fn apply_config_constants_from_headers(
     config: &mut Config,
     headers: &[Header],
     string_table: &StringTable,
     config_path: &Path,
-) -> Result<(), CompilerError> {
+) -> Result<(), Vec<CompilerError>> {
+    let mut errors = Vec::new();
+
     for header in headers {
         let HeaderKind::Constant { metadata } = &header.kind else {
             continue;
         };
 
+        // Extract the config key name from the header
         let Some(key_id) = header.tokens.src_path.name() else {
-            return Err(CompilerError::compiler_error(
+            errors.push(CompilerError::compiler_error(
                 "Config constant header is missing a symbol name.",
             ));
+            continue;
         };
         let key = string_table.resolve(key_id).to_string();
+
+        // Location tracking: store the source location for this config key for precise error reporting
+        let location = header.name_location.to_error_location(string_table);
+        config.setting_locations.insert(key.clone(), location);
 
         let mut initializer_tokens = metadata.declaration_syntax.initializer_tokens.clone();
         initializer_tokens.push(Token::new(TokenKind::Eof, header.name_location.to_owned()));
         let mut value_index = 0usize;
         skip_newlines(&initializer_tokens, &mut value_index);
 
+        // Deprecated key handling: collect errors for old config keys with helpful migration messages
         if key == "libraries" {
-            return Err(CompilerError::new(
+            let mut error = CompilerError::new(
                 "Config key '#libraries' has been replaced. Use '#root_folders' instead.",
                 header.name_location.to_error_location(string_table),
                 ErrorType::Config,
-            ));
+            );
+            error.metadata.insert(
+                crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
+                "Rename '#libraries' to '#root_folders' in your config file".to_string(),
+            );
+            errors.push(error);
+            continue;
         }
 
+        // Special handling for '#root_folders' which accepts multiple values
         if key == "root_folders" {
-            config.root_folders = parse_root_folders_value(
+            match parse_root_folders_value(
                 &initializer_tokens,
                 &mut value_index,
                 string_table,
                 config_path,
-            )?;
+            ) {
+                Ok(root_folders) => config.root_folders = root_folders,
+                Err(folder_errors) => errors.extend(folder_errors),
+            }
             continue;
         }
 
         let Some(value_token) = initializer_tokens.get(value_index) else {
-            return Err(CompilerError::new(
+            let mut error = CompilerError::new(
                 format!("Missing value for config constant '#{key}'."),
                 header.name_location.to_error_location(string_table),
                 ErrorType::Config,
-            ));
+            );
+            error.metadata.insert(
+                crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
+                format!("Add a value after '#{key} =' (e.g., '#{key} = \"value\"')"),
+            );
+            errors.push(error);
+            continue;
         };
         let Some(value) = parse_config_scalar_value(&value_token.kind, string_table) else {
-            return Err(CompilerError::new(
+            let mut error = CompilerError::new(
                 format!("Unsupported value for config constant '#{key}'."),
                 value_token.location.to_error_location(string_table),
                 ErrorType::Config,
-            ));
+            );
+            error.metadata.insert(
+                crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
+                "Config values must be strings, numbers, booleans, or paths".to_string(),
+            );
+            errors.push(error);
+            continue;
         };
 
+        // Deprecated key handling: '#src' was renamed to '#entry_root'
         if key == "src" {
-            return Err(CompilerError::new(
+            let mut error = CompilerError::new(
                 "Config key '#src' is deprecated. Use '#entry_root' instead.",
                 header.name_location.to_error_location(string_table),
                 ErrorType::Config,
-            ));
+            );
+            error.metadata.insert(
+                crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
+                "Rename '#src' to '#entry_root' in your config file".to_string(),
+            );
+            errors.push(error);
+            continue;
         }
 
         apply_config_entry(config, &key, &value);
     }
 
-    Ok(())
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors)
+    }
 }
 
 fn parse_root_folders_value(
@@ -734,8 +862,10 @@ fn parse_root_folders_value(
     index: &mut usize,
     string_table: &StringTable,
     config_path: &Path,
-) -> Result<Vec<PathBuf>, CompilerError> {
+) -> Result<Vec<PathBuf>, Vec<CompilerError>> {
     let mut root_folders = Vec::new();
+    let mut errors = Vec::new();
+
     let Some(start_token) = tokens.get(*index) else {
         return Ok(root_folders);
     };
@@ -750,84 +880,122 @@ fn parse_root_folders_value(
                 }
                 TokenKind::Path(paths) => {
                     for path in paths {
-                        root_folders.push(validate_root_folder_path(
+                        match validate_root_folder_path(
                             PathBuf::from(path.to_string(string_table)),
                             token,
                             string_table,
-                        )?);
+                        ) {
+                            Ok(validated_path) => root_folders.push(validated_path),
+                            Err(error) => errors.push(error),
+                        }
                     }
                 }
                 TokenKind::StringSliceLiteral(value) | TokenKind::RawStringLiteral(value) => {
-                    root_folders.push(validate_root_folder_path(
+                    match validate_root_folder_path(
                         PathBuf::from(string_table.resolve(*value)),
                         token,
                         string_table,
-                    )?);
+                    ) {
+                        Ok(validated_path) => root_folders.push(validated_path),
+                        Err(error) => errors.push(error),
+                    }
                 }
                 TokenKind::Symbol(value) => {
-                    root_folders.push(validate_root_folder_path(
+                    match validate_root_folder_path(
                         PathBuf::from(string_table.resolve(*value)),
                         token,
                         string_table,
-                    )?);
+                    ) {
+                        Ok(validated_path) => root_folders.push(validated_path),
+                        Err(error) => errors.push(error),
+                    }
                 }
                 TokenKind::Comma | TokenKind::Newline => {}
                 TokenKind::Eof => {
-                    return Err(CompilerError::new(
+                    let mut error = CompilerError::new(
                         "Unterminated '#root_folders' block. Missing closing '}'.",
                         token.location.to_error_location(string_table),
                         ErrorType::Config,
-                    ));
+                    );
+                    error.metadata.insert(
+                        crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
+                        "Add '}' to close the '#root_folders' block".to_string()
+                    );
+                    errors.push(error);
+                    break;
                 }
                 _ => {
-                    return Err(CompilerError::new(
+                    let mut error = CompilerError::new(
                         "Unsupported value in '#root_folders' block.",
                         token.location.to_error_location(string_table),
                         ErrorType::Config,
-                    ));
+                    );
+                    error.metadata.insert(
+                        crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
+                        "Use folder names like '@lib' or strings like \"@lib\"".to_string()
+                    );
+                    errors.push(error);
                 }
             }
             *index += 1;
         }
         dedupe_paths(&mut root_folders);
+
+        if !errors.is_empty() {
+            return Err(errors);
+        }
         return Ok(root_folders);
     }
 
     match &start_token.kind {
         TokenKind::Path(paths) => {
             for path in paths {
-                root_folders.push(validate_root_folder_path(
+                match validate_root_folder_path(
                     PathBuf::from(path.to_string(string_table)),
                     start_token,
                     string_table,
-                )?);
+                ) {
+                    Ok(validated_path) => root_folders.push(validated_path),
+                    Err(error) => errors.push(error),
+                }
             }
         }
         TokenKind::StringSliceLiteral(value) | TokenKind::RawStringLiteral(value) => {
-            root_folders.push(validate_root_folder_path(
+            match validate_root_folder_path(
                 PathBuf::from(string_table.resolve(*value)),
                 start_token,
                 string_table,
-            )?);
+            ) {
+                Ok(validated_path) => root_folders.push(validated_path),
+                Err(error) => errors.push(error),
+            }
         }
         TokenKind::Symbol(value) => {
-            root_folders.push(validate_root_folder_path(
+            match validate_root_folder_path(
                 PathBuf::from(string_table.resolve(*value)),
                 start_token,
                 string_table,
-            )?);
+            ) {
+                Ok(validated_path) => root_folders.push(validated_path),
+                Err(error) => errors.push(error),
+            }
         }
         _ => {
-            return Err(CompilerError::new(
+            let mut error = CompilerError::new(
                 "Unsupported '#root_folders' value. Use a path, string, or '{ ... }' block.",
                 start_token.location.to_error_location(string_table),
                 ErrorType::Config,
-            ));
+            );
+            error.metadata.insert(
+                crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
+                "Use '#root_folders = @lib' or '#root_folders = { @lib, @utils }'".to_string(),
+            );
+            errors.push(error);
         }
     }
 
-    if root_folders.is_empty() {
-        return Err(CompilerError::file_error(
+    if root_folders.is_empty() && errors.is_empty() {
+        errors.push(CompilerError::file_error(
             config_path,
             "Expected at least one root folder in '#root_folders'.",
         ));
@@ -835,7 +1003,12 @@ fn parse_root_folders_value(
 
     *index += 1;
     dedupe_paths(&mut root_folders);
-    Ok(root_folders)
+
+    if !errors.is_empty() {
+        Err(errors)
+    } else {
+        Ok(root_folders)
+    }
 }
 
 /// WHAT: validates one '#root_folders' entry and normalizes it to the stored path form.
@@ -846,42 +1019,62 @@ fn validate_root_folder_path(
     string_table: &StringTable,
 ) -> Result<PathBuf, CompilerError> {
     if root_folder.as_os_str().is_empty() {
-        return Err(CompilerError::new(
+        let mut error = CompilerError::new(
             "Invalid '#root_folders' entry. Root folders cannot be empty.",
             token.location.to_error_location(string_table),
             ErrorType::Config,
-        ));
+        );
+        error.metadata.insert(
+            crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
+            "Provide a folder name like '@lib' or '@utils'".to_string(),
+        );
+        return Err(error);
     }
 
     if root_folder.is_absolute() {
-        return Err(CompilerError::new(
+        let mut error = CompilerError::new(
             format!(
                 "Invalid '#root_folders' entry '{}'. Root folders must be relative to the project root.",
                 root_folder.display()
             ),
             token.location.to_error_location(string_table),
             ErrorType::Config,
-        ));
+        );
+        error.metadata.insert(
+            crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
+            "Use a relative folder name like '@lib' instead of an absolute path".to_string(),
+        );
+        return Err(error);
     }
 
     let mut components = root_folder.components();
     let Some(first) = components.next() else {
-        return Err(CompilerError::new(
+        let mut error = CompilerError::new(
             "Invalid '#root_folders' entry. Root folders cannot be empty.",
             token.location.to_error_location(string_table),
             ErrorType::Config,
-        ));
+        );
+        error.metadata.insert(
+            crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
+            "Provide a folder name like '@lib' or '@utils'".to_string(),
+        );
+        return Err(error);
     };
 
     if !matches!(first, std::path::Component::Normal(_)) || components.next().is_some() {
-        return Err(CompilerError::new(
+        let mut error = CompilerError::new(
             format!(
                 "Invalid '#root_folders' entry '{}'. Root folders must be a single top-level folder name such as '@lib'.",
                 root_folder.display()
             ),
             token.location.to_error_location(string_table),
             ErrorType::Config,
-        ));
+        );
+        error.metadata.insert(
+            crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
+            "Use a single folder name like '@lib', not a nested path like '@lib/utils'".to_string(),
+        );
+        return Err(error);
     }
 
     Ok(root_folder)
@@ -949,11 +1142,66 @@ pub fn extract_source_code(file_path: &Path) -> Result<String, CompilerError> {
             return_file_error!(
                 &file_path,
                 format!("Error reading file when adding new bst files to parse: {:?}", e), {
-                    CompilationStage => "File System",
-                    PrimarySuggestion => suggestion,
+                    CompilationStage => String::from("File System"),
+                    PrimarySuggestion => String::from(suggestion),
                 }
             )
         }
+    }
+}
+
+/// WHAT: detects duplicate config keys and returns errors for all duplicates.
+/// WHY: users should see all duplicate keys at once to fix them in one iteration.
+/// Config-specific duplicate detection uses ErrorType::Config for proper categorization.
+fn detect_duplicate_config_keys(
+    headers: &[Header],
+    string_table: &StringTable,
+) -> Option<Vec<CompilerError>> {
+    let mut seen_keys = HashMap::new();
+    let mut errors = Vec::new();
+
+    for header in headers {
+        let HeaderKind::Constant { .. } = &header.kind else {
+            continue;
+        };
+
+        let Some(key_id) = header.tokens.src_path.name() else {
+            continue;
+        };
+
+        let key = string_table.resolve(key_id);
+
+        if let Some(_first_location) = seen_keys.get(key) {
+            let mut metadata = HashMap::new();
+            metadata.insert(
+                ErrorMetaDataKey::PrimarySuggestion,
+                String::from("Remove or rename one of the duplicate keys"),
+            );
+
+            errors.push(CompilerError {
+                msg: format!(
+                    "Duplicate config key '#{key}' found. Each config key must be unique."
+                ),
+                location: header.name_location.to_error_location(string_table),
+                error_type: ErrorType::Config,
+                metadata,
+            });
+        } else {
+            seen_keys.insert(key.to_string(), header.name_location.clone());
+        }
+    }
+
+    if errors.is_empty() {
+        None
+    } else {
+        Some(errors)
+    }
+}
+
+fn compiler_messages_from_error(error: CompilerError) -> CompilerMessages {
+    CompilerMessages {
+        errors: vec![error],
+        warnings: Vec::new(),
     }
 }
 

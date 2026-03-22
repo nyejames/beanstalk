@@ -3,7 +3,7 @@
 //! WHAT: parses routing-related `#config.bst` settings into typed values.
 //! WHY: keeping one parser avoids drift between builder validation and dev-server runtime behavior.
 
-use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorType};
+use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorLocation, ErrorType};
 use crate::projects::settings::{CONFIG_FILE_NAME, Config};
 
 /// Canonical page URL style used for directory-backed HTML routes.
@@ -65,6 +65,7 @@ fn validate_origin(config: &Config, origin: &str) -> Result<(), CompilerError> {
     if origin.is_empty() {
         return Err(config_error(
             config,
+            "origin",
             String::from("'#origin' cannot be empty."),
         ));
     }
@@ -72,6 +73,7 @@ fn validate_origin(config: &Config, origin: &str) -> Result<(), CompilerError> {
     if !origin.starts_with('/') {
         return Err(config_error(
             config,
+            "origin",
             format!("'#origin' must start with '/'. Found: '{origin}'"),
         ));
     }
@@ -79,6 +81,7 @@ fn validate_origin(config: &Config, origin: &str) -> Result<(), CompilerError> {
     if origin.len() > 1 && origin.ends_with('/') {
         return Err(config_error(
             config,
+            "origin",
             format!("'#origin' must not end with '/' unless it is exactly '/'. Found: '{origin}'"),
         ));
     }
@@ -86,6 +89,7 @@ fn validate_origin(config: &Config, origin: &str) -> Result<(), CompilerError> {
     if origin.contains('?') || origin.contains('#') {
         return Err(config_error(
             config,
+            "origin",
             format!(
                 "'#origin' must not contain query (?) or fragment (#) characters. Found: '{origin}'"
             ),
@@ -95,6 +99,7 @@ fn validate_origin(config: &Config, origin: &str) -> Result<(), CompilerError> {
     if origin.contains('\\') {
         return Err(config_error(
             config,
+            "origin",
             format!("'#origin' must not contain backslashes. Found: '{origin}'"),
         ));
     }
@@ -113,6 +118,7 @@ fn parse_page_url_style(config: &Config) -> Result<PageUrlStyle, CompilerError> 
         "ignore" => Ok(PageUrlStyle::Ignore),
         _ => Err(config_error(
             config,
+            "page_url_style",
             format!(
                 "Invalid '#page_url_style' value '{raw_value}'. Allowed values: \"trailing_slash\", \"no_trailing_slash\", \"ignore\"."
             ),
@@ -130,6 +136,7 @@ fn parse_redirect_index_html(config: &Config) -> Result<bool, CompilerError> {
         "false" => Ok(false),
         _ => Err(config_error(
             config,
+            "redirect_index_html",
             format!(
                 "Invalid '#redirect_index_html' value '{raw_value}'. Allowed values: true or false."
             ),
@@ -137,9 +144,31 @@ fn parse_redirect_index_html(config: &Config) -> Result<bool, CompilerError> {
     }
 }
 
-fn config_error(config: &Config, message: String) -> CompilerError {
-    let config_path = config.entry_dir.join(CONFIG_FILE_NAME);
-    CompilerError::file_error(&config_path, message).with_error_type(ErrorType::Config)
+/// WHAT: creates a config error with precise location from setting_locations if available.
+/// WHY: precise error locations help users quickly identify and fix config issues.
+fn config_error(config: &Config, key: &str, message: String) -> CompilerError {
+    let location = config
+        .setting_locations
+        .get(key)
+        .cloned()
+        .unwrap_or_else(|| {
+            // Fall back to file-level location if key location not found
+            let config_path = config.entry_dir.join(CONFIG_FILE_NAME);
+            ErrorLocation::new(config_path, Default::default(), Default::default())
+        });
+
+    let mut error = CompilerError::new(message, location, ErrorType::Config);
+    // Add actionable suggestion based on the key
+    let suggestion = match key {
+        "page_url_style" => "Use 'trailing_slash', 'no_trailing_slash', or 'ignore'",
+        "redirect_index_html" => "Use 'true' to redirect or 'false' to keep index.html URLs",
+        _ => "Check the config documentation for valid values",
+    };
+    error.metadata.insert(
+        crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
+        suggestion.to_string(),
+    );
+    error
 }
 
 // --- Public Path Helpers ---

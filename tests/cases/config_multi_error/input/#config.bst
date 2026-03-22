@@ -1,0 +1,5 @@
+#entry_root = "src"
+#entry_root = "pages"
+#dev_folder = "/invalid/absolute/path"
+#output_folder = "release"
+#output_folder = "dist"
