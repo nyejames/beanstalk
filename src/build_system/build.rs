@@ -163,18 +163,18 @@ pub fn build_project(
     // This discovers all the modules, parses the config,
     // and compiles each module to HIR for backend lowering.
     let mut config = Config::new(valid_path);
-    
+
     // WHAT: Load and validate project config before compilation begins (Stage 0)
     // WHY: Config must be validated early so backends can reject invalid settings before any work
     load_project_config(&mut config)?;
-    
+
     // WHAT: Validate backend-specific config requirements before compilation
     // WHY: Backend validation must occur after Stage 0 loading but before any compilation work
     project_builder
         .backend
         .validate_project_config(&config)
         .map_err(compiler_messages_from_error)?;
-    
+
     let modules = compile_project_frontend(
         &mut config,
         flags,

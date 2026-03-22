@@ -153,7 +153,7 @@ impl BackendBuilder for HtmlProjectBuilder {
             .with_error_type(ErrorType::Config);
             error.metadata.insert(
                 crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
-                format!("Create a '#page.bst' file in '{}'", entry_root.display())
+                format!("Create a '#page.bst' file in '{}'", entry_root.display()),
             );
             return Err(CompilerMessages {
                 errors: vec![error],

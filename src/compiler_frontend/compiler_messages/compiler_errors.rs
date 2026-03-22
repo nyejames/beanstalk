@@ -643,35 +643,6 @@ macro_rules! return_compiler_error {
     }};
 }
 
-/// Returns a new CompileError for development server issues.
-///
-/// Usage: `return_dev_server_error!("message", location, { metadata })`;
-#[macro_export]
-macro_rules! return_dev_server_error {
-    // With metadata
-    ($msg:expr, $location:expr, { $( $key:ident => $value:expr ),* $(,)? }) => {
-        return Err($crate::compiler_frontend::compiler_errors::CompilerError {
-            msg: $msg.into(),
-            location: $location,
-            error_type: $crate::compiler_frontend::compiler_errors::ErrorType::DevServer,
-            metadata: {
-                let mut map = std::collections::HashMap::new();
-                $( map.insert($crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::$key, $value.into()); )*
-                map
-            },
-        })
-    };
-    // Simple
-    ($msg:expr, $location:expr) => {
-        return Err($crate::compiler_frontend::compiler_errors::CompilerError {
-            msg: $msg.into(),
-            location: $location,
-            error_type: $crate::compiler_frontend::compiler_errors::ErrorType::DevServer,
-            metadata: std::collections::HashMap::new(),
-        })
-    };
-}
-
 /// Returns a new CompileError for borrow checking violations.
 ///
 /// Borrow checker errors indicate memory safety violations detected during

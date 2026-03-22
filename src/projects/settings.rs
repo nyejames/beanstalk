@@ -1,6 +1,6 @@
+use crate::compiler_frontend::compiler_errors::ErrorLocation;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use crate::compiler_frontend::compiler_errors::ErrorLocation;
 
 pub const BEANSTALK_FILE_EXTENSION: &str = "bst";
 pub const COMP_PAGE_KEYWORD: &str = "#page";

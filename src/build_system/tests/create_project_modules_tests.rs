@@ -77,7 +77,10 @@ fn rejects_legacy_config_assignment_syntax() {
     let messages =
         parse_project_config_file(&mut config, &config_path).expect_err("config should fail");
 
-    assert!(!messages.errors.is_empty(), "should have at least one error");
+    assert!(
+        !messages.errors.is_empty(),
+        "should have at least one error"
+    );
     let error = &messages.errors[0];
     assert!(
         error
@@ -102,7 +105,10 @@ fn rejects_deprecated_src_config_key() {
     let messages =
         parse_project_config_file(&mut config, &config_path).expect_err("config should fail");
 
-    assert!(!messages.errors.is_empty(), "should have at least one error");
+    assert!(
+        !messages.errors.is_empty(),
+        "should have at least one error"
+    );
     let error = &messages.errors[0];
     assert!(
         error.msg.contains("#entry_root"),
@@ -125,7 +131,10 @@ fn rejects_legacy_libraries_config_key() {
     let messages =
         parse_project_config_file(&mut config, &config_path).expect_err("config should fail");
 
-    assert!(!messages.errors.is_empty(), "should have at least one error");
+    assert!(
+        !messages.errors.is_empty(),
+        "should have at least one error"
+    );
     let error = &messages.errors[0];
     assert!(
         error.msg.contains("#root_folders"),
@@ -148,7 +157,10 @@ fn rejects_invalid_root_folder_entries() {
     let messages =
         parse_project_config_file(&mut config, &config_path).expect_err("config should fail");
 
-    assert!(!messages.errors.is_empty(), "should have at least one error");
+    assert!(
+        !messages.errors.is_empty(),
+        "should have at least one error"
+    );
     let error = &messages.errors[0];
     assert!(
         error.msg.contains("single top-level folder name"),
@@ -496,14 +508,27 @@ fn detects_duplicate_config_keys() {
     let messages =
         parse_project_config_file(&mut config, &config_path).expect_err("config should fail");
 
-    assert!(!messages.errors.is_empty(), "should have at least one error");
-    
+    assert!(
+        !messages.errors.is_empty(),
+        "should have at least one error"
+    );
+
     // Find the duplicate key error
-    let duplicate_error = messages.errors.iter().find(|e| e.msg.contains("Duplicate config key"));
-    assert!(duplicate_error.is_some(), "should have a duplicate config key error");
-    
+    let duplicate_error = messages
+        .errors
+        .iter()
+        .find(|e| e.msg.contains("Duplicate config key"));
+    assert!(
+        duplicate_error.is_some(),
+        "should have a duplicate config key error"
+    );
+
     let error = duplicate_error.unwrap();
-    assert_eq!(error.error_type, ErrorType::Config, "duplicate config key error should use ErrorType::Config");
+    assert_eq!(
+        error.error_type,
+        ErrorType::Config,
+        "duplicate config key error should use ErrorType::Config"
+    );
 
     fs::remove_dir_all(&root).expect("should remove temp root");
 }

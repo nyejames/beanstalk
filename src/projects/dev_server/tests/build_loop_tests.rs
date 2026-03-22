@@ -302,7 +302,10 @@ fn dev_server_error_messages_use_dev_server_error_type() {
 fn format_error_messages_contains_error_text() {
     let mut messages = CompilerMessages::new();
     let mut error = CompilerError::compiler_error("expected text");
-    error.new_metadata_entry(ErrorMetaDataKey::CompilationStage, String::from("AST Construction"));
+    error.new_metadata_entry(
+        ErrorMetaDataKey::CompilationStage,
+        String::from("AST Construction"),
+    );
     error.new_metadata_entry(
         ErrorMetaDataKey::PrimarySuggestion,
         String::from("Declare/import the function before calling it"),

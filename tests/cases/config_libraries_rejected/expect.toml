@@ -1,0 +1,5 @@
+mode = "failure"
+entry = "."
+error_type = "Config"
+message_contains = ["#libraries", "replaced"]
+warnings = "forbid"

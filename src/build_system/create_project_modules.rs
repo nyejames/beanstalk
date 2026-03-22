@@ -5,7 +5,9 @@
 // This is because both a Wasm and JS backend must be supported, so it is agnostic about what happens after that.
 
 use crate::build_system::build::{InputFile, Module};
-use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages, ErrorMetaDataKey, ErrorType};
+use crate::compiler_frontend::compiler_errors::{
+    CompilerError, CompilerMessages, ErrorMetaDataKey, ErrorType,
+};
 use crate::compiler_frontend::headers::parse_file_headers::{Header, HeaderKind, parse_headers};
 use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
@@ -557,11 +559,11 @@ fn extract_import_paths(
 /// parse_project_config_file if present. Missing config files are allowed (returns Ok).
 pub fn load_project_config(config: &mut Config) -> Result<(), CompilerMessages> {
     let config_path = config.entry_dir.join(settings::CONFIG_FILE_NAME);
-    
+
     if !config_path.exists() {
         return Ok(()); // Config file is optional
     }
-    
+
     parse_project_config_file(config, &config_path)
 }
 
@@ -570,14 +572,17 @@ pub fn load_project_config(config: &mut Config) -> Result<(), CompilerMessages> 
 ///
 /// Error handling: tokenization and header parsing errors are collected and returned together.
 /// Value-level validation (apply_config_constants_from_headers) uses first-error semantics.
-fn parse_project_config_file(config: &mut Config, config_path: &Path) -> Result<(), CompilerMessages> {
+fn parse_project_config_file(
+    config: &mut Config,
+    config_path: &Path,
+) -> Result<(), CompilerMessages> {
     let mut errors = Vec::new();
-    
+
     let source = extract_source_code(config_path).map_err(compiler_messages_from_error)?;
     let mut string_table = StringTable::new();
     let style_directives = StyleDirectiveRegistry::built_ins();
     let interned_path = InternedPath::from_path_buf(config_path, &mut string_table);
-    
+
     // Tokenization errors are fatal
     let token_stream = match tokenize(
         &source,
@@ -589,7 +594,10 @@ fn parse_project_config_file(config: &mut Config, config_path: &Path) -> Result<
         Ok(tokens) => tokens,
         Err(error) => {
             errors.push(error.with_file_path(config_path.to_path_buf()));
-            return Err(CompilerMessages { errors, warnings: Vec::new() });
+            return Err(CompilerMessages {
+                errors,
+                warnings: Vec::new(),
+            });
         }
     };
 
@@ -599,7 +607,7 @@ fn parse_project_config_file(config: &mut Config, config_path: &Path) -> Result<
 
     let host_registry = HostRegistry::new(&mut string_table);
     let mut warnings = Vec::new();
-    
+
     // Header parsing - for config files, we handle duplicate detection separately
     let parsed_headers = match parse_headers(
         vec![token_stream],
@@ -619,30 +627,44 @@ fn parse_project_config_file(config: &mut Config, config_path: &Path) -> Result<
                     // Use a clearer message for config context while preserving location and metadata
                     let mut config_error = error.clone();
                     config_error.error_type = ErrorType::Config;
-                    config_error.msg = "Duplicate config key found. Each config key must be unique.".to_string();
+                    config_error.msg =
+                        "Duplicate config key found. Each config key must be unique.".to_string();
                     errors.push(config_error);
                 } else {
                     // Preserve all other header errors as-is
                     errors.push(error);
                 }
             }
-            return Err(CompilerMessages { errors, warnings: Vec::new() });
+            return Err(CompilerMessages {
+                errors,
+                warnings: Vec::new(),
+            });
         }
     };
 
     // Detect duplicate config keys with Config error type
     // This handles cases where parse_headers succeeded but there are still duplicates
-    if let Some(duplicate_errors) = detect_duplicate_config_keys(&parsed_headers.headers, &string_table) {
+    if let Some(duplicate_errors) =
+        detect_duplicate_config_keys(&parsed_headers.headers, &string_table)
+    {
         errors.extend(duplicate_errors);
     }
 
     // Apply config values - collect all value-level errors
-    if let Err(config_errors) = apply_config_constants_from_headers(config, &parsed_headers.headers, &string_table, config_path) {
+    if let Err(config_errors) = apply_config_constants_from_headers(
+        config,
+        &parsed_headers.headers,
+        &string_table,
+        config_path,
+    ) {
         errors.extend(config_errors);
     }
 
     if !errors.is_empty() {
-        return Err(CompilerMessages { errors, warnings: Vec::new() });
+        return Err(CompilerMessages {
+            errors,
+            warnings: Vec::new(),
+        });
     }
 
     Ok(())
@@ -710,7 +732,7 @@ fn validate_config_hash_assignments(
             );
             error.metadata.insert(
                 crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
-                format!("Add '=' between '#{name}' and the value")
+                format!("Add '=' between '#{name}' and the value"),
             );
             errors.push(error);
         }
@@ -763,7 +785,7 @@ fn apply_config_constants_from_headers(
             );
             error.metadata.insert(
                 crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
-                "Rename '#libraries' to '#root_folders' in your config file".to_string()
+                "Rename '#libraries' to '#root_folders' in your config file".to_string(),
             );
             errors.push(error);
             continue;
@@ -791,7 +813,7 @@ fn apply_config_constants_from_headers(
             );
             error.metadata.insert(
                 crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
-                format!("Add a value after '#{key} =' (e.g., '#{key} = \"value\"')")
+                format!("Add a value after '#{key} =' (e.g., '#{key} = \"value\"')"),
             );
             errors.push(error);
             continue;
@@ -804,7 +826,7 @@ fn apply_config_constants_from_headers(
             );
             error.metadata.insert(
                 crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
-                "Config values must be strings, numbers, booleans, or paths".to_string()
+                "Config values must be strings, numbers, booleans, or paths".to_string(),
             );
             errors.push(error);
             continue;
@@ -819,7 +841,7 @@ fn apply_config_constants_from_headers(
             );
             error.metadata.insert(
                 crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
-                "Rename '#src' to '#entry_root' in your config file".to_string()
+                "Rename '#src' to '#entry_root' in your config file".to_string(),
             );
             errors.push(error);
             continue;
@@ -843,7 +865,7 @@ fn parse_root_folders_value(
 ) -> Result<Vec<PathBuf>, Vec<CompilerError>> {
     let mut root_folders = Vec::new();
     let mut errors = Vec::new();
-    
+
     let Some(start_token) = tokens.get(*index) else {
         return Ok(root_folders);
     };
@@ -918,7 +940,7 @@ fn parse_root_folders_value(
             *index += 1;
         }
         dedupe_paths(&mut root_folders);
-        
+
         if !errors.is_empty() {
             return Err(errors);
         }
@@ -966,7 +988,7 @@ fn parse_root_folders_value(
             );
             error.metadata.insert(
                 crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
-                "Use '#root_folders = @lib' or '#root_folders = { @lib, @utils }'".to_string()
+                "Use '#root_folders = @lib' or '#root_folders = { @lib, @utils }'".to_string(),
             );
             errors.push(error);
         }
@@ -981,7 +1003,7 @@ fn parse_root_folders_value(
 
     *index += 1;
     dedupe_paths(&mut root_folders);
-    
+
     if !errors.is_empty() {
         Err(errors)
     } else {
@@ -1004,7 +1026,7 @@ fn validate_root_folder_path(
         );
         error.metadata.insert(
             crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
-            "Provide a folder name like '@lib' or '@utils'".to_string()
+            "Provide a folder name like '@lib' or '@utils'".to_string(),
         );
         return Err(error);
     }
@@ -1020,7 +1042,7 @@ fn validate_root_folder_path(
         );
         error.metadata.insert(
             crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
-            "Use a relative folder name like '@lib' instead of an absolute path".to_string()
+            "Use a relative folder name like '@lib' instead of an absolute path".to_string(),
         );
         return Err(error);
     }
@@ -1034,7 +1056,7 @@ fn validate_root_folder_path(
         );
         error.metadata.insert(
             crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
-            "Provide a folder name like '@lib' or '@utils'".to_string()
+            "Provide a folder name like '@lib' or '@utils'".to_string(),
         );
         return Err(error);
     };
@@ -1050,7 +1072,7 @@ fn validate_root_folder_path(
         );
         error.metadata.insert(
             crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
-            "Use a single folder name like '@lib', not a nested path like '@lib/utils'".to_string()
+            "Use a single folder name like '@lib', not a nested path like '@lib/utils'".to_string(),
         );
         return Err(error);
     }
@@ -1137,27 +1159,29 @@ fn detect_duplicate_config_keys(
 ) -> Option<Vec<CompilerError>> {
     let mut seen_keys = HashMap::new();
     let mut errors = Vec::new();
-    
+
     for header in headers {
         let HeaderKind::Constant { .. } = &header.kind else {
             continue;
         };
-        
+
         let Some(key_id) = header.tokens.src_path.name() else {
             continue;
         };
-        
+
         let key = string_table.resolve(key_id);
-        
+
         if let Some(_first_location) = seen_keys.get(key) {
             let mut metadata = HashMap::new();
             metadata.insert(
-                ErrorMetaDataKey::PrimarySuggestion, 
-                String::from("Remove or rename one of the duplicate keys")
+                ErrorMetaDataKey::PrimarySuggestion,
+                String::from("Remove or rename one of the duplicate keys"),
             );
-            
+
             errors.push(CompilerError {
-                msg: format!("Duplicate config key '#{key}' found. Each config key must be unique."),
+                msg: format!(
+                    "Duplicate config key '#{key}' found. Each config key must be unique."
+                ),
                 location: header.name_location.to_error_location(string_table),
                 error_type: ErrorType::Config,
                 metadata,
@@ -1166,7 +1190,7 @@ fn detect_duplicate_config_keys(
             seen_keys.insert(key.to_string(), header.name_location.clone());
         }
     }
-    
+
     if errors.is_empty() {
         None
     } else {

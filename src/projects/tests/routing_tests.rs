@@ -77,14 +77,24 @@ fn parser_rejects_invalid_page_url_style() {
         crate::compiler_frontend::compiler_errors::ErrorType::Config
     );
     assert!(error.msg.contains("#page_url_style"));
-    
+
     // Verify the suggestion contains the actual accepted values
-    let suggestion = error.metadata.get(
-        &crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::PrimarySuggestion
-    ).expect("error should have suggestion");
-    assert!(suggestion.contains("trailing_slash"), "suggestion should mention 'trailing_slash'");
-    assert!(suggestion.contains("no_trailing_slash"), "suggestion should mention 'no_trailing_slash'");
-    assert!(suggestion.contains("ignore"), "suggestion should mention 'ignore'");
+    let suggestion = error
+        .metadata
+        .get(&crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::PrimarySuggestion)
+        .expect("error should have suggestion");
+    assert!(
+        suggestion.contains("trailing_slash"),
+        "suggestion should mention 'trailing_slash'"
+    );
+    assert!(
+        suggestion.contains("no_trailing_slash"),
+        "suggestion should mention 'no_trailing_slash'"
+    );
+    assert!(
+        suggestion.contains("ignore"),
+        "suggestion should mention 'ignore'"
+    );
 }
 
 #[test]
@@ -105,22 +115,24 @@ fn parser_rejects_invalid_redirect_index_html() {
 #[test]
 fn parser_uses_precise_location_from_setting_locations() {
     use crate::compiler_frontend::compiler_errors::ErrorLocation;
-    
+
     let mut config = Config::new(PathBuf::from("project"));
     config
         .settings
         .insert(String::from("origin"), String::from("invalid"));
-    
+
     // Store a precise location for the origin key
     let precise_location = ErrorLocation::new(
         PathBuf::from("project/#config.bst"),
         Default::default(),
         Default::default(),
     );
-    config.setting_locations.insert(String::from("origin"), precise_location.clone());
-    
+    config
+        .setting_locations
+        .insert(String::from("origin"), precise_location.clone());
+
     let error = parse_html_site_config(&config).expect_err("invalid origin should fail");
-    
+
     // Verify the error uses the precise location from setting_locations
     assert_eq!(error.location.scope, precise_location.scope);
 }
@@ -131,15 +143,14 @@ fn parser_falls_back_to_file_location_when_key_not_in_setting_locations() {
     config
         .settings
         .insert(String::from("origin"), String::from("invalid"));
-    
+
     // Don't add the key to setting_locations
-    
+
     let error = parse_html_site_config(&config).expect_err("invalid origin should fail");
-    
+
     // Verify the error falls back to file-level location
     assert_eq!(error.location.scope, PathBuf::from("project/#config.bst"));
 }
-
 
 #[test]
 fn prefix_origin_works() {

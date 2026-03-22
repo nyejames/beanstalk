@@ -147,19 +147,16 @@ fn parse_redirect_index_html(config: &Config) -> Result<bool, CompilerError> {
 /// WHAT: creates a config error with precise location from setting_locations if available.
 /// WHY: precise error locations help users quickly identify and fix config issues.
 fn config_error(config: &Config, key: &str, message: String) -> CompilerError {
-    let location = config.setting_locations
+    let location = config
+        .setting_locations
         .get(key)
         .cloned()
         .unwrap_or_else(|| {
             // Fall back to file-level location if key location not found
             let config_path = config.entry_dir.join(CONFIG_FILE_NAME);
-            ErrorLocation::new(
-                config_path,
-                Default::default(),
-                Default::default(),
-            )
+            ErrorLocation::new(config_path, Default::default(), Default::default())
         });
-    
+
     let mut error = CompilerError::new(message, location, ErrorType::Config);
     // Add actionable suggestion based on the key
     let suggestion = match key {
@@ -169,7 +166,7 @@ fn config_error(config: &Config, key: &str, message: String) -> CompilerError {
     };
     error.metadata.insert(
         crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
-        suggestion.to_string()
+        suggestion.to_string(),
     );
     error
 }

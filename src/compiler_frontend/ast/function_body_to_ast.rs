@@ -49,7 +49,10 @@ fn unexpected_function_body_token_error(
                     .current_location()
                     .to_error_location(string_table),
             );
-            error.new_metadata_entry(ErrorMetaDataKey::CompilationStage, String::from("AST Construction"));
+            error.new_metadata_entry(
+                ErrorMetaDataKey::CompilationStage,
+                String::from("AST Construction"),
+            );
             error.new_metadata_entry(
                 ErrorMetaDataKey::PrimarySuggestion,
                 String::from("Remove the comma or place it inside a list/argument context"),
@@ -64,10 +67,15 @@ fn unexpected_function_body_token_error(
                     .current_location()
                     .to_error_location(string_table),
             );
-            error.new_metadata_entry(ErrorMetaDataKey::CompilationStage, String::from("AST Construction"));
+            error.new_metadata_entry(
+                ErrorMetaDataKey::CompilationStage,
+                String::from("AST Construction"),
+            );
             error.new_metadata_entry(
                 ErrorMetaDataKey::PrimarySuggestion,
-                String::from("Remove the stray ')' or complete the expression/call before this point"),
+                String::from(
+                    "Remove the stray ')' or complete the expression/call before this point",
+                ),
             );
             error
         }
@@ -79,10 +87,15 @@ fn unexpected_function_body_token_error(
                     .current_location()
                     .to_error_location(string_table),
             );
-            error.new_metadata_entry(ErrorMetaDataKey::CompilationStage, String::from("AST Construction"));
+            error.new_metadata_entry(
+                ErrorMetaDataKey::CompilationStage,
+                String::from("AST Construction"),
+            );
             error.new_metadata_entry(
                 ErrorMetaDataKey::PrimarySuggestion,
-                String::from("Remove the stray '}' or use collection syntax in a valid expression context"),
+                String::from(
+                    "Remove the stray '}' or use collection syntax in a valid expression context",
+                ),
             );
             error
         }
@@ -94,7 +107,10 @@ fn unexpected_function_body_token_error(
                     .current_location()
                     .to_error_location(string_table),
             );
-            error.new_metadata_entry(ErrorMetaDataKey::CompilationStage, String::from("AST Construction"));
+            error.new_metadata_entry(
+                ErrorMetaDataKey::CompilationStage,
+                String::from("AST Construction"),
+            );
             error.new_metadata_entry(
                 ErrorMetaDataKey::PrimarySuggestion,
                 String::from("Remove the stray '|' or move it into a declaration signature"),
@@ -109,7 +125,10 @@ fn unexpected_function_body_token_error(
                     .current_location()
                     .to_error_location(string_table),
             );
-            error.new_metadata_entry(ErrorMetaDataKey::CompilationStage, String::from("AST Construction"));
+            error.new_metadata_entry(
+                ErrorMetaDataKey::CompilationStage,
+                String::from("AST Construction"),
+            );
             error.new_metadata_entry(
                 ErrorMetaDataKey::PrimarySuggestion,
                 String::from("Use '->' only in a function signature like '|args| -> Type:'"),
@@ -124,7 +143,10 @@ fn unexpected_function_body_token_error(
                     .current_location()
                     .to_error_location(string_table),
             );
-            error.new_metadata_entry(ErrorMetaDataKey::CompilationStage, String::from("AST Construction"));
+            error.new_metadata_entry(
+                ErrorMetaDataKey::CompilationStage,
+                String::from("AST Construction"),
+            );
             error.new_metadata_entry(
                 ErrorMetaDataKey::PrimarySuggestion,
                 String::from("Use '_' only in supported pattern positions, or use 'else:' for default match arms"),
@@ -139,7 +161,10 @@ fn unexpected_function_body_token_error(
                     .current_location()
                     .to_error_location(string_table),
             );
-            error.new_metadata_entry(ErrorMetaDataKey::CompilationStage, String::from("AST Construction"));
+            error.new_metadata_entry(
+                ErrorMetaDataKey::CompilationStage,
+                String::from("AST Construction"),
+            );
             error.new_metadata_entry(
                 ErrorMetaDataKey::PrimarySuggestion,
                 String::from("Use a valid statement such as a declaration, assignment, call, control-flow block, or template"),

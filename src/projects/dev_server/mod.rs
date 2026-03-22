@@ -58,7 +58,7 @@ pub fn run_dev_server(
             .map(Path::to_path_buf)
             .unwrap_or_else(|| PathBuf::from("."))
     };
-    
+
     // WHAT: Resolve output directory using the same config-driven logic as core compilation.
     // WHY: Dev server and core compilation must use consistent output root policy for directory projects.
     let output_dir = if entry_target.is_dir() {
