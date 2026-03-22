@@ -1,11 +1,14 @@
 //! Built-in `$raw` template style support.
 //!
 //! WHAT:
-//! - Disables default template-body whitespace normalization for the current template.
+//! - Disables the default template-body whitespace normalization (dedent/trim) for the
+//!   current template while keeping all other template features intact.
+//! - Child templates, expressions, and composition work the same as the default template.
 //!
 //! WHY:
-//! - The compiler now normalizes template body whitespace by default.
-//! - `$raw` provides an explicit opt-out for templates that must preserve authored bytes.
+//! - The compiler normalizes template body whitespace by default for readability.
+//! - `$raw` provides an explicit opt-out for templates where authored whitespace must be
+//!   preserved exactly as written. Raw strings inside templates use [`raw string`] syntax.
 
 use crate::compiler_frontend::ast::templates::create_template_node::Template;
 use crate::compiler_frontend::ast::templates::template::BodyWhitespacePolicy;

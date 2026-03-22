@@ -12,8 +12,9 @@
 //!   entirely rather than reparsing or escaping it.
 
 use crate::compiler_frontend::ast::templates::styles::whitespace::{
-    TemplateBodyRunPosition, TemplateWhitespacePassProfile, apply_whitespace_passes,
+    TemplateBodyRunPosition, TemplateWhitespacePassProfile, apply_whitespace_passes_to_input,
 };
+
 use crate::compiler_frontend::ast::templates::template::{
     BodyWhitespacePolicy, Style, TemplateContent,
 };
@@ -102,10 +103,9 @@ pub(crate) fn apply_body_formatter(
             pieces: input_pieces,
         };
 
-        // 1. Pre-format whitespace passes
-        let mut output = input.invoke_legacy_formatter(string_table, |text_buffer| {
-            apply_whitespace_passes(text_buffer, pre_format_passes, run_position);
-        });
+        // 1. Pre-format whitespace passes (operates directly on structured input).
+        let mut output =
+            apply_whitespace_passes_to_input(input, pre_format_passes, run_position, string_table);
 
         // 2. Style formatter
         if let Some(fmt) = formatter {
@@ -116,9 +116,12 @@ pub(crate) fn apply_body_formatter(
         // 3. Post-format whitespace passes
         if !post_format_passes.is_empty() {
             let post_input = output_to_input(output, string_table);
-            output = post_input.invoke_legacy_formatter(string_table, |text_buffer| {
-                apply_whitespace_passes(text_buffer, post_format_passes, run_position);
-            });
+            output = apply_whitespace_passes_to_input(
+                post_input,
+                post_format_passes,
+                run_position,
+                string_table,
+            );
         }
 
         // Map formatter output back to render pieces using the anchor side-table.

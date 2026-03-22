@@ -9,9 +9,12 @@
 //! - Templates need lightweight markdown support without adding a full markdown dependency.
 //! - Nested template formatting must not be reparsed by parent markdown runs.
 
-use crate::compiler_frontend::ast::templates::styles::TEMPLATE_FORMAT_GUARD_CHAR;
 use crate::compiler_frontend::ast::templates::styles::whitespace::TemplateWhitespacePassProfile;
 use crate::compiler_frontend::ast::templates::template::{Formatter, TemplateFormatter};
+use crate::compiler_frontend::ast::templates::template_render_plan::{
+    FormatterInput, FormatterInputPiece, FormatterOutput, FormatterOutputPiece,
+};
+use crate::compiler_frontend::string_interning::StringTable;
 use std::sync::Arc;
 
 /// Parser/render context for the lightweight markdown formatter.
@@ -68,12 +71,25 @@ pub struct MarkdownTemplateFormatter;
 impl TemplateFormatter for MarkdownTemplateFormatter {
     fn format(
         &self,
-        input: crate::compiler_frontend::ast::templates::template_render_plan::FormatterInput,
-        string_table: &mut crate::compiler_frontend::string_interning::StringTable,
-    ) -> crate::compiler_frontend::ast::templates::template_render_plan::FormatterOutput {
-        input.invoke_legacy_formatter(string_table, |content| {
-            *content = to_markdown(content, "p");
-        })
+        input: FormatterInput,
+        string_table: &mut StringTable,
+    ) -> FormatterOutput {
+        // Each text piece is processed through markdown independently. Opaque anchors
+        // (child templates, dynamic expressions) pass through unchanged — their content
+        // is structurally sealed and must not be reparsed by the markdown formatter.
+        let pieces = input
+            .pieces
+            .into_iter()
+            .map(|piece| match piece {
+                FormatterInputPiece::Text(text_piece) => {
+                    let text = string_table.resolve(text_piece.text);
+                    FormatterOutputPiece::Text(to_markdown(text, "p"))
+                }
+                FormatterInputPiece::Opaque(id) => FormatterOutputPiece::Opaque(id),
+            })
+            .collect();
+
+        FormatterOutput { pieces }
     }
 }
 
@@ -437,7 +453,7 @@ fn unwrap_single_default_tag_block(rendered: String, default_tag: &str) -> Strin
 /// WHAT:
 /// - A character-at-a-time state machine that interprets inline emphasis (`*`), headings (`#`), and custom implicit links (`@(/path Label)`).
 /// - Accumulates unstyled text into standard wrapper block elements like `<p>`.
-/// - Ignores markdown formatting within spans guarded by `TEMPLATE_FORMAT_GUARD_CHAR`.
+/// - Operates on individual text pieces; opaque anchors between pieces are preserved structurally by the caller.
 ///
 /// WHY:
 /// - This handles the core conversion from plaintext characters into HTML, avoiding heavy regex passes and letting it correctly handle overlapping state changes in one tight pass.
@@ -460,26 +476,9 @@ fn to_markdown_inline(content: &str, default_tag: &str) -> String {
     // If negative, then it's inside an emphasis tag and tracking the closing count.
     let mut em_strength: i32 = 0;
 
-    let mut skip_parsing = false;
-
     let mut index = 0usize;
     while index < chars.len() {
         let ch = chars[index];
-
-        // Special object replace character that signals to ignore parsing a section
-        // into Markdown. This preserves nested formatted template segments.
-        if ch == TEMPLATE_FORMAT_GUARD_CHAR {
-            skip_parsing = !skip_parsing;
-            output.push(ch); // The parser no longer consumes Guard char
-            index += 1;
-            continue;
-        }
-
-        if skip_parsing {
-            output.push(ch);
-            index += 1;
-            continue;
-        }
 
         // HANDLING WHITESPACE
         if ch == '\t' || ch == ' ' {
@@ -653,7 +652,7 @@ fn try_parse_link_at(chars: &[char], at_index: usize) -> Option<ParsedMarkdownLi
 
     if at_index > 0 {
         let prev = chars[at_index - 1];
-        if prev != TEMPLATE_FORMAT_GUARD_CHAR && !prev.is_whitespace() {
+        if !prev.is_whitespace() {
             return None;
         }
     }

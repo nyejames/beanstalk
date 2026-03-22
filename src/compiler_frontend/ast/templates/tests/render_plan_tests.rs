@@ -156,15 +156,16 @@ mod render_plan_tests {
     }
 
     #[test]
-    fn opaque_anchors_roundtrip_through_legacy_formatter() {
+    fn opaque_anchors_survive_structured_formatter() {
+        use crate::compiler_frontend::ast::templates::styles::escape_html::escape_html_formatter;
         use crate::compiler_frontend::ast::templates::template_render_plan::{
             FormatterAnchorId, FormatterInput, FormatterInputPiece, FormatterOutputPiece,
             FormatterTextPiece,
         };
 
         let mut string_table = StringTable::new();
-        let hello = string_table.intern("Hello ");
-        let world = string_table.intern(" World");
+        let hello = string_table.intern("<Hello> ");
+        let world = string_table.intern(" &World");
 
         // Build input with text-anchor-text pattern.
         let input = FormatterInput {
@@ -181,21 +182,22 @@ mod render_plan_tests {
             ],
         };
 
-        // Identity formatter — text passes through unchanged.
-        let output = input.invoke_legacy_formatter(&string_table, |_| {});
+        // Run the escape_html formatter — text should be escaped, anchors preserved.
+        let formatter = escape_html_formatter();
+        let output = formatter.formatter.format(input, &mut string_table);
 
         assert_eq!(output.pieces.len(), 3);
         match &output.pieces[0] {
-            FormatterOutputPiece::Text(t) => assert_eq!(t, "Hello "),
-            _ => panic!("Expected text"),
+            FormatterOutputPiece::Text(t) => assert_eq!(t, "&lt;Hello&gt; "),
+            _ => panic!("Expected escaped text"),
         }
         match &output.pieces[1] {
             FormatterOutputPiece::Opaque(id) => assert_eq!(*id, FormatterAnchorId(42)),
             _ => panic!("Expected opaque anchor"),
         }
         match &output.pieces[2] {
-            FormatterOutputPiece::Text(t) => assert_eq!(t, " World"),
-            _ => panic!("Expected text"),
+            FormatterOutputPiece::Text(t) => assert_eq!(t, " &amp;World"),
+            _ => panic!("Expected escaped text"),
         }
     }
 }

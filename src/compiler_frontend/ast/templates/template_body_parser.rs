@@ -49,6 +49,17 @@ pub(crate) fn parse_template_body(
             }
 
             TokenKind::TemplateHead => {
+                // When child templates are suppressed (e.g. `$doc`), brackets are
+                // treated as balanced literal text rather than parsed as nested templates.
+                if template.style.suppress_child_templates {
+                    consume_balanced_brackets_as_literal_text(
+                        token_stream,
+                        template,
+                        string_table,
+                    );
+                    continue;
+                }
+
                 parse_nested_template(
                     token_stream,
                     context,
@@ -187,6 +198,143 @@ fn parse_nested_template(
     let expr = Expression::template(nested_template, Ownership::ImmutableOwned);
     template.content.add(expr);
     Ok(())
+}
+
+/// Consumes a `[...]` bracketed region as literal text when child templates are
+/// suppressed (e.g. in `$doc` bodies). Tracks bracket nesting depth so balanced
+/// brackets are included in the literal output.
+fn consume_balanced_brackets_as_literal_text(
+    token_stream: &mut FileTokens,
+    template: &mut Template,
+    string_table: &mut StringTable,
+) {
+    // Emit the opening bracket as literal text.
+    let open_bracket_id = string_table.intern("[");
+    template.content.add(Expression::string_slice(
+        open_bracket_id,
+        token_stream.current_location(),
+        Ownership::ImmutableOwned,
+    ));
+    token_stream.advance();
+
+    let mut depth = 1usize;
+
+    while depth > 0 && token_stream.index < token_stream.tokens.len() {
+        match token_stream.current_token_kind() {
+            TokenKind::Eof => break,
+
+            TokenKind::TemplateHead => {
+                let bracket_id = string_table.intern("[");
+                template.content.add(Expression::string_slice(
+                    bracket_id,
+                    token_stream.current_location(),
+                    Ownership::ImmutableOwned,
+                ));
+                depth += 1;
+            }
+
+            TokenKind::TemplateClose => {
+                depth -= 1;
+                if depth == 0 {
+                    // Emit the closing bracket and consume it.
+                    let close_bracket_id = string_table.intern("]");
+                    template.content.add(Expression::string_slice(
+                        close_bracket_id,
+                        token_stream.current_location(),
+                        Ownership::ImmutableOwned,
+                    ));
+                    token_stream.advance();
+                    return;
+                }
+
+                let bracket_id = string_table.intern("]");
+                template.content.add(Expression::string_slice(
+                    bracket_id,
+                    token_stream.current_location(),
+                    Ownership::ImmutableOwned,
+                ));
+            }
+
+            TokenKind::RawStringLiteral(content) | TokenKind::StringSliceLiteral(content) => {
+                template.content.add(Expression::string_slice(
+                    *content,
+                    token_stream.current_location(),
+                    Ownership::ImmutableOwned,
+                ));
+            }
+
+            TokenKind::Newline => {
+                let newline_id = string_table.intern("\n");
+                template.content.add(Expression::string_slice(
+                    newline_id,
+                    token_stream.current_location(),
+                    Ownership::ImmutableOwned,
+                ));
+            }
+
+            // Tokens the tokenizer produces inside template head regions.
+            // These must be converted back to literal text representations.
+            TokenKind::Symbol(id) | TokenKind::StyleDirective(id) => {
+                let prefix = if matches!(token_stream.current_token_kind(), TokenKind::StyleDirective(_)) {
+                    "$"
+                } else {
+                    ""
+                };
+                let name = string_table.resolve(*id).to_owned();
+                let literal = format!("{prefix}{name}");
+                let literal_id = string_table.intern(&literal);
+                template.content.add(Expression::string_slice(
+                    literal_id,
+                    token_stream.current_location(),
+                    Ownership::ImmutableOwned,
+                ));
+            }
+
+            TokenKind::StartTemplateBody | TokenKind::Colon => {
+                let colon_id = string_table.intern(":");
+                template.content.add(Expression::string_slice(
+                    colon_id,
+                    token_stream.current_location(),
+                    Ownership::ImmutableOwned,
+                ));
+            }
+
+            TokenKind::Comma => {
+                let comma_id = string_table.intern(",");
+                template.content.add(Expression::string_slice(
+                    comma_id,
+                    token_stream.current_location(),
+                    Ownership::ImmutableOwned,
+                ));
+            }
+
+            TokenKind::OpenParenthesis => {
+                let paren_id = string_table.intern("(");
+                template.content.add(Expression::string_slice(
+                    paren_id,
+                    token_stream.current_location(),
+                    Ownership::ImmutableOwned,
+                ));
+            }
+
+            TokenKind::CloseParenthesis => {
+                let paren_id = string_table.intern(")");
+                template.content.add(Expression::string_slice(
+                    paren_id,
+                    token_stream.current_location(),
+                    Ownership::ImmutableOwned,
+                ));
+            }
+
+            _ => {
+                // Remaining token kinds (operators, keywords, etc.) are silently
+                // skipped. The common cases — text, symbols, brackets, and structural
+                // punctuation — are covered above.
+            }
+        }
+
+        token_stream.advance();
+    }
 }
 
 /// Returns true if the template contains any direct child template output atoms.

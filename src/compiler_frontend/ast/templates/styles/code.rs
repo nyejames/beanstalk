@@ -5,8 +5,10 @@
 //! - converting compile-time body string runs into highlighted HTML
 
 use crate::compiler_frontend::ast::templates::create_template_node::Template;
-use crate::compiler_frontend::ast::templates::styles::TEMPLATE_FORMAT_GUARD_CHAR;
 use crate::compiler_frontend::ast::templates::template::{Formatter, TemplateFormatter};
+use crate::compiler_frontend::ast::templates::template_render_plan::{
+    FormatterInput, FormatterInputPiece, FormatterOutput, FormatterOutputPiece,
+};
 use crate::compiler_frontend::basic_utility_functions::NumericalParsing;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::string_interning::StringTable;
@@ -56,13 +58,49 @@ struct CodeTemplateFormatter {
 impl TemplateFormatter for CodeTemplateFormatter {
     fn format(
         &self,
-        input: crate::compiler_frontend::ast::templates::template_render_plan::FormatterInput,
-        string_table: &mut crate::compiler_frontend::string_interning::StringTable,
-    ) -> crate::compiler_frontend::ast::templates::template_render_plan::FormatterOutput {
-        input.invoke_legacy_formatter(string_table, |content| {
-            let highlighted = highlight_code_html(content, self.language);
-            *content = format!("<code class='codeblock'>{highlighted}</code>");
-        })
+        input: FormatterInput,
+        string_table: &mut StringTable,
+    ) -> FormatterOutput {
+        // Process each text piece through syntax highlighting. Opaque anchors (child
+        // templates, dynamic expressions) pass through without highlighting.
+        let mut output_pieces: Vec<FormatterOutputPiece> = Vec::with_capacity(input.pieces.len());
+        let mut first_text_emitted = false;
+
+        for piece in input.pieces {
+            match piece {
+                FormatterInputPiece::Text(text_piece) => {
+                    let text = string_table.resolve(text_piece.text);
+                    let highlighted = highlight_code_html(text, self.language);
+
+                    // Wrap the first text piece with the opening <code> tag.
+                    let wrapped = if !first_text_emitted {
+                        first_text_emitted = true;
+                        format!("<code class='codeblock'>{highlighted}")
+                    } else {
+                        highlighted
+                    };
+
+                    output_pieces.push(FormatterOutputPiece::Text(wrapped));
+                }
+                FormatterInputPiece::Opaque(id) => {
+                    output_pieces.push(FormatterOutputPiece::Opaque(id));
+                }
+            }
+        }
+
+        // Close the <code> block on the last text piece.
+        if first_text_emitted {
+            for piece in output_pieces.iter_mut().rev() {
+                if let FormatterOutputPiece::Text(text) = piece {
+                    text.push_str("</code>");
+                    break;
+                }
+            }
+        }
+
+        FormatterOutput {
+            pieces: output_pieces,
+        }
     }
 }
 
@@ -105,7 +143,7 @@ pub(crate) fn configure_code_style(
 /// - Strips shared formatting indentation from the code string.
 /// - Iterates over characters to identify structural boundaries (strings, numbers, comments, symbols, keywords) without a full lexer pass.
 /// - Wraps the matched runs in span classes for CSS styling.
-/// - Passes nested, already-formatted template regions through untouched via the `TEMPLATE_FORMAT_GUARD_CHAR`.
+/// - Operates on individual text pieces; opaque anchors between pieces are preserved structurally by the caller.
 ///
 /// WHY:
 /// - Provides simple syntax highlighting for documentation without the binary weight of a full parsing dependency like syn/tree-sitter.
@@ -122,25 +160,6 @@ pub(crate) fn highlight_code_html(source: &str, language: CodeLanguage) -> Strin
 
     while index < chars.len() {
         let current = chars[index];
-
-        if current == TEMPLATE_FORMAT_GUARD_CHAR {
-            flush_word(&mut highlighted, &mut word, language);
-            index += 1;
-
-            // Nested templates can already contain formatted HTML spans. Those sections
-            // are wrapped in the shared hidden guard char so parent formatters copy them
-            // through without trying to tokenize the generated markup again.
-            while index < chars.len() && chars[index] != TEMPLATE_FORMAT_GUARD_CHAR {
-                highlighted.push(chars[index]);
-                index += 1;
-            }
-
-            if index < chars.len() {
-                index += 1;
-            }
-
-            continue;
-        }
 
         // Comments are matched before operators so prefixes like `//` and `--`
         // become a single comment run instead of two separate operator tokens.

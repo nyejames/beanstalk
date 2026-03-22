@@ -981,16 +981,25 @@ fn note_and_todo_directives_reject_arguments() {
 }
 
 #[test]
-fn doc_templates_require_const_values() {
+fn doc_templates_treat_brackets_as_literal_text() {
     let mut string_table = StringTable::new();
     let mut token_stream = template_tokens_from_source("[$doc:\n[value]\n]", &mut string_table);
     let context = runtime_template_context(&token_stream.src_path, &mut string_table);
 
-    let error = Template::new(&mut token_stream, &context, vec![], &mut string_table)
-        .expect_err("doc comments should reject runtime values");
+    // With suppress_child_templates, brackets are balanced literal text,
+    // not nested child templates. Parsing succeeds even with a runtime context.
+    let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
+        .expect("doc template should parse brackets as literal text");
 
-    assert!(error.msg.contains("$doc"));
-    assert!(error.msg.contains("compile-time"));
+    let folded = template
+        .fold_into_stringid(&None, &mut string_table)
+        .expect("doc template should fold");
+    let result = string_table.resolve(folded);
+    // Each bracket and the symbol become separate atoms, each markdown-formatted
+    // as individual paragraphs. The key assertion is that all three appear in the output.
+    assert!(result.contains("["), "Opening bracket should appear as literal text: {result}");
+    assert!(result.contains("value"), "Inner symbol should appear as literal text: {result}");
+    assert!(result.contains("]"), "Closing bracket should appear as literal text: {result}");
 }
 
 #[test]
@@ -1013,7 +1022,7 @@ fn doc_templates_are_markdown_formatted_by_default() {
 }
 
 #[test]
-fn nested_templates_inside_doc_are_collected_as_doc_children() {
+fn doc_brackets_become_literal_text_not_doc_children() {
     let mut string_table = StringTable::new();
     let mut token_stream = template_tokens_from_source("[$doc:\n[: child]\n]", &mut string_table);
     let context = ScopeContext::new_constant(token_stream.src_path.to_owned());
@@ -1021,11 +1030,17 @@ fn nested_templates_inside_doc_are_collected_as_doc_children() {
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("doc template should parse");
 
-    assert_eq!(template.doc_children.len(), 1);
-    assert!(matches!(
-        template.doc_children[0].kind,
-        TemplateType::Comment(CommentDirectiveKind::Doc)
-    ));
+    // With suppress_child_templates, brackets are literal text. No doc children are collected.
+    assert_eq!(template.doc_children.len(), 0);
+
+    let folded = template
+        .fold_into_stringid(&None, &mut string_table)
+        .expect("doc template should fold");
+    let result = string_table.resolve(folded);
+    // Each bracket, colon, and body text become separate atoms, markdown-formatted individually.
+    assert!(result.contains("["), "Opening bracket should appear as literal text: {result}");
+    assert!(result.contains("child"), "Body text should appear as literal text: {result}");
+    assert!(result.contains("]"), "Closing bracket should appear as literal text: {result}");
 }
 
 #[test]

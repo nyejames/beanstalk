@@ -28,8 +28,8 @@ import @styles/docs/{navbar, footer, title, section, header, body, palette, tabl
     ## Styles
     Templates can be used to build complex UI components. They can use slots to insert content from other templates and have **style metadata** attached to them.
 
-    A template’s style is defined in the **template head** using `$` directives. 
-    `$` introduces **compiler-handled directives** (so they don’t collide with normal variables and can be extended in the future), such as formatter-like built-ins, precedence controls, and default child templates that are automatically applied to direct child templates.
+    A template's style is defined in the **template head** using `$` directives. 
+    `$` introduces **compiler-handled directives** (so they don't collide with normal variables and can be extended in the future), such as formatter-like built-ins, precedence controls, and default child templates that are automatically applied to direct child templates.
 
     Directive availability is frontend-registry based:
     - Compiler built-ins are available by default (`$markdown`, `$code`, `$css`, slots, etc.).

@@ -2,6 +2,7 @@
 //!
 //! WHAT:
 //! - Escapes HTML-sensitive characters in compile-time body string runs.
+//! - Processes structured formatter input directly, preserving opaque child anchors.
 //!
 //! WHY:
 //! - Templates often embed user-facing text into HTML output.
@@ -9,6 +10,10 @@
 
 use crate::compiler_frontend::ast::templates::create_template_node::Template;
 use crate::compiler_frontend::ast::templates::template::{Formatter, TemplateFormatter};
+use crate::compiler_frontend::ast::templates::template_render_plan::{
+    FormatterInput, FormatterInputPiece, FormatterOutput, FormatterOutputPiece,
+};
+use crate::compiler_frontend::string_interning::StringTable;
 use std::sync::Arc;
 
 #[derive(Debug)]
@@ -17,25 +22,37 @@ struct EscapeHtmlTemplateFormatter;
 impl TemplateFormatter for EscapeHtmlTemplateFormatter {
     fn format(
         &self,
-        input: crate::compiler_frontend::ast::templates::template_render_plan::FormatterInput,
-        string_table: &mut crate::compiler_frontend::string_interning::StringTable,
-    ) -> crate::compiler_frontend::ast::templates::template_render_plan::FormatterOutput {
-        input.invoke_legacy_formatter(string_table, |content| {
-            let mut escaped = String::with_capacity(content.len());
+        input: FormatterInput,
+        string_table: &mut StringTable,
+    ) -> FormatterOutput {
+        let pieces = input
+            .pieces
+            .into_iter()
+            .map(|piece| match piece {
+                FormatterInputPiece::Text(text_piece) => {
+                    let text = string_table.resolve(text_piece.text);
+                    let mut escaped = String::with_capacity(text.len());
 
-            for ch in content.chars() {
-                match ch {
-                    '&' => escaped.push_str("&amp;"),
-                    '<' => escaped.push_str("&lt;"),
-                    '>' => escaped.push_str("&gt;"),
-                    '"' => escaped.push_str("&quot;"),
-                    '\'' => escaped.push_str("&#39;"),
-                    _ => escaped.push(ch),
+                    for ch in text.chars() {
+                        match ch {
+                            '&' => escaped.push_str("&amp;"),
+                            '<' => escaped.push_str("&lt;"),
+                            '>' => escaped.push_str("&gt;"),
+                            '"' => escaped.push_str("&quot;"),
+                            '\'' => escaped.push_str("&#39;"),
+                            _ => escaped.push(ch),
+                        }
+                    }
+
+                    FormatterOutputPiece::Text(escaped)
                 }
-            }
+                // Opaque anchors (child templates, dynamic expressions) pass through
+                // without escaping — their content is sealed.
+                FormatterInputPiece::Opaque(id) => FormatterOutputPiece::Opaque(id),
+            })
+            .collect();
 
-            *content = escaped;
-        })
+        FormatterOutput { pieces }
     }
 }
 

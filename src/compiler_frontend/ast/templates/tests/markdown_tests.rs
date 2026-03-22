@@ -1,5 +1,4 @@
 use super::to_markdown;
-use crate::compiler_frontend::ast::templates::styles::TEMPLATE_FORMAT_GUARD_CHAR;
 
 #[test]
 fn parses_links_for_all_supported_target_prefixes() {
@@ -124,23 +123,6 @@ fn malformed_links_still_escape_literal_html_characters() {
 }
 
 #[test]
-fn hidden_skip_runs_remain_unescaped() {
-    let source = format!(
-        "prefix{marker}<strong>&\"'</strong>{marker}suffix",
-        marker = TEMPLATE_FORMAT_GUARD_CHAR
-    );
-
-    let rendered = to_markdown(&source, "p");
-    assert_eq!(
-        rendered,
-        format!(
-            "<p>prefix{marker}<strong>&\"'</strong>{marker}suffix</p>",
-            marker = TEMPLATE_FORMAT_GUARD_CHAR
-        )
-    );
-}
-
-#[test]
 fn parses_unordered_list_markers_into_list_items() {
     let rendered = to_markdown("- first\n* second\n+ third", "p");
     assert_eq!(
@@ -205,23 +187,6 @@ fn heading_line_breaks_out_of_list_without_blank_line() {
 }
 
 #[test]
-fn continuation_lines_preserve_hidden_skip_segments() {
-    let source = format!(
-        "- prefix\n{marker}<strong>&\"'</strong>{marker}\n- next",
-        marker = TEMPLATE_FORMAT_GUARD_CHAR
-    );
-
-    let rendered = to_markdown(&source, "p");
-    assert_eq!(
-        rendered,
-        format!(
-            "<ul><li>prefix {marker}<strong>&\"'</strong>{marker}</li><li>next</li></ul>",
-            marker = TEMPLATE_FORMAT_GUARD_CHAR
-        )
-    );
-}
-
-#[test]
 fn list_items_keep_inline_markdown_links_and_escaping() {
     let rendered = to_markdown("- item *bold* @/docs (Docs) <tag>", "p");
 
@@ -234,4 +199,56 @@ fn list_items_keep_inline_markdown_links_and_escaping() {
 fn non_list_lines_remain_plain_markdown_blocks() {
     let rendered = to_markdown("-not a list\nstill plain text", "p");
     assert_eq!(rendered, "<p>-not a list still plain text</p>");
+}
+
+#[test]
+fn opaque_anchors_preserved_between_formatted_text_pieces() {
+    use crate::compiler_frontend::ast::templates::styles::markdown::MarkdownTemplateFormatter;
+    use crate::compiler_frontend::ast::templates::template::TemplateFormatter;
+    use crate::compiler_frontend::ast::templates::template_render_plan::{
+        FormatterAnchorId, FormatterInput, FormatterInputPiece, FormatterOutputPiece,
+        FormatterTextPiece,
+    };
+    use crate::compiler_frontend::string_interning::StringTable;
+    use crate::compiler_frontend::tokenizer::tokens::TextLocation;
+
+    let mut string_table = StringTable::new();
+    let list_start = string_table.intern("- item one");
+    let list_end = string_table.intern("\n- item two");
+
+    let input = FormatterInput {
+        pieces: vec![
+            FormatterInputPiece::Text(FormatterTextPiece {
+                text: list_start,
+                location: TextLocation::default(),
+            }),
+            FormatterInputPiece::Opaque(FormatterAnchorId(7)),
+            FormatterInputPiece::Text(FormatterTextPiece {
+                text: list_end,
+                location: TextLocation::default(),
+            }),
+        ],
+    };
+
+    let formatter = MarkdownTemplateFormatter;
+    let output = formatter.format(input, &mut string_table);
+
+    // The opaque anchor must survive between the two formatted text pieces.
+    assert_eq!(output.pieces.len(), 3);
+    match &output.pieces[0] {
+        FormatterOutputPiece::Text(t) => {
+            assert!(t.contains("<li>"), "First piece should contain list markup");
+        }
+        _ => panic!("Expected formatted text piece"),
+    }
+    match &output.pieces[1] {
+        FormatterOutputPiece::Opaque(id) => assert_eq!(*id, FormatterAnchorId(7)),
+        _ => panic!("Expected opaque anchor"),
+    }
+    match &output.pieces[2] {
+        FormatterOutputPiece::Text(t) => {
+            assert!(t.contains("<li>"), "Third piece should contain list markup");
+        }
+        _ => panic!("Expected formatted text piece"),
+    }
 }

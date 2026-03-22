@@ -642,8 +642,13 @@ fn mark_template_body_whitespace_style_controlled(template: &mut Template) {
 pub(crate) fn apply_doc_comment_defaults(template: &mut Template) {
     template.kind = TemplateType::Comment(CommentDirectiveKind::Doc);
     template.apply_style(Style::default());
-    // Doc comments are parsed as markdown content by default.
+    // Doc comments use markdown formatting with balanced bracket escaping.
+    // Nested child templates are suppressed — `[...]` brackets in the body are
+    // treated as literal text.
     apply_markdown_style(template);
+    template.apply_style_updates(|style| {
+        style.suppress_child_templates = true;
+    });
 }
 
 fn apply_markdown_style(template: &mut Template) {

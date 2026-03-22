@@ -13,8 +13,3 @@ pub(crate) mod html;
 pub(crate) mod markdown;
 pub(crate) mod raw;
 pub(crate) mod whitespace;
-
-/// Internal boundary marker used by `invoke_legacy_formatter` and string-based
-/// formatters (e.g. `$markdown`) to protect opaque anchor positions inside a
-/// concatenated text buffer. Not part of the structured formatter interface.
-pub(crate) const TEMPLATE_FORMAT_GUARD_CHAR: char = '\u{FFFC}';

@@ -339,6 +339,9 @@ pub struct Style {
     pub html_mode: bool,
     pub clear_inherited: bool,
     pub body_whitespace_policy: BodyWhitespacePolicy,
+    /// When true, `[...]` brackets in the template body are treated as balanced
+    /// literal text rather than parsed as nested child templates.
+    pub suppress_child_templates: bool,
 }
 
 impl Style {
@@ -353,29 +356,8 @@ impl Style {
             html_mode: false,
             clear_inherited: false,
             body_whitespace_policy: BodyWhitespacePolicy::DefaultTemplateBehavior,
+            suppress_child_templates: false,
         }
     }
 }
 
-// A trait for how the content of a template should be parsed
-// This is used for Markdown, codeblocks, comments
-// THESE ARE ORDERED BY PRECEDENCE (LOWEST TO HIGHEST)
-#[allow(dead_code)] // Variants used by backend codegen; planned for broader format dispatch
-#[derive(Clone, Debug, PartialEq, PartialOrd, Eq, Ord)]
-pub enum StyleFormat {
-    Markdown = 0,
-    WasmString = 1,
-    None = 2, // This is an explicit override of the parent style
-    Codeblock = 3,
-    Metadata = 4,
-    Raw = 5,
-    Comment = 6,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-#[allow(dead_code)] // Planned for template-level if/loop control flow
-pub enum TemplateControlFlow {
-    None,
-    If,
-    Loop,
-}

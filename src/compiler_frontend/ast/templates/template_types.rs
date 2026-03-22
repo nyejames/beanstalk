@@ -7,7 +7,7 @@
 //! so other modules can depend on the struct without pulling in the full parser.
 
 use crate::compiler_frontend::ast::templates::template::{
-    Style, TemplateConstValueKind, TemplateContent, TemplateControlFlow, TemplateType,
+    Style, TemplateConstValueKind, TemplateContent, TemplateType,
 };
 use crate::compiler_frontend::tokenizer::tokens::TextLocation;
 
@@ -28,8 +28,6 @@ pub struct Template {
     pub doc_children: Vec<Template>,
     pub style: Style,
     pub explicit_style: Style,
-    #[allow(dead_code)] // Planned for template-level if/loop control flow
-    pub control_flow: TemplateControlFlow,
     pub id: String,
     pub location: TextLocation,
 }
@@ -79,7 +77,6 @@ impl Template {
             doc_children: vec![],
             style,
             explicit_style: Style::default(),
-            control_flow: TemplateControlFlow::None,
             id: String::new(),
             location: TextLocation::default(),
         }
