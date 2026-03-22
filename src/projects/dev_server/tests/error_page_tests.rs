@@ -43,11 +43,11 @@ fn formatted_compiler_messages_include_suggestion_metadata() {
     let mut error = CompilerError::new_syntax_error("bad syntax", ErrorLocation::default());
     error.new_metadata_entry(
         ErrorMetaDataKey::CompilationStage,
-        "Function Signature Parsing",
+        String::from("Function Signature Parsing"),
     );
     error.new_metadata_entry(
         ErrorMetaDataKey::PrimarySuggestion,
-        "Add ':' after return declarations",
+        String::from("Add ':' after return declarations"),
     );
     messages.errors.push(error);
 
@@ -87,11 +87,11 @@ fn compiler_error_page_links_to_project_relative_resolved_source_path() {
     );
     error.new_metadata_entry(
         ErrorMetaDataKey::CompilationStage,
-        "Function Signature Parsing",
+        String::from("Function Signature Parsing"),
     );
     error.new_metadata_entry(
         ErrorMetaDataKey::PrimarySuggestion,
-        "Add ':' after return declarations",
+        String::from("Add ':' after return declarations"),
     );
     messages.errors.push(error);
 

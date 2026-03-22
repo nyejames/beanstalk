@@ -1,3 +1,4 @@
+use crate::compiler_frontend::compiler_errors::ErrorLocation;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -26,6 +27,29 @@ pub const TOKEN_TO_DECLARATION_RATIO: usize = 20; // (Maybe) About 1/20 tokens f
 pub const TOKEN_TO_NODE_RATIO: usize = 10; // (Maybe) About 1/10 tokens to AstNode ratio
 pub const MINIMUM_LIKELY_DECLARATIONS: usize = 10; // (Maybe) How many symbols the smallest common Ast blocks will likely have
 
+/// WHAT: project configuration loaded from #config.bst that controls build behavior.
+/// WHY: config is the control plane for the build system; it must be validated early
+///      and provide precise error locations for all settings.
+///
+/// Design Principles:
+/// - Config is loaded in Stage 0 before any compilation work begins
+/// - All config keys are validated early so backends can reject invalid settings
+/// - Source locations are tracked for precise error reporting
+/// - Multi-error collection helps developers fix all issues in one iteration
+///
+/// Standard Config Keys:
+/// - `#entry_root`: The root directory for source files (default: "")
+/// - `#dev_folder`: Output directory for development builds (default: "dev")
+/// - `#output_folder`: Output directory for release builds (default: "release")
+/// - `#root_folders`: Top-level project folders for explicit imports (default: [])
+/// - `#project_name` or `#name`: The project name
+/// - `#version`: The project version (default: "0.1.0")
+/// - `#author`: The project author
+/// - `#license`: The project license (default: "MIT")
+///
+/// Custom Keys:
+/// - Backend-specific keys are stored in the `settings` HashMap
+/// - Backends validate their own keys through `BackendBuilder::validate_project_config`
 #[derive(Clone)]
 pub struct Config {
     pub project_name: String,
@@ -33,11 +57,15 @@ pub struct Config {
     pub entry_root: PathBuf,
     pub dev_folder: PathBuf,
     pub release_folder: PathBuf,
-    pub root_folders: Vec<PathBuf>, // Top-level project folders that non-relative imports can target explicitly
+    /// Top-level project folders that non-relative imports can target explicitly
+    pub root_folders: Vec<PathBuf>,
     pub version: String,
     pub author: String,
     pub license: String,
+    /// Custom settings for any project builder to use
     pub settings: HashMap<String, String>,
+    /// Source locations for each config key, used for precise error reporting
+    pub setting_locations: HashMap<String, ErrorLocation>,
 }
 
 impl Config {
@@ -57,6 +85,7 @@ impl Config {
 
             // Custom settings for any project builder to use
             settings: HashMap::new(),
+            setting_locations: HashMap::new(),
         }
     }
 }
@@ -74,6 +103,7 @@ impl Default for Config {
             author: String::new(),
             license: String::from("MIT"),
             settings: HashMap::new(),
+            setting_locations: HashMap::new(),
         }
     }
 }
