@@ -24,7 +24,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 pub enum AstStartTemplateItem {
     ConstString {
         value: StringId,
-        #[allow(dead_code)] // todo
+        #[allow(dead_code)] // Preserved for future source-mapping and error reporting
         location: TextLocation,
     },
     RuntimeStringFunction {

@@ -28,7 +28,7 @@ pub struct Template {
     pub doc_children: Vec<Template>,
     pub style: Style,
     pub explicit_style: Style,
-    #[allow(dead_code)] // todo
+    #[allow(dead_code)] // Planned for template-level if/loop control flow
     pub control_flow: TemplateControlFlow,
     pub id: String,
     pub location: TextLocation,
@@ -44,9 +44,9 @@ pub(crate) struct TemplateInheritance {
 }
 
 impl TemplateInheritance {
-    /// Builds inheritance state from a list of wrapper templates provided by
-    /// the caller (e.g. inherited `$children(..)` wrappers from a parent).
-    pub(crate) fn from_legacy_templates(templates: Vec<Template>) -> Self {
+    /// Builds inheritance state from wrapper templates passed down by a parent
+    /// (e.g. `$children(..)` wrappers or inherited style directives).
+    pub(crate) fn from_parent_wrappers(templates: Vec<Template>) -> Self {
         let recursive_style = templates
             .last()
             .and_then(|template| recursive_inherited_style(&template.style));
@@ -61,7 +61,7 @@ impl TemplateInheritance {
 impl Template {
     /// Creates a default template pre-populated with inherited style state.
     pub fn create_default(templates: Vec<Template>) -> Template {
-        let inheritance = TemplateInheritance::from_legacy_templates(templates);
+        let inheritance = TemplateInheritance::from_parent_wrappers(templates);
         Self::create_default_with_inherited_style(inheritance.recursive_style)
     }
 

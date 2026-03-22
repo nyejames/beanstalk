@@ -292,6 +292,54 @@ fn queued_rebuild_runs_when_files_change_during_build() {
 }
 
 #[test]
+fn rebuild_loop_stops_at_max_consecutive_rebuilds() {
+    use super::MAX_CONSECUTIVE_REBUILDS;
+
+    let root = temp_dir("max_rebuilds");
+    fs::create_dir_all(&root).expect("should create temp root");
+    fs::write(root.join("main.bst"), "start").expect("should write initial source file");
+    let output_dir = root.join("dev");
+    let state = Arc::new(DevServerState::new(output_dir.clone()));
+
+    // Build enough responses for every possible rebuild cycle.
+    let responses: Vec<_> = (0..MAX_CONSECUTIVE_REBUILDS + 2)
+        .map(|_| Ok(html_build_result()))
+        .collect();
+
+    let watched_file = root.join("main.bst");
+    let counter = Arc::new(AtomicUsize::new(0));
+    let counter_clone = counter.clone();
+
+    // Mutate the watched file on every call so fingerprints always change.
+    let mut executor = FakeExecutor::with_on_call(
+        responses,
+        Box::new(move |call_index| {
+            counter_clone.store(call_index, Ordering::SeqCst);
+            let content = format!("version_{call_index}");
+            fs::write(&watched_file, content).expect("should mutate watched file during build");
+        }),
+    );
+
+    let mut baseline =
+        watch::collect_fingerprints(&root, &output_dir).expect("should collect baseline");
+
+    let builds = run_builds_until_stable(
+        &state,
+        &mut executor,
+        &root.join("main.bst"),
+        &Vec::new(),
+        &root,
+        &output_dir,
+        &mut baseline,
+    )
+    .expect("build loop should complete despite instability");
+
+    // The loop must stop at the safety limit rather than running forever.
+    assert_eq!(builds, MAX_CONSECUTIVE_REBUILDS);
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
 fn dev_server_error_messages_use_dev_server_error_type() {
     let messages = dev_server_error_messages(Path::new("x.bst"), "oops");
     assert_eq!(messages.errors.len(), 1);

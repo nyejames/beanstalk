@@ -61,11 +61,14 @@ pub fn run_dev_server(
 
     // WHAT: Resolve output directory using the same config-driven logic as core compilation.
     // WHY: Dev server and core compilation must use consistent output root policy for directory projects.
+    //       The path is canonicalized when it exists so that `should_ignore_path`'s `starts_with`
+    //       comparison works reliably against the canonicalized `watch_root`.
     let output_dir = if entry_target.is_dir() {
         // Directory project: load config early and use canonical output root resolution
         let mut config = Config::new(entry_target.clone());
         load_project_config(&mut config)?;
-        resolve_project_output_root(&config, flags)
+        let resolved = resolve_project_output_root(&config, flags);
+        resolved.canonicalize().unwrap_or(resolved)
     } else {
         // Single-file build: preserve existing fallback behavior (parent dir + "dev")
         watch_root.join("dev")

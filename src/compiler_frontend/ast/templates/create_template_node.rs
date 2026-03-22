@@ -47,7 +47,7 @@ impl Template {
         templates_inherited: Vec<Template>,
         string_table: &mut StringTable,
     ) -> Result<Template, CompilerError> {
-        let inheritance = TemplateInheritance::from_legacy_templates(templates_inherited);
+        let inheritance = TemplateInheritance::from_parent_wrappers(templates_inherited);
         Self::new_with_doc_context(token_stream, context, inheritance, string_table, false)
     }
 

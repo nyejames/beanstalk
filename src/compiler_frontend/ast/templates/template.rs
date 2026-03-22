@@ -99,7 +99,7 @@ pub struct TemplateContent {
 }
 
 impl TemplateContent {
-    #[allow(dead_code)] // todo
+    #[allow(dead_code)] // Used only in tests and planned constructors
     pub fn new(content: Vec<Expression>) -> TemplateContent {
         TemplateContent {
             atoms: content
@@ -284,7 +284,7 @@ impl std::fmt::Debug for dyn TemplateFormatter {
 }
 
 #[derive(Clone, Debug)]
-#[allow(dead_code)] // todo
+#[allow(dead_code)] // Some fields (id, skip_if_already_formatted) are planned but not yet read
 pub struct Formatter {
     pub id: &'static str,
 
@@ -360,7 +360,7 @@ impl Style {
 // A trait for how the content of a template should be parsed
 // This is used for Markdown, codeblocks, comments
 // THESE ARE ORDERED BY PRECEDENCE (LOWEST TO HIGHEST)
-#[allow(dead_code)] // todo
+#[allow(dead_code)] // Variants used by backend codegen; planned for broader format dispatch
 #[derive(Clone, Debug, PartialEq, PartialOrd, Eq, Ord)]
 pub enum StyleFormat {
     Markdown = 0,
@@ -373,7 +373,7 @@ pub enum StyleFormat {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-#[allow(dead_code)] // todo
+#[allow(dead_code)] // Planned for template-level if/loop control flow
 pub enum TemplateControlFlow {
     None,
     If,

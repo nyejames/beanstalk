@@ -54,19 +54,42 @@ pub struct RenderExpressionPiece {
     pub origin: TemplateSegmentOrigin,
 }
 
+/// Stable opaque anchor into compiler-owned non-text pieces.
+/// A formatter may preserve or reorder these anchors, but it must not inspect
+/// or interpret the content they represent (child templates, dynamic expressions, etc.).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct FormatterAnchorId(pub usize);
+
+/// The only data a formatter should see:
+/// - body text it may rewrite
+/// - opaque anchors that preserve ordering around non-text content
 #[derive(Debug, Clone)]
 pub struct FormatterInput {
     pub pieces: Vec<FormatterInputPiece>,
 }
 
+/// A single piece of formatter input — either rewritable text or an opaque anchor.
 #[derive(Debug, Clone)]
 pub enum FormatterInputPiece {
-    Text(StringId),
-    #[allow(dead_code)]
-    ChildTemplate(StringId), // Represented by an opaque placeholder string ID
+    Text(FormatterTextPiece),
+    Opaque(FormatterAnchorId),
+}
+
+/// Body text visible to a formatter, with source location for diagnostics.
+#[derive(Debug, Clone)]
+pub struct FormatterTextPiece {
+    pub text: StringId,
+    #[allow(dead_code)] // Preserved for future formatter diagnostics and source mapping
+    pub location: TextLocation,
 }
 
 impl FormatterInput {
+    /// Convenience adapter for string-based formatters such as `$markdown`.
+    ///
+    /// Concatenates all text pieces into a single buffer, inserts guard-char
+    /// placeholders for opaque anchors, runs the formatting closure, then
+    /// reconstructs the output by locating the preserved placeholders.
+    /// Guard characters are an internal implementation detail of this adapter.
     pub fn invoke_legacy_formatter<F>(
         &self,
         string_table: &crate::compiler_frontend::string_interning::StringTable,
@@ -76,19 +99,22 @@ impl FormatterInput {
         F: FnOnce(&mut String),
     {
         use crate::compiler_frontend::ast::templates::styles::TEMPLATE_FORMAT_GUARD_CHAR;
-        let mut buffer = String::new();
-        let mut child_count = 0;
 
-        for piece in self.pieces.iter() {
+        let mut buffer = String::new();
+        let mut anchors_in_order: Vec<FormatterAnchorId> = Vec::new();
+
+        for piece in &self.pieces {
             match piece {
-                FormatterInputPiece::Text(id) => {
-                    buffer.push_str(string_table.resolve(*id));
+                FormatterInputPiece::Text(text_piece) => {
+                    buffer.push_str(string_table.resolve(text_piece.text));
                 }
-                FormatterInputPiece::ChildTemplate(_) => {
+                FormatterInputPiece::Opaque(anchor_id) => {
+                    let ordinal = anchors_in_order.len();
+                    anchors_in_order.push(*anchor_id);
+
                     buffer.push(TEMPLATE_FORMAT_GUARD_CHAR);
-                    buffer.push_str(&child_count.to_string());
+                    buffer.push_str(&ordinal.to_string());
                     buffer.push(TEMPLATE_FORMAT_GUARD_CHAR);
-                    child_count += 1;
                 }
             }
         }
@@ -98,10 +124,10 @@ impl FormatterInput {
         let mut output_pieces = Vec::new();
         let mut remaining = buffer.as_str();
 
-        for child_index in 0..child_count {
+        for (ordinal, anchor_id) in anchors_in_order.into_iter().enumerate() {
             let placeholder = format!(
-                "{}{}{}",
-                TEMPLATE_FORMAT_GUARD_CHAR, child_index, TEMPLATE_FORMAT_GUARD_CHAR
+                "{guard}{ordinal}{guard}",
+                guard = TEMPLATE_FORMAT_GUARD_CHAR
             );
 
             let Some(split_index) = remaining.find(&placeholder) else {
@@ -112,8 +138,8 @@ impl FormatterInput {
             if !before.is_empty() {
                 output_pieces.push(FormatterOutputPiece::Text(before.to_owned()));
             }
-            output_pieces.push(FormatterOutputPiece::ChildTemplate(child_index));
 
+            output_pieces.push(FormatterOutputPiece::Opaque(anchor_id));
             remaining = &remaining[split_index + placeholder.len()..];
         }
 
@@ -127,36 +153,18 @@ impl FormatterInput {
     }
 }
 
+/// Formatter output — newly generated text and preserved opaque anchors.
+/// No slots, no expressions, no child-template contents, no head content.
 #[derive(Debug, Clone)]
 pub struct FormatterOutput {
     pub pieces: Vec<FormatterOutputPiece>,
 }
 
-impl FormatterOutput {
-    pub fn into_input(
-        self,
-        string_table: &mut crate::compiler_frontend::string_interning::StringTable,
-        child_map: &[StringId],
-    ) -> FormatterInput {
-        let mut pieces = Vec::new();
-        for piece in self.pieces {
-            match piece {
-                FormatterOutputPiece::Text(t) => {
-                    pieces.push(FormatterInputPiece::Text(string_table.intern(&t)));
-                }
-                FormatterOutputPiece::ChildTemplate(index) => {
-                    pieces.push(FormatterInputPiece::ChildTemplate(child_map[index]));
-                }
-            }
-        }
-        FormatterInput { pieces }
-    }
-}
-
+/// A single piece of formatter output — either transformed text or a preserved anchor.
 #[derive(Debug, Clone)]
 pub enum FormatterOutputPiece {
     Text(String),
-    ChildTemplate(usize), // Points back to the child index in the run
+    Opaque(FormatterAnchorId),
 }
 
 impl TemplateRenderPlan {
@@ -170,12 +178,13 @@ impl TemplateRenderPlan {
                 }
                 TemplateAtom::Content(segment) => {
                     if segment.is_child_template_output
-                        && let Some(_source) = &segment.source_child_template {
-                            pieces.push(RenderPiece::ChildTemplate(RenderChildPiece {
-                                expression: segment.expression.clone(),
-                            }));
-                            continue;
-                        }
+                        && let Some(_source) = &segment.source_child_template
+                    {
+                        pieces.push(RenderPiece::ChildTemplate(RenderChildPiece {
+                            expression: segment.expression.clone(),
+                        }));
+                        continue;
+                    }
 
                     if let ExpressionKind::StringSlice(intern_id) = segment.expression.kind {
                         let text_piece = RenderTextPiece {

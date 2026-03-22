@@ -1,25 +1,16 @@
 //! Shared template body formatting pipeline.
 //!
 //! WHAT:
-//! - Collects contiguous template body string runs and applies whitespace passes
-//!   and optional style formatter logic.
-//! - Preserves child template positions using guarded numeric placeholders while
-//!   parent formatters run over the surrounding body text.
+//! - Collects contiguous body-run pieces (text, child templates, dynamic expressions)
+//!   and applies whitespace passes and optional style formatter logic.
+//! - Maps non-text pieces to opaque `FormatterAnchorId` anchors so that parent
+//!   formatters can never inspect child template or expression content.
 //!
 //! WHY:
 //! - Keeps `create_template_node.rs` focused on AST construction/composition.
 //! - Parent formatters such as `$markdown` should ignore child template output
 //!   entirely rather than reparsing or escaping it.
-//!
-//! NOTE:
-//! - This file uses the requested minimal placeholder form:
-//!   `TEMPLATE_FORMAT_GUARD_CHAR + "12" + TEMPLATE_FORMAT_GUARD_CHAR`.
-//! - Because built-in formatters strip the guard chars and copy only the payload
-//!   through, reinsertion later searches for the numeric payload text in order.
-//!   That is not collision-proof if the formatted output naturally contains the
-//!   same digit sequence in the wrong place.
 
-use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
 use crate::compiler_frontend::ast::templates::styles::whitespace::{
     TemplateBodyRunPosition, TemplateWhitespacePassProfile, apply_whitespace_passes,
 };
@@ -30,10 +21,15 @@ use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::TextLocation;
 
 use crate::compiler_frontend::ast::templates::template_render_plan::{
-    FormatterInput, FormatterInputPiece, FormatterOutputPiece, RenderPiece, RenderTextPiece,
-    TemplateRenderPlan,
+    FormatterAnchorId, FormatterInput, FormatterInputPiece, FormatterOutputPiece,
+    FormatterTextPiece, RenderPiece, RenderTextPiece, TemplateRenderPlan,
 };
 
+/// Applies the body formatter and whitespace passes to a template's content.
+///
+/// Walks the render plan, groups contiguous body-run pieces into formatter runs,
+/// maps non-text pieces to opaque anchors, then runs whitespace passes and the
+/// style formatter before mapping results back to render pieces.
 pub(crate) fn apply_body_formatter(
     content: &TemplateContent,
     style: &Style,
@@ -69,6 +65,9 @@ pub(crate) fn apply_body_formatter(
 
     let mut current_run = Vec::new();
 
+    // Processes a contiguous body run through whitespace passes and the style formatter.
+    // Non-text pieces (child templates, dynamic expressions) are mapped to opaque anchors
+    // so formatters never see their content. After formatting, anchors are mapped back.
     let process_run = |run: Vec<RenderPiece>,
                        run_position: TemplateBodyRunPosition,
                        string_table: &mut StringTable|
@@ -77,59 +76,54 @@ pub(crate) fn apply_body_formatter(
             return Vec::new();
         }
 
+        // Build the opaque-anchor side-table: each non-text piece gets a FormatterAnchorId
+        // that the formatter sees but cannot inspect.
         let mut input_pieces = Vec::with_capacity(run.len());
-        let mut child_templates = Vec::new();
+        let mut anchor_side_table: Vec<RenderPiece> = Vec::new();
 
         for piece in &run {
             match piece {
-                RenderPiece::Text(t) => input_pieces.push(FormatterInputPiece::Text(t.text)),
-                RenderPiece::ChildTemplate(c) => {
-                    if let ExpressionKind::StringSlice(id) = c.expression.kind {
-                        input_pieces.push(FormatterInputPiece::ChildTemplate(id));
-                        child_templates.push(c.clone());
-                    } else {
-                        unreachable!("Child template expression must be StringSlice");
-                    }
+                RenderPiece::Text(t) => {
+                    input_pieces.push(FormatterInputPiece::Text(FormatterTextPiece {
+                        text: t.text,
+                        location: t.location.clone(),
+                    }));
                 }
-                _ => unreachable!("Only text and child templates are formatted"),
+                // Child templates and dynamic expressions both become opaque anchors.
+                other => {
+                    let anchor_id = FormatterAnchorId(anchor_side_table.len());
+                    anchor_side_table.push(other.clone());
+                    input_pieces.push(FormatterInputPiece::Opaque(anchor_id));
+                }
             }
         }
 
         let input = FormatterInput {
             pieces: input_pieces,
         };
-        let child_map: Vec<_> = child_templates
-            .iter()
-            .map(|c| {
-                if let ExpressionKind::StringSlice(id) = c.expression.kind {
-                    id
-                } else {
-                    unreachable!()
-                }
-            })
-            .collect();
 
-        // 1. Whitespace passes (Legacy `&mut String` boundary)
+        // 1. Pre-format whitespace passes
         let mut output = input.invoke_legacy_formatter(string_table, |text_buffer| {
             apply_whitespace_passes(text_buffer, pre_format_passes, run_position);
         });
 
         // 2. Style formatter
         if let Some(fmt) = formatter {
-            let next_input = output.into_input(string_table, &child_map);
+            let next_input = output_to_input(output, string_table);
             output = fmt.formatter.format(next_input, string_table);
         }
 
         // 3. Post-format whitespace passes
-        let final_output = output
-            .into_input(string_table, &child_map)
-            .invoke_legacy_formatter(string_table, |text_buffer| {
+        if !post_format_passes.is_empty() {
+            let post_input = output_to_input(output, string_table);
+            output = post_input.invoke_legacy_formatter(string_table, |text_buffer| {
                 apply_whitespace_passes(text_buffer, post_format_passes, run_position);
             });
+        }
 
-        // Map `FormatterOutputPiece` back to `RenderPiece`
-        let mut replacement_pieces = Vec::with_capacity(final_output.pieces.len());
-        for out_piece in final_output.pieces {
+        // Map formatter output back to render pieces using the anchor side-table.
+        let mut replacement_pieces = Vec::with_capacity(output.pieces.len());
+        for out_piece in output.pieces {
             match out_piece {
                 FormatterOutputPiece::Text(text) => {
                     let id = string_table.intern(&text);
@@ -138,9 +132,8 @@ pub(crate) fn apply_body_formatter(
                         location: TextLocation::default(),
                     }));
                 }
-                FormatterOutputPiece::ChildTemplate(index) => {
-                    replacement_pieces
-                        .push(RenderPiece::ChildTemplate(child_templates[index].clone()));
+                FormatterOutputPiece::Opaque(anchor_id) => {
+                    replacement_pieces.push(anchor_side_table[anchor_id.0].clone());
                 }
             }
         }
@@ -151,7 +144,10 @@ pub(crate) fn apply_body_formatter(
     let mut is_first_run = true;
     for piece in std::mem::take(&mut plan.pieces) {
         match piece {
-            RenderPiece::Text(_) | RenderPiece::ChildTemplate(_) => {
+            // Body text and non-head non-slot content forms contiguous formatter runs.
+            RenderPiece::Text(_)
+            | RenderPiece::ChildTemplate(_)
+            | RenderPiece::DynamicExpression(_) => {
                 current_run.push(piece);
             }
             other => {
@@ -184,4 +180,24 @@ pub(crate) fn apply_body_formatter(
 
     plan.pieces = new_plan_pieces;
     plan
+}
+
+/// Converts formatter output back into formatter input for chaining pipeline stages.
+/// Text pieces are interned, opaque anchors are preserved as-is.
+fn output_to_input(
+    output: crate::compiler_frontend::ast::templates::template_render_plan::FormatterOutput,
+    string_table: &mut StringTable,
+) -> FormatterInput {
+    let pieces = output
+        .pieces
+        .into_iter()
+        .map(|piece| match piece {
+            FormatterOutputPiece::Text(t) => FormatterInputPiece::Text(FormatterTextPiece {
+                text: string_table.intern(&t),
+                location: TextLocation::default(),
+            }),
+            FormatterOutputPiece::Opaque(anchor_id) => FormatterInputPiece::Opaque(anchor_id),
+        })
+        .collect();
+    FormatterInput { pieces }
 }

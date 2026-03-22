@@ -154,4 +154,48 @@ mod render_plan_tests {
             _ => panic!("Expected dynamic expression piece"),
         }
     }
+
+    #[test]
+    fn opaque_anchors_roundtrip_through_legacy_formatter() {
+        use crate::compiler_frontend::ast::templates::template_render_plan::{
+            FormatterAnchorId, FormatterInput, FormatterInputPiece, FormatterOutputPiece,
+            FormatterTextPiece,
+        };
+
+        let mut string_table = StringTable::new();
+        let hello = string_table.intern("Hello ");
+        let world = string_table.intern(" World");
+
+        // Build input with text-anchor-text pattern.
+        let input = FormatterInput {
+            pieces: vec![
+                FormatterInputPiece::Text(FormatterTextPiece {
+                    text: hello,
+                    location: TextLocation::default(),
+                }),
+                FormatterInputPiece::Opaque(FormatterAnchorId(42)),
+                FormatterInputPiece::Text(FormatterTextPiece {
+                    text: world,
+                    location: TextLocation::default(),
+                }),
+            ],
+        };
+
+        // Identity formatter — text passes through unchanged.
+        let output = input.invoke_legacy_formatter(&string_table, |_| {});
+
+        assert_eq!(output.pieces.len(), 3);
+        match &output.pieces[0] {
+            FormatterOutputPiece::Text(t) => assert_eq!(t, "Hello "),
+            _ => panic!("Expected text"),
+        }
+        match &output.pieces[1] {
+            FormatterOutputPiece::Opaque(id) => assert_eq!(*id, FormatterAnchorId(42)),
+            _ => panic!("Expected opaque anchor"),
+        }
+        match &output.pieces[2] {
+            FormatterOutputPiece::Text(t) => assert_eq!(t, " World"),
+            _ => panic!("Expected text"),
+        }
+    }
 }

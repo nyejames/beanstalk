@@ -2046,7 +2046,12 @@ fn code_formatter_wrapper_preserves_newlines_after_dedent() {
 
     let id = string_table.intern("    x\n    y");
     let input = crate::compiler_frontend::ast::templates::template_render_plan::FormatterInput {
-        pieces: vec![crate::compiler_frontend::ast::templates::template_render_plan::FormatterInputPiece::Text(id)],
+        pieces: vec![crate::compiler_frontend::ast::templates::template_render_plan::FormatterInputPiece::Text(
+            crate::compiler_frontend::ast::templates::template_render_plan::FormatterTextPiece {
+                text: id,
+                location: crate::compiler_frontend::tokenizer::tokens::TextLocation::default(),
+            },
+        )],
     };
 
     let output = formatter.formatter.format(input, &mut string_table);

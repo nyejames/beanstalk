@@ -159,6 +159,11 @@ pub fn run_single_build_cycle(
     }
 }
 
+/// Maximum consecutive rebuilds before the loop stops to prevent infinite rebuild cycles.
+/// If the build itself modifies watched files (e.g. through file-system side effects),
+/// the fingerprint check would trigger indefinitely without this limit.
+const MAX_CONSECUTIVE_REBUILDS: usize = 5;
+
 pub fn run_builds_until_stable(
     state: &Arc<DevServerState>,
     executor: &mut dyn DevBuildExecutor,
@@ -199,6 +204,16 @@ pub fn run_builds_until_stable(
 
         // Queue one immediate follow-up build if files changed while the previous build was running.
         if !watch::detect_changes(&before_build, &after_build) {
+            break;
+        }
+
+        if build_count >= MAX_CONSECUTIVE_REBUILDS {
+            say!(
+                Yellow "Dev server reached ",
+                Yellow MAX_CONSECUTIVE_REBUILDS,
+                Yellow " consecutive rebuilds without stabilising — pausing rebuild loop. ",
+                Yellow "This usually means the build is modifying watched source files."
+            );
             break;
         }
     }
