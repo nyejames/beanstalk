@@ -422,7 +422,7 @@ fn explicit_root_folder_imports_resolve_from_project_root() {
     .expect("should write config");
     fs::write(
         src.join("#page.bst"),
-        "import @lib/html/{center}\n#[center: ok]\n",
+        "import @lib/html {center}\n#[center: ok]\n",
     )
     .expect("should write page");
     fs::write(
@@ -464,7 +464,7 @@ fn rejects_entry_root_folder_that_conflicts_with_root_folder_name() {
         "#entry_root = \"src\"\n#root_folders = { @lib }\n",
     )
     .expect("should write config");
-    fs::write(src.join("#page.bst"), "import @lib/html/{center}\n").expect("should write page");
+    fs::write(src.join("#page.bst"), "import @lib/html {center}\n").expect("should write page");
 
     let mut config = Config::new(root.clone());
     parse_project_config_file(&mut config, &root.join(settings::CONFIG_FILE_NAME))

@@ -1,5 +1,5 @@
-import @styles/docs/{navbar, footer, page, palette}
-import @lib/html/{link}
+import @styles/docs {navbar, footer, page, palette}
+import @lib/html {link}
 [page, $markdown:
 [navbar]
 

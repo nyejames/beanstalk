@@ -65,7 +65,7 @@ pub struct CompileTimePath {
 /// A collection of one or more resolved compile-time path values.
 ///
 /// WHAT: wraps multiple resolved paths from a single path expression.
-/// WHY: the grouped path syntax `@dir/{a, b}` produces multiple paths
+/// WHY: grouped path syntax (`@dir {a, b}`) produces multiple paths
 ///      from one token. This type carries them as a unit so expressions
 ///      and string coercion can handle the 1-or-many case uniformly.
 #[derive(Clone, Debug)]

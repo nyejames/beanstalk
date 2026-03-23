@@ -117,7 +117,7 @@ fn ensure_trailing_slash(s: &str) -> String {
 }
 
 /// WHAT: formats multiple compile-time paths as a comma-separated string.
-/// WHY: grouped path expressions (`@dir/{a, b}`) coerce to comma-separated
+/// WHY: grouped path expressions (`@dir {a, b}`) coerce to comma-separated
 ///      lists so all resolved paths are represented in the output.
 pub fn format_compile_time_paths(
     paths: &CompileTimePaths,

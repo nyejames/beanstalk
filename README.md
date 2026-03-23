@@ -27,7 +27,7 @@ It originated with the desire to never have to use TypeScript, web frameworks or
 
 ```haskell
 import @html/center
-import @blog_styles/{section, divider}
+import @blog_styles {section, divider}
 
 -- Create a new blog post
 # create_post |title String, date Int, content String| -> String:
@@ -54,7 +54,7 @@ The HTML build system will generate an HTML page from this code:
 ```haskell
 import @generators/create_post
 import @html/doc
-import @blog_styles/{page, title, pad2}
+import @blog_styles {page, title, pad2}
 
 date = 2025
 post = create_post(date, [$markdown:

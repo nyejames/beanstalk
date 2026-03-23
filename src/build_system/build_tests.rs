@@ -1005,7 +1005,7 @@ fn build_project_const_slot_children_wrap_table_rows_and_cells_without_cross_app
     .expect("should write html library");
     fs::write(
         root.join("main.bst"),
-        "import @libs/html/{table}\n[table:\n    [: [:Type] [:Description] ]\n    [: [:float] [:64 bit floating point number] ]\n]\n",
+        "import @libs/html {table}\n[table:\n    [: [:Type] [:Description] ]\n    [: [:float] [:64 bit floating point number] ]\n]\n",
     )
     .expect("should write source file");
     let _cwd_guard = CurrentDirGuard::set_to(&root);
@@ -1043,12 +1043,12 @@ fn build_project_markdown_page_reexported_table_keeps_rows_and_cells_inside_tabl
     .expect("should write html library");
     fs::write(
         root.join("styles").join("docs.bst"),
-        "import @libs/html/{format}\n#page = [:\n  <body>[$slot]</body>\n]\n#table = [format.table]\n",
+        "import @libs/html {format}\n#page = [:\n  <body>[$slot]</body>\n]\n#table = [format.table]\n",
     )
     .expect("should write docs style library");
     fs::write(
         root.join("main.bst"),
-        "import @styles/docs/{page, table}\n[page, $markdown:\n[table:\n    [: [:Type] [:Description] ]\n    [: [:float] [:64 bit floating point number] ]\n]\n]\n",
+        "import @styles/docs {page, table}\n[page, $markdown:\n[table:\n    [: [:Type] [:Description] ]\n    [: [:float] [:64 bit floating point number] ]\n]\n]\n",
     )
     .expect("should write source file");
     let _cwd_guard = CurrentDirGuard::set_to(&root);
@@ -1098,7 +1098,7 @@ fn build_project_docs_style_title_and_center_slot_chain_compiles() {
     .expect("should write docs style library");
     fs::write(
         root.join("src").join("#page.bst"),
-        "import @lib/html/{center}\nimport @styles/docs/{title}\n#[title, center: LANGUAGE BASICS]\n",
+        "import @lib/html {center}\nimport @styles/docs {title}\n#[title, center: LANGUAGE BASICS]\n",
     )
     .expect("should write source file");
 
@@ -1141,12 +1141,12 @@ fn build_project_markdown_docs_row_wrappers_render_plain_cells_and_headers() {
     .expect("should write html library");
     fs::write(
         root.join("styles").join("docs.bst"),
-        "import @libs/html/{format}\n#page = [:\n  <body>[$slot]</body>\n]\n#table = [format.table:\n    [$insert(\"style\"):border-collapse: collapse; border: 1px solid; padding: 0.5em;]\n    [$slot]\n]\n#row = [:\n    <tr>[$reset, $children([:<td>[$slot]</td>]):[$slot]]</tr>\n]\n#header_row = [:\n    <tr>\n        [$reset, $children([:\n            <th style=\"border: 1px solid; padding: 0.5em; text-align: left;\">[$slot]</th>\n        ]):[$slot]]\n    </tr>\n]\n",
+        "import @libs/html {format}\n#page = [:\n  <body>[$slot]</body>\n]\n#table = [format.table:\n    [$insert(\"style\"):border-collapse: collapse; border: 1px solid; padding: 0.5em;]\n    [$slot]\n]\n#row = [:\n    <tr>[$reset, $children([:<td>[$slot]</td>]):[$slot]]</tr>\n]\n#header_row = [:\n    <tr>\n        [$reset, $children([:\n            <th style=\"border: 1px solid; padding: 0.5em; text-align: left;\">[$slot]</th>\n        ]):[$slot]]\n    </tr>\n]\n",
     )
     .expect("should write docs style library");
     fs::write(
         root.join("main.bst"),
-        "import @styles/docs/{page, table, row, header_row}\n[page, $markdown:\n[table:\n    [header_row: [: Type] [: Description] ]\n\n    [row: [: float ] [: 64 bit floating point number] ]\n\n    [row: [: int ] [:  64 bit signed integer ] ]\n]\n]\n",
+        "import @styles/docs {page, table, row, header_row}\n[page, $markdown:\n[table:\n    [header_row: [: Type] [: Description] ]\n\n    [row: [: float ] [: 64 bit floating point number] ]\n\n    [row: [: int ] [:  64 bit signed integer ] ]\n]\n]\n",
     )
     .expect("should write source file");
     let _cwd_guard = CurrentDirGuard::set_to(&root);
