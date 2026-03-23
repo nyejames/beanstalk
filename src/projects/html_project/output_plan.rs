@@ -32,6 +32,7 @@ pub(crate) struct HtmlRouteOutputPlan {
 /// Build an output plan for one entry file in JS-only mode.
 ///
 /// WHY: JS-only builds emit a single HTML file; the output path equals the logical path.
+#[allow(dead_code)] // TODO: is this even going to be used?
 pub(crate) fn plan_js_output(
     entry_point: &Path,
     entry_root: Option<&Path>,
@@ -166,11 +167,7 @@ fn derive_wasm_route_base(logical_html_path: &Path) -> Result<PathBuf, CompilerE
         return Ok(PathBuf::new());
     }
 
-    if logical_html_path
-        .file_name()
-        .and_then(|name| name.to_str())
-        == Some("index.html")
-    {
+    if logical_html_path.file_name().and_then(|name| name.to_str()) == Some("index.html") {
         return Ok(logical_html_path
             .parent()
             .map(Path::to_path_buf)
@@ -178,11 +175,7 @@ fn derive_wasm_route_base(logical_html_path: &Path) -> Result<PathBuf, CompilerE
     }
 
     // Legacy flat path: normalise to route folder.
-    if logical_html_path
-        .extension()
-        .and_then(|ext| ext.to_str())
-        != Some("html")
-    {
+    if logical_html_path.extension().and_then(|ext| ext.to_str()) != Some("html") {
         return Err(CompilerError::file_error(
             logical_html_path,
             format!(

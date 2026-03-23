@@ -342,7 +342,6 @@ fn validate_relative_output_path(relative_output_path: &Path) -> Result<(), Comp
     Ok(())
 }
 
-
 #[cfg(test)]
 #[path = "build_tests.rs"]
 mod tests;

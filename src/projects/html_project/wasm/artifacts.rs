@@ -82,8 +82,8 @@ pub(crate) fn compile_html_module_wasm(
 ) -> Result<CompiledHtmlWasmModule, CompilerMessages> {
     // Derive per-route artifact paths from the logical HTML path using the canonical planner.
     // WHY: plan_wasm_output owns the filesystem layout policy for all Wasm routes.
-    let output_plan = plan_wasm_output(logical_html_output_path, None)
-        .map_err(CompilerMessages::from_error)?;
+    let output_plan =
+        plan_wasm_output(logical_html_output_path, None).map_err(CompilerMessages::from_error)?;
 
     let js_lowering_config = JsLoweringConfig::standard_html(release_build);
     let js_module = lower_hir_to_js(
@@ -128,7 +128,9 @@ pub(crate) fn compile_html_module_wasm(
     emit_debug_outputs_if_enabled(&debug_outputs);
 
     let js_path = output_plan.js_path.expect("Wasm plan always has a js_path");
-    let wasm_path = output_plan.wasm_path.expect("Wasm plan always has a wasm_path");
+    let wasm_path = output_plan
+        .wasm_path
+        .expect("Wasm plan always has a wasm_path");
     Ok(CompiledHtmlWasmModule {
         output_files: vec![
             OutputFile::new(
@@ -278,4 +280,3 @@ fn emit_debug_outputs_if_enabled(debug: &HtmlWasmDebugOutputs) {
         println!("{text}");
     }
 }
-

@@ -34,7 +34,8 @@ pub(crate) fn lower_hir_module_to_lir(
     functions.sort_by_key(|function| function.id.0);
 
     for hir_function in &functions {
-        let lowered = lower_function(&mut context, hir_function).map_err(CompilerMessages::from_error)?;
+        let lowered =
+            lower_function(&mut context, hir_function).map_err(CompilerMessages::from_error)?;
         context.lir_module.functions.push(lowered);
     }
 
@@ -72,4 +73,3 @@ fn register_function_maps(context: &mut WasmLirLoweringContext<'_>) -> Result<()
 
     Ok(())
 }
-

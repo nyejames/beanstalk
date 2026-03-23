@@ -120,7 +120,8 @@ fn compile_single_file_frontend(
         Err(error) => return_err_as_messages!(error),
     };
 
-    let input_files = collect_reachable_input_files(&entry_path, &project_path_resolver, style_directives)?;
+    let input_files =
+        collect_reachable_input_files(&entry_path, &project_path_resolver, style_directives)?;
     let module = compile_module(
         input_files,
         config,
@@ -210,10 +211,11 @@ fn collect_reachable_input_files(
     project_path_resolver: &ProjectPathResolver,
     style_directives: &StyleDirectiveRegistry,
 ) -> Result<Vec<InputFile>, CompilerMessages> {
-    let reachable_files = match discover_reachable_files(entry_path, project_path_resolver, style_directives) {
-        Ok(files) => files,
-        Err(error) => return_err_as_messages!(error),
-    };
+    let reachable_files =
+        match discover_reachable_files(entry_path, project_path_resolver, style_directives) {
+            Ok(files) => files,
+            Err(error) => return_err_as_messages!(error),
+        };
 
     let mut input_files = Vec::with_capacity(reachable_files.len());
     for source_path in reachable_files {
@@ -221,7 +223,10 @@ fn collect_reachable_input_files(
             Ok(code) => code,
             Err(error) => return_err_as_messages!(error),
         };
-        input_files.push(InputFile { source_code, source_path });
+        input_files.push(InputFile {
+            source_code,
+            source_path,
+        });
     }
     Ok(input_files)
 }

@@ -48,7 +48,8 @@ pub(crate) fn lower_hir_to_wasm_module(
 
     // WHAT: perform pure Wasm encoding from already-lowered LIR.
     // WHY: emitter must stay backend-encoding focused and avoid reinterpreting frontend semantics.
-    let emit_result = emit_lir_to_wasm_module(&result.lir_module, request).map_err(CompilerMessages::from_error)?;
+    let emit_result = emit_lir_to_wasm_module(&result.lir_module, request)
+        .map_err(CompilerMessages::from_error)?;
     result.wasm_bytes = Some(emit_result.wasm_bytes);
 
     if request.debug_flags.show_wasm_sections {

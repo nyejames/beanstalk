@@ -1,8 +1,8 @@
 use super::*;
+use crate::compiler_frontend::compiler_errors::ErrorType;
 use crate::compiler_frontend::paths::path_resolution::{
     ProjectPathResolver, resolve_project_entry_root,
 };
-use crate::compiler_frontend::compiler_errors::ErrorType;
 use std::collections::HashSet;
 use std::ffi::OsStr;
 use std::path::PathBuf;

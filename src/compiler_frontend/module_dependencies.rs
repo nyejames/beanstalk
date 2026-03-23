@@ -159,7 +159,14 @@ fn visit_node(
                 string_table,
             );
             for dependency in soft_edges {
-                visit_node(&dependency, tracker, graph, order_lookup, sorted, string_table)?;
+                visit_node(
+                    &dependency,
+                    tracker,
+                    graph,
+                    order_lookup,
+                    sorted,
+                    string_table,
+                )?;
             }
         }
 
@@ -174,7 +181,14 @@ fn visit_node(
                 string_table,
             );
             for dependency in soft_edges {
-                visit_node(&dependency, tracker, graph, order_lookup, sorted, string_table)?;
+                visit_node(
+                    &dependency,
+                    tracker,
+                    graph,
+                    order_lookup,
+                    sorted,
+                    string_table,
+                )?;
             }
         }
 

@@ -4,9 +4,7 @@
 //! build outcomes into dev-server state updates and SSE reload broadcasts.
 use crate::build_system::build::{self, BuildResult, ProjectBuilder, WriteOptions};
 use crate::compiler_frontend::Flag;
-use crate::compiler_frontend::compiler_errors::{
-    CompilerError, CompilerMessages, ErrorType,
-};
+use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages, ErrorType};
 use crate::projects::dev_server::error_page::{
     format_compiler_messages, render_compiler_error_page, render_runtime_error_page,
 };
