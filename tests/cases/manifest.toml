@@ -42,3 +42,48 @@ tags = ["diagnostics", "ast"]
 id = "multi_file_fixture_only_counts_entry_case"
 path = "multi_file_fixture_only_counts_entry_case"
 tags = ["success", "imports", "multi-file"]
+
+[[case]]
+id = "path_exists_file"
+path = "path_exists_file"
+tags = ["success", "paths"]
+
+[[case]]
+id = "path_exists_directory"
+path = "path_exists_directory"
+tags = ["success", "paths"]
+
+[[case]]
+id = "path_missing_error"
+path = "path_missing_error"
+tags = ["diagnostics", "paths"]
+
+[[case]]
+id = "path_escape_project_root_error"
+path = "path_escape_project_root_error"
+tags = ["diagnostics", "paths"]
+
+[[case]]
+id = "path_origin_root_based"
+path = "path_origin_root_based"
+tags = ["success", "paths", "config"]
+
+[[case]]
+id = "path_origin_relative_stays_relative"
+path = "path_origin_relative_stays_relative"
+tags = ["success", "paths", "config"]
+
+[[case]]
+id = "path_directory_trailing_slash"
+path = "path_directory_trailing_slash"
+tags = ["success", "paths"]
+
+[[case]]
+id = "path_bst_template_warning"
+path = "path_bst_template_warning"
+tags = ["success", "paths", "diagnostics"]
+
+[[case]]
+id = "path_root_folder_preserved"
+path = "path_root_folder_preserved"
+tags = ["success", "paths", "config"]

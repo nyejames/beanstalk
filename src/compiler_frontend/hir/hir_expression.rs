@@ -20,6 +20,7 @@ use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringId;
 use crate::compiler_frontend::tokenizer::tokens::TextLocation;
 use crate::hir_log;
+use crate::projects::path_format::format_compile_time_paths;
 use crate::return_hir_transformation_error;
 
 mod operators;
@@ -116,6 +117,33 @@ impl<'a> HirBuilder<'a> {
                         HirExpressionKind::StringLiteral(
                             self.string_table.resolve(*value).to_owned(),
                         ),
+                        ty,
+                        ValueKind::Const,
+                        region,
+                    ),
+                })
+            }
+
+            ExpressionKind::Path(compile_time_paths) => {
+                // Compile-time path values lower to string literals in HIR.
+                // Formatting applies #origin for root-based paths and trailing
+                // slash for directories through the shared path formatter.
+                let region = self.current_region_or_error(&expr.location)?;
+                let ty = self.lower_data_type(
+                    &DataType::StringSlice,
+                    &expr.location,
+                )?;
+                let path_string = format_compile_time_paths(
+                    compile_time_paths,
+                    &self.path_format_config,
+                    self.string_table,
+                );
+
+                Ok(LoweredExpression {
+                    prelude: vec![],
+                    value: self.make_expression(
+                        &expr.location,
+                        HirExpressionKind::StringLiteral(path_string),
                         ty,
                         ValueKind::Const,
                         region,
@@ -725,7 +753,8 @@ impl<'a> HirBuilder<'a> {
             DataType::StringSlice
             | DataType::CoerceToString
             | DataType::Template
-            | DataType::TemplateWrapper => HirTypeKind::String,
+            | DataType::TemplateWrapper
+            | DataType::Path(_) => HirTypeKind::String,
             DataType::Range => HirTypeKind::Range,
             DataType::None => HirTypeKind::Unit,
 

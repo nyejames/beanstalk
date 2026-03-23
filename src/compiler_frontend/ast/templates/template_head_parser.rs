@@ -34,6 +34,7 @@ use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::style_directives::StyleDirectiveSource;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TextLocation, TokenKind};
 use crate::compiler_frontend::traits::ContainsReferences;
+use crate::projects::path_format::format_compile_time_paths;
 use crate::projects::settings::BS_VAR_PREFIX;
 use crate::{ast_log, return_compiler_error, return_syntax_error};
 
@@ -253,16 +254,68 @@ pub fn parse_template_head(
                     );
                 }
 
-                for path in paths {
-                    let interned_path = string_table.get_or_intern(path.to_string(string_table));
+                if let Some(resolver) = &context.project_path_resolver {
+                    // Use the real source file path when available (e.g. for const templates
+                    // where scope is a synthetic path like `#page.bst/#const_template0`).
+                    let source_scope = context.source_file_scope.as_ref().unwrap_or(&context.scope);
+                    let importer_file = source_scope.to_path_buf(string_table);
+                    let resolved = resolver.resolve_compile_time_paths(
+                        &paths,
+                        &importer_file,
+                        string_table,
+                    )?;
+
+                    // Warn when a .bst source file path is coerced into template output.
+                    for p in &resolved.paths {
+                        if p.filesystem_path
+                            .extension()
+                            .is_some_and(|ext| ext == "bst")
+                        {
+                            let location = token_stream.current_location();
+                            let file_path = location.scope.to_path_buf(string_table);
+                            context.emit_warning(CompilerWarning::new(
+                                &format!(
+                                    "Path to Beanstalk source file is being inserted into template output: '{}'",
+                                    p.source_path.to_portable_string(string_table)
+                                ),
+                                location.to_error_location(string_table),
+                                WarningKind::BstFilePathInTemplateOutput,
+                                file_path,
+                            ));
+                        }
+                    }
+
+                    // Format the resolved path(s) into a string for template output.
+                    // Templates always fold to strings, so we convert eagerly here
+                    // rather than deferring to HIR lowering.
+                    let formatted = format_compile_time_paths(
+                        &resolved,
+                        &context.path_format_config,
+                        string_table,
+                    );
+                    let interned = string_table.get_or_intern(formatted);
                     template.content.add_with_origin(
                         Expression::string_slice(
-                            interned_path,
+                            interned,
                             token_stream.current_location(),
                             Ownership::ImmutableOwned,
                         ),
                         TemplateSegmentOrigin::Head,
                     );
+                } else {
+                    // Fallback for single-file builds without a project resolver.
+                    for path in paths {
+                        let interned_path =
+                            string_table.get_or_intern(path.to_string(string_table));
+                        template.content.add_with_origin(
+                            Expression::string_slice(
+                                interned_path,
+                                token_stream.current_location(),
+                                Ownership::ImmutableOwned,
+                            ),
+                            TemplateSegmentOrigin::Head,
+                        );
+                    }
                 }
 
                 saw_meaningful_head_item = true;

@@ -5,6 +5,7 @@ use crate::compiler_frontend::ast::statements::functions::{FunctionReturn, Funct
 use crate::compiler_frontend::compiler_errors::{CompilerMessages, ErrorType};
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::hir::hir_builder::{HirBuilder, validate_module_for_tests};
+use crate::projects::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::hir::hir_nodes::{
     HirExpression, HirExpressionKind, HirMatchArm, HirPattern, HirPlace, HirRegion, HirTerminator,
     HirValueId, RegionId, ValueKind,
@@ -84,7 +85,7 @@ fn lower_ast(
     ast: Ast,
     string_table: &mut StringTable,
 ) -> Result<crate::compiler_frontend::hir::hir_nodes::HirModule, CompilerMessages> {
-    HirBuilder::new(string_table).build_hir_module(ast)
+    HirBuilder::new(string_table, PathStringFormatConfig::default()).build_hir_module(ast)
 }
 
 #[test]

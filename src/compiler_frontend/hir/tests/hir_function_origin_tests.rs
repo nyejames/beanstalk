@@ -2,6 +2,7 @@ use crate::compiler_frontend::ast::ast::{Ast, AstStartTemplateItem, ModuleExport
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind, TextLocation};
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
+use crate::projects::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::hir::hir_nodes::{FunctionId, HirFunctionOrigin};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
@@ -86,7 +87,7 @@ fn classifies_entry_file_start_runtime_template_and_normal_functions() {
         }],
     );
 
-    let module = HirBuilder::new(&mut string_table)
+    let module = HirBuilder::new(&mut string_table, PathStringFormatConfig::default())
         .build_hir_module(ast)
         .expect("HIR lowering should succeed");
 

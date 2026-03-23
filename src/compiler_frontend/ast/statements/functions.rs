@@ -442,6 +442,7 @@ fn format_type_for_error(data_type: &DataType) -> String {
         DataType::Reference(data_type) => {
             format!("{} Reference", format_type_for_error(data_type),)
         }
+        DataType::Path(_) => "Path".to_string(),
     }
 }
 

@@ -48,6 +48,7 @@ use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::tokenizer::tokenizer::tokenize;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenizeMode};
+use crate::projects::path_format::{OutputPathStyle, PathStringFormatConfig};
 use crate::projects::path_resolution::ProjectPathResolver;
 use crate::projects::settings::Config;
 use std::path::{Path, PathBuf};
@@ -74,11 +75,12 @@ pub struct CompilerFrontend {
     pub(crate) style_directives: StyleDirectiveRegistry,
     pub(crate) string_table: StringTable,
     pub(crate) project_path_resolver: Option<ProjectPathResolver>,
+    pub(crate) path_format_config: PathStringFormatConfig,
 }
 
 impl CompilerFrontend {
     pub(crate) fn new(
-        _project_config: &Config,
+        project_config: &Config,
         mut string_table: StringTable,
         style_directives: StyleDirectiveRegistry,
         project_path_resolver: Option<ProjectPathResolver>,
@@ -86,11 +88,23 @@ impl CompilerFrontend {
         // Create a builtin host function registry with print and other host functions
         let host_function_registry = HostRegistry::new(&mut string_table);
 
+        // Build path formatting config from project settings.
+        let origin = project_config
+            .settings
+            .get("origin")
+            .cloned()
+            .unwrap_or_else(|| String::from("/"));
+        let path_format_config = PathStringFormatConfig {
+            origin,
+            output_style: OutputPathStyle::Portable,
+        };
+
         Self {
             host_function_registry,
             style_directives,
             string_table,
             project_path_resolver,
+            path_format_config,
         }
     }
 
@@ -183,6 +197,8 @@ impl CompilerFrontend {
             &mut self.string_table,
             interned_entry_dir,
             build_profile,
+            self.project_path_resolver.clone(),
+            self.path_format_config.clone(),
         )
     }
 
@@ -192,7 +208,11 @@ impl CompilerFrontend {
     /// Generate HIR from AST nodes, linearizing expressions and creating
     /// a place-based representation suitable for borrow checking analysis.
     pub fn generate_hir(&mut self, ast: Ast) -> Result<HirModule, CompilerMessages> {
-        let hir_module = lower_module(ast, &mut self.string_table)?;
+        let hir_module = lower_module(
+            ast,
+            &mut self.string_table,
+            self.path_format_config.clone(),
+        )?;
         Ok(hir_module)
     }
 

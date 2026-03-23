@@ -45,6 +45,7 @@ pub enum WarningKind {
     PointlessExport,
     MalformedCssTemplate,
     MalformedHtmlTemplate,
+    BstFilePathInTemplateOutput,
 }
 
 pub fn print_formatted_warning(w: CompilerWarning) {
@@ -86,6 +87,12 @@ pub fn print_formatted_warning(w: CompilerWarning) {
         }
         WarningKind::MalformedHtmlTemplate => {
             println!("Malformed HTML template: {}", w.msg);
+        }
+        WarningKind::BstFilePathInTemplateOutput => {
+            println!(
+                "Path to Beanstalk source file is being inserted into template output: {}",
+                w.msg
+            );
         }
     }
 }

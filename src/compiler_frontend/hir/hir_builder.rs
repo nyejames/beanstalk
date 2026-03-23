@@ -27,6 +27,7 @@ use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::projects::settings::IMPLICIT_START_FUNC_NAME;
 use crate::return_hir_transformation_error;
+use crate::projects::path_format::PathStringFormatConfig;
 use rustc_hash::{FxHashMap, FxHashSet};
 
 // -----------
@@ -35,8 +36,9 @@ use rustc_hash::{FxHashMap, FxHashSet};
 pub fn lower_module(
     ast: Ast,
     string_table: &mut StringTable,
+    path_format_config: PathStringFormatConfig,
 ) -> Result<HirModule, CompilerMessages> {
-    let ctx = HirBuilder::new(string_table);
+    let ctx = HirBuilder::new(string_table, path_format_config);
     ctx.build_hir_module(ast)
 }
 
@@ -67,6 +69,9 @@ pub struct HirBuilder<'a> {
 
     // === For variable name resolution ===
     pub(super) string_table: &'a mut StringTable,
+
+    // === Path formatting config (origin, output style) ===
+    pub(super) path_format_config: PathStringFormatConfig,
 
     // === ID Counters ===
     pub(super) next_block_id: u32,
@@ -114,11 +119,15 @@ impl<'a> HirBuilder<'a> {
     // -----------
     // Constructor
     // -----------
-    pub fn new(string_table: &'a mut StringTable) -> HirBuilder<'a> {
+    pub fn new(
+        string_table: &'a mut StringTable,
+        path_format_config: PathStringFormatConfig,
+    ) -> HirBuilder<'a> {
         HirBuilder {
             module: HirModule::new(),
 
             string_table,
+            path_format_config,
 
             next_block_id: 0,
             next_local_id: 0,

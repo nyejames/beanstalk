@@ -12,6 +12,7 @@ use crate::compiler_frontend::ast::templates::template::{SlotKey, SlotPlaceholde
 use crate::compiler_frontend::compiler_errors::{CompilerMessages, ErrorType};
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
+use crate::projects::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::hir::hir_nodes::{
     HirBinOp, HirConstValue, HirDocFragmentKind, HirExpressionKind, HirModule, HirPattern,
     HirStatementKind, HirTerminator, StartFragment,
@@ -120,7 +121,7 @@ fn entry_path_and_start_name(string_table: &mut StringTable) -> (InternedPath, I
 }
 
 fn lower_ast(ast: Ast, string_table: &mut StringTable) -> Result<HirModule, CompilerMessages> {
-    HirBuilder::new(string_table).build_hir_module(ast)
+    HirBuilder::new(string_table, PathStringFormatConfig::default()).build_hir_module(ast)
 }
 
 fn assert_no_placeholder_terminators(module: &HirModule) {

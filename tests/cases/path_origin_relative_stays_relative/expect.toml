@@ -1,0 +1,9 @@
+mode = "success"
+entry = "."
+warnings = "forbid"
+
+[[artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain = ["./local_file.txt"]
+must_not_contain = ["/mysite/"]

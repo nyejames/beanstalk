@@ -7,6 +7,7 @@ use crate::compiler_frontend::ast::templates::template::{SlotKey, SlotPlaceholde
 use crate::compiler_frontend::compiler_errors::ErrorType;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
+use crate::projects::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::hir::hir_nodes::{
     BlockId, FieldId, FunctionId, HirBinOp, HirBlock, HirExpressionKind, HirLocal, HirPlace,
     HirStatementKind, HirTerminator, HirUnaryOp, LocalId, RegionId, StructId, ValueKind,
@@ -18,7 +19,7 @@ use crate::compiler_frontend::tokenizer::tokens::{CharPosition, TextLocation};
 
 fn setup_builder(string_table: &'_ mut StringTable) -> HirBuilder<'_> {
     let test_function_name = InternedPath::from_single_str("__expr_test_fn", string_table);
-    let mut builder = HirBuilder::new(string_table);
+    let mut builder = HirBuilder::new(string_table, PathStringFormatConfig::default());
 
     let region = RegionId(0);
     let function_id = FunctionId(0);

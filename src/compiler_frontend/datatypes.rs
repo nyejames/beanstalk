@@ -1,7 +1,28 @@
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::string_interning::StringTable;
+use crate::projects::path_resolution::CompileTimePathKind;
 use std::fmt::Display;
+
+/// Type-level distinction for compile-time path values.
+///
+/// WHAT: carries file vs directory classification inside the type system.
+/// WHY: future path operations (trailing-slash coercion, join semantics,
+///      metadata inspection) need this distinction at the type level.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PathTypeKind {
+    File,
+    Directory,
+}
+
+impl From<CompileTimePathKind> for PathTypeKind {
+    fn from(kind: CompileTimePathKind) -> Self {
+        match kind {
+            CompileTimePathKind::File => PathTypeKind::File,
+            CompileTimePathKind::Directory => PathTypeKind::Directory,
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub enum Ownership {
@@ -72,6 +93,9 @@ pub enum DataType {
     // Mathematical operations will still work and take priority, but strings can be used in these expressions.
     // All types will finally be coerced to strings after everything is evaluated.
     CoerceToString,
+
+    // Compile-time path value (file or directory).
+    Path(PathTypeKind),
 
     // Mutable owned strings
     // Can also become string building functions at runtime if they are not folded
@@ -249,6 +273,8 @@ impl DataType {
                 format!("Function({} -> {})", arg_str, returns_string)
             }
 
+            DataType::Path(PathTypeKind::File) => "Path(File)".to_string(),
+            DataType::Path(PathTypeKind::Directory) => "Path(Directory)".to_string(),
             DataType::Template => "Template".to_string(),
             DataType::None => "None".to_string(),
             DataType::True => "True".to_string(),
@@ -290,6 +316,7 @@ impl PartialEq for DataType {
             (DataType::Int, DataType::Int) => true,
             (DataType::Decimal, DataType::Decimal) => true,
             (DataType::Collection(a, oa), DataType::Collection(b, ob)) => a == b && oa == ob,
+            (DataType::Path(a), DataType::Path(b)) => a == b,
             (DataType::Template, DataType::Template) => true,
             (DataType::Option(a), DataType::Option(b)) => a == b,
             // For Args, Struct, Function, and Choices, we compare by name/structure
@@ -397,6 +424,8 @@ impl Display for DataType {
 
                 write!(f, "Function({arg_str} -> {returns_string})")
             }
+            DataType::Path(PathTypeKind::File) => write!(f, "Path(File)"),
+            DataType::Path(PathTypeKind::Directory) => write!(f, "Path(Directory)"),
             DataType::Template => {
                 write!(f, "Template")
             }

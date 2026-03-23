@@ -17,6 +17,7 @@ pub mod projects {
     pub mod cli;
     pub mod dev_server;
     pub(crate) mod html_project;
+    pub(crate) mod path_format;
     pub(crate) mod path_resolution;
     pub(crate) mod repl;
     pub(crate) mod routing;

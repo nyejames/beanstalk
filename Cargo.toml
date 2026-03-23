@@ -30,6 +30,7 @@ wasmparser = "0.240.0"
 
 
 [dev-dependencies]
+tempfile = "3"
 
 [profile.release]
 debug = true

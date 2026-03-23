@@ -1,0 +1,8 @@
+mode = "success"
+entry = "."
+warnings = "forbid"
+
+[[artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain = ["./mydir/"]

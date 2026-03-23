@@ -22,6 +22,8 @@ use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
+use crate::projects::path_format::PathStringFormatConfig;
+use crate::projects::path_resolution::ProjectPathResolver;
 use crate::projects::settings::{self, IMPLICIT_START_FUNC_NAME};
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::cell::RefCell;
@@ -66,6 +68,8 @@ impl Ast {
         string_table: &mut StringTable,
         entry_dir: InternedPath,
         build_profile: FrontendBuildProfile,
+        project_path_resolver: Option<ProjectPathResolver>,
+        path_format_config: PathStringFormatConfig,
     ) -> Result<Ast, CompilerMessages> {
         // Each file will be combined into a single AST.
         let mut ast: Vec<AstNode> =
@@ -247,7 +251,9 @@ impl Ast {
                     .with_style_directives(style_directives)
                     .with_build_profile(build_profile)
                     .with_visible_declarations(bindings.visible_symbol_paths.to_owned())
-                    .with_start_import_aliases(bindings.start_aliases.to_owned());
+                    .with_start_import_aliases(bindings.start_aliases.to_owned())
+                    .with_project_path_resolver(project_path_resolver.clone())
+                    .with_path_format_config(path_format_config.clone());
 
                     let mut struct_tokens = header.tokens.to_owned();
                     let fields_result =
@@ -307,7 +313,9 @@ impl Ast {
                     .with_style_directives(style_directives)
                     .with_build_profile(build_profile)
                     .with_visible_declarations(visible_declarations)
-                    .with_start_import_aliases(bindings.start_aliases.to_owned());
+                    .with_start_import_aliases(bindings.start_aliases.to_owned())
+                    .with_project_path_resolver(project_path_resolver.clone())
+                    .with_path_format_config(path_format_config.clone());
 
                     let mut token_stream = header.tokens;
 
@@ -354,7 +362,9 @@ impl Ast {
                     .with_style_directives(style_directives)
                     .with_build_profile(build_profile)
                     .with_visible_declarations(bindings.visible_symbol_paths.to_owned())
-                    .with_start_import_aliases(bindings.start_aliases.to_owned());
+                    .with_start_import_aliases(bindings.start_aliases.to_owned())
+                    .with_project_path_resolver(project_path_resolver.clone())
+                    .with_path_format_config(path_format_config.clone());
 
                     let mut token_stream = header.tokens;
 
@@ -453,7 +463,10 @@ impl Ast {
                     .with_style_directives(style_directives)
                     .with_build_profile(build_profile)
                     .with_visible_declarations(bindings.visible_symbol_paths.to_owned())
-                    .with_start_import_aliases(bindings.start_aliases.to_owned());
+                    .with_start_import_aliases(bindings.start_aliases.to_owned())
+                    .with_project_path_resolver(project_path_resolver.clone())
+                    .with_path_format_config(path_format_config.clone())
+                    .with_source_file_scope(header.source_file.clone());
 
                     let template_result =
                         Template::new(&mut template_tokens, &context, vec![], string_table);
@@ -562,6 +575,15 @@ pub struct ScopeContext {
     pub loop_depth: usize,
     pub build_profile: FrontendBuildProfile,
     pub(crate) emitted_warnings: Rc<RefCell<Vec<CompilerWarning>>>,
+    /// Project-aware path resolver for compile-time path validation.
+    /// `None` for single-file builds without a project context.
+    pub(crate) project_path_resolver: Option<ProjectPathResolver>,
+    /// The real filesystem source file that this context originated from.
+    /// For const templates, `scope` is a synthetic path like `#page.bst/#const_template0`,
+    /// so this field carries the actual source file path for path resolution.
+    pub(crate) source_file_scope: Option<InternedPath>,
+    /// Path formatting config for `#origin`-aware path string coercion.
+    pub(crate) path_format_config: PathStringFormatConfig,
 }
 #[derive(PartialEq, Clone)]
 pub enum ContextKind {
@@ -606,6 +628,9 @@ impl ScopeContext {
             loop_depth: 0,
             build_profile: FrontendBuildProfile::Dev,
             emitted_warnings: Rc::new(RefCell::new(Vec::new())),
+            project_path_resolver: None,
+            source_file_scope: None,
+            path_format_config: PathStringFormatConfig::default(),
         }
     }
 
@@ -678,6 +703,9 @@ impl ScopeContext {
             loop_depth: self.loop_depth,
             build_profile: self.build_profile,
             emitted_warnings: self.emitted_warnings.clone(),
+            project_path_resolver: self.project_path_resolver.clone(),
+            source_file_scope: self.source_file_scope.clone(),
+            path_format_config: self.path_format_config.clone(),
         }
     }
 
@@ -695,6 +723,9 @@ impl ScopeContext {
             loop_depth: 0,
             build_profile: FrontendBuildProfile::Dev,
             emitted_warnings: Rc::new(RefCell::new(Vec::new())),
+            project_path_resolver: None,
+            source_file_scope: None,
+            path_format_config: PathStringFormatConfig::default(),
         }
     }
 
@@ -723,6 +754,30 @@ impl ScopeContext {
         style_directives: &StyleDirectiveRegistry,
     ) -> ScopeContext {
         self.style_directives = style_directives.clone();
+        self
+    }
+
+    pub fn with_project_path_resolver(
+        mut self,
+        resolver: Option<ProjectPathResolver>,
+    ) -> ScopeContext {
+        self.project_path_resolver = resolver;
+        self
+    }
+
+    pub fn with_source_file_scope(
+        mut self,
+        source_file: InternedPath,
+    ) -> ScopeContext {
+        self.source_file_scope = Some(source_file);
+        self
+    }
+
+    pub fn with_path_format_config(
+        mut self,
+        config: PathStringFormatConfig,
+    ) -> ScopeContext {
+        self.path_format_config = config;
         self
     }
 
@@ -775,6 +830,9 @@ macro_rules! new_template_context {
             loop_depth: $context.loop_depth,
             build_profile: $context.build_profile,
             emitted_warnings: $context.emitted_warnings.clone(),
+            project_path_resolver: $context.project_path_resolver.clone(),
+            source_file_scope: $context.source_file_scope.clone(),
+            path_format_config: $context.path_format_config.clone(),
         }
     };
 }
@@ -800,6 +858,9 @@ macro_rules! new_config_context {
             loop_depth: 0,
             build_profile: $crate::compiler_frontend::FrontendBuildProfile::Dev,
             emitted_warnings: std::rc::Rc::new(std::cell::RefCell::new(Vec::new())),
+            project_path_resolver: None,
+            source_file_scope: None,
+            path_format_config: PathStringFormatConfig::default(),
         }
     }};
 }
@@ -825,6 +886,9 @@ macro_rules! new_condition_context {
             loop_depth: 0,
             build_profile: $crate::compiler_frontend::FrontendBuildProfile::Dev,
             emitted_warnings: std::rc::Rc::new(std::cell::RefCell::new(Vec::new())),
+            project_path_resolver: None,
+            source_file_scope: None,
+            path_format_config: PathStringFormatConfig::default(),
         }
     }};
 }

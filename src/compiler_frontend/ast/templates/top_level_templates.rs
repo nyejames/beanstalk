@@ -531,7 +531,8 @@ fn collect_references_from_expression(
         | ExpressionKind::Float(_)
         | ExpressionKind::StringSlice(_)
         | ExpressionKind::Bool(_)
-        | ExpressionKind::Char(_) => {}
+        | ExpressionKind::Char(_)
+        | ExpressionKind::Path(_) => {}
     }
 }
 

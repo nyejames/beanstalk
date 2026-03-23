@@ -1,0 +1,4 @@
+mode = "success"
+entry = "."
+warnings = "exact"
+warning_count = 1

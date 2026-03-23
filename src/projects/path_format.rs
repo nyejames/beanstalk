@@ -1,0 +1,148 @@
+//! Build-system-aware path string formatting for compile-time path values.
+//!
+//! WHAT: formats resolved `CompileTimePath` values into public string
+//! representations, applying `#origin` and output style policies.
+//!
+//! WHY: path-to-string coercion rules (origin prefix, trailing slash,
+//! relative preservation) belong in one shared module so all builders
+//! consume consistent output without reimplementing the rules.
+
+use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::string_interning::StringTable;
+use crate::projects::path_resolution::{
+    CompileTimePath, CompileTimePathBase, CompileTimePathKind, CompileTimePaths,
+};
+
+/// Output path separator style.
+///
+/// `Portable` uses forward slashes and is the default for web output.
+/// `Native` is scaffolding for future build systems that need platform
+/// separators.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OutputPathStyle {
+    Portable,
+    #[allow(dead_code)] // Scaffolding for future backend-specific output
+    Native,
+}
+
+/// Configuration for path string formatting.
+///
+/// WHAT: carries `#origin` and output style so formatting is deterministic.
+/// WHY: builders must agree on one source of truth for these policies.
+#[derive(Debug, Clone)]
+pub struct PathStringFormatConfig {
+    /// The `#origin` value from project config (e.g. `"/beanstalk"`).
+    /// A bare `"/"` means no prefix is added.
+    pub origin: String,
+    /// Separator style for the formatted output.
+    pub output_style: OutputPathStyle,
+}
+
+impl Default for PathStringFormatConfig {
+    fn default() -> Self {
+        Self {
+            origin: String::from("/"),
+            output_style: OutputPathStyle::Portable,
+        }
+    }
+}
+
+/// WHAT: formats a compile-time path into a public string representation.
+/// WHY: this is the single place where `#origin`, trailing slash, and
+/// relative-path preservation rules are applied.
+///
+/// Rules:
+/// - Relative paths (`RelativeToFile`) stay relative; no origin is applied.
+/// - Root-based paths (`ProjectRootFolder`, `EntryRoot`) get a leading `/`
+///   and are prefixed with origin when origin is not `"/"`.
+/// - Directory paths get a trailing `/`.
+/// - The `Portable` output style always uses forward slashes.
+pub fn format_compile_time_path(
+    path: &CompileTimePath,
+    config: &PathStringFormatConfig,
+    string_table: &StringTable,
+) -> String {
+    let raw = render_public_path(&path.public_path, &path.base, string_table);
+
+    let with_trailing = match path.kind {
+        CompileTimePathKind::Directory => ensure_trailing_slash(&raw),
+        CompileTimePathKind::File => raw,
+    };
+
+    let formatted = match path.base {
+        CompileTimePathBase::RelativeToFile => with_trailing,
+        CompileTimePathBase::ProjectRootFolder | CompileTimePathBase::EntryRoot => {
+            apply_origin(&with_trailing, &config.origin)
+        }
+    };
+
+    match config.output_style {
+        OutputPathStyle::Portable => formatted.replace('\\', "/"),
+        OutputPathStyle::Native => formatted,
+    }
+}
+
+/// Renders the public path components into a string with appropriate leading
+/// characters based on the path base.
+fn render_public_path(
+    public_path: &InternedPath,
+    base: &CompileTimePathBase,
+    string_table: &StringTable,
+) -> String {
+    let portable = public_path.to_portable_string(string_table);
+
+    match base {
+        CompileTimePathBase::RelativeToFile => {
+            // Relative paths keep their form as-is (e.g. "./images/logo.png").
+            portable
+        }
+        CompileTimePathBase::ProjectRootFolder | CompileTimePathBase::EntryRoot => {
+            // Non-relative paths become absolute site paths: "/assets/logo.png"
+            if portable.starts_with('/') {
+                portable
+            } else {
+                format!("/{portable}")
+            }
+        }
+    }
+}
+
+/// Ensures the string ends with exactly one `/`.
+fn ensure_trailing_slash(s: &str) -> String {
+    if s.ends_with('/') {
+        s.to_owned()
+    } else {
+        format!("{s}/")
+    }
+}
+
+/// WHAT: formats multiple compile-time paths as a comma-separated string.
+/// WHY: grouped path expressions (`@dir/{a, b}`) coerce to comma-separated
+///      lists so all resolved paths are represented in the output.
+pub fn format_compile_time_paths(
+    paths: &CompileTimePaths,
+    config: &PathStringFormatConfig,
+    string_table: &StringTable,
+) -> String {
+    paths
+        .paths
+        .iter()
+        .map(|p| format_compile_time_path(p, config, string_table))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// Applies the `#origin` prefix to an absolute site path.
+fn apply_origin(site_path: &str, origin: &str) -> String {
+    if origin == "/" {
+        return site_path.to_owned();
+    }
+
+    // origin is like "/beanstalk", site_path is like "/assets/logo.png"
+    // result: "/beanstalk/assets/logo.png"
+    format!("{origin}{site_path}")
+}
+
+#[cfg(test)]
+#[path = "tests/path_format_tests.rs"]
+mod tests;

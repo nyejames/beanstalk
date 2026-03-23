@@ -8,6 +8,71 @@ use std::ffi::OsStr;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 
+// ---------------------------------------------------------------------------
+// Compile-time path value types
+// ---------------------------------------------------------------------------
+
+/// Whether a resolved compile-time path points at a file or a directory.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum CompileTimePathKind {
+    File,
+    Directory,
+}
+
+/// How the path was resolved relative to the project layout.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum CompileTimePathBase {
+    /// Resolved relative to the importing file (`./` or `../`).
+    RelativeToFile,
+    /// First segment matched a configured `#root_folders` entry.
+    ProjectRootFolder,
+    /// Fell through to the configured `#entry_root`.
+    EntryRoot,
+}
+
+/// A fully resolved compile-time path value.
+///
+/// WHAT: carries all semantic metadata the compiler needs for validation,
+/// typed representation, and later string coercion of Beanstalk path literals.
+///
+/// WHY: path literals must be first-class compile-time values so that
+/// `#origin` application, file/directory distinction, and public-path
+/// formatting can be handled consistently in one place.
+#[derive(Clone, Debug)]
+pub struct CompileTimePath {
+    /// The original syntactic path as written in source, normalized to
+    /// Beanstalk components. Preserved for diagnostics and future path
+    /// manipulation.
+    pub source_path: InternedPath,
+
+    /// The canonical filesystem path used for compile-time existence
+    /// validation. This is an absolute path into the development tree.
+    pub filesystem_path: PathBuf,
+
+    /// The project-visible public path after resolution but *before*
+    /// `#origin` application. This is the path that string coercion
+    /// should render (plus optional origin prefix).
+    pub public_path: InternedPath,
+
+    /// How the path resolved semantically – determines whether `#origin`
+    /// is applied during string coercion.
+    pub base: CompileTimePathBase,
+
+    /// Whether the target is a file or a directory.
+    pub kind: CompileTimePathKind,
+}
+
+/// A collection of one or more resolved compile-time path values.
+///
+/// WHAT: wraps multiple resolved paths from a single path expression.
+/// WHY: the grouped path syntax `@dir/{a, b}` produces multiple paths
+///      from one token. This type carries them as a unit so expressions
+///      and string coercion can handle the 1-or-many case uniformly.
+#[derive(Clone, Debug)]
+pub struct CompileTimePaths {
+    pub paths: Vec<CompileTimePath>,
+}
+
 /// WHAT: resolves project-aware import paths using the configured entry root and explicit root folders.
 /// WHY: Stage 0 discovery and later frontend import normalization must use identical path rules.
 #[derive(Clone, Debug)]
@@ -60,12 +125,28 @@ impl ProjectPathResolver {
         importer_file: &Path,
         string_table: &StringTable,
     ) -> Result<PathBuf, CompilerError> {
-        let normalized =
-            self.normalize_import_path_buf(import_path, importer_file, string_table)?;
+        let (_, canonical) =
+            self.resolve_import_as_compile_time_path(import_path, importer_file, string_table)?;
+        Ok(canonical)
+    }
+
+    /// WHAT: resolves one import path to both a typed compile-time path and a canonical file path.
+    /// WHY: imports use the same resolution model as general path literals, but additionally
+    ///      apply `.bst` extension fallback logic. Returns both representations so callers
+    ///      can choose what they need.
+    pub(crate) fn resolve_import_as_compile_time_path(
+        &self,
+        import_path: &InternedPath,
+        importer_file: &Path,
+        string_table: &StringTable,
+    ) -> Result<(CompileTimePath, PathBuf), CompilerError> {
+        let (base_kind, filesystem_base) =
+            self.resolve_path_base(import_path, importer_file, string_table)?;
+        let normalized = join_and_normalize_path(&filesystem_base, import_path, string_table);
 
         for candidate in candidate_import_files(&normalized, import_path.len()) {
             if candidate.is_file() {
-                return fs::canonicalize(&candidate).map_err(|error| {
+                let canonical = fs::canonicalize(&candidate).map_err(|error| {
                     CompilerError::file_error(
                         importer_file,
                         format!(
@@ -73,7 +154,16 @@ impl ProjectPathResolver {
                             import_path.to_portable_string(string_table)
                         ),
                     )
-                });
+                })?;
+                let public_path = build_public_path(import_path, &base_kind, string_table);
+                let ct_path = CompileTimePath {
+                    source_path: import_path.clone(),
+                    filesystem_path: canonical.clone(),
+                    public_path,
+                    base: base_kind,
+                    kind: CompileTimePathKind::File,
+                };
+                return Ok((ct_path, canonical));
             }
         }
 
@@ -154,12 +244,70 @@ impl ProjectPathResolver {
             .is_some_and(|segment| self.root_folder_names.contains(segment))
     }
 
-    fn normalize_import_path_buf(
+    // -----------------------------------------------------------------------
+    // Compile-time path literal resolution (non-import general paths)
+    // -----------------------------------------------------------------------
+
+    /// WHAT: resolves a general path literal to a typed compile-time path value.
+    /// WHY: all Beanstalk path literals must use the same resolution rules as
+    ///       imports, but additionally classify file vs directory, reject
+    ///       escapes outside the project root, and carry public-path metadata.
+    pub(crate) fn resolve_compile_time_path(
         &self,
-        import_path: &InternedPath,
+        path: &InternedPath,
         importer_file: &Path,
         string_table: &StringTable,
-    ) -> Result<PathBuf, CompilerError> {
+    ) -> Result<CompileTimePath, CompilerError> {
+        let (base_kind, filesystem_base) =
+            self.resolve_path_base(path, importer_file, string_table)?;
+
+        let filesystem_path =
+            join_and_normalize_path(&filesystem_base, path, string_table);
+
+        self.validate_inside_project_root(&filesystem_path, path, importer_file, string_table)?;
+
+        let kind = classify_existing_target(&filesystem_path, path, importer_file, string_table)?;
+
+        let public_path =
+            build_public_path(path, &base_kind, string_table);
+
+        Ok(CompileTimePath {
+            source_path: path.clone(),
+            filesystem_path,
+            public_path,
+            base: base_kind,
+            kind,
+        })
+    }
+
+    /// WHAT: resolves all paths in a `Vec<InternedPath>` to typed compile-time values.
+    /// WHY: grouped path syntax produces multiple `InternedPath`s from one token;
+    ///      each must be resolved independently through the same rules.
+    pub(crate) fn resolve_compile_time_paths(
+        &self,
+        paths: &[InternedPath],
+        importer_file: &Path,
+        string_table: &StringTable,
+    ) -> Result<CompileTimePaths, CompilerError> {
+        let mut resolved = Vec::with_capacity(paths.len());
+        for path in paths {
+            resolved.push(self.resolve_compile_time_path(path, importer_file, string_table)?);
+        }
+        Ok(CompileTimePaths { paths: resolved })
+    }
+
+    // -----------------------------------------------------------------------
+    // Shared resolution helpers
+    // -----------------------------------------------------------------------
+
+    /// WHAT: determines the semantic base for a path and its filesystem root.
+    /// WHY: import resolution and general path resolution share this logic.
+    fn resolve_path_base(
+        &self,
+        path: &InternedPath,
+        importer_file: &Path,
+        string_table: &StringTable,
+    ) -> Result<(CompileTimePathBase, PathBuf), CompilerError> {
         let importer_dir = importer_file.parent().ok_or_else(|| {
             CompilerError::file_error(
                 importer_file,
@@ -167,15 +315,67 @@ impl ProjectPathResolver {
             )
         })?;
 
-        let base = if is_relative_import_path(import_path, string_table) {
-            importer_dir.to_path_buf()
-        } else if self.matches_root_folder(import_path, string_table) {
-            self.project_root.clone()
+        if is_relative_import_path(path, string_table) {
+            Ok((CompileTimePathBase::RelativeToFile, importer_dir.to_path_buf()))
+        } else if self.matches_root_folder(path, string_table) {
+            Ok((CompileTimePathBase::ProjectRootFolder, self.project_root.clone()))
         } else {
-            self.entry_root.clone()
-        };
+            Ok((CompileTimePathBase::EntryRoot, self.entry_root.clone()))
+        }
+    }
 
-        Ok(join_and_normalize_path(&base, import_path, string_table))
+    /// WHAT: rejects paths that would escape the project root after normalization.
+    /// WHY: paths outside the project root are a semantic error in Beanstalk.
+    fn validate_inside_project_root(
+        &self,
+        resolved: &Path,
+        source_path: &InternedPath,
+        importer_file: &Path,
+        string_table: &StringTable,
+    ) -> Result<(), CompilerError> {
+        // Canonicalize the project root once (it must exist).
+        let canonical_root = fs::canonicalize(&self.project_root).map_err(|error| {
+            CompilerError::file_error(
+                &self.project_root,
+                format!(
+                    "Failed to canonicalize project root '{}': {error}",
+                    self.project_root.display()
+                ),
+            )
+        })?;
+
+        // The resolved path may not exist yet (that check comes next), so we
+        // walk up to the nearest existing ancestor and canonicalize from there,
+        // then re-append the remaining tail.
+        let canonical_resolved = canonicalize_best_effort(resolved);
+
+        if !canonical_resolved.starts_with(&canonical_root) {
+            return_file_error!(
+                importer_file,
+                format!(
+                    "Compile-time path escapes the project root and is not allowed: '{}'",
+                    source_path.to_portable_string(string_table),
+                ),
+                {
+                    CompilationStage => String::from("Project Structure"),
+                    PrimarySuggestion => String::from("Use a path inside the project root or move the target into the project."),
+                }
+            );
+        }
+
+        Ok(())
+    }
+
+    fn normalize_import_path_buf(
+        &self,
+        import_path: &InternedPath,
+        importer_file: &Path,
+        string_table: &StringTable,
+    ) -> Result<PathBuf, CompilerError> {
+        let (_base_kind, filesystem_base) =
+            self.resolve_path_base(import_path, importer_file, string_table)?;
+
+        Ok(join_and_normalize_path(&filesystem_base, import_path, string_table))
     }
 }
 
@@ -281,3 +481,107 @@ fn with_bst_extension(path: PathBuf) -> PathBuf {
         path.with_extension(BEANSTALK_FILE_EXTENSION)
     }
 }
+
+// ---------------------------------------------------------------------------
+// Compile-time path helpers
+// ---------------------------------------------------------------------------
+
+/// WHAT: checks that the resolved filesystem target exists and classifies it.
+/// WHY: compile-time path validation requires the target to exist.
+fn classify_existing_target(
+    filesystem_path: &Path,
+    source_path: &InternedPath,
+    importer_file: &Path,
+    string_table: &StringTable,
+) -> Result<CompileTimePathKind, CompilerError> {
+    if filesystem_path.is_file() {
+        Ok(CompileTimePathKind::File)
+    } else if filesystem_path.is_dir() {
+        Ok(CompileTimePathKind::Directory)
+    } else {
+        return_file_error!(
+            importer_file,
+            format!(
+                "Compile-time path does not exist: '{}'",
+                source_path.to_portable_string(string_table),
+            ),
+            {
+                CompilationStage => String::from("Project Structure"),
+                PrimarySuggestion => String::from("Check that the file or directory exists relative to the configured path base."),
+            }
+        );
+    }
+}
+
+/// WHAT: builds the project-visible public path from a resolved path literal.
+/// WHY: the public path is what string coercion renders; it differs from the
+///      filesystem path by stripping the base and keeping the user-visible segments.
+fn build_public_path(
+    source_path: &InternedPath,
+    base_kind: &CompileTimePathBase,
+    string_table: &StringTable,
+) -> InternedPath {
+    match base_kind {
+        // Relative paths keep their original form as the public path.
+        CompileTimePathBase::RelativeToFile => source_path.clone(),
+
+        // Root-folder and entry-root paths keep the visible segments.
+        // For root-folder paths the first segment is the folder name itself
+        // which must be preserved. For entry-root paths, all segments are
+        // visible. In both cases the source path already contains the
+        // correct visible segments, so we can reuse it directly.
+        CompileTimePathBase::ProjectRootFolder | CompileTimePathBase::EntryRoot => {
+            // Strip leading `.` or `..` (should not be present for non-relative,
+            // but guard defensively).
+            let components = source_path.as_components();
+            let skip = components
+                .iter()
+                .take_while(|c| {
+                    let s = string_table.resolve(**c);
+                    s == "." || s == ".."
+                })
+                .count();
+
+            if skip == 0 {
+                source_path.clone()
+            } else {
+                InternedPath::from_components(components[skip..].to_vec())
+            }
+        }
+    }
+}
+
+/// WHAT: best-effort canonicalization that works even when the leaf doesn't
+///       exist yet – walks up to the nearest existing ancestor.
+/// WHY: `validate_inside_project_root` needs a canonical path for prefix
+///      comparison, but the target file may not exist (we report that separately).
+fn canonicalize_best_effort(path: &Path) -> PathBuf {
+    // Try to canonicalize the entire path first.
+    if let Ok(canonical) = fs::canonicalize(path) {
+        return canonical;
+    }
+
+    // Walk up until we find an existing ancestor, collecting non-existent
+    // tail segments as owned strings to avoid borrow conflicts.
+    let mut existing = path.to_path_buf();
+    let mut tail_components: Vec<String> = Vec::new();
+
+    while !existing.exists() {
+        if let Some(name) = existing.file_name().and_then(|n| n.to_str()) {
+            tail_components.push(name.to_owned());
+        }
+        if !existing.pop() {
+            return path.to_path_buf();
+        }
+    }
+
+    let mut result = fs::canonicalize(&existing).unwrap_or(existing);
+    for component in tail_components.iter().rev() {
+        result.push(component);
+    }
+    result
+}
+
+#[cfg(test)]
+#[path = "tests/path_resolution_tests.rs"]
+mod tests;

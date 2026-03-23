@@ -8,13 +8,14 @@ use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
+use crate::projects::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::string_interning::StringTable;
 
 fn lower_hir(
     ast: crate::compiler_frontend::ast::ast::Ast,
     string_table: &mut StringTable,
 ) -> crate::compiler_frontend::hir::hir_nodes::HirModule {
-    HirBuilder::new(string_table)
+    HirBuilder::new(string_table, PathStringFormatConfig::default())
         .build_hir_module(ast)
         .expect("HIR lowering should succeed")
 }

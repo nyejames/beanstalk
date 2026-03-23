@@ -1,0 +1,5 @@
+mode = "failure"
+entry = "."
+error_type = "File"
+message_contains = ["does not exist"]
+warnings = "ignore"

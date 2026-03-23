@@ -1,4 +1,5 @@
 <!DOCTYPE html><html lang="en">
+
       <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -279,7 +280,7 @@
             "
         >
             <a
-                href="/beanstalk/docs"
+                href="docs"
                 style="
                     color: light-dark(var(--bst-text-lightmode), var(--bst-text-darkmode));
                     text-decoration: none;
@@ -322,11 +323,13 @@
             </a>
         </div>
     </nav>
+
  <h1 style="font-size: 2em;text-align: center;"> FUNCTIONS</h1>
+
 
     <section class="container">
     <pre style="background-color: hsla(0, 0%, 42%, 0.12); padding-left: 1em; border-radius: 5px; max-width: 100%; white-space: pre; overflow-x: auto;">
-        <code>
+        <code class='codeblock'>
 <span class='bst-code-comment'>-- The simplest possible function</span>
 <span class='bst-code-comment'>-- The name of the function first,</span>
 <span class='bst-code-comment'>-- Followed by a parameter definition that defines what arguments must be passed in</span>
@@ -335,9 +338,9 @@ main <span class='bst-code-operator'>|</span><span class='bst-code-operator'>|</
 ;
 </code>
     </pre>
-    <h2>The function signature</h2>    <p>Functions in Beanstalk pass arguments by reference. </p>    <p>The arrow symbol is used to define the return signature of a function.      Functions can return multiple values.      If the function returns values,      it must use a type signature or the name of one of the arguments if it&#39;s returning that reference back to the caller. </p>    
+<h2>The function signature</h2><p>Functions in Beanstalk pass arguments by reference. </p><p>The arrow symbol is used to define the return signature of a function.  Functions can return multiple values.  If the function returns values,  it must use a type signature or the name of one of the arguments if it&#39;s returning that reference back to the caller. </p>
     <pre style="background-color: hsla(0, 0%, 42%, 0.12); padding-left: 1em; border-radius: 5px; max-width: 100%; white-space: pre; overflow-x: auto;">
-        <code>
+        <code class='codeblock'>
 
 get_doubled <span class='bst-code-operator'>|</span>value <span class='bst-code-type'>Int</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>Int</span><span class='bst-code-operator'>:</span>
     <span class='bst-code-comment'>-- Creates a new immutable integer using value</span>
@@ -394,9 +397,9 @@ panics <span class='bst-code-operator'>|</span><span class='bst-code-operator'>|
 ;
 </code>
     </pre>
-    <h2>Closures</h2>    <p>Closures in Beanstalk are nameless functions used as values.     They use the same syntax as functions, but do not have a name and therefore cannot be declared at the top level. </p>    <p>Closures may only appear inside a function or method body and are always expressions (rvalues). </p>    
+<h2>Closures</h2><p>Closures in Beanstalk are nameless functions used as values. They use the same syntax as functions, but do not have a name and therefore cannot be declared at the top level. </p><p>Closures may only appear inside a function or method body and are always expressions (rvalues). </p>
     <pre style="background-color: hsla(0, 0%, 42%, 0.12); padding-left: 1em; border-radius: 5px; max-width: 100%; white-space: pre; overflow-x: auto;">
-        <code>
+        <code class='codeblock'>
 update_total <span class='bst-code-operator'>|</span>values <span class='bst-code-parenthesis'>{</span><span class='bst-code-type'>Int</span><span class='bst-code-parenthesis'>}</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>Int</span><span class='bst-code-operator'>:</span>
     total <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-number'>0</span>
 
@@ -412,16 +415,16 @@ update_total <span class='bst-code-operator'>|</span>values <span class='bst-cod
 ;
 </code>
     </pre>
-    <h3>Capturing Variables</h3>    <p>A closure may reference values from its surrounding scope.     This is called capture. </p>    <p>Captures are implicit, references by default and subject to the same mutability and exclusivity rules as normal variables. </p>    <h3>Returnning closures from functions</h3>    <p>Functions may return closures as values. </p>    <p>To represent a closure type, Beanstalk uses the `Fn` keyword followed by the parameter and return type signatures inside of brackets. </p>    
+<h3>Capturing Variables</h3><p>A closure may reference values from its surrounding scope. This is called capture. </p><p>Captures are implicit, references by default and subject to the same mutability and exclusivity rules as normal variables. </p><h3>Returnning closures from functions</h3><p>Functions may return closures as values. </p><p>To represent a closure type, Beanstalk uses the `Fn` keyword followed by the parameter and return type signatures inside of brackets. </p>
     <pre style="background-color: hsla(0, 0%, 42%, 0.12); padding-left: 1em; border-radius: 5px; max-width: 100%; white-space: pre; overflow-x: auto;">
-        <code>
+        <code class='codeblock'>
 <span class='bst-code-comment'>-- Defining the type of a closure that takes an Int and returns a String</span>
 <span class='bst-code-struct'>Fn</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-type'>Int</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-parenthesis'>)</span>
 </code>
     </pre>
-    
+
     <pre style="background-color: hsla(0, 0%, 42%, 0.12); padding-left: 1em; border-radius: 5px; max-width: 100%; white-space: pre; overflow-x: auto;">
-        <code>
+        <code class='codeblock'>
 map <span class='bst-code-operator'>|</span>items <span class='bst-code-parenthesis'>{</span><span class='bst-code-type'>Int</span><span class='bst-code-parenthesis'>}</span>, f <span class='bst-code-struct'>Fn</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-type'>Int</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>Int</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-type'>Int</span><span class='bst-code-parenthesis'>}</span><span class='bst-code-operator'>:</span>
     result <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-parenthesis'>}</span>
     <span class='bst-code-keyword'>loop</span> item <span class='bst-code-keyword'>in</span> items<span class='bst-code-operator'>:</span>

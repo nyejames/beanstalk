@@ -2,10 +2,11 @@ use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration};
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::ast::templates::create_template_node::Template;
 use crate::compiler_frontend::ast::templates::template::TemplateConstValueKind;
-use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::datatypes::{DataType, Ownership, PathTypeKind};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::TextLocation;
+use crate::projects::path_resolution::CompileTimePaths;
 
 // Expressions represent anything that will turn into a value
 // Their kind will represent what their value is.
@@ -46,6 +47,16 @@ impl Expression {
             ExpressionKind::Float(float) => float.to_string(),
             ExpressionKind::Bool(bool) => bool.to_string(),
             ExpressionKind::Char(char) => char.to_string(),
+            ExpressionKind::Path(ct_paths) => {
+                // Basic public path string without origin – full formatting
+                // goes through the path formatter abstraction.
+                ct_paths
+                    .paths
+                    .iter()
+                    .map(|p| p.public_path.to_portable_string(string_table))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            }
             ExpressionKind::Reference(interned_name) => interned_name.to_string(string_table),
             ExpressionKind::Copy(..) => String::new(),
             ExpressionKind::Template(..) => String::new(),
@@ -151,6 +162,21 @@ impl Expression {
             kind: ExpressionKind::Char(value),
             location,
             ownership,
+        }
+    }
+
+    pub fn path(compile_time_paths: CompileTimePaths, location: TextLocation) -> Self {
+        // Derives the path type kind from the first resolved path.
+        let path_type_kind = compile_time_paths
+            .paths
+            .first()
+            .map(|p| PathTypeKind::from(p.kind.clone()))
+            .unwrap_or(PathTypeKind::File);
+        Self {
+            data_type: DataType::Path(path_type_kind),
+            kind: ExpressionKind::Path(Box::new(compile_time_paths)),
+            location,
+            ownership: Ownership::ImmutableOwned,
         }
     }
 
@@ -337,7 +363,8 @@ impl Expression {
             | ExpressionKind::Float(_)
             | ExpressionKind::StringSlice(_)
             | ExpressionKind::Bool(_)
-            | ExpressionKind::Char(_) => ConstValueKind::Literal,
+            | ExpressionKind::Char(_)
+            | ExpressionKind::Path(_) => ConstValueKind::Literal,
             ExpressionKind::Collection(items) => {
                 if items.iter().all(Expression::is_compile_time_constant) {
                     ConstValueKind::Composite
@@ -391,6 +418,9 @@ pub enum ExpressionKind {
     Bool(bool),
     Char(char),
 
+    // Compile-time path literal(s) — one or more resolved paths from grouped syntax.
+    Path(Box<CompileTimePaths>),
+
     // Reference to a variable by name
     Reference(InternedPath),
 
@@ -434,6 +464,7 @@ impl ExpressionKind {
                 | ExpressionKind::Bool(_)
                 | ExpressionKind::StringSlice(_)
                 | ExpressionKind::Char(_)
+                | ExpressionKind::Path(_)
         )
     }
 

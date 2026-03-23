@@ -6,6 +6,7 @@ use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
+use crate::projects::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::host_functions::{
     ErrorHandling, HostAbiType, HostAccessKind, HostFunctionDef, HostParameter, HostRegistry,
     HostReturnAlias,
@@ -118,7 +119,7 @@ pub(crate) fn lower_hir(
     ast: Ast,
     string_table: &mut StringTable,
 ) -> crate::compiler_frontend::hir::hir_nodes::HirModule {
-    HirBuilder::new(string_table)
+    HirBuilder::new(string_table, PathStringFormatConfig::default())
         .build_hir_module(ast)
         .expect("HIR lowering should succeed")
 }
