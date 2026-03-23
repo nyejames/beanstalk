@@ -17,10 +17,10 @@ use crate::compiler_frontend::hir::hir_nodes::{
 };
 use crate::compiler_frontend::host_functions::CallTarget;
 use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::paths::path_format::format_compile_time_paths;
 use crate::compiler_frontend::string_interning::StringId;
 use crate::compiler_frontend::tokenizer::tokens::TextLocation;
 use crate::hir_log;
-use crate::projects::path_format::format_compile_time_paths;
 use crate::return_hir_transformation_error;
 
 mod operators;
@@ -129,10 +129,7 @@ impl<'a> HirBuilder<'a> {
                 // Formatting applies #origin for root-based paths and trailing
                 // slash for directories through the shared path formatter.
                 let region = self.current_region_or_error(&expr.location)?;
-                let ty = self.lower_data_type(
-                    &DataType::StringSlice,
-                    &expr.location,
-                )?;
+                let ty = self.lower_data_type(&DataType::StringSlice, &expr.location)?;
                 let path_string = format_compile_time_paths(
                     compile_time_paths,
                     &self.path_format_config,

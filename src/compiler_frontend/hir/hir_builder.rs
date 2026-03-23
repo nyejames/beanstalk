@@ -27,7 +27,6 @@ use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::projects::settings::IMPLICIT_START_FUNC_NAME;
 use crate::return_hir_transformation_error;
-use crate::projects::path_format::PathStringFormatConfig;
 use rustc_hash::{FxHashMap, FxHashSet};
 
 // -----------
@@ -51,9 +50,9 @@ pub(super) struct LoopTargets {
 #[cfg(test)]
 #[path = "tests/hir_builder_test_support.rs"]
 mod hir_builder_test_support;
+use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 #[cfg(test)]
 pub(crate) use hir_builder_test_support::validate_module_for_tests;
-
 // -------------------
 // HIR Builder Context
 // -------------------

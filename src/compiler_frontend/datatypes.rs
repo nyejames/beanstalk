@@ -1,7 +1,7 @@
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
+use crate::compiler_frontend::paths::path_resolution::CompileTimePathKind;
 use crate::compiler_frontend::string_interning::StringTable;
-use crate::projects::path_resolution::CompileTimePathKind;
 use std::fmt::Display;
 
 /// Type-level distinction for compile-time path values.
@@ -95,6 +95,7 @@ pub enum DataType {
     CoerceToString,
 
     // Compile-time path value (file or directory).
+    #[allow(dead_code)] // Will be needed for path expressions in the future
     Path(PathTypeKind),
 
     // Mutable owned strings

@@ -6,12 +6,12 @@ use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
-use crate::projects::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::host_functions::{
     ErrorHandling, HostAbiType, HostAccessKind, HostFunctionDef, HostParameter, HostRegistry,
     HostReturnAlias,
 };
 use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::CharPosition;
 use crate::projects::settings::IMPLICIT_START_FUNC_NAME;

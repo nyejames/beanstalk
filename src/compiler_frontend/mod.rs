@@ -29,6 +29,7 @@ pub(crate) mod host_functions;
 pub(crate) mod hir;
 
 pub(crate) mod analysis;
+pub(crate) mod paths;
 
 use crate::compiler_frontend::analysis::borrow_checker::{
     BorrowCheckReport, check_borrows as run_borrow_checker,
@@ -44,12 +45,12 @@ use crate::compiler_frontend::hir::hir_nodes::HirModule;
 use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::module_dependencies::resolve_module_dependencies;
+use crate::compiler_frontend::paths::path_format::{OutputPathStyle, PathStringFormatConfig};
+use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::tokenizer::tokenizer::tokenize;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenizeMode};
-use crate::projects::path_format::{OutputPathStyle, PathStringFormatConfig};
-use crate::projects::path_resolution::ProjectPathResolver;
 use crate::projects::settings::Config;
 use std::path::{Path, PathBuf};
 
@@ -208,11 +209,8 @@ impl CompilerFrontend {
     /// Generate HIR from AST nodes, linearizing expressions and creating
     /// a place-based representation suitable for borrow checking analysis.
     pub fn generate_hir(&mut self, ast: Ast) -> Result<HirModule, CompilerMessages> {
-        let hir_module = lower_module(
-            ast,
-            &mut self.string_table,
-            self.path_format_config.clone(),
-        )?;
+        let hir_module =
+            lower_module(ast, &mut self.string_table, self.path_format_config.clone())?;
         Ok(hir_module)
     }
 

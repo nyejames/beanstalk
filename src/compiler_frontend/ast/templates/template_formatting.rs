@@ -151,7 +151,8 @@ pub(crate) fn apply_body_formatter(
             RenderPiece::Text(_)
             | RenderPiece::ChildTemplate(_)
             | RenderPiece::DynamicExpression(RenderExpressionPiece {
-                origin: crate::compiler_frontend::ast::templates::template::TemplateSegmentOrigin::Body,
+                origin:
+                    crate::compiler_frontend::ast::templates::template::TemplateSegmentOrigin::Body,
                 ..
             }) => {
                 current_run.push(piece);

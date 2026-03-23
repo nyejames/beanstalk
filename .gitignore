@@ -14,10 +14,9 @@ test_output/
 !.gitattributes
 !.github/**
 
-# These are created by compiler test files, and can be ignored
+# These are created by compiler test files sometimes, and can be ignored
 /dev
 /test.html
-/main.html
 /index.html
 
 # Integration golden snapshots should remain versionable even when they

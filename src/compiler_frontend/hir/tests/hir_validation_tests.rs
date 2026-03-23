@@ -5,13 +5,13 @@ use crate::compiler_frontend::ast::statements::functions::{FunctionReturn, Funct
 use crate::compiler_frontend::compiler_errors::{CompilerMessages, ErrorType};
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::hir::hir_builder::{HirBuilder, validate_module_for_tests};
-use crate::projects::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::hir::hir_nodes::{
     HirExpression, HirExpressionKind, HirMatchArm, HirPattern, HirPlace, HirRegion, HirTerminator,
     HirValueId, RegionId, ValueKind,
 };
 use crate::compiler_frontend::hir::tests::hir_expression_lowering_tests::location;
 use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::projects::settings::IMPLICIT_START_FUNC_NAME;
 

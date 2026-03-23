@@ -4,9 +4,9 @@ use crate::compiler_frontend::ast::templates::create_template_node::Template;
 use crate::compiler_frontend::ast::templates::template::TemplateConstValueKind;
 use crate::compiler_frontend::datatypes::{DataType, Ownership, PathTypeKind};
 use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::paths::path_resolution::CompileTimePaths;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::TextLocation;
-use crate::projects::path_resolution::CompileTimePaths;
 
 // Expressions represent anything that will turn into a value
 // Their kind will represent what their value is.
@@ -165,6 +165,7 @@ impl Expression {
         }
     }
 
+    #[allow(dead_code)] // TODO - path expressions MAYBE????
     pub fn path(compile_time_paths: CompileTimePaths, location: TextLocation) -> Self {
         // Derives the path type kind from the first resolved path.
         let path_type_kind = compile_time_paths
@@ -419,6 +420,7 @@ pub enum ExpressionKind {
     Char(char),
 
     // Compile-time path literal(s) — one or more resolved paths from grouped syntax.
+    #[allow(dead_code)] // Will be needed for path expressions in the future
     Path(Box<CompileTimePaths>),
 
     // Reference to a variable by name

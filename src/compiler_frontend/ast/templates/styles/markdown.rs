@@ -69,11 +69,7 @@ struct MarkdownListLevel {
 pub struct MarkdownTemplateFormatter;
 
 impl TemplateFormatter for MarkdownTemplateFormatter {
-    fn format(
-        &self,
-        input: FormatterInput,
-        string_table: &mut StringTable,
-    ) -> FormatterOutput {
+    fn format(&self, input: FormatterInput, string_table: &mut StringTable) -> FormatterOutput {
         // Each text piece is processed through markdown independently. Opaque anchors
         // (child templates, dynamic expressions) pass through unchanged — their content
         // is structurally sealed and must not be reparsed by the markdown formatter.

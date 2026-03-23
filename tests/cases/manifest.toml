@@ -9,11 +9,6 @@ path = "choice_rejected"
 tags = ["diagnostics", "headers"]
 
 [[case]]
-id = "config_src_rejected"
-path = "config_src_rejected"
-tags = ["config", "diagnostics"]
-
-[[case]]
 id = "float_literal_malformed"
 path = "float_literal_malformed"
 tags = ["diagnostics", "tokenizer"]

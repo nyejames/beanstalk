@@ -2,9 +2,9 @@ use crate::compiler_frontend::ast::ast::{Ast, AstStartTemplateItem, ModuleExport
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind, TextLocation};
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
-use crate::projects::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::hir::hir_nodes::{FunctionId, HirFunctionOrigin};
 use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::projects::settings::IMPLICIT_START_FUNC_NAME;
 

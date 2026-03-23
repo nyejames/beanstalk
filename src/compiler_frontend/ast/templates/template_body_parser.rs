@@ -52,11 +52,7 @@ pub(crate) fn parse_template_body(
                 // When child templates are suppressed (e.g. `$doc`), brackets are
                 // treated as balanced literal text rather than parsed as nested templates.
                 if template.style.suppress_child_templates {
-                    consume_balanced_brackets_as_literal_text(
-                        token_stream,
-                        template,
-                        string_table,
-                    );
+                    consume_balanced_brackets_as_literal_text(token_stream, template, string_table);
                     continue;
                 }
 
@@ -275,7 +271,10 @@ fn consume_balanced_brackets_as_literal_text(
             // Tokens the tokenizer produces inside template head regions.
             // These must be converted back to literal text representations.
             TokenKind::Symbol(id) | TokenKind::StyleDirective(id) => {
-                let prefix = if matches!(token_stream.current_token_kind(), TokenKind::StyleDirective(_)) {
+                let prefix = if matches!(
+                    token_stream.current_token_kind(),
+                    TokenKind::StyleDirective(_)
+                ) {
                     "$"
                 } else {
                     ""

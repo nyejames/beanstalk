@@ -1,9 +1,9 @@
 use crate::compiler_frontend::basic_utility_functions::is_valid_var_char;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::paths::paths::parse_file_path;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
-use crate::compiler_frontend::tokenizer::paths::parse_file_path;
 use crate::compiler_frontend::tokenizer::tokens::{
     FileTokens, TemplateBodyMode, TextLocation, Token, TokenKind, TokenStream, TokenizeMode,
 };

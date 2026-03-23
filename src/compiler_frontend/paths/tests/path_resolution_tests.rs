@@ -1,10 +1,10 @@
 //! Unit tests for compile-time path resolution.
 
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::string_interning::StringTable;
-use crate::projects::path_resolution::{
+use crate::compiler_frontend::paths::path_resolution::{
     CompileTimePathBase, CompileTimePathKind, ProjectPathResolver,
 };
+use crate::compiler_frontend::string_interning::StringTable;
 use std::fs;
 use std::path::PathBuf;
 

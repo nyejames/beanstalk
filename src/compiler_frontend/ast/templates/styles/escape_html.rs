@@ -20,11 +20,7 @@ use std::sync::Arc;
 struct EscapeHtmlTemplateFormatter;
 
 impl TemplateFormatter for EscapeHtmlTemplateFormatter {
-    fn format(
-        &self,
-        input: FormatterInput,
-        string_table: &mut StringTable,
-    ) -> FormatterOutput {
+    fn format(&self, input: FormatterInput, string_table: &mut StringTable) -> FormatterOutput {
         let pieces = input
             .pieces
             .into_iter()

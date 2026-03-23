@@ -12,8 +12,7 @@
 //!   opaque child-template anchors into a temporary string buffer.
 
 use crate::compiler_frontend::ast::templates::template_render_plan::{
-    FormatterAnchorId, FormatterInput, FormatterInputPiece, FormatterOutput,
-    FormatterOutputPiece,
+    FormatterAnchorId, FormatterInput, FormatterInputPiece, FormatterOutput, FormatterOutputPiece,
 };
 use crate::compiler_frontend::basic_utility_functions::NumericalParsing;
 use crate::compiler_frontend::string_interning::StringTable;

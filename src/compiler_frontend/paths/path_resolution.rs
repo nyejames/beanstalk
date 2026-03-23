@@ -261,15 +261,13 @@ impl ProjectPathResolver {
         let (base_kind, filesystem_base) =
             self.resolve_path_base(path, importer_file, string_table)?;
 
-        let filesystem_path =
-            join_and_normalize_path(&filesystem_base, path, string_table);
+        let filesystem_path = join_and_normalize_path(&filesystem_base, path, string_table);
 
         self.validate_inside_project_root(&filesystem_path, path, importer_file, string_table)?;
 
         let kind = classify_existing_target(&filesystem_path, path, importer_file, string_table)?;
 
-        let public_path =
-            build_public_path(path, &base_kind, string_table);
+        let public_path = build_public_path(path, &base_kind, string_table);
 
         Ok(CompileTimePath {
             source_path: path.clone(),
@@ -316,9 +314,15 @@ impl ProjectPathResolver {
         })?;
 
         if is_relative_import_path(path, string_table) {
-            Ok((CompileTimePathBase::RelativeToFile, importer_dir.to_path_buf()))
+            Ok((
+                CompileTimePathBase::RelativeToFile,
+                importer_dir.to_path_buf(),
+            ))
         } else if self.matches_root_folder(path, string_table) {
-            Ok((CompileTimePathBase::ProjectRootFolder, self.project_root.clone()))
+            Ok((
+                CompileTimePathBase::ProjectRootFolder,
+                self.project_root.clone(),
+            ))
         } else {
             Ok((CompileTimePathBase::EntryRoot, self.entry_root.clone()))
         }
@@ -375,7 +379,11 @@ impl ProjectPathResolver {
         let (_base_kind, filesystem_base) =
             self.resolve_path_base(import_path, importer_file, string_table)?;
 
-        Ok(join_and_normalize_path(&filesystem_base, import_path, string_table))
+        Ok(join_and_normalize_path(
+            &filesystem_base,
+            import_path,
+            string_table,
+        ))
     }
 }
 

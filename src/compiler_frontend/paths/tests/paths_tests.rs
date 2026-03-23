@@ -47,7 +47,7 @@ fn collect_import_path_values(source: &str) -> Vec<String> {
     )
     .expect("tokenization should succeed");
 
-    collect_import_paths_from_tokens(&file_tokens.tokens, &string_table)
+    collect_paths_from_tokens(&file_tokens.tokens, &string_table)
         .expect("import collection should succeed")
         .iter()
         .map(|path| path.to_portable_string(&string_table))
@@ -204,6 +204,6 @@ fn collect_import_paths_from_tokens_rejects_missing_path() {
     )
     .expect("tokenization should succeed");
 
-    let result = collect_import_paths_from_tokens(&file_tokens.tokens, &string_table);
+    let result = collect_paths_from_tokens(&file_tokens.tokens, &string_table);
     assert!(result.is_err(), "import without a path token should fail");
 }

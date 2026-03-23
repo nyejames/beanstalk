@@ -8,10 +8,10 @@
 //! consume consistent output without reimplementing the rules.
 
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::string_interning::StringTable;
-use crate::projects::path_resolution::{
+use crate::compiler_frontend::paths::path_resolution::{
     CompileTimePath, CompileTimePathBase, CompileTimePathKind, CompileTimePaths,
 };
+use crate::compiler_frontend::string_interning::StringTable;
 
 /// Output path separator style.
 ///

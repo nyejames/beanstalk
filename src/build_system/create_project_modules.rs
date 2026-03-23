@@ -11,13 +11,15 @@ use crate::compiler_frontend::compiler_errors::{
 use crate::compiler_frontend::headers::parse_file_headers::{Header, HeaderKind, parse_headers};
 use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::paths::path_resolution::{
+    ProjectPathResolver, resolve_project_entry_root,
+};
+use crate::compiler_frontend::paths::paths::collect_paths_from_tokens;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::style_directives::{StyleDirectiveRegistry, StyleDirectiveSpec};
-use crate::compiler_frontend::tokenizer::paths::collect_import_paths_from_tokens;
 use crate::compiler_frontend::tokenizer::tokenizer::tokenize;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, Token, TokenKind, TokenizeMode};
 use crate::compiler_frontend::{CompilerFrontend, Flag, FrontendBuildProfile};
-use crate::projects::path_resolution::{ProjectPathResolver, resolve_project_entry_root};
 use crate::projects::settings;
 use crate::projects::settings::{BEANSTALK_FILE_EXTENSION, Config};
 use crate::{borrow_log, return_err_as_messages, return_file_error, timer_log};
@@ -543,7 +545,7 @@ fn extract_import_paths(
     )
     .map_err(|error| error.with_file_path(file_path.to_path_buf()))?;
 
-    let imports = collect_import_paths_from_tokens(&tokens.tokens, &string_table)
+    let imports = collect_paths_from_tokens(&tokens.tokens, &string_table)
         .map_err(|error| error.with_file_path(file_path.to_path_buf()))?;
 
     Ok(ParsedImportPaths {

@@ -22,8 +22,6 @@ use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
-use crate::projects::path_format::PathStringFormatConfig;
-use crate::projects::path_resolution::ProjectPathResolver;
 use crate::projects::settings::{self, IMPLICIT_START_FUNC_NAME};
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::cell::RefCell;
@@ -33,6 +31,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 pub use crate::compiler_frontend::ast::templates::top_level_templates::{
     AstDocFragment, AstDocFragmentKind, AstStartTemplateItem,
 };
+use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
+use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 
 static CONTROL_FLOW_SCOPE_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
@@ -765,18 +765,12 @@ impl ScopeContext {
         self
     }
 
-    pub fn with_source_file_scope(
-        mut self,
-        source_file: InternedPath,
-    ) -> ScopeContext {
+    pub fn with_source_file_scope(mut self, source_file: InternedPath) -> ScopeContext {
         self.source_file_scope = Some(source_file);
         self
     }
 
-    pub fn with_path_format_config(
-        mut self,
-        config: PathStringFormatConfig,
-    ) -> ScopeContext {
+    pub fn with_path_format_config(mut self, config: PathStringFormatConfig) -> ScopeContext {
         self.path_format_config = config;
         self
     }

@@ -56,11 +56,7 @@ struct CodeTemplateFormatter {
 }
 
 impl TemplateFormatter for CodeTemplateFormatter {
-    fn format(
-        &self,
-        input: FormatterInput,
-        string_table: &mut StringTable,
-    ) -> FormatterOutput {
+    fn format(&self, input: FormatterInput, string_table: &mut StringTable) -> FormatterOutput {
         // Process each text piece through syntax highlighting. Opaque anchors (child
         // templates, dynamic expressions) pass through without highlighting.
         let mut output_pieces: Vec<FormatterOutputPiece> = Vec::with_capacity(input.pieces.len());

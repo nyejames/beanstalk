@@ -997,9 +997,18 @@ fn doc_templates_treat_brackets_as_literal_text() {
     let result = string_table.resolve(folded);
     // Each bracket and the symbol become separate atoms, each markdown-formatted
     // as individual paragraphs. The key assertion is that all three appear in the output.
-    assert!(result.contains("["), "Opening bracket should appear as literal text: {result}");
-    assert!(result.contains("value"), "Inner symbol should appear as literal text: {result}");
-    assert!(result.contains("]"), "Closing bracket should appear as literal text: {result}");
+    assert!(
+        result.contains("["),
+        "Opening bracket should appear as literal text: {result}"
+    );
+    assert!(
+        result.contains("value"),
+        "Inner symbol should appear as literal text: {result}"
+    );
+    assert!(
+        result.contains("]"),
+        "Closing bracket should appear as literal text: {result}"
+    );
 }
 
 #[test]
@@ -1038,9 +1047,18 @@ fn doc_brackets_become_literal_text_not_doc_children() {
         .expect("doc template should fold");
     let result = string_table.resolve(folded);
     // Each bracket, colon, and body text become separate atoms, markdown-formatted individually.
-    assert!(result.contains("["), "Opening bracket should appear as literal text: {result}");
-    assert!(result.contains("child"), "Body text should appear as literal text: {result}");
-    assert!(result.contains("]"), "Closing bracket should appear as literal text: {result}");
+    assert!(
+        result.contains("["),
+        "Opening bracket should appear as literal text: {result}"
+    );
+    assert!(
+        result.contains("child"),
+        "Body text should appear as literal text: {result}"
+    );
+    assert!(
+        result.contains("]"),
+        "Closing bracket should appear as literal text: {result}"
+    );
 }
 
 #[test]
@@ -1285,7 +1303,10 @@ fn runtime_templates_with_code_format_only_static_body_strings() {
     // when the value is known and will be copied or moved.
     assert!(template_segments(&template).iter().any(|segment| {
         segment.origin == TemplateSegmentOrigin::Head
-            && matches!(segment.expression.kind, ExpressionKind::Reference(_) | ExpressionKind::StringSlice(_))
+            && matches!(
+                segment.expression.kind,
+                ExpressionKind::Reference(_) | ExpressionKind::StringSlice(_)
+            )
     }));
 
     // Formatted body text (after $code pass) lives in render_plan, not template.content.

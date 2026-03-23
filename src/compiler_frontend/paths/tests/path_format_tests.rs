@@ -1,11 +1,13 @@
 //! Unit tests for compile-time path string formatting.
 
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::string_interning::StringTable;
-use crate::projects::path_format::*;
-use crate::projects::path_resolution::{
+use crate::compiler_frontend::paths::path_format::{
+    OutputPathStyle, PathStringFormatConfig, format_compile_time_path, format_compile_time_paths,
+};
+use crate::compiler_frontend::paths::path_resolution::{
     CompileTimePath, CompileTimePathBase, CompileTimePathKind, CompileTimePaths,
 };
+use crate::compiler_frontend::string_interning::StringTable;
 use std::path::PathBuf;
 
 fn make_path(
@@ -116,10 +118,7 @@ fn relative_directory_stays_relative_with_trailing_slash() {
     );
     let config = PathStringFormatConfig::default();
 
-    assert_eq!(
-        format_compile_time_path(&path, &config, &st),
-        "./docs/"
-    );
+    assert_eq!(format_compile_time_path(&path, &config, &st), "./docs/");
 }
 
 #[test]
@@ -181,9 +180,7 @@ fn format_single_path_in_multi_wrapper_has_no_comma() {
         CompileTimePathKind::File,
         &mut st,
     );
-    let paths = CompileTimePaths {
-        paths: vec![path],
-    };
+    let paths = CompileTimePaths { paths: vec![path] };
     let config = PathStringFormatConfig::default();
 
     assert_eq!(

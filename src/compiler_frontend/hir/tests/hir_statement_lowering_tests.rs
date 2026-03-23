@@ -12,13 +12,13 @@ use crate::compiler_frontend::ast::templates::template::{SlotKey, SlotPlaceholde
 use crate::compiler_frontend::compiler_errors::{CompilerMessages, ErrorType};
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
-use crate::projects::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::hir::hir_nodes::{
     HirBinOp, HirConstValue, HirDocFragmentKind, HirExpressionKind, HirModule, HirPattern,
     HirStatementKind, HirTerminator, StartFragment,
 };
 use crate::compiler_frontend::hir::tests::hir_expression_lowering_tests::location;
 use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::projects::settings::{IMPLICIT_START_FUNC_NAME, TOP_LEVEL_TEMPLATE_NAME};
 

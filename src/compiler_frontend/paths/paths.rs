@@ -2,24 +2,32 @@ use crate::compiler_frontend::basic_utility_functions::NumericalParsing;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
-use crate::compiler_frontend::tokenizer::tokens::{Token, TokenKind, TokenStream};
+use crate::compiler_frontend::tokenizer::tokens::{Token, TokenKind, TokenStream, TokenizeMode};
 use crate::{return_syntax_error, return_token};
 
 pub fn parse_file_path(
     stream: &mut TokenStream,
     string_table: &mut StringTable,
 ) -> Result<Token, CompilerError> {
-    // Path Syntax
+    // Path syntax accepted by the tokenizer.
+    //
+    // Examples:
     // @path/to/file
     // @(path/to/file)
-    // Path to multiple items within the same directory (used for imports)
-    // @path/to/file/{import1, import2, import3}
-    // @path/to/file/ {import1, import2, import3}
-    // @(path/to/file/ {import1, import2, import3})
-    // or @(path/to/file/ {
-    //        import1,
-    //        import2
+    //
+    // Grouped entries expand a base path into multiple concrete paths.
+    // The grouped entries are path components, not identifier-only symbols.
+    // Depending on context these may refer to exported symbols, file names,
+    // or other path-like entries.
+    //
+    // @path/to/base/{entry1, entry2}
+    // @path/to/base/ {entry1, entry2}
+    // @(path/to/base/{entry1, entry2})
+    // @(path/to/base/ {
+    //     entry1,
+    //     entry2
     // })
+
     let mut base_components = Vec::with_capacity(2);
     let mut segment = String::new();
 
@@ -39,10 +47,10 @@ pub fn parse_file_path(
         false
     };
 
-    let mut imports: Vec<InternedPath> = Vec::with_capacity(1);
-    let mut grouped_imports = false;
+    let mut parsed_paths: Vec<InternedPath> = Vec::with_capacity(1);
+    let mut has_grouped_entries = false;
     let mut closed_wrapped_path = false;
-    let mut closed_grouped_import = false;
+    let mut closed_grouped_entries = false;
 
     while let Some(c) = stream.peek().copied() {
         if !wrapped_in_parentheses && matches!(c, '\n' | '\r') {
@@ -57,8 +65,15 @@ pub fn parse_file_path(
                 break;
             }
 
+            // In template heads, stop before `]` or `:` so the enclosing template
+            // parser can consume the closing delimiter or body separator.
+            _ if stream.mode == TokenizeMode::TemplateHead && matches!(c, ']' | ':') => {
+                push_segment_if_non_empty(&mut base_components, &mut segment, string_table);
+                break;
+            }
+
             '{' => {
-                grouped_imports = true;
+                has_grouped_entries = true;
                 push_segment_if_non_empty(&mut base_components, &mut segment, string_table);
                 stream.next();
                 break;
@@ -75,7 +90,7 @@ pub fn parse_file_path(
                 push_segment_if_non_empty(&mut base_components, &mut segment, string_table);
                 consume_non_newline_whitespace(stream);
                 if stream.peek() == Some(&'{') {
-                    grouped_imports = true;
+                    has_grouped_entries = true;
                     stream.next();
                 }
                 break;
@@ -93,12 +108,12 @@ pub fn parse_file_path(
         }
     }
 
-    if wrapped_in_parentheses && !grouped_imports && !closed_wrapped_path {
+    if wrapped_in_parentheses && !has_grouped_entries && !closed_wrapped_path {
         return_syntax_error!(
             "Invalid character, expected a closing parenthesis for this path.",
             stream.new_location().to_error_location(string_table), {
                 CompilationStage => "Tokenization",
-                PrimarySuggestion => "Close the path with ')' after the import target",
+                PrimarySuggestion => "Close the path with ')' after the path target",
             }
         )
     }
@@ -107,7 +122,7 @@ pub fn parse_file_path(
 
     if base_components.is_empty() {
         return_syntax_error!(
-            "Import path cannot be empty",
+            "Path cannot be empty",
             stream.new_location().to_error_location(string_table), {
                 CompilationStage => "Tokenization",
                 PrimarySuggestion => "Provide a valid file path",
@@ -115,13 +130,16 @@ pub fn parse_file_path(
         )
     }
 
-    if !grouped_imports {
-        imports.push(InternedPath::from_components(base_components));
-        return_token!(TokenKind::Path(imports), stream);
+    if !has_grouped_entries {
+        parsed_paths.push(InternedPath::from_components(base_components));
+        return_token!(TokenKind::Path(parsed_paths), stream);
     }
 
-    let mut expect_symbol = true;
-    let mut parsed_symbols = 0usize;
+    // Parse grouped path entries after `base/{...}`.
+    // Each entry is appended as one final path component and expanded into
+    // its own InternedPath.
+    let mut expect_grouped_entry = true;
+    let mut parsed_grouped_entries = 0usize;
 
     while let Some(c) = stream.peek().copied() {
         if c.is_whitespace() {
@@ -131,9 +149,9 @@ pub fn parse_file_path(
 
         match c {
             '}' => {
-                if expect_symbol && parsed_symbols > 0 {
+                if expect_grouped_entry && parsed_grouped_entries > 0 {
                     return_syntax_error!(
-                        "Trailing comma is not allowed in grouped imports.",
+                        "Trailing comma is not allowed in grouped paths.",
                         stream.new_location().to_error_location(string_table), {
                             CompilationStage => "Tokenization",
                             PrimarySuggestion => "Remove the trailing comma before '}'",
@@ -142,14 +160,14 @@ pub fn parse_file_path(
                 }
 
                 stream.next();
-                closed_grouped_import = true;
+                closed_grouped_entries = true;
                 break;
             }
 
             ',' => {
-                if expect_symbol {
+                if expect_grouped_entry {
                     return_syntax_error!(
-                        "Multiple commas in a row are not allowed in grouped imports.",
+                        "Multiple commas in a row are not allowed in grouped paths.",
                         stream.new_location().to_error_location(string_table), {
                             CompilationStage => "Tokenization",
                             PrimarySuggestion => "Remove the extra comma",
@@ -157,70 +175,70 @@ pub fn parse_file_path(
                     )
                 }
 
-                expect_symbol = true;
+                expect_grouped_entry = true;
                 stream.next();
             }
 
             _ => {
-                if !expect_symbol {
+                if !expect_grouped_entry {
                     return_syntax_error!(
-                        "Grouped import symbols must be separated by commas.",
+                        "Grouped path entries must be separated by commas.",
                         stream.new_location().to_error_location(string_table), {
                             CompilationStage => "Tokenization",
-                            PrimarySuggestion => "Add a comma between grouped import symbols",
+                            PrimarySuggestion => "Add a comma between grouped path symbols",
                         }
                     )
                 }
 
-                if !(c.is_alphabetic() || c == '_') {
+                if !is_grouped_path_component_char(c) {
                     return_syntax_error!(
-                        "Invalid grouped import symbol. Symbols must start with a letter or underscore.",
+                        "Invalid grouped path entry",
                         stream.new_location().to_error_location(string_table), {
                             CompilationStage => "Tokenization",
-                            PrimarySuggestion => "Use a valid grouped import symbol name",
+                            PrimarySuggestion => "Use a valid grouped path entry",
                         }
                     )
                 }
 
-                let mut symbol = String::new();
-                symbol.push(c);
+                let mut grouped_entry = String::new();
+                grouped_entry.push(c);
                 stream.next();
 
                 while let Some(next) = stream.peek().copied() {
-                    if next.is_alphanumeric() || next == '_' {
-                        symbol.push(next);
+                    if is_grouped_path_component_char(next) {
+                        grouped_entry.push(next);
                         stream.next();
                     } else {
                         break;
                     }
                 }
 
-                let mut full_components = base_components.clone();
-                full_components.push(string_table.intern(&symbol));
-                imports.push(InternedPath::from_components(full_components));
-                parsed_symbols += 1;
-                expect_symbol = false;
+                let mut entry_components = base_components.clone();
+                entry_components.push(string_table.intern(&grouped_entry));
+                parsed_paths.push(InternedPath::from_components(entry_components));
+                parsed_grouped_entries += 1;
+                expect_grouped_entry = false;
             }
         }
     }
 
-    if grouped_imports && !closed_grouped_import {
+    if has_grouped_entries && !closed_grouped_entries {
         return_syntax_error!(
-            "Grouped import is missing a closing '}'",
+            "grouped path is missing a closing '}'",
             stream.new_location().to_error_location(string_table), {
                 CompilationStage => "Tokenization",
-                PrimarySuggestion => "Close grouped imports with '}'",
+                PrimarySuggestion => "Close grouped paths with '}'",
                 SuggestedInsertion => "}",
             }
         )
     }
 
-    if imports.is_empty() {
+    if parsed_paths.is_empty() {
         return_syntax_error!(
-            "Grouped imports require at least one symbol.",
+            "grouped path require at least one symbol.",
             stream.new_location().to_error_location(string_table), {
                 CompilationStage => "Tokenization",
-                PrimarySuggestion => "Add at least one import symbol inside '{}'",
+                PrimarySuggestion => "Add at least one path symbol inside '{}'",
             }
         )
     }
@@ -237,10 +255,10 @@ pub fn parse_file_path(
 
         if stream.peek() != Some(&')') {
             return_syntax_error!(
-                "Invalid character, expected a closing parenthesis after grouped imports.",
+                "Invalid character, expected a closing parenthesis after grouped paths.",
                 stream.new_location().to_error_location(string_table), {
                     CompilationStage => "Tokenization",
-                    PrimarySuggestion => "Add a closing parenthesis after the grouped imports",
+                    PrimarySuggestion => "Add a closing parenthesis after the grouped paths",
                 }
             )
         }
@@ -248,7 +266,7 @@ pub fn parse_file_path(
         stream.next();
     }
 
-    return_token!(TokenKind::Path(imports), stream)
+    return_token!(TokenKind::Path(parsed_paths), stream)
 }
 
 pub fn parse_import_clause_tokens(
@@ -302,17 +320,17 @@ pub fn parse_import_clause_tokens(
     Ok((paths.to_owned(), index + 1))
 }
 
-pub fn collect_import_paths_from_tokens(
+pub fn collect_paths_from_tokens(
     tokens: &[Token],
     string_table: &StringTable,
 ) -> Result<Vec<InternedPath>, CompilerError> {
-    let mut imports = Vec::new();
+    let mut parsed_paths = Vec::new();
     let mut index = 0usize;
 
     while index < tokens.len() {
         if matches!(tokens[index].kind, TokenKind::Import) {
             let (paths, next_index) = parse_import_clause_tokens(tokens, index, string_table)?;
-            imports.extend(paths);
+            parsed_paths.extend(paths);
             index = next_index;
             continue;
         }
@@ -320,7 +338,7 @@ pub fn collect_import_paths_from_tokens(
         index += 1;
     }
 
-    Ok(imports)
+    Ok(parsed_paths)
 }
 
 fn push_segment_if_non_empty(
@@ -342,6 +360,27 @@ fn consume_non_newline_whitespace(stream: &mut TokenStream) {
     {
         stream.next();
     }
+}
+
+fn is_grouped_path_component_char(c: char) -> bool {
+    // Reject control characters outright.
+    if c.is_control() {
+        return false;
+    }
+
+    // Allow a normal space, but reject other whitespace like tabs/newlines.
+    if c.is_whitespace() && c != ' ' {
+        return false;
+    }
+
+    // Reject Beanstalk syntax delimiters and path separators.
+    !matches!(
+        c,
+        '[' | ']' | '{' | '}' | ',' | '(' | ')' | '/' | '\\'
+            // Reject Windows-forbidden filename characters too, to stay conservative
+            // across operating systems.
+            | '<' | '>' | ':' | '"' | '|' | '?' | '*'
+    )
 }
 
 #[cfg(test)]

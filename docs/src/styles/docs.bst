@@ -27,7 +27,7 @@ import @lib/html/{doc, format}
 # navbar = [$html:
     <nav class="bst-nav-1" aria-label="Primary">
         <a
-            href="/"
+            href="[/@]"
             style="
                 display: flex;
                 align-items: center;
@@ -59,7 +59,7 @@ import @lib/html/{doc, format}
             "
         >
             <a
-                href="docs"
+                href="/beanstalk/docs"
                 style="
                     color: light-dark(var(--bst-text-lightmode), var(--bst-text-darkmode));
                     text-decoration: none;

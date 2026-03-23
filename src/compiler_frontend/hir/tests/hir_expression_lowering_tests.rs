@@ -7,13 +7,13 @@ use crate::compiler_frontend::ast::templates::template::{SlotKey, SlotPlaceholde
 use crate::compiler_frontend::compiler_errors::ErrorType;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
-use crate::projects::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::hir::hir_nodes::{
     BlockId, FieldId, FunctionId, HirBinOp, HirBlock, HirExpressionKind, HirLocal, HirPlace,
     HirStatementKind, HirTerminator, HirUnaryOp, LocalId, RegionId, StructId, ValueKind,
 };
 use crate::compiler_frontend::host_functions::CallTarget;
 use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{CharPosition, TextLocation};
 
