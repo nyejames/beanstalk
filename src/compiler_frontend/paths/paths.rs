@@ -31,7 +31,7 @@ pub fn parse_file_path(
     let mut base_components = Vec::with_capacity(2);
     let mut segment = String::new();
 
-    // Skip initial non-newline whitespace
+    // Skip initial non-newline whitespace before the path contents.
     while let Some(c) = stream.peek() {
         if c.is_non_newline_whitespace() && c != &'\n' {
             stream.next();
@@ -66,7 +66,7 @@ pub fn parse_file_path(
             }
 
             // In template heads, stop before `]` or `:` so the enclosing template
-            // parser can consume the closing delimiter or body separator.
+            // parser can consume the closing delimiter or body separator itself.
             _ if stream.mode == TokenizeMode::TemplateHead && matches!(c, ']' | ':') => {
                 push_segment_if_non_empty(&mut base_components, &mut segment, string_table);
                 break;
@@ -80,7 +80,7 @@ pub fn parse_file_path(
             }
 
             // Config lists use bare path syntax like `@lib, @assets`.
-            // Stop before delimiters so the lexer can emit the comma/brace separately.
+            // Stop before delimiters so the tokenizer can emit them separately.
             ',' | '}' if !wrapped_in_parentheses => {
                 push_segment_if_non_empty(&mut base_components, &mut segment, string_table);
                 break;
@@ -89,10 +89,12 @@ pub fn parse_file_path(
             _ if !wrapped_in_parentheses && c.is_non_newline_whitespace() => {
                 push_segment_if_non_empty(&mut base_components, &mut segment, string_table);
                 consume_non_newline_whitespace(stream);
+
                 if stream.peek() == Some(&'{') {
                     has_grouped_entries = true;
                     stream.next();
                 }
+
                 break;
             }
 
@@ -113,7 +115,7 @@ pub fn parse_file_path(
             "Invalid character, expected a closing parenthesis for this path.",
             stream.new_location().to_error_location(string_table), {
                 CompilationStage => "Tokenization",
-                PrimarySuggestion => "Close the path with ')' after the path target",
+                PrimarySuggestion => "Add a closing ')' after the path",
             }
         )
     }
@@ -122,7 +124,7 @@ pub fn parse_file_path(
 
     if base_components.is_empty() {
         return_syntax_error!(
-            "Path cannot be empty",
+            "Path cannot be empty.",
             stream.new_location().to_error_location(string_table), {
                 CompilationStage => "Tokenization",
                 PrimarySuggestion => "Provide a valid file path",
@@ -135,9 +137,9 @@ pub fn parse_file_path(
         return_token!(TokenKind::Path(parsed_paths), stream);
     }
 
-    // Parse grouped path entries after `base/{...}`.
+    // Parses grouped path entries after `base/{...}`.
     // Each entry is appended as one final path component and expanded into
-    // its own InternedPath.
+    // its own concrete InternedPath.
     let mut expect_grouped_entry = true;
     let mut parsed_grouped_entries = 0usize;
 
@@ -185,14 +187,14 @@ pub fn parse_file_path(
                         "Grouped path entries must be separated by commas.",
                         stream.new_location().to_error_location(string_table), {
                             CompilationStage => "Tokenization",
-                            PrimarySuggestion => "Add a comma between grouped path symbols",
+                            PrimarySuggestion => "Add a comma between grouped path entries",
                         }
                     )
                 }
 
                 if !is_grouped_path_component_char(c) {
                     return_syntax_error!(
-                        "Invalid grouped path entry",
+                        "Invalid grouped path entry.",
                         stream.new_location().to_error_location(string_table), {
                             CompilationStage => "Tokenization",
                             PrimarySuggestion => "Use a valid grouped path entry",
@@ -213,6 +215,16 @@ pub fn parse_file_path(
                     }
                 }
 
+                if !is_valid_grouped_path_entry(&grouped_entry) {
+                    return_syntax_error!(
+                        format!("Invalid grouped path entry '{}'.", grouped_entry),
+                        stream.new_location().to_error_location(string_table), {
+                            CompilationStage => "Tokenization",
+                            PrimarySuggestion => "Use a valid file or directory name",
+                        }
+                    )
+                }
+
                 let mut entry_components = base_components.clone();
                 entry_components.push(string_table.intern(&grouped_entry));
                 parsed_paths.push(InternedPath::from_components(entry_components));
@@ -224,27 +236,27 @@ pub fn parse_file_path(
 
     if has_grouped_entries && !closed_grouped_entries {
         return_syntax_error!(
-            "grouped path is missing a closing '}'",
+            "Grouped path is missing a closing '}'.",
             stream.new_location().to_error_location(string_table), {
                 CompilationStage => "Tokenization",
-                PrimarySuggestion => "Close grouped paths with '}'",
+                PrimarySuggestion => "Close the grouped path with '}'",
                 SuggestedInsertion => "}",
             }
         )
     }
 
-    if parsed_paths.is_empty() {
+    if parsed_grouped_entries == 0 {
         return_syntax_error!(
-            "grouped path require at least one symbol.",
+            "Grouped path requires at least one entry.",
             stream.new_location().to_error_location(string_table), {
                 CompilationStage => "Tokenization",
-                PrimarySuggestion => "Add at least one path symbol inside '{}'",
+                PrimarySuggestion => "Add at least one grouped path entry inside '{}'",
             }
         )
     }
 
     if wrapped_in_parentheses {
-        // Skip trailing whitespace and enforce final ')'
+        // Allows whitespace before the final `)` but still requires it to be present.
         while let Some(c) = stream.peek() {
             if c.is_whitespace() {
                 stream.next();
@@ -255,10 +267,10 @@ pub fn parse_file_path(
 
         if stream.peek() != Some(&')') {
             return_syntax_error!(
-                "Invalid character, expected a closing parenthesis after grouped paths.",
+                "Invalid character, expected a closing parenthesis after the grouped path.",
                 stream.new_location().to_error_location(string_table), {
                     CompilationStage => "Tokenization",
-                    PrimarySuggestion => "Add a closing parenthesis after the grouped paths",
+                    PrimarySuggestion => "Add a closing ')' after the grouped path",
                 }
             )
         }
@@ -296,7 +308,7 @@ pub fn parse_import_clause_tokens(
 
     let Some(path_token) = tokens.get(index) else {
         return_syntax_error!(
-            "Expected a path after the 'import' keyword",
+            "Expected a path after the 'import' keyword.",
             import_token.location.to_error_location(string_table), {
                 CompilationStage => "Header Parsing",
                 PrimarySuggestion => "Add an import path like '@(folder/file)' after 'import'",
@@ -307,7 +319,7 @@ pub fn parse_import_clause_tokens(
     let TokenKind::Path(paths) = &path_token.kind else {
         return_syntax_error!(
             format!(
-                "Expected a path after the 'import' keyword, found '{:?}'",
+                "Expected a path after the 'import' keyword, found '{:?}'.",
                 path_token.kind
             ),
             path_token.location.to_error_location(string_table), {
@@ -363,23 +375,83 @@ fn consume_non_newline_whitespace(stream: &mut TokenStream) {
 }
 
 fn is_grouped_path_component_char(c: char) -> bool {
-    // Reject control characters outright.
     if c.is_control() {
         return false;
     }
 
-    // Allow a normal space, but reject other whitespace like tabs/newlines.
+    // Allow a plain space in grouped entries, but reject other whitespace.
     if c.is_whitespace() && c != ' ' {
         return false;
     }
 
-    // Reject Beanstalk syntax delimiters and path separators.
+    // Reject syntax delimiters, path separators, and characters that are
+    // broadly unsafe in filenames across platforms.
     !matches!(
         c,
-        '[' | ']' | '{' | '}' | ',' | '(' | ')' | '/' | '\\'
-            // Reject Windows-forbidden filename characters too, to stay conservative
-            // across operating systems.
-            | '<' | '>' | ':' | '"' | '|' | '?' | '*'
+        '[' | ']'
+            | '{'
+            | '}'
+            | ','
+            | '('
+            | ')'
+            | '/'
+            | '\\'
+            | '<'
+            | '>'
+            | ':'
+            | '"'
+            | '|'
+            | '?'
+            | '*'
+    )
+}
+
+fn is_valid_grouped_path_entry(entry: &str) -> bool {
+    if entry.is_empty() {
+        return false;
+    }
+
+    if entry == "." || entry == ".." {
+        return false;
+    }
+
+    if entry.starts_with(' ') || entry.ends_with(' ') {
+        return false;
+    }
+
+    if entry.ends_with('.') {
+        return false;
+    }
+
+    let entry_prefix = match entry.split('.').next() {
+        Some(prefix) => prefix,
+        None => entry,
+    };
+
+    !matches!(
+        entry_prefix.to_ascii_uppercase().as_str(),
+        "CON"
+            | "PRN"
+            | "AUX"
+            | "NUL"
+            | "COM1"
+            | "COM2"
+            | "COM3"
+            | "COM4"
+            | "COM5"
+            | "COM6"
+            | "COM7"
+            | "COM8"
+            | "COM9"
+            | "LPT1"
+            | "LPT2"
+            | "LPT3"
+            | "LPT4"
+            | "LPT5"
+            | "LPT6"
+            | "LPT7"
+            | "LPT8"
+            | "LPT9"
     )
 }
 
