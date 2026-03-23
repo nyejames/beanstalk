@@ -148,81 +148,33 @@ fn visit_node(
             visit_node(&import, tracker, graph, order_lookup, sorted, string_table)?;
         }
 
-        // Struct default-expression dependencies are soft sort edges:
-        // resolve and order them when possible but never fail dependency sorting
-        // if a candidate is unresolved here. AST semantic validation owns those errors.
+        // Soft edges: struct default-value dependencies.
+        // WHY: resolved when possible but never fail sorting — AST validation owns those errors.
         if let HeaderKind::Struct { metadata } = &header.kind {
-            let mut soft_imports = metadata
-                .default_value_dependencies
-                .iter()
-                .filter_map(|dependency| resolve_graph_path(dependency, graph, string_table))
-                .filter(|dependency| {
-                    matches!(
-                        graph.get(dependency).map(|header| &header.kind),
-                        Some(HeaderKind::Constant { .. })
-                    )
-                })
-                .filter(|dependency| dependency != &resolved_path)
-                .collect::<Vec<_>>();
-
-            soft_imports.sort_by(|left, right| {
-                let left_order = order_lookup.get(left).copied().unwrap_or(usize::MAX);
-                let right_order = order_lookup.get(right).copied().unwrap_or(usize::MAX);
-                left_order.cmp(&right_order).then_with(|| {
-                    left.to_portable_string(string_table)
-                        .cmp(&right.to_portable_string(string_table))
-                })
-            });
-            soft_imports.dedup();
-
-            for dependency in soft_imports {
-                visit_node(
-                    &dependency,
-                    tracker,
-                    graph,
-                    order_lookup,
-                    sorted,
-                    string_table,
-                )?;
+            let soft_edges = collect_struct_default_soft_edges(
+                &metadata.default_value_dependencies,
+                &resolved_path,
+                graph,
+                order_lookup,
+                string_table,
+            );
+            for dependency in soft_edges {
+                visit_node(&dependency, tracker, graph, order_lookup, sorted, string_table)?;
             }
         }
 
-        // Constant declaration symbol dependencies are soft sort edges:
-        // resolve and order them when possible but never fail dependency sorting
-        // if a candidate is unresolved here. AST semantic validation owns those errors.
+        // Soft edges: constant symbol dependencies.
+        // WHY: same policy as struct defaults — order when resolvable, never block on failure.
         if let HeaderKind::Constant { metadata } = &header.kind {
-            let mut soft_imports = metadata
-                .symbol_dependencies
-                .iter()
-                .filter_map(|dependency| resolve_graph_path(dependency, graph, string_table))
-                .filter(|dependency| {
-                    matches!(
-                        graph.get(dependency).map(|header| &header.kind),
-                        Some(HeaderKind::Struct { .. }) | Some(HeaderKind::Constant { .. })
-                    )
-                })
-                .filter(|dependency| dependency != &resolved_path)
-                .collect::<Vec<_>>();
-
-            soft_imports.sort_by(|left, right| {
-                let left_order = order_lookup.get(left).copied().unwrap_or(usize::MAX);
-                let right_order = order_lookup.get(right).copied().unwrap_or(usize::MAX);
-                left_order.cmp(&right_order).then_with(|| {
-                    left.to_portable_string(string_table)
-                        .cmp(&right.to_portable_string(string_table))
-                })
-            });
-            soft_imports.dedup();
-
-            for dependency in soft_imports {
-                visit_node(
-                    &dependency,
-                    tracker,
-                    graph,
-                    order_lookup,
-                    sorted,
-                    string_table,
-                )?;
+            let soft_edges = collect_constant_symbol_soft_edges(
+                &metadata.symbol_dependencies,
+                &resolved_path,
+                graph,
+                order_lookup,
+                string_table,
+            );
+            for dependency in soft_edges {
+                visit_node(&dependency, tracker, graph, order_lookup, sorted, string_table)?;
             }
         }
 
@@ -235,6 +187,74 @@ fn visit_node(
     }
 
     Ok(())
+}
+
+/// Collect soft sort edges for a struct's default-expression dependencies.
+///
+/// WHY: only Constant headers are valid soft targets here; unresolved candidates are silently
+/// ignored so dependency sorting never fails on a missing struct default dependency.
+fn collect_struct_default_soft_edges(
+    dependencies: &HashSet<InternedPath>,
+    resolved_self: &InternedPath,
+    graph: &HashMap<InternedPath, Header>,
+    order_lookup: &HashMap<InternedPath, usize>,
+    string_table: &StringTable,
+) -> Vec<InternedPath> {
+    let mut soft_edges = dependencies
+        .iter()
+        .filter_map(|dep| resolve_graph_path(dep, graph, string_table))
+        .filter(|dep| {
+            matches!(
+                graph.get(dep).map(|h| &h.kind),
+                Some(HeaderKind::Constant { .. })
+            )
+        })
+        .filter(|dep| dep != resolved_self)
+        .collect::<Vec<_>>();
+    sort_and_dedup_soft_edges(&mut soft_edges, order_lookup, string_table);
+    soft_edges
+}
+
+/// Collect soft sort edges for a constant declaration's symbol dependencies.
+///
+/// WHY: Struct and Constant headers are valid soft targets; unresolved candidates are silently
+/// ignored so dependency sorting never fails on a missing constant symbol reference.
+fn collect_constant_symbol_soft_edges(
+    dependencies: &HashSet<InternedPath>,
+    resolved_self: &InternedPath,
+    graph: &HashMap<InternedPath, Header>,
+    order_lookup: &HashMap<InternedPath, usize>,
+    string_table: &StringTable,
+) -> Vec<InternedPath> {
+    let mut soft_edges = dependencies
+        .iter()
+        .filter_map(|dep| resolve_graph_path(dep, graph, string_table))
+        .filter(|dep| {
+            matches!(
+                graph.get(dep).map(|h| &h.kind),
+                Some(HeaderKind::Struct { .. }) | Some(HeaderKind::Constant { .. })
+            )
+        })
+        .filter(|dep| dep != resolved_self)
+        .collect::<Vec<_>>();
+    sort_and_dedup_soft_edges(&mut soft_edges, order_lookup, string_table);
+    soft_edges
+}
+
+fn sort_and_dedup_soft_edges(
+    edges: &mut Vec<InternedPath>,
+    order_lookup: &HashMap<InternedPath, usize>,
+    string_table: &StringTable,
+) {
+    edges.sort_by(|left, right| {
+        let left_order = order_lookup.get(left).copied().unwrap_or(usize::MAX);
+        let right_order = order_lookup.get(right).copied().unwrap_or(usize::MAX);
+        left_order.cmp(&right_order).then_with(|| {
+            left.to_portable_string(string_table)
+                .cmp(&right.to_portable_string(string_table))
+        })
+    });
+    edges.dedup();
 }
 
 fn resolve_graph_path(

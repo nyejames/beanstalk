@@ -4,7 +4,8 @@
 //! writer (`write_project_outputs`). Build tools can compile once and choose where artifacts are
 //! written without reimplementing frontend/backend orchestration.
 
-use crate::build_system::create_project_modules::{compile_project_frontend, load_project_config};
+use crate::build_system::create_project_modules::compile_project_frontend;
+use crate::build_system::project_config::load_project_config;
 use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::analysis::borrow_checker::BorrowCheckReport;
 use crate::compiler_frontend::basic_utility_functions::check_if_valid_path;
@@ -153,7 +154,7 @@ pub fn build_project(
     entry_path: &str,
     flags: &[Flag],
 ) -> Result<BuildResult, CompilerMessages> {
-    let valid_path = check_if_valid_path(entry_path).map_err(compiler_messages_from_error)?;
+    let valid_path = check_if_valid_path(entry_path).map_err(CompilerMessages::from_error)?;
 
     say!("\nCompiling Project");
 
@@ -173,7 +174,7 @@ pub fn build_project(
     project_builder
         .backend
         .validate_project_config(&config)
-        .map_err(compiler_messages_from_error)?;
+        .map_err(CompilerMessages::from_error)?;
 
     let modules = compile_project_frontend(
         &mut config,
@@ -220,7 +221,7 @@ pub fn write_project_outputs(
     options: &WriteOptions,
 ) -> Result<(), CompilerMessages> {
     fs::create_dir_all(&options.output_root).map_err(|error| {
-        compiler_messages_from_error(CompilerError::file_error(
+        CompilerMessages::from_error(CompilerError::file_error(
             &options.output_root,
             format!(
                 "Failed to create output root '{}': {error}",
@@ -242,7 +243,7 @@ pub fn write_project_outputs(
             FileKind::NotBuilt => {}
             FileKind::Directory => {
                 fs::create_dir_all(&destination).map_err(|error| {
-                    compiler_messages_from_error(CompilerError::file_error(
+                    CompilerMessages::from_error(CompilerError::file_error(
                         &destination,
                         format!(
                             "Failed to create output directory '{}': {error}",
@@ -254,7 +255,7 @@ pub fn write_project_outputs(
             FileKind::Js(content) | FileKind::Html(content) => {
                 create_parent_dir_if_needed(&destination)?;
                 fs::write(&destination, content).map_err(|error| {
-                    compiler_messages_from_error(CompilerError::file_error(
+                    CompilerMessages::from_error(CompilerError::file_error(
                         &destination,
                         format!(
                             "Failed to write output file '{}': {error}",
@@ -266,7 +267,7 @@ pub fn write_project_outputs(
             FileKind::Wasm(bytes) => {
                 create_parent_dir_if_needed(&destination)?;
                 fs::write(&destination, bytes).map_err(|error| {
-                    compiler_messages_from_error(CompilerError::file_error(
+                    CompilerMessages::from_error(CompilerError::file_error(
                         &destination,
                         format!(
                             "Failed to write output file '{}': {error}",
@@ -295,7 +296,7 @@ fn create_parent_dir_if_needed(path: &Path) -> Result<(), CompilerMessages> {
     };
 
     fs::create_dir_all(parent).map_err(|error| {
-        compiler_messages_from_error(CompilerError::file_error(
+        CompilerMessages::from_error(CompilerError::file_error(
             parent,
             format!(
                 "Failed to create parent directory '{}': {error}",
@@ -307,14 +308,14 @@ fn create_parent_dir_if_needed(path: &Path) -> Result<(), CompilerMessages> {
 
 fn validate_relative_output_path(relative_output_path: &Path) -> Result<(), CompilerMessages> {
     if relative_output_path.as_os_str().is_empty() {
-        return Err(compiler_messages_from_error(CompilerError::file_error(
+        return Err(CompilerMessages::from_error(CompilerError::file_error(
             relative_output_path,
             "Output path cannot be empty for built artifacts.",
         )));
     }
 
     if relative_output_path.is_absolute() {
-        return Err(compiler_messages_from_error(CompilerError::file_error(
+        return Err(CompilerMessages::from_error(CompilerError::file_error(
             relative_output_path,
             "Output path must be relative, not absolute.",
         )));
@@ -324,13 +325,13 @@ fn validate_relative_output_path(relative_output_path: &Path) -> Result<(), Comp
         match component {
             Component::Normal(_) => {}
             Component::ParentDir => {
-                return Err(compiler_messages_from_error(CompilerError::file_error(
+                return Err(CompilerMessages::from_error(CompilerError::file_error(
                     relative_output_path,
                     "Output path cannot contain '..' traversal components.",
                 )));
             }
             Component::CurDir | Component::RootDir | Component::Prefix(_) => {
-                return Err(compiler_messages_from_error(CompilerError::file_error(
+                return Err(CompilerMessages::from_error(CompilerError::file_error(
                     relative_output_path,
                     "Output path must only contain normal path components.",
                 )));
@@ -341,12 +342,6 @@ fn validate_relative_output_path(relative_output_path: &Path) -> Result<(), Comp
     Ok(())
 }
 
-fn compiler_messages_from_error(error: CompilerError) -> CompilerMessages {
-    CompilerMessages {
-        errors: vec![error],
-        warnings: Vec::new(),
-    }
-}
 
 #[cfg(test)]
 #[path = "build_tests.rs"]

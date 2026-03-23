@@ -1,9 +1,7 @@
 //! Tests for build-loop state transitions and queued rebuild behavior.
 
-use super::{
-    DevBuildExecutor, dev_server_error_messages, format_error_messages, run_builds_until_stable,
-    run_single_build_cycle,
-};
+use super::{DevBuildExecutor, dev_server_error_messages, run_builds_until_stable, run_single_build_cycle};
+use crate::projects::dev_server::error_page::format_compiler_messages;
 use crate::build_system::build::{self, BuildResult, FileKind, OutputFile, Project, WriteOptions};
 use crate::compiler_frontend::compiler_errors::{
     CompilerError, CompilerMessages, ErrorMetaDataKey, ErrorType,
@@ -359,7 +357,7 @@ fn format_error_messages_contains_error_text() {
         String::from("Declare/import the function before calling it"),
     );
     messages.errors.push(error);
-    let text = format_error_messages(&messages);
+    let text = format_compiler_messages(&messages);
     assert!(text.contains("expected text"));
     assert!(text.contains("stage: AST Construction"));
     assert!(text.contains("help: Declare/import the function before calling it"));

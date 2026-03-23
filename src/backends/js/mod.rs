@@ -34,6 +34,20 @@ pub struct JsLoweringConfig {
     pub auto_invoke_start: bool,
 }
 
+impl JsLoweringConfig {
+    /// Standard HTML builder lowering config.
+    ///
+    /// WHY: both JS-only and Wasm builder paths use the same JS lowering settings. Centralising
+    /// this avoids the settings drifting independently across call sites.
+    pub fn standard_html(release_build: bool) -> Self {
+        JsLoweringConfig {
+            pretty: !release_build,
+            emit_locations: false,
+            auto_invoke_start: false,
+        }
+    }
+}
+
 /// Result of lowering a HIR module to JavaScript.
 #[derive(Debug, Clone)]
 pub struct JsModule {

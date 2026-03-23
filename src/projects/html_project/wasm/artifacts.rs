@@ -13,12 +13,12 @@ use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages}
 use crate::compiler_frontend::hir::hir_nodes::{FunctionId, HirModule};
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::projects::html_project::js_path::{RuntimeSlotMount, render_entry_fragments};
+use crate::projects::html_project::output_plan::plan_wasm_output;
 use crate::projects::html_project::wasm::export_plan::{
     HtmlWasmExportPlan, build_html_wasm_export_plan,
 };
 use crate::projects::html_project::wasm::js_bootstrap::generate_wasm_bootstrap_js;
 use crate::projects::html_project::wasm::request::build_wasm_backend_request;
-use crate::projects::routing::HtmlSiteConfig;
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
@@ -69,16 +69,6 @@ pub(crate) struct CompiledHtmlWasmModule {
     pub debug: HtmlWasmDebugOutputs,
 }
 
-#[derive(Debug, Clone)]
-struct HtmlWasmOutputPaths {
-    /// Relative `index.html` path for this route.
-    html_path: PathBuf,
-    /// Relative `page.js` path colocated with `index.html`.
-    js_path: PathBuf,
-    /// Relative `page.wasm` path colocated with `index.html`.
-    wasm_path: PathBuf,
-}
-
 /// Compiles a single module through the HTML+Wasm builder path.
 ///
 /// WHAT: lowers JS and Wasm artifacts, generates bootstrap JS, and emits route-indexed outputs.
@@ -89,29 +79,25 @@ pub(crate) fn compile_html_module_wasm(
     string_table: &StringTable,
     logical_html_output_path: &Path,
     release_build: bool,
-    _config: &HtmlSiteConfig,
 ) -> Result<CompiledHtmlWasmModule, CompilerMessages> {
-    // Convert logical route output (`about.html`) into route-folder artifacts (`about/index.html` etc).
-    let output_paths =
-        wasm_output_paths_for_html_route(logical_html_output_path).map_err(single_error)?;
+    // Derive per-route artifact paths from the logical HTML path using the canonical planner.
+    // WHY: plan_wasm_output owns the filesystem layout policy for all Wasm routes.
+    let output_plan = plan_wasm_output(logical_html_output_path, None)
+        .map_err(CompilerMessages::from_error)?;
 
-    let js_lowering_config = JsLoweringConfig {
-        pretty: !release_build,
-        emit_locations: false,
-        auto_invoke_start: false,
-    };
+    let js_lowering_config = JsLoweringConfig::standard_html(release_build);
     let js_module = lower_hir_to_js(
         hir_module,
         borrow_analysis,
         string_table,
         js_lowering_config,
     )
-    .map_err(single_error)?;
+    .map_err(CompilerMessages::from_error)?;
     let (entry_fragment_html, runtime_slots) =
-        render_entry_fragments(hir_module).map_err(single_error)?;
+        render_entry_fragments(hir_module).map_err(CompilerMessages::from_error)?;
     let build_plan =
         build_html_wasm_plan(hir_module, &js_module.function_name_by_id, runtime_slots)
-            .map_err(single_error)?;
+            .map_err(CompilerMessages::from_error)?;
 
     let wasm_result = lower_hir_to_wasm_module(
         hir_module,
@@ -119,7 +105,7 @@ pub(crate) fn compile_html_module_wasm(
         &build_plan.wasm_request,
     )?;
     let wasm_bytes = wasm_result.wasm_bytes.ok_or_else(|| {
-        single_error(CompilerError::compiler_error(
+        CompilerMessages::from_error(CompilerError::compiler_error(
             "HTML Wasm mode expected emitted wasm bytes, but the backend returned none",
         ))
     })?;
@@ -132,7 +118,7 @@ pub(crate) fn compile_html_module_wasm(
         &js_module.function_name_by_id,
         wasm_bytes,
     )
-    .map_err(single_error)?;
+    .map_err(CompilerMessages::from_error)?;
     let debug_outputs = build_debug_outputs(
         &build_plan,
         &artifacts,
@@ -141,16 +127,18 @@ pub(crate) fn compile_html_module_wasm(
     );
     emit_debug_outputs_if_enabled(&debug_outputs);
 
+    let js_path = output_plan.js_path.expect("Wasm plan always has a js_path");
+    let wasm_path = output_plan.wasm_path.expect("Wasm plan always has a wasm_path");
     Ok(CompiledHtmlWasmModule {
         output_files: vec![
             OutputFile::new(
-                output_paths.html_path.clone(),
+                output_plan.html_path.clone(),
                 FileKind::Html(artifacts.html),
             ),
-            OutputFile::new(output_paths.js_path, FileKind::Js(artifacts.bootstrap_js)),
-            OutputFile::new(output_paths.wasm_path, FileKind::Wasm(artifacts.wasm_bytes)),
+            OutputFile::new(js_path, FileKind::Js(artifacts.bootstrap_js)),
+            OutputFile::new(wasm_path, FileKind::Wasm(artifacts.wasm_bytes)),
         ],
-        html_output_path: output_paths.html_path,
+        html_output_path: output_plan.html_path,
         debug: debug_outputs,
     })
 }
@@ -223,56 +211,6 @@ fn render_wasm_html_document(entry_fragment_html: &str) -> String {
     html
 }
 
-fn wasm_output_paths_for_html_route(
-    logical_html_output_path: &Path,
-) -> Result<HtmlWasmOutputPaths, CompilerError> {
-    // Convert route logical paths into per-page folder artifacts:
-    // - `index.html` -> `index.html`, `page.js`, `page.wasm`
-    // - `about/index.html` -> `about/index.html`, `about/page.js`, `about/page.wasm`
-    // - legacy `about.html` -> `about/index.html`, `about/page.js`, `about/page.wasm`
-    let route_base = if logical_html_output_path == Path::new("index.html") {
-        PathBuf::new()
-    } else if logical_html_output_path
-        .file_name()
-        .and_then(|name| name.to_str())
-        == Some("index.html")
-    {
-        logical_html_output_path
-            .parent()
-            .map(Path::to_path_buf)
-            .unwrap_or_default()
-    } else {
-        if logical_html_output_path
-            .extension()
-            .and_then(|ext| ext.to_str())
-            != Some("html")
-        {
-            return Err(CompilerError::file_error(
-                logical_html_output_path,
-                format!(
-                    "HTML Wasm output conversion expected an '.html' path, got '{}'",
-                    logical_html_output_path.display()
-                ),
-            ));
-        }
-        logical_html_output_path.with_extension("")
-    };
-
-    if route_base.as_os_str().is_empty() {
-        Ok(HtmlWasmOutputPaths {
-            html_path: PathBuf::from("index.html"),
-            js_path: PathBuf::from("page.js"),
-            wasm_path: PathBuf::from("page.wasm"),
-        })
-    } else {
-        Ok(HtmlWasmOutputPaths {
-            html_path: route_base.join("index.html"),
-            js_path: route_base.join("page.js"),
-            wasm_path: route_base.join("page.wasm"),
-        })
-    }
-}
-
 fn build_debug_outputs(
     plan: &HtmlWasmBuildPlan,
     artifacts: &HtmlWasmArtifacts,
@@ -341,10 +279,3 @@ fn emit_debug_outputs_if_enabled(debug: &HtmlWasmDebugOutputs) {
     }
 }
 
-fn single_error(error: CompilerError) -> CompilerMessages {
-    // Builder internals often return one root error; normalize into compiler message shape.
-    CompilerMessages {
-        errors: vec![error],
-        warnings: Vec::new(),
-    }
-}

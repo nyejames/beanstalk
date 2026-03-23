@@ -23,10 +23,10 @@ pub(crate) fn lower_hir_module_to_lir(
 
     // WHAT: register stable function mappings before lowering any bodies.
     // WHY: call lowering depends on these mappings even for forward references.
-    register_function_maps(&mut context).map_err(single_error)?;
+    register_function_maps(&mut context).map_err(CompilerMessages::from_error)?;
     // WHAT: pre-register host imports required by the module.
     // WHY: keeps import ids deterministic and avoids re-scan during statement lowering.
-    register_required_host_imports(&mut context).map_err(single_error)?;
+    register_required_host_imports(&mut context).map_err(CompilerMessages::from_error)?;
 
     // WHAT: sort functions by id.
     // WHY: ensures deterministic output regardless of source container ordering.
@@ -34,13 +34,13 @@ pub(crate) fn lower_hir_module_to_lir(
     functions.sort_by_key(|function| function.id.0);
 
     for hir_function in &functions {
-        let lowered = lower_function(&mut context, hir_function).map_err(single_error)?;
+        let lowered = lower_function(&mut context, hir_function).map_err(CompilerMessages::from_error)?;
         context.lir_module.functions.push(lowered);
     }
 
     // WHAT: synthesize post-lowering export wrapper functions.
     // WHY: wrapper boundary keeps user bodies internal while export ABI stays stable.
-    synthesize_export_wrappers(&mut context).map_err(single_error)?;
+    synthesize_export_wrappers(&mut context).map_err(CompilerMessages::from_error)?;
 
     Ok(context.lir_module)
 }
@@ -73,9 +73,3 @@ fn register_function_maps(context: &mut WasmLirLoweringContext<'_>) -> Result<()
     Ok(())
 }
 
-fn single_error(error: CompilerError) -> CompilerMessages {
-    CompilerMessages {
-        errors: vec![error],
-        warnings: Vec::new(),
-    }
-}

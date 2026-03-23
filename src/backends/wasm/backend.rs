@@ -19,7 +19,7 @@ pub(crate) fn lower_hir_to_wasm_lir(
 ) -> Result<WasmLirBackendResult, CompilerMessages> {
     // WHAT: fail fast on builder/backend contract issues.
     // WHY: avoid partial lowering and keep diagnostics deterministic.
-    validate_request(hir_module, request).map_err(single_error)?;
+    validate_request(hir_module, request).map_err(CompilerMessages::from_error)?;
 
     // WHAT: perform full module lowering using HIR + borrow side tables.
     // WHY: phase-1 establishes the stable HIR->LIR seam for later Wasm emission.
@@ -48,7 +48,7 @@ pub(crate) fn lower_hir_to_wasm_module(
 
     // WHAT: perform pure Wasm encoding from already-lowered LIR.
     // WHY: emitter must stay backend-encoding focused and avoid reinterpreting frontend semantics.
-    let emit_result = emit_lir_to_wasm_module(&result.lir_module, request).map_err(single_error)?;
+    let emit_result = emit_lir_to_wasm_module(&result.lir_module, request).map_err(CompilerMessages::from_error)?;
     result.wasm_bytes = Some(emit_result.wasm_bytes);
 
     if request.debug_flags.show_wasm_sections {
@@ -141,13 +141,6 @@ fn contains_function(hir_module: &HirModule, function_id: FunctionId) -> bool {
         .functions
         .iter()
         .any(|function| function.id == function_id)
-}
-
-fn single_error(error: CompilerError) -> CompilerMessages {
-    CompilerMessages {
-        errors: vec![error],
-        warnings: Vec::new(),
-    }
 }
 
 fn validate_feature_flags(request: &WasmBackendRequest) -> Result<(), CompilerError> {
