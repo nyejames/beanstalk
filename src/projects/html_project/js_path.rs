@@ -1,8 +1,17 @@
 //! HTML builder JavaScript-only rendering path.
 //!
-//! WHAT: owns existing HIR -> JS lowering and inline HTML assembly behavior.
+//! WHAT: owns HIR -> JS lowering and inline HTML assembly for the JS-only build path.
 //! WHY: keeping this path isolated lets the HTML builder add a Wasm mode without
 //! blending two output strategies into one large module.
+//!
+//! JS-only HTML lifecycle contract (in emission order):
+//!   1. Static entry fragments are emitted as raw HTML in source order.
+//!   2. Runtime fragment slots are emitted as `<div id="bst-slot-N">` placeholders.
+//!   3. The compiled JS bundle is embedded in an inline `<script>` block.
+//!      The bundle content is escaped so it cannot contain a raw `</script>` sequence
+//!      that would prematurely close the script tag.
+//!   4. A second inline `<script>` hydrates runtime slots in source order via
+//!      `insertAdjacentHTML`, then calls `start()` after all slots are filled.
 
 use crate::backends::js::{JsLoweringConfig, lower_hir_to_js};
 use crate::build_system::build::{FileKind, OutputFile};
@@ -99,8 +108,11 @@ pub(crate) fn render_html_document(
     // Build static HTML and runtime slot list first so hydration preserves source ordering.
     let (mut html, runtime_slots) = render_entry_fragments(hir_module)?;
 
+    // Escape the bundle so any `</script>` sequence inside string literals or comments cannot
+    // prematurely terminate the HTML script tag and corrupt the page.
+    let safe_bundle = escape_inline_script(js_bundle);
     html.push_str("<script>\n");
-    html.push_str(js_bundle);
+    html.push_str(&safe_bundle);
     html.push_str("\n</script>\n");
     html.push_str("<script>\n");
     html.push_str("(function () {\n");
@@ -152,4 +164,16 @@ pub(crate) fn html_output_path(
 ) -> Result<PathBuf, CompilerError> {
     use crate::projects::html_project::output_plan::derive_logical_html_path;
     derive_logical_html_path(entry_point, entry_root)
+}
+
+/// Escapes JS source so it is safe to embed inside an HTML `<script>` block.
+///
+/// WHAT: replaces every `</` occurrence with `<\/` so the HTML parser cannot see a closing tag
+/// sequence inside the script content.
+/// WHY: a raw `</script>` anywhere in an inlined JS bundle — including inside string literals or
+/// comments — causes the browser to terminate the script tag early and corrupt the page.
+/// `<\/` is a valid JS string escape sequence equivalent to `</`, so the JS semantics are
+/// preserved while the HTML parser sees a harmless non-tag sequence.
+pub(crate) fn escape_inline_script(js: &str) -> String {
+    js.replace("</", "<\\/")
 }

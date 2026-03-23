@@ -13,7 +13,9 @@ use crate::compiler_frontend::host_functions::CallTarget;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::TextLocation;
-use crate::projects::html_project::js_path::RuntimeSlotMount;
+use crate::projects::html_project::js_path::{
+    RuntimeSlotMount, escape_inline_script, render_html_document,
+};
 use crate::projects::html_project::wasm::artifacts::build_html_wasm_plan;
 use crate::projects::settings::Config;
 use std::collections::HashMap;
@@ -628,5 +630,177 @@ fn builder_rejects_invalid_origin_config() {
         messages.errors[0]
             .msg
             .contains("'#origin' must start with '/'")
+    );
+}
+
+// ---------------------------------------------------------------------------
+// JS-only HTML lifecycle contract tests
+// ---------------------------------------------------------------------------
+
+/// Verifies that the HTML lifecycle order is: static fragments → JS bundle → hydration → start().
+///
+/// This pins the observable contract described in js_path.rs so regressions are caught without
+/// manually reading emitted HTML.
+#[test]
+fn js_lifecycle_order_is_static_then_bundle_then_hydration_then_start() {
+    let builder = HtmlProjectBuilder::new();
+    let entry_path = PathBuf::from("#page.bst");
+    let mut module = create_test_module(entry_path.clone());
+
+    module.hir.start_fragments = vec![
+        StartFragment::ConstString(ConstStringId(0)),
+        StartFragment::RuntimeStringFn(FunctionId(0)),
+    ];
+    module.hir.const_string_pool = vec![String::from("<h1>Hello</h1>")];
+
+    let project = builder
+        .build_backend(vec![module], &Config::new(entry_path), &[])
+        .expect("build_backend should succeed");
+
+    let html = match project.output_files[0].file_kind() {
+        FileKind::Html(content) => content,
+        _ => panic!("expected HTML output"),
+    };
+
+    // Locate each lifecycle phase in the emitted HTML and verify their relative ordering.
+    let static_pos = html
+        .find("<h1>Hello</h1>")
+        .expect("static fragment must be present");
+    let slot_pos = html
+        .find("<div id=\"bst-slot-0\">")
+        .expect("runtime slot must be present");
+    let bundle_pos = html
+        .find("<script>")
+        .expect("JS bundle script block must be present");
+    let hydration_pos = html
+        .find("insertAdjacentHTML")
+        .expect("slot hydration must be present");
+    let start_pos = html
+        .find("if (typeof start_entry")
+        .expect("start() invocation must be present");
+
+    assert!(
+        static_pos < slot_pos,
+        "const fragment must appear before runtime slot"
+    );
+    assert!(
+        slot_pos < bundle_pos,
+        "runtime slot must appear before the JS bundle script tag"
+    );
+    assert!(
+        bundle_pos < hydration_pos,
+        "JS bundle must be loaded before slot hydration"
+    );
+    assert!(
+        hydration_pos < start_pos,
+        "slot hydration must complete before start() is called"
+    );
+}
+
+/// Verifies that multiple runtime slots are mounted in the same order as the source fragments.
+#[test]
+fn multiple_runtime_slots_are_mounted_in_source_order() {
+    let builder = HtmlProjectBuilder::new();
+    let entry_path = PathBuf::from("#page.bst");
+    let mut module = create_test_module(entry_path.clone());
+
+    add_callable_function(&mut module, FunctionId(1), "frag_b");
+
+    // Two runtime fragments in explicit source order.
+    module.hir.start_fragments = vec![
+        StartFragment::RuntimeStringFn(FunctionId(0)),
+        StartFragment::RuntimeStringFn(FunctionId(1)),
+    ];
+
+    let project = builder
+        .build_backend(vec![module], &Config::new(entry_path), &[])
+        .expect("build_backend should succeed");
+
+    let html = match project.output_files[0].file_kind() {
+        FileKind::Html(content) => content,
+        _ => panic!("expected HTML output"),
+    };
+
+    let slot0_pos = html.find("bst-slot-0").expect("bst-slot-0 must be present");
+    let slot1_pos = html.find("bst-slot-1").expect("bst-slot-1 must be present");
+
+    assert!(
+        slot0_pos < slot1_pos,
+        "runtime slots must appear in source fragment order"
+    );
+}
+
+/// Verifies that a module with no runtime fragments still emits a valid start() call.
+#[test]
+fn no_runtime_fragments_still_emits_start_call() {
+    let builder = HtmlProjectBuilder::new();
+    let entry_path = PathBuf::from("#page.bst");
+    let module = create_test_module(entry_path.clone());
+
+    // No start_fragments — only the start function exists.
+    let project = builder
+        .build_backend(vec![module], &Config::new(entry_path), &[])
+        .expect("build_backend should succeed");
+
+    let html = match project.output_files[0].file_kind() {
+        FileKind::Html(content) => content,
+        _ => panic!("expected HTML output"),
+    };
+
+    assert!(
+        !html.contains("bst-slot-"),
+        "no runtime slots should be present when there are no runtime fragments"
+    );
+    assert!(
+        html.contains("if (typeof start_entry === \"function\") start_entry();"),
+        "start() must still be called when there are no runtime fragments"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Inline-script safety tests
+// ---------------------------------------------------------------------------
+
+/// Verifies that escape_inline_script replaces `</` with `<\/` to prevent script-tag breakout.
+#[test]
+fn escape_inline_script_replaces_closing_tag_sequence() {
+    let js = "const x = \"</script>\";";
+    let escaped = escape_inline_script(js);
+
+    assert_eq!(
+        escaped, "const x = \"<\\/script>\";",
+        "escape_inline_script must replace '</' with '<\\/'"
+    );
+    assert!(
+        !escaped.contains("</"),
+        "escaped JS must not contain any '</' sequence"
+    );
+}
+
+/// Verifies that a JS bundle containing `</script>` is safely embedded in the HTML output.
+///
+/// Uses render_html_document directly with a pre-built js_bundle that contains the hazardous
+/// sequence, bypassing HIR lowering. This is the most direct regression test for the hazard.
+#[test]
+fn inline_js_bundle_with_closing_script_tag_is_escaped_in_html() {
+    let mut hir_module = create_test_hir_module();
+    hir_module.start_fragments = vec![];
+
+    // Simulate a JS bundle that happens to contain the closing-tag sequence inside a string.
+    let js_bundle = "const msg = \"</script>\";\n";
+
+    let mut function_names = HashMap::new();
+    function_names.insert(FunctionId(0), String::from("start_entry"));
+
+    let html = render_html_document(&hir_module, js_bundle, &function_names)
+        .expect("render_html_document should succeed");
+
+    assert!(
+        !html.contains("</script>\";"),
+        "raw </script> inside a JS string must not appear unescaped in HTML output"
+    );
+    assert!(
+        html.contains("<\\/script>"),
+        "the closing-tag sequence must be escaped as <\\/script> in the output"
     );
 }

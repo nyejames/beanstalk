@@ -157,9 +157,31 @@ impl<'hir> JsEmitter<'hir> {
     }
 
     fn emit_runtime_prelude(&mut self) {
-        // The JS backend keeps Beanstalk's aliasing semantics by modeling locals and computed
-        // places as explicit reference records. Once everything goes through this uniform layer,
-        // the rest of the emitter can preserve HIR behaviour with ordinary JS reads/writes.
+        // The JS backend preserves Beanstalk's aliasing semantics by modeling locals and computed
+        // places as explicit reference records. The prelude is the concrete JS model for those
+        // semantics — it is not incidental helper code.
+        //
+        // Helper groups and their responsibilities:
+        //   binding helpers      — reference record construction, parameter normalisation, slot
+        //                          read/write, and alias-chain resolution
+        //   alias helpers        — binding-mode transitions for borrow and value assignment
+        //   computed-place helpers — closures capturing base reference + key for field/index access
+        //   clone helpers        — deep value copy for explicit `copy` semantics
+        self.emit_runtime_binding_helpers();
+        self.emit_runtime_alias_helpers();
+        self.emit_runtime_computed_place_helpers();
+        self.emit_runtime_clone_helpers();
+    }
+
+    /// Emits the core binding and slot read/write helpers.
+    ///
+    /// WHAT: `__bs_is_ref` identifies reference records; `__bs_binding` constructs slot bindings;
+    /// `__bs_param_binding` normalises call arguments from plain JS values or alias refs;
+    /// `__bs_resolve` walks alias chains; `__bs_read`/`__bs_write` perform guarded slot or
+    /// computed-place reads and writes.
+    /// WHY: every local and parameter in emitted JS flows through this layer so higher-level
+    /// emission code can assume uniform binding semantics.
+    fn emit_runtime_binding_helpers(&mut self) {
         self.emit_line("function __bs_is_ref(value) {");
         self.with_indent(|emitter| {
             emitter.emit_line(
@@ -180,15 +202,15 @@ impl<'hir> JsEmitter<'hir> {
 
         self.emit_line("function __bs_param_binding(value) {");
         self.with_indent(|emitter| {
-            // Calls from JS hosts can hand us plain values, while Beanstalk-to-Beanstalk calls
-            // pass reference records. Normalize both cases so function bodies only deal with the
-            // binding model.
+            // Calls from JS hosts can pass plain values; Beanstalk-to-Beanstalk calls pass
+            // reference records. Normalise both so function bodies only deal with bindings.
             emitter.emit_line("if (!__bs_is_ref(value)) {");
             emitter.with_indent(|em| em.emit_line("return __bs_binding(value);"));
             emitter.emit_line("}");
             emitter.emit_line("if (value.__bs_kind === \"binding\") {");
             emitter.with_indent(|em| em.emit_line("return value;"));
             emitter.emit_line("}");
+            // Computed-place ref: wrap in an alias binding so callers get a uniform handle.
             emitter.emit_line("const binding = __bs_binding(undefined);");
             emitter.emit_line("binding.__bs_mode = \"alias\";");
             emitter.emit_line("binding.__bs_target = value;");
@@ -199,6 +221,7 @@ impl<'hir> JsEmitter<'hir> {
 
         self.emit_line("function __bs_resolve(ref) {");
         self.with_indent(|emitter| {
+            // Walk alias chains until a slot binding or computed-place ref is reached.
             emitter.emit_line(
                 "while (ref.__bs_kind === \"binding\" && ref.__bs_mode === \"alias\") {",
             );
@@ -231,9 +254,20 @@ impl<'hir> JsEmitter<'hir> {
         });
         self.emit_line("}");
         self.emit_line("");
+    }
 
+    /// Emits binding-mode transition helpers for borrow and value assignment.
+    ///
+    /// WHAT: `__bs_assign_borrow` makes a fresh slot binding point at another reference (alias
+    /// mode), or write-through if already an alias; `__bs_assign_value` collapses an alias and
+    /// writes a plain value into the binding's slot.
+    /// WHY: Beanstalk has distinct borrow-assign and value-assign semantics that must map to
+    /// distinct JS operations — conflating them would silently break aliasing.
+    fn emit_runtime_alias_helpers(&mut self) {
         self.emit_line("function __bs_assign_borrow(binding, ref) {");
         self.with_indent(|emitter| {
+            // If the binding is already an alias, write through to the existing target rather
+            // than rebinding — this preserves the observable aliasing contract.
             emitter.emit_line("if (binding.__bs_mode === \"alias\") {");
             emitter.with_indent(|em| em.emit_line("return __bs_write(binding, __bs_read(ref));"));
             emitter.emit_line("}");
@@ -246,9 +280,11 @@ impl<'hir> JsEmitter<'hir> {
 
         self.emit_line("function __bs_assign_value(binding, value) {");
         self.with_indent(|emitter| {
+            // If the binding is an alias, write through so the aliased location gets the value.
             emitter.emit_line("if (binding.__bs_mode === \"alias\") {");
             emitter.with_indent(|em| em.emit_line("return __bs_write(binding, value);"));
             emitter.emit_line("}");
+            // Slot mode: clear any stale alias target and write directly.
             emitter.emit_line("binding.__bs_mode = \"slot\";");
             emitter.emit_line("binding.__bs_target = null;");
             emitter.emit_line("binding.__bs_slot.value = value;");
@@ -256,7 +292,16 @@ impl<'hir> JsEmitter<'hir> {
         });
         self.emit_line("}");
         self.emit_line("");
+    }
 
+    /// Emits computed-place helpers for field and index access.
+    ///
+    /// WHAT: `__bs_field` and `__bs_index` each return a computed-place record capturing the base
+    /// reference and key. The record implements `__bs_get`/`__bs_set` so it composes correctly
+    /// with `__bs_read` and `__bs_write`.
+    /// WHY: struct field and collection index mutations must route through the same reference
+    /// layer as slot bindings — returning a composable computed ref achieves this uniformly.
+    fn emit_runtime_computed_place_helpers(&mut self) {
         self.emit_line("function __bs_field(baseRef, field) {");
         self.with_indent(|emitter| {
             emitter.emit_line("return {");
@@ -292,7 +337,15 @@ impl<'hir> JsEmitter<'hir> {
         });
         self.emit_line("}");
         self.emit_line("");
+    }
 
+    /// Emits the deep-copy helper for explicit `copy` semantics.
+    ///
+    /// WHAT: `__bs_clone_value` recursively copies arrays element-by-element and plain objects
+    /// key-by-key; primitives are returned as-is.
+    /// WHY: Beanstalk `copy` must produce a value that does not alias the original — a shallow
+    /// copy would silently break that contract for nested structures.
+    fn emit_runtime_clone_helpers(&mut self) {
         self.emit_line("function __bs_clone_value(value) {");
         self.with_indent(|emitter| {
             emitter.emit_line("if (Array.isArray(value)) {");
