@@ -14,7 +14,7 @@ use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::TextLocation;
 use crate::projects::html_project::js_path::{
-    RuntimeSlotMount, escape_inline_script, render_html_document,
+    RuntimeSlotMount, escape_inline_script, render_entry_fragments, render_html_document,
 };
 use crate::projects::html_project::wasm::artifacts::build_html_wasm_plan;
 use crate::projects::settings::Config;
@@ -802,5 +802,40 @@ fn inline_js_bundle_with_closing_script_tag_is_escaped_in_html() {
     assert!(
         html.contains("<\\/script>"),
         "the closing-tag sequence must be escaped as <\\/script> in the output"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Error path tests
+// ---------------------------------------------------------------------------
+
+/// Verifies that render_entry_fragments returns an error when a ConstStringId is out of bounds.
+#[test]
+fn render_entry_fragments_errors_on_missing_const_string() {
+    let mut hir_module = create_test_hir_module();
+    hir_module.start_fragments = vec![StartFragment::ConstString(ConstStringId(99))];
+    // const_string_pool is empty by default, so index 99 is out of bounds.
+
+    let result = render_entry_fragments(&hir_module);
+    let error = result.expect_err("should fail when const fragment ID is out of bounds");
+    assert!(
+        error.msg.contains("const fragment"),
+        "error message must mention the missing const fragment"
+    );
+}
+
+/// Verifies that render_html_document returns an error when a runtime fragment function name
+/// is missing from the function-name map.
+#[test]
+fn render_html_document_errors_on_missing_function_name() {
+    let mut hir_module = create_test_hir_module();
+    hir_module.start_fragments = vec![StartFragment::RuntimeStringFn(FunctionId(99))];
+
+    let function_names = HashMap::new();
+    let result = render_html_document(&hir_module, "// bundle", &function_names);
+    let error = result.expect_err("should fail when runtime fragment function name is missing");
+    assert!(
+        error.msg.contains("runtime fragment function"),
+        "error message must mention the missing runtime fragment function"
     );
 }

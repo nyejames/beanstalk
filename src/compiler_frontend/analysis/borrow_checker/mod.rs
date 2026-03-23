@@ -12,7 +12,7 @@ mod types;
 #[allow(unused_imports)]
 pub(crate) use types::{
     BorrowAnalysis, BorrowCheckReport, BorrowCheckStats, BorrowDropSite, BorrowDropSiteKind,
-    LocalMode,
+    BorrowStateSnapshot, LocalBorrowSnapshot, LocalMode,
 };
 pub(crate) type BorrowFacts = BorrowAnalysis;
 
