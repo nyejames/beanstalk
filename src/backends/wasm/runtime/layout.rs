@@ -1,10 +1,4 @@
 //! Runtime layout planning metadata.
-
-#[allow(dead_code)] // todo
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum RuntimeLayoutMode {
-    /// Default phase-1 behavior: GC-first semantics.
-    GcFirst,
-    /// Ownership-aware runtime hooks present but still conservative.
-    OwnershipScaffolded,
-}
+//!
+//! Currently empty — `RuntimeLayoutMode` was removed as unused scaffolding.
+//! This module will hold layout-mode configuration once ownership-aware runtime hooks land.

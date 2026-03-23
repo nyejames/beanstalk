@@ -4,7 +4,6 @@ use crate::backends::wasm::hir_to_lir::context::WasmFunctionLoweringContext;
 use crate::backends::wasm::hir_to_lir::expr::lower_expression;
 use crate::backends::wasm::hir_to_lir::imports::resolve_host_call_import;
 use crate::backends::wasm::lir::instructions::{WasmCalleeRef, WasmLirStmt};
-use crate::backends::wasm::lir::types::{WasmAbiType, WasmLirLocalId};
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
 use crate::compiler_frontend::hir::hir_nodes::{HirPlace, HirStatement, HirStatementKind};
 use crate::compiler_frontend::host_functions::CallTarget;
@@ -92,7 +91,7 @@ pub(crate) fn lower_statement(
                 ))
             })?;
 
-            if is_handle_local(context, mapped_local) {
+            if context.is_handle_local(mapped_local) {
                 statements.push(WasmLirStmt::DropIfOwned {
                     value: mapped_local,
                 });
@@ -148,15 +147,3 @@ fn lower_assignment(
     Ok(())
 }
 
-fn is_handle_local(
-    context: &WasmFunctionLoweringContext<'_, '_>,
-    local_id: WasmLirLocalId,
-) -> bool {
-    context
-        .lir_function
-        .locals
-        .iter()
-        .find(|local| local.id == local_id)
-        .map(|local| matches!(local.ty, WasmAbiType::Handle))
-        .unwrap_or(false)
-}

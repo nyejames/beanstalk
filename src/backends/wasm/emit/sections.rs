@@ -124,7 +124,12 @@ pub(crate) fn build_emit_plan(
         }
     }
 
-    let (data_offsets, data_lengths, data_order, heap_base) = plan_static_data_layout(module)?;
+    let StaticDataLayoutResult {
+        data_offsets,
+        data_lengths,
+        data_order,
+        heap_base,
+    } = plan_static_data_layout(module)?;
     let heap_top_global_index = should_emit_helpers.then_some(0);
 
     Ok(WasmEmitPlan {
@@ -354,14 +359,14 @@ fn module_uses_runtime_helpers(module: &WasmLirModule) -> bool {
     false
 }
 
-type StaticDataLayoutPlan = (
-    FxHashMap<WasmStaticDataId, u32>,
-    FxHashMap<WasmStaticDataId, u32>,
-    Vec<WasmStaticDataId>,
-    u32,
-);
+struct StaticDataLayoutResult {
+    data_offsets: FxHashMap<WasmStaticDataId, u32>,
+    data_lengths: FxHashMap<WasmStaticDataId, u32>,
+    data_order: Vec<WasmStaticDataId>,
+    heap_base: u32,
+}
 
-fn plan_static_data_layout(module: &WasmLirModule) -> Result<StaticDataLayoutPlan, CompilerError> {
+fn plan_static_data_layout(module: &WasmLirModule) -> Result<StaticDataLayoutResult, CompilerError> {
     // WHAT: place static segments by stable `WasmStaticDataId`, aligned to 8 bytes.
     // WHY: deterministic layout keeps literal pointer tests reproducible and preserves
     // handle/pointer alignment assumptions for runtime helpers.
@@ -388,7 +393,12 @@ fn plan_static_data_layout(module: &WasmLirModule) -> Result<StaticDataLayoutPla
             })?;
     }
 
-    Ok((data_offsets, data_lengths, data_order, align_to(cursor, 8)))
+    Ok(StaticDataLayoutResult {
+        data_offsets,
+        data_lengths,
+        data_order,
+        heap_base: align_to(cursor, 8),
+    })
 }
 
 fn intern_signature(

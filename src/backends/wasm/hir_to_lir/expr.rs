@@ -5,11 +5,11 @@ use crate::backends::wasm::hir_to_lir::static_data::intern_static_utf8;
 use crate::backends::wasm::lir::instructions::WasmLirStmt;
 use crate::backends::wasm::lir::types::{WasmAbiType, WasmLirLocalId, WasmLocalRole};
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
-use crate::compiler_frontend::hir::hir_datatypes::{HirTypeKind, TypeId};
 use crate::compiler_frontend::hir::hir_nodes::{
     HirBinOp, HirExpression, HirExpressionKind, HirPlace,
 };
 
+/// Result of lowering a single HIR expression into LIR statements and a destination local.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct ExprLoweringOutput {
     /// Local containing the lowered expression value/handle.
@@ -169,28 +169,3 @@ fn lower_place_local(
     }
 }
 
-pub(crate) fn lower_type_to_abi(
-    context: &WasmFunctionLoweringContext<'_, '_>,
-    type_id: TypeId,
-) -> Result<WasmAbiType, CompilerError> {
-    // Centralized type->ABI mapping used by expression/terminator lowering.
-    let hir_type = context.module_context.hir_module.type_context.get(type_id);
-
-    let abi_type = match &hir_type.kind {
-        HirTypeKind::Bool | HirTypeKind::Char => WasmAbiType::I32,
-        HirTypeKind::Int => WasmAbiType::I64,
-        HirTypeKind::Float | HirTypeKind::Decimal => WasmAbiType::F64,
-        HirTypeKind::Unit => WasmAbiType::Void,
-        HirTypeKind::String
-        | HirTypeKind::Range
-        | HirTypeKind::Tuple { .. }
-        | HirTypeKind::Collection { .. }
-        | HirTypeKind::Struct { .. }
-        | HirTypeKind::Function { .. }
-        | HirTypeKind::Option { .. }
-        | HirTypeKind::Result { .. }
-        | HirTypeKind::Union { .. } => WasmAbiType::Handle,
-    };
-
-    Ok(abi_type)
-}

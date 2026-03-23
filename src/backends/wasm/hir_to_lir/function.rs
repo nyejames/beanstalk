@@ -1,7 +1,7 @@
 //! Per-function lowering for HIR -> Wasm LIR.
 
 use crate::backends::wasm::hir_to_lir::context::{
-    WasmFunctionLoweringContext, WasmLirLoweringContext,
+    WasmFunctionLoweringContext, WasmLirLoweringContext, lower_type_to_abi,
 };
 use crate::backends::wasm::hir_to_lir::ownership::insert_advisory_drops;
 use crate::backends::wasm::hir_to_lir::stmt::lower_statement;
@@ -10,7 +10,7 @@ use crate::backends::wasm::hir_to_lir::terminator::lower_terminator;
 use crate::backends::wasm::lir::function::{WasmLirFunction, WasmLirFunctionOrigin};
 use crate::backends::wasm::lir::types::{WasmAbiType, WasmLirSignature, WasmLocalRole};
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
-use crate::compiler_frontend::hir::hir_datatypes::{HirTypeKind, TypeId};
+use crate::compiler_frontend::hir::hir_datatypes::TypeId;
 use crate::compiler_frontend::hir::hir_nodes::{
     BlockId, FunctionId, HirFunction, HirFunctionOrigin, HirTerminator, LocalId,
 };
@@ -50,7 +50,7 @@ pub(crate) fn lower_function(
         module_context,
         hir_function,
         lir_id,
-        format!("fn_{}", hir_function.id.0),
+        build_debug_name(module_context, hir_function),
         origin,
         signature,
     );
@@ -142,25 +142,6 @@ fn lower_function_signature(
     };
 
     Ok(WasmLirSignature { params, results })
-}
-
-fn lower_type_to_abi(context: &WasmLirLoweringContext<'_>, type_id: TypeId) -> WasmAbiType {
-    let hir_type = context.hir_module.type_context.get(type_id);
-    match &hir_type.kind {
-        HirTypeKind::Bool | HirTypeKind::Char => WasmAbiType::I32,
-        HirTypeKind::Int => WasmAbiType::I64,
-        HirTypeKind::Float | HirTypeKind::Decimal => WasmAbiType::F64,
-        HirTypeKind::Unit => WasmAbiType::Void,
-        HirTypeKind::String
-        | HirTypeKind::Range
-        | HirTypeKind::Tuple { .. }
-        | HirTypeKind::Collection { .. }
-        | HirTypeKind::Struct { .. }
-        | HirTypeKind::Function { .. }
-        | HirTypeKind::Option { .. }
-        | HirTypeKind::Result { .. }
-        | HirTypeKind::Union { .. } => WasmAbiType::Handle,
-    }
 }
 
 fn alloc_function_locals(
@@ -293,6 +274,24 @@ fn block_by_id_or_error<'a>(
                 block_id, function_id
             ))
         })
+}
+
+fn build_debug_name(
+    module_context: &WasmLirLoweringContext<'_>,
+    hir_function: &HirFunction,
+) -> String {
+    // WHAT: derive debug name from source path when available.
+    // WHY: improves readability in debug output and name sections.
+    if let Some(path) = module_context
+        .hir_module
+        .side_table
+        .function_name_path(hir_function.id)
+    {
+        if let Some(name) = path.name_str(module_context.string_table) {
+            return format!("fn_{}_{}", name, hir_function.id.0);
+        }
+    }
+    format!("fn_{}", hir_function.id.0)
 }
 
 fn map_function_origin(origin: HirFunctionOrigin) -> WasmLirFunctionOrigin {

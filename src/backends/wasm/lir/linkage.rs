@@ -8,11 +8,11 @@ pub(crate) enum WasmFunctionLinkage {
     Internal,
     /// Synthetic exported wrapper function.
     ExportedWrapper,
-    /// Reserved runtime helper linkage (phase-2+).
-    #[allow(dead_code)] // todo
+    /// Reserved: needed once helpers get explicit linkage metadata instead of side-table tracking.
+    #[allow(dead_code)] // needed for helper linkage classification
     RuntimeHelper,
-    /// Imported host function thunk/placeholder.
-    #[allow(dead_code)] // todo
+    /// Reserved: needed once imported host thunks carry linkage classification.
+    #[allow(dead_code)] // needed for import linkage classification
     ImportedHost,
 }
 

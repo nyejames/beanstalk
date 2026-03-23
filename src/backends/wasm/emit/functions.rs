@@ -1,18 +1,19 @@
-//! Function and code section emission.
+//! User-function code section emission.
 
+use crate::backends::wasm::emit::helpers::emit_helper_function;
 use crate::backends::wasm::emit::instructions::{
     LirBodyEmitContext, emit_statement, emit_terminator,
 };
 use crate::backends::wasm::emit::sections::{DefinedFunctionKey, WasmEmitPlan};
 use crate::backends::wasm::emit::types::abi_to_val_type;
 use crate::backends::wasm::lir::function::WasmLirFunction;
+use crate::backends::wasm::lir::instructions::WasmLirTerminator;
 use crate::backends::wasm::lir::types::{
     WasmAbiType, WasmLirBlockId, WasmLirLocalId, WasmLocalRole,
 };
-use crate::backends::wasm::runtime::strings::WasmRuntimeHelper;
 use crate::compiler_frontend::compiler_messages::compiler_errors::{CompilerError, ErrorType};
 use rustc_hash::FxHashMap;
-use wasm_encoder::{CodeSection, Function, Instruction, MemArg, ValType};
+use wasm_encoder::{CodeSection, Function, Instruction, ValType};
 
 pub(crate) fn build_code_section(
     lir_functions: &FxHashMap<u32, &WasmLirFunction>,
@@ -115,118 +116,7 @@ fn emit_lir_function(
     Ok(wasm_function)
 }
 
-fn emit_helper_function(
-    helper: WasmRuntimeHelper,
-    plan: &WasmEmitPlan,
-) -> Result<Function, CompilerError> {
-    // WHAT: helpers share one bump-allocation/global model in phase-2.
-    // WHY: this is correctness-first runtime scaffolding until richer ownership/runtime logic lands.
-    let heap_top_global = plan.heap_top_global_index.ok_or_else(|| {
-        CompilerError::compiler_error(
-            "Wasm emission expected heap_top global while synthesizing runtime helpers",
-        )
-        .with_error_type(ErrorType::WasmGeneration)
-    })?;
-
-    let alloc_index = plan
-        .helper_indices
-        .get(&WasmRuntimeHelper::Alloc)
-        .copied()
-        .ok_or_else(|| {
-            CompilerError::compiler_error("Wasm emission missing rt_alloc helper index")
-                .with_error_type(ErrorType::WasmGeneration)
-        })?;
-
-    let mut function = match helper {
-        WasmRuntimeHelper::Alloc => Function::new(vec![(1, ValType::I32)]),
-        WasmRuntimeHelper::StringNewBuffer => Function::new(vec![(1, ValType::I32)]),
-        WasmRuntimeHelper::StringPushLiteral
-        | WasmRuntimeHelper::StringPushHandle
-        | WasmRuntimeHelper::StringFinish
-        | WasmRuntimeHelper::StringPtr
-        | WasmRuntimeHelper::StringLen
-        | WasmRuntimeHelper::Release
-        | WasmRuntimeHelper::DropIfOwned => Function::new(Vec::new()),
-    };
-
-    match helper {
-        WasmRuntimeHelper::Alloc => {
-            // WHAT: return current heap_top and then advance by requested size.
-            // WHY: phase-2 uses a simple monotonic bump allocator for runtime objects.
-            function.instruction(&Instruction::GlobalGet(heap_top_global));
-            function.instruction(&Instruction::LocalTee(1));
-            function.instruction(&Instruction::LocalGet(0));
-            function.instruction(&Instruction::I32Add);
-            function.instruction(&Instruction::GlobalSet(heap_top_global));
-            function.instruction(&Instruction::LocalGet(1));
-            function.instruction(&Instruction::Return);
-        }
-        WasmRuntimeHelper::StringNewBuffer => {
-            // WHAT: allocate and initialize an 8-byte `{ptr,len}` buffer header.
-            // WHY: this gives string-building helpers a stable in-memory shape.
-            function.instruction(&Instruction::I32Const(8));
-            function.instruction(&Instruction::Call(alloc_index));
-            function.instruction(&Instruction::LocalTee(0));
-            function.instruction(&Instruction::LocalGet(0));
-            function.instruction(&Instruction::I32Const(0));
-            function.instruction(&Instruction::I32Store(memarg(0)));
-            function.instruction(&Instruction::LocalGet(0));
-            function.instruction(&Instruction::I32Const(0));
-            function.instruction(&Instruction::I32Store(memarg(4)));
-            function.instruction(&Instruction::LocalGet(0));
-            function.instruction(&Instruction::Return);
-        }
-        WasmRuntimeHelper::StringPushLiteral => {
-            // WHAT: set `{ptr,len}` directly from static literal metadata.
-            // WHY: literals are already resident in static data; no byte copy is needed here.
-            function.instruction(&Instruction::LocalGet(0));
-            function.instruction(&Instruction::LocalGet(1));
-            function.instruction(&Instruction::I32Store(memarg(0)));
-            function.instruction(&Instruction::LocalGet(0));
-            function.instruction(&Instruction::LocalGet(2));
-            function.instruction(&Instruction::I32Store(memarg(4)));
-            function.instruction(&Instruction::Return);
-        }
-        WasmRuntimeHelper::StringPushHandle => {
-            // WHAT: copy `{ptr,len}` from one handle header into another.
-            // WHY: phase-2 keeps runtime string handling conservative and pointer-shaped.
-            function.instruction(&Instruction::LocalGet(0));
-            function.instruction(&Instruction::LocalGet(1));
-            function.instruction(&Instruction::I32Load(memarg(0)));
-            function.instruction(&Instruction::I32Store(memarg(0)));
-            function.instruction(&Instruction::LocalGet(0));
-            function.instruction(&Instruction::LocalGet(1));
-            function.instruction(&Instruction::I32Load(memarg(4)));
-            function.instruction(&Instruction::I32Store(memarg(4)));
-            function.instruction(&Instruction::Return);
-        }
-        WasmRuntimeHelper::StringFinish => {
-            // WHAT: return the buffer as the finalized string handle.
-            // WHY: phase-2 keeps string values and buffers ABI-compatible as `i32` handles.
-            function.instruction(&Instruction::LocalGet(0));
-            function.instruction(&Instruction::Return);
-        }
-        WasmRuntimeHelper::StringPtr => {
-            function.instruction(&Instruction::LocalGet(0));
-            function.instruction(&Instruction::I32Load(memarg(0)));
-            function.instruction(&Instruction::Return);
-        }
-        WasmRuntimeHelper::StringLen => {
-            function.instruction(&Instruction::LocalGet(0));
-            function.instruction(&Instruction::I32Load(memarg(4)));
-            function.instruction(&Instruction::Return);
-        }
-        WasmRuntimeHelper::Release | WasmRuntimeHelper::DropIfOwned => {
-            // WHAT: phase-2 release/drop helpers are conservative no-ops.
-            // WHY: ownership-eliding/free semantics are introduced incrementally after baseline correctness.
-            function.instruction(&Instruction::Return);
-        }
-    }
-
-    function.instruction(&Instruction::End);
-    Ok(function)
-}
-
+/// Deterministic local-index mapping and non-parameter declarations for a single function body.
 struct LocalLayout {
     local_decls: Vec<(u32, ValType)>,
     local_index_by_id: FxHashMap<WasmLirLocalId, u32>,
@@ -332,10 +222,10 @@ fn determine_entry_block(function: &WasmLirFunction) -> Result<WasmLirBlockId, C
 
     for block in &function.blocks {
         match block.terminator {
-            crate::backends::wasm::lir::instructions::WasmLirTerminator::Jump(target) => {
+            WasmLirTerminator::Jump(target) => {
                 *incoming_counts.entry(target).or_insert(0) += 1;
             }
-            crate::backends::wasm::lir::instructions::WasmLirTerminator::Branch {
+            WasmLirTerminator::Branch {
                 then_block,
                 else_block,
                 ..
@@ -343,8 +233,7 @@ fn determine_entry_block(function: &WasmLirFunction) -> Result<WasmLirBlockId, C
                 *incoming_counts.entry(then_block).or_insert(0) += 1;
                 *incoming_counts.entry(else_block).or_insert(0) += 1;
             }
-            crate::backends::wasm::lir::instructions::WasmLirTerminator::Return { .. }
-            | crate::backends::wasm::lir::instructions::WasmLirTerminator::Trap => {}
+            WasmLirTerminator::Return { .. } | WasmLirTerminator::Trap => {}
         }
     }
 
@@ -373,12 +262,3 @@ fn determine_entry_block(function: &WasmLirFunction) -> Result<WasmLirBlockId, C
     .with_error_type(ErrorType::WasmGeneration))
 }
 
-fn memarg(offset: u64) -> MemArg {
-    // WHAT: all helper runtime memory accesses target memory index 0 with 4-byte alignment.
-    // WHY: phase-2 uses one internal 32-bit linear memory and i32 load/store fields.
-    MemArg {
-        offset,
-        align: 2,
-        memory_index: 0,
-    }
-}

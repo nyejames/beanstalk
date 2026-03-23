@@ -1,8 +1,9 @@
 use crate::backends::wasm::backend::lower_hir_to_wasm_lir;
+use crate::backends::wasm::hir_to_lir::context::lower_type_to_abi;
 use crate::backends::wasm::lir::function::WasmLirFunctionOrigin;
 use crate::backends::wasm::lir::instructions::{WasmCalleeRef, WasmLirStmt, WasmLirTerminator};
 use crate::backends::wasm::lir::linkage::{WasmExportKind, WasmFunctionLinkage};
-use crate::backends::wasm::lir::types::{WasmLirFunctionId, WasmLirLocalId};
+use crate::backends::wasm::lir::types::{WasmAbiType, WasmImportId, WasmLirFunctionId, WasmLirLocalId};
 use crate::backends::wasm::request::{WasmBackendRequest, WasmDebugFlags, WasmExportPolicy};
 use crate::backends::wasm::tests::lowering::test_support::{
     bool_expression, borrow_facts_with_drop_site, build_module, build_type_context,
@@ -10,6 +11,7 @@ use crate::backends::wasm::tests::lowering::test_support::{
     string_expression, unit_expression,
 };
 use crate::compiler_frontend::analysis::borrow_checker::BorrowDropSiteKind;
+use crate::compiler_frontend::hir::hir_datatypes::{HirType, HirTypeKind};
 use crate::compiler_frontend::hir::hir_nodes::{
     BlockId, FunctionId, HirBinOp, HirBlock, HirExpressionKind, HirFunction, HirFunctionOrigin,
     HirPlace, HirStatementKind, HirTerminator, LocalId, RegionId, StartFragment, ValueKind,
@@ -114,6 +116,7 @@ fn lowers_calls_and_cfg_with_deterministic_block_mapping() {
         &module,
         &default_borrow_facts(),
         &WasmBackendRequest::default(),
+        &string_table,
     )
     .expect("Wasm lowering should succeed");
 
@@ -219,6 +222,7 @@ fn lowers_runtime_template_with_literal_and_handle_chunks_in_order() {
         &module,
         &default_borrow_facts(),
         &WasmBackendRequest::default(),
+        &string_table,
     )
     .expect("Wasm lowering should succeed");
 
@@ -300,6 +304,7 @@ fn deduplicates_static_utf8_segments() {
         &module,
         &default_borrow_facts(),
         &WasmBackendRequest::default(),
+        &string_table,
     )
     .expect("Wasm lowering should succeed");
     assert_eq!(result.lir_module.static_data.len(), 1);
@@ -336,7 +341,7 @@ fn maps_advisory_drop_sites_to_drop_if_owned_statements() {
     let borrow_facts =
         borrow_facts_with_drop_site(BlockId(0), BorrowDropSiteKind::Return, vec![LocalId(0)]);
 
-    let result = lower_hir_to_wasm_lir(&module, &borrow_facts, &WasmBackendRequest::default())
+    let result = lower_hir_to_wasm_lir(&module, &borrow_facts, &WasmBackendRequest::default(), &string_table)
         .expect("Wasm lowering should succeed");
     let lowered_start = result
         .lir_module
@@ -394,7 +399,7 @@ fn synthesizes_export_wrappers_with_stable_names() {
         },
     };
 
-    let result = lower_hir_to_wasm_lir(&module, &default_borrow_facts(), &request)
+    let result = lower_hir_to_wasm_lir(&module, &default_borrow_facts(), &request, &string_table)
         .expect("Wasm lowering should succeed");
 
     assert_eq!(result.lir_module.exports.len(), 1);
@@ -469,11 +474,448 @@ fn rejects_invalid_export_request_with_structured_diagnostic() {
         ..Default::default()
     };
 
-    let error = lower_hir_to_wasm_lir(&module, &default_borrow_facts(), &invalid_request)
+    let error = lower_hir_to_wasm_lir(&module, &default_borrow_facts(), &invalid_request, &string_table)
         .expect_err("invalid request should produce a lowering diagnostic");
     assert!(
         error.errors[0]
             .msg
             .contains("missing stable export name for FunctionId(0)")
+    );
+}
+
+#[test]
+fn resolves_supported_host_call_to_correct_import() {
+    let mut string_table = StringTable::new();
+    let (type_context, types) = build_type_context();
+    let start_path = InternedPath::from_single_str("main", &mut string_table);
+
+    // "io" is the supported host function name for LogString.
+    let io_path = InternedPath::from_single_str("io", &mut string_table);
+    let start_block = HirBlock {
+        id: BlockId(0),
+        region: RegionId(0),
+        locals: vec![local(0, types.string, RegionId(0))],
+        statements: vec![
+            statement(
+                1,
+                HirStatementKind::Assign {
+                    target: HirPlace::Local(LocalId(0)),
+                    value: string_expression(700, "hello", types.string, RegionId(0)),
+                },
+                1,
+            ),
+            statement(
+                2,
+                HirStatementKind::Call {
+                    target: CallTarget::HostFunction(io_path),
+                    args: vec![load_local(710, LocalId(0), types.string, RegionId(0))],
+                    result: None,
+                },
+                2,
+            ),
+        ],
+        terminator: HirTerminator::Return(unit_expression(701, types.unit, RegionId(0))),
+    };
+
+    let start_function = HirFunction {
+        id: FunctionId(0),
+        entry: BlockId(0),
+        params: vec![],
+        return_type: types.unit,
+        return_aliases: vec![],
+    };
+    let module = build_module(
+        &mut string_table,
+        vec![(start_function, start_path, HirFunctionOrigin::EntryStart)],
+        vec![start_block],
+        type_context,
+        FunctionId(0),
+    );
+
+    let result = lower_hir_to_wasm_lir(
+        &module,
+        &default_borrow_facts(),
+        &WasmBackendRequest::default(),
+        &string_table,
+    )
+    .expect("supported host call should lower successfully");
+
+    // Exactly one import should be registered (LogString).
+    assert_eq!(result.lir_module.imports.len(), 1);
+    assert_eq!(result.lir_module.imports[0].item_name, "log_string");
+    assert_eq!(result.lir_module.imports[0].module_name, "host");
+
+    // The call statement should reference import id 0.
+    let start_lir = result
+        .lir_module
+        .functions
+        .iter()
+        .find(|f| f.id == WasmLirFunctionId(0))
+        .expect("start function should be present");
+    assert!(start_lir.blocks[0].statements.iter().any(|stmt| matches!(
+        stmt,
+        WasmLirStmt::Call {
+            callee: WasmCalleeRef::Import(WasmImportId(0)),
+            ..
+        }
+    )));
+}
+
+#[test]
+fn rejects_unsupported_host_call_with_diagnostic() {
+    let mut string_table = StringTable::new();
+    let (type_context, types) = build_type_context();
+    let start_path = InternedPath::from_single_str("main", &mut string_table);
+
+    let unknown_path = InternedPath::from_single_str("unknown_host_fn", &mut string_table);
+    let start_block = HirBlock {
+        id: BlockId(0),
+        region: RegionId(0),
+        locals: vec![],
+        statements: vec![statement(
+            1,
+            HirStatementKind::Call {
+                target: CallTarget::HostFunction(unknown_path),
+                args: vec![],
+                result: None,
+            },
+            1,
+        )],
+        terminator: HirTerminator::Return(unit_expression(800, types.unit, RegionId(0))),
+    };
+
+    let start_function = HirFunction {
+        id: FunctionId(0),
+        entry: BlockId(0),
+        params: vec![],
+        return_type: types.unit,
+        return_aliases: vec![],
+    };
+    let module = build_module(
+        &mut string_table,
+        vec![(start_function, start_path, HirFunctionOrigin::EntryStart)],
+        vec![start_block],
+        type_context,
+        FunctionId(0),
+    );
+
+    let error = lower_hir_to_wasm_lir(
+        &module,
+        &default_borrow_facts(),
+        &WasmBackendRequest::default(),
+        &string_table,
+    )
+    .expect_err("unsupported host call should produce diagnostic");
+    assert!(error.errors[0].msg.contains("unknown_host_fn"));
+}
+
+#[test]
+fn deduplicates_host_imports_across_multiple_calls() {
+    let mut string_table = StringTable::new();
+    let (type_context, types) = build_type_context();
+    let start_path = InternedPath::from_single_str("main", &mut string_table);
+
+    let io_path_a = InternedPath::from_single_str("io", &mut string_table);
+    let io_path_b = InternedPath::from_single_str("io", &mut string_table);
+
+    let start_block = HirBlock {
+        id: BlockId(0),
+        region: RegionId(0),
+        locals: vec![
+            local(0, types.string, RegionId(0)),
+            local(1, types.string, RegionId(0)),
+        ],
+        statements: vec![
+            statement(
+                1,
+                HirStatementKind::Assign {
+                    target: HirPlace::Local(LocalId(0)),
+                    value: string_expression(900, "a", types.string, RegionId(0)),
+                },
+                1,
+            ),
+            statement(
+                2,
+                HirStatementKind::Call {
+                    target: CallTarget::HostFunction(io_path_a),
+                    args: vec![load_local(910, LocalId(0), types.string, RegionId(0))],
+                    result: None,
+                },
+                2,
+            ),
+            statement(
+                3,
+                HirStatementKind::Assign {
+                    target: HirPlace::Local(LocalId(1)),
+                    value: string_expression(901, "b", types.string, RegionId(0)),
+                },
+                3,
+            ),
+            statement(
+                4,
+                HirStatementKind::Call {
+                    target: CallTarget::HostFunction(io_path_b),
+                    args: vec![load_local(920, LocalId(1), types.string, RegionId(0))],
+                    result: None,
+                },
+                4,
+            ),
+        ],
+        terminator: HirTerminator::Return(unit_expression(902, types.unit, RegionId(0))),
+    };
+
+    let start_function = HirFunction {
+        id: FunctionId(0),
+        entry: BlockId(0),
+        params: vec![],
+        return_type: types.unit,
+        return_aliases: vec![],
+    };
+    let module = build_module(
+        &mut string_table,
+        vec![(start_function, start_path, HirFunctionOrigin::EntryStart)],
+        vec![start_block],
+        type_context,
+        FunctionId(0),
+    );
+
+    let result = lower_hir_to_wasm_lir(
+        &module,
+        &default_borrow_facts(),
+        &WasmBackendRequest::default(),
+        &string_table,
+    )
+    .expect("duplicate host calls should lower successfully");
+
+    // Same host function called twice should result in exactly one import.
+    assert_eq!(result.lir_module.imports.len(), 1);
+}
+
+#[test]
+fn lower_type_to_abi_maps_all_hir_types_correctly() {
+    let mut string_table = StringTable::new();
+    let (type_context, types) = build_type_context();
+    let start_path = InternedPath::from_single_str("main", &mut string_table);
+
+    // Build a minimal module so we can construct a WasmLirLoweringContext.
+    let start_block = HirBlock {
+        id: BlockId(0),
+        region: RegionId(0),
+        locals: vec![],
+        statements: vec![],
+        terminator: HirTerminator::Return(int_expression(1000, 0, types.int, RegionId(0))),
+    };
+    let start_function = HirFunction {
+        id: FunctionId(0),
+        entry: BlockId(0),
+        params: vec![],
+        return_type: types.int,
+        return_aliases: vec![],
+    };
+    let mut module = build_module(
+        &mut string_table,
+        vec![(start_function, start_path, HirFunctionOrigin::EntryStart)],
+        vec![start_block],
+        type_context,
+        FunctionId(0),
+    );
+
+    // Insert additional types to test all ABI mappings.
+    let float_id = module.type_context.insert(HirType {
+        kind: HirTypeKind::Float,
+    });
+    let char_id = module.type_context.insert(HirType {
+        kind: HirTypeKind::Char,
+    });
+    let decimal_id = module.type_context.insert(HirType {
+        kind: HirTypeKind::Decimal,
+    });
+    let range_id = module.type_context.insert(HirType {
+        kind: HirTypeKind::Range,
+    });
+
+    let borrow_facts = default_borrow_facts();
+    let request = WasmBackendRequest::default();
+    let context = crate::backends::wasm::hir_to_lir::context::WasmLirLoweringContext::new(
+        &module,
+        &borrow_facts,
+        &request,
+        &string_table,
+    );
+
+    assert_eq!(lower_type_to_abi(&context, types.int), WasmAbiType::I64);
+    assert_eq!(lower_type_to_abi(&context, types.boolean), WasmAbiType::I32);
+    assert_eq!(lower_type_to_abi(&context, types.string), WasmAbiType::Handle);
+    assert_eq!(lower_type_to_abi(&context, types.unit), WasmAbiType::Void);
+    assert_eq!(lower_type_to_abi(&context, float_id), WasmAbiType::F64);
+    assert_eq!(lower_type_to_abi(&context, char_id), WasmAbiType::I32);
+    assert_eq!(lower_type_to_abi(&context, decimal_id), WasmAbiType::F64);
+    assert_eq!(lower_type_to_abi(&context, range_id), WasmAbiType::Handle);
+}
+
+#[test]
+fn multi_fragment_template_produces_all_push_operations() {
+    // Verifies that a runtime template with literal + handle + literal + handle
+    // produces the correct sequence: NewBuffer, PushLiteral, PushHandle, PushLiteral, PushHandle, Finish.
+    let mut string_table = StringTable::new();
+    let (type_context, types) = build_type_context();
+    let runtime_path = InternedPath::from_single_str("__bst_frag_0", &mut string_table);
+
+    // Build: "prefix" + param0 + "middle" + param1 + "suffix"
+    let inner_concat_1 = expression(
+        1101,
+        HirExpressionKind::BinOp {
+            left: Box::new(string_expression(1100, "prefix", types.string, RegionId(0))),
+            op: HirBinOp::Add,
+            right: Box::new(load_local(1102, LocalId(0), types.string, RegionId(0))),
+        },
+        types.string,
+        RegionId(0),
+        ValueKind::RValue,
+    );
+    let inner_concat_2 = expression(
+        1103,
+        HirExpressionKind::BinOp {
+            left: Box::new(inner_concat_1),
+            op: HirBinOp::Add,
+            right: Box::new(string_expression(1104, "middle", types.string, RegionId(0))),
+        },
+        types.string,
+        RegionId(0),
+        ValueKind::RValue,
+    );
+    let inner_concat_3 = expression(
+        1105,
+        HirExpressionKind::BinOp {
+            left: Box::new(inner_concat_2),
+            op: HirBinOp::Add,
+            right: Box::new(load_local(1106, LocalId(1), types.string, RegionId(0))),
+        },
+        types.string,
+        RegionId(0),
+        ValueKind::RValue,
+    );
+    let full_concat = expression(
+        1107,
+        HirExpressionKind::BinOp {
+            left: Box::new(inner_concat_3),
+            op: HirBinOp::Add,
+            right: Box::new(string_expression(1108, "suffix", types.string, RegionId(0))),
+        },
+        types.string,
+        RegionId(0),
+        ValueKind::RValue,
+    );
+
+    let runtime_block = HirBlock {
+        id: BlockId(0),
+        region: RegionId(0),
+        locals: vec![
+            local(0, types.string, RegionId(0)),
+            local(1, types.string, RegionId(0)),
+        ],
+        statements: vec![],
+        terminator: HirTerminator::Return(full_concat),
+    };
+
+    let runtime_function = HirFunction {
+        id: FunctionId(0),
+        entry: BlockId(0),
+        params: vec![LocalId(0), LocalId(1)],
+        return_type: types.string,
+        return_aliases: vec![],
+    };
+
+    let mut module = build_module(
+        &mut string_table,
+        vec![(
+            runtime_function,
+            runtime_path,
+            HirFunctionOrigin::RuntimeTemplate,
+        )],
+        vec![runtime_block],
+        type_context,
+        FunctionId(0),
+    );
+    module
+        .start_fragments
+        .push(StartFragment::RuntimeStringFn(FunctionId(0)));
+
+    let result = lower_hir_to_wasm_lir(
+        &module,
+        &default_borrow_facts(),
+        &WasmBackendRequest::default(),
+        &string_table,
+    )
+    .expect("multi-fragment template should lower successfully");
+
+    let runtime_lir = result
+        .lir_module
+        .functions
+        .iter()
+        .find(|f| f.id == WasmLirFunctionId(0))
+        .expect("runtime function should be present");
+    let stmts = &runtime_lir.blocks[0].statements;
+
+    // Expected order: NewBuffer, PushLiteral("prefix"), PushHandle(param0),
+    // PushLiteral("middle"), PushHandle(param1), PushLiteral("suffix"), Finish
+    assert!(matches!(stmts[0], WasmLirStmt::StringNewBuffer { .. }));
+    assert!(matches!(stmts[1], WasmLirStmt::StringPushLiteral { .. }));
+    assert!(matches!(stmts[2], WasmLirStmt::StringPushHandle { .. }));
+    assert!(matches!(stmts[3], WasmLirStmt::StringPushLiteral { .. }));
+    assert!(matches!(stmts[4], WasmLirStmt::StringPushHandle { .. }));
+    assert!(matches!(stmts[5], WasmLirStmt::StringPushLiteral { .. }));
+    assert!(matches!(stmts[6], WasmLirStmt::StringFinish { .. }));
+
+    // Three distinct string literals should produce at least 3 static data entries.
+    assert!(result.lir_module.static_data.len() >= 3);
+}
+
+#[test]
+fn debug_name_uses_source_name_when_available() {
+    let mut string_table = StringTable::new();
+    let (type_context, types) = build_type_context();
+    let fn_path = InternedPath::from_single_str("my_helper", &mut string_table);
+
+    let block = HirBlock {
+        id: BlockId(0),
+        region: RegionId(0),
+        locals: vec![],
+        statements: vec![],
+        terminator: HirTerminator::Return(int_expression(1200, 0, types.int, RegionId(0))),
+    };
+    let function = HirFunction {
+        id: FunctionId(0),
+        entry: BlockId(0),
+        params: vec![],
+        return_type: types.int,
+        return_aliases: vec![],
+    };
+    let module = build_module(
+        &mut string_table,
+        vec![(function, fn_path, HirFunctionOrigin::Normal)],
+        vec![block],
+        type_context,
+        FunctionId(0),
+    );
+
+    let result = lower_hir_to_wasm_lir(
+        &module,
+        &default_borrow_facts(),
+        &WasmBackendRequest::default(),
+        &string_table,
+    )
+    .expect("lowering should succeed");
+
+    let lir_fn = result
+        .lir_module
+        .functions
+        .iter()
+        .find(|f| f.id == WasmLirFunctionId(0))
+        .expect("function should be present");
+    assert!(
+        lir_fn.debug_name.contains("my_helper"),
+        "debug name should contain source name, got: {}",
+        lir_fn.debug_name
     );
 }

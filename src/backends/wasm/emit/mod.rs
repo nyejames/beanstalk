@@ -5,6 +5,7 @@
 pub(crate) mod data;
 pub(crate) mod exports;
 pub(crate) mod functions;
+pub(crate) mod helpers;
 pub(crate) mod imports;
 pub(crate) mod instructions;
 pub(crate) mod module;

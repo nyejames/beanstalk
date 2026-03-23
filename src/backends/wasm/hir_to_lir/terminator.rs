@@ -1,7 +1,7 @@
 //! Terminator lowering for HIR -> Wasm LIR.
 
-use crate::backends::wasm::hir_to_lir::context::WasmFunctionLoweringContext;
-use crate::backends::wasm::hir_to_lir::expr::{lower_expression, lower_type_to_abi};
+use crate::backends::wasm::hir_to_lir::context::{WasmFunctionLoweringContext, lower_type_to_abi};
+use crate::backends::wasm::hir_to_lir::expr::lower_expression;
 use crate::backends::wasm::lir::instructions::{WasmLirStmt, WasmLirTerminator};
 use crate::backends::wasm::lir::types::WasmAbiType;
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
@@ -35,7 +35,7 @@ pub(crate) fn lower_terminator(
         }
         HirTerminator::Return(value) => {
             // Preserve unit-return as `Return(None)` to keep ABI shape explicit.
-            let return_abi = lower_type_to_abi(context, value.ty)?;
+            let return_abi = lower_type_to_abi(context.module_context, value.ty);
             if matches!(return_abi, WasmAbiType::Void) {
                 return Ok(WasmLirTerminator::Return { value: None });
             }

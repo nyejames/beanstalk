@@ -2,7 +2,7 @@
 
 use crate::backends::wasm::hir_to_lir::context::WasmLirLoweringContext;
 use crate::backends::wasm::lir::linkage::{WasmImport, WasmImportKind};
-use crate::backends::wasm::lir::types::{WasmImportId, WasmLirSignature};
+use crate::backends::wasm::lir::types::{WasmAbiType, WasmImportId, WasmLirSignature};
 use crate::backends::wasm::runtime::imports::WasmHostFunction;
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
 use crate::compiler_frontend::hir::hir_nodes::HirStatementKind;
@@ -13,23 +13,15 @@ pub(crate) fn register_required_host_imports(
 ) -> Result<(), CompilerError> {
     // WHAT: scan HIR for host calls and pre-register required imports.
     // WHY: deterministic import-id assignment for the whole module.
-    //
-    // Phase-1 note:
-    // host import mapping is intentionally minimal and will be expanded.
-    let mut needs_log = false;
-
     for block in &context.hir_module.blocks {
         for statement in &block.statements {
-            if let HirStatementKind::Call { target, .. } = &statement.kind
-                && matches!(target, CallTarget::HostFunction(_))
-            {
-                needs_log = true;
+            if let HirStatementKind::Call { target, .. } = &statement.kind {
+                if let CallTarget::HostFunction(path) = target {
+                    let host_function = resolve_host_function_name(context, path)?;
+                    ensure_host_import(context, host_function);
+                }
             }
         }
-    }
-
-    if needs_log {
-        ensure_host_import(context, WasmHostFunction::LogString);
     }
 
     Ok(())
@@ -37,11 +29,40 @@ pub(crate) fn register_required_host_imports(
 
 pub(crate) fn resolve_host_call_import(
     context: &mut WasmLirLoweringContext<'_>,
-    _target: &CallTarget,
+    target: &CallTarget,
 ) -> Result<WasmImportId, CompilerError> {
-    // Phase-1 TODO:
-    // Map specific host call targets to distinct imports once host ABI lowering expands.
-    Ok(ensure_host_import(context, WasmHostFunction::LogString))
+    // WHAT: resolve a host call target to its pre-registered import id.
+    // WHY: each distinct host function maps to exactly one import; unsupported targets
+    // must fail with a structured diagnostic instead of silently mapping to the wrong import.
+    let CallTarget::HostFunction(path) = target else {
+        return Err(CompilerError::lir_transformation(
+            "Wasm lowering expected a HostFunction call target in resolve_host_call_import",
+        ));
+    };
+
+    let host_function = resolve_host_function_name(context, path)?;
+    Ok(ensure_host_import(context, host_function))
+}
+
+fn resolve_host_function_name(
+    context: &WasmLirLoweringContext<'_>,
+    path: &crate::compiler_frontend::interned_path::InternedPath,
+) -> Result<WasmHostFunction, CompilerError> {
+    // WHAT: map a host function path to its Wasm backend import identity.
+    // WHY: ensures only explicitly supported host calls are lowered.
+    let Some(name) = path.name_str(context.string_table) else {
+        return Err(CompilerError::lir_transformation(
+            "Wasm lowering could not resolve host function path to a name",
+        ));
+    };
+
+    match name {
+        "io" => Ok(WasmHostFunction::LogString),
+        _ => Err(CompilerError::lir_transformation(format!(
+            "Wasm backend does not yet support host function '{}'",
+            name
+        ))),
+    }
 }
 
 fn ensure_host_import(
@@ -56,15 +77,33 @@ fn ensure_host_import(
     let import_id = WasmImportId(context.lir_module.imports.len() as u32);
     context.host_imports.insert(function, import_id);
 
+    // WHAT: import signature is determined by the host function identity.
+    // WHY: each host function has a fixed ABI contract.
+    let signature = host_function_signature(function);
     context.lir_module.imports.push(WasmImport {
         id: import_id,
         module_name: function.module_name().to_owned(),
         item_name: function.item_name().to_owned(),
-        kind: WasmImportKind::Function(WasmLirSignature {
-            params: vec![crate::backends::wasm::lir::types::WasmAbiType::Handle],
-            results: vec![],
-        }),
+        kind: WasmImportKind::Function(signature),
     });
 
     import_id
+}
+
+fn host_function_signature(function: WasmHostFunction) -> WasmLirSignature {
+    // WHAT: canonical ABI signature for each supported host function.
+    // WHY: keeps import registration and signature assignment in one explicit place.
+    match function {
+        WasmHostFunction::LogString => WasmLirSignature {
+            params: vec![WasmAbiType::Handle],
+            results: vec![],
+        },
+        WasmHostFunction::DomCreateText
+        | WasmHostFunction::DomSetText
+        | WasmHostFunction::DomSetHtml => WasmLirSignature {
+            // Placeholder signatures for upcoming DOM integration.
+            params: vec![WasmAbiType::Handle],
+            results: vec![],
+        },
+    }
 }

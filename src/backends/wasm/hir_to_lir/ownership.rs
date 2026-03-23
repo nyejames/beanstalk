@@ -2,7 +2,6 @@
 
 use crate::backends::wasm::hir_to_lir::context::WasmFunctionLoweringContext;
 use crate::backends::wasm::lir::instructions::WasmLirStmt;
-use crate::backends::wasm::lir::types::WasmAbiType;
 use crate::compiler_frontend::analysis::borrow_checker::BorrowDropSiteKind;
 use crate::compiler_frontend::hir::hir_nodes::BlockId;
 use std::collections::BTreeSet;
@@ -39,7 +38,7 @@ pub(crate) fn insert_advisory_drops(
             let Some(lir_local_id) = context.local_map.get(local_id).copied() else {
                 continue;
             };
-            if !is_handle_local(context, lir_local_id) {
+            if !context.is_handle_local(lir_local_id) {
                 continue;
             }
             if !emitted_locals.insert(lir_local_id.0) {
@@ -53,15 +52,3 @@ pub(crate) fn insert_advisory_drops(
     }
 }
 
-fn is_handle_local(
-    context: &WasmFunctionLoweringContext<'_, '_>,
-    local_id: crate::backends::wasm::lir::types::WasmLirLocalId,
-) -> bool {
-    context
-        .lir_function
-        .locals
-        .iter()
-        .find(|local| local.id == local_id)
-        .map(|local| matches!(local.ty, WasmAbiType::Handle))
-        .unwrap_or(false)
-}

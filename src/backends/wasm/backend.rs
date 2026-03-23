@@ -10,12 +10,14 @@ use crate::compiler_frontend::compiler_messages::compiler_errors::{
     CompilerError, CompilerMessages, ErrorType,
 };
 use crate::compiler_frontend::hir::hir_nodes::{FunctionId, HirModule};
+use crate::compiler_frontend::string_interning::StringTable;
 use std::collections::HashSet;
 
 pub(crate) fn lower_hir_to_wasm_lir(
     hir_module: &HirModule,
     borrow_facts: &BorrowFacts,
     request: &WasmBackendRequest,
+    string_table: &StringTable,
 ) -> Result<WasmLirBackendResult, CompilerMessages> {
     // WHAT: fail fast on builder/backend contract issues.
     // WHY: avoid partial lowering and keep diagnostics deterministic.
@@ -23,7 +25,7 @@ pub(crate) fn lower_hir_to_wasm_lir(
 
     // WHAT: perform full module lowering using HIR + borrow side tables.
     // WHY: phase-1 establishes the stable HIR->LIR seam for later Wasm emission.
-    let lir_module = lower_hir_module_to_lir(hir_module, borrow_facts, request)?;
+    let lir_module = lower_hir_module_to_lir(hir_module, borrow_facts, request, string_table)?;
     // WHAT: collect optional debug text with zero impact on lowering semantics.
     let debug_outputs = build_debug_outputs(request, &lir_module);
 
@@ -38,10 +40,11 @@ pub(crate) fn lower_hir_to_wasm_module(
     hir_module: &HirModule,
     borrow_facts: &BorrowFacts,
     request: &WasmBackendRequest,
+    string_table: &StringTable,
 ) -> Result<WasmLirBackendResult, CompilerMessages> {
     // WHAT: preserve the existing phase-1 lowering entry and layer emission on top.
     // WHY: this keeps debug and diagnostics workflows stable while phase-2 expands output.
-    let mut result = lower_hir_to_wasm_lir(hir_module, borrow_facts, request)?;
+    let mut result = lower_hir_to_wasm_lir(hir_module, borrow_facts, request, string_table)?;
     if !request.emit_options.emit_wasm_module {
         return Ok(result);
     }
@@ -168,12 +171,8 @@ fn validate_feature_flags(request: &WasmBackendRequest) -> Result<(), CompilerEr
         .with_error_type(ErrorType::WasmGeneration));
     }
 
-    if request.target_features.enable_bulk_memory {
-        return Err(CompilerError::compiler_error(
-            "Wasm backend request enables bulk memory, but phase-2 does not require bulk-memory instructions",
-        )
-        .with_error_type(ErrorType::WasmGeneration));
-    }
+    // Note: bulk-memory (memory.copy) is now used internally by runtime string helpers.
+    // The enable_bulk_memory flag is reserved for user-facing feature gating if needed.
 
     Ok(())
 }

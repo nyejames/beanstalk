@@ -103,6 +103,7 @@ pub(crate) fn compile_html_module_wasm(
         hir_module,
         borrow_analysis.borrow_facts(),
         &build_plan.wasm_request,
+        string_table,
     )?;
     let wasm_bytes = wasm_result.wasm_bytes.ok_or_else(|| {
         CompilerMessages::from_error(CompilerError::compiler_error(

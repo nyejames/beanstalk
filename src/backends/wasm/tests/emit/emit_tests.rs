@@ -57,7 +57,7 @@ fn lowers_hir_to_wasm_module_bytes() {
 
     let mut request = WasmBackendRequest::default();
     request.emit_options.validate_emitted_module = false;
-    let result = lower_hir_to_wasm_module(&hir_module, &default_borrow_facts(), &request)
+    let result = lower_hir_to_wasm_module(&hir_module, &default_borrow_facts(), &request, &string_table)
         .expect("phase-2 lowering should emit wasm bytes");
     let wasm_bytes = result.wasm_bytes.expect("wasm bytes should be available");
     validate_wasm(&wasm_bytes);
@@ -124,7 +124,7 @@ fn rejects_invalid_helper_export_policy() {
         FunctionId(0),
     );
 
-    let error = lower_hir_to_wasm_module(&hir_module, &default_borrow_facts(), &request)
+    let error = lower_hir_to_wasm_module(&hir_module, &default_borrow_facts(), &request, &string_table)
         .expect_err("invalid helper policy should fail");
     assert_eq!(error.errors[0].error_type, ErrorType::WasmGeneration);
     assert!(error.errors[0].msg.contains("bst_str_ptr"));
@@ -160,7 +160,7 @@ fn rejects_unsupported_wasm_feature_flags() {
         FunctionId(0),
     );
 
-    let error = lower_hir_to_wasm_module(&hir_module, &default_borrow_facts(), &request)
+    let error = lower_hir_to_wasm_module(&hir_module, &default_borrow_facts(), &request, &string_table)
         .expect_err("unsupported feature toggle should fail");
     assert_eq!(error.errors[0].error_type, ErrorType::WasmGeneration);
     assert!(error.errors[0].msg.contains("use_wasm_gc"));
@@ -196,7 +196,7 @@ fn rejects_unsupported_cfg_lowering_strategy() {
         FunctionId(0),
     );
 
-    let error = lower_hir_to_wasm_module(&hir_module, &default_borrow_facts(), &request)
+    let error = lower_hir_to_wasm_module(&hir_module, &default_borrow_facts(), &request, &string_table)
         .expect_err("unsupported cfg strategy should fail");
     assert_eq!(error.errors[0].error_type, ErrorType::WasmGeneration);
     assert!(error.errors[0].msg.contains("dispatcher-loop"));

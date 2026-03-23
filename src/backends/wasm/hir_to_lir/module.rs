@@ -11,15 +11,17 @@ use crate::compiler_frontend::compiler_messages::compiler_errors::{
     CompilerError, CompilerMessages,
 };
 use crate::compiler_frontend::hir::hir_nodes::HirModule;
+use crate::compiler_frontend::string_interning::StringTable;
 
 pub(crate) fn lower_hir_module_to_lir(
     hir_module: &HirModule,
     borrow_facts: &BorrowFacts,
     request: &WasmBackendRequest,
+    string_table: &StringTable,
 ) -> Result<crate::backends::wasm::lir::module::WasmLirModule, CompilerMessages> {
     // WHAT: one mutable context carries all per-module lowering state.
     // WHY: keeps interning/ids/import planning coherent and deterministic.
-    let mut context = WasmLirLoweringContext::new(hir_module, borrow_facts, request);
+    let mut context = WasmLirLoweringContext::new(hir_module, borrow_facts, request, string_table);
 
     // WHAT: register stable function mappings before lowering any bodies.
     // WHY: call lowering depends on these mappings even for forward references.

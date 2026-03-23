@@ -294,7 +294,14 @@ fn emit_compare(
                 &Instruction::F64Ne
             });
         }
-        WasmAbiType::I32 | WasmAbiType::Handle | WasmAbiType::Void => {
+        WasmAbiType::Void => {
+            return Err(CompilerError::compiler_error(format!(
+                "Wasm emission cannot compare Void-typed locals in function {:?}",
+                context.function_id
+            ))
+            .with_error_type(ErrorType::WasmGeneration));
+        }
+        WasmAbiType::I32 | WasmAbiType::Handle => {
             function.instruction(if is_eq {
                 &Instruction::I32Eq
             } else {
