@@ -1,52 +1,56 @@
 # Beanstalk Compiler Development Guide
-This guide covers the structure, goals and best practices for Beanstalk's compiler development.
-New and refactored code should ALWAYS follow these guidelines.
-Always run `cargo check`, `cargo test` (unit tests) and `cargo run tests` (integration tests) to check for regressions.
 
-Readability and modularity are highest priority for new code in this codebase.
+This guide defines the required standards for new and refactored compiler code.
+
+Priorities:
+1. Readability
+2. Modularity
+3. Correctness and diagnostics
+
+Before finishing changes, always run:
+- `cargo check`
+- `cargo test`
+- `cargo run tests`
 
 ## Best Practices
 
 ### No user-input panics
 - Active frontend stages must reject unsupported syntax and malformed input with structured diagnostics, not `panic!`, `todo!`, or user-data-driven `.unwrap()`.
-- Use panic paths only for proven internal invariants that indicate a compiler bug.
+- Panic paths are only for proven internal invariants that indicate a compiler bug.
 
-### Variables and Functions
-- Use descriptive, full names—avoid abbreviations except for simple iterators (`i`, `j`)
-- Functions should be self-documenting through clear naming
-- Compiler passes: descriptive names (`build_ast`, `generate_hir`, `emit_wasm`)
-- Comments should use correct grammar without dropping definitive articles or connectives (`BAD:// Build AST` vs `GOOD:// Builds the AST`)
+### Naming
+- Use descriptive, full names. Avoid abbreviations except simple iterators such as `i` and `j`.
+- Functions should be self-describing through clear names.
+- Compiler passes should use explicit names such as `build_ast`, `generate_hir`, and `emit_wasm`.
 
-### Import Guidelines
-- **Avoid inline imports**: If a function/type is used more than once in a file, import it at the top
-- **Use clear, consistent names**: Avoid aliasing types or imports as much as possible
+### Imports
+- Avoid inline imports. If a type or function is used more than once in a file, import it at the top.
+- Avoid aliasing unless it clearly improves readability.
 
 ### Code Style and Organisation
-**Compiler Development**:
 - Maintain clear separation between compilation stages.
-- Never use .unwrap() unless blatantly safe, prefer match to handle results.
-- Prefer `.to_owned()` over `.clone()` for string/data copying (signals potential future refactoring)
-- Use `.clone()` only when you are sure a copy is unavoidable with this pattern
-- Split up and organise code into files that each deal with a category of tasks. Files should aim to be ~< 2000 lines each when possible.
-- Each module has ONE clear responsibility—don't mix concerns
-- Prefer using a context struct for state—don't pass individual state pieces between functions
+- Each module should have one clear responsibility. Do not mix concerns.
+- Split files by task category. Aim for files under ~2000 lines where practical.
+- Prefer context structs for shared state instead of passing many state values between functions.
+- Avoid `.unwrap()` unless it is blatantly safe and tied to an internal invariant.
+- Prefer `.to_owned()` over `.clone()` when copying owned string-like data.
+- Use `.clone()` when a general copy is genuinely required and clearer.
 
-**Types in a file (structs / enums) should be ordered from the highest abstraction to the lowest**
+### Type Ordering
+Order types in a file from higher-level abstractions to lower-level supporting types.
+
 ```rust
-// Define the most abstract types earlier in the file
-// And define the types they depend on later
 pub struct HirModule { ... }
 pub struct HirBlock { ... }
-pub struct HirNode { ...}
-pub struct HirExpression { ...}
+pub struct HirNode { ... }
+pub struct HirExpression { ... }
 ```
 
-#### Iterator vs Loop Preference
-- Simple operations: Use iterators
-- Complex multi-stage operations: Use explicit loops for clarity
+### Iterators vs Loops
+- Use iterators for simple transformations.
+- Use explicit loops for complex multi-stage logic where control flow is clearer.
 
 ```rust
-// Prefer explicit loops for complex compiler_frontend logic
 let mut processed_nodes = Vec::new();
 for node in ast_nodes {
     if let Some(ir_node) = convert_to_ir(&node)? {
@@ -57,87 +61,63 @@ for node in ast_nodes {
 }
 ```
 
-#### Function Size Guidelines
-- **Simple functions**: ~50 lines max for straightforward operations
-- **Complex functions**: ~100 lines max when handling complex tasks
-- **Acceptable complexity**: Functions can be longer when they:
-  - Handle intricate compiler transformations (AST → HIR, LIR → WASM)
-  - Manage complex state machines or pattern matching
-  - Coordinate multiple related operations that benefit from being together
-  - Would be harder to understand if split into smaller pieces
-
-**When to Split Functions**
-- The function has multiple unrelated responsibilities
-- The logic can be reused in other contexts
-- The function is challenging to test as a whole
-- The function name doesn't accurately describe what it does
-
-**When to Keep Functions Together**
-- Operations are tightly coupled and sequential
-- Splitting would require passing many parameters
-- The function represents a single conceptual operation
-- Splitting would make the code harder to follow
+### Function Size
+- Simple functions should usually stay under ~50 lines.
+- Complex functions should usually stay under ~100 lines.
+- Longer functions are acceptable when they still represent one coherent operation, such as a compiler transformation, state machine, or tightly coupled sequential process.
+- Split functions when they mix unrelated responsibilities, are hard to test, or no longer match their name.
 
 ### Macros
-- Minimal macro usage: Only small declarative macros for repetition
-- Avoid procedural macros entirely
+- Keep macro usage minimal.
+- Use small declarative macros only where they clearly reduce repetition.
+- Avoid procedural macros.
 
-### Other Style Considerations
-- Use `#[allow(dead_code)]` sparingly with justification
-- Try to reduce unused variable warnings as much as possible 
-- Use clippy to check code
-- Use the default Rust formatter
+### Comments
+- Add doc comments at the top of new files.
+- Add concise WHAT/WHY comments for complex functions, structs, methods, and important control-flow joins.
+- Comments should explain behavior and rationale, not restate syntax.
+- Use comments to clarify unusual code, subtle bug fixes, invariants, dataflow direction, and failure conditions.
+- Use grammatical, readable comments.
 
-### Comments:
-Stick to concise and brief descriptions. Add doc comments at the top of new files.
-Always add short comments of WHAT something does and WHY it is done that way across new code to make it easy to read and understandable for people seeing the code for the first time.
-
-Good places to add comments: 
-- Short summaries before important / complex functions and control flow
-- Labelling parts of the control flow (branches) to clarify what each branch is doing
-- TODOs for unimplemented features or guards for unimplemented features
-- Comments referencing an unusual or unclear bit of code and why it is written the way it is. Particularly when something has been changed to fix a subtle bug.
-
-**Comment Quality Gate**
-- New or changed complex logic includes concise WHAT/WHY comments on functions, structs, methods or critical control-flow joins.
-- Comments explain behavior and rationale (invariants, dataflow direction, failure conditions), not just syntax.
-
-### Returning Errors
-The error system is built around three core types:
-- **`CompilerError`**: The unified error type with owned data and structured metadata
-- **`ErrorLocation`**: Owned location information without string interning dependencies
-- **`ErrorMetaDataKey`**: Structured metadata keys for intelligent error analysis
-
-CompilerError Best practices:
-- **Be Specific**: Include exact tokens, types or names in errors.
-- **Be Helpful**: Suggest corrections when possible, especially for borrow checker errors. Provide actionable messages with context
-- **User errors**: Use `return_syntax_error!`, `return_rule_error!`, or `return_type_error!`
-- **Compiler bugs**: Use `return_compiler_error!` (prefix added automatically)
-- Always include source location (ErrorLocation) for user errors
-- Use consistent error handling patterns across stages, use provided macros and methods inside `src/compiler_frontend/compiler_messages/compiler_errors.rs` to do this cleanly and consistently. 
-- Each macro can support multiple variations, but sometimes using CompilerError methods directly will be more concise and clear for advanced error handling
-- Return a CompilerMessages Err result when a mix of warnings and/or multiple errors can be created at once. Use a single CompilerError when only one error without warnings could be returned.
-- Add warnings to the output when it is appropriate to warn rather than error. See `src/compiler_frontend/compiler_messages/compiler_warnings.rs`.
-
-Every error as an associated type which informs the error output formatter how to display it and what data to expect and display.
-``` rust
-pub enum ErrorType {
-    Syntax,
-    Type,
-    Rule,
-    File,
-    Config,
-    Compiler,
-    DevServer,
-    BorrowChecker,
-    HirTransformation,
-    LirTransformation,
-    WasmGeneration,
-}
+Good:
+```rust
+// Builds the AST for the current module before name resolution.
 ```
 
+Bad:
 ```rust
-// Good: User made a syntax error with metadata
+// Build AST
+```
+
+### Warnings and Lints
+- Use `clippy`.
+- Use the default Rust formatter.
+- Keep unused variables and dead code to a minimum.
+- Use `#[allow(dead_code)]` sparingly and only with clear justification. Dead code must have a comment with it stating this is a todo, used only in tests or another valid justification.
+
+## Returning Errors
+
+The compiler error system is based on:
+- `CompilerError` for structured owned errors
+- `ErrorLocation` for source locations
+- `ErrorMetaDataKey` for structured metadata
+
+Rules:
+- Be specific. Include exact tokens, types, or names.
+- Be helpful. Suggest corrections when practical.
+- Use stage-appropriate `return_*_error!` macros for user-facing errors.
+- Use `return_compiler_error!` only for internal compiler bugs or broken invariants.
+- Always include an `ErrorLocation` for user errors.
+- Use the shared error helpers in `src/compiler_frontend/compiler_messages/compiler_errors.rs` for consistency.
+- Return `CompilerMessages` when producing multiple warnings and/or errors together.
+- Return a single `CompilerError` when only one error without warnings is needed.
+- Emit warnings when warning-level behavior is more appropriate than failure. See `src/compiler_frontend/compiler_messages/compiler_warnings.rs`.
+
+Error categories include:
+`Syntax`, `Type`, `Rule`, `File`, `Config`, `Compiler`, `DevServer`, `BorrowChecker`, `HirTransformation`, `LirTransformation`, and `WasmGeneration`.
+
+Examples:
+```rust
 return_syntax_error!(
     "Expected ';' after statement",
     location, {
@@ -145,96 +125,73 @@ return_syntax_error!(
         PrimarySuggestion => "Add a semicolon at the end of the statement"
     }
 );
+```
 
-// Bad: Using compiler_frontend error for user mistakes
-return_compiler_error!("User provided invalid variable name"); // Should be rule_error!
-
-// Instead, Use for: Internal compiler_frontend bugs and unimplemented features
-// Examples: Unsupported AST nodes, internal state corruption
-// User-facing: No - indicates the compiler_frontend developer needs to fix
-// Note: Automatically prefixed with "COMPILER BUG" in output
-// No location required: These are internal errors
+```rust
 return_compiler_error!(
     "Unsupported AST node type: {:?}",
     node_type; {
         CompilationStage => "AST Processing",
-        PrimarySuggestion => "This is a compiler_frontend bug - please report it"
+        PrimarySuggestion => "This is a compiler bug - please report it"
     }
 );
-
-// Bad: Using rule error for unimplemented features  
-return_rule_error!(location, "Match expressions not supported"); // Should be hir_transformation_error!
 ```
 
 ## Development Commands and Feature Flags
 
 ```bash
-# Compile and build a single file
 cargo run -- build test.bst
-
-# Compile and run with debugging output
 cargo run --features "show_ast,show_hir,detailed_timers" -- build test.bst
-
-# Run integration test suite
 cargo run -- tests
-
-# Run a specific canonical test case entry
 cargo run -- build tests/cases/basic_print_statement/input/main.bst
 ```
 
-**Compilation Pipeline Debugging**:
-- `show_tokens` - Display tokenization output
-- `show_headers` - Display parsed headers and dependencies
-- `show_ast` - Display generated Abstract Syntax Tree
-- `show_hir` - Display High level IR
+Useful debug flags:
+- `show_tokens`
+- `show_headers`
+- `show_ast`
+- `show_hir`
+- `detailed_timers`
 
-**Performance Analysis**:
-- `detailed_timers` - Show timing for each compilation stage
-
-See the Cargo.toml for all feature flags.
+See `Cargo.toml` for the full feature set.
 
 ## Testing Workflow
-The primary goal is to get the language working end-to-end. Focus on real-world usage patterns and language features.
+
+The primary goal is end-to-end language correctness. Prefer real usage patterns and full language snippets over narrow isolated tests.
 
 ### Unit Testing
-Tests should NEVER be kept in the same files as actual code.
-
-Otherwise, tests specific to a module should go inside their own folder inside that module's directory. 
-For example, Hir tests should go inside `src/compiler_frontend/hir/tests/`.
-
-End-to-end tests, or tests that use many modules at once should be kept in `src/compiler_tests/`.
-
-Once a system is working as expected, old unit tests should be pruned to reduce gradual unit test bloat.
-Rewriting unit tests is preferable to leaving them in the codebase. 
-Integration tests with actual language snippets should always be preferred.
+- Do not keep tests in the same files as production code.
+- Module-specific tests should live in that module’s test directory, for example `src/compiler_frontend/hir/tests/`.
+- End-to-end or multi-module tests should live in `src/compiler_tests/`.
+- Once a subsystem is stable, prune outdated unit tests to avoid long-term test bloat.
+- Rewriting tests is preferable to carrying obsolete ones forward.
+- Prefer integration tests whenever possible.
 
 ### Integration Testing
-Integration tests are the main way to check new features or refactors still work.
-They run actual snippets of Beanstalk code.
+Integration tests are the main regression check for new features and refactors.
 
-Using `cargo run tests` starts the test runner inside src/compiler_tests and automatically run all the integration tests.
-This will provide a percentage pass rate for both expected and unexpected failures.
+- `cargo run tests` runs the integration test runner in `src/compiler_tests`.
+- Tests should use real Beanstalk snippets.
+- Canonical cases should be self-contained directories representing one scenario each.
+- Multi-file fixtures should remain inside one case folder so helpers are not treated as standalone tests.
+- Failure cases should assert the intended `ErrorType` and, where practical, message fragments proving the correct failure reason.
 
 **Test Case Structure** (`tests/cases/`):
-```
+```text
 tests/cases/
-├── manifest.toml                 # Optional explicit ordering / tags
+├── manifest.toml
 └── case_name/
     ├── input/
-    │   ├── main.bst              # Entry file or fixture root
-    │   └── helper.bst            # Additional source files for the same case
-    ├── expect.toml               # Required outcome contract
+    │   ├── main.bst
+    │   └── helper.bst
+    ├── expect.toml
     └── golden/
-        ├── html/                 # Backend golden assertions (html)
-        └── html_wasm/            # Backend-matrix golden assertions (html_wasm)
+        ├── html/
+        └── html_wasm/
 ```
 
-Canonical integration cases should be self-contained directories that describe one scenario each.
-Multi-file fixtures should stay inside a single case folder so helper files are not counted as standalone tests.
-Failure cases should assert the intended `ErrorType` and, when practical, message fragments that prove the compiler failed for the right reason.
-
-**Backend Matrix Expectations**:
-- Use a single `expect.toml` with one input fixture and backend-specific assertion blocks:
+### Backend Matrix Expectations
+Use one `expect.toml` per case with backend-specific assertion blocks.
 
 ```toml
 entry = "."
@@ -254,4 +211,4 @@ validate_wasm = true
 must_export = ["memory", "bst_str_ptr", "bst_str_len", "bst_release"]
 ```
 
-- Matrix-mode goldens should be stored in `golden/<backend>/...` so the same input fixture can assert different backend outputs.
+Store matrix-mode goldens in `golden/<backend>/...` so one input fixture can assert different backend outputs.
