@@ -10,7 +10,6 @@ use crate::compiler_frontend::analysis::borrow_checker::BorrowCheckReport;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::hir::hir_nodes::{FunctionId, HirModule, StartFragment};
 use crate::compiler_frontend::string_interning::StringTable;
-use crate::projects::routing::HtmlSiteConfig;
 use std::collections::HashMap;
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
@@ -33,13 +32,8 @@ pub(crate) fn compile_html_module_js(
     string_table: &StringTable,
     output_path: PathBuf,
     release_build: bool,
-    _config: &HtmlSiteConfig,
 ) -> Result<OutputFile, CompilerError> {
-    let js_lowering_config = JsLoweringConfig {
-        pretty: !release_build,
-        emit_locations: false,
-        auto_invoke_start: false,
-    };
+    let js_lowering_config = JsLoweringConfig::standard_html(release_build);
 
     let js_module = lower_hir_to_js(
         hir_module,
@@ -149,74 +143,13 @@ pub(crate) fn render_html_document(
     Ok(html)
 }
 
+/// Derive the logical HTML output path for this entry file.
+///
+/// Delegates to the canonical output planner so JS-only and Wasm paths agree on route derivation.
 pub(crate) fn html_output_path(
     entry_point: &Path,
     entry_root: Option<&Path>,
 ) -> Result<PathBuf, CompilerError> {
-    // Directory builds use entry-root-relative routes; single-file builds keep legacy naming.
-    if let Some(entry_root) = entry_root {
-        return html_output_path_from_entry_root(entry_point, entry_root);
-    }
-
-    let file_stem = entry_point
-        .file_stem()
-        .and_then(|stem| stem.to_str())
-        .filter(|stem| !stem.is_empty())
-        .unwrap_or("main");
-
-    if file_stem == "#page" {
-        Ok(PathBuf::from("index.html"))
-    } else {
-        let route_name = file_stem.strip_prefix('#').unwrap_or(file_stem);
-        Ok(PathBuf::from(format!("{route_name}.html")))
-    }
-}
-
-fn html_output_path_from_entry_root(
-    entry_point: &Path,
-    entry_root: &Path,
-) -> Result<PathBuf, CompilerError> {
-    // Route derivation remains deterministic so module discovery order never affects outputs.
-    let relative_entry = entry_point.strip_prefix(entry_root).map_err(|_| {
-        CompilerError::file_error(
-            entry_point,
-            format!(
-                "HTML entry '{}' is not inside the configured entry root '{}'.",
-                entry_point.display(),
-                entry_root.display(),
-            ),
-        )
-    })?;
-    let file_stem = relative_entry
-        .file_stem()
-        .and_then(|stem| stem.to_str())
-        .filter(|stem| !stem.is_empty())
-        .ok_or_else(|| {
-            CompilerError::file_error(
-                entry_point,
-                format!(
-                    "HTML entry '{}' is missing a valid file stem.",
-                    entry_point.display(),
-                ),
-            )
-        })?;
-    let parent = relative_entry.parent().unwrap_or_else(|| Path::new(""));
-
-    if file_stem == "#page" {
-        if parent.as_os_str().is_empty() {
-            return Ok(PathBuf::from("index.html"));
-        }
-
-        return Ok(parent.join("index.html"));
-    }
-
-    let route_name = file_stem.strip_prefix('#').unwrap_or(file_stem);
-    // Directory projects emit folder-backed page routes by default so dev/prod routing semantics
-    // match and every page has one canonical `.../index.html` backing file.
-    let route_base = if parent.as_os_str().is_empty() {
-        PathBuf::from(route_name)
-    } else {
-        parent.join(route_name)
-    };
-    Ok(route_base.join("index.html"))
+    use crate::projects::html_project::output_plan::derive_logical_html_path;
+    derive_logical_html_path(entry_point, entry_root)
 }

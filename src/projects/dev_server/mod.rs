@@ -12,7 +12,7 @@ mod static_files;
 mod watch;
 
 use crate::build_system::build::{ProjectBuilder, resolve_project_output_root};
-use crate::build_system::create_project_modules::load_project_config;
+use crate::build_system::project_config::load_project_config;
 use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::basic_utility_functions::check_if_valid_path;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages, ErrorType};

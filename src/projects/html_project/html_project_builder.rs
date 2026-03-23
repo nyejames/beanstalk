@@ -36,96 +36,48 @@ impl BackendBuilder for HtmlProjectBuilder {
         config: &Config,
         flags: &[Flag],
     ) -> Result<Project, CompilerMessages> {
-        let html_site_config = match parse_html_site_config(config) {
-            Ok(config) => config,
-            Err(error) => return Err(compiler_messages_from_error(error)),
-        };
+        parse_html_site_config(config).map_err(CompilerMessages::from_error)?;
 
         if modules.is_empty() {
-            return Err(compiler_messages_from_error(CompilerError::compiler_error(
+            return Err(CompilerMessages::from_error(CompilerError::compiler_error(
                 "HTML builder expected at least one compiled module but got 0.",
             )));
         }
 
         let release_build = flags.contains(&Flag::Release);
         let wasm_enabled = flags.contains(&Flag::HtmlWasm);
-        let mut output_files = Vec::new();
-        let mut output_paths = HashSet::new();
         let is_directory_build = config.entry_dir.is_dir();
-        let resolved_entry_root = if is_directory_build {
-            Some(
-                fs::canonicalize(resolve_project_entry_root(config)).map_err(|error| {
-                    compiler_messages_from_error(CompilerError::file_error(
-                        &config.entry_dir,
-                        format!(
-                            "Failed to resolve configured HTML entry root '{}': {error}",
-                            resolve_project_entry_root(config).display()
-                        ),
-                    ))
-                })?,
-            )
-        } else {
-            None
-        };
+        let resolved_entry_root = resolve_canonical_entry_root(config, is_directory_build)?;
 
         let expected_homepage_entry = resolved_entry_root
             .as_ref()
             .map(|entry_root| entry_root.join("#page.bst"));
+
+        let mut output_files = Vec::new();
+        let mut output_paths = HashSet::new();
         let mut entry_page_rel = None;
         let mut has_directory_homepage = false;
 
         for module in modules {
             let logical_html_output_path =
-                match html_output_path(&module.entry_point, resolved_entry_root.as_deref()) {
-                    Ok(path) => path,
-                    Err(error) => return Err(compiler_messages_from_error(error)),
-                };
+                html_output_path(&module.entry_point, resolved_entry_root.as_deref())
+                    .map_err(CompilerMessages::from_error)?;
 
-            let compiled_artifacts = if wasm_enabled {
-                let compiled_wasm = compile_html_module_wasm(
-                    &module.hir,
-                    &module.borrow_analysis,
-                    &module.string_table,
-                    &logical_html_output_path,
-                    release_build,
-                    &html_site_config,
-                )?;
-                CompiledHtmlModuleArtifacts::from_wasm(compiled_wasm)
-            } else {
-                let output_file = compile_html_module_js(
-                    &module.hir,
-                    &module.borrow_analysis,
-                    &module.string_table,
-                    logical_html_output_path.clone(),
-                    release_build,
-                    &html_site_config,
-                )
-                .map_err(compiler_messages_from_error)?;
-
-                CompiledHtmlModuleArtifacts::from_js(logical_html_output_path, output_file)
-            };
+            let compiled_artifacts = compile_one_module(
+                &module,
+                &logical_html_output_path,
+                release_build,
+                wasm_enabled,
+            )?;
 
             for output_file in compiled_artifacts.output_files {
                 let output_path = output_file.relative_output_path().to_path_buf();
                 if !output_paths.insert(output_path.clone()) {
-                    let mut error = CompilerError::file_error(
+                    return Err(duplicate_output_path_error(
                         &module.entry_point,
-                        format!(
-                            "HTML builder produced duplicate output path '{}'. Ensure each '#*.bst' entry maps to a unique page output.",
-                            output_path.display(),
-                        ),
-                    )
-                    .with_error_type(ErrorType::Config);
-                    error.metadata.insert(
-                        crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
-                        "Check your page routing configuration to ensure unique output paths".to_string()
-                    );
-                    return Err(CompilerMessages {
-                        errors: vec![error],
-                        warnings: Vec::new(),
-                    });
+                        &output_path,
+                    ));
                 }
-
                 output_files.push(output_file);
             }
 
@@ -140,25 +92,10 @@ impl BackendBuilder for HtmlProjectBuilder {
         }
 
         if is_directory_build && !has_directory_homepage {
-            let entry_root = resolved_entry_root
-                .as_deref()
-                .unwrap_or_else(|| Path::new("."));
-            let mut error = CompilerError::file_error(
-                &config.entry_dir,
-                format!(
-                    "HTML project builds require a '#page.bst' homepage at the root of the configured entry root '{}'.",
-                    entry_root.display(),
-                ),
-            )
-            .with_error_type(ErrorType::Config);
-            error.metadata.insert(
-                crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
-                format!("Create a '#page.bst' file in '{}'", entry_root.display()),
-            );
-            return Err(CompilerMessages {
-                errors: vec![error],
-                warnings: Vec::new(),
-            });
+            return Err(missing_homepage_error(
+                config,
+                resolved_entry_root.as_deref(),
+            ));
         }
 
         Ok(Project {
@@ -176,6 +113,94 @@ impl BackendBuilder for HtmlProjectBuilder {
         // Empty dev/release folders are allowed and resolved by core build output logic.
         Ok(())
     }
+}
+
+/// Resolve and canonicalize the entry root for directory builds.
+///
+/// Returns `None` for single-file builds; `Some(canonical_path)` for directory builds.
+fn resolve_canonical_entry_root(
+    config: &Config,
+    is_directory_build: bool,
+) -> Result<Option<PathBuf>, CompilerMessages> {
+    if !is_directory_build {
+        return Ok(None);
+    }
+    let entry_root_path = resolve_project_entry_root(config);
+    let canonical = fs::canonicalize(&entry_root_path).map_err(|error| {
+        CompilerMessages::from_error(CompilerError::file_error(
+            &config.entry_dir,
+            format!(
+                "Failed to resolve configured HTML entry root '{}': {error}",
+                entry_root_path.display()
+            ),
+        ))
+    })?;
+    Ok(Some(canonical))
+}
+
+/// Compile one module through the appropriate builder path (JS-only or HTML+Wasm).
+fn compile_one_module(
+    module: &Module,
+    logical_html_output_path: &PathBuf,
+    release_build: bool,
+    wasm_enabled: bool,
+) -> Result<CompiledHtmlModuleArtifacts, CompilerMessages> {
+    if wasm_enabled {
+        let compiled_wasm = compile_html_module_wasm(
+            &module.hir,
+            &module.borrow_analysis,
+            &module.string_table,
+            logical_html_output_path,
+            release_build,
+        )?;
+        Ok(CompiledHtmlModuleArtifacts::from_wasm(compiled_wasm))
+    } else {
+        let output_file = compile_html_module_js(
+            &module.hir,
+            &module.borrow_analysis,
+            &module.string_table,
+            logical_html_output_path.clone(),
+            release_build,
+        )
+        .map_err(CompilerMessages::from_error)?;
+        Ok(CompiledHtmlModuleArtifacts::from_js(
+            logical_html_output_path.clone(),
+            output_file,
+        ))
+    }
+}
+
+fn duplicate_output_path_error(entry_point: &Path, output_path: &Path) -> CompilerMessages {
+    let mut error = CompilerError::file_error(
+        entry_point,
+        format!(
+            "HTML builder produced duplicate output path '{}'. Ensure each '#*.bst' entry maps to a unique page output.",
+            output_path.display(),
+        ),
+    )
+    .with_error_type(ErrorType::Config);
+    error.metadata.insert(
+        crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
+        "Check your page routing configuration to ensure unique output paths".to_string(),
+    );
+    CompilerMessages::from_error(error)
+}
+
+fn missing_homepage_error(config: &Config, resolved_entry_root: Option<&Path>) -> CompilerMessages {
+    let entry_root = resolved_entry_root.unwrap_or_else(|| Path::new("."));
+    let mut error = CompilerError::file_error(
+        &config.entry_dir,
+        format!(
+            "HTML project builds require a '#page.bst' homepage at the root of the configured entry root '{}'.",
+            entry_root.display(),
+        ),
+    )
+    .with_error_type(ErrorType::Config);
+    error.metadata.insert(
+        crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
+        format!("Create a '#page.bst' file in '{}'", entry_root.display()),
+    );
+    CompilerMessages::from_error(error)
 }
 
 struct CompiledHtmlModuleArtifacts {
@@ -202,66 +227,6 @@ impl CompiledHtmlModuleArtifacts {
         Self {
             output_files: compiled_wasm.output_files,
             html_output_path: compiled_wasm.html_output_path,
-        }
-    }
-}
-
-fn compiler_messages_from_error(error: CompilerError) -> CompilerMessages {
-    // Normalize single builder errors into the compiler message container.
-    CompilerMessages {
-        errors: vec![error],
-        warnings: Vec::new(),
-    }
-}
-
-#[allow(dead_code)] // todo
-#[derive(Clone)]
-pub struct HTMLMeta {
-    pub site_title: String,
-    pub page_description: String,
-    pub site_url: String,
-    pub page_url: String,
-    pub page_og_title: String,
-    pub page_og_description: String,
-    pub page_image_url: String,
-    pub page_image_alt: String,
-    pub page_locale: String,
-    pub page_type: String,
-    pub page_twitter_large_image: String,
-    pub page_canonical_url: String,
-    pub page_root_url: String,
-    pub origin: String,
-    pub image_folder_url: String,
-    pub favicons_folder_url: String,
-    pub theme_color_light: String,
-    pub theme_color_dark: String,
-    pub auto_site_title: bool,
-    pub release_build: bool,
-}
-
-impl Default for HTMLMeta {
-    fn default() -> Self {
-        HTMLMeta {
-            site_title: String::from("Website Title"),
-            page_description: String::from("Website Description"),
-            site_url: String::from("localhost:6969"),
-            page_url: String::from(""),
-            page_og_title: String::from(""),
-            page_og_description: String::from(""),
-            page_image_url: String::from(""),
-            page_image_alt: String::from(""),
-            page_locale: String::from("en_US"),
-            page_type: String::from("website"),
-            page_twitter_large_image: String::from(""),
-            page_canonical_url: String::from(""),
-            page_root_url: String::from("./"),
-            origin: String::from("/"),
-            image_folder_url: String::from("images"),
-            favicons_folder_url: String::from("images/favicons"),
-            theme_color_light: String::from("#fafafa"),
-            theme_color_dark: String::from("#101010"),
-            auto_site_title: true,
-            release_build: false,
         }
     }
 }

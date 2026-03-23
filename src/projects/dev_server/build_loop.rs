@@ -5,7 +5,7 @@
 use crate::build_system::build::{self, BuildResult, ProjectBuilder, WriteOptions};
 use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::compiler_errors::{
-    CompilerError, CompilerMessages, ErrorMetaDataKey, ErrorType, error_type_to_str,
+    CompilerError, CompilerMessages, ErrorType,
 };
 use crate::projects::dev_server::error_page::{
     format_compiler_messages, render_compiler_error_page, render_runtime_error_page,
@@ -380,25 +380,6 @@ pub fn dev_server_error_messages(path: &Path, msg: impl Into<String>) -> Compile
         errors: vec![error],
         warnings: Vec::new(),
     }
-}
-
-#[allow(dead_code)] // Used only in tests
-pub fn format_error_messages(messages: &CompilerMessages) -> String {
-    let mut formatted = String::new();
-    for error in &messages.errors {
-        let line = format!("[{}] {}\n", error_type_to_str(&error.error_type), error.msg);
-        formatted.push_str(&line);
-        if let Some(stage) = error.metadata.get(&ErrorMetaDataKey::CompilationStage) {
-            formatted.push_str(&format!("  stage: {stage}\n"));
-        }
-        if let Some(help) = error.metadata.get(&ErrorMetaDataKey::PrimarySuggestion) {
-            formatted.push_str(&format!("  help: {help}\n"));
-        }
-        if let Some(alternative) = error.metadata.get(&ErrorMetaDataKey::AlternativeSuggestion) {
-            formatted.push_str(&format!("  alternative: {alternative}\n"));
-        }
-    }
-    formatted
 }
 
 #[cfg(test)]

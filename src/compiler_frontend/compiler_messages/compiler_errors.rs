@@ -165,6 +165,18 @@ impl CompilerMessages {
     pub fn has_errors(&self) -> bool {
         !self.errors.is_empty()
     }
+
+    /// Wrap a single `CompilerError` into a `CompilerMessages` container with no warnings.
+    ///
+    /// WHY: Several build/backend modules need to convert a `CompilerError` into the richer
+    /// `CompilerMessages` type at a boundary. Centralising this avoids repeated inline struct
+    /// literals scattered across callers.
+    pub fn from_error(error: CompilerError) -> Self {
+        CompilerMessages {
+            errors: vec![error],
+            warnings: Vec::new(),
+        }
+    }
 }
 
 #[derive(Debug, Eq, Hash, PartialEq, Clone)]
