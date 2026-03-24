@@ -4,8 +4,8 @@ use crate::compiler_frontend::ast::statements::declaration_syntax::{
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::{CompilerWarning, WarningKind};
-use crate::compiler_frontend::identity::FileId;
 use crate::compiler_frontend::host_functions::HostRegistry;
+use crate::compiler_frontend::identity::FileId;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::paths::parse_import_clause_tokens;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
@@ -961,8 +961,7 @@ fn create_top_level_const_template(
         end_pos: token_stream.current_location().end_pos,
     };
 
-    let mut template_tokens =
-        FileTokens::new_with_file_id(full_name, token_stream.file_id, body);
+    let mut template_tokens = FileTokens::new_with_file_id(full_name, token_stream.file_id, body);
     template_tokens.canonical_os_path = token_stream.canonical_os_path.clone();
 
     Ok(Header {

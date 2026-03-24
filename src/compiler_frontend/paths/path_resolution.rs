@@ -123,7 +123,8 @@ impl ProjectPathResolver {
         for root_folder_name in sorted_root_folders {
             let root_folder_path = self.project_root.join(root_folder_name);
             if canonical_file.starts_with(&root_folder_path) {
-                if let Ok(relative_to_project_root) = canonical_file.strip_prefix(&self.project_root)
+                if let Ok(relative_to_project_root) =
+                    canonical_file.strip_prefix(&self.project_root)
                 {
                     return Ok(relative_to_project_root.to_path_buf());
                 }
@@ -397,7 +398,6 @@ impl ProjectPathResolver {
 
         Ok(())
     }
-
 }
 
 /// WHAT: resolves the directory configured as the project entry root.
@@ -542,6 +542,8 @@ fn build_public_path(
     base_kind: &CompileTimePathBase,
     string_table: &StringTable,
 ) -> InternedPath {
+    // An empty source/public path under a rooted base represents the Beanstalk
+    // public-root literal (`@/`). This is site-root semantics, not OS-root semantics.
     match base_kind {
         // Relative paths keep their original form as the public path.
         CompileTimePathBase::RelativeToFile => source_path.clone(),

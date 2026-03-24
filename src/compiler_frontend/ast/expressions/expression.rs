@@ -48,8 +48,13 @@ impl Expression {
             ExpressionKind::Bool(bool) => bool.to_string(),
             ExpressionKind::Char(char) => char.to_string(),
             ExpressionKind::Path(ct_paths) => {
-                // Basic public path string without origin – full formatting
-                // goes through the path formatter abstraction.
+                // WHAT: This returns a bare public-path view without origin.
+                // WHY: It is an intermediate representation only (diagnostics/debug/folding
+                // contexts that have not crossed the runtime/public formatting boundary).
+                // Final runtime/public path strings must go through the shared path formatter
+                // (`format_compile_time_path(s)`), where leading `/`, trailing `/`, and
+                // `#origin` are applied exactly once. Do not re-prefix origin onto strings
+                // that may already be formatted, or origin components can stack.
                 ct_paths
                     .paths
                     .iter()

@@ -261,4 +261,3 @@ fn determine_entry_block(function: &WasmLirFunction) -> Result<WasmLirBlockId, C
     ))
     .with_error_type(ErrorType::WasmGeneration))
 }
-

@@ -41,10 +41,10 @@ use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::headers::parse_file_headers::{
     Header, Headers, TopLevelTemplateItem, parse_headers_with_path_resolver,
 };
-use crate::compiler_frontend::identity::SourceFileTable;
 use crate::compiler_frontend::hir::hir_builder::lower_module;
 use crate::compiler_frontend::hir::hir_nodes::HirModule;
 use crate::compiler_frontend::host_functions::HostRegistry;
+use crate::compiler_frontend::identity::SourceFileTable;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::module_dependencies::resolve_module_dependencies;
 use crate::compiler_frontend::paths::path_format::{OutputPathStyle, PathStringFormatConfig};
@@ -130,19 +130,21 @@ impl CompilerFrontend {
         module_path: &PathBuf,
         tokenizer_mode: TokenizeMode,
     ) -> Result<FileTokens, CompilerError> {
-        let (logical_path, file_id, canonical_os_path) =
-            match self.source_files.get_by_canonical_path(module_path.as_path()) {
-                Some(identity) => (
-                    identity.logical_path.to_owned(),
-                    Some(identity.file_id),
-                    Some(identity.canonical_os_path.clone()),
-                ),
-                None => (
-                    InternedPath::from_path_buf(module_path, &mut self.string_table),
-                    None,
-                    Some(module_path.to_owned()),
-                ),
-            };
+        let (logical_path, file_id, canonical_os_path) = match self
+            .source_files
+            .get_by_canonical_path(module_path.as_path())
+        {
+            Some(identity) => (
+                identity.logical_path.to_owned(),
+                Some(identity.file_id),
+                Some(identity.canonical_os_path.clone()),
+            ),
+            None => (
+                InternedPath::from_path_buf(module_path, &mut self.string_table),
+                None,
+                Some(module_path.to_owned()),
+            ),
+        };
 
         match tokenize_with_file_id(
             source_code,
@@ -224,7 +226,9 @@ impl CompilerFrontend {
             .source_files
             .get_by_canonical_path(entry_file_path)
             .map(|identity| identity.logical_path.to_owned())
-            .unwrap_or_else(|| InternedPath::from_path_buf(entry_file_path, &mut self.string_table));
+            .unwrap_or_else(|| {
+                InternedPath::from_path_buf(entry_file_path, &mut self.string_table)
+            });
 
         Ast::new(
             headers,

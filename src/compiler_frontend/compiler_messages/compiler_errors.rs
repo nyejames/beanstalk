@@ -395,7 +395,6 @@ impl CompilerError {
             metadata,
         }
     }
-
 }
 
 // Adds more information to the CompileError

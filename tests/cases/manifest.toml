@@ -74,6 +74,16 @@ path = "path_directory_trailing_slash"
 tags = ["success", "paths"]
 
 [[case]]
+id = "path_public_root_default_origin"
+path = "path_public_root_default_origin"
+tags = ["success", "paths"]
+
+[[case]]
+id = "path_public_root_custom_origin"
+path = "path_public_root_custom_origin"
+tags = ["success", "paths", "config"]
+
+[[case]]
 id = "path_bst_template_warning"
 path = "path_bst_template_warning"
 tags = ["success", "paths", "diagnostics"]

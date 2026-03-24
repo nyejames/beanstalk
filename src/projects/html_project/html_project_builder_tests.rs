@@ -32,7 +32,6 @@ fn temp_dir(prefix: &str) -> PathBuf {
     std::env::temp_dir().join(format!("beanstalk_html_builder_{prefix}_{unique}"))
 }
 
-
 fn create_test_hir_module() -> HirModule {
     let mut module = HirModule::new();
     let mut type_context = TypeContext::default();

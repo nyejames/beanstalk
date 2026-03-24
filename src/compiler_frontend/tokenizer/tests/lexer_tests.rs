@@ -347,10 +347,8 @@ fn html_template_body_tokenizes_attribute_brackets_using_normal_rules() {
         "expected nested template symbol 'two' from bracket content"
     );
 
-    let preserves_literal_attribute_brackets = file_tokens
-        .tokens
-        .iter()
-        .any(|token| match token.kind {
+    let preserves_literal_attribute_brackets =
+        file_tokens.tokens.iter().any(|token| match token.kind {
             TokenKind::StringSliceLiteral(id) => {
                 let value = string_table.resolve(id);
                 value.contains("data-tags=\"[one,two]\"")

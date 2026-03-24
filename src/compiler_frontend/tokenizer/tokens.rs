@@ -413,7 +413,6 @@ impl<'a> TokenStream<'a> {
         current_mode.body_closed_square_brackets.saturating_add(1)
             == current_mode.body_open_square_brackets
     }
-
 }
 
 #[derive(PartialEq, Debug, Clone)]

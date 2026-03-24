@@ -52,7 +52,6 @@ impl Ownership {
             _ => self.to_owned(),
         }
     }
-
 }
 
 #[derive(Debug, Clone)]
@@ -422,4 +421,3 @@ impl Display for DataType {
         }
     }
 }
-

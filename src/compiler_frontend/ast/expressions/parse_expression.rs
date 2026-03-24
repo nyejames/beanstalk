@@ -1198,4 +1198,3 @@ pub(crate) fn create_expression_until(
     token_stream.index = end_index;
     Ok(expression)
 }
-

@@ -5,6 +5,15 @@ use crate::compiler_frontend::tokenizer::tokenizer::tokenize;
 use crate::compiler_frontend::tokenizer::tokens::TokenizeMode;
 
 fn first_path_token_values(source: &str) -> Vec<String> {
+    let (paths, string_table) = first_path_token(source);
+
+    paths
+        .iter()
+        .map(|path| path.to_portable_string(&string_table))
+        .collect()
+}
+
+fn first_path_token(source: &str) -> (Vec<InternedPath>, StringTable) {
     let mut string_table = StringTable::new();
     let style_directives = StyleDirectiveRegistry::built_ins();
     let source_path = InternedPath::from_single_str("test.bst", &mut string_table);
@@ -17,21 +26,18 @@ fn first_path_token_values(source: &str) -> Vec<String> {
     )
     .expect("tokenization should succeed");
 
-    file_tokens
+    let paths = file_tokens
         .tokens
         .iter()
         .find_map(|token| {
             let TokenKind::Path(paths) = &token.kind else {
                 return None;
             };
-            Some(
-                paths
-                    .iter()
-                    .map(|path| path.to_portable_string(&string_table))
-                    .collect::<Vec<_>>(),
-            )
+            Some(paths.to_owned())
         })
-        .expect("expected at least one path token")
+        .expect("expected at least one path token");
+
+    (paths, string_table)
 }
 
 fn collect_import_path_values(source: &str) -> Vec<String> {
@@ -58,6 +64,107 @@ fn collect_import_path_values(source: &str) -> Vec<String> {
 fn parse_file_path_preserves_final_segment() {
     let paths = first_path_token_values("import @a/b/c\n");
     assert_eq!(paths, vec!["a/b/c".to_string()]);
+}
+
+#[test]
+fn parse_file_path_accepts_exact_public_root_literal() {
+    let (paths, string_table) = first_path_token("import @/\n");
+    assert_eq!(paths.len(), 1);
+    assert!(paths[0].as_components().is_empty());
+    assert_eq!(paths[0].to_portable_string(&string_table), "");
+}
+
+#[test]
+fn parse_file_path_rejects_bare_at_symbol() {
+    let mut string_table = StringTable::new();
+    let style_directives = StyleDirectiveRegistry::built_ins();
+    let source_path = InternedPath::from_single_str("test.bst", &mut string_table);
+
+    let result = tokenize(
+        "import @\n",
+        &source_path,
+        TokenizeMode::Normal,
+        &style_directives,
+        &mut string_table,
+    );
+
+    assert!(result.is_err(), "bare '@' should fail");
+    let error = result.expect_err("expected tokenizer error");
+    assert!(error.msg.contains("Path cannot be empty"));
+}
+
+#[test]
+fn parse_file_path_rejects_public_root_with_suffix() {
+    let mut string_table = StringTable::new();
+    let style_directives = StyleDirectiveRegistry::built_ins();
+    let source_path = InternedPath::from_single_str("test.bst", &mut string_table);
+
+    let result = tokenize(
+        "import @/foo\n",
+        &source_path,
+        TokenizeMode::Normal,
+        &style_directives,
+        &mut string_table,
+    );
+
+    assert!(result.is_err(), "'@/foo' should fail");
+    let error = result.expect_err("expected tokenizer error");
+    assert!(error.msg.contains("Only exact \"@/\" is supported"));
+}
+
+#[test]
+fn parse_file_path_rejects_public_root_grouped_expansion() {
+    let mut string_table = StringTable::new();
+    let style_directives = StyleDirectiveRegistry::built_ins();
+    let source_path = InternedPath::from_single_str("test.bst", &mut string_table);
+
+    let result = tokenize(
+        "import @/{a,b}\n",
+        &source_path,
+        TokenizeMode::Normal,
+        &style_directives,
+        &mut string_table,
+    );
+
+    assert!(result.is_err(), "'@/{{a,b}}' should fail");
+    let error = result.expect_err("expected tokenizer error");
+    assert!(error.msg.contains("Only exact \"@/\" is supported"));
+}
+
+#[test]
+fn parse_file_path_rejects_public_root_with_double_slash() {
+    let mut string_table = StringTable::new();
+    let style_directives = StyleDirectiveRegistry::built_ins();
+    let source_path = InternedPath::from_single_str("test.bst", &mut string_table);
+
+    let result = tokenize(
+        "import @//\n",
+        &source_path,
+        TokenizeMode::Normal,
+        &style_directives,
+        &mut string_table,
+    );
+
+    assert!(result.is_err(), "'@//' should fail");
+    let error = result.expect_err("expected tokenizer error");
+    assert!(error.msg.contains("Only exact \"@/\" is supported"));
+}
+
+#[test]
+fn parse_file_path_rejects_public_root_backslash_variant() {
+    let mut string_table = StringTable::new();
+    let style_directives = StyleDirectiveRegistry::built_ins();
+    let source_path = InternedPath::from_single_str("test.bst", &mut string_table);
+
+    let result = tokenize(
+        "import @\\\n",
+        &source_path,
+        TokenizeMode::Normal,
+        &style_directives,
+        &mut string_table,
+    );
+
+    assert!(result.is_err(), "'@\\' should fail");
 }
 
 #[test]

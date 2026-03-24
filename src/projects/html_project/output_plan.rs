@@ -196,5 +196,4 @@ mod tests {
         assert_eq!(plan.js_path, Some(PathBuf::from("about/page.js")));
         assert_eq!(plan.wasm_path, Some(PathBuf::from("about/page.wasm")));
     }
-
 }

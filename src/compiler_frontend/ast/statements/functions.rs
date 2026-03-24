@@ -40,7 +40,6 @@ impl FunctionReturn {
             } => Some(parameter_indices.as_slice()),
         }
     }
-
 }
 
 #[derive(Clone, Debug, Default)]

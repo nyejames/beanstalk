@@ -253,3 +253,20 @@ fn resolve_compile_time_paths_fails_if_any_path_missing() {
 
     assert!(err.msg.contains("does not exist"));
 }
+
+#[test]
+fn empty_path_resolves_as_entry_root_public_directory() {
+    let h = TestHarness::new(&["assets"]);
+    let path = InternedPath::new();
+    let importer = h.importer();
+
+    let result = h
+        .resolver
+        .resolve_compile_time_path(&path, &importer, &h.string_table)
+        .expect("empty path should resolve to entry root");
+
+    assert_eq!(result.base, CompileTimePathBase::EntryRoot);
+    assert_eq!(result.kind, CompileTimePathKind::Directory);
+    assert_eq!(result.filesystem_path, h.project_root.join("src"));
+    assert!(result.public_path.as_components().is_empty());
+}

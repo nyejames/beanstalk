@@ -97,7 +97,9 @@ fn render_public_path(
             portable
         }
         CompileTimePathBase::ProjectRootFolder | CompileTimePathBase::EntryRoot => {
-            // Non-relative paths become absolute site paths: "/assets/logo.png"
+            // Non-relative paths become absolute site paths: "/assets/logo.png".
+            // An empty public path here is the Beanstalk public-root literal (`@/`),
+            // which renders as "/" before origin is applied.
             if portable.starts_with('/') {
                 portable
             } else {
@@ -137,6 +139,9 @@ fn apply_origin(site_path: &str, origin: &str) -> String {
     if origin == "/" {
         return site_path.to_owned();
     }
+
+    // Origin is applied exactly once at the public formatting boundary.
+    // Callers must not prepend origin to already formatted path strings.
 
     // origin is like "/beanstalk", site_path is like "/assets/logo.png"
     // result: "/beanstalk/assets/logo.png"

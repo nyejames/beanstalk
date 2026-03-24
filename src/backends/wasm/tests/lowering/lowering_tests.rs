@@ -3,7 +3,9 @@ use crate::backends::wasm::hir_to_lir::context::lower_type_to_abi;
 use crate::backends::wasm::lir::function::WasmLirFunctionOrigin;
 use crate::backends::wasm::lir::instructions::{WasmCalleeRef, WasmLirStmt, WasmLirTerminator};
 use crate::backends::wasm::lir::linkage::{WasmExportKind, WasmFunctionLinkage};
-use crate::backends::wasm::lir::types::{WasmAbiType, WasmImportId, WasmLirFunctionId, WasmLirLocalId};
+use crate::backends::wasm::lir::types::{
+    WasmAbiType, WasmImportId, WasmLirFunctionId, WasmLirLocalId,
+};
 use crate::backends::wasm::request::{WasmBackendRequest, WasmDebugFlags, WasmExportPolicy};
 use crate::backends::wasm::tests::lowering::test_support::{
     bool_expression, borrow_facts_with_drop_site, build_module, build_type_context,
@@ -341,8 +343,13 @@ fn maps_advisory_drop_sites_to_drop_if_owned_statements() {
     let borrow_facts =
         borrow_facts_with_drop_site(BlockId(0), BorrowDropSiteKind::Return, vec![LocalId(0)]);
 
-    let result = lower_hir_to_wasm_lir(&module, &borrow_facts, &WasmBackendRequest::default(), &string_table)
-        .expect("Wasm lowering should succeed");
+    let result = lower_hir_to_wasm_lir(
+        &module,
+        &borrow_facts,
+        &WasmBackendRequest::default(),
+        &string_table,
+    )
+    .expect("Wasm lowering should succeed");
     let lowered_start = result
         .lir_module
         .functions
@@ -474,8 +481,13 @@ fn rejects_invalid_export_request_with_structured_diagnostic() {
         ..Default::default()
     };
 
-    let error = lower_hir_to_wasm_lir(&module, &default_borrow_facts(), &invalid_request, &string_table)
-        .expect_err("invalid request should produce a lowering diagnostic");
+    let error = lower_hir_to_wasm_lir(
+        &module,
+        &default_borrow_facts(),
+        &invalid_request,
+        &string_table,
+    )
+    .expect_err("invalid request should produce a lowering diagnostic");
     assert!(
         error.errors[0]
             .msg
@@ -745,7 +757,10 @@ fn lower_type_to_abi_maps_all_hir_types_correctly() {
 
     assert_eq!(lower_type_to_abi(&context, types.int), WasmAbiType::I64);
     assert_eq!(lower_type_to_abi(&context, types.boolean), WasmAbiType::I32);
-    assert_eq!(lower_type_to_abi(&context, types.string), WasmAbiType::Handle);
+    assert_eq!(
+        lower_type_to_abi(&context, types.string),
+        WasmAbiType::Handle
+    );
     assert_eq!(lower_type_to_abi(&context, types.unit), WasmAbiType::Void);
     assert_eq!(lower_type_to_abi(&context, float_id), WasmAbiType::F64);
     assert_eq!(lower_type_to_abi(&context, char_id), WasmAbiType::I32);

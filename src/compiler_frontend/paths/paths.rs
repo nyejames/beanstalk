@@ -63,6 +63,33 @@ pub fn parse_file_path(
 
     consume_non_newline_whitespace(stream);
 
+    // WHAT: Accept exact `@/` as the singleton public-root path literal.
+    // WHY: Site templates commonly need the public root itself, and the existing
+    // empty `InternedPath` representation models that case cleanly without
+    // expanding path grammar into a generic slash-prefixed family.
+    if stream.peek() == Some(&'/') {
+        stream.next();
+
+        match stream.peek().copied() {
+            None => return_token!(TokenKind::Path(vec![InternedPath::new()]), stream),
+            Some(next) => {
+                if let Some(stop_reason) = ordinary_stop_reason(stream.mode, next)
+                    && stop_reason != PathStopReason::GroupStart
+                {
+                    return_token!(TokenKind::Path(vec![InternedPath::new()]), stream);
+                }
+
+                return_syntax_error!(
+                    "Only exact \"@/\" is supported as the public root path. Use '@name/...' for rooted paths.",
+                    stream.new_location().to_error_location(string_table), {
+                        CompilationStage => "Tokenization",
+                        PrimarySuggestion => "Use exactly '@/' for the public root, or use '@name/...' for non-root paths",
+                    }
+                )
+            }
+        }
+    }
+
     let parsed_prefix = parse_path_prefix(stream, string_table)?;
 
     if parsed_prefix.components.is_empty() {

@@ -168,4 +168,3 @@ fn lower_place_local(
         )),
     }
 }
-

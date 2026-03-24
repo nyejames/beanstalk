@@ -366,7 +366,9 @@ struct StaticDataLayoutResult {
     heap_base: u32,
 }
 
-fn plan_static_data_layout(module: &WasmLirModule) -> Result<StaticDataLayoutResult, CompilerError> {
+fn plan_static_data_layout(
+    module: &WasmLirModule,
+) -> Result<StaticDataLayoutResult, CompilerError> {
     // WHAT: place static segments by stable `WasmStaticDataId`, aligned to 8 bytes.
     // WHY: deterministic layout keeps literal pointer tests reproducible and preserves
     // handle/pointer alignment assumptions for runtime helpers.

@@ -160,10 +160,7 @@ impl<'a, 'b> WasmFunctionLoweringContext<'a, 'b> {
     /// Returns true if the given LIR local has handle ABI type.
     /// WHY: handle-sensitive logic (drops, ownership) uses this to filter non-handle locals.
     pub(crate) fn is_handle_local(&self, local_id: WasmLirLocalId) -> bool {
-        self.local_type_by_id
-            .get(&local_id)
-            .copied()
-            == Some(WasmAbiType::Handle)
+        self.local_type_by_id.get(&local_id).copied() == Some(WasmAbiType::Handle)
     }
 }
 

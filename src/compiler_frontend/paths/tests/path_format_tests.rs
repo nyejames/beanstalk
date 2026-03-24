@@ -141,6 +141,37 @@ fn entry_root_file_with_origin() {
     );
 }
 
+#[test]
+fn entry_root_empty_directory_with_default_origin_formats_as_public_root() {
+    let mut st = StringTable::new();
+    let path = make_path(
+        &[],
+        CompileTimePathBase::EntryRoot,
+        CompileTimePathKind::Directory,
+        &mut st,
+    );
+    let config = PathStringFormatConfig::default();
+
+    assert_eq!(format_compile_time_path(&path, &config, &st), "/");
+}
+
+#[test]
+fn entry_root_empty_directory_with_custom_origin_formats_as_origin_root() {
+    let mut st = StringTable::new();
+    let path = make_path(
+        &[],
+        CompileTimePathBase::EntryRoot,
+        CompileTimePathKind::Directory,
+        &mut st,
+    );
+    let config = PathStringFormatConfig {
+        origin: String::from("/beanstalk"),
+        output_style: OutputPathStyle::Portable,
+    };
+
+    assert_eq!(format_compile_time_path(&path, &config, &st), "/beanstalk/");
+}
+
 // -----------------------------------------------------------------------
 // Multi-path formatting (`format_compile_time_paths`)
 // -----------------------------------------------------------------------
