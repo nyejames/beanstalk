@@ -127,6 +127,7 @@ impl DevBuildExecutor for FakeExecutor {
                     &build_result.project,
                     &WriteOptions {
                         output_root: output_dir.to_path_buf(),
+                        project_entry_dir: None,
                     },
                 )?;
                 Ok(build_result)

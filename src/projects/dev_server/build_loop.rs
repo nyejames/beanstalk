@@ -77,10 +77,17 @@ impl DevBuildExecutor for ProjectBuildExecutor {
         })?;
 
         let build_result = build::build_project(&self.builder, entry_path, flags)?;
+        let project_entry_dir = entry_file
+            .parent()
+            .filter(|parent| parent.is_dir())
+            .map(Path::to_path_buf)
+            .or_else(|| Some(entry_file.to_path_buf()))
+            .filter(|path| path.is_dir());
         build::write_project_outputs(
             &build_result.project,
             &WriteOptions {
                 output_root: output_dir.to_path_buf(),
+                project_entry_dir,
             },
         )?;
 
