@@ -1,1 +1,1 @@
-io("hello world")
+[@src: [@src]]

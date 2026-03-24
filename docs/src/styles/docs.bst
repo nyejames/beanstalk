@@ -59,7 +59,7 @@ import @lib/html {doc, format}
             "
         >
             <a
-                href="/beanstalk/docs"
+                href="[@docs]"
                 style="
                     color: light-dark(var(--bst-text-lightmode), var(--bst-text-darkmode));
                     text-decoration: none;

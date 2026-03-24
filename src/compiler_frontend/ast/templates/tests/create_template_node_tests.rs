@@ -329,31 +329,6 @@ fn parse_template_head_handles_truncated_stream_without_panicking() {
 }
 
 #[test]
-fn template_head_public_root_path_fallback_formats_default_origin() {
-    let rendered = folded_template_output("[@/]");
-    assert_eq!(rendered, "/");
-}
-
-#[test]
-fn template_head_public_root_path_fallback_formats_custom_origin() {
-    let mut string_table = StringTable::new();
-    let mut token_stream = template_tokens_from_source("[@/]", &mut string_table);
-    let context = ScopeContext::new_constant(token_stream.src_path.to_owned())
-        .with_path_format_config(PathStringFormatConfig {
-            origin: String::from("/beanstalk"),
-            output_style: OutputPathStyle::Portable,
-        });
-
-    let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
-        .expect("template should parse");
-    let folded = template
-        .fold_into_stringid(&None, &mut string_table)
-        .expect("folding should succeed");
-
-    assert_eq!(string_table.resolve(folded), "/beanstalk/");
-}
-
-#[test]
 fn single_item_template_head_with_close_is_foldable() {
     let mut string_table = StringTable::new();
     let scope = InternedPath::from_single_str("main.bst/#const_template0", &mut string_table);

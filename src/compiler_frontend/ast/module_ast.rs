@@ -590,9 +590,10 @@ pub struct ScopeContext {
     pub loop_depth: usize,
     pub build_profile: FrontendBuildProfile,
     pub(crate) emitted_warnings: Rc<RefCell<Vec<CompilerWarning>>>,
+    
     /// Project-aware path resolver for compile-time path validation.
-    /// `None` for single-file builds without a project context.
     pub(crate) project_path_resolver: Option<ProjectPathResolver>,
+    
     /// The real filesystem source file that this context originated from.
     /// For const templates, `scope` is a synthetic path like `#page.bst/#const_template0`,
     /// so this field carries the actual source file path for path resolution.

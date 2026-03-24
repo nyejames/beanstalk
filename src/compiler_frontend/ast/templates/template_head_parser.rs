@@ -30,20 +30,13 @@ use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::{CompilerWarning, WarningKind};
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
-use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::paths::path_format::{
-    format_compile_time_path, format_compile_time_paths,
-};
-use crate::compiler_frontend::paths::path_resolution::{
-    CompileTimePath, CompileTimePathBase, CompileTimePathKind,
-};
+use crate::compiler_frontend::paths::path_format::format_compile_time_paths;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::style_directives::StyleDirectiveSource;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TextLocation, TokenKind};
 use crate::compiler_frontend::traits::ContainsReferences;
 use crate::projects::settings::BS_VAR_PREFIX;
 use crate::{ast_log, return_compiler_error, return_syntax_error};
-use std::path::PathBuf;
 
 // ---------------------
 // TEMPLATE HEAD PARSING
@@ -310,40 +303,8 @@ pub fn parse_template_head(
                         TemplateSegmentOrigin::Head,
                     );
                 } else {
-                    // Fallback for single-file builds without a project resolver.
-                    for path in paths {
-                        let interned_path = if path.as_components().is_empty() {
-                            // WHAT: Preserve `@/` public-root formatting in no-resolver mode.
-                            // WHY: Runtime/public path strings must keep using the shared formatter
-                            // so root and origin semantics do not diverge in fallback handling.
-                            let root_path = CompileTimePath {
-                                source_path: InternedPath::new(),
-                                filesystem_path: PathBuf::new(),
-                                public_path: InternedPath::new(),
-                                base: CompileTimePathBase::EntryRoot,
-                                kind: CompileTimePathKind::Directory,
-                            };
-                            let formatted_root = format_compile_time_path(
-                                &root_path,
-                                &context.path_format_config,
-                                string_table,
-                            );
-                            string_table.get_or_intern(formatted_root)
-                        } else {
-                            // Keep fallback behavior minimal for non-root paths.
-                            // Resolver-backed contexts are the source of truth for
-                            // full project-aware public-path semantics.
-                            string_table.get_or_intern(path.to_string(string_table))
-                        };
-                        template.content.add_with_origin(
-                            Expression::string_slice(
-                                interned_path,
-                                token_stream.current_location(),
-                                Ownership::ImmutableOwned,
-                            ),
-                            TemplateSegmentOrigin::Head,
-                        );
-                    }
+                    // SHOULD ALWAYS BE A PROJECT RESOLVER HERE
+                    return_compiler_error!("Project resolver is not set.");
                 }
 
                 saw_meaningful_head_item = true;
