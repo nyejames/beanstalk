@@ -248,7 +248,7 @@
 <body style="">
     <nav class="bst-nav-1" aria-label="Primary">
         <a
-            href="/"
+            href="/beanstalk/"
             style="
                 display: flex;
                 align-items: center;
@@ -280,7 +280,7 @@
             "
         >
             <a
-                href="docs"
+                href="/beanstalk/docs/"
                 style="
                     color: light-dark(var(--bst-text-lightmode), var(--bst-text-darkmode));
                     text-decoration: none;
@@ -343,7 +343,22 @@
 <span class='bst-code-parenthesis'>]</span>
 </code>
     </pre>
-<p><strong>Built-in Style Directives</strong> </p><ul><li>$slot / $insert(..) - See slots below!</li><li>$reset              - Clears inherited style state before applying new directives in the same head</li><li>$markdown           - Parses the template bodies with a custom flavour of Markdown</li><li>$raw                - Parses the template body as a raw string (no escaping, no formatting)</li><li>$html               - Parses the template body as raw HTML (no escaping)</li><li>$css                - Provides some basic warnings for malformed CSS</li><li>$note / $todo       - Comments (ignored by final output)</li><li>$doc                - Turns the template into a documentation comment</li><li>$children(..)       - Accepts a template (or string slice) that will be applied only to this template&#39;s direct child templates</li></ul><p>Formatting directives do not automatically flow into nested child templates. If a child template should keep using a formatter such as `$markdown`, redeclare it in that child template&#39;s head. </p><h2>Slots</h2><p>Template slots let one template receive content from another template. The default slot is written as `</p><p>` and marks where the main body content should be inserted. </p>    <p>Named slots can also be declared with `</p><p>`. These allow helper templates to insert content into a specific part of another template using `$insert(&quot;name&quot;)`. </p>    <p>Positional slots can be declared using positive integers, such as `</p><p>`, `</p><p>`, etc. Loose contributions (those not explicitly targetting a named slot) are assigned to positional slots first, in ascending numeric order. Any remaining loose contributions go to the default slot if it exists. </p>    
+<p><strong>Built-in Style Directives</strong> </p><ul><li>$slot / $insert(..) - See slots below!</li><li>$fresh              - Opts this child template out of wrappers applied by the immediate parent&#39;s `$children(..)` directive</li><li>$markdown           - Parses the template bodies with a custom flavour of Markdown</li><li>$raw                - Parses the template body as a raw string (no escaping, no formatting)</li><li>$html               - Parses the template body as raw HTML (no escaping)</li><li>$css                - Provides some basic warnings for malformed CSS</li><li>$note / $todo       - Comments (ignored by final output)</li><li>$doc                - Turns the template into a documentation comment</li><li>$children(..)       - Accepts a template (or string slice) that will be applied only to this template&#39;s direct child templates</li></ul><p>Formatting directives do not automatically flow into nested child templates. If a child template should keep using a formatter such as `$markdown`, redeclare it in that child template&#39;s head. </p><p>`$fresh` is per-child and only affects wrapper application from the immediate parent. Siblings without `$fresh` still receive the parent wrappers: </p>
+    <pre style="background-color: hsla(0, 0%, 42%, 0.12); padding-left: 1em; border-radius: 5px; max-width: 100%; white-space: pre; overflow-x: auto;">
+        <code class='codeblock'>
+<span class='bst-code-operator'>#</span> list <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>children<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span><span class='bst-code-operator'>&lt;</span>li<span class='bst-code-operator'>&gt;</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>slot<span class='bst-code-parenthesis'>]</span><span class='bst-code-operator'>&lt;</span><span class='bst-code-operator'>/</span>li<span class='bst-code-operator'>&gt;</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>:</span>
+    <span class='bst-code-operator'>&lt;</span>ul<span class='bst-code-operator'>&gt;</span>
+        <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>slot<span class='bst-code-parenthesis'>]</span>
+    <span class='bst-code-operator'>&lt;</span><span class='bst-code-operator'>/</span>ul<span class='bst-code-operator'>&gt;</span>
+<span class='bst-code-parenthesis'>]</span>
+
+<span class='bst-code-parenthesis'>[</span>list<span class='bst-code-operator'>:</span>
+    <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> one <span class='bst-code-parenthesis'>]</span>
+    <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>fresh<span class='bst-code-operator'>:</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> two <span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>]</span>
+<span class='bst-code-parenthesis'>]</span>
+</code>
+    </pre>
+<p>In this example, `one` is wrapped with `&lt;li&gt;...&lt;/li&gt;`, while `two` opts out and is rendered without the parent `$children(..)` wrapper. </p><h2>Slots</h2><p>Template slots let one template receive content from another template. The default slot is written as `</p><p>` and marks where the main body content should be inserted. </p>    <p>Named slots can also be declared with `</p><p>`. These allow helper templates to insert content into a specific part of another template using `$insert(&quot;name&quot;)`. </p>    <p>Positional slots can be declared using positive integers, such as `</p><p>`, `</p><p>`, etc. Loose contributions (those not explicitly targetting a named slot) are assigned to positional slots first, in ascending numeric order. Any remaining loose contributions go to the default slot if it exists. </p>    
     <pre style="background-color: hsla(0, 0%, 42%, 0.12); padding-left: 1em; border-radius: 5px; max-width: 100%; white-space: pre; overflow-x: auto;">
         <code class='codeblock'>
 img <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span>
@@ -505,40 +520,40 @@ return result;
 return value;
 }
 
-function _Users_aneirinjames_projects_beanstalk_beanstalk_docs_lib_html_bst_start() {
+function b_fn0() {
 
 return "";
 }
 
-function _Users_aneirinjames_projects_beanstalk_beanstalk_docs_src_docs_templates__page_bst_start() {
+function b_fn1() {
 
 return "";
 }
 
-function _Users_aneirinjames_projects_beanstalk_beanstalk_docs_src_styles_docs_bst_start() {
+function b_fn2() {
 
 return "";
 }
 
-function _Users_aneirinjames_projects_beanstalk_beanstalk_docs_src_docs_templates__page_bst___bst_frag_0() {
-let __hir_tmp_0 = __bs_binding(undefined);
+function b_fn3() {
+let b_l1 = __bs_binding(undefined);
 
-__bs_assign_value(__hir_tmp_0, _Users_aneirinjames_projects_beanstalk_beanstalk_docs_src_docs_templates__page_bst___bst_frag_0___template_fn_0(__bs_binding("\n    <div></div>\n")));
-return __bs_clone_value(__bs_read(__hir_tmp_0));
+__bs_assign_value(b_l1, b_fn4(__bs_binding("\n    <div><\/div>\n")));
+return __bs_clone_value(__bs_read(b_l1));
 }
 
-function _Users_aneirinjames_projects_beanstalk_beanstalk_docs_src_docs_templates__page_bst___bst_frag_0___template_fn_0(chunk_0) {
+function b_fn4(b_l0) {
 
-chunk_0 = __bs_param_binding(chunk_0);
+b_l0 = __bs_param_binding(b_l0);
 
-return ("" + __bs_read(chunk_0));
+return ("" + __bs_read(b_l0));
 }
 
 </script>
 <script>
 (function () {
   const slots = [
-    ["bst-slot-0", _Users_aneirinjames_projects_beanstalk_beanstalk_docs_src_docs_templates__page_bst___bst_frag_0],
+    ["bst-slot-0", b_fn3],
   ];
 
   for (const [id, fn] of slots) {
@@ -548,6 +563,6 @@ return ("" + __bs_read(chunk_0));
   }
 
   // start() remains the lifecycle entrypoint and runs after fragment hydration.
-  if (typeof _Users_aneirinjames_projects_beanstalk_beanstalk_docs_src_docs_templates__page_bst_start === "function") _Users_aneirinjames_projects_beanstalk_beanstalk_docs_src_docs_templates__page_bst_start();
+  if (typeof b_fn1 === "function") b_fn1();
 })();
 </script>

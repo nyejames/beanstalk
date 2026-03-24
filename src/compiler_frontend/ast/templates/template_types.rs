@@ -32,41 +32,27 @@ pub struct Template {
     pub location: TextLocation,
 }
 
-/// Inherited style state passed from parent to nested child templates.
-/// Carries the recursive style (formatter/mode) and direct child wrappers
-/// from `$children(..)` directives.
+/// Inheritance state passed from parent to nested child templates.
+/// Carries only direct child wrappers from `$children(..)` directives.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct TemplateInheritance {
-    pub(crate) recursive_style: Option<Style>,
     pub(crate) direct_child_wrappers: Vec<Template>,
 }
 
 impl TemplateInheritance {
-    /// Builds inheritance state from wrapper templates passed down by a parent
-    /// (e.g. `$children(..)` wrappers or inherited style directives).
+    /// Builds inheritance state from wrapper templates passed down by a parent.
+    /// Nested templates do not inherit formatter/style state automatically.
     pub(crate) fn from_parent_wrappers(templates: Vec<Template>) -> Self {
-        let recursive_style = templates
-            .last()
-            .and_then(|template| recursive_inherited_style(&template.style));
-
         Self {
-            recursive_style,
             direct_child_wrappers: templates,
         }
     }
 }
 
 impl Template {
-    /// Creates a default template pre-populated with inherited style state.
+    /// Creates a default template with no inherited formatter/style state.
     pub fn create_default(templates: Vec<Template>) -> Template {
-        let inheritance = TemplateInheritance::from_parent_wrappers(templates);
-        Self::create_default_with_inherited_style(inheritance.recursive_style)
-    }
-
-    /// Creates a default template with an optional pre-inherited style.
-    pub(crate) fn create_default_with_inherited_style(inherited_style: Option<Style>) -> Template {
-        let mut style = inherited_style.unwrap_or_else(Style::default);
-        style.child_templates.clear();
+        let _inheritance = TemplateInheritance::from_parent_wrappers(templates);
 
         Template {
             content: TemplateContent::default(),
@@ -75,7 +61,7 @@ impl Template {
             render_plan: None,
             kind: TemplateType::StringFunction,
             doc_children: vec![],
-            style,
+            style: Style::default(),
             explicit_style: Style::default(),
             id: String::new(),
             location: TextLocation::default(),
@@ -143,28 +129,4 @@ impl Template {
 
         TemplateConstValueKind::RenderableString
     }
-}
-
-/// Extracts the inheritable recursive style from a given style. Returns `None`
-/// if the style has no meaningful state worth inheriting (empty ID, no formatter,
-/// no mode flags).
-pub(crate) fn recursive_inherited_style(style: &Style) -> Option<Style> {
-    use crate::compiler_frontend::ast::templates::template::BodyWhitespacePolicy;
-
-    let mut inherited = style.to_owned();
-    inherited.child_templates.clear();
-
-    if inherited.formatter.is_none()
-        && inherited.css_mode.is_none()
-        && inherited.formatter_precedence == -1
-        && inherited.override_precedence == -1
-        && inherited.id.is_empty()
-        && !inherited.clear_inherited
-        && inherited.body_whitespace_policy == BodyWhitespacePolicy::DefaultTemplateBehavior
-        && !inherited.html_mode
-    {
-        return None;
-    }
-
-    Some(inherited)
 }

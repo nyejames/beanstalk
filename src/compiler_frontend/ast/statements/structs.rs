@@ -25,7 +25,7 @@ pub fn create_struct_definition(
     // Need to skip it,
     token_stream.advance();
 
-    let arguments = parse_parameters(token_stream, &mut true, string_table, true, Some(context))?;
+    let arguments = parse_parameters(token_stream, &mut true, string_table, true, context)?;
 
     // Skip the Parameters token
     token_stream.advance();
@@ -41,7 +41,7 @@ pub fn parse_parameters(
     pure: &mut bool,
     string_table: &mut StringTable,
     _is_const: bool, // False for function definitions, true for struct definitions
-    expression_context: Option<&ScopeContext>,
+    expression_context: &ScopeContext,
 ) -> Result<Vec<Declaration>, CompilerError> {
     let mut args: Vec<Declaration> = Vec::with_capacity(1);
     let mut next_in_list: bool = true;
@@ -349,7 +349,7 @@ fn parse_collection_inner_signature_type(
 pub fn new_parameter(
     token_stream: &mut FileTokens,
     full_name: InternedPath,
-    expression_context: Option<&ScopeContext>,
+    expression_context: &ScopeContext,
     string_table: &mut StringTable,
 ) -> Result<Declaration, CompilerError> {
     // Move past the name
@@ -422,9 +422,7 @@ pub fn new_parameter(
 
     // Check if this whole expression is nested in brackets.
     // This is just so we don't wastefully call create_expression recursively right away
-    let parameter_context = expression_context
-        .cloned()
-        .unwrap_or_else(|| ScopeContext::new_constant(token_stream.src_path.to_owned()));
+    let parameter_context = expression_context.to_owned();
 
     let parsed_expr = create_expression(
         token_stream,

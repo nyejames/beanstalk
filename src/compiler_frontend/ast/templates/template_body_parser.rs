@@ -11,9 +11,6 @@ use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::templates::template::{
     CommentDirectiveKind, TemplateAtom, TemplateSegmentOrigin, TemplateType,
 };
-use crate::compiler_frontend::ast::templates::template_composition::{
-    effective_inherited_style_for_nested_templates, inherited_style_for_nested_child_templates,
-};
 use crate::compiler_frontend::ast::templates::template_types::{Template, TemplateInheritance};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::Ownership;
@@ -115,7 +112,6 @@ fn parse_nested_template(
     string_table: &mut StringTable,
 ) -> Result<(), CompilerError> {
     let nested_inheritance = TemplateInheritance {
-        recursive_style: inherited_style_for_nested_child_templates(&template.style),
         direct_child_wrappers: template.style.child_templates.to_owned(),
     };
     let nested_template = Template::new_with_doc_context(
@@ -147,12 +143,11 @@ fn parse_nested_template(
                 "Found a compile time foldable template inside a template. Folding into a string slice..."
             );
 
-            // Preserve formatter boundaries when folding nested compile-time
-            // templates into this template's body stream.
-            let inherited_style = effective_inherited_style_for_nested_templates(&template.style);
-
-            let interned_child =
-                nested_template.fold_into_stringid(&inherited_style, string_table)?;
+            let mut fold_context = context.new_template_fold_context(
+                string_table,
+                "nested compile-time template folding in body parser",
+            )?;
+            let interned_child = nested_template.fold_into_stringid(&mut fold_context)?;
 
             template.content.atoms.push(
                 crate::compiler_frontend::ast::templates::template::TemplateAtom::Content(
@@ -185,7 +180,7 @@ fn parse_nested_template(
                 slot_key.to_owned(),
                 direct_child_wrappers.to_owned(),
                 template.style.child_templates.to_owned(),
-                template.style.clear_inherited,
+                template.style.skip_parent_child_wrappers,
             );
             return Ok(());
         }

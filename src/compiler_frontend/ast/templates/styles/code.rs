@@ -126,7 +126,6 @@ pub(crate) fn configure_code_style(
     template.apply_style_updates(|style| {
         style.id = "code";
         style.formatter = Some(code_formatter(language));
-        style.formatter_precedence = 0;
         style.css_mode = None;
         style.html_mode = false;
     });

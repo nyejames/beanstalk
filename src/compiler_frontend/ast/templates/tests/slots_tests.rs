@@ -1,12 +1,15 @@
 use super::*;
-use crate::compiler_frontend::ast::ast::ScopeContext;
+use crate::compiler_frontend::ast::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::templates::create_template_node::Template;
 use crate::compiler_frontend::ast::templates::template::{
     SlotKey, TemplateAtom, TemplateContent, TemplateSegment, TemplateSegmentOrigin,
 };
 use crate::compiler_frontend::datatypes::Ownership;
+use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
+use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::tokenizer::tokenizer::tokenize;
@@ -33,9 +36,25 @@ fn template_tokens_from_source(source: &str, string_table: &mut StringTable) -> 
     tokens
 }
 
+fn test_constant_context(scope: InternedPath) -> ScopeContext {
+    let cwd = std::env::temp_dir();
+    let resolver = ProjectPathResolver::new(cwd.clone(), cwd, &[])
+        .expect("test path resolver should be valid");
+    ScopeContext::new(
+        ContextKind::Constant,
+        scope.clone(),
+        &[],
+        HostRegistry::default(),
+        vec![],
+    )
+    .with_project_path_resolver(Some(resolver))
+    .with_source_file_scope(scope)
+    .with_path_format_config(PathStringFormatConfig::default())
+}
+
 fn template_from_source(source: &str, string_table: &mut StringTable) -> Template {
     let mut tokens = template_tokens_from_source(source, string_table);
-    let context = ScopeContext::new_constant(tokens.src_path.to_owned());
+    let context = test_constant_context(tokens.src_path.to_owned());
     Template::new(&mut tokens, &context, Vec::new(), string_table).unwrap()
 }
 

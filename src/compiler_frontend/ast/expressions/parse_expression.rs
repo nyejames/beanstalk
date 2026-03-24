@@ -673,7 +673,11 @@ pub fn create_expression(
 
                         ast_log!("Template is foldable now. Folding...");
 
-                        let folded_string = template.fold_into_stringid(&None, string_table)?;
+                        let mut fold_context = template_context.new_template_fold_context(
+                            string_table,
+                            "expression parsing template fold",
+                        )?;
+                        let folded_string = template.fold_into_stringid(&mut fold_context)?;
 
                         return Ok(Expression::string_slice(
                             folded_string,

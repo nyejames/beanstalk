@@ -62,8 +62,9 @@ impl Template {
         doc_context: bool,
     ) -> Result<Template, CompilerError> {
         let direct_child_wrappers = inheritance.direct_child_wrappers.to_owned();
-        // These are variables or special keywords passed into the template head
-        let mut template = Self::create_default_with_inherited_style(inheritance.recursive_style);
+        // These are variables or special keywords passed into the template head.
+        // Nested templates do not inherit formatter/style state by default.
+        let mut template = Self::create_default(vec![]);
         // Capture the opening token location early so style/directive errors can
         // still point at the template even if parsing later advances deeply.
         template.location = token_stream.current_location();

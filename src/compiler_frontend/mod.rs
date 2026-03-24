@@ -189,6 +189,8 @@ impl CompilerFrontend {
             warnings,
             entry_file_path,
             entry_file_id,
+            self.project_path_resolver.clone(),
+            self.path_format_config.clone(),
             &mut self.string_table,
         )
     }
@@ -249,8 +251,20 @@ impl CompilerFrontend {
     /// Generate HIR from AST nodes, linearizing expressions and creating
     /// a place-based representation suitable for borrow checking analysis.
     pub fn generate_hir(&mut self, ast: Ast) -> Result<HirModule, CompilerMessages> {
-        let hir_module =
-            lower_module(ast, &mut self.string_table, self.path_format_config.clone())?;
+        let Some(project_path_resolver) = self.project_path_resolver.clone() else {
+            return Err(CompilerMessages {
+                errors: vec![CompilerError::compiler_error(
+                    "HIR generation requires a project path resolver for template folding.",
+                )],
+                warnings: vec![],
+            });
+        };
+        let hir_module = lower_module(
+            ast,
+            &mut self.string_table,
+            self.path_format_config.clone(),
+            project_path_resolver,
+        )?;
         Ok(hir_module)
     }
 

@@ -66,7 +66,6 @@ pub(crate) fn configure_escape_html_style(template: &mut Template) {
     template.apply_style_updates(|style| {
         style.id = "escape_html";
         style.formatter = Some(escape_html_formatter());
-        style.formatter_precedence = 0;
         style.css_mode = None;
         style.html_mode = false;
     });

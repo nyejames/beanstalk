@@ -63,7 +63,7 @@ pub fn new_declaration(
     // Function declarations are parsed eagerly here because they use
     // a dedicated signature/body syntax that does not fit value declarations.
     if token_stream.current_token_kind() == &TokenKind::TypeParameterBracket {
-        let func_sig = FunctionSignature::new(token_stream, string_table, &full_name)?;
+        let func_sig = FunctionSignature::new(token_stream, string_table, &full_name, context)?;
         let func_context = context.new_child_function(id, func_sig.to_owned(), string_table);
 
         let function_body = function_body_to_ast(
@@ -134,7 +134,7 @@ pub fn resolve_declaration_syntax(
 
     // Check if this whole expression is nested in brackets.
     // This is just so we don't wastefully call create_expression recursively right away.
-    let const_context = ScopeContext::new_constant(initializer_stream.src_path.to_owned());
+    let const_context = ScopeContext::new_constant(initializer_stream.src_path.to_owned(), context);
     let mut parsed_expr = match initializer_stream.current_token_kind() {
         // Struct Definition
         TokenKind::TypeParameterBracket => {

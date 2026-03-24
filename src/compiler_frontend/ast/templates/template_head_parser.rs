@@ -254,58 +254,48 @@ pub fn parse_template_head(
                     );
                 }
 
-                if let Some(resolver) = &context.project_path_resolver {
-                    // Use the real source file path when available (e.g. for const templates
-                    // where scope is a synthetic path like `#page.bst/#const_template0`).
-                    let source_scope = context.source_file_scope.as_ref().unwrap_or(&context.scope);
-                    let importer_file = source_scope.to_path_buf(string_table);
-                    let resolved = resolver.resolve_compile_time_paths(
-                        &paths,
-                        &importer_file,
-                        string_table,
-                    )?;
+                let resolver =
+                    context.required_project_path_resolver("template head path coercion")?;
+                let source_scope =
+                    context.required_source_file_scope("template head path coercion")?;
+                let importer_file = source_scope.to_path_buf(string_table);
+                let resolved =
+                    resolver.resolve_compile_time_paths(&paths, &importer_file, string_table)?;
 
-                    // Warn when a .bst source file path is coerced into template output.
-                    for p in &resolved.paths {
-                        if p.filesystem_path
-                            .extension()
-                            .is_some_and(|ext| ext == "bst")
-                        {
-                            let location = token_stream.current_location();
-                            let file_path = location.scope.to_path_buf(string_table);
-                            context.emit_warning(CompilerWarning::new(
-                                &format!(
-                                    "Path to Beanstalk source file is being inserted into template output: '{}'",
-                                    p.source_path.to_portable_string(string_table)
-                                ),
-                                location.to_error_location(string_table),
-                                WarningKind::BstFilePathInTemplateOutput,
-                                file_path,
-                            ));
-                        }
+                // Warn when a .bst source file path is coerced into template output.
+                for p in &resolved.paths {
+                    if p.filesystem_path
+                        .extension()
+                        .is_some_and(|ext| ext == "bst")
+                    {
+                        let location = token_stream.current_location();
+                        let file_path = location.scope.to_path_buf(string_table);
+                        context.emit_warning(CompilerWarning::new(
+                            &format!(
+                                "Path to Beanstalk source file is being inserted into template output: '{}'",
+                                p.source_path.to_portable_string(string_table)
+                            ),
+                            location.to_error_location(string_table),
+                            WarningKind::BstFilePathInTemplateOutput,
+                            file_path,
+                        ));
                     }
-
-                    // Format the resolved path(s) into a string for template output.
-                    // Templates always fold to strings, so we convert eagerly here
-                    // rather than deferring to HIR lowering.
-                    let formatted = format_compile_time_paths(
-                        &resolved,
-                        &context.path_format_config,
-                        string_table,
-                    );
-                    let interned = string_table.get_or_intern(formatted);
-                    template.content.add_with_origin(
-                        Expression::string_slice(
-                            interned,
-                            token_stream.current_location(),
-                            Ownership::ImmutableOwned,
-                        ),
-                        TemplateSegmentOrigin::Head,
-                    );
-                } else {
-                    // SHOULD ALWAYS BE A PROJECT RESOLVER HERE
-                    return_compiler_error!("Project resolver is not set.");
                 }
+
+                // Format the resolved path(s) into a string for template output.
+                // Templates always fold to strings, so we convert eagerly here
+                // rather than deferring to HIR lowering.
+                let formatted =
+                    format_compile_time_paths(&resolved, &context.path_format_config, string_table);
+                let interned = string_table.get_or_intern(formatted);
+                template.content.add_with_origin(
+                    Expression::string_slice(
+                        interned,
+                        token_stream.current_location(),
+                        Ownership::ImmutableOwned,
+                    ),
+                    TemplateSegmentOrigin::Head,
+                );
 
                 saw_meaningful_head_item = true;
             }
@@ -625,11 +615,10 @@ fn parse_style_directive(
             Ok(false)
         }
 
-        "reset" => {
-            // `$reset` wipes the inherited style state first, then later directives
-            // in the same head can layer fresh settings back on top.
-            template.apply_style(Style::default());
-            template.apply_style_updates(|style| style.clear_inherited = true);
+        "fresh" => {
+            // `$fresh` opt-outs this template from parent-applied `$children(..)`
+            // wrappers while still allowing local directives/wrappers in the same head.
+            template.apply_style_updates(|style| style.skip_parent_child_wrappers = true);
             Ok(false)
         }
 
@@ -697,7 +686,6 @@ fn apply_markdown_style(template: &mut Template) {
     template.apply_style_updates(|style| {
         style.id = "markdown";
         style.formatter = Some(markdown_formatter());
-        style.formatter_precedence = 0;
         style.css_mode = None;
         style.html_mode = false;
     });

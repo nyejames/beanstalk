@@ -53,17 +53,19 @@ impl FunctionSignature {
         token_stream: &mut FileTokens,
         string_table: &mut StringTable,
         scope: &InternedPath,
+        parent_context: &ScopeContext,
     ) -> Result<Self, CompilerError> {
         // Should start at the Colon
         // Need to skip it,
         token_stream.advance();
 
+        let signature_context = ScopeContext::new_constant(scope.to_owned(), parent_context);
         let parameters = parse_parameters(
             token_stream,
             &mut true,
             string_table,
             false,
-            Some(&ScopeContext::new_constant(scope.to_owned())),
+            &signature_context,
         )?;
         token_stream.advance();
 

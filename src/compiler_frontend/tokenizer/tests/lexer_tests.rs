@@ -44,7 +44,7 @@ fn find_token_index(tokens: &[Token], predicate: impl Fn(&TokenKind) -> bool) ->
 
 #[test]
 fn tokenizes_style_directives_inside_template_heads() {
-    let (file_tokens, string_table) = tokenize_source("[$markdown, $reset: body]");
+    let (file_tokens, string_table) = tokenize_source("[$markdown, $fresh: body]");
 
     let outer_head = find_token_index(&file_tokens.tokens, |kind| {
         matches!(kind, TokenKind::TemplateHead)
@@ -53,21 +53,42 @@ fn tokenizes_style_directives_inside_template_heads() {
         &file_tokens.tokens,
         |kind| matches!(kind, TokenKind::StyleDirective(id) if string_table.resolve(*id) == "markdown"),
     );
-    let reset = find_token_index(
+    let fresh = find_token_index(
         &file_tokens.tokens,
-        |kind| matches!(kind, TokenKind::StyleDirective(id) if string_table.resolve(*id) == "reset"),
+        |kind| matches!(kind, TokenKind::StyleDirective(id) if string_table.resolve(*id) == "fresh"),
     );
 
     assert!(outer_head < markdown);
-    assert!(markdown < reset);
+    assert!(markdown < fresh);
     assert!(matches!(
         file_tokens.tokens[markdown].kind,
         TokenKind::StyleDirective(..)
     ));
     assert!(matches!(
-        file_tokens.tokens[reset].kind,
+        file_tokens.tokens[fresh].kind,
         TokenKind::StyleDirective(..)
     ));
+}
+
+#[test]
+fn rejects_legacy_reset_style_directive_name() {
+    let mut string_table = StringTable::new();
+    let style_directives = StyleDirectiveRegistry::built_ins();
+    let source_path = InternedPath::from_single_str("test.bst", &mut string_table);
+    let error = tokenize(
+        "[$reset: body]",
+        &source_path,
+        TokenizeMode::Normal,
+        &style_directives,
+        &mut string_table,
+    )
+    .expect_err("legacy reset directive should be rejected");
+
+    assert!(
+        error.msg.contains("Unsupported style directive '$reset'"),
+        "unexpected error message: {}",
+        error.msg
+    );
 }
 
 #[test]

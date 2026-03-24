@@ -26,7 +26,8 @@ impl<'a> HirBuilder<'a> {
             // Module constant evaluation must stay statement-free. When constant structs carry
             // wrapper templates, fold them into string literals with unresolved slots rendered
             // as empty segments so constant references can lower without runtime template calls.
-            let folded = template.fold_into_stringid(&None, self.string_table)?;
+            let mut fold_context = self.new_template_fold_context(&template.location.scope);
+            let folded = template.fold_into_stringid(&mut fold_context)?;
             let region = self.current_region_or_error(location)?;
             let string_ty = self.intern_type_kind(HirTypeKind::String);
 

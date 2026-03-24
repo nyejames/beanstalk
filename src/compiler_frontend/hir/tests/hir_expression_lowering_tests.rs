@@ -19,7 +19,11 @@ use crate::compiler_frontend::tokenizer::tokens::{CharPosition, TextLocation};
 
 fn setup_builder(string_table: &'_ mut StringTable) -> HirBuilder<'_> {
     let test_function_name = InternedPath::from_single_str("__expr_test_fn", string_table);
-    let mut builder = HirBuilder::new(string_table, PathStringFormatConfig::default());
+    let mut builder = HirBuilder::new(
+        string_table,
+        PathStringFormatConfig::default(),
+        super::test_project_path_resolver(),
+    );
 
     let region = RegionId(0);
     let function_id = FunctionId(0);

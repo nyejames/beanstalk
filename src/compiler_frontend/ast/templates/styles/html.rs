@@ -57,7 +57,6 @@ pub(crate) fn configure_html_style(
     template.apply_style_updates(|style| {
         style.id = "html";
         style.formatter = None;
-        style.formatter_precedence = 0;
         style.css_mode = None;
         style.html_mode = true;
     });

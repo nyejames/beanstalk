@@ -4,12 +4,18 @@ use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::statements::functions::{FunctionReturn, FunctionSignature};
 use crate::compiler_frontend::ast::templates::create_template_node::Template;
 use crate::compiler_frontend::ast::templates::template::{CommentDirectiveKind, TemplateType};
+use crate::compiler_frontend::ast::templates::top_level_templates::{
+    AstDocFragment, AstStartTemplateItem,
+};
+use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::headers::parse_file_headers::{
     TopLevelTemplateItem, TopLevelTemplateKind,
 };
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
+use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
+use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{CharPosition, TextLocation};
 use crate::projects::settings::{IMPLICIT_START_FUNC_NAME, TOP_LEVEL_TEMPLATE_NAME};
 use rustc_hash::FxHashMap;
@@ -108,6 +114,43 @@ fn find_function<'a>(ast_nodes: &'a [AstNode], name: &InternedPath) -> &'a AstNo
         .expect("expected function node to exist")
 }
 
+fn test_project_path_resolver() -> ProjectPathResolver {
+    let cwd = std::env::temp_dir();
+    ProjectPathResolver::new(cwd.clone(), cwd, &[]).expect("test path resolver should be valid")
+}
+
+fn synthesize_start_template_items_for_tests(
+    ast_nodes: &mut Vec<AstNode>,
+    entry_dir: &InternedPath,
+    top_level_template_items: &[TopLevelTemplateItem],
+    const_templates_by_path: &FxHashMap<InternedPath, StringId>,
+    string_table: &mut StringTable,
+) -> Result<Vec<AstStartTemplateItem>, CompilerError> {
+    let resolver = test_project_path_resolver();
+    synthesize_start_template_items(
+        ast_nodes,
+        entry_dir,
+        top_level_template_items,
+        const_templates_by_path,
+        &resolver,
+        &PathStringFormatConfig::default(),
+        string_table,
+    )
+}
+
+fn collect_and_strip_comment_templates_for_tests(
+    ast_nodes: &mut [AstNode],
+    string_table: &mut StringTable,
+) -> Result<Vec<AstDocFragment>, CompilerError> {
+    let resolver = test_project_path_resolver();
+    collect_and_strip_comment_templates(
+        ast_nodes,
+        &resolver,
+        &PathStringFormatConfig::default(),
+        string_table,
+    )
+}
+
 #[test]
 fn extracts_runtime_template_declarations_and_builds_runtime_fragment_wrapper() {
     let mut string_table = StringTable::new();
@@ -150,7 +193,7 @@ fn extracts_runtime_template_declarations_and_builds_runtime_fragment_wrapper() 
         &mut string_table,
     )];
 
-    let start_items = synthesize_start_template_items(
+    let start_items = synthesize_start_template_items_for_tests(
         &mut ast_nodes,
         &entry_dir,
         &[],
@@ -232,7 +275,7 @@ fn folds_runtime_candidate_that_is_already_const_into_const_fragment() {
         &mut string_table,
     )];
 
-    let start_items = synthesize_start_template_items(
+    let start_items = synthesize_start_template_items_for_tests(
         &mut ast_nodes,
         &entry_dir,
         &[],
@@ -316,7 +359,7 @@ fn merges_const_and_runtime_fragments_in_source_order() {
         },
     }];
 
-    let start_items = synthesize_start_template_items(
+    let start_items = synthesize_start_template_items_for_tests(
         &mut ast_nodes,
         &entry_dir,
         &top_level_template_items,
@@ -358,7 +401,7 @@ fn errors_when_const_template_lookup_is_missing() {
         },
     }];
 
-    let error = synthesize_start_template_items(
+    let error = synthesize_start_template_items_for_tests(
         &mut ast_nodes,
         &entry_dir,
         &top_level_template_items,
@@ -425,7 +468,7 @@ fn rejects_mutable_reassignment_of_captured_symbol_before_runtime_template() {
         &mut string_table,
     )];
 
-    let error = synthesize_start_template_items(
+    let error = synthesize_start_template_items_for_tests(
         &mut ast_nodes,
         &entry_dir,
         &[],
@@ -443,7 +486,7 @@ fn errors_when_entry_start_function_is_missing() {
     let entry_dir = InternedPath::from_single_str("main.bst", &mut string_table);
 
     let mut ast_nodes = vec![];
-    let error = synthesize_start_template_items(
+    let error = synthesize_start_template_items_for_tests(
         &mut ast_nodes,
         &entry_dir,
         &[],
@@ -504,8 +547,9 @@ fn collects_and_strips_top_level_doc_comment_templates() {
         &mut string_table,
     )];
 
-    let doc_fragments = collect_and_strip_comment_templates(&mut ast_nodes, &mut string_table)
-        .expect("doc comment collection should succeed");
+    let doc_fragments =
+        collect_and_strip_comment_templates_for_tests(&mut ast_nodes, &mut string_table)
+            .expect("doc comment collection should succeed");
 
     assert_eq!(doc_fragments.len(), 1);
     assert!(matches!(doc_fragments[0].kind, AstDocFragmentKind::Doc));
@@ -573,8 +617,9 @@ fn collects_nested_doc_fragments_in_source_order() {
         &mut string_table,
     )];
 
-    let doc_fragments = collect_and_strip_comment_templates(&mut ast_nodes, &mut string_table)
-        .expect("nested doc comment collection should succeed");
+    let doc_fragments =
+        collect_and_strip_comment_templates_for_tests(&mut ast_nodes, &mut string_table)
+            .expect("nested doc comment collection should succeed");
 
     assert_eq!(doc_fragments.len(), 3);
     assert_eq!(string_table.resolve(doc_fragments[0].value), "parent");
@@ -629,9 +674,9 @@ fn top_level_doc_comments_do_not_generate_start_fragments() {
         &mut string_table,
     )];
 
-    let _ = collect_and_strip_comment_templates(&mut ast_nodes, &mut string_table)
+    let _ = collect_and_strip_comment_templates_for_tests(&mut ast_nodes, &mut string_table)
         .expect("doc comment stripping should succeed");
-    let start_items = synthesize_start_template_items(
+    let start_items = synthesize_start_template_items_for_tests(
         &mut ast_nodes,
         &entry_dir,
         &[],

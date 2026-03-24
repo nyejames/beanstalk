@@ -433,7 +433,7 @@ pub enum TokenKind {
 
     /// Variable name
     Symbol(StringId),
-    // `$markdown`, `$reset`, and builder-registered directives inside template heads.
+    // `$markdown`, `$fresh`, and builder-registered directives inside template heads.
     StyleDirective(StringId),
 
     // Values

@@ -9,12 +9,15 @@ use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::statements::functions::{FunctionReturn, FunctionSignature};
 use crate::compiler_frontend::ast::templates::template::{CommentDirectiveKind, TemplateType};
+use crate::compiler_frontend::ast::templates::template_folding::TemplateFoldContext;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::headers::parse_file_headers::{
     TopLevelTemplateItem, TopLevelTemplateKind,
 };
 use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
+use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::TextLocation;
 use crate::projects::settings::{IMPLICIT_START_FUNC_NAME, TOP_LEVEL_TEMPLATE_NAME};
@@ -58,6 +61,8 @@ pub(crate) fn synthesize_start_template_items(
     entry_dir: &InternedPath,
     top_level_template_items: &[TopLevelTemplateItem],
     const_templates_by_path: &FxHashMap<InternedPath, StringId>,
+    project_path_resolver: &ProjectPathResolver,
+    path_format_config: &PathStringFormatConfig,
     string_table: &mut StringTable,
 ) -> Result<Vec<AstStartTemplateItem>, CompilerError> {
     // Phase 1: locate the entry start function and extract runtime `#template`
@@ -127,7 +132,13 @@ pub(crate) fn synthesize_start_template_items(
                 // Runtime template expressions can still fold to constants after AST folding.
                 // Keep them as const fragments to avoid generating unnecessary wrapper functions.
                 if template.is_const_renderable_string() {
-                    let folded = template.fold_into_stringid(&None, string_table)?;
+                    let folded = fold_template_with_context(
+                        template,
+                        &template.location.scope,
+                        project_path_resolver,
+                        path_format_config,
+                        string_table,
+                    )?;
                     start_template_items.push(AstStartTemplateItem::ConstString {
                         value: folded,
                         location: candidate.location.to_owned(),
@@ -172,6 +183,8 @@ pub(crate) fn synthesize_start_template_items(
 
 pub(crate) fn collect_and_strip_comment_templates(
     ast_nodes: &mut [AstNode],
+    project_path_resolver: &ProjectPathResolver,
+    path_format_config: &PathStringFormatConfig,
     string_table: &mut StringTable,
 ) -> Result<Vec<AstDocFragment>, CompilerError> {
     let mut fragments = Vec::new();
@@ -186,7 +199,13 @@ pub(crate) fn collect_and_strip_comment_templates(
             if let Some(comment_template) =
                 as_top_level_template_comment_declaration(&statement, string_table)
             {
-                collect_doc_fragments(comment_template, &mut fragments, string_table)?;
+                collect_doc_fragments(
+                    comment_template,
+                    &mut fragments,
+                    project_path_resolver,
+                    path_format_config,
+                    string_table,
+                )?;
                 continue;
             }
 
@@ -222,13 +241,21 @@ fn as_top_level_template_comment_declaration<'a>(
 fn collect_doc_fragments(
     template: &crate::compiler_frontend::ast::templates::create_template_node::Template,
     fragments: &mut Vec<AstDocFragment>,
+    project_path_resolver: &ProjectPathResolver,
+    path_format_config: &PathStringFormatConfig,
     string_table: &mut StringTable,
 ) -> Result<(), CompilerError> {
     if matches!(
         template.kind,
         TemplateType::Comment(CommentDirectiveKind::Doc)
     ) {
-        let rendered = template.fold_into_stringid(&None, string_table)?;
+        let rendered = fold_template_with_context(
+            template,
+            &template.location.scope,
+            project_path_resolver,
+            path_format_config,
+            string_table,
+        )?;
         fragments.push(AstDocFragment {
             kind: AstDocFragmentKind::Doc,
             value: rendered,
@@ -237,10 +264,32 @@ fn collect_doc_fragments(
     }
 
     for child in &template.doc_children {
-        collect_doc_fragments(child, fragments, string_table)?;
+        collect_doc_fragments(
+            child,
+            fragments,
+            project_path_resolver,
+            path_format_config,
+            string_table,
+        )?;
     }
 
     Ok(())
+}
+
+fn fold_template_with_context(
+    template: &crate::compiler_frontend::ast::templates::create_template_node::Template,
+    source_file_scope: &InternedPath,
+    project_path_resolver: &ProjectPathResolver,
+    path_format_config: &PathStringFormatConfig,
+    string_table: &mut StringTable,
+) -> Result<StringId, CompilerError> {
+    let mut fold_context = TemplateFoldContext {
+        string_table,
+        project_path_resolver,
+        path_format_config,
+        source_file_scope,
+    };
+    template.fold_into_stringid(&mut fold_context)
 }
 
 #[allow(clippy::large_enum_variant)]

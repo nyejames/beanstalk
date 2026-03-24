@@ -1,3 +1,4 @@
+use crate::compiler_frontend::ast::module_ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::ast::statements::declaration_syntax::{
     DeclarationSyntax, parse_declaration_syntax,
 };
@@ -7,6 +8,8 @@ use crate::compiler_frontend::compiler_warnings::{CompilerWarning, WarningKind};
 use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::identity::FileId;
 use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
+use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::paths::paths::parse_import_clause_tokens;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TextLocation, Token, TokenKind};
@@ -28,6 +31,8 @@ struct HeaderParseContext<'a> {
     host_function_registry: &'a HostRegistry,
     warnings: &'a mut Vec<CompilerWarning>,
     is_entry_file: bool,
+    project_path_resolver: Option<ProjectPathResolver>,
+    path_format_config: PathStringFormatConfig,
     string_table: &'a mut StringTable,
     const_template_number: &'a mut usize,
     top_level_template_order: &'a mut usize,
@@ -35,6 +40,9 @@ struct HeaderParseContext<'a> {
 }
 
 struct HeaderBuildContext<'a> {
+    host_function_registry: &'a HostRegistry,
+    project_path_resolver: Option<ProjectPathResolver>,
+    path_format_config: PathStringFormatConfig,
     source_file: &'a InternedPath,
     file_imports: &'a HashSet<InternedPath>,
     file_import_entries: &'a [FileImport],
@@ -137,6 +145,8 @@ pub fn parse_headers(
         warnings,
         entry_file_path,
         None,
+        None,
+        PathStringFormatConfig::default(),
         string_table,
     )
 }
@@ -147,6 +157,8 @@ pub fn parse_headers_with_path_resolver(
     warnings: &mut Vec<CompilerWarning>,
     entry_file_path: &Path,
     entry_file_id: Option<FileId>,
+    project_path_resolver: Option<ProjectPathResolver>,
+    path_format_config: PathStringFormatConfig,
     string_table: &mut StringTable,
 ) -> Result<Headers, Vec<CompilerError>> {
     let mut headers: Vec<Header> = Vec::new();
@@ -165,6 +177,8 @@ pub fn parse_headers_with_path_resolver(
             host_function_registry: host_registry,
             warnings,
             is_entry_file,
+            project_path_resolver: project_path_resolver.clone(),
+            path_format_config: path_format_config.clone(),
             string_table,
             const_template_number: &mut const_template_count,
             top_level_template_order: &mut top_level_template_order,
@@ -263,6 +277,9 @@ fn parse_headers_in_file(
                         // If not, it goes into the implicit main function.
                         let source_file = token_stream.src_path.to_owned();
                         let mut build_context = HeaderBuildContext {
+                            host_function_registry: context.host_function_registry,
+                            project_path_resolver: context.project_path_resolver.clone(),
+                            path_format_config: context.path_format_config.clone(),
                             source_file: &source_file,
                             file_imports: &file_import_paths,
                             file_import_entries: &file_imports,
@@ -368,6 +385,9 @@ fn parse_headers_in_file(
                     // An 'exported' top-level template that must be evaluated at compile time
                     let source_file = token_stream.src_path.to_owned();
                     let mut build_context = HeaderBuildContext {
+                        host_function_registry: context.host_function_registry,
+                        project_path_resolver: context.project_path_resolver.clone(),
+                        path_format_config: context.path_format_config.clone(),
                         source_file: &source_file,
                         file_imports: &file_import_paths,
                         file_import_entries: &file_imports,
@@ -506,7 +526,22 @@ fn create_header(
     match current_token {
         // FUNCTIONS
         TokenKind::TypeParameterBracket => {
-            let signature = FunctionSignature::new(token_stream, context.string_table, &full_name)?;
+            let signature_context = ScopeContext::new(
+                ContextKind::ConstantHeader,
+                full_name.to_owned(),
+                &[],
+                context.host_function_registry.to_owned(),
+                vec![],
+            )
+            .with_project_path_resolver(context.project_path_resolver.clone())
+            .with_source_file_scope(context.source_file.to_owned())
+            .with_path_format_config(context.path_format_config.clone());
+            let signature = FunctionSignature::new(
+                token_stream,
+                context.string_table,
+                &full_name,
+                &signature_context,
+            )?;
 
             let mut scopes_opened = 1;
             let mut scopes_closed = 0;

@@ -89,13 +89,23 @@ fn compile_beanstalk_to_string(
     source_path: &Path,
 ) -> Result<String, CompilerError> {
     use crate::compiler_frontend::interned_path::InternedPath;
+    use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
+    use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
     use crate::compiler_frontend::string_interning::StringTable;
+    use std::path::PathBuf;
 
     // Create a string table for this compilation
     let mut string_table = StringTable::new();
 
     // Convert path to interned path
     let interned_path = InternedPath::from_path_buf(source_path, &mut string_table);
+    let source_root = source_path
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| PathBuf::from("."));
+    let canonical_root = std::fs::canonicalize(&source_root).unwrap_or(source_root);
+    let project_path_resolver =
+        ProjectPathResolver::new(canonical_root.clone(), canonical_root, &[])?;
 
     // Tokenize the source code
     let style_directives = StyleDirectiveRegistry::built_ins();
@@ -108,11 +118,14 @@ fn compile_beanstalk_to_string(
     )?;
     let ast_context = ScopeContext::new(
         ContextKind::Template,
-        interned_path,
+        interned_path.to_owned(),
         &[],
         HostRegistry::new(&mut string_table),
         Vec::new(),
-    );
+    )
+    .with_project_path_resolver(Some(project_path_resolver))
+    .with_source_file_scope(interned_path.to_owned())
+    .with_path_format_config(PathStringFormatConfig::default());
 
     // Build Template
     let template = Template::new(
@@ -124,7 +137,9 @@ fn compile_beanstalk_to_string(
 
     // The helper only needs the final folded UTF-8 output, so resolve the interned result
     // immediately instead of introducing a separate runtime representation here.
-    let template_string = template.fold_into_stringid(&None, &mut string_table)?;
+    let mut fold_context =
+        ast_context.new_template_fold_context(&mut string_table, "repl template folding")?;
+    let template_string = template.fold_into_stringid(&mut fold_context)?;
 
     Ok(string_table.resolve(template_string).to_string())
 }

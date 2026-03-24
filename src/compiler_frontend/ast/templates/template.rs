@@ -62,7 +62,7 @@ pub struct SlotPlaceholder {
     pub key: SlotKey,
     pub applied_child_wrappers: Vec<Template>,
     pub child_wrappers: Vec<Template>,
-    pub clear_inherited_style: bool,
+    pub skip_parent_child_wrappers: bool,
 }
 
 impl SlotPlaceholder {
@@ -72,7 +72,7 @@ impl SlotPlaceholder {
             key,
             applied_child_wrappers: Vec::new(),
             child_wrappers: Vec::new(),
-            clear_inherited_style: false,
+            skip_parent_child_wrappers: false,
         }
     }
 
@@ -80,13 +80,13 @@ impl SlotPlaceholder {
         key: SlotKey,
         applied_child_wrappers: Vec<Template>,
         child_wrappers: Vec<Template>,
-        clear_inherited_style: bool,
+        skip_parent_child_wrappers: bool,
     ) -> Self {
         Self {
             key,
             applied_child_wrappers,
             child_wrappers,
-            clear_inherited_style,
+            skip_parent_child_wrappers,
         }
     }
 }
@@ -136,14 +136,14 @@ impl TemplateContent {
         key: SlotKey,
         applied_child_wrappers: Vec<Template>,
         child_wrappers: Vec<Template>,
-        clear_inherited_style: bool,
+        skip_parent_child_wrappers: bool,
     ) {
         self.atoms
             .push(TemplateAtom::Slot(SlotPlaceholder::with_child_wrappers(
                 key,
                 applied_child_wrappers,
                 child_wrappers,
-                clear_inherited_style,
+                skip_parent_child_wrappers,
             )));
     }
 
@@ -327,17 +327,15 @@ pub struct Style {
     // A callback function for how the string content of the template should be parsed
     // If at all. Compiler will determine if this can be run at compile-time, or need a runtime call.
     pub formatter: Option<Formatter>,
-    pub formatter_precedence: i32,
-
-    // Overrides any inherited styles that have a lower precedence
-    pub override_precedence: i32,
 
     // Passes templates into the head of each direct child template of this template.
     // These wrappers do not automatically flow into grandchildren.
     pub child_templates: Vec<Template>,
     pub css_mode: Option<CssDirectiveMode>,
     pub html_mode: bool,
-    pub clear_inherited: bool,
+    /// When true, nested child templates skip the parent-applied `$children(..)`
+    /// wrappers while still allowing wrappers declared on the child itself.
+    pub skip_parent_child_wrappers: bool,
     pub body_whitespace_policy: BodyWhitespacePolicy,
     /// When true, `[...]` brackets in the template body are treated as balanced
     /// literal text rather than parsed as nested child templates.
@@ -349,12 +347,10 @@ impl Style {
         Style {
             id: "",
             formatter: None,
-            formatter_precedence: -1,
-            override_precedence: -1,
             child_templates: vec![],
             css_mode: None,
             html_mode: false,
-            clear_inherited: false,
+            skip_parent_child_wrappers: false,
             body_whitespace_policy: BodyWhitespacePolicy::DefaultTemplateBehavior,
             suppress_child_templates: false,
         }

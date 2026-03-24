@@ -1145,7 +1145,7 @@ fn build_project_markdown_docs_row_wrappers_render_plain_cells_and_headers() {
     .expect("should write html library");
     fs::write(
         root.join("styles").join("docs.bst"),
-        "import @libs/html {format}\n#page = [:\n  <body>[$slot]</body>\n]\n#table = [format.table:\n    [$insert(\"style\"):border-collapse: collapse; border: 1px solid; padding: 0.5em;]\n    [$slot]\n]\n#row = [:\n    <tr>[$reset, $children([:<td>[$slot]</td>]):[$slot]]</tr>\n]\n#header_row = [:\n    <tr>\n        [$reset, $children([:\n            <th style=\"border: 1px solid; padding: 0.5em; text-align: left;\">[$slot]</th>\n        ]):[$slot]]\n    </tr>\n]\n",
+        "import @libs/html {format}\n#page = [:\n  <body>[$slot]</body>\n]\n#table = [format.table:\n    [$insert(\"style\"):border-collapse: collapse; border: 1px solid; padding: 0.5em;]\n    [$slot]\n]\n#row = [:\n    <tr>[$fresh, $children([:<td>[$slot]</td>]):[$slot]]</tr>\n]\n#header_row = [:\n    <tr>\n        [$fresh, $children([:\n            <th style=\"border: 1px solid; padding: 0.5em; text-align: left;\">[$slot]</th>\n        ]):[$slot]]\n    </tr>\n]\n",
     )
     .expect("should write docs style library");
     fs::write(
@@ -1319,8 +1319,8 @@ fn build_project_rejects_struct_constructor_with_too_many_arguments() {
 // ---------------------------------------------------------------------------
 
 use super::{
-    read_build_manifest, remove_stale_artifacts, validate_output_root_is_safe,
-    write_build_manifest, BUILD_MANIFEST_FILENAME,
+    BUILD_MANIFEST_FILENAME, read_build_manifest, remove_stale_artifacts,
+    validate_output_root_is_safe, write_build_manifest,
 };
 use std::collections::HashSet;
 
@@ -1694,8 +1694,8 @@ fn write_build_manifest_produces_sorted_output() {
 
     write_build_manifest(&root, &paths).expect("should write manifest");
 
-    let content = fs::read_to_string(root.join(BUILD_MANIFEST_FILENAME))
-        .expect("should read manifest file");
+    let content =
+        fs::read_to_string(root.join(BUILD_MANIFEST_FILENAME)).expect("should read manifest file");
     let lines: Vec<&str> = content.lines().collect();
     assert_eq!(lines, vec!["about/index.html", "index.html", "z/page.js"]);
 

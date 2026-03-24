@@ -8,6 +8,7 @@ use crate::compiler_frontend::ast::import_bindings::{
 use crate::compiler_frontend::ast::statements::functions::{FunctionReturn, FunctionSignature};
 use crate::compiler_frontend::ast::statements::structs::create_struct_definition;
 use crate::compiler_frontend::ast::templates::create_template_node::Template;
+use crate::compiler_frontend::ast::templates::template_folding::TemplateFoldContext;
 use crate::compiler_frontend::ast::templates::top_level_templates::{
     collect_and_strip_comment_templates, synthesize_start_template_items,
 };
@@ -33,6 +34,7 @@ pub use crate::compiler_frontend::ast::templates::top_level_templates::{
 };
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
+use crate::return_compiler_error;
 
 static CONTROL_FLOW_SCOPE_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
@@ -88,6 +90,14 @@ impl Ast {
         let mut module_file_paths: FxHashSet<InternedPath> = FxHashSet::default();
         let mut resolved_struct_fields_by_path: FxHashMap<InternedPath, Vec<Declaration>> =
             FxHashMap::default();
+        let Some(project_path_resolver_for_folding) = project_path_resolver.as_ref() else {
+            return Err(CompilerMessages {
+                errors: vec![CompilerError::compiler_error(
+                    "AST construction requires a project path resolver for template folding and path coercion.",
+                )],
+                warnings,
+            });
+        };
 
         // Collect every module declaration once.
         // WHY: Resolution stores fully qualified symbol paths.
@@ -229,6 +239,8 @@ impl Ast {
                             visible_declaration_ids: &bindings.visible_symbol_paths,
                             start_import_aliases: &bindings.start_aliases,
                             host_registry,
+                            project_path_resolver: project_path_resolver.clone(),
+                            path_format_config: path_format_config.clone(),
                             build_profile,
                             warnings: &mut warnings,
                             string_table,
@@ -522,7 +534,19 @@ impl Ast {
                         }
                     }
 
-                    let html = match template.fold_into_stringid(&None, string_table) {
+                    let mut fold_context = match context
+                        .new_template_fold_context(string_table, "top-level const template folding")
+                    {
+                        Ok(context) => context,
+                        Err(error) => {
+                            return Err(CompilerMessages {
+                                errors: vec![error],
+                                warnings,
+                            });
+                        }
+                    };
+
+                    let html = match template.fold_into_stringid(&mut fold_context) {
                         Ok(value) => value,
                         Err(error) => {
                             return Err(CompilerMessages {
@@ -540,19 +564,24 @@ impl Ast {
             if header.exported {}
         }
 
-        let doc_fragments =
-            collect_and_strip_comment_templates(&mut ast, string_table).map_err(|error| {
-                CompilerMessages {
-                    errors: vec![error],
-                    warnings: warnings.clone(),
-                }
-            })?;
+        let doc_fragments = collect_and_strip_comment_templates(
+            &mut ast,
+            project_path_resolver_for_folding,
+            &path_format_config,
+            string_table,
+        )
+        .map_err(|error| CompilerMessages {
+            errors: vec![error],
+            warnings: warnings.clone(),
+        })?;
 
         let start_template_items = synthesize_start_template_items(
             &mut ast,
             &entry_dir,
             &top_level_template_items,
             &const_templates_by_path,
+            project_path_resolver_for_folding,
+            &path_format_config,
             string_table,
         )
         .map_err(|error| CompilerMessages {
@@ -590,10 +619,10 @@ pub struct ScopeContext {
     pub loop_depth: usize,
     pub build_profile: FrontendBuildProfile,
     pub(crate) emitted_warnings: Rc<RefCell<Vec<CompilerWarning>>>,
-    
+
     /// Project-aware path resolver for compile-time path validation.
     pub(crate) project_path_resolver: Option<ProjectPathResolver>,
-    
+
     /// The real filesystem source file that this context originated from.
     /// For const templates, `scope` is a synthetic path like `#page.bst/#const_template0`,
     /// so this field carries the actual source file path for path resolution.
@@ -725,24 +754,72 @@ impl ScopeContext {
         }
     }
 
-    // Can also be a cheeky struct or enum or something
-    pub fn new_constant(scope: InternedPath) -> ScopeContext {
+    /// Builds a constant child context that preserves project-aware folding/path state.
+    ///
+    /// WHAT: clones the parent visibility/declaration environment and forces
+    ///       resolver + source file scope propagation into constant parsing paths.
+    /// WHY: resolver-less constant contexts are invalid for template folding and
+    ///      template-head path coercion.
+    pub fn new_constant(scope: InternedPath, parent: &ScopeContext) -> ScopeContext {
         ScopeContext {
             kind: ContextKind::Constant,
             scope,
-            declarations: Vec::new(),
-            visible_declaration_ids: None,
-            start_import_aliases: FxHashMap::default(),
+            declarations: parent.declarations.to_owned(),
+            visible_declaration_ids: parent.visible_declaration_ids.clone(),
+            start_import_aliases: parent.start_import_aliases.clone(),
             expected_result_types: Vec::new(),
-            host_registry: HostRegistry::default(),
-            style_directives: StyleDirectiveRegistry::built_ins(),
-            loop_depth: 0,
-            build_profile: FrontendBuildProfile::Dev,
-            emitted_warnings: Rc::new(RefCell::new(Vec::new())),
-            project_path_resolver: None,
-            source_file_scope: None,
-            path_format_config: PathStringFormatConfig::default(),
+            host_registry: parent.host_registry.clone(),
+            style_directives: parent.style_directives.clone(),
+            loop_depth: parent.loop_depth,
+            build_profile: parent.build_profile,
+            emitted_warnings: parent.emitted_warnings.clone(),
+            project_path_resolver: parent.project_path_resolver.clone(),
+            source_file_scope: parent.source_file_scope.clone(),
+            path_format_config: parent.path_format_config.clone(),
         }
+    }
+
+    pub(crate) fn required_project_path_resolver(
+        &self,
+        operation: &str,
+    ) -> Result<&ProjectPathResolver, CompilerError> {
+        let Some(resolver) = self.project_path_resolver.as_ref() else {
+            return_compiler_error!(
+                "Missing project path resolver during '{}'. Context scope: '{}'. This is a compiler setup bug.",
+                operation,
+                format!("{:?}", self.scope)
+            );
+        };
+        Ok(resolver)
+    }
+
+    pub(crate) fn required_source_file_scope(
+        &self,
+        operation: &str,
+    ) -> Result<&InternedPath, CompilerError> {
+        let Some(source_scope) = self.source_file_scope.as_ref() else {
+            return_compiler_error!(
+                "Missing source file scope during '{}'. Context scope: '{}'. This is a compiler setup bug.",
+                operation,
+                format!("{:?}", self.scope)
+            );
+        };
+        Ok(source_scope)
+    }
+
+    pub fn new_template_fold_context<'a>(
+        &'a self,
+        string_table: &'a mut StringTable,
+        operation: &str,
+    ) -> Result<TemplateFoldContext<'a>, CompilerError> {
+        let resolver = self.required_project_path_resolver(operation)?;
+        let source_file_scope = self.required_source_file_scope(operation)?;
+        Ok(TemplateFoldContext {
+            string_table,
+            project_path_resolver: resolver,
+            path_format_config: &self.path_format_config,
+            source_file_scope,
+        })
     }
 
     pub fn with_build_profile(mut self, profile: FrontendBuildProfile) -> ScopeContext {

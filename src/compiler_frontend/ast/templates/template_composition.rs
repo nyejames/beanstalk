@@ -2,38 +2,20 @@
 //! and style inheritance.
 //!
 //! WHAT: Applies Beanstalk's template semantics after parsing — head-chain
-//! composition, `$children(..)` wrapper application, and inherited style
-//! derivation.
+//! composition and `$children(..)` wrapper application.
 //!
 //! WHY: Keeps composition separate from token-level parsing so each phase
 //! has a clear input/output contract.
 
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::templates::template::{
-    Style, TemplateAtom, TemplateContent, TemplateSegment, TemplateSegmentOrigin, TemplateType,
+    TemplateAtom, TemplateContent, TemplateSegment, TemplateSegmentOrigin, TemplateType,
 };
 use crate::compiler_frontend::ast::templates::template_slots::compose_template_with_slots;
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::Ownership;
 use crate::compiler_frontend::string_interning::StringTable;
-
-// -------------------------
-// STYLE INHERITANCE
-// -------------------------
-
-/// Computes the inherited style for nested templates within the current template.
-/// Currently returns `None` — formatters must be redeclared explicitly.
-pub(crate) fn effective_inherited_style_for_nested_templates(style: &Style) -> Option<Style> {
-    inherited_style_for_nested_child_templates(style)
-}
-
-/// Nested templates start with no inherited formatter/style state.
-/// Formatters such as `$markdown` must be redeclared explicitly on
-/// each nested template that wants formatter-controlled body parsing.
-pub(crate) fn inherited_style_for_nested_child_templates(_style: &Style) -> Option<Style> {
-    None
-}
 
 // -------------------------
 // CHILD WRAPPER APPLICATION

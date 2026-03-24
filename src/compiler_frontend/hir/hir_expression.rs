@@ -967,7 +967,8 @@ impl<'a> HirBuilder<'a> {
         if let ExpressionKind::Template(template) = &constant_declaration.value.kind {
             match template.const_value_kind() {
                 crate::compiler_frontend::ast::templates::template::TemplateConstValueKind::RenderableString => {
-                    let folded = template.fold_into_stringid(&None, self.string_table)?;
+                    let mut fold_context = self.new_template_fold_context(&template.location.scope);
+                    let folded = template.fold_into_stringid(&mut fold_context)?;
                     let string_ty = self.intern_type_kind(HirTypeKind::String);
                     let region = self.current_region_or_error(location)?;
 
@@ -983,7 +984,8 @@ impl<'a> HirBuilder<'a> {
                     // WHAT: allow direct runtime uses of wrapper constants to lower as strings.
                     // WHY: unresolved wrapper slots render as empty segments when no fill-site
                     // consumes them, matching runtime template rendering semantics.
-                    let folded = template.fold_into_stringid(&None, self.string_table)?;
+                    let mut fold_context = self.new_template_fold_context(&template.location.scope);
+                    let folded = template.fold_into_stringid(&mut fold_context)?;
                     let string_ty = self.intern_type_kind(HirTypeKind::String);
                     let region = self.current_region_or_error(location)?;
 

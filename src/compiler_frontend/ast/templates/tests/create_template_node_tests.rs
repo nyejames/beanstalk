@@ -16,8 +16,9 @@ use crate::compiler_frontend::compiler_warnings::WarningKind;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::paths::path_format::{OutputPathStyle, PathStringFormatConfig};
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
+use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
+use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::style_directives::{StyleDirectiveRegistry, StyleDirectiveSpec};
 use crate::compiler_frontend::tokenizer::tokenizer::tokenize;
 use crate::compiler_frontend::tokenizer::tokens::{
@@ -87,6 +88,45 @@ fn template_tokens_from_source_with_directives(
     tokens
 }
 
+fn test_project_path_resolver() -> ProjectPathResolver {
+    let cwd = std::env::temp_dir();
+    ProjectPathResolver::new(cwd.clone(), cwd, &[]).expect("test path resolver should be valid")
+}
+
+fn with_test_path_context(context: ScopeContext, source_scope: &InternedPath) -> ScopeContext {
+    context
+        .with_project_path_resolver(Some(test_project_path_resolver()))
+        .with_source_file_scope(source_scope.to_owned())
+        .with_path_format_config(PathStringFormatConfig::default())
+}
+
+fn new_constant_context(scope: InternedPath) -> ScopeContext {
+    let parent = with_test_path_context(
+        ScopeContext::new(
+            ContextKind::Constant,
+            scope.to_owned(),
+            &[],
+            HostRegistry::default(),
+            vec![],
+        ),
+        &scope,
+    );
+    ScopeContext::new_constant(scope, &parent)
+}
+
+fn fold_template_in_context(
+    template: &Template,
+    context: &ScopeContext,
+    string_table: &mut StringTable,
+) -> StringId {
+    let mut fold_context = context
+        .new_template_fold_context(string_table, "template tests fold")
+        .expect("test context should include fold dependencies");
+    template
+        .fold_into_stringid(&mut fold_context)
+        .expect("template should fold")
+}
+
 fn runtime_template_context(scope: &InternedPath, string_table: &mut StringTable) -> ScopeContext {
     let value_name = string_table.intern("value");
     let declaration = Declaration {
@@ -108,22 +148,28 @@ fn runtime_template_context(scope: &InternedPath, string_table: &mut StringTable
         ),
     };
 
-    ScopeContext::new(
-        ContextKind::Template,
-        scope.to_owned(),
-        &[declaration],
-        HostRegistry::default(),
-        vec![],
+    with_test_path_context(
+        ScopeContext::new(
+            ContextKind::Template,
+            scope.to_owned(),
+            &[declaration],
+            HostRegistry::default(),
+            vec![],
+        ),
+        scope,
     )
 }
 
 fn constant_template_context(scope: &InternedPath, declarations: &[Declaration]) -> ScopeContext {
-    ScopeContext::new(
-        ContextKind::Constant,
-        scope.to_owned(),
-        declarations,
-        HostRegistry::default(),
-        vec![],
+    with_test_path_context(
+        ScopeContext::new(
+            ContextKind::Constant,
+            scope.to_owned(),
+            declarations,
+            HostRegistry::default(),
+            vec![],
+        ),
+        scope,
     )
 }
 
@@ -138,31 +184,31 @@ fn docs_style_wrapper_declarations(string_table: &mut StringTable) -> Vec<Declar
     ]",
         string_table,
     );
-    let table_context = ScopeContext::new_constant(table_tokens.src_path.to_owned());
+    let table_context = new_constant_context(table_tokens.src_path.to_owned());
     let table = Template::new(&mut table_tokens, &table_context, vec![], string_table)
         .expect("table wrapper should parse");
 
     let mut row_tokens = template_tokens_from_source(
         "[:
-    <tr>[$reset, $children([:<td>[$slot]</td>]):[$slot]]</tr>
+    <tr>[$fresh, $children([:<td>[$slot]</td>]):[$slot]]</tr>
 ]",
         string_table,
     );
-    let row_context = ScopeContext::new_constant(row_tokens.src_path.to_owned());
+    let row_context = new_constant_context(row_tokens.src_path.to_owned());
     let row = Template::new(&mut row_tokens, &row_context, vec![], string_table)
         .expect("row wrapper should parse");
 
     let mut header_row_tokens = template_tokens_from_source(
         "[:
     <tr>
-        [$reset, $children([:
+        [$fresh, $children([:
             <th style=\"border: 1px solid; padding: 0.5em; text-align: left;\">[$slot]</th>
         ]):[$slot]]
     </tr>
 ]",
         string_table,
     );
-    let header_row_context = ScopeContext::new_constant(header_row_tokens.src_path.to_owned());
+    let header_row_context = new_constant_context(header_row_tokens.src_path.to_owned());
     let header_row = Template::new(
         &mut header_row_tokens,
         &header_row_context,
@@ -190,13 +236,11 @@ fn docs_style_wrapper_declarations(string_table: &mut StringTable) -> Vec<Declar
 fn folded_template_output(source: &str) -> String {
     let mut string_table = StringTable::new();
     let mut token_stream = template_tokens_from_source(source, &mut string_table);
-    let context = ScopeContext::new_constant(token_stream.src_path.to_owned());
+    let context = new_constant_context(token_stream.src_path.to_owned());
 
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("template should parse");
-    let folded = template
-        .fold_into_stringid(&None, &mut string_table)
-        .expect("folding should succeed");
+    let folded = fold_template_in_context(&template, &context, &mut string_table);
 
     string_table.resolve(folded).to_owned()
 }
@@ -220,7 +264,7 @@ fn template_parse_error(source: &str) -> String {
         .iter()
         .position(|token| matches!(token.kind, TokenKind::TemplateHead))
         .expect("expected a template opener");
-    let context = ScopeContext::new_constant(token_stream.src_path.to_owned());
+    let context = new_constant_context(token_stream.src_path.to_owned());
 
     Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect_err("template should fail to parse")
@@ -236,7 +280,7 @@ fn template_warnings(
     let context = if runtime_context {
         runtime_template_context(&token_stream.src_path, &mut string_table)
     } else {
-        ScopeContext::new_constant(token_stream.src_path.to_owned())
+        new_constant_context(token_stream.src_path.to_owned())
     };
 
     let _ = Template::new(&mut token_stream, &context, vec![], &mut string_table)
@@ -311,7 +355,7 @@ fn render_static_template_fragments(template: &Template, string_table: &StringTa
 fn parse_template_head_handles_truncated_stream_without_panicking() {
     let mut string_table = StringTable::new();
     let scope = InternedPath::from_single_str("main.bst/#const_template0", &mut string_table);
-    let context = ScopeContext::new_constant(scope.to_owned());
+    let context = new_constant_context(scope.to_owned());
 
     let mut token_stream = FileTokens::new(
         scope,
@@ -332,7 +376,7 @@ fn parse_template_head_handles_truncated_stream_without_panicking() {
 fn single_item_template_head_with_close_is_foldable() {
     let mut string_table = StringTable::new();
     let scope = InternedPath::from_single_str("main.bst/#const_template0", &mut string_table);
-    let context = ScopeContext::new_constant(scope.to_owned());
+    let context = new_constant_context(scope.to_owned());
 
     let mut token_stream = FileTokens::new(
         scope,
@@ -348,9 +392,7 @@ fn single_item_template_head_with_close_is_foldable() {
         .expect("single-item head template should parse");
 
     assert!(matches!(template.kind, TemplateType::String));
-    let folded = template
-        .fold_into_stringid(&None, &mut string_table)
-        .expect("folding should succeed");
+    let folded = fold_template_in_context(&template, &context, &mut string_table);
     assert_eq!(string_table.resolve(folded), "3");
 }
 
@@ -359,15 +401,13 @@ fn markdown_formats_only_template_body_content() {
     let mut string_table = StringTable::new();
     let mut token_stream =
         template_tokens_from_source("[\"prefix\", $markdown:\n# Hello\n]", &mut string_table);
-    let context = ScopeContext::new_constant(token_stream.src_path.to_owned());
+    let context = new_constant_context(token_stream.src_path.to_owned());
 
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("template should parse");
 
     assert!(matches!(template.kind, TemplateType::String));
-    let folded = template
-        .fold_into_stringid(&None, &mut string_table)
-        .expect("folding should succeed");
+    let folded = fold_template_in_context(&template, &context, &mut string_table);
     let rendered = string_table.resolve(folded);
 
     assert!(rendered.starts_with("prefix"));
@@ -568,7 +608,7 @@ fn html_directive_sets_html_mode() {
     let mut string_table = StringTable::new();
     let mut token_stream =
         template_tokens_from_source("[$html:\n<div class=\"card\">x</div>\n]", &mut string_table);
-    let context = ScopeContext::new_constant(token_stream.src_path.to_owned());
+    let context = new_constant_context(token_stream.src_path.to_owned());
 
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("html template should parse");
@@ -636,15 +676,14 @@ fn runtime_templates_format_static_body_strings_only() {
 }
 
 #[test]
-fn reset_clears_inherited_style_before_reapplying_markdown() {
+fn fresh_marks_template_to_skip_parent_child_wrappers() {
     let mut string_table = StringTable::new();
     let mut token_stream =
-        template_tokens_from_source("[$reset, $markdown:\n# Hello\n]", &mut string_table);
-    let context = ScopeContext::new_constant(token_stream.src_path.to_owned());
+        template_tokens_from_source("[$fresh, $markdown:\n# Hello\n]", &mut string_table);
+    let context = new_constant_context(token_stream.src_path.to_owned());
 
     let mut inherited = Template::create_default(vec![]);
     inherited.style.formatter = Some(markdown_formatter());
-    inherited.style.formatter_precedence = 0;
     inherited
         .style
         .child_templates
@@ -659,6 +698,7 @@ fn reset_clears_inherited_style_before_reapplying_markdown() {
     .expect("template should parse");
 
     assert!(template.style.formatter.is_some());
+    assert!(template.style.skip_parent_child_wrappers);
     assert!(template.style.child_templates.is_empty());
 }
 
@@ -667,7 +707,7 @@ fn stores_style_child_templates_from_children_directive() {
     let mut string_table = StringTable::new();
     let mut token_stream =
         template_tokens_from_source("[$children([:prefix]), : body]", &mut string_table);
-    let context = ScopeContext::new_constant(token_stream.src_path.to_owned());
+    let context = new_constant_context(token_stream.src_path.to_owned());
 
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("template should parse");
@@ -705,9 +745,7 @@ fn children_directive_accepts_const_string_reference() {
 
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("children directive should accept const-folded references");
-    let folded = template
-        .fold_into_stringid(&None, &mut string_table)
-        .expect("template should fold");
+    let folded = fold_template_in_context(&template, &context, &mut string_table);
 
     assert!(string_table.resolve(folded).contains("prefix:"));
 }
@@ -769,7 +807,7 @@ fn slot_children_wrappers_apply_table_rows_and_cells_without_cross_applying() {
         "[$children([:<tr>[$slot]</tr>]): <table style=\"[$slot(\"style\")]\">[$children([:<td>[$slot]</td>]):[$slot]]</table>]",
         &mut string_table,
     );
-    let wrapper_context = ScopeContext::new_constant(wrapper_tokens.src_path.to_owned());
+    let wrapper_context = new_constant_context(wrapper_tokens.src_path.to_owned());
     let wrapper = Template::new(
         &mut wrapper_tokens,
         &wrapper_context,
@@ -791,9 +829,7 @@ fn slot_children_wrappers_apply_table_rows_and_cells_without_cross_applying() {
 
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("slot child wrapper application should parse");
-    let folded = template
-        .fold_into_stringid(&None, &mut string_table)
-        .expect("wrapped slot children should fold");
+    let folded = fold_template_in_context(&template, &context, &mut string_table);
     let rendered = string_table.resolve(folded);
 
     assert_eq!(rendered.matches("<tr>").count(), 2);
@@ -812,7 +848,7 @@ fn markdown_parent_keeps_table_rows_and_cells_inside_table() {
         "[$children([:<tr>[$slot]</tr>]): <table style=\"[$slot(\"style\")]\">[$children([:<td>[$slot]</td>]):[$slot]]</table>]",
         &mut string_table,
     );
-    let wrapper_context = ScopeContext::new_constant(wrapper_tokens.src_path.to_owned());
+    let wrapper_context = new_constant_context(wrapper_tokens.src_path.to_owned());
     let wrapper = Template::new(
         &mut wrapper_tokens,
         &wrapper_context,
@@ -834,9 +870,7 @@ fn markdown_parent_keeps_table_rows_and_cells_inside_table() {
 
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("markdown table usage should parse");
-    let folded = template
-        .fold_into_stringid(&None, &mut string_table)
-        .expect("markdown table usage should fold");
+    let folded = fold_template_in_context(&template, &context, &mut string_table);
     let rendered = string_table.resolve(folded);
 
     assert!(!rendered.contains('\u{FFFC}'));
@@ -854,7 +888,7 @@ fn markdown_page_wrapper_keeps_table_rows_and_cells_inside_table() {
         "[$children([:<tr>[$slot]</tr>]): <table style=\"[$slot(\"style\")]\">[$children([:<td>[$slot]</td>]):[$slot]]</table>]",
         &mut string_table,
     );
-    let wrapper_context = ScopeContext::new_constant(table_tokens.src_path.to_owned());
+    let wrapper_context = new_constant_context(table_tokens.src_path.to_owned());
     let table_wrapper = Template::new(
         &mut table_tokens,
         &wrapper_context,
@@ -892,9 +926,7 @@ fn markdown_page_wrapper_keeps_table_rows_and_cells_inside_table() {
 
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("markdown page wrapper table usage should parse");
-    let folded = template
-        .fold_into_stringid(&None, &mut string_table)
-        .expect("markdown page wrapper table usage should fold");
+    let folded = fold_template_in_context(&template, &context, &mut string_table);
     let rendered = string_table.resolve(folded);
 
     assert!(!rendered.contains('\u{FFFC}'));
@@ -903,7 +935,7 @@ fn markdown_page_wrapper_keeps_table_rows_and_cells_inside_table() {
 }
 
 #[test]
-fn markdown_parent_with_reset_row_wrapper_renders_plain_cells() {
+fn markdown_parent_with_fresh_row_wrapper_renders_plain_cells() {
     let mut string_table = StringTable::new();
     let declarations = docs_style_wrapper_declarations(&mut string_table);
 
@@ -915,9 +947,7 @@ fn markdown_parent_with_reset_row_wrapper_renders_plain_cells() {
 
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("markdown row usage should parse");
-    let folded = template
-        .fold_into_stringid(&None, &mut string_table)
-        .expect("markdown row usage should fold");
+    let folded = fold_template_in_context(&template, &context, &mut string_table);
     let rendered = string_table.resolve(folded);
 
     println!("RENDERED: {}", rendered);
@@ -928,7 +958,7 @@ fn markdown_parent_with_reset_row_wrapper_renders_plain_cells() {
 }
 
 #[test]
-fn markdown_parent_with_reset_header_row_wrapper_renders_plain_headers() {
+fn markdown_parent_with_fresh_header_row_wrapper_renders_plain_headers() {
     let mut string_table = StringTable::new();
     let declarations = docs_style_wrapper_declarations(&mut string_table);
 
@@ -943,9 +973,7 @@ fn markdown_parent_with_reset_header_row_wrapper_renders_plain_headers() {
 
     println!("PARENT RENDER PLAN: {:#?}", template.render_plan);
 
-    let folded = template
-        .fold_into_stringid(&None, &mut string_table)
-        .expect("markdown header row usage should fold");
+    let folded = fold_template_in_context(&template, &context, &mut string_table);
     let rendered = string_table.resolve(folded);
 
     println!("RENDERED: {}", rendered);
@@ -990,9 +1018,7 @@ fn doc_templates_treat_brackets_as_literal_text() {
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("doc template should parse brackets as literal text");
 
-    let folded = template
-        .fold_into_stringid(&None, &mut string_table)
-        .expect("doc template should fold");
+    let folded = fold_template_in_context(&template, &context, &mut string_table);
     let result = string_table.resolve(folded);
     // Each bracket and the symbol become separate atoms, each markdown-formatted
     // as individual paragraphs. The key assertion is that all three appear in the output.
@@ -1014,7 +1040,7 @@ fn doc_templates_treat_brackets_as_literal_text() {
 fn doc_templates_are_markdown_formatted_by_default() {
     let mut string_table = StringTable::new();
     let mut token_stream = template_tokens_from_source("[$doc:\n# Heading\n]", &mut string_table);
-    let context = ScopeContext::new_constant(token_stream.src_path.to_owned());
+    let context = new_constant_context(token_stream.src_path.to_owned());
 
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("doc template should parse");
@@ -1023,9 +1049,7 @@ fn doc_templates_are_markdown_formatted_by_default() {
         TemplateType::Comment(CommentDirectiveKind::Doc)
     ));
 
-    let folded = template
-        .fold_into_stringid(&None, &mut string_table)
-        .expect("doc template should fold");
+    let folded = fold_template_in_context(&template, &context, &mut string_table);
     assert!(string_table.resolve(folded).contains("<h1>Heading</h1>"));
 }
 
@@ -1033,7 +1057,7 @@ fn doc_templates_are_markdown_formatted_by_default() {
 fn doc_brackets_become_literal_text_not_doc_children() {
     let mut string_table = StringTable::new();
     let mut token_stream = template_tokens_from_source("[$doc:\n[: child]\n]", &mut string_table);
-    let context = ScopeContext::new_constant(token_stream.src_path.to_owned());
+    let context = new_constant_context(token_stream.src_path.to_owned());
 
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("doc template should parse");
@@ -1041,9 +1065,7 @@ fn doc_brackets_become_literal_text_not_doc_children() {
     // With suppress_child_templates, brackets are literal text. No doc children are collected.
     assert_eq!(template.doc_children.len(), 0);
 
-    let folded = template
-        .fold_into_stringid(&None, &mut string_table)
-        .expect("doc template should fold");
+    let folded = fold_template_in_context(&template, &context, &mut string_table);
     let result = string_table.resolve(folded);
     // Each bracket, colon, and body text become separate atoms, markdown-formatted individually.
     assert!(
@@ -1094,8 +1116,8 @@ fn builder_registered_style_directive_parses_as_noop_scaffold() {
         &directives,
         &mut string_table,
     );
-    let context = ScopeContext::new_constant(token_stream.src_path.to_owned())
-        .with_style_directives(&registry);
+    let context =
+        new_constant_context(token_stream.src_path.to_owned()).with_style_directives(&registry);
 
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("builder-registered directives should parse in scaffold mode");
@@ -1114,14 +1136,12 @@ fn builder_registered_style_directive_preserves_raw_body_whitespace() {
         &directives,
         &mut string_table,
     );
-    let context = ScopeContext::new_constant(token_stream.src_path.to_owned())
-        .with_style_directives(&registry);
+    let context =
+        new_constant_context(token_stream.src_path.to_owned()).with_style_directives(&registry);
 
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("builder-registered directives should parse in scaffold mode");
-    let folded = template
-        .fold_into_stringid(&None, &mut string_table)
-        .expect("template should fold");
+    let folded = fold_template_in_context(&template, &context, &mut string_table);
 
     assert_eq!(string_table.resolve(folded), "\n    Hello\n    World\n");
 }
@@ -1136,8 +1156,8 @@ fn builder_directive_can_override_builtin_slot_name() {
         &directives,
         &mut string_table,
     );
-    let context = ScopeContext::new_constant(token_stream.src_path.to_owned())
-        .with_style_directives(&registry);
+    let context =
+        new_constant_context(token_stream.src_path.to_owned()).with_style_directives(&registry);
 
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("builder override should disable built-in slot parsing semantics");
@@ -1151,7 +1171,7 @@ fn css_without_argument_parses_as_block_mode() {
     let mut string_table = StringTable::new();
     let mut token_stream =
         template_tokens_from_source("[$css:\n.button { color: red; }\n]", &mut string_table);
-    let context = ScopeContext::new_constant(token_stream.src_path.to_owned());
+    let context = new_constant_context(token_stream.src_path.to_owned());
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("css template should parse");
 
@@ -1163,7 +1183,7 @@ fn css_inline_argument_parses_correctly() {
     let mut string_table = StringTable::new();
     let mut token_stream =
         template_tokens_from_source("[$css(\"inline\"):\ncolor: blue;\n]", &mut string_table);
-    let context = ScopeContext::new_constant(token_stream.src_path.to_owned());
+    let context = new_constant_context(token_stream.src_path.to_owned());
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("inline css template should parse");
 
@@ -1343,7 +1363,7 @@ fn slot_wrappers_remain_compile_time_templates_until_filled() {
     let mut string_table = StringTable::new();
     let mut token_stream =
         template_tokens_from_source("[: before [$slot] after]", &mut string_table);
-    let context = ScopeContext::new_constant(token_stream.src_path.to_owned());
+    let context = new_constant_context(token_stream.src_path.to_owned());
 
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("wrapper template should parse");
@@ -1362,7 +1382,7 @@ fn folding_nested_wrapper_constant_with_unfilled_named_slots_renders_empty_strin
         "[:<link rel=\"icon\" href=\"[$slot(\"favicon\")]\"><style>[$slot(\"css\")]</style>]",
         &mut string_table,
     );
-    let wrapper_context = ScopeContext::new_constant(wrapper_tokens.src_path.to_owned());
+    let wrapper_context = new_constant_context(wrapper_tokens.src_path.to_owned());
     let wrapper = Template::new(
         &mut wrapper_tokens,
         &wrapper_context,
@@ -1381,9 +1401,7 @@ fn folding_nested_wrapper_constant_with_unfilled_named_slots_renders_empty_strin
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("template using wrapper constant should parse");
 
-    let folded = template
-        .fold_into_stringid(&None, &mut string_table)
-        .expect("unfilled named slots should fold as empty strings");
+    let folded = fold_template_in_context(&template, &context, &mut string_table);
     let rendered = string_table.resolve(folded);
 
     assert!(rendered.contains("rel=\"icon\""));
@@ -1452,12 +1470,15 @@ fn constant_context_template_head_with_constant_references_folds_to_string_slice
         },
     ];
 
-    let context = ScopeContext::new(
-        ContextKind::Constant,
-        scope,
-        &declarations,
-        HostRegistry::default(),
-        vec![],
+    let context = with_test_path_context(
+        ScopeContext::new(
+            ContextKind::Constant,
+            scope.to_owned(),
+            &declarations,
+            HostRegistry::default(),
+            vec![],
+        ),
+        &scope,
     );
     let mut token_stream =
         template_tokens_from_source("[const_before, const_after]", &mut string_table);
@@ -1511,7 +1532,7 @@ fn fills_single_slot_templates_in_source_order() {
         InternedPath::from_single_str("main.bst/#const_template0", &mut string_table);
     let mut wrapper_tokens =
         template_tokens_from_source("[: before [$slot] after]", &mut string_table);
-    let wrapper_context = ScopeContext::new_constant(wrapper_tokens.src_path.to_owned());
+    let wrapper_context = new_constant_context(wrapper_tokens.src_path.to_owned());
     let wrapper = Template::new(
         &mut wrapper_tokens,
         &wrapper_context,
@@ -1533,9 +1554,7 @@ fn fills_single_slot_templates_in_source_order() {
 
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("slot application should parse");
-    let folded = template
-        .fold_into_stringid(&None, &mut string_table)
-        .expect("filled template should fold");
+    let folded = fold_template_in_context(&template, &context, &mut string_table);
     let rendered = string_table.resolve(folded);
     let before = rendered
         .find("before")
@@ -1558,7 +1577,7 @@ fn fills_multiple_named_slots_with_ordered_inserts() {
         "[: before [$slot(\"first\")] in the middle [$slot(\"second\")] afterwards]",
         &mut string_table,
     );
-    let wrapper_context = ScopeContext::new_constant(wrapper_tokens.src_path.to_owned());
+    let wrapper_context = new_constant_context(wrapper_tokens.src_path.to_owned());
     let wrapper = Template::new(
         &mut wrapper_tokens,
         &wrapper_context,
@@ -1580,9 +1599,7 @@ fn fills_multiple_named_slots_with_ordered_inserts() {
 
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("ordered slot application should parse");
-    let folded = template
-        .fold_into_stringid(&None, &mut string_table)
-        .expect("filled template should fold");
+    let folded = fold_template_in_context(&template, &context, &mut string_table);
     let rendered = string_table.resolve(folded);
 
     let first_slot = rendered
@@ -1609,7 +1626,7 @@ fn allows_explicitly_empty_named_slot_insertions() {
         "[: before [$slot(\"first\")] in the middle [$slot(\"second\")] afterwards]",
         &mut string_table,
     );
-    let wrapper_context = ScopeContext::new_constant(wrapper_tokens.src_path.to_owned());
+    let wrapper_context = new_constant_context(wrapper_tokens.src_path.to_owned());
     let wrapper = Template::new(
         &mut wrapper_tokens,
         &wrapper_context,
@@ -1631,9 +1648,7 @@ fn allows_explicitly_empty_named_slot_insertions() {
 
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("empty slot markers should still count as used");
-    let folded = template
-        .fold_into_stringid(&None, &mut string_table)
-        .expect("filled template should fold");
+    let folded = fold_template_in_context(&template, &context, &mut string_table);
     let rendered = string_table.resolve(folded);
 
     assert!(rendered.contains("first"));
@@ -1648,7 +1663,7 @@ fn rejects_loose_content_for_named_only_slots_without_default() {
         InternedPath::from_single_str("main.bst/#const_template0", &mut string_table);
     let mut wrapper_tokens =
         template_tokens_from_source("[: before [$slot(\"title\")] after]", &mut string_table);
-    let wrapper_context = ScopeContext::new_constant(wrapper_tokens.src_path.to_owned());
+    let wrapper_context = new_constant_context(wrapper_tokens.src_path.to_owned());
     let wrapper = Template::new(
         &mut wrapper_tokens,
         &wrapper_context,
@@ -1679,7 +1694,7 @@ fn rejects_unknown_named_insert_targets() {
         InternedPath::from_single_str("main.bst/#const_template0", &mut string_table);
     let mut wrapper_tokens =
         template_tokens_from_source("[: before [$slot(\"title\")] after]", &mut string_table);
-    let wrapper_context = ScopeContext::new_constant(wrapper_tokens.src_path.to_owned());
+    let wrapper_context = new_constant_context(wrapper_tokens.src_path.to_owned());
     let wrapper = Template::new(
         &mut wrapper_tokens,
         &wrapper_context,
@@ -1712,7 +1727,7 @@ fn rejects_duplicate_default_slot_definitions() {
         InternedPath::from_single_str("main.bst/#const_template0", &mut string_table);
     let mut wrapper_tokens =
         template_tokens_from_source("[: before [$slot] middle [$slot] after]", &mut string_table);
-    let wrapper_context = ScopeContext::new_constant(wrapper_tokens.src_path.to_owned());
+    let wrapper_context = new_constant_context(wrapper_tokens.src_path.to_owned());
     let wrapper = Template::new(
         &mut wrapper_tokens,
         &wrapper_context,
@@ -1745,7 +1760,7 @@ fn rejects_insert_targeting_non_immediate_parent_slot() {
     let outer_scope = outer_tokens.src_path.to_owned();
     let outer = Template::new(
         &mut outer_tokens,
-        &ScopeContext::new_constant(outer_scope),
+        &new_constant_context(outer_scope),
         vec![],
         &mut string_table,
     )
@@ -1756,7 +1771,7 @@ fn rejects_insert_targeting_non_immediate_parent_slot() {
     let inner_scope = inner_tokens.src_path.to_owned();
     let inner = Template::new(
         &mut inner_tokens,
-        &ScopeContext::new_constant(inner_scope),
+        &new_constant_context(inner_scope),
         vec![],
         &mut string_table,
     )
@@ -1769,7 +1784,7 @@ fn rejects_insert_targeting_non_immediate_parent_slot() {
     let insert_scope = insert_tokens.src_path.to_owned();
     let outer_insert = Template::new(
         &mut insert_tokens,
-        &ScopeContext::new_constant(insert_scope),
+        &new_constant_context(insert_scope),
         vec![],
         &mut string_table,
     )
@@ -1810,7 +1825,7 @@ fn fills_nested_slots_in_parent_authored_order() {
         "[: outer [: inner [$slot(\"first\")] middle [$slot] [: deep [$slot(\"second\")] end] tail] after]",
         &mut string_table,
     );
-    let wrapper_context = ScopeContext::new_constant(wrapper_tokens.src_path.to_owned());
+    let wrapper_context = new_constant_context(wrapper_tokens.src_path.to_owned());
     let wrapper = Template::new(
         &mut wrapper_tokens,
         &wrapper_context,
@@ -1832,9 +1847,7 @@ fn fills_nested_slots_in_parent_authored_order() {
 
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("nested slot application should parse");
-    let folded = template
-        .fold_into_stringid(&None, &mut string_table)
-        .expect("nested slot template should fold");
+    let folded = fold_template_in_context(&template, &context, &mut string_table);
     let rendered = string_table.resolve(folded);
 
     let first_slot = rendered
@@ -1965,7 +1978,7 @@ fn template_with_slot_and_insert_contributes_upward_after_receiving_content() {
     let page_scope = page_tokens.src_path.to_owned();
     let page = Template::new(
         &mut page_tokens,
-        &ScopeContext::new_constant(page_scope),
+        &new_constant_context(page_scope),
         vec![],
         &mut string_table,
     )
@@ -1978,7 +1991,7 @@ fn template_with_slot_and_insert_contributes_upward_after_receiving_content() {
     let style_scope = style_tokens.src_path.to_owned();
     let style_wrapper = Template::new(
         &mut style_tokens,
-        &ScopeContext::new_constant(style_scope),
+        &new_constant_context(style_scope),
         vec![],
         &mut string_table,
     )
@@ -1999,9 +2012,7 @@ fn template_with_slot_and_insert_contributes_upward_after_receiving_content() {
     let context = constant_template_context(&token_stream.src_path, &declarations);
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("composed template should parse");
-    let folded = template
-        .fold_into_stringid(&None, &mut string_table)
-        .expect("composed template should fold");
+    let folded = fold_template_in_context(&template, &context, &mut string_table);
     let rendered = string_table.resolve(folded);
 
     assert!(rendered.contains("color: blue;"));

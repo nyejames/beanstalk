@@ -306,7 +306,11 @@ pub fn write_project_outputs(
     // WHAT: Clean up stale artifacts and write updated manifest when cleanup is enabled
     // WHY: Artifacts from removed pages must not persist in the output folder between builds
     if options.project_entry_dir.is_some() {
-        remove_stale_artifacts(&options.output_root, &current_output_paths, &previous_manifest);
+        remove_stale_artifacts(
+            &options.output_root,
+            &current_output_paths,
+            &previous_manifest,
+        );
         write_build_manifest(&options.output_root, &current_output_paths)?;
     }
 
@@ -399,9 +403,7 @@ fn validate_output_root_is_safe(
     // WHAT: Verify the output root is near the project directory
     // WHY: An output root in a completely unrelated location is likely a misconfiguration
     let canonical_project = canonicalize_or_nearest_ancestor(project_entry_dir);
-    let project_parent = canonical_project
-        .parent()
-        .unwrap_or(&canonical_project);
+    let project_parent = canonical_project.parent().unwrap_or(&canonical_project);
 
     let is_inside_project = canonical_root.starts_with(&canonical_project);
     let is_sibling_of_project = canonical_root.starts_with(project_parent);
@@ -479,9 +481,7 @@ fn is_dangerous_system_path(path: &Path) -> bool {
             r"c:\system32",
         ];
         for dangerous in dangerous_windows_paths {
-            if path_str == *dangerous
-                || path_str == dangerous.trim_end_matches('\\')
-            {
+            if path_str == *dangerous || path_str == dangerous.trim_end_matches('\\') {
                 return true;
             }
         }

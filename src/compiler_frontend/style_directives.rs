@@ -76,7 +76,7 @@ impl StyleDirectiveRegistry {
             ordered: vec![
                 StyleDirectiveSpec::built_in("markdown", TemplateBodyMode::Normal),
                 StyleDirectiveSpec::built_in("children", TemplateBodyMode::Normal),
-                StyleDirectiveSpec::built_in("reset", TemplateBodyMode::Normal),
+                StyleDirectiveSpec::built_in("fresh", TemplateBodyMode::Normal),
                 StyleDirectiveSpec::built_in("slot", TemplateBodyMode::Normal),
                 StyleDirectiveSpec::built_in("insert", TemplateBodyMode::Normal),
                 StyleDirectiveSpec::built_in("note", TemplateBodyMode::DiscardBalanced),

@@ -161,7 +161,7 @@ Directive availability is frontend-registry based:
 **Built-in Style Directives**
 
 - $slot / $insert(..) - See slots below!
-- $reset              - Clears inherited style state before applying new directives in the same head
+- $fresh              - Opts this child template out of wrappers applied by the immediate parent's `$children(..)` directive
 - $markdown           - Parses the template bodies with a custom flavour of Markdown
 - $css                - Provides some basic warnings for malformed CSS
 - $note / $todo       - Comments (ignored by final output)
@@ -170,6 +170,23 @@ Directive availability is frontend-registry based:
 
 Formatting directives do not automatically flow into nested child templates.
 If a child template should keep using a formatter such as `$markdown`, redeclare it in that child template's head.
+
+`$fresh` is per-child and only affects wrapper application from the immediate parent. Siblings without `$fresh` still receive the parent wrappers:
+
+```beanstalk
+# list = [$children([:<li>[$slot]</li>]):
+  <ul>
+    [$slot]
+  </ul>
+]
+
+[list:
+  [: one ]
+  [$fresh: [: two ]]
+]
+```
+
+In this example, `one` is wrapped with `<li>...</li>`, while `two` opts out and is rendered without the parent `$children(..)` wrapper.
 
 ### Template Slots
 

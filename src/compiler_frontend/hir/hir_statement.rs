@@ -139,7 +139,9 @@ impl<'a> HirBuilder<'a> {
                 // WHY: these are AST-time composition values, not concrete runtime metadata.
                 match template.const_value_kind() {
                     crate::compiler_frontend::ast::templates::template::TemplateConstValueKind::RenderableString => {
-                        let folded = template.fold_into_stringid(&None, self.string_table)?;
+                        let mut fold_context =
+                            self.new_template_fold_context(&template.location.scope);
+                        let folded = template.fold_into_stringid(&mut fold_context)?;
                         Ok(Some(HirConstValue::String(
                             self.string_table.resolve(folded).to_string(),
                         )))
