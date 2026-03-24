@@ -1,0 +1,5 @@
+mode = "failure"
+entry = "."
+error_type = "Syntax"
+warnings = "forbid"
+message_contains = ["Path components with whitespace must be quoted"]

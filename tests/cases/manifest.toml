@@ -82,3 +82,13 @@ tags = ["success", "paths", "diagnostics"]
 id = "path_root_folder_preserved"
 path = "path_root_folder_preserved"
 tags = ["success", "paths", "config"]
+
+[[case]]
+id = "path_grouped_nested_expansion"
+path = "path_grouped_nested_expansion"
+tags = ["success", "paths", "tokenizer"]
+
+[[case]]
+id = "path_unquoted_whitespace_error"
+path = "path_unquoted_whitespace_error"
+tags = ["diagnostics", "paths", "tokenizer"]

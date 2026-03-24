@@ -23,7 +23,7 @@ pub(crate) struct FileImportBindings {
     /// Import-visible symbols for one source file.
     /// This is a path set rather than names-only so resolution stays globally unique.
     pub(crate) visible_symbol_paths: FxHashSet<InternedPath>,
-    /// Bare file imports (`@(foo/bar)`) bind an alias (`bar`) to that file's implicit start.
+    /// Bare file imports (`@foo/bar`) bind an alias (`bar`) to that file's implicit start.
     pub(crate) start_aliases: FxHashMap<StringId, InternedPath>,
 }
 

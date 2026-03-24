@@ -1,0 +1,13 @@
+mode = "success"
+entry = "."
+warnings = "forbid"
+
+[[artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain = [
+    "/docs/intro.md",
+    "/docs/my folder/a file.md",
+    "/docs/my folder/b.md",
+    "/docs/my folder/another folder/c.md",
+]

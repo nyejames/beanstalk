@@ -225,7 +225,7 @@ pub fn function_body_to_ast(
                                 ),
                                 token_stream.current_location().to_error_location(string_table), {
                                     CompilationStage => "AST Construction",
-                                    PrimarySuggestion => "Import exports directly with '@(path/to/file/symbol)' or '@(path/to/file/{a, b})'",
+                                    PrimarySuggestion => "Import exports directly with '@path/to/file/symbol' or '@path/to/file {a, b}'",
                                 }
                             );
                         }

@@ -1,4 +1,4 @@
-import @styles/docs/{navbar, footer, header, body, section, palette}
+import @styles/docs {navbar, footer, header, body, section, palette}
 
 #[header]
 #[body:

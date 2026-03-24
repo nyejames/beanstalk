@@ -394,13 +394,19 @@ Example:
 **Import syntax:**
 ```beanstalk
 -- Import a file start function as a callable alias:
-import @(path/to/file)
+import @path/to/file
 
 -- Import one exported symbol:
-import @(path/to/file/symbol)
+import @path/to/file/symbol
 
--- Import multiple exported symbols:
-import @(path/to/file/{symbol_a, symbol_b})
+-- Grouped relative path expansion from one shared base:
+import @path/to/file {symbol_a, symbol_b}
+
+-- Grouped entries can include nested relative paths:
+import @docs {
+    intro.md,
+    guides/getting-started.md,
+}
 ```
 
 **Entry files and implicit start functions:**
@@ -411,8 +417,8 @@ import @(path/to/file/{symbol_a, symbol_b})
 **File execution semantics:**
 ```beanstalk
 -- main.bst (entry file)
-import @(utils/helper)
-import @(utils/helper/another_func)
+import @utils/helper
+import @utils/helper/another_func
 
 -- This executes automatically when the module starts
 io("Starting main")
@@ -422,10 +428,10 @@ another_func() -- Call imported exported symbol directly
 ```
 
 **Import resolution rules:**
-- Relative imports (`@(./x)` / `@(..)`) resolve from the importing file's directory
+- Relative imports (`@./x` / `@..`) resolve from the importing file's directory
 - Non-relative imports whose first segment matches `#root_folders` resolve from the project root
 - Other non-relative imports resolve from the configured module entry root
-- Grouped imports are expanded into individual dependency edges
+- Grouped import paths are expanded into individual dependency edges
 - Circular imports are detected and cause compilation errors
 
 ### Hash (`#`) semantics

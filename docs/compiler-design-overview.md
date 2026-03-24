@@ -113,7 +113,7 @@ Project builders then perform:
 - The exact name of the file (e.g. `#page`, `#layout`, `#lib`) is preserved and interpreted by the build system
 - The project builder can be aware of multiple `#` files per root, but they can only exist at the root of a module
 
-### Stage 1: Tokenization (`src/compiler_frontend/tokenizer/tokenizer.rs`)
+### Stage 1: Tokenization (`src/compiler_frontend/tokenizer/lexer.rs`)
 **Purpose**: Convert raw source code into structured tokens with location information.
 
 **Key Features**:

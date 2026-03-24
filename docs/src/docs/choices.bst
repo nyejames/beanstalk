@@ -1,6 +1,6 @@
-@(libs/html/Basic)
-@(styles/Docs)
-@(./components)
+@libs/html/Basic
+@styles/Docs
+@./components
 [Docs.navbar]
 [Basic.page:
 

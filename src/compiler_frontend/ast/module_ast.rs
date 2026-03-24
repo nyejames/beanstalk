@@ -567,7 +567,7 @@ pub struct ScopeContext {
     // Optional file-local visibility gate over `declarations`.
     // When present, references must be in this set, which enforces import boundaries.
     pub visible_declaration_ids: Option<FxHashSet<InternedPath>>,
-    // Bare file imports (`@(path/to/file)`) bind alias -> imported file start function path.
+    // Bare file imports (`@path/to/file`) bind alias -> imported file start function path.
     pub start_import_aliases: FxHashMap<StringId, InternedPath>,
     pub expected_result_types: Vec<DataType>,
     pub host_registry: HostRegistry,

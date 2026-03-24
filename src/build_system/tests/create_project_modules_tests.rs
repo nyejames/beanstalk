@@ -154,7 +154,7 @@ fn rejects_invalid_root_folder_entries() {
     fs::create_dir_all(&root).expect("should create root dir");
     let config_path = root.join(settings::CONFIG_FILE_NAME);
 
-    fs::write(&config_path, "#root_folders = { @(core/html) }\n").expect("should write config");
+    fs::write(&config_path, "#root_folders = { @core/html }\n").expect("should write config");
 
     let mut config = Config::new(root.clone());
     let messages =
@@ -187,7 +187,7 @@ fn discover_modules_uses_reachable_files_only() {
         "#entry_root = \"src\"\n",
     )
     .expect("should write config");
-    fs::write(src.join("#page.bst"), "import @(libs/html/basic)\n#[:ok]\n")
+    fs::write(src.join("#page.bst"), "import @libs/html/basic\n#[:ok]\n")
         .expect("should write entry");
     fs::write(src.join("#404.bst"), "#[:404]\n").expect("should write 404");
     fs::write(src.join("libs/html.bst"), "#basic = #[:basic]\n").expect("should write lib");
@@ -267,12 +267,12 @@ fn discover_modules_resolves_relative_imports_with_dot_segments() {
     .expect("should write config");
     fs::write(
         src.join("#page.bst"),
-        "import @(./components/widget)\nio(\"page\")\n",
+        "import @./components/widget\nio(\"page\")\n",
     )
     .expect("should write page");
     fs::write(
         src.join("components/widget.bst"),
-        "import @(../shared/common)\nio(\"widget\")\n",
+        "import @../shared/common\nio(\"widget\")\n",
     )
     .expect("should write widget file");
     fs::write(src.join("shared/common.bst"), "io(\"common\")\n").expect("should write common");
@@ -321,7 +321,7 @@ fn entry_root_fallback_wins_for_unmatched_non_relative_imports() {
     .expect("should write config");
     fs::write(
         src.join("#page.bst"),
-        "import @(helpers/theme)\nio(\"page\")\n",
+        "import @helpers/theme\nio(\"page\")\n",
     )
     .expect("should write page");
     fs::write(src.join("helpers/theme.bst"), "io(\"source\")\n").expect("should write source");
@@ -422,7 +422,7 @@ fn explicit_root_folder_imports_resolve_from_project_root() {
     .expect("should write config");
     fs::write(
         src.join("#page.bst"),
-        "import @lib/html/{center}\n#[center: ok]\n",
+        "import @lib/html {center}\n#[center: ok]\n",
     )
     .expect("should write page");
     fs::write(
@@ -464,7 +464,7 @@ fn rejects_entry_root_folder_that_conflicts_with_root_folder_name() {
         "#entry_root = \"src\"\n#root_folders = { @lib }\n",
     )
     .expect("should write config");
-    fs::write(src.join("#page.bst"), "import @lib/html/{center}\n").expect("should write page");
+    fs::write(src.join("#page.bst"), "import @lib/html {center}\n").expect("should write page");
 
     let mut config = Config::new(root.clone());
     parse_project_config_file(&mut config, &root.join(settings::CONFIG_FILE_NAME))

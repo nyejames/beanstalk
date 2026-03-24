@@ -52,8 +52,8 @@ fn header_name(header: &Header, string_table: &StringTable) -> String {
 fn sorts_strict_import_dependencies_before_dependents() {
     let (headers, mut string_table) = parse_module_headers(
         &[
-            ("src/a.bst", "import @(b)\nb()\nio(\"a\")\n"),
-            ("src/b.bst", "import @(c)\nc()\nio(\"b\")\n"),
+            ("src/a.bst", "import @b\nb()\nio(\"a\")\n"),
+            ("src/b.bst", "import @c\nc()\nio(\"b\")\n"),
             ("src/c.bst", "io(\"c\")\n"),
         ],
         "src/a.bst",
@@ -111,8 +111,8 @@ fn applies_soft_struct_and_constant_edges_when_resolvable() {
 fn reports_circular_dependencies() {
     let (headers, mut string_table) = parse_module_headers(
         &[
-            ("src/a.bst", "import @(b)\nb()\nio(\"a\")\n"),
-            ("src/b.bst", "import @(a)\na()\nio(\"b\")\n"),
+            ("src/a.bst", "import @b\nb()\nio(\"a\")\n"),
+            ("src/b.bst", "import @a\na()\nio(\"b\")\n"),
         ],
         "src/a.bst",
     );
@@ -132,10 +132,7 @@ fn reports_circular_dependencies() {
 fn reports_ambiguous_suffix_import_resolution() {
     let (headers, mut string_table) = parse_module_headers(
         &[
-            (
-                "src/app.bst",
-                "import @(shared/util)\nutil()\nio(\"app\")\n",
-            ),
+            ("src/app.bst", "import @shared/util\nutil()\nio(\"app\")\n"),
             ("src/features/shared/util.bst", "io(\"feature util\")\n"),
             ("src/lib/shared/util.bst", "io(\"lib util\")\n"),
         ],

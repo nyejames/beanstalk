@@ -1,4 +1,4 @@
-import @lib/html/{doc, format}
+import @lib/html {doc, format}
 -- Some basic testing styles for the documentation website
 
 # header = [:

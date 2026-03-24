@@ -1,6 +1,6 @@
 -- Entry file for multi-file module test
 -- Should change some of the import syntax later when it supports struct files
-import @(helper/greet)
+import @helper/greet
 
 io("Starting main")
 greet("World")
