@@ -4,8 +4,8 @@ use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::hir::hir_datatypes::{HirTypeKind, TypeId};
 use crate::compiler_frontend::hir::hir_nodes::{
-    HirBlock, HirExpression, HirExpressionKind, HirFunction, HirLocal, HirPlace, HirTerminator,
-    LocalId, RegionId, ValueKind,
+    FunctionId, HirBlock, HirExpression, HirExpressionKind, HirFunction, HirLocal, HirPlace,
+    HirTerminator, LocalId, RegionId, ValueKind,
 };
 use crate::compiler_frontend::host_functions::CallTarget;
 use crate::compiler_frontend::interned_path::InternedPath;
@@ -73,7 +73,7 @@ impl<'a> HirBuilder<'a> {
         &mut self,
         chunk_types: &[DataType],
         location: &TextLocation,
-    ) -> Result<InternedPath, CompilerError> {
+    ) -> Result<FunctionId, CompilerError> {
         let Some(current_function_id) = self.current_function else {
             return_hir_transformation_error!(
                 "Runtime template lowering requires an active function context",
@@ -170,7 +170,7 @@ impl<'a> HirBuilder<'a> {
             location,
         )?;
 
-        Ok(template_function_name)
+        Ok(template_function_id)
     }
 
     // WHAT: Allocates a collision-free synthesized function name under the current parent symbol.

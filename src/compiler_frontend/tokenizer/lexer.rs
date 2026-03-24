@@ -1,5 +1,6 @@
 use crate::compiler_frontend::basic_utility_functions::is_valid_var_char;
 use crate::compiler_frontend::compiler_errors::CompilerError;
+use crate::compiler_frontend::identity::FileId;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::paths::parse_file_path;
 use crate::compiler_frontend::string_interning::StringTable;
@@ -26,6 +27,28 @@ pub fn tokenize(
     style_directives: &StyleDirectiveRegistry,
     string_table: &mut StringTable,
 ) -> Result<FileTokens, CompilerError> {
+    tokenize_with_file_id(
+        source_code,
+        src_path,
+        mode,
+        style_directives,
+        string_table,
+        None,
+    )
+}
+
+/// Tokenize one source file and optionally attach stable file identity metadata.
+///
+/// WHAT: wraps lexing output in `FileTokens` carrying both logical path and optional `FileId`.
+/// WHY: later frontend stages should prefer explicit file identity over path string comparisons.
+pub fn tokenize_with_file_id(
+    source_code: &str,
+    src_path: &InternedPath,
+    mode: TokenizeMode,
+    style_directives: &StyleDirectiveRegistry,
+    string_table: &mut StringTable,
+    file_id: Option<FileId>,
+) -> Result<FileTokens, CompilerError> {
     // About 1/6 of the source code seems to be tokens roughly from some very small preliminary tests
     let initial_capacity = source_code.len() / settings::SRC_TO_TOKEN_RATIO;
 
@@ -48,7 +71,11 @@ pub fn tokenize(
     tokens.push(token);
 
     // First creation of TokenContext
-    Ok(FileTokens::new(src_path.to_owned(), tokens))
+    Ok(FileTokens::new_with_file_id(
+        src_path.to_owned(),
+        file_id,
+        tokens,
+    ))
 }
 
 pub fn get_token_kind(

@@ -8,8 +8,7 @@ use crate::compiler_frontend::hir::hir_nodes::{
     BlockId, FunctionId, HirModule, HirStatementKind, HirTerminator, StartFragment,
 };
 use crate::compiler_frontend::host_functions::CallTarget;
-use crate::compiler_frontend::interned_path::InternedPath;
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashSet;
 use std::collections::VecDeque;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -70,7 +69,6 @@ impl HtmlWasmHelperExports {
 pub(crate) fn build_html_wasm_export_plan(
     hir_module: &HirModule,
 ) -> Result<HtmlWasmExportPlan, CompilerError> {
-    let function_by_path = build_function_path_index(hir_module)?;
     let runtime_template_functions = collect_runtime_template_fragment_functions(hir_module);
     let mut requested_function_ids = FxHashSet::default();
 
@@ -82,15 +80,9 @@ pub(crate) fn build_html_wasm_export_plan(
         let block = block_by_id_or_error(hir_module, block_id)?;
         for statement in &block.statements {
             if let HirStatementKind::Call { target, .. } = &statement.kind
-                && let CallTarget::UserFunction(path) = target
+                && let CallTarget::UserFunction(function_id) = target
             {
-                let Some(function_id) = function_by_path.get(path).copied() else {
-                    return Err(CompilerError::compiler_error(format!(
-                        "HTML Wasm export planning could not resolve call target {:?}",
-                        path
-                    )));
-                };
-                requested_function_ids.insert(function_id);
+                requested_function_ids.insert(*function_id);
             }
         }
     }
@@ -116,34 +108,6 @@ pub(crate) fn build_html_wasm_export_plan(
         function_exports,
         helper_exports: HtmlWasmHelperExports::all_enabled(),
     })
-}
-
-fn build_function_path_index(
-    hir_module: &HirModule,
-) -> Result<FxHashMap<InternedPath, FunctionId>, CompilerError> {
-    // Build a deterministic reverse map so call-target path lookups are O(1).
-    let mut function_by_path = FxHashMap::default();
-    for function in &hir_module.functions {
-        let Some(path) = hir_module
-            .side_table
-            .function_name_path(function.id)
-            .cloned()
-        else {
-            return Err(CompilerError::compiler_error(format!(
-                "HTML Wasm export planning is missing side-table path for function {:?}",
-                function.id
-            )));
-        };
-
-        if function_by_path.insert(path.clone(), function.id).is_some() {
-            return Err(CompilerError::compiler_error(format!(
-                "HTML Wasm export planning found duplicate function path {:?}",
-                path
-            )));
-        }
-    }
-
-    Ok(function_by_path)
 }
 
 fn collect_runtime_template_fragment_functions(hir_module: &HirModule) -> FxHashSet<FunctionId> {

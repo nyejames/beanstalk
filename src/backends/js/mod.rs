@@ -16,7 +16,6 @@ use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
 use crate::compiler_frontend::hir::hir_nodes::{
     BlockId, FieldId, FunctionId, HirBlock, HirModule, HirTerminator, LocalId,
 };
-use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::TextLocation;
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -78,7 +77,6 @@ pub(crate) struct JsEmitter<'hir> {
     pub(crate) blocks_by_id: HashMap<BlockId, &'hir HirBlock>,
 
     pub(crate) function_name_by_id: HashMap<FunctionId, String>,
-    pub(crate) function_name_by_path: HashMap<InternedPath, String>,
     pub(crate) local_name_by_id: HashMap<LocalId, String>,
     pub(crate) field_name_by_id: HashMap<FieldId, String>,
 
@@ -108,7 +106,6 @@ impl<'hir> JsEmitter<'hir> {
             indent: 0,
             blocks_by_id,
             function_name_by_id: HashMap::new(),
-            function_name_by_path: HashMap::new(),
             local_name_by_id: HashMap::new(),
             field_name_by_id: HashMap::new(),
             used_identifiers: HashSet::new(),
@@ -375,31 +372,23 @@ impl<'hir> JsEmitter<'hir> {
     }
 
     fn build_function_symbols(&mut self) {
-        let mut function_specs = self
+        let mut function_ids = self
             .hir
             .functions
             .iter()
-            .map(|function| {
-                let path = self.hir.side_table.function_name_path(function.id).cloned();
-                let raw_name = path
-                    .as_ref()
-                    .map(|value| value.to_string(self.string_table))
-                    .unwrap_or_else(|| format!("fn{}", function.id.0));
-
-                (function.id, path, raw_name)
-            })
+            .map(|function| function.id)
             .collect::<Vec<_>>();
+        function_ids.sort_by_key(|function_id| function_id.0);
 
-        function_specs.sort_by_key(|(id, _, _)| id.0);
-
-        for (function_id, path, raw_name) in function_specs {
+        for function_id in function_ids {
+            let leaf_name_hint = self
+                .hir
+                .side_table
+                .resolve_function_name(function_id, self.string_table)
+                .unwrap_or("fn");
+            let raw_name = self.build_function_symbol_raw(function_id, leaf_name_hint);
             let js_name = self.assign_unique_identifier(&raw_name);
-            self.function_name_by_id
-                .insert(function_id, js_name.clone());
-
-            if let Some(path) = path {
-                self.function_name_by_path.insert(path, js_name);
-            }
+            self.function_name_by_id.insert(function_id, js_name);
         }
     }
 
@@ -413,8 +402,8 @@ impl<'hir> JsEmitter<'hir> {
                     .side_table
                     .local_name_path(local.id)
                     .and_then(|path| path.name_str(self.string_table))
-                    .map(str::to_owned)
-                    .unwrap_or_else(|| format!("l{}", local.id.0));
+                    .map(|leaf_name| self.build_local_symbol_raw(local.id, leaf_name))
+                    .unwrap_or_else(|| self.build_local_symbol_raw(local.id, "local"));
 
                 local_specs.push((local.id, raw_name));
             }
@@ -439,8 +428,8 @@ impl<'hir> JsEmitter<'hir> {
                     .side_table
                     .field_name_path(field.id)
                     .and_then(|path| path.name_str(self.string_table))
-                    .map(str::to_owned)
-                    .unwrap_or_else(|| format!("field{}", field.id.0));
+                    .map(|leaf_name| self.build_field_symbol_raw(field.id, leaf_name))
+                    .unwrap_or_else(|| self.build_field_symbol_raw(field.id, "field"));
 
                 field_specs.push((field.id, raw_name));
             }
@@ -499,18 +488,6 @@ impl<'hir> JsEmitter<'hir> {
                 CompilerError::compiler_error(format!(
                     "JavaScript backend: missing function symbol for {:?}",
                     function_id
-                ))
-            })
-    }
-
-    pub(crate) fn user_call_name(&self, path: &InternedPath) -> Result<&str, CompilerError> {
-        self.function_name_by_path
-            .get(path)
-            .map(String::as_str)
-            .ok_or_else(|| {
-                CompilerError::compiler_error(format!(
-                    "JavaScript backend: unresolved user function call target '{}'",
-                    path.to_string(self.string_table)
                 ))
             })
     }
@@ -620,6 +597,34 @@ impl<'hir> JsEmitter<'hir> {
         self.indent += 1;
         callback(self);
         self.indent -= 1;
+    }
+
+    fn build_function_symbol_raw(&self, function_id: FunctionId, leaf_name_hint: &str) -> String {
+        if self.use_release_symbol_names() {
+            format!("b_fn{}", function_id.0)
+        } else {
+            format!("bst_{}_fn{}", leaf_name_hint, function_id.0)
+        }
+    }
+
+    fn build_local_symbol_raw(&self, local_id: LocalId, leaf_name_hint: &str) -> String {
+        if self.use_release_symbol_names() {
+            format!("b_l{}", local_id.0)
+        } else {
+            format!("bst_{}_l{}", leaf_name_hint, local_id.0)
+        }
+    }
+
+    fn build_field_symbol_raw(&self, field_id: FieldId, leaf_name_hint: &str) -> String {
+        if self.use_release_symbol_names() {
+            format!("b_fld{}", field_id.0)
+        } else {
+            format!("bst_{}_fld{}", leaf_name_hint, field_id.0)
+        }
+    }
+
+    fn use_release_symbol_names(&self) -> bool {
+        !self.config.pretty
     }
 }
 

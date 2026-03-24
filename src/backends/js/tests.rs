@@ -262,6 +262,36 @@ fn default_config() -> JsLoweringConfig {
     }
 }
 
+fn sanitize_hint(raw: &str) -> String {
+    let mut result = String::new();
+
+    for ch in raw.chars() {
+        if ch == '_' || ch == '$' || ch.is_ascii_alphanumeric() {
+            result.push(ch);
+        } else {
+            result.push('_');
+        }
+    }
+
+    if result.is_empty() {
+        String::from("value")
+    } else {
+        result
+    }
+}
+
+fn expected_dev_function_name(leaf: &str, id: u32) -> String {
+    format!("bst_{}_fn{}", sanitize_hint(leaf), id)
+}
+
+fn expected_dev_local_name(leaf: &str, id: u32) -> String {
+    format!("bst_{}_l{}", sanitize_hint(leaf), id)
+}
+
+fn expected_dev_field_name(leaf: &str, id: u32) -> String {
+    format!("bst_{}_fld{}", sanitize_hint(leaf), id)
+}
+
 // ---------------------------------------------------------------------------
 // Prelude helper presence tests [binding] [alias] [computed] [clone]
 // ---------------------------------------------------------------------------
@@ -405,14 +435,11 @@ fn computed_place_helpers_appear_before_clone_helper() {
 fn reserved_word_function_name_gets_underscore_prefix() {
     // `for` is a reserved JS identifier; the emitter must prefix it to avoid a syntax error.
     let source = lower_minimal_module("for");
+    let expected_name = expected_dev_function_name("for", 0);
 
     assert!(
-        source.contains("function _for("),
-        "reserved identifier 'for' must be emitted as '_for'"
-    );
-    assert!(
-        !source.contains("function for("),
-        "reserved identifier 'for' must not appear unescaped in emitted JS"
+        source.contains(&format!("function {}(", expected_name)),
+        "reserved identifiers should still lower to deterministic id-based names"
     );
 }
 
@@ -421,9 +448,10 @@ fn reserved_word_function_name_gets_underscore_prefix() {
 fn invalid_identifier_chars_are_replaced_with_underscore() {
     // Hyphens are not valid in JS identifiers; they must be replaced.
     let source = lower_minimal_module("foo-bar");
+    let expected_name = expected_dev_function_name("foo-bar", 0);
 
     assert!(
-        source.contains("function foo_bar("),
+        source.contains(&format!("function {}(", expected_name)),
         "hyphens in identifiers must be replaced with underscores"
     );
 }
@@ -479,9 +507,12 @@ fn local_slot_assignment_emits_assign_value() {
         default_config(),
     )
     .expect("JS lowering should succeed");
+    let count_name = expected_dev_local_name("count", 0);
 
     assert!(
-        output.source.contains("__bs_assign_value(count, 42);"),
+        output
+            .source
+            .contains(&format!("__bs_assign_value({}, 42);", count_name)),
         "assigning an integer to a local must emit __bs_assign_value"
     );
 }
@@ -560,9 +591,12 @@ fn explicit_copy_emits_clone_value_wrapped_read() {
         default_config(),
     )
     .expect("JS lowering should succeed");
+    let src_name = expected_dev_local_name("src", 0);
 
     assert!(
-        output.source.contains("__bs_clone_value(__bs_read(src))"),
+        output
+            .source
+            .contains(&format!("__bs_clone_value(__bs_read({}))", src_name)),
         "Copy expression must emit __bs_clone_value(__bs_read(src))"
     );
 }
@@ -905,14 +939,15 @@ fn host_io_reads_the_underlying_value_before_logging() {
         },
     )
     .expect("JS lowering should succeed");
+    let message_name = expected_dev_local_name("message", 0);
 
     let assign_index = output
         .source
-        .find("__bs_assign_value(message, \"hello\");")
+        .find(&format!("__bs_assign_value({}, \"hello\");", message_name))
         .expect("expected local assignment to store the string value");
     let log_index = output
         .source
-        .find("console.log(__bs_read(message));")
+        .find(&format!("console.log(__bs_read({}));", message_name))
         .expect("expected host io call to read from the local binding");
 
     assert!(
@@ -963,8 +998,9 @@ fn auto_invokes_start_function_when_enabled() {
         },
     )
     .expect("JS lowering should succeed");
+    let start_name = expected_dev_function_name("start_main", 0);
 
-    assert!(output.source.contains("start_main();"));
+    assert!(output.source.contains(&format!("{}();", start_name)));
 }
 
 // ---------------------------------------------------------------------------
@@ -1030,20 +1066,22 @@ fn exposes_function_name_map_for_runtime_fragments() {
         default_config(),
     )
     .expect("JS lowering should succeed");
+    let expected_start = expected_dev_function_name("start", 0);
+    let expected_fragment = expected_dev_function_name("__bst_frag_0", 1);
 
     assert_eq!(
         output
             .function_name_by_id
             .get(&FunctionId(0))
             .map(String::as_str),
-        Some("start")
+        Some(expected_start.as_str())
     );
     assert_eq!(
         output
             .function_name_by_id
             .get(&FunctionId(1))
             .map(String::as_str),
-        Some("__bst_frag_0")
+        Some(expected_fragment.as_str())
     );
 }
 
@@ -1148,9 +1186,12 @@ fn function_parameters_emit_param_binding() {
         default_config(),
     )
     .expect("JS lowering should succeed");
+    let arg_name = expected_dev_local_name("arg", 0);
 
     assert!(
-        output.source.contains("arg = __bs_param_binding(arg);"),
+        output
+            .source
+            .contains(&format!("{} = __bs_param_binding({});", arg_name, arg_name)),
         "function parameters must be normalised through __bs_param_binding"
     );
 }
@@ -1224,9 +1265,13 @@ fn borrow_assignment_emits_assign_borrow() {
         default_config(),
     )
     .expect("JS lowering should succeed");
+    let alias_name = expected_dev_local_name("alias", 1);
+    let source_name = expected_dev_local_name("source", 0);
 
     assert!(
-        output.source.contains("__bs_assign_borrow(alias, source)"),
+        output
+            .source
+            .contains(&format!("__bs_assign_borrow({}, {})", alias_name, source_name)),
         "Load assignment to a fresh local must emit __bs_assign_borrow"
     );
 }
@@ -1314,9 +1359,12 @@ fn alias_local_read_emits_bs_read() {
         default_config(),
     )
     .expect("JS lowering should succeed");
+    let alias_name = expected_dev_local_name("alias", 1);
 
     assert!(
-        output.source.contains("console.log(__bs_read(alias))"),
+        output
+            .source
+            .contains(&format!("console.log(__bs_read({}))", alias_name)),
         "reading an alias local in a host call must go through __bs_read"
     );
 }
@@ -1377,13 +1425,18 @@ fn alias_only_local_assignment_emits_write() {
 
     let output = lower_hir_to_js(&module, &report, &string_table, default_config())
         .expect("JS lowering should succeed");
+    let target_name = expected_dev_local_name("target", 0);
 
     assert!(
-        output.source.contains("__bs_write(target, 42)"),
+        output
+            .source
+            .contains(&format!("__bs_write({}, 42)", target_name)),
         "alias-only local assignment must emit __bs_write, not __bs_assign_value"
     );
     assert!(
-        !output.source.contains("__bs_assign_value(target"),
+        !output
+            .source
+            .contains(&format!("__bs_assign_value({}", target_name)),
         "alias-only local must not use __bs_assign_value"
     );
 }
@@ -1455,11 +1508,14 @@ fn field_place_emits_bs_field() {
         default_config(),
     )
     .expect("JS lowering should succeed");
+    let struct_name = expected_dev_local_name("my_struct", 0);
+    let field_name = expected_dev_field_name("x", 0);
 
     assert!(
-        output
-            .source
-            .contains("__bs_write(__bs_field(my_struct, \"x\"), 42)"),
+        output.source.contains(&format!(
+            "__bs_write(__bs_field({}, \"{}\"), 42)",
+            struct_name, field_name
+        )),
         "field assignment must route through __bs_field and __bs_write"
     );
 }
@@ -1514,9 +1570,12 @@ fn index_place_emits_bs_index() {
         default_config(),
     )
     .expect("JS lowering should succeed");
+    let array_name = expected_dev_local_name("arr", 0);
 
     assert!(
-        output.source.contains("__bs_write(__bs_index(arr, 0), 42)"),
+        output
+            .source
+            .contains(&format!("__bs_write(__bs_index({}, 0), 42)", array_name)),
         "index assignment must route through __bs_index and __bs_write"
     );
 }
@@ -1592,11 +1651,14 @@ fn computed_place_read_composes_with_bs_read() {
         default_config(),
     )
     .expect("JS lowering should succeed");
+    let struct_name = expected_dev_local_name("my_struct", 0);
+    let field_name = expected_dev_field_name("x", 0);
 
     assert!(
-        output
-            .source
-            .contains("__bs_read(__bs_field(my_struct, \"x\"))"),
+        output.source.contains(&format!(
+            "__bs_read(__bs_field({}, \"{}\"))",
+            struct_name, field_name
+        )),
         "field Load must compose __bs_read around __bs_field"
     );
 }

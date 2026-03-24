@@ -31,24 +31,12 @@ pub(crate) fn lower_statement(
             }
 
             let callee = match target {
-                CallTarget::UserFunction(path) => {
-                    // User calls stay function-id based after path resolution.
+                CallTarget::UserFunction(function_id) => {
+                    // User calls stay function-id based after semantic lowering.
                     let function_id = context
                         .module_context
-                        .function_id_by_path
-                        .get(path)
-                        .copied()
-                        .ok_or_else(|| {
-                            CompilerError::lir_transformation(format!(
-                                "Wasm lowering could not resolve user function path {:?}",
-                                path
-                            ))
-                        })?;
-
-                    let lir_id = context
-                        .module_context
                         .function_map
-                        .get(&function_id)
+                        .get(function_id)
                         .copied()
                         .ok_or_else(|| {
                             CompilerError::lir_transformation(format!(
@@ -56,8 +44,7 @@ pub(crate) fn lower_statement(
                                 function_id
                             ))
                         })?;
-
-                    WasmCalleeRef::Function(lir_id)
+                    WasmCalleeRef::Function(function_id)
                 }
                 CallTarget::HostFunction(_) => {
                     // Host calls lower to deterministic import ids.
@@ -146,4 +133,3 @@ fn lower_assignment(
 
     Ok(())
 }
-

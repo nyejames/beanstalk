@@ -34,7 +34,6 @@ use crate::compiler_frontend::hir::hir_nodes::{
     HirPlace, HirStatement, HirStatementKind, HirTerminator, LocalId, RegionId,
 };
 use crate::compiler_frontend::host_functions::HostRegistry;
-use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::return_borrow_checker_error;
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -57,7 +56,6 @@ struct BorrowChecker<'a> {
     block_index_by_id: FxHashMap<BlockId, usize>,
     region_parent_by_id: FxHashMap<RegionId, Option<RegionId>>,
     // Call/signature metadata caches used by transfer for O(1) access.
-    function_by_path: FxHashMap<InternedPath, FunctionId>,
     function_param_mutability: FxHashMap<FunctionId, Vec<bool>>,
     function_return_alias: FxHashMap<FunctionId, FunctionReturnAliasSummary>,
 }
@@ -88,7 +86,6 @@ impl<'a> BorrowChecker<'a> {
             diagnostics: BorrowDiagnostics::new(module, string_table),
             block_index_by_id,
             region_parent_by_id,
-            function_by_path: FxHashMap::default(),
             function_param_mutability: FxHashMap::default(),
             function_return_alias: FxHashMap::default(),
         }
@@ -97,7 +94,6 @@ impl<'a> BorrowChecker<'a> {
     fn run(mut self) -> Result<BorrowCheckReport, CompilerError> {
         // Build all metadata once so block transfer stays allocation-light
         // and does not repeat module scans.
-        self.build_function_lookup()?;
         self.build_function_param_mutability()?;
         self.build_function_return_alias_summaries()?;
 
@@ -121,34 +117,6 @@ impl<'a> BorrowChecker<'a> {
         ));
 
         Ok(report)
-    }
-
-    fn build_function_lookup(&mut self) -> Result<(), CompilerError> {
-        // Function call targets are path-based, so the checker builds one
-        // canonical path -> FunctionId map from side-table bindings.
-        for function in &self.module.functions {
-            let Some(path) = self
-                .module
-                .side_table
-                .function_name_path(function.id)
-                .cloned()
-            else {
-                return_borrow_checker_error!(
-                    format!(
-                        "Borrow checker is missing function path binding for '{}'",
-                        function.id
-                    ),
-                    self.diagnostics.function_error_location(function.id),
-                    {
-                        CompilationStage => "Borrow Checking",
-                    }
-                );
-            };
-
-            self.function_by_path.insert(path, function.id);
-        }
-
-        Ok(())
     }
 
     fn build_function_param_mutability(&mut self) -> Result<(), CompilerError> {
@@ -457,7 +425,6 @@ impl<'a> BorrowChecker<'a> {
         let transfer_context = BorrowTransferContext {
             string_table: self.string_table,
             host_registry: self.host_registry,
-            function_by_path: &self.function_by_path,
             function_param_mutability: &self.function_param_mutability,
             function_return_alias: &self.function_return_alias,
             diagnostics: BorrowDiagnostics::new(self.module, self.string_table),

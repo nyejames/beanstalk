@@ -213,6 +213,12 @@ impl Ast {
                 .get(&header.source_file)
                 .cloned()
                 .unwrap_or_default();
+            let source_file_scope = header
+                .tokens
+                .canonical_os_path
+                .as_ref()
+                .map(|canonical_path| InternedPath::from_path_buf(canonical_path, string_table))
+                .unwrap_or_else(|| header.source_file.to_owned());
 
             match &header.kind {
                 HeaderKind::Constant { .. } => {
@@ -253,7 +259,8 @@ impl Ast {
                     .with_visible_declarations(bindings.visible_symbol_paths.to_owned())
                     .with_start_import_aliases(bindings.start_aliases.to_owned())
                     .with_project_path_resolver(project_path_resolver.clone())
-                    .with_path_format_config(path_format_config.clone());
+                    .with_path_format_config(path_format_config.clone())
+                    .with_source_file_scope(source_file_scope);
 
                     let mut struct_tokens = header.tokens.to_owned();
                     let fields_result =
@@ -292,6 +299,12 @@ impl Ast {
                 .get(&header.source_file)
                 .cloned()
                 .unwrap_or_default();
+            let source_file_scope = header
+                .tokens
+                .canonical_os_path
+                .as_ref()
+                .map(|canonical_path| InternedPath::from_path_buf(canonical_path, string_table))
+                .unwrap_or_else(|| header.source_file.to_owned());
 
             match header.kind {
                 HeaderKind::Function { signature } => {
@@ -315,7 +328,8 @@ impl Ast {
                     .with_visible_declarations(visible_declarations)
                     .with_start_import_aliases(bindings.start_aliases.to_owned())
                     .with_project_path_resolver(project_path_resolver.clone())
-                    .with_path_format_config(path_format_config.clone());
+                    .with_path_format_config(path_format_config.clone())
+                    .with_source_file_scope(source_file_scope.to_owned());
 
                     let mut token_stream = header.tokens;
 
@@ -364,7 +378,8 @@ impl Ast {
                     .with_visible_declarations(bindings.visible_symbol_paths.to_owned())
                     .with_start_import_aliases(bindings.start_aliases.to_owned())
                     .with_project_path_resolver(project_path_resolver.clone())
-                    .with_path_format_config(path_format_config.clone());
+                    .with_path_format_config(path_format_config.clone())
+                    .with_source_file_scope(source_file_scope.to_owned());
 
                     let mut token_stream = header.tokens;
 
@@ -466,7 +481,7 @@ impl Ast {
                     .with_start_import_aliases(bindings.start_aliases.to_owned())
                     .with_project_path_resolver(project_path_resolver.clone())
                     .with_path_format_config(path_format_config.clone())
-                    .with_source_file_scope(header.source_file.clone());
+                    .with_source_file_scope(source_file_scope);
 
                     let template_result =
                         Template::new(&mut template_tokens, &context, vec![], string_table);

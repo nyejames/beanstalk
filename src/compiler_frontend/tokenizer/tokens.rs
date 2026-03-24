@@ -1,4 +1,5 @@
 use crate::compiler_frontend::datatypes::DataType;
+use crate::compiler_frontend::identity::FileId;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 
@@ -6,6 +7,7 @@ use crate::compiler_frontend::compiler_errors::ErrorLocation;
 use crate::token_log;
 use std::cmp::Ordering;
 use std::iter::Peekable;
+use std::path::PathBuf;
 use std::str::Chars;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -149,15 +151,41 @@ impl Token {
 pub struct FileTokens {
     pub tokens: Vec<Token>,
     pub src_path: InternedPath,
+    /// Stable source-file identity for this token stream.
+    ///
+    /// WHAT: carries frontend file identity into downstream parsing stages.
+    /// WHY: entry-file detection and diagnostics should not rely on comparing path text.
+    pub file_id: Option<FileId>,
+    /// Canonical filesystem source path for IO/path-resolution-only logic.
+    pub canonical_os_path: Option<PathBuf>,
     pub index: usize,
     pub length: usize,
 }
 
 impl FileTokens {
     pub fn new(src_path: InternedPath, tokens: Vec<Token>) -> FileTokens {
+        Self::new_with_identity(src_path, None, None, tokens)
+    }
+
+    pub fn new_with_file_id(
+        src_path: InternedPath,
+        file_id: Option<FileId>,
+        tokens: Vec<Token>,
+    ) -> FileTokens {
+        Self::new_with_identity(src_path, file_id, None, tokens)
+    }
+
+    pub fn new_with_identity(
+        src_path: InternedPath,
+        file_id: Option<FileId>,
+        canonical_os_path: Option<PathBuf>,
+        tokens: Vec<Token>,
+    ) -> FileTokens {
         FileTokens {
             length: tokens.len(),
             src_path,
+            file_id,
+            canonical_os_path,
             tokens,
             index: 0,
         }

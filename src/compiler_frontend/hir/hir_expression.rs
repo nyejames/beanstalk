@@ -173,12 +173,15 @@ impl<'a> HirBuilder<'a> {
                 self.lower_runtime_rpn_expression(nodes, &expr.location, &expr.data_type)
             }
 
-            ExpressionKind::FunctionCall(name, args) => self.lower_call_expression(
-                CallTarget::UserFunction(name.clone()),
-                args,
-                &self.extract_return_types_from_datatype(&expr.data_type),
-                &expr.location,
-            ),
+            ExpressionKind::FunctionCall(name, args) => {
+                let function_id = self.resolve_function_id_or_error(name, &expr.location)?;
+                self.lower_call_expression(
+                    CallTarget::UserFunction(function_id),
+                    args,
+                    &self.extract_return_types_from_datatype(&expr.data_type),
+                    &expr.location,
+                )
+            }
 
             ExpressionKind::HostFunctionCall(host_id, args) => self.lower_call_expression(
                 CallTarget::HostFunction(host_id.clone()),
@@ -320,8 +323,9 @@ impl<'a> HirBuilder<'a> {
                     result_types,
                     location,
                 } => {
+                    let function_id = self.resolve_function_id_or_error(name, location)?;
                     let lowered = self.lower_call_expression(
-                        CallTarget::UserFunction(name.clone()),
+                        CallTarget::UserFunction(function_id),
                         args,
                         result_types,
                         location,
@@ -490,12 +494,15 @@ impl<'a> HirBuilder<'a> {
                 args,
                 result_types,
                 location,
-            } => self.lower_call_expression(
-                CallTarget::UserFunction(name.clone()),
-                args,
-                result_types,
-                location,
-            ),
+            } => {
+                let function_id = self.resolve_function_id_or_error(name, location)?;
+                self.lower_call_expression(
+                    CallTarget::UserFunction(function_id),
+                    args,
+                    result_types,
+                    location,
+                )
+            }
 
             NodeKind::HostFunctionCall {
                 name: host_function_id,
@@ -592,8 +599,9 @@ impl<'a> HirBuilder<'a> {
                 result_types,
                 location,
             } => {
+                let function_id = self.resolve_function_id_or_error(name, location)?;
                 let lowered = self.lower_call_expression(
-                    CallTarget::UserFunction(name.clone()),
+                    CallTarget::UserFunction(function_id),
                     args,
                     result_types,
                     location,
@@ -651,10 +659,6 @@ impl<'a> HirBuilder<'a> {
         result_types: &[DataType],
         location: &TextLocation,
     ) -> Result<LoweredExpression, CompilerError> {
-        if let CallTarget::UserFunction(name) = &target {
-            let _ = self.resolve_function_id_or_error(name, location)?;
-        }
-
         let mut prelude = Vec::new();
         let mut lowered_args = Vec::with_capacity(args.len());
 

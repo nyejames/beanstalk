@@ -56,21 +56,6 @@ fn register_function_maps(context: &mut WasmLirLoweringContext<'_>) -> Result<()
         context
             .function_map
             .insert(function.id, WasmLirFunctionId(next_id as u32));
-
-        let Some(path) = context
-            .hir_module
-            .side_table
-            .function_name_path(function.id)
-        else {
-            return Err(CompilerError::lir_transformation(format!(
-                "Wasm lowering could not resolve function path for {:?}",
-                function.id
-            )));
-        };
-
-        context
-            .function_id_by_path
-            .insert(path.clone(), function.id);
     }
 
     Ok(())

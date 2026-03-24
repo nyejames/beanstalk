@@ -3,6 +3,7 @@ use crate::compiler_frontend::ast::expressions::expression::{Expression, Express
 use crate::compiler_frontend::ast::statements::functions::{FunctionReturn, FunctionSignature};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::hir::hir_nodes::FunctionId;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::return_compiler_error;
@@ -22,20 +23,20 @@ pub enum BackendKind {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum CallTarget {
-    UserFunction(InternedPath),
+    UserFunction(FunctionId),
     HostFunction(InternedPath),
 }
 
 impl CallTarget {
     #[allow(dead_code)] // todo
     pub fn as_string(&self, string_table: &StringTable) -> String {
-        let path = match self {
-            CallTarget::UserFunction(path) | CallTarget::HostFunction(path) => path,
-        };
-
-        path.name_str(string_table)
-            .map(str::to_owned)
-            .unwrap_or_else(|| path.to_string(string_table))
+        match self {
+            CallTarget::UserFunction(function_id) => format!("fn{}", function_id.0),
+            CallTarget::HostFunction(path) => path
+                .name_str(string_table)
+                .map(str::to_owned)
+                .unwrap_or_else(|| path.to_string(string_table)),
+        }
     }
 }
 

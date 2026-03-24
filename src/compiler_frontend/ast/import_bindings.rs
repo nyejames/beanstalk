@@ -244,6 +244,13 @@ pub(crate) fn parse_constant_header_declaration(
         ));
     };
 
+    let source_file_scope = header
+        .tokens
+        .canonical_os_path
+        .as_ref()
+        .map(|canonical_path| InternedPath::from_path_buf(canonical_path, string_table))
+        .unwrap_or_else(|| header.source_file.to_owned());
+
     let context = ScopeContext::new(
         ContextKind::ConstantHeader,
         header.tokens.src_path.to_owned(),
@@ -255,7 +262,8 @@ pub(crate) fn parse_constant_header_declaration(
     // Keep full module declarations for path identity, but explicitly gate what this file
     // can see to enforce import boundaries and prevent cross-file leakage.
     .with_visible_declarations(visible_declaration_ids.to_owned())
-    .with_start_import_aliases(start_import_aliases.to_owned());
+    .with_start_import_aliases(start_import_aliases.to_owned())
+    .with_source_file_scope(source_file_scope);
 
     let declaration_result = resolve_declaration_syntax(
         metadata.declaration_syntax.clone(),

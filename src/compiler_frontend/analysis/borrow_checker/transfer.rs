@@ -18,7 +18,6 @@ use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::hir::hir_nodes::HirBlock;
 use crate::compiler_frontend::hir::hir_nodes::{BlockId, FunctionId, HirNodeId, HirValueId};
 use crate::compiler_frontend::host_functions::HostRegistry;
-use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
 use rustc_hash::FxHashMap;
 
@@ -30,7 +29,6 @@ pub(super) struct BorrowTransferContext<'a> {
     // WHY: avoids repeated module scans while statements/terminators are analyzed.
     pub string_table: &'a StringTable,
     pub host_registry: &'a HostRegistry,
-    pub function_by_path: &'a FxHashMap<InternedPath, FunctionId>,
     pub function_param_mutability: &'a FxHashMap<FunctionId, Vec<bool>>,
     pub function_return_alias: &'a FxHashMap<FunctionId, FunctionReturnAliasSummary>,
     pub diagnostics: BorrowDiagnostics<'a>,

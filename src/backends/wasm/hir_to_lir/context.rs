@@ -14,7 +14,6 @@ use crate::compiler_frontend::hir::hir_datatypes::{HirTypeKind, TypeId};
 use crate::compiler_frontend::hir::hir_nodes::{
     BlockId, FunctionId, HirFunction, HirModule, LocalId,
 };
-use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
 use rustc_hash::FxHashMap;
 
@@ -34,8 +33,6 @@ pub(crate) struct WasmLirLoweringContext<'a> {
     /// Stable HIR function id -> LIR function id mapping.
     /// WHY: preserves deterministic cross-references during lowering.
     pub function_map: FxHashMap<FunctionId, WasmLirFunctionId>,
-    /// Reverse lookup for path-based call targets in HIR call statements.
-    pub function_id_by_path: FxHashMap<InternedPath, FunctionId>,
     /// Global UTF-8 interning pool keyed by bytes.
     /// WHY: deduplicates static segments before memory-layout planning.
     pub static_string_pool: FxHashMap<Vec<u8>, WasmStaticDataId>,
@@ -57,7 +54,6 @@ impl<'a> WasmLirLoweringContext<'a> {
             string_table,
             lir_module: WasmLirModule::default(),
             function_map: FxHashMap::default(),
-            function_id_by_path: FxHashMap::default(),
             static_string_pool: FxHashMap::default(),
             host_imports: FxHashMap::default(),
         }

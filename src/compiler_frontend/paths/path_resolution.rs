@@ -103,18 +103,46 @@ impl ProjectPathResolver {
         &self.entry_root
     }
 
-    /// WHAT: rewrites an import into its canonical project-aware path form.
-    /// WHY: later compiler stages should resolve imports deterministically instead of relying on suffix matches.
-    pub(crate) fn normalize_import_path(
+    /// WHAT: derive a portable logical source path from a canonical filesystem file path.
+    /// WHY: frontend identity should preserve import semantics without leaking machine-local paths.
+    pub(crate) fn logical_path_for_canonical_file(
         &self,
-        import_path: &InternedPath,
-        importer_file: &InternedPath,
-        string_table: &mut StringTable,
-    ) -> Result<InternedPath, CompilerError> {
-        let importer_path = importer_file.to_path_buf(string_table);
-        let normalized =
-            self.normalize_import_path_buf(import_path, &importer_path, string_table)?;
-        Ok(InternedPath::from_path_buf(&normalized, string_table))
+        canonical_file: &Path,
+    ) -> Result<PathBuf, CompilerError> {
+        if let Ok(relative_to_entry_root) = canonical_file.strip_prefix(&self.entry_root) {
+            return Ok(relative_to_entry_root.to_path_buf());
+        }
+
+        let mut sorted_root_folders = self
+            .root_folder_names
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>();
+        sorted_root_folders.sort_unstable();
+
+        for root_folder_name in sorted_root_folders {
+            let root_folder_path = self.project_root.join(root_folder_name);
+            if canonical_file.starts_with(&root_folder_path) {
+                if let Ok(relative_to_project_root) = canonical_file.strip_prefix(&self.project_root)
+                {
+                    return Ok(relative_to_project_root.to_path_buf());
+                }
+            }
+        }
+
+        if let Ok(relative_to_project_root) = canonical_file.strip_prefix(&self.project_root) {
+            return Ok(relative_to_project_root.to_path_buf());
+        }
+
+        Err(CompilerError::file_error(
+            canonical_file,
+            format!(
+                "Source file '{}' is outside both entry root '{}' and project root '{}'",
+                canonical_file.display(),
+                self.entry_root.display(),
+                self.project_root.display()
+            ),
+        ))
     }
 
     /// WHAT: resolves one import path to a concrete `.bst` source file on disk.
@@ -370,21 +398,6 @@ impl ProjectPathResolver {
         Ok(())
     }
 
-    fn normalize_import_path_buf(
-        &self,
-        import_path: &InternedPath,
-        importer_file: &Path,
-        string_table: &StringTable,
-    ) -> Result<PathBuf, CompilerError> {
-        let (_base_kind, filesystem_base) =
-            self.resolve_path_base(import_path, importer_file, string_table)?;
-
-        Ok(join_and_normalize_path(
-            &filesystem_base,
-            import_path,
-            string_table,
-        ))
-    }
 }
 
 /// WHAT: resolves the directory configured as the project entry root.

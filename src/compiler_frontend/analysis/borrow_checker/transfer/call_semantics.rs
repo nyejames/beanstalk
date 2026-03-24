@@ -44,21 +44,8 @@ pub(super) fn resolve_call_semantics(
     location: ErrorLocation,
 ) -> Result<CallSemantics, CompilerError> {
     match target {
-        CallTarget::UserFunction(path) => {
-            let Some(function_id) = context.function_by_path.get(path).copied() else {
-                return_borrow_checker_error!(
-                    format!(
-                        "Borrow checker could not resolve user call target '{}'",
-                        context.diagnostics.path_name(path)
-                    ),
-                    location,
-                    {
-                        CompilationStage => "Borrow Checking",
-                        PrimarySuggestion => "Ensure the called function is declared in the module before use",
-                    }
-                );
-            };
-
+        CallTarget::UserFunction(function_id) => {
+            let function_id = *function_id;
             let Some(param_mutability) = context.function_param_mutability.get(&function_id) else {
                 return_borrow_checker_error!(
                     format!(

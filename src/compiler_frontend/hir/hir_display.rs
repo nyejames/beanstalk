@@ -1022,7 +1022,13 @@ impl<'a> HirDisplayContext<'a> {
     }
 
     fn render_call_target(&self, target: &CallTarget) -> String {
-        target.as_string(self.string_table)
+        match target {
+            CallTarget::UserFunction(function_id) => self.function_label(*function_id),
+            CallTarget::HostFunction(path) => path
+                .name_str(self.string_table)
+                .map(str::to_owned)
+                .unwrap_or_else(|| path.to_string(self.string_table)),
+        }
     }
 
     fn value_kind_label(&self, value_kind: ValueKind) -> &'static str {

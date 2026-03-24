@@ -243,7 +243,10 @@ impl<'a> HirBuilder<'a> {
                 args,
                 result_types: _,
                 location,
-            } => self.lower_call_statement(CallTarget::UserFunction(name.clone()), args, location),
+            } => {
+                let function_id = self.resolve_function_id_or_error(name, location)?;
+                self.lower_call_statement(CallTarget::UserFunction(function_id), args, location)
+            }
 
             NodeKind::HostFunctionCall {
                 name: host_function_id,
@@ -622,10 +625,6 @@ impl<'a> HirBuilder<'a> {
         args: &[Expression],
         location: &TextLocation,
     ) -> Result<(), CompilerError> {
-        if let CallTarget::UserFunction(name) = &target {
-            let _ = self.resolve_function_id_or_error(name, location)?;
-        }
-
         let mut lowered_args = Vec::with_capacity(args.len());
 
         for arg in args {

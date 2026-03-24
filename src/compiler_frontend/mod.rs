@@ -29,6 +29,7 @@ pub(crate) mod host_functions;
 pub(crate) mod hir;
 
 pub(crate) mod analysis;
+pub(crate) mod identity;
 pub(crate) mod paths;
 
 use crate::compiler_frontend::analysis::borrow_checker::{
@@ -40,6 +41,7 @@ use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::headers::parse_file_headers::{
     Header, Headers, TopLevelTemplateItem, parse_headers_with_path_resolver,
 };
+use crate::compiler_frontend::identity::SourceFileTable;
 use crate::compiler_frontend::hir::hir_builder::lower_module;
 use crate::compiler_frontend::hir::hir_nodes::HirModule;
 use crate::compiler_frontend::host_functions::HostRegistry;
@@ -49,7 +51,7 @@ use crate::compiler_frontend::paths::path_format::{OutputPathStyle, PathStringFo
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
-use crate::compiler_frontend::tokenizer::tokenizer::tokenize;
+use crate::compiler_frontend::tokenizer::tokenizer::tokenize_with_file_id;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenizeMode};
 use crate::projects::settings::Config;
 use std::path::{Path, PathBuf};
@@ -77,6 +79,7 @@ pub struct CompilerFrontend {
     pub(crate) string_table: StringTable,
     pub(crate) project_path_resolver: Option<ProjectPathResolver>,
     pub(crate) path_format_config: PathStringFormatConfig,
+    pub(crate) source_files: SourceFileTable,
 }
 
 impl CompilerFrontend {
@@ -106,7 +109,16 @@ impl CompilerFrontend {
             string_table,
             project_path_resolver,
             path_format_config,
+            source_files: SourceFileTable::empty(),
         }
+    }
+
+    /// Attach per-module file identities built during Stage 0.
+    ///
+    /// WHAT: stores canonical/logical path mapping plus deterministic `FileId`s.
+    /// WHY: downstream frontend stages should not reconstruct identity from path text.
+    pub fn set_source_files(&mut self, source_files: SourceFileTable) {
+        self.source_files = source_files;
     }
 
     /// -----------------------------
@@ -118,16 +130,32 @@ impl CompilerFrontend {
         module_path: &PathBuf,
         tokenizer_mode: TokenizeMode,
     ) -> Result<FileTokens, CompilerError> {
-        let interned_path = &InternedPath::from_path_buf(module_path, &mut self.string_table);
+        let (logical_path, file_id, canonical_os_path) =
+            match self.source_files.get_by_canonical_path(module_path.as_path()) {
+                Some(identity) => (
+                    identity.logical_path.to_owned(),
+                    Some(identity.file_id),
+                    Some(identity.canonical_os_path.clone()),
+                ),
+                None => (
+                    InternedPath::from_path_buf(module_path, &mut self.string_table),
+                    None,
+                    Some(module_path.to_owned()),
+                ),
+            };
 
-        match tokenize(
+        match tokenize_with_file_id(
             source_code,
-            interned_path,
+            &logical_path,
             tokenizer_mode,
             &self.style_directives,
             &mut self.string_table,
+            file_id,
         ) {
-            Ok(tokens) => Ok(tokens),
+            Ok(mut tokens) => {
+                tokens.canonical_os_path = canonical_os_path;
+                Ok(tokens)
+            }
             Err(e) => Err(e.with_file_path(module_path.to_owned())),
         }
     }
@@ -148,11 +176,17 @@ impl CompilerFrontend {
         warnings: &mut Vec<CompilerWarning>,
         entry_file_path: &Path,
     ) -> Result<Headers, Vec<CompilerError>> {
+        let entry_file_id = self
+            .source_files
+            .get_by_canonical_path(entry_file_path)
+            .map(|identity| identity.file_id);
+
         parse_headers_with_path_resolver(
             files,
             &self.host_function_registry,
             warnings,
             entry_file_path,
+            entry_file_id,
             self.project_path_resolver.as_ref(),
             &mut self.string_table,
         )
@@ -187,8 +221,11 @@ impl CompilerFrontend {
         entry_file_path: &Path,
         build_profile: FrontendBuildProfile,
     ) -> Result<Ast, CompilerMessages> {
-        let interned_entry_dir =
-            InternedPath::from_path_buf(entry_file_path, &mut self.string_table);
+        let interned_entry_dir = self
+            .source_files
+            .get_by_canonical_path(entry_file_path)
+            .map(|identity| identity.logical_path.to_owned())
+            .unwrap_or_else(|| InternedPath::from_path_buf(entry_file_path, &mut self.string_table));
 
         Ast::new(
             headers,

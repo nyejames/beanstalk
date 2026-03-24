@@ -4,6 +4,7 @@ use crate::compiler_frontend::ast::statements::declaration_syntax::{
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::{CompilerWarning, WarningKind};
+use crate::compiler_frontend::identity::FileId;
 use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
@@ -138,6 +139,7 @@ pub fn parse_headers(
         warnings,
         entry_file_path,
         None,
+        None,
         string_table,
     )
 }
@@ -147,6 +149,7 @@ pub fn parse_headers_with_path_resolver(
     host_registry: &HostRegistry,
     warnings: &mut Vec<CompilerWarning>,
     entry_file_path: &Path,
+    entry_file_id: Option<FileId>,
     project_path_resolver: Option<&ProjectPathResolver>,
     string_table: &mut StringTable,
 ) -> Result<Headers, Vec<CompilerError>> {
@@ -157,7 +160,10 @@ pub fn parse_headers_with_path_resolver(
     let mut top_level_template_order = 0usize;
 
     for mut file in tokenized_files {
-        let is_entry_file = file.src_path.to_path_buf(string_table) == entry_file_path;
+        let is_entry_file = match (entry_file_id, file.file_id) {
+            (Some(expected_id), Some(current_id)) => expected_id == current_id,
+            _ => file.src_path.to_path_buf(string_table) == entry_file_path,
+        };
 
         let mut parse_context = HeaderParseContext {
             host_function_registry: host_registry,
@@ -433,12 +439,19 @@ fn parse_headers_in_file(
         }
     }
 
+    let mut start_tokens = FileTokens::new_with_file_id(
+        token_stream.src_path.to_owned(),
+        token_stream.file_id,
+        main_function_body,
+    );
+    start_tokens.canonical_os_path = token_stream.canonical_os_path.clone();
+
     headers.push(Header {
         kind: HeaderKind::StartFunction,
         exported: next_statement_exported,
         dependencies: main_function_dependencies,
         name_location: TextLocation::default(),
-        tokens: FileTokens::new(token_stream.src_path.to_owned(), main_function_body),
+        tokens: start_tokens,
         source_file: token_stream.src_path.to_owned(),
         file_imports,
     });
@@ -449,13 +462,9 @@ fn parse_headers_in_file(
 fn normalize_import_dependency_path(
     import_path: &InternedPath,
     source_file: &InternedPath,
-    project_path_resolver: Option<&ProjectPathResolver>,
+    _project_path_resolver: Option<&ProjectPathResolver>,
     string_table: &mut StringTable,
 ) -> Result<InternedPath, CompilerError> {
-    if let Some(project_path_resolver) = project_path_resolver {
-        return project_path_resolver.normalize_import_path(import_path, source_file, string_table);
-    }
-
     let mut import_components = import_path.as_components().iter().copied();
     let Some(first) = import_components.next() else {
         return Ok(import_path.to_owned());
@@ -682,12 +691,15 @@ fn create_header(
         _ => {}
     }
 
+    let mut header_tokens = FileTokens::new_with_file_id(full_name, token_stream.file_id, body);
+    header_tokens.canonical_os_path = token_stream.canonical_os_path.clone();
+
     Ok(Header {
         kind,
         exported,
         dependencies,
         name_location,
-        tokens: FileTokens::new(full_name, body),
+        tokens: header_tokens,
         source_file: context.source_file.to_owned(),
         file_imports: context.file_import_entries.to_vec(),
     })
@@ -956,6 +968,10 @@ fn create_top_level_const_template(
         end_pos: token_stream.current_location().end_pos,
     };
 
+    let mut template_tokens =
+        FileTokens::new_with_file_id(full_name, token_stream.file_id, body);
+    template_tokens.canonical_os_path = token_stream.canonical_os_path.clone();
+
     Ok(Header {
         kind: HeaderKind::ConstTemplate {
             file_order: const_template_number,
@@ -963,7 +979,7 @@ fn create_top_level_const_template(
         exported: true,
         dependencies,
         name_location,
-        tokens: FileTokens::new(full_name, body),
+        tokens: template_tokens,
         source_file: context.source_file.to_owned(),
         file_imports: context.file_import_entries.to_vec(),
     })

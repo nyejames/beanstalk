@@ -56,7 +56,7 @@ fn lowers_calls_and_cfg_with_deterministic_block_mapping() {
             statement(
                 2,
                 HirStatementKind::Call {
-                    target: CallTarget::UserFunction(callee_path.clone()),
+                    target: CallTarget::UserFunction(FunctionId(0)),
                     args: vec![],
                     result: Some(LocalId(1)),
                 },

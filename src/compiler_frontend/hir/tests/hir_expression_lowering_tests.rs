@@ -500,7 +500,7 @@ fn lowers_function_call_to_call_statement_and_temp_load() {
             args,
             result,
         } => {
-            assert_eq!(target, &CallTarget::UserFunction(function_name.clone()));
+            assert_eq!(target, &CallTarget::UserFunction(FunctionId(2)));
             assert_eq!(args.len(), 1);
             result.expect("call with return should bind a temp local")
         }
@@ -591,9 +591,9 @@ fn preserves_left_to_right_call_prelude_order_in_nested_call_args() {
     assert_eq!(
         targets,
         vec![
-            CallTarget::UserFunction(first),
-            CallTarget::UserFunction(second),
-            CallTarget::UserFunction(outer),
+            CallTarget::UserFunction(FunctionId(1)),
+            CallTarget::UserFunction(FunctionId(2)),
+            CallTarget::UserFunction(FunctionId(3)),
         ]
     );
 }
@@ -645,16 +645,17 @@ fn runtime_template_expression_lowers_to_synthetic_function_call() {
 
     let template_target = match &lowered.prelude[0].kind {
         HirStatementKind::Call {
-            target: CallTarget::UserFunction(path),
+            target: CallTarget::UserFunction(function_id),
             result: Some(_),
             ..
-        } => path.clone(),
+        } => *function_id,
         other => panic!("expected synthetic template call, got {other:?}"),
     };
 
     assert!(
-        template_target
-            .name_str(&string_table)
+        builder
+            .side_table
+            .resolve_function_name(template_target, &string_table)
             .is_some_and(|name| name.starts_with("__template_fn_"))
     );
     assert!(matches!(
@@ -681,21 +682,17 @@ fn runtime_template_generated_function_coerces_non_string_segments() {
 
     let template_target = match &lowered.prelude[0].kind {
         HirStatementKind::Call {
-            target: CallTarget::UserFunction(path),
+            target: CallTarget::UserFunction(function_id),
             ..
-        } => path.clone(),
+        } => *function_id,
         other => panic!("expected synthetic template call, got {other:?}"),
     };
 
-    let template_function_id = *builder
-        .functions_by_name
-        .get(&template_target)
-        .expect("synthetic template function should be registered");
     let template_function = builder
         .module
         .functions
         .iter()
-        .find(|function| function.id == template_function_id)
+        .find(|function| function.id == template_target)
         .expect("synthetic template function should be present");
     let template_entry = builder
         .module

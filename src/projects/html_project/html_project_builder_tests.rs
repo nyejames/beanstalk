@@ -31,6 +31,27 @@ fn temp_dir(prefix: &str) -> PathBuf {
     std::env::temp_dir().join(format!("beanstalk_html_builder_{prefix}_{unique}"))
 }
 
+fn sanitize_hint(raw: &str) -> String {
+    let mut result = String::new();
+    for ch in raw.chars() {
+        if ch == '_' || ch == '$' || ch.is_ascii_alphanumeric() {
+            result.push(ch);
+        } else {
+            result.push('_');
+        }
+    }
+
+    if result.is_empty() {
+        String::from("value")
+    } else {
+        result
+    }
+}
+
+fn expected_dev_function_name(leaf: &str, id: u32) -> String {
+    format!("bst_{}_fn{}", sanitize_hint(leaf), id)
+}
+
 fn create_test_hir_module() -> HirModule {
     let mut module = HirModule::new();
     let mut type_context = TypeContext::default();
@@ -128,6 +149,19 @@ fn add_callable_function(module: &mut Module, function_id: FunctionId, name: &st
 
 fn add_start_call(module: &mut Module, target_name: &str, statement_id: u32) {
     let target_path = InternedPath::from_single_str(target_name, &mut module.string_table);
+    let target_function_id = module
+        .hir
+        .functions
+        .iter()
+        .find_map(|function| {
+            module
+                .hir
+                .side_table
+                .function_name_path(function.id)
+                .filter(|path| **path == target_path)
+                .map(|_| function.id)
+        })
+        .expect("target function should exist in HIR side table");
     let start_block = module
         .hir
         .blocks
@@ -137,7 +171,7 @@ fn add_start_call(module: &mut Module, target_name: &str, statement_id: u32) {
     start_block.statements.push(HirStatement {
         id: HirNodeId(statement_id),
         kind: HirStatementKind::Call {
-            target: CallTarget::UserFunction(target_path),
+            target: CallTarget::UserFunction(target_function_id),
             args: vec![],
             result: None,
         },
@@ -308,11 +342,15 @@ fn emits_runtime_slots_and_bootstrap_calls_start() {
         FileKind::Html(content) => content,
         _ => panic!("expected HTML output"),
     };
+    let start_name = expected_dev_function_name("start_entry", 0);
 
     assert!(html.contains("<meta charset=\"utf-8\">"));
     assert!(html.contains("<div id=\"bst-slot-0\"></div>"));
     assert!(html.contains("insertAdjacentHTML(\"beforeend\", fn());"));
-    assert!(html.contains("if (typeof start_entry === \"function\") start_entry();"));
+    assert!(html.contains(&format!(
+        "if (typeof {} === \"function\") {}();",
+        start_name, start_name
+    )));
 }
 
 #[test]
@@ -529,8 +567,9 @@ fn wasm_mode_bootstrap_calls_wrapper_exports_not_internal_names() {
             _ => None,
         })
         .expect("page.js should be emitted");
+    let helper_name = expected_dev_function_name("helper_fn", 1);
 
-    assert!(js.contains("helper_fn = (...args) =>"));
+    assert!(js.contains(&format!("{} = (...args) =>", helper_name)));
     assert!(js.contains("bst_call_0"));
     assert!(js.contains("const slots = ["));
 }
@@ -675,8 +714,9 @@ fn js_lifecycle_order_is_static_then_bundle_then_hydration_then_start() {
     let hydration_pos = html
         .find("insertAdjacentHTML")
         .expect("slot hydration must be present");
+    let start_name = expected_dev_function_name("start_entry", 0);
     let start_pos = html
-        .find("if (typeof start_entry")
+        .find(&format!("if (typeof {}", start_name))
         .expect("start() invocation must be present");
 
     assert!(
@@ -752,7 +792,11 @@ fn no_runtime_fragments_still_emits_start_call() {
         "no runtime slots should be present when there are no runtime fragments"
     );
     assert!(
-        html.contains("if (typeof start_entry === \"function\") start_entry();"),
+        html.contains(&format!(
+            "if (typeof {} === \"function\") {}();",
+            expected_dev_function_name("start_entry", 0),
+            expected_dev_function_name("start_entry", 0)
+        )),
         "start() must still be called when there are no runtime fragments"
     );
 }

@@ -9,6 +9,7 @@
 
 use crate::build_system::build::{InputFile, Module};
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
+use crate::compiler_frontend::identity::SourceFileTable;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_resolution::{
     ProjectPathResolver, resolve_project_entry_root,
@@ -254,6 +255,19 @@ pub fn compile_module(
         style_directives.to_owned(),
         project_path_resolver,
     );
+
+    let canonical_files = module
+        .iter()
+        .map(|input_file| input_file.source_path.to_owned())
+        .collect::<Vec<_>>();
+    let source_files = SourceFileTable::build(
+        &canonical_files,
+        entry_file_path,
+        compiler.project_path_resolver.as_ref(),
+        &mut compiler.string_table,
+    )
+    .map_err(CompilerMessages::from_error)?;
+    compiler.set_source_files(source_files);
 
     let _time = Instant::now();
 

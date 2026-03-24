@@ -73,7 +73,9 @@ impl<'hir> JsEmitter<'hir> {
 
     fn lower_call_target(&self, target: &CallTarget) -> Result<String, CompilerError> {
         match target {
-            CallTarget::UserFunction(path) => Ok(self.user_call_name(path)?.to_owned()),
+            CallTarget::UserFunction(function_id) => {
+                Ok(self.function_name(*function_id)?.to_owned())
+            }
             CallTarget::HostFunction(path) => {
                 let Some(host_target) = resolve_host_function_path(path, self.string_table) else {
                     return Err(CompilerError::compiler_error(format!(
@@ -179,19 +181,17 @@ impl<'hir> JsEmitter<'hir> {
     }
 
     fn call_returns_alias_reference(&self, target: &CallTarget) -> bool {
-        let CallTarget::UserFunction(path) = target else {
+        let CallTarget::UserFunction(function_id) = target else {
             return false;
         };
 
-        self.hir.functions.iter().any(|function| {
-            self.hir
-                .side_table
-                .function_name_path(function.id)
-                .map(|candidate| candidate == path)
-                .unwrap_or(false)
-                && function.return_aliases.len() == 1
-                && function.return_aliases[0].is_some()
-        })
+        self.hir
+            .functions
+            .iter()
+            .find(|function| function.id == *function_id)
+            .is_some_and(|function| {
+                function.return_aliases.len() == 1 && function.return_aliases[0].is_some()
+            })
     }
 
     pub(crate) fn emit_return_terminator(
