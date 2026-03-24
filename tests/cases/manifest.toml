@@ -87,3 +87,8 @@ tags = ["success", "paths", "config"]
 id = "path_grouped_nested_expansion"
 path = "path_grouped_nested_expansion"
 tags = ["success", "paths", "tokenizer"]
+
+[[case]]
+id = "path_unquoted_whitespace_error"
+path = "path_unquoted_whitespace_error"
+tags = ["diagnostics", "paths", "tokenizer"]

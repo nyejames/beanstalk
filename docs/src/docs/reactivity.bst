@@ -1,6 +1,6 @@
-@(libs/html/Basic)
-@(styles/Docs)
-@(./components)
+@libs/html/Basic
+@styles/Docs
+@./components
 
 [Basic.page:
 
@@ -75,7 +75,7 @@ Reactive capture is only possible for values that can be mutably accessed.
 # Example
 
 ```beanstalk
-@(html/Basic)
+@html/Basic
 
 count ~= 0
 

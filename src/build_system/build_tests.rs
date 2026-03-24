@@ -164,7 +164,7 @@ fn build_single_file_project_includes_reachable_import_files() {
     fs::create_dir_all(root.join("utils")).expect("should create utils directory");
     fs::write(
         root.join("main.bst"),
-        "import @(utils/helper/greet)\ngreet()\n",
+        "import @utils/helper/greet\ngreet()\n",
     )
     .expect("should write main file");
     fs::write(
@@ -1186,7 +1186,7 @@ fn build_project_struct_default_uses_imported_constant() {
     fs::create_dir_all(root.join("styles")).expect("should create temp root");
     fs::write(
         root.join("main.bst"),
-        "import @(styles/theme/base)\nCard = |\n    color String = base,\n|\ncard = Card()\nio([: card.color])\n",
+        "import @styles/theme/base\nCard = |\n    color String = base,\n|\ncard = Card()\nio([: card.color])\n",
     )
     .expect("should write main source file");
     fs::write(root.join("styles/theme.bst"), "#base = \"green\"\n")

@@ -14,8 +14,13 @@ enum PathStopReason {
     Newline,
     TemplateHeadDelimiter,
     ConfigDelimiter,
-    WrappedCloseParen,
     GroupStart,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ParseComponentContext {
+    OrdinaryPath,
+    GroupedEntry,
 }
 
 #[derive(Debug)]
@@ -31,6 +36,12 @@ struct ParsedGroupedPrefix {
     ended_with_separator: bool,
 }
 
+#[derive(Debug)]
+struct ParsedComponent {
+    value: String,
+    was_quoted: bool,
+}
+
 pub fn parse_file_path(
     stream: &mut TokenStream,
     string_table: &mut StringTable,
@@ -39,34 +50,20 @@ pub fn parse_file_path(
     //
     // Canonical examples:
     // @path/to/file
-    // @(path/to/file)
+    // @docs/"my file.md"
     //
     // @docs {
     //     intro.md,
-    //     guides/getting-started.md,
-    //     guides/advanced {
+    //     "my folder"/"my file.md",
+    //     guides {
     //         ownership.md,
     //         memory.md,
     //     },
     // }
 
-    // Skip initial non-newline whitespace before the path contents.
-    while let Some(c) = stream.peek() {
-        if c.is_non_newline_whitespace() && c != &'\n' {
-            stream.next();
-            continue;
-        }
-        break;
-    }
+    consume_non_newline_whitespace(stream);
 
-    let wrapped_in_parentheses = if stream.peek() == Some(&'(') {
-        stream.next();
-        true
-    } else {
-        false
-    };
-
-    let parsed_prefix = parse_path_prefix(stream, string_table, wrapped_in_parentheses)?;
+    let parsed_prefix = parse_path_prefix(stream, string_table)?;
 
     if parsed_prefix.components.is_empty() {
         return_syntax_error!(
@@ -102,43 +99,18 @@ pub fn parse_file_path(
     let mut parsed_paths = Vec::with_capacity(1);
 
     if parsed_prefix.stop_reason != PathStopReason::GroupStart {
-        if wrapped_in_parentheses && parsed_prefix.stop_reason != PathStopReason::WrappedCloseParen
-        {
-            return_syntax_error!(
-                "Invalid character, expected a closing parenthesis for this path.",
-                stream.new_location().to_error_location(string_table), {
-                    CompilationStage => "Tokenization",
-                    PrimarySuggestion => "Add a closing ')' after the path",
-                }
-            )
-        }
-
         parsed_paths.push(InternedPath::from_components(parsed_prefix.components));
         return_token!(TokenKind::Path(parsed_paths), stream);
     }
 
+    // Consume the opening grouped brace so the grouped parser starts at the first entry.
+    stream.next();
     let grouped_suffixes = parse_grouped_block(stream, string_table)?;
 
     for suffix_components in grouped_suffixes {
         let mut full_components = parsed_prefix.components.clone();
         full_components.extend(suffix_components);
         parsed_paths.push(InternedPath::from_components(full_components));
-    }
-
-    if wrapped_in_parentheses {
-        consume_all_whitespace(stream);
-
-        if stream.peek() != Some(&')') {
-            return_syntax_error!(
-                "Invalid character, expected a closing parenthesis after the grouped path.",
-                stream.new_location().to_error_location(string_table), {
-                    CompilationStage => "Tokenization",
-                    PrimarySuggestion => "Add a closing ')' after the grouped path",
-                }
-            )
-        }
-
-        stream.next();
     }
 
     return_token!(TokenKind::Path(parsed_paths), stream)
@@ -174,7 +146,7 @@ pub fn parse_import_clause_tokens(
             "Expected a path after the 'import' keyword.",
             import_token.location.to_error_location(string_table), {
                 CompilationStage => "Header Parsing",
-                PrimarySuggestion => "Add an import path like '@(folder/file)' after 'import'",
+                PrimarySuggestion => "Add an import path like '@folder/file' after 'import'",
             }
         );
     };
@@ -187,7 +159,7 @@ pub fn parse_import_clause_tokens(
             ),
             path_token.location.to_error_location(string_table), {
                 CompilationStage => "Header Parsing",
-                PrimarySuggestion => "Use import syntax like 'import @(folder/file)'",
+                PrimarySuggestion => "Use import syntax like 'import @folder/file'",
             }
         );
     };
@@ -217,134 +189,37 @@ pub fn collect_paths_from_tokens(
 }
 
 /// WHAT: Parses the base path prefix before an optional grouped block.
-/// WHY: This isolates context-sensitive stop conditions (wrapped paths, template-head delimiters,
-///      config-list delimiters) from grouped expansion parsing.
+/// WHY: Keeps context-sensitive ordinary-path stop conditions isolated from grouped expansion.
 fn parse_path_prefix(
     stream: &mut TokenStream,
     string_table: &mut StringTable,
-    wrapped_in_parentheses: bool,
 ) -> Result<ParsedPathPrefix, CompilerError> {
     let mut components = Vec::with_capacity(2);
-    let mut component_buffer = String::new();
     let mut seen_non_relative_component = false;
     let mut ended_with_separator = false;
+    let mut expect_component = true;
 
     loop {
-        let Some(c) = stream.peek().copied() else {
-            let _ = push_component_if_present(
-                &mut components,
-                &mut component_buffer,
-                true,
-                &mut seen_non_relative_component,
-                stream,
-                string_table,
-            )?;
+        if expect_component {
+            consume_non_newline_whitespace(stream);
 
-            return Ok(ParsedPathPrefix {
-                components,
-                stop_reason: PathStopReason::EndOfInput,
-                ended_with_separator,
-            });
-        };
+            let Some(next) = stream.peek().copied() else {
+                return Ok(ParsedPathPrefix {
+                    components,
+                    stop_reason: PathStopReason::EndOfInput,
+                    ended_with_separator,
+                });
+            };
 
-        if !wrapped_in_parentheses && matches!(c, '\n' | '\r') {
-            let _ = push_component_if_present(
-                &mut components,
-                &mut component_buffer,
-                true,
-                &mut seen_non_relative_component,
-                stream,
-                string_table,
-            )?;
+            if let Some(stop_reason) = ordinary_stop_reason(stream.mode, next) {
+                return Ok(ParsedPathPrefix {
+                    components,
+                    stop_reason,
+                    ended_with_separator,
+                });
+            }
 
-            return Ok(ParsedPathPrefix {
-                components,
-                stop_reason: PathStopReason::Newline,
-                ended_with_separator,
-            });
-        }
-
-        if stream.mode == TokenizeMode::TemplateHead && matches!(c, ']' | ':') {
-            let _ = push_component_if_present(
-                &mut components,
-                &mut component_buffer,
-                true,
-                &mut seen_non_relative_component,
-                stream,
-                string_table,
-            )?;
-
-            return Ok(ParsedPathPrefix {
-                components,
-                stop_reason: PathStopReason::TemplateHeadDelimiter,
-                ended_with_separator,
-            });
-        }
-
-        if !wrapped_in_parentheses && matches!(c, ',' | '}') {
-            let _ = push_component_if_present(
-                &mut components,
-                &mut component_buffer,
-                true,
-                &mut seen_non_relative_component,
-                stream,
-                string_table,
-            )?;
-
-            return Ok(ParsedPathPrefix {
-                components,
-                stop_reason: PathStopReason::ConfigDelimiter,
-                ended_with_separator,
-            });
-        }
-
-        if wrapped_in_parentheses && c == ')' {
-            let _ = push_component_if_present(
-                &mut components,
-                &mut component_buffer,
-                true,
-                &mut seen_non_relative_component,
-                stream,
-                string_table,
-            )?;
-            stream.next();
-
-            return Ok(ParsedPathPrefix {
-                components,
-                stop_reason: PathStopReason::WrappedCloseParen,
-                ended_with_separator,
-            });
-        }
-
-        if c == '{' {
-            let _ = push_component_if_present(
-                &mut components,
-                &mut component_buffer,
-                true,
-                &mut seen_non_relative_component,
-                stream,
-                string_table,
-            )?;
-            stream.next();
-
-            return Ok(ParsedPathPrefix {
-                components,
-                stop_reason: PathStopReason::GroupStart,
-                ended_with_separator,
-            });
-        }
-
-        if matches!(c, '/' | '\\') {
-            let pushed_component = push_component_if_present(
-                &mut components,
-                &mut component_buffer,
-                true,
-                &mut seen_non_relative_component,
-                stream,
-                string_table,
-            )?;
-
-            if !pushed_component {
+            if matches!(next, '/' | '\\') {
                 return_syntax_error!(
                     "Empty path component is not allowed here.",
                     stream.new_location().to_error_location(string_table), {
@@ -354,23 +229,70 @@ fn parse_path_prefix(
                 )
             }
 
+            let parsed_component =
+                parse_component(stream, ParseComponentContext::OrdinaryPath, string_table)?;
+            push_validated_component(
+                &mut components,
+                parsed_component,
+                true,
+                &mut seen_non_relative_component,
+                stream,
+                string_table,
+            )?;
+
+            expect_component = false;
+            ended_with_separator = false;
+            continue;
+        }
+
+        let skipped_whitespace = consume_non_newline_whitespace(stream);
+
+        let Some(next) = stream.peek().copied() else {
+            return Ok(ParsedPathPrefix {
+                components,
+                stop_reason: PathStopReason::EndOfInput,
+                ended_with_separator,
+            });
+        };
+
+        if let Some(stop_reason) = ordinary_stop_reason(stream.mode, next) {
+            return Ok(ParsedPathPrefix {
+                components,
+                stop_reason,
+                ended_with_separator,
+            });
+        }
+
+        if matches!(next, '/' | '\\') {
             stream.next();
+            expect_component = true;
             ended_with_separator = true;
             continue;
         }
 
-        component_buffer.push(c);
-        stream.next();
-
-        if !c.is_whitespace() {
-            ended_with_separator = false;
+        if skipped_whitespace {
+            return_syntax_error!(
+                "Path components with whitespace must be quoted.",
+                stream.new_location().to_error_location(string_table), {
+                    CompilationStage => "Tokenization",
+                    PrimarySuggestion => "Quote this path component, for example: \"my file.md\".",
+                }
+            )
         }
+
+        return_syntax_error!(
+            "Path components must be separated by '/'.",
+            stream.new_location().to_error_location(string_table), {
+                CompilationStage => "Tokenization",
+                PrimarySuggestion => "Insert '/' between path components",
+            }
+        )
     }
 }
 
 /// WHAT: Parses one grouped `{ ... }` block into expanded relative-path suffixes.
-/// WHY: Grouped path syntax is pure sugar; this recursive parser expands nested groups into
-///      explicit suffix component lists that the caller can prepend to a base prefix.
+/// WHY: Grouped path syntax is sugar; this recursive parser expands nested groups into
+///      explicit suffix component lists that callers prepend to a base prefix.
 fn parse_grouped_block(
     stream: &mut TokenStream,
     string_table: &mut StringTable,
@@ -506,33 +428,35 @@ fn parse_grouped_block(
 }
 
 /// WHAT: Parses one grouped entry prefix up to `,`, `}`, or nested `{`.
-/// WHY: A grouped entry can be either a leaf path or a nested-group prefix. This helper
-///      captures the shared prefix parsing and validation logic for both forms.
+/// WHY: Grouped entries share the same component parsing and validation rules as ordinary paths.
 fn parse_grouped_entry_prefix(
     stream: &mut TokenStream,
     string_table: &mut StringTable,
 ) -> Result<ParsedGroupedPrefix, CompilerError> {
     let mut components = Vec::new();
-    let mut component_buffer = String::new();
     let mut seen_non_relative_component = false;
     let mut ended_with_separator = false;
+    let mut expect_component = true;
 
-    while let Some(next) = stream.peek().copied() {
-        if matches!(next, ',' | '}' | '{') {
-            break;
-        }
+    loop {
+        if expect_component {
+            consume_all_whitespace(stream);
 
-        if matches!(next, '/' | '\\') {
-            let pushed_component = push_component_if_present(
-                &mut components,
-                &mut component_buffer,
-                false,
-                &mut seen_non_relative_component,
-                stream,
-                string_table,
-            )?;
+            let Some(next) = stream.peek().copied() else {
+                return Ok(ParsedGroupedPrefix {
+                    components,
+                    ended_with_separator,
+                });
+            };
 
-            if !pushed_component {
+            if is_grouped_entry_stop_char(next) {
+                return Ok(ParsedGroupedPrefix {
+                    components,
+                    ended_with_separator,
+                });
+            }
+
+            if matches!(next, '/' | '\\') {
                 return_syntax_error!(
                     "Empty path component is not allowed here.",
                     stream.new_location().to_error_location(string_table), {
@@ -542,72 +466,263 @@ fn parse_grouped_entry_prefix(
                 )
             }
 
+            let parsed_component =
+                parse_component(stream, ParseComponentContext::GroupedEntry, string_table)?;
+            push_validated_component(
+                &mut components,
+                parsed_component,
+                false,
+                &mut seen_non_relative_component,
+                stream,
+                string_table,
+            )?;
+
+            expect_component = false;
+            ended_with_separator = false;
+            continue;
+        }
+
+        let skipped_whitespace = consume_all_whitespace(stream);
+
+        let Some(next) = stream.peek().copied() else {
+            return Ok(ParsedGroupedPrefix {
+                components,
+                ended_with_separator,
+            });
+        };
+
+        if is_grouped_entry_stop_char(next) {
+            return Ok(ParsedGroupedPrefix {
+                components,
+                ended_with_separator,
+            });
+        }
+
+        if matches!(next, '/' | '\\') {
             stream.next();
+            expect_component = true;
             ended_with_separator = true;
             continue;
         }
 
-        component_buffer.push(next);
-        stream.next();
+        if skipped_whitespace {
+            return_syntax_error!(
+                "Path components with whitespace must be quoted.",
+                stream.new_location().to_error_location(string_table), {
+                    CompilationStage => "Tokenization",
+                    PrimarySuggestion => "Quote this path component, for example: \"my file.md\".",
+                }
+            )
+        }
 
-        if !next.is_whitespace() {
-            ended_with_separator = false;
+        return_syntax_error!(
+            "Path components must be separated by '/'.",
+            stream.new_location().to_error_location(string_table), {
+                CompilationStage => "Tokenization",
+                PrimarySuggestion => "Insert '/' between path components",
+            }
+        )
+    }
+}
+
+/// WHAT: Parses exactly one path component (bare or quoted) from the current stream position.
+/// WHY: Ordinary paths and grouped entries must share the same component grammar and escapes.
+fn parse_component(
+    stream: &mut TokenStream,
+    context: ParseComponentContext,
+    string_table: &StringTable,
+) -> Result<ParsedComponent, CompilerError> {
+    if stream.peek() == Some(&'"') {
+        return parse_quoted_component(stream, string_table);
+    }
+
+    parse_bare_component(stream, context, string_table)
+}
+
+/// WHAT: Parses a quoted path component using path-literal escapes.
+/// WHY: Quoted components are the only syntax that allows whitespace inside a component.
+fn parse_quoted_component(
+    stream: &mut TokenStream,
+    string_table: &StringTable,
+) -> Result<ParsedComponent, CompilerError> {
+    let Some('"') = stream.peek().copied() else {
+        return Err(CompilerError::compiler_error(
+            "Quoted path component parsing expected to start on '\"'.",
+        ));
+    };
+
+    stream.next();
+    let mut value = String::new();
+
+    loop {
+        let Some(next) = stream.peek().copied() else {
+            return_syntax_error!(
+                "Unclosed quoted path component.",
+                stream.new_location().to_error_location(string_table), {
+                    CompilationStage => "Tokenization",
+                    PrimarySuggestion => "Add a closing double quote to finish this path component.",
+                    SuggestedInsertion => "\"",
+                }
+            );
+        };
+
+        if next == '"' {
+            stream.next();
+            return Ok(ParsedComponent {
+                value,
+                was_quoted: true,
+            });
+        }
+
+        if next == '\\' {
+            stream.next();
+
+            let Some(escaped) = stream.peek().copied() else {
+                return_syntax_error!(
+                    "Unclosed quoted path component.",
+                    stream.new_location().to_error_location(string_table), {
+                        CompilationStage => "Tokenization",
+                        PrimarySuggestion => "Add a closing double quote to finish this path component.",
+                        SuggestedInsertion => "\"",
+                    }
+                );
+            };
+
+            match escaped {
+                '"' | '\\' => {
+                    value.push(escaped);
+                    stream.next();
+                }
+                _ => {
+                    return_syntax_error!(
+                        "Invalid escape in quoted path component. Only '\\\"' and '\\\\' are supported.",
+                        stream.new_location().to_error_location(string_table), {
+                            CompilationStage => "Tokenization",
+                            PrimarySuggestion => "Use '\\\"' for a quote or '\\\\' for a backslash in quoted path components",
+                        }
+                    )
+                }
+            }
+
+            continue;
+        }
+
+        value.push(next);
+        stream.next();
+    }
+}
+
+/// WHAT: Parses an unquoted path component and enforces quote-required whitespace rules.
+/// WHY: Bare components must remain unambiguous path tokens without internal whitespace.
+fn parse_bare_component(
+    stream: &mut TokenStream,
+    context: ParseComponentContext,
+    string_table: &StringTable,
+) -> Result<ParsedComponent, CompilerError> {
+    let mut value = String::new();
+
+    loop {
+        let Some(next) = stream.peek().copied() else {
+            break;
+        };
+
+        if is_component_terminator(stream.mode, context, next) || next.is_whitespace() {
+            break;
+        }
+
+        value.push(next);
+        stream.next();
+    }
+
+    if value.is_empty() {
+        return_syntax_error!(
+            "Path component cannot be empty.",
+            stream.new_location().to_error_location(string_table), {
+                CompilationStage => "Tokenization",
+                PrimarySuggestion => "Provide a valid path component",
+            }
+        );
+    }
+
+    if stream
+        .peek()
+        .is_some_and(|character| character.is_whitespace())
+    {
+        match context {
+            ParseComponentContext::OrdinaryPath => {
+                consume_non_newline_whitespace(stream);
+            }
+            ParseComponentContext::GroupedEntry => {
+                consume_all_whitespace(stream);
+            }
+        }
+
+        let mode = stream.mode;
+        if stream
+            .peek()
+            .is_some_and(|next| !is_component_terminator(mode, context, *next))
+        {
+            return_syntax_error!(
+                "Path components with whitespace must be quoted.",
+                stream.new_location().to_error_location(string_table), {
+                    CompilationStage => "Tokenization",
+                    PrimarySuggestion => "Quote this path component, for example: \"my file.md\".",
+                }
+            );
         }
     }
 
-    let _ = push_component_if_present(
-        &mut components,
-        &mut component_buffer,
-        false,
-        &mut seen_non_relative_component,
-        stream,
-        string_table,
-    )?;
-
-    Ok(ParsedGroupedPrefix {
-        components,
-        ended_with_separator,
+    Ok(ParsedComponent {
+        value,
+        was_quoted: false,
     })
 }
 
-/// WHAT: Finalizes the buffered component, validates it, and interns it.
-/// WHY: Grouped and non-grouped parsing both need identical component validation/normalization,
-///      so this helper is the shared boundary for those rules.
-fn push_component_if_present(
+/// WHAT: Validates and interns one parsed component.
+/// WHY: Keeps grouped and ordinary paths aligned on one validation boundary.
+fn push_validated_component(
     components: &mut PathComponents,
-    component_buffer: &mut String,
+    parsed_component: ParsedComponent,
     allow_leading_relative_markers: bool,
     seen_non_relative_component: &mut bool,
     stream: &mut TokenStream,
     string_table: &mut StringTable,
-) -> Result<bool, CompilerError> {
-    let trimmed = component_buffer.trim();
-
-    if trimmed.is_empty() {
-        component_buffer.clear();
-        return Ok(false);
-    }
-
+) -> Result<(), CompilerError> {
     let allow_relative_marker = allow_leading_relative_markers && !*seen_non_relative_component;
 
-    validate_path_component(trimmed, allow_relative_marker, stream, string_table)?;
+    validate_path_component(
+        &parsed_component.value,
+        allow_relative_marker,
+        parsed_component.was_quoted,
+        stream,
+        string_table,
+    )?;
 
-    if trimmed != "." && trimmed != ".." {
+    if parsed_component.value != "." && parsed_component.value != ".." {
         *seen_non_relative_component = true;
     }
 
-    components.push(string_table.intern(trimmed));
-    component_buffer.clear();
-
-    Ok(true)
+    components.push(string_table.intern(&parsed_component.value));
+    Ok(())
 }
 
 fn validate_path_component(
     component: &str,
     allow_relative_marker: bool,
+    was_quoted: bool,
     stream: &mut TokenStream,
     string_table: &StringTable,
 ) -> Result<(), CompilerError> {
+    if component.is_empty() {
+        return_syntax_error!(
+            "Path component cannot be empty.",
+            stream.new_location().to_error_location(string_table), {
+                CompilationStage => "Tokenization",
+                PrimarySuggestion => "Provide a valid path component",
+            }
+        )
+    }
+
     if component == "." || component == ".." {
         if allow_relative_marker {
             return Ok(());
@@ -632,7 +747,10 @@ fn validate_path_component(
         )
     }
 
-    if component.chars().any(|c| !is_valid_component_char(c)) {
+    if component
+        .chars()
+        .any(|character| !is_valid_component_char(character, was_quoted))
+    {
         return_syntax_error!(
             format!("Invalid path component '{}'.", component),
             stream.new_location().to_error_location(string_table), {
@@ -655,18 +773,21 @@ fn validate_path_component(
     Ok(())
 }
 
-fn is_valid_component_char(c: char) -> bool {
-    if c.is_control() {
+fn is_valid_component_char(character: char, allow_spaces: bool) -> bool {
+    if character.is_control() {
         return false;
     }
 
-    // Keep plain spaces as data in path components, but reject other whitespace.
-    if c.is_whitespace() && c != ' ' {
+    if character.is_whitespace() {
+        if allow_spaces && character == ' ' {
+            return true;
+        }
+
         return false;
     }
 
     !matches!(
-        c,
+        character,
         '[' | ']'
             | '{'
             | '}'
@@ -715,13 +836,71 @@ fn is_reserved_windows_name(component: &str) -> bool {
     )
 }
 
-fn consume_all_whitespace(stream: &mut TokenStream) {
+fn ordinary_stop_reason(mode: TokenizeMode, character: char) -> Option<PathStopReason> {
+    if matches!(character, '\n' | '\r') {
+        return Some(PathStopReason::Newline);
+    }
+
+    if mode == TokenizeMode::TemplateHead && matches!(character, ']' | ':') {
+        return Some(PathStopReason::TemplateHeadDelimiter);
+    }
+
+    if matches!(character, ',' | '}') {
+        return Some(PathStopReason::ConfigDelimiter);
+    }
+
+    if character == '{' {
+        return Some(PathStopReason::GroupStart);
+    }
+
+    None
+}
+
+fn is_grouped_entry_stop_char(character: char) -> bool {
+    matches!(character, ',' | '}' | '{')
+}
+
+fn is_component_terminator(
+    mode: TokenizeMode,
+    context: ParseComponentContext,
+    character: char,
+) -> bool {
+    if matches!(character, '/' | '\\') {
+        return true;
+    }
+
+    match context {
+        ParseComponentContext::OrdinaryPath => ordinary_stop_reason(mode, character).is_some(),
+        ParseComponentContext::GroupedEntry => is_grouped_entry_stop_char(character),
+    }
+}
+
+fn consume_non_newline_whitespace(stream: &mut TokenStream) -> bool {
+    let mut consumed = false;
+
+    while stream
+        .peek()
+        .is_some_and(|character| character.is_non_newline_whitespace())
+    {
+        stream.next();
+        consumed = true;
+    }
+
+    consumed
+}
+
+fn consume_all_whitespace(stream: &mut TokenStream) -> bool {
+    let mut consumed = false;
+
     while stream
         .peek()
         .is_some_and(|character| character.is_whitespace())
     {
         stream.next();
+        consumed = true;
     }
+
+    consumed
 }
 
 #[cfg(test)]

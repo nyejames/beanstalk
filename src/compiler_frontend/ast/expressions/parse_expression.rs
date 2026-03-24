@@ -492,7 +492,7 @@ pub fn create_expression(
                                 token_stream.current_location().to_error_location(string_table),
                                 {
                                     CompilationStage => "Expression Parsing",
-                                    PrimarySuggestion => "Import exports directly with '@(path/to/file/symbol)' or '@(path/to/file {a, b})'",
+                                    PrimarySuggestion => "Import exports directly with '@path/to/file/symbol' or '@path/to/file {a, b}'",
                                 }
                             );
                         }

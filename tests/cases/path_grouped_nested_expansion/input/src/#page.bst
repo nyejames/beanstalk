@@ -1,13 +1,10 @@
 -- Complex grouped relative-path expansion in a template head.
--- This exercises:
--- - leaf relative entry (intro.md)
--- - nested shared prefix grouping (subfolder { ... })
--- - mixed leaf + branch entries in one grouped block
+-- This exercises quoted whitespace components and mixed leaf/branch grouped entries.
 [@docs {
     intro.md,
-    subfolder {
-        a.md,
+    "my folder" {
+        "a file.md",
         b.md,
     },
-    subfolder/another_folder/c.md,
+    "my folder"/"another folder"/c.md,
 }]

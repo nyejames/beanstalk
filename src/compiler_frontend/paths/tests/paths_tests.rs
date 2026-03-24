@@ -56,37 +56,61 @@ fn collect_import_path_values(source: &str) -> Vec<String> {
 
 #[test]
 fn parse_file_path_preserves_final_segment() {
-    let paths = first_path_token_values("import @(a/b/c)\n");
-    assert_eq!(paths, vec!["a/b/c".to_string()]);
-}
-
-#[test]
-fn parse_file_path_supports_bare_path_syntax() {
     let paths = first_path_token_values("import @a/b/c\n");
     assert_eq!(paths, vec!["a/b/c".to_string()]);
 }
 
 #[test]
-fn parse_file_path_preserves_internal_spaces_for_non_grouped_path() {
-    let paths = first_path_token_values("import @docs/my file.md\n");
+fn parse_file_path_rejects_parenthesis_wrapper_syntax() {
+    let mut string_table = StringTable::new();
+    let style_directives = StyleDirectiveRegistry::built_ins();
+    let source_path = InternedPath::from_single_str("test.bst", &mut string_table);
+
+    let result = tokenize(
+        "import @(a/b/c)\n",
+        &source_path,
+        TokenizeMode::Normal,
+        &style_directives,
+        &mut string_table,
+    );
+
+    assert!(result.is_err(), "parenthesis wrapper should fail");
+}
+
+#[test]
+fn parse_file_path_rejects_unquoted_whitespace_for_non_grouped_path() {
+    let mut string_table = StringTable::new();
+    let style_directives = StyleDirectiveRegistry::built_ins();
+    let source_path = InternedPath::from_single_str("test.bst", &mut string_table);
+
+    let result = tokenize(
+        "import @docs/my file.md\n",
+        &source_path,
+        TokenizeMode::Normal,
+        &style_directives,
+        &mut string_table,
+    );
+
+    assert!(result.is_err(), "unquoted whitespace should fail");
+    let error = result.expect_err("expected tokenizer error");
+    assert!(error.msg.contains("must be quoted"));
+}
+
+#[test]
+fn parse_file_path_accepts_quoted_non_grouped_component() {
+    let paths = first_path_token_values("import @docs/\"my file.md\"\n");
     assert_eq!(paths, vec!["docs/my file.md".to_string()]);
+}
+
+#[test]
+fn parse_file_path_accepts_quoted_root_component() {
+    let paths = first_path_token_values("import @\"root folder\"/docs/file.md\n");
+    assert_eq!(paths, vec!["root folder/docs/file.md".to_string()]);
 }
 
 #[test]
 fn parse_file_path_grouped_paths_expand_leaf_entries() {
     let paths = first_path_token_values("import @styles/docs {footer, navbar}\n");
-    assert_eq!(
-        paths,
-        vec![
-            "styles/docs/footer".to_string(),
-            "styles/docs/navbar".to_string(),
-        ]
-    );
-}
-
-#[test]
-fn parse_file_path_wrapped_grouped_paths_expand_leaf_entries() {
-    let paths = first_path_token_values("import @(styles/docs {footer, navbar})\n");
     assert_eq!(
         paths,
         vec![
@@ -167,6 +191,41 @@ fn parse_file_path_grouped_paths_accept_whitespace_and_trailing_commas() {
 }
 
 #[test]
+fn parse_file_path_grouped_paths_accept_quoted_leaf_entry() {
+    let paths = first_path_token_values("import @docs { \"my file.md\", intro.md }\n");
+    assert_eq!(
+        paths,
+        vec!["docs/my file.md".to_string(), "docs/intro.md".to_string()]
+    );
+}
+
+#[test]
+fn parse_file_path_grouped_paths_accept_quoted_nested_prefix_entry() {
+    let paths = first_path_token_values("import @docs { \"my folder\" { a.md, b.md } }\n");
+    assert_eq!(
+        paths,
+        vec![
+            "docs/my folder/a.md".to_string(),
+            "docs/my folder/b.md".to_string(),
+        ]
+    );
+}
+
+#[test]
+fn parse_file_path_grouped_paths_accept_mixed_quoted_and_unquoted_components() {
+    let paths = first_path_token_values(
+        "import @docs { \"my folder\"/\"another folder\"/c.md, intro.md }\n",
+    );
+    assert_eq!(
+        paths,
+        vec![
+            "docs/my folder/another folder/c.md".to_string(),
+            "docs/intro.md".to_string(),
+        ]
+    );
+}
+
+#[test]
 fn parse_file_path_stops_before_config_list_comma() {
     let paths = first_path_token_values("#root_folders = { @lib, @assets }\n");
     assert_eq!(paths, vec!["lib".to_string()]);
@@ -180,7 +239,7 @@ fn parse_file_path_stops_before_config_list_closing_brace() {
 
 #[test]
 fn parse_file_path_accepts_backslash_separator() {
-    let paths = first_path_token_values("import @(styles\\docs\\footer)\n");
+    let paths = first_path_token_values("import @styles\\docs\\footer\n");
     assert_eq!(paths, vec!["styles/docs/footer".to_string()]);
 }
 
@@ -264,22 +323,64 @@ fn parse_file_path_rejects_grouped_path_missing_closing_brace() {
 }
 
 #[test]
-fn parse_file_path_rejects_grouped_path_missing_closing_parenthesis() {
+fn parse_file_path_rejects_unterminated_quoted_component_non_grouped() {
     let mut string_table = StringTable::new();
     let style_directives = StyleDirectiveRegistry::built_ins();
     let source_path = InternedPath::from_single_str("test.bst", &mut string_table);
 
     let result = tokenize(
-        "import @(docs { a.md, b.md }\n",
+        "import @docs/\"my file.md\n",
         &source_path,
         TokenizeMode::Normal,
         &style_directives,
         &mut string_table,
     );
 
-    assert!(result.is_err(), "missing closing parenthesis should fail");
+    assert!(result.is_err(), "unterminated quote should fail");
     let error = result.expect_err("expected tokenizer error");
-    assert!(error.msg.contains("closing parenthesis"));
+    assert!(error.msg.contains("Unclosed quoted path component"));
+}
+
+#[test]
+fn parse_file_path_rejects_unterminated_quoted_component_grouped() {
+    let mut string_table = StringTable::new();
+    let style_directives = StyleDirectiveRegistry::built_ins();
+    let source_path = InternedPath::from_single_str("test.bst", &mut string_table);
+
+    let result = tokenize(
+        "import @docs { \"my file.md }\n",
+        &source_path,
+        TokenizeMode::Normal,
+        &style_directives,
+        &mut string_table,
+    );
+
+    assert!(result.is_err(), "unterminated grouped quote should fail");
+    let error = result.expect_err("expected tokenizer error");
+    assert!(error.msg.contains("Unclosed quoted path component"));
+}
+
+#[test]
+fn parse_file_path_rejects_unknown_escape_in_quoted_component() {
+    let mut string_table = StringTable::new();
+    let style_directives = StyleDirectiveRegistry::built_ins();
+    let source_path = InternedPath::from_single_str("test.bst", &mut string_table);
+
+    let result = tokenize(
+        "import @docs/\"my\\nfile.md\"\n",
+        &source_path,
+        TokenizeMode::Normal,
+        &style_directives,
+        &mut string_table,
+    );
+
+    assert!(result.is_err(), "unknown escape should fail");
+    let error = result.expect_err("expected tokenizer error");
+    assert!(
+        error
+            .msg
+            .contains("Invalid escape in quoted path component")
+    );
 }
 
 #[test]
@@ -423,7 +524,7 @@ fn parse_file_path_rejects_non_leading_dot_segments() {
     let source_path = InternedPath::from_single_str("test.bst", &mut string_table);
 
     let result = tokenize(
-        "import @(docs/../content)\n",
+        "import @docs/../content\n",
         &source_path,
         TokenizeMode::Normal,
         &style_directives,
@@ -435,8 +536,115 @@ fn parse_file_path_rejects_non_leading_dot_segments() {
 
 #[test]
 fn parse_file_path_accepts_leading_relative_dot_segments() {
-    let paths = first_path_token_values("import @(../shared/content)\n");
+    let paths = first_path_token_values("import @../shared/content\n");
     assert_eq!(paths, vec!["../shared/content".to_string()]);
+}
+
+#[test]
+fn parse_file_path_rejects_unquoted_whitespace_for_grouped_entry() {
+    let mut string_table = StringTable::new();
+    let style_directives = StyleDirectiveRegistry::built_ins();
+    let source_path = InternedPath::from_single_str("test.bst", &mut string_table);
+
+    let result = tokenize(
+        "import @docs { my file.md }\n",
+        &source_path,
+        TokenizeMode::Normal,
+        &style_directives,
+        &mut string_table,
+    );
+
+    assert!(result.is_err(), "unquoted grouped whitespace should fail");
+    let error = result.expect_err("expected tokenizer error");
+    assert!(error.msg.contains("must be quoted"));
+}
+
+#[test]
+fn parse_file_path_rejects_unquoted_whitespace_for_grouped_nested_prefix() {
+    let mut string_table = StringTable::new();
+    let style_directives = StyleDirectiveRegistry::built_ins();
+    let source_path = InternedPath::from_single_str("test.bst", &mut string_table);
+
+    let result = tokenize(
+        "import @docs { my folder { a.md } }\n",
+        &source_path,
+        TokenizeMode::Normal,
+        &style_directives,
+        &mut string_table,
+    );
+
+    assert!(
+        result.is_err(),
+        "unquoted nested prefix whitespace should fail"
+    );
+    let error = result.expect_err("expected tokenizer error");
+    assert!(error.msg.contains("must be quoted"));
+}
+
+#[test]
+fn parse_file_path_rejects_quoted_component_with_structural_separator_character() {
+    let mut string_table = StringTable::new();
+    let style_directives = StyleDirectiveRegistry::built_ins();
+    let source_path = InternedPath::from_single_str("test.bst", &mut string_table);
+
+    let result = tokenize(
+        "import @docs/\"a/b.md\"\n",
+        &source_path,
+        TokenizeMode::Normal,
+        &style_directives,
+        &mut string_table,
+    );
+
+    assert!(
+        result.is_err(),
+        "quoted separator should still be invalid content"
+    );
+    let error = result.expect_err("expected tokenizer error");
+    assert!(error.msg.contains("Invalid path component"));
+}
+
+#[test]
+fn parse_file_path_rejects_quoted_component_with_grouped_delimiter_character() {
+    let mut string_table = StringTable::new();
+    let style_directives = StyleDirectiveRegistry::built_ins();
+    let source_path = InternedPath::from_single_str("test.bst", &mut string_table);
+
+    let result = tokenize(
+        "import @docs { \"a,b.md\" }\n",
+        &source_path,
+        TokenizeMode::Normal,
+        &style_directives,
+        &mut string_table,
+    );
+
+    assert!(
+        result.is_err(),
+        "quoted grouped delimiter should still be invalid content"
+    );
+    let error = result.expect_err("expected tokenizer error");
+    assert!(error.msg.contains("Invalid path component"));
+}
+
+#[test]
+fn parse_file_path_rejects_missing_comma_between_grouped_entries() {
+    let mut string_table = StringTable::new();
+    let style_directives = StyleDirectiveRegistry::built_ins();
+    let source_path = InternedPath::from_single_str("test.bst", &mut string_table);
+
+    let result = tokenize(
+        "import @docs { subfolder { a.md } other { b.md } }\n",
+        &source_path,
+        TokenizeMode::Normal,
+        &style_directives,
+        &mut string_table,
+    );
+
+    assert!(
+        result.is_err(),
+        "missing comma between siblings should fail"
+    );
+    let error = result.expect_err("expected tokenizer error");
+    assert!(error.msg.contains("separated by commas"));
 }
 
 #[test]
@@ -453,7 +661,7 @@ fn parse_file_path_in_template_head_supports_grouped_expansion() {
 
 #[test]
 fn collect_import_paths_from_tokens_supports_newline_after_import() {
-    let paths = collect_import_path_values("import\n@(styles/docs/footer)\n");
+    let paths = collect_import_path_values("import\n@styles/docs/footer\n");
     assert_eq!(paths, vec!["styles/docs/footer".to_string()]);
 }
 

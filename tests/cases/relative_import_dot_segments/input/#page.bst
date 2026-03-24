@@ -1,3 +1,3 @@
-import @(./components/widget)
+import @./components/widget
 
 #[:relative imports ok]

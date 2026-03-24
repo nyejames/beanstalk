@@ -78,7 +78,7 @@ fn first_function_signature(headers: &Headers) -> &FunctionSignature {
 
 #[test]
 fn import_paths_are_captured_for_start_function_dependencies() {
-    let headers = parse_single_file_headers("import @(libs/html/basic)\n[basic]\n");
+    let headers = parse_single_file_headers("import @libs/html/basic\n[basic]\n");
     let start_header = headers
         .headers
         .iter()
@@ -105,7 +105,7 @@ fn exported_constant_headers_are_parsed() {
 
 #[test]
 fn exported_constant_dependency_tracks_imported_symbol() {
-    let headers = parse_single_file_headers("import @(styles/docs/navbar)\n#theme = navbar\n");
+    let headers = parse_single_file_headers("import @styles/docs/navbar\n#theme = navbar\n");
     let constant_header = headers
         .headers
         .iter()
@@ -139,7 +139,7 @@ fn exported_typed_constant_headers_are_parsed_and_follow_on_constant_stays_heade
 #[test]
 fn constant_symbol_dependencies_track_import_struct_and_constant_and_ignore_member_access() {
     let headers = parse_single_file_headers(
-        "import @(styles/docs/theme)\n\
+        "import @styles/docs/theme\n\
          #base = \"seed\"\n\
          Card = |\n\
              title String,\n\
@@ -214,7 +214,7 @@ fn constant_symbol_dependencies_track_import_struct_and_constant_and_ignore_memb
 #[test]
 fn struct_default_dependencies_track_imports_and_local_constants() {
     let headers = parse_single_file_headers(
-        "import @(styles/docs/theme)\n\
+        "import @styles/docs/theme\n\
          #base = \"red\"\n\
          Card = |\n\
              title String = theme + base,\n\
@@ -240,7 +240,7 @@ fn struct_default_dependencies_track_imports_and_local_constants() {
 #[test]
 fn struct_default_dependencies_ignore_field_access_member_symbol() {
     let headers = parse_single_file_headers(
-        "import @(styles/docs/theme)\n\
+        "import @styles/docs/theme\n\
          Card = |\n\
              title String = theme.value,\n\
          |\n",

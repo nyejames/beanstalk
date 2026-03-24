@@ -1,1 +1,1 @@
-#[@(./helper.bst)]
+#[@./helper.bst]

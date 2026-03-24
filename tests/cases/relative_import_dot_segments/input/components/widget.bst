@@ -1,3 +1,3 @@
-import @(../shared/content)
+import @../shared/content
 
 io("widget loaded")

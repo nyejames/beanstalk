@@ -1,3 +1,3 @@
-import @(helper/greet)
+import @helper/greet
 
 greet("World")
