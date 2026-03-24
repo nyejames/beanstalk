@@ -357,12 +357,19 @@ pub fn concat_template(
 }
 
 fn extract_location(nodes: &[AstNode]) -> Result<TextLocation, CompilerError> {
-    // TODO: Just in case the first node is an operator or something
-    // This should PROBABLY iterate through until it hits the first expression node
-    match nodes.first() {
-        Some(node) => Ok(node.location.to_owned()),
-        None => return_compiler_error!("No nodes found in expression. This should never happen."),
+    if nodes.is_empty() {
+        return_compiler_error!("No nodes found in expression. This should never happen.");
     }
+
+    // Skip operator nodes and return the location of the first expression node
+    for node in nodes {
+        if !matches!(node.kind, NodeKind::Operator(_)) {
+            return Ok(node.location.to_owned());
+        }
+    }
+
+    // Fallback to first node if all nodes are operators (shouldn't happen)
+    Ok(nodes[0].location.to_owned())
 }
 
 // TODO - needs to check what can be concatenated at compile time
