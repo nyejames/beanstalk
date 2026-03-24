@@ -27,19 +27,6 @@ pub enum CallTarget {
     HostFunction(InternedPath),
 }
 
-impl CallTarget {
-    #[allow(dead_code)] // todo
-    pub fn as_string(&self, string_table: &StringTable) -> String {
-        match self {
-            CallTarget::UserFunction(function_id) => format!("fn{}", function_id.0),
-            CallTarget::HostFunction(path) => path
-                .name_str(string_table)
-                .map(str::to_owned)
-                .unwrap_or_else(|| path.to_string(string_table)),
-        }
-    }
-}
-
 /// Backend-agnostic ABI values that cross the host boundary.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum HostAbiType {

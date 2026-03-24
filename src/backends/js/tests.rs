@@ -262,35 +262,9 @@ fn default_config() -> JsLoweringConfig {
     }
 }
 
-fn sanitize_hint(raw: &str) -> String {
-    let mut result = String::new();
-
-    for ch in raw.chars() {
-        if ch == '_' || ch == '$' || ch.is_ascii_alphanumeric() {
-            result.push(ch);
-        } else {
-            result.push('_');
-        }
-    }
-
-    if result.is_empty() {
-        String::from("value")
-    } else {
-        result
-    }
-}
-
-fn expected_dev_function_name(leaf: &str, id: u32) -> String {
-    format!("bst_{}_fn{}", sanitize_hint(leaf), id)
-}
-
-fn expected_dev_local_name(leaf: &str, id: u32) -> String {
-    format!("bst_{}_l{}", sanitize_hint(leaf), id)
-}
-
-fn expected_dev_field_name(leaf: &str, id: u32) -> String {
-    format!("bst_{}_fld{}", sanitize_hint(leaf), id)
-}
+use super::test_symbol_helpers::{
+    expected_dev_field_name, expected_dev_function_name, expected_dev_local_name,
+};
 
 // ---------------------------------------------------------------------------
 // Prelude helper presence tests [binding] [alias] [computed] [clone]

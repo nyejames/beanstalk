@@ -7,7 +7,6 @@ use crate::compiler_frontend::compiler_warnings::{CompilerWarning, WarningKind};
 use crate::compiler_frontend::identity::FileId;
 use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::paths::paths::parse_import_clause_tokens;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TextLocation, Token, TokenKind};
@@ -29,7 +28,6 @@ struct HeaderParseContext<'a> {
     host_function_registry: &'a HostRegistry,
     warnings: &'a mut Vec<CompilerWarning>,
     is_entry_file: bool,
-    project_path_resolver: Option<&'a ProjectPathResolver>,
     string_table: &'a mut StringTable,
     const_template_number: &'a mut usize,
     top_level_template_order: &'a mut usize,
@@ -139,7 +137,6 @@ pub fn parse_headers(
         warnings,
         entry_file_path,
         None,
-        None,
         string_table,
     )
 }
@@ -150,7 +147,6 @@ pub fn parse_headers_with_path_resolver(
     warnings: &mut Vec<CompilerWarning>,
     entry_file_path: &Path,
     entry_file_id: Option<FileId>,
-    project_path_resolver: Option<&ProjectPathResolver>,
     string_table: &mut StringTable,
 ) -> Result<Headers, Vec<CompilerError>> {
     let mut headers: Vec<Header> = Vec::new();
@@ -169,7 +165,6 @@ pub fn parse_headers_with_path_resolver(
             host_function_registry: host_registry,
             warnings,
             is_entry_file,
-            project_path_resolver,
             string_table,
             const_template_number: &mut const_template_count,
             top_level_template_order: &mut top_level_template_order,
@@ -331,7 +326,6 @@ fn parse_headers_in_file(
                     let normalized_path = normalize_import_dependency_path(
                         &path,
                         &token_stream.src_path,
-                        context.project_path_resolver,
                         context.string_table,
                     )?;
 
@@ -462,7 +456,6 @@ fn parse_headers_in_file(
 fn normalize_import_dependency_path(
     import_path: &InternedPath,
     source_file: &InternedPath,
-    _project_path_resolver: Option<&ProjectPathResolver>,
     string_table: &mut StringTable,
 ) -> Result<InternedPath, CompilerError> {
     let mut import_components = import_path.as_components().iter().copied();

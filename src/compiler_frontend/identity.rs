@@ -13,15 +13,15 @@ use std::path::{Path, PathBuf};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct FileId(pub u32);
 
-/// Transitional scope identity for the path-to-ID migration.
-/// Phase 2 wires this into semantic scope ownership.
-#[allow(dead_code)]
+/// Scope identity for the path-to-ID migration.
+/// WHY: scope-based visibility replaces path-prefix matching for import/export gating.
+#[allow(dead_code)] // scaffolding: wired in when import visibility uses ScopeId instead of path prefixes
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct ScopeId(pub u32);
 
-/// Transitional declaration identity for the path-to-ID migration.
-/// Phase 3 wires this into semantic declaration ownership.
-#[allow(dead_code)]
+/// Declaration identity for the path-to-ID migration.
+/// WHY: declarations need stable IDs so cross-module references survive path refactors.
+#[allow(dead_code)] // scaffolding: wired in when declaration ownership tracks SymbolId instead of InternedPath
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct SymbolId(pub u32);
 

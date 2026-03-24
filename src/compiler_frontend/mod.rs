@@ -187,7 +187,6 @@ impl CompilerFrontend {
             warnings,
             entry_file_path,
             entry_file_id,
-            self.project_path_resolver.as_ref(),
             &mut self.string_table,
         )
     }

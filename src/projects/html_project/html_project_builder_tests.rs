@@ -1,4 +1,5 @@
 use super::*;
+use crate::backends::js::test_symbol_helpers::expected_dev_function_name;
 use crate::build_system::build::{FileKind, Module};
 use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::analysis::borrow_checker::BorrowCheckReport;
@@ -31,26 +32,6 @@ fn temp_dir(prefix: &str) -> PathBuf {
     std::env::temp_dir().join(format!("beanstalk_html_builder_{prefix}_{unique}"))
 }
 
-fn sanitize_hint(raw: &str) -> String {
-    let mut result = String::new();
-    for ch in raw.chars() {
-        if ch == '_' || ch == '$' || ch.is_ascii_alphanumeric() {
-            result.push(ch);
-        } else {
-            result.push('_');
-        }
-    }
-
-    if result.is_empty() {
-        String::from("value")
-    } else {
-        result
-    }
-}
-
-fn expected_dev_function_name(leaf: &str, id: u32) -> String {
-    format!("bst_{}_fn{}", sanitize_hint(leaf), id)
-}
 
 fn create_test_hir_module() -> HirModule {
     let mut module = HirModule::new();

@@ -9,6 +9,8 @@ mod js_host_functions;
 mod js_statement;
 
 #[cfg(test)]
+pub(crate) mod test_symbol_helpers;
+#[cfg(test)]
 mod tests;
 
 use crate::compiler_frontend::analysis::borrow_checker::BorrowCheckReport;
@@ -386,7 +388,7 @@ impl<'hir> JsEmitter<'hir> {
                 .side_table
                 .resolve_function_name(function_id, self.string_table)
                 .unwrap_or("fn");
-            let raw_name = self.build_function_symbol_raw(function_id, leaf_name_hint);
+            let raw_name = self.build_symbol_raw("fn", function_id.0, leaf_name_hint);
             let js_name = self.assign_unique_identifier(&raw_name);
             self.function_name_by_id.insert(function_id, js_name);
         }
@@ -402,8 +404,8 @@ impl<'hir> JsEmitter<'hir> {
                     .side_table
                     .local_name_path(local.id)
                     .and_then(|path| path.name_str(self.string_table))
-                    .map(|leaf_name| self.build_local_symbol_raw(local.id, leaf_name))
-                    .unwrap_or_else(|| self.build_local_symbol_raw(local.id, "local"));
+                    .map(|leaf_name| self.build_symbol_raw("l", local.id.0, leaf_name))
+                    .unwrap_or_else(|| self.build_symbol_raw("l", local.id.0, "local"));
 
                 local_specs.push((local.id, raw_name));
             }
@@ -428,8 +430,8 @@ impl<'hir> JsEmitter<'hir> {
                     .side_table
                     .field_name_path(field.id)
                     .and_then(|path| path.name_str(self.string_table))
-                    .map(|leaf_name| self.build_field_symbol_raw(field.id, leaf_name))
-                    .unwrap_or_else(|| self.build_field_symbol_raw(field.id, "field"));
+                    .map(|leaf_name| self.build_symbol_raw("fld", field.id.0, leaf_name))
+                    .unwrap_or_else(|| self.build_symbol_raw("fld", field.id.0, "field"));
 
                 field_specs.push((field.id, raw_name));
             }
@@ -599,27 +601,11 @@ impl<'hir> JsEmitter<'hir> {
         self.indent -= 1;
     }
 
-    fn build_function_symbol_raw(&self, function_id: FunctionId, leaf_name_hint: &str) -> String {
+    fn build_symbol_raw(&self, kind_tag: &str, id: u32, leaf_name_hint: &str) -> String {
         if self.use_release_symbol_names() {
-            format!("b_fn{}", function_id.0)
+            format!("b_{kind_tag}{id}")
         } else {
-            format!("bst_{}_fn{}", leaf_name_hint, function_id.0)
-        }
-    }
-
-    fn build_local_symbol_raw(&self, local_id: LocalId, leaf_name_hint: &str) -> String {
-        if self.use_release_symbol_names() {
-            format!("b_l{}", local_id.0)
-        } else {
-            format!("bst_{}_l{}", leaf_name_hint, local_id.0)
-        }
-    }
-
-    fn build_field_symbol_raw(&self, field_id: FieldId, leaf_name_hint: &str) -> String {
-        if self.use_release_symbol_names() {
-            format!("b_fld{}", field_id.0)
-        } else {
-            format!("bst_{}_fld{}", leaf_name_hint, field_id.0)
+            format!("bst_{leaf_name_hint}_{kind_tag}{id}")
         }
     }
 
