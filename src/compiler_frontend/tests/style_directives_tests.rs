@@ -37,7 +37,7 @@ fn built_ins_include_new_html_raw_and_escape_html_directives() {
     let html = built_ins
         .find("html")
         .expect("html directive should be registered as a built-in");
-    assert_eq!(html.body_mode, TemplateBodyMode::HtmlHybrid);
+    assert_eq!(html.body_mode, TemplateBodyMode::Normal);
     assert_eq!(html.source, StyleDirectiveSource::BuiltIn);
 
     let raw = built_ins

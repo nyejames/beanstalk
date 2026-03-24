@@ -566,7 +566,7 @@ fn html_directive_rejects_arguments() {
 fn html_directive_sets_html_mode() {
     let mut string_table = StringTable::new();
     let mut token_stream = template_tokens_from_source(
-        "[$html:\n<div data-tags=\"[one,two]\">x</div>\n]",
+        "[$html:\n<div class=\"card\">x</div>\n]",
         &mut string_table,
     );
     let context = ScopeContext::new_constant(token_stream.src_path.to_owned());

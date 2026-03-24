@@ -1,1 +1,1 @@
-[@docs/ {memory-management-design.md, codebase-style-guide.md}]
+io("hello world")

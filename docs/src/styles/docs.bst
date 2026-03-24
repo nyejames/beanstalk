@@ -27,7 +27,7 @@ import @lib/html {doc, format}
 # navbar = [$html:
     <nav class="bst-nav-1" aria-label="Primary">
         <a
-            href="[/@]"
+            href="[@/]"
             style="
                 display: flex;
                 align-items: center;

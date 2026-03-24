@@ -313,7 +313,7 @@ fn css_template_body_keeps_selector_brackets_as_literal_text() {
 }
 
 #[test]
-fn html_template_body_keeps_attribute_brackets_as_literal_text() {
+fn html_template_body_tokenizes_attribute_brackets_using_normal_rules() {
     let (file_tokens, string_table) =
         tokenize_source("[$html:\n<div data-tags=\"[one,two]\">Hello</div>\n]");
 
@@ -329,28 +329,42 @@ fn html_template_body_keeps_attribute_brackets_as_literal_text() {
         .count();
 
     assert_eq!(
-        template_heads, 1,
-        "html template bodies should not tokenize attribute brackets as nested templates"
+        template_heads, 2,
+        "normal template-body parsing should tokenize '[one,two]' as a nested template in $html"
     );
-    assert_eq!(template_closes, 1);
+    assert_eq!(template_closes, 2);
 
-    let body_literal = file_tokens
+    assert!(
+        file_tokens.tokens.iter().any(
+            |token| matches!(token.kind, TokenKind::Symbol(id) if string_table.resolve(id) == "one")
+        ),
+        "expected nested template symbol 'one' from bracket content"
+    );
+    assert!(
+        file_tokens.tokens.iter().any(
+            |token| matches!(token.kind, TokenKind::Symbol(id) if string_table.resolve(id) == "two")
+        ),
+        "expected nested template symbol 'two' from bracket content"
+    );
+
+    let preserves_literal_attribute_brackets = file_tokens
         .tokens
         .iter()
-        .find_map(|token| match token.kind {
+        .any(|token| match token.kind {
             TokenKind::StringSliceLiteral(id) => {
                 let value = string_table.resolve(id);
-                value.contains("data-tags=\"[one,two]\"").then_some(value)
+                value.contains("data-tags=\"[one,two]\"")
             }
-            _ => None,
-        })
-        .expect("expected html template body text to include literal attribute brackets");
-
-    assert!(body_literal.contains("<div"));
+            _ => false,
+        });
+    assert!(
+        !preserves_literal_attribute_brackets,
+        "normal $html tokenization should not preserve attribute bracket lists as one literal slice"
+    );
 }
 
 #[test]
-fn html_template_body_tokenizes_slot_templates_inside_quoted_attributes() {
+fn html_template_body_tokenizes_slot_templates_inside_quoted_attributes_with_normal_rules() {
     let (file_tokens, string_table) =
         tokenize_source("[$html:\n<h1 style=\"font-size: 2em;[$slot(\"style\")]\">[$slot]</h1>\n]");
 
@@ -367,7 +381,7 @@ fn html_template_body_tokenizes_slot_templates_inside_quoted_attributes() {
 
     assert_eq!(
         template_heads, 3,
-        "html bodies should still open nested templates for explicit slot directives"
+        "normal template-body parsing should still tokenize slot templates inside quoted attributes"
     );
     assert_eq!(template_closes, 3);
 
@@ -382,7 +396,7 @@ fn html_template_body_tokenizes_slot_templates_inside_quoted_attributes() {
 }
 
 #[test]
-fn html_template_body_tokenizes_symbol_wrappers_outside_quotes() {
+fn html_template_body_tokenizes_symbol_wrappers_with_general_template_rules() {
     let (file_tokens, string_table) =
         tokenize_source("[$html:\n[title, center: LANGUAGE BASICS]\n]");
 
@@ -399,7 +413,7 @@ fn html_template_body_tokenizes_symbol_wrappers_outside_quotes() {
 
     assert_eq!(
         template_heads, 2,
-        "html bodies should open nested wrappers when symbolic template syntax is used in body text"
+        "normal template-body parsing should tokenize wrapper syntax in $html bodies"
     );
     assert_eq!(template_closes, 2);
 

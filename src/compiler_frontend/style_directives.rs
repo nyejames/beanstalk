@@ -84,9 +84,8 @@ impl StyleDirectiveRegistry {
                 StyleDirectiveSpec::built_in("doc", TemplateBodyMode::Normal),
                 StyleDirectiveSpec::built_in("code", TemplateBodyMode::Balanced),
                 StyleDirectiveSpec::built_in("css", TemplateBodyMode::Balanced),
-                // `$html` keeps most bracket text literal, but still allows explicit
-                // nested template syntax (for example `[$slot]`) in its body.
-                StyleDirectiveSpec::built_in("html", TemplateBodyMode::HtmlHybrid),
+                // `$html` uses the same normal template-body parsing as `$markdown`.
+                StyleDirectiveSpec::built_in("html", TemplateBodyMode::Normal),
                 StyleDirectiveSpec::built_in("raw", TemplateBodyMode::Normal),
                 StyleDirectiveSpec::built_in("escape_html", TemplateBodyMode::Normal),
             ],
