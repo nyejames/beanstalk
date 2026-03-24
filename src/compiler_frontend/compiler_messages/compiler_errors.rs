@@ -396,17 +396,6 @@ impl CompilerError {
         }
     }
 
-    //     pub fn to_llm_friendly_json(&self) -> serde_json::Value {
-    //         json!({
-    //             "type": format!("{:?}", self.error_type),
-    // x           "message": self.msg.to_string(),
-    //             "file": self.location.scope.to_string(),
-    //             "line": self.location.line,
-    //             "column": self.location.column,
-    //             "suggestions": self.suggestions.iter().map(|s| s.to_string()).collect::<Vec<_>>(),
-    //             "metadata": self.metadata,
-    //         })
-    //     }
 }
 
 // Adds more information to the CompileError

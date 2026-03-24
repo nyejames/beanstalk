@@ -41,10 +41,6 @@ impl FunctionReturn {
         }
     }
 
-    #[allow(dead_code)] // todo
-    pub fn is_alias(&self) -> bool {
-        matches!(self, FunctionReturn::AliasCandidates { .. })
-    }
 }
 
 #[derive(Clone, Debug, Default)]
@@ -517,25 +513,6 @@ pub fn parse_function_call(
     let args =
         create_function_call_arguments(token_stream, &signature.parameters, context, string_table)?;
 
-    // TODO
-    // Makes sure the call value is correct for the function call
-    // If so, the function call args are sorted into their correct order (if some are named or optional)
-    // Once this is always working then default args can be removed from the JS output
-    // let args = create_func_call_args(&expressions, argument_refs, &x.current_position())?;
-
-    // look for which arguments are being accessed from the function call
-    // let return_type = create_args_from_types(returns);
-    // let accessed_args = get_accessed_args(x, name, &DataType::Object(return_type), &mut Vec::new(), captured_declarations)?;
-
-    // Inline this function call if it's pure and the function call is pure
-    // if is_pure && call_value.is_pure() {
-    //     let original_function = variable_declarations
-    //         .iter()
-    //         .find(|a| a.name == *name)
-    //         .unwrap();
-    //     return inline_function_call(&args, &accessed_args, &original_function.value);
-    // }
-
     Ok(AstNode {
         kind: NodeKind::FunctionCall {
             name: id.to_owned(),
@@ -627,72 +604,6 @@ pub fn create_function_call_arguments(
         let call_context = context.new_child_expression(required_argument_types.to_owned());
 
         create_multiple_expressions(token_stream, &call_context, true, string_table)
-    }
-}
-
-/// Coerce an expression to a string at compile time if possible
-/// This handles compile-time constant folding for CoerceToString parameters
-#[allow(dead_code)] // todo
-fn coerce_to_string_at_compile_time(
-    expr: &Expression,
-    string_table: &mut StringTable,
-) -> Result<Expression, CompilerError> {
-    match &expr.kind {
-        // String literals pass through unchanged (optimization: no conversion needed)
-        ExpressionKind::StringSlice(_) => Ok(expr.clone()),
-
-        // Integer literals: fold to string at compile time (42 → "42")
-        ExpressionKind::Int(value) => {
-            let string_value = value.to_string();
-            let interned = string_table.get_or_intern(string_value);
-            Ok(Expression::string_slice(
-                interned,
-                expr.location.clone(),
-                Ownership::ImmutableOwned,
-            ))
-        }
-
-        // Float literals: fold to string at compile time (3.14 → "3.14")
-        ExpressionKind::Float(value) => {
-            let string_value = value.to_string();
-            let interned = string_table.get_or_intern(string_value);
-            Ok(Expression::string_slice(
-                interned,
-                expr.location.clone(),
-                Ownership::ImmutableOwned,
-            ))
-        }
-
-        // Boolean literals: fold to string at compile time (true → "true", false → "false")
-        ExpressionKind::Bool(value) => {
-            let string_value = value.to_string();
-            let interned = string_table.get_or_intern(string_value);
-            Ok(Expression::string_slice(
-                interned,
-                expr.location.clone(),
-                Ownership::ImmutableOwned,
-            ))
-        }
-
-        // Template literals: evaluate to string at compile time if possible
-        ExpressionKind::Template(template) => {
-            // Try to fold the template to a string
-            if let Ok(folded_string) = template.fold_into_stringid(&None, string_table) {
-                Ok(Expression::string_slice(
-                    folded_string,
-                    expr.location.clone(),
-                    Ownership::ImmutableOwned,
-                ))
-            } else {
-                // Template contains runtime expressions, can't fold at compile time
-                // Return as-is for runtime conversion
-                Ok(expr.clone())
-            }
-        }
-
-        // Runtime expressions, variable references, function calls, etc.
-        // These cannot be folded at compile time and will need runtime conversion
-        _ => Ok(expr.clone()),
     }
 }
 

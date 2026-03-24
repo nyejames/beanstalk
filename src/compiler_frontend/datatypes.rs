@@ -53,15 +53,6 @@ impl Ownership {
         }
     }
 
-    #[allow(dead_code)] // todo
-    pub fn as_string(&self) -> String {
-        match &self {
-            Ownership::MutableOwned => String::from("mutable"),
-            Ownership::MutableReference => String::from("mutable reference"),
-            Ownership::ImmutableOwned => String::from("immutable"),
-            Ownership::ImmutableReference => String::from("immutable reference"),
-        }
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -186,21 +177,6 @@ impl DataType {
 
     pub fn is_numerical(&self) -> bool {
         matches!(self, DataType::Float | DataType::Int | DataType::Decimal)
-    }
-
-    #[allow(dead_code)] // todo
-    pub fn is_iterable(&self) -> bool {
-        match self {
-            DataType::Range => true,
-            DataType::Collection(..) => true,
-            DataType::Parameters(_) => true,
-            DataType::StringSlice => true,
-            DataType::Float => true,
-            DataType::Int => true,
-            DataType::Decimal => true,
-            DataType::Inferred => true, // Will need to be type checked later
-            _ => false,
-        }
     }
 
     /// Display the DataType with proper string resolution for interned strings.
@@ -447,27 +423,3 @@ impl Display for DataType {
     }
 }
 
-// pub fn get_rgba_args() -> DataType {
-//     DataType::Args(vec![
-//         Arg {
-//             name: "red".to_string(),
-//             data_type: DataType::Choices(vec![DataType::Float(false), DataType::Int(false)]),
-//             default_value: ExpressionKind::Float(0.0),
-//         },
-//         Arg {
-//             name: "green".to_string(),
-//             data_type: DataType::Choices(vec![DataType::Float(false), DataType::Int(false)]),
-//             default_value: ExpressionKind::Float(0.0),
-//         },
-//         Arg {
-//             name: "blue".to_string(),
-//             data_type: DataType::Choices(vec![DataType::Float(false), DataType::Int(false)]),
-//             default_value: ExpressionKind::Float(0.0),
-//         },
-//         Arg {
-//             name: "alpha".to_string(),
-//             data_type: DataType::Choices(vec![DataType::Float(false), DataType::Int(false)]),
-//             default_value: ExpressionKind::Float(1.0),
-//         },
-//     ])
-// }

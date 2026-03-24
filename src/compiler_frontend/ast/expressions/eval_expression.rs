@@ -372,57 +372,6 @@ fn extract_location(nodes: &[AstNode]) -> Result<TextLocation, CompilerError> {
     Ok(nodes[0].location.to_owned())
 }
 
-// TODO - needs to check what can be concatenated at compile time
-// Everything else should be left for runtime
-// fn concat_strings(simplified_expression: &mut Vec<AstNode>) -> Result<Expression, CompileError> {
-//     let mut final_string_expression: Vec<AstNode> = Vec::with_capacity(2);
-//     for node in simplified_expression {
-//         let expr = node.get_expr()?;
-//         match expr.kind {
-//             ExpressionKind::String(ref string) => {
-//                 let mut last_node = final_string_expression.last();
-//                 match &mut last_node.get_expr()?.kind {
-//                     Some(AstNode::Expression(expr, ..)) => {
-//                         expr.kind.evaluate_operator(
-//                             &ExpressionKind::String(string.to_string()),
-//                             &Operator::Add,
-//                         );
-//                     }
-//                     _ => {
-//                         final_string_expression.push(node.to_owned());
-//                         final_string_expression.push(AstNode::Operator(Operator::Add));
-//                     }
-//                 }
-//             }
-//
-//             ExpressionKind::Runtime(_) => final_string_expression.push(node.to_owned()),
-//
-//             ExpressionKind::Reference(..) => {
-//                 final_string_expression
-//                     .push(NodeKind::Operator(Operator::Add, node.get_position()));
-//                 final_string_expression.push(node.to_owned());
-//             }
-//
-//             _ => {
-//                 return_type_error!(
-//                     TextLocation::default(),
-//                     "You can only concatenate strings with other strings or numbers. Found: {:?}",
-//                     node,
-//                 )
-//             }
-//         }
-//     }
-//
-//     if final_string_expression.len() == 1 {
-//         return Ok(final_string_expression[0].to_owned().get_expr());
-//     }
-//
-//     Ok(ExpressionKind::Runtime(
-//         final_string_expression,
-//         DataType::String(false),
-//     ))
-// }
-
 #[cfg(test)]
 #[path = "tests/eval_expression_tests.rs"]
 mod eval_expression_tests;

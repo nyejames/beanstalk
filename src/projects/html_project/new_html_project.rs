@@ -54,18 +54,3 @@ pub fn create_html_project_template(
 
     Ok(())
 }
-
-// pub fn create_default_project_name(full_path: &Path) -> &str {
-//     // If any of these stages fail, just set an empty string
-//     if full_path.is_file() {
-//         // Get the name of the directory this file is in
-//         if let Some(last) = full_path.ancestors().last() {
-//             last.to_str().unwrap_or_default()
-//         } else {
-//             ""
-//         }
-//     } else {
-//         // Get the name of this directory
-//         full_path.to_str().unwrap_or_default()
-//     }
-// }

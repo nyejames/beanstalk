@@ -224,18 +224,6 @@ pub fn origin_root_url(origin: &str) -> String {
     }
 }
 
-/// Converts a site-local page URL to a public URL including the origin.
-#[allow(dead_code)] // Prepared for future path-coercion use
-pub fn public_page_url(site_local_page_url: &str, origin: &str) -> String {
-    prefix_origin(origin, site_local_page_url)
-}
-
-/// Converts a site-local asset path to a public URL including the origin.
-#[allow(dead_code)] // Prepared for future path-coercion use
-pub fn public_asset_url(site_local_asset_path: &str, origin: &str) -> String {
-    prefix_origin(origin, site_local_asset_path)
-}
-
 #[cfg(test)]
 #[path = "tests/routing_tests.rs"]
 mod tests;

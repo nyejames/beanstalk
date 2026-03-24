@@ -222,20 +222,6 @@ pub fn expression_to_js(expr: &Expression, string_table: &StringTable) -> Result
     Ok(js)
 }
 
-//pub fn create_reactive_reference(name: &str, data_type: &DataType) -> String {
-//    match data_type {
-//        // DataType::Float | DataType::Int => {
-//        //     format!("uInnerHTML(\"{name}\", wsx.get_{BS_VAR_PREFIX}{name}());")
-//        // }
-//        DataType::Args(_) | DataType::Collection(_) => {
-//            format!("\nuInnerHTML(\"{name}\",{name});\n")
-//        }
-//        _ => {
-//            format!("\nuInnerHTML(\"{name}\",{name});\n")
-//        }
-//    }
-//}
-
 pub fn combine_vec_to_js(collection: &[Expression]) -> Result<String, CompileError> {
     let mut js = String::new();
 
@@ -251,57 +237,3 @@ pub fn combine_vec_to_js(collection: &[Expression]) -> Result<String, CompileErr
     Ok(js)
 }
 
-// pub fn access_args_to_js(accessed_members: &[Arg]) -> String {
-//     let mut js = String::new();
-//
-//     for member in accessed_members {
-//         match member.data_type {
-//             DataType::Block(..) => {
-//                 let arguments_js = expressions_to_js(arguments, "").unwrap_or_else(|_| "".to_owned());
-//                 js.push_str(
-//                     &format!(".{}({})", name, arguments_js)
-//                 )
-//                 match data_type {
-//                     DataType::Block(..) => {
-//
-//                     }
-//                     _ => {
-//
-//                     }
-//                 }
-//
-//             }
-//             _ => {
-//                 js.push_str(&format!(".{}", member.name));
-//             }
-//         }
-//     }
-//
-//     js
-// }
-
-//         let mut js_imports: String = format!(
-//             "<script type=\"module\" src=\"./{}\"></script>",
-//             &module
-//                 .output_path
-//                 .with_extension("js")
-//                 .file_name()
-//                 .unwrap()
-//                 .to_string_lossy()
-//         );
-//
-//         for import in &mut module.imports {
-//             // Stripping the src folder from the import path,
-//             // As this directory is removed in the output directory
-//             let trimmed_import = import.0.strip_prefix("src/").unwrap_or(import.0);
-//
-//             js_imports += &format!(
-//                 "<script type=\"module\" src=\"{}.js\"></script>",
-//                 trimmed_import
-//             );
-//         }
-//
-//         module.html = compile_result
-//             .html
-//             .replace("<!--//js-modules-->", &js_imports);
-//         module.js = compile_result.js;

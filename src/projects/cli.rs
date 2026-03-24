@@ -25,8 +25,6 @@ enum Command {
 
     Build(String), // Builds a file or project
 
-    // Run(&'static str),  //TODO:  Jit the project/file. This will be an eventual Rust interpreter project
-
     // Runs a hot reloading dev server that can be accessed in the browser
     // Will only support HTML projects for now
     Dev {
@@ -44,9 +42,6 @@ pub fn start_cli() {
     let compiler_args: Vec<String> = env::args().collect();
 
     if compiler_args.len() < 2 {
-        // TODO: When interpreter is working properly
-        // Start REPL session for running small snippets of Beanstalk code
-        // repl::start_repl_session();
         print_help(true);
         return;
     }
@@ -60,9 +55,7 @@ pub fn start_cli() {
         }
     };
 
-    // Gather a list of any additional flags
     let flags = get_flags(&compiler_args);
-    // grey_ln!("compiler_frontend settings {:#?}", flags);
 
     match command {
         Command::Help => {
@@ -137,11 +130,6 @@ pub fn start_cli() {
             }
         }
 
-        // Command::Run(path) => {
-        //     let messages =
-        //         build::build_project_files(&path, false, &flags, Some(BuildTarget::Interpreter));
-        //     print_compiler_messages(messages);
-        // }
         Command::Dev { path, options } => {
             say!("\nStarting dev server...");
             let project_builder = build::ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
@@ -199,12 +187,6 @@ fn get_command(args: &[String]) -> Result<Command, String> {
             }
         }
 
-        // Some("run") => match args.get(1).map(String::as_str) {
-        //     Some(str) => {
-        //         Ok(Command::Run(str))
-        //     }
-        //     _ => Ok(Command::Run("")),
-        // },
         Some("dev") => parse_dev_command(args),
 
         Some("tests") => parse_tests_command(args),
@@ -375,12 +357,6 @@ fn print_help(commands_only: bool) {
         say!("Usage: ", Bold "<command>",  Italic "<args>");
     }
     say!(Green Bold "\nCommands:");
-    //say!("  new <project name>   - Creates a new project");
-    //say!(
-    //   // "  dev <path>           - Runs the dev server (builds files in dev directory with hot reloading)"
-    //);
-    //say!("  build <path>         - Builds a file");
-    say!("  run <path>        - JITs a file");
     say!("  build <path>      - Builds a project");
     say!("  dev <path>        - Runs the hot reloading dev server");
     say!("  tests [--backend <id>] - Runs the integration test suite");

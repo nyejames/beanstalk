@@ -1199,14 +1199,3 @@ pub(crate) fn create_expression_until(
     Ok(expression)
 }
 
-// pub fn create_args_from_types(data_types: &[DataType]) -> Vec<Arg> {
-//     let mut arguments = Vec::new();
-//
-//     for data_type in data_types {
-//         if let DataType::Args(inner_args) = data_type {
-//             arguments.extend(inner_args.to_owned());
-//         }
-//     }
-//
-//     arguments
-// }

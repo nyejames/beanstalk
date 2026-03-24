@@ -29,24 +29,6 @@ pub(crate) struct HtmlRouteOutputPlan {
     pub wasm_path: Option<PathBuf>,
 }
 
-/// Build an output plan for one entry file in JS-only mode.
-///
-/// WHY: JS-only builds emit a single HTML file; the output path equals the logical path.
-#[allow(dead_code)] // TODO: is this even going to be used?
-pub(crate) fn plan_js_output(
-    entry_point: &Path,
-    entry_root: Option<&Path>,
-) -> Result<HtmlRouteOutputPlan, CompilerError> {
-    let logical_html_path = derive_logical_html_path(entry_point, entry_root)?;
-    let html_path = logical_html_path.clone();
-    Ok(HtmlRouteOutputPlan {
-        logical_html_path,
-        html_path,
-        js_path: None,
-        wasm_path: None,
-    })
-}
-
 /// Build an output plan for one entry file in HTML+Wasm mode.
 ///
 /// WHY: Wasm builds colocate JS and Wasm alongside `index.html` under a per-route folder.
@@ -192,28 +174,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn js_page_root_maps_to_index_html() {
-        let plan = plan_js_output(
-            Path::new("/project/src/#page.bst"),
-            Some(Path::new("/project/src")),
-        )
-        .expect("should plan");
-        assert_eq!(plan.html_path, PathBuf::from("index.html"));
-        assert!(plan.js_path.is_none());
-        assert!(plan.wasm_path.is_none());
-    }
-
-    #[test]
-    fn js_about_route_maps_to_folder_backed_path() {
-        let plan = plan_js_output(
-            Path::new("/project/src/#about.bst"),
-            Some(Path::new("/project/src")),
-        )
-        .expect("should plan");
-        assert_eq!(plan.html_path, PathBuf::from("about/index.html"));
-    }
-
-    #[test]
     fn wasm_root_page_colocates_artifacts_at_root() {
         let plan = plan_wasm_output(
             Path::new("/project/src/#page.bst"),
@@ -237,15 +197,4 @@ mod tests {
         assert_eq!(plan.wasm_path, Some(PathBuf::from("about/page.wasm")));
     }
 
-    #[test]
-    fn single_file_build_uses_legacy_flat_naming() {
-        let plan = plan_js_output(Path::new("/project/#about.bst"), None).expect("should plan");
-        assert_eq!(plan.html_path, PathBuf::from("about.html"));
-    }
-
-    #[test]
-    fn single_file_page_maps_to_index_html() {
-        let plan = plan_js_output(Path::new("/project/#page.bst"), None).expect("should plan");
-        assert_eq!(plan.html_path, PathBuf::from("index.html"));
-    }
 }
