@@ -110,7 +110,10 @@ pub fn start_cli() {
 
                     let write_result = build::write_project_outputs(
                         &build_result.project,
-                        &build::WriteOptions { output_root },
+                        &build::WriteOptions {
+                            output_root,
+                            project_entry_dir: Some(build_result.config.entry_dir.clone()),
+                        },
                     );
 
                     match write_result {
