@@ -61,7 +61,11 @@ pub enum StyleDirectiveArgumentValue {
 /// Template-style toggles that a handler-based directive can apply when used.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct StyleDirectiveEffects {
-    /// Optional semantic style ID used for formatter precedence/debugging.
+    /// Optional semantic style label applied to `Template.style.id`.
+    ///
+    /// This is intentionally distinct from `Formatter.id`:
+    /// - `style_id` tags parsed template semantics.
+    /// - `Formatter.id` identifies the concrete formatter implementation.
     pub style_id: Option<&'static str>,
     /// Optional body-whitespace policy override.
     pub body_whitespace_policy: Option<BodyWhitespacePolicy>,

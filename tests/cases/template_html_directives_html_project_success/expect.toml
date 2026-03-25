@@ -1,0 +1,12 @@
+mode = "success"
+entry = "."
+warnings = "forbid"
+
+[[artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain = [
+  "<div id=\"raw\"><span>raw</span></div>",
+  ".button { color: red; }",
+  "&lt;div id=&quot;escaped&quot;&gt;x &amp; y&lt;/div&gt;"
+]

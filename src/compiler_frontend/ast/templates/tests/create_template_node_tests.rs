@@ -19,8 +19,8 @@ use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::style_directives::{
-    StyleDirectiveArgumentType, StyleDirectiveHandlerSpec, StyleDirectiveRegistry,
-    StyleDirectiveSpec,
+    StyleDirectiveArgumentType, StyleDirectiveEffects, StyleDirectiveHandlerSpec,
+    StyleDirectiveRegistry, StyleDirectiveSpec,
 };
 use crate::compiler_frontend::tokenizer::tokenizer::tokenize;
 use crate::compiler_frontend::tokenizer::tokens::{
@@ -410,6 +410,38 @@ fn collect_body_text_from_render_plan(
         .collect()
 }
 
+fn collect_body_text_locations_from_render_plan(template: &Template) -> Vec<TextLocation> {
+    use crate::compiler_frontend::ast::templates::template_render_plan::TemplateRenderPlan;
+
+    let plan = template
+        .render_plan
+        .as_ref()
+        .cloned()
+        .unwrap_or_else(|| TemplateRenderPlan::from_content(&template.content));
+
+    plan.pieces
+        .iter()
+        .filter_map(|piece| match piece {
+            RenderPiece::Text(p) => Some(p.location.to_owned()),
+            _ => None,
+        })
+        .collect()
+}
+
+fn is_default_text_location(location: &TextLocation) -> bool {
+    location.scope == InternedPath::new()
+        && location.start_pos == CharPosition::default()
+        && location.end_pos == CharPosition::default()
+}
+
+fn is_default_error_location(
+    location: &crate::compiler_frontend::compiler_errors::ErrorLocation,
+) -> bool {
+    location.scope.as_os_str().is_empty()
+        && location.start_pos == CharPosition::default()
+        && location.end_pos == CharPosition::default()
+}
+
 fn collect_static_template_fragments(
     atoms: &[TemplateAtom],
     string_table: &StringTable,
@@ -731,6 +763,103 @@ fn html_directive_sets_formatter_via_handler_behavior() {
 }
 
 #[test]
+fn css_directive_sets_style_and_formatter_identity() {
+    let style_directives = html_project_test_style_directives();
+    let mut string_table = StringTable::new();
+    let mut token_stream = template_tokens_from_source_with_style_directives(
+        "[$css:\n.button { color: red; }\n]",
+        &style_directives,
+        &mut string_table,
+    );
+    let context = new_constant_context_with_style_directives(
+        token_stream.src_path.to_owned(),
+        &style_directives,
+    );
+
+    let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
+        .expect("css template should parse");
+
+    assert_eq!(template.style.id, "css");
+    assert_eq!(
+        template
+            .style
+            .formatter
+            .as_ref()
+            .map(|formatter| formatter.id),
+        Some("css")
+    );
+}
+
+#[test]
+fn markdown_directive_sets_style_and_formatter_identity() {
+    let mut string_table = StringTable::new();
+    let mut token_stream =
+        template_tokens_from_source("[$markdown:\n# Hello\n]", &mut string_table);
+    let context = new_constant_context(token_stream.src_path.to_owned());
+
+    let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
+        .expect("markdown template should parse");
+
+    assert_eq!(template.style.id, "markdown");
+    assert_eq!(
+        template
+            .style
+            .formatter
+            .as_ref()
+            .map(|formatter| formatter.id),
+        Some("markdown")
+    );
+}
+
+#[test]
+fn code_directive_sets_style_and_formatter_identity() {
+    let mut string_table = StringTable::new();
+    let mut token_stream = template_tokens_from_source("[$code:\nloop x\n]", &mut string_table);
+    let context = new_constant_context(token_stream.src_path.to_owned());
+
+    let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
+        .expect("code template should parse");
+
+    assert_eq!(template.style.id, "code");
+    assert_eq!(
+        template
+            .style
+            .formatter
+            .as_ref()
+            .map(|formatter| formatter.id),
+        Some("code")
+    );
+}
+
+#[test]
+fn escape_html_directive_sets_style_and_formatter_identity() {
+    let style_directives = html_project_test_style_directives();
+    let mut string_table = StringTable::new();
+    let mut token_stream = template_tokens_from_source_with_style_directives(
+        "[$escape_html:\n<b>Hello</b>\n]",
+        &style_directives,
+        &mut string_table,
+    );
+    let context = new_constant_context_with_style_directives(
+        token_stream.src_path.to_owned(),
+        &style_directives,
+    );
+
+    let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
+        .expect("escape_html template should parse");
+
+    assert_eq!(template.style.id, "escape_html");
+    assert_eq!(
+        template
+            .style
+            .formatter
+            .as_ref()
+            .map(|formatter| formatter.id),
+        Some("escape_html")
+    );
+}
+
+#[test]
 fn const_html_template_emits_sanitation_warnings() {
     let style_directives = html_project_test_style_directives();
     let warnings = template_warnings_with_style_directives(
@@ -755,6 +884,24 @@ fn const_html_template_emits_sanitation_warnings() {
         warnings
             .iter()
             .any(|warning| warning.msg.contains("javascript:"))
+    );
+}
+
+#[test]
+fn html_validation_warnings_keep_non_default_locations() {
+    let style_directives = html_project_test_style_directives();
+    let warnings = template_warnings_with_style_directives(
+        "[$html:\n<script>alert(1)</script>\n<a href=\"javascript:bad()\">x</a>\n<div onclick=\"run()\"></div>\n]",
+        false,
+        &style_directives,
+    );
+
+    assert!(!warnings.is_empty());
+    assert!(
+        warnings
+            .iter()
+            .all(|warning| !is_default_error_location(&warning.location)),
+        "html warnings should keep meaningful source locations"
     );
 }
 
@@ -798,6 +945,59 @@ fn runtime_templates_format_static_body_strings_only() {
             .iter()
             .any(|text| text.contains("<h1>Hello</h1>")),
         "expected formatted body text to contain markdown-rendered heading in render_plan"
+    );
+}
+
+#[test]
+fn markdown_formatter_output_text_uses_non_default_render_plan_locations() {
+    let mut string_table = StringTable::new();
+    let mut token_stream =
+        template_tokens_from_source("[$markdown:\n# Hello\n]", &mut string_table);
+    let context = new_constant_context(token_stream.src_path.to_owned());
+
+    let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
+        .expect("markdown template should parse");
+    let locations = collect_body_text_locations_from_render_plan(&template);
+
+    assert!(
+        !locations.is_empty(),
+        "expected body text pieces in render plan"
+    );
+    assert!(
+        locations
+            .iter()
+            .all(|location| !is_default_text_location(location)),
+        "formatter-emitted body text should keep coarse source provenance"
+    );
+}
+
+#[test]
+fn unformatted_content_preserves_pre_format_composed_structure() {
+    let mut string_table = StringTable::new();
+    let mut token_stream =
+        template_tokens_from_source("[$markdown:\n# Hello\n]", &mut string_table);
+    let context = new_constant_context(token_stream.src_path.to_owned());
+
+    let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
+        .expect("markdown template should parse");
+
+    let mut unformatted_rendered = String::new();
+    collect_static_template_fragments(
+        &template.unformatted_content.atoms,
+        &string_table,
+        &mut unformatted_rendered,
+    );
+    let formatted_body = collect_body_text_from_render_plan(&template, &string_table);
+
+    assert!(
+        unformatted_rendered.contains("# Hello"),
+        "unformatted_content should keep pre-format source text"
+    );
+    assert!(
+        formatted_body
+            .iter()
+            .any(|text| text.contains("<h1>Hello</h1>")),
+        "render plan should carry formatted markdown output"
     );
 }
 
@@ -1257,6 +1457,38 @@ fn builder_registered_style_directive_parses_as_noop_scaffold() {
 }
 
 #[test]
+fn builder_effects_only_handler_updates_style_without_formatter() {
+    let mut string_table = StringTable::new();
+    let directives = vec![StyleDirectiveSpec::handler(
+        "brand",
+        TemplateBodyMode::Normal,
+        StyleDirectiveHandlerSpec::new(
+            None,
+            StyleDirectiveEffects {
+                style_id: Some("brand"),
+                ..StyleDirectiveEffects::default()
+            },
+            None,
+        ),
+    )];
+    let registry = StyleDirectiveRegistry::merged(&directives)
+        .expect("provided directive should merge with core directives");
+    let mut token_stream = template_tokens_from_source_with_directives(
+        "[$brand: body]",
+        &directives,
+        &mut string_table,
+    );
+    let context =
+        new_constant_context(token_stream.src_path.to_owned()).with_style_directives(&registry);
+
+    let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
+        .expect("effects-only directive should parse");
+
+    assert_eq!(template.style.id, "brand");
+    assert!(template.style.formatter.is_none());
+}
+
+#[test]
 fn builder_registered_noop_directive_rejects_parenthesized_arguments_by_default() {
     let mut string_table = StringTable::new();
     let directives = vec![StyleDirectiveSpec::handler_no_op(
@@ -1305,6 +1537,63 @@ fn builder_registered_handler_directive_accepts_declared_optional_argument_type(
         .expect("provided directives should parse optional arguments when configured");
 
     assert!(matches!(template.kind, TemplateType::String));
+}
+
+#[test]
+fn builder_registered_handler_directive_rejects_multiple_arguments() {
+    let mut string_table = StringTable::new();
+    let directives = vec![StyleDirectiveSpec::handler(
+        "brand",
+        TemplateBodyMode::Normal,
+        StyleDirectiveHandlerSpec::new(
+            Some(StyleDirectiveArgumentType::String),
+            Default::default(),
+            None,
+        ),
+    )];
+    let registry = StyleDirectiveRegistry::merged(&directives)
+        .expect("provided directive should merge with core directives");
+    let mut token_stream = template_tokens_from_source_with_directives(
+        "[$brand(\"theme\", \"extra\"): body]",
+        &directives,
+        &mut string_table,
+    );
+    let context =
+        new_constant_context(token_stream.src_path.to_owned()).with_style_directives(&registry);
+
+    let error = Template::new(&mut token_stream, &context, vec![], &mut string_table)
+        .expect_err("handler directives should reject multiple arguments");
+    assert!(error.msg.contains("accepts at most one argument"));
+}
+
+#[test]
+fn builder_registered_handler_directive_rejects_runtime_argument_values() {
+    let mut string_table = StringTable::new();
+    let directives = vec![StyleDirectiveSpec::handler(
+        "brand",
+        TemplateBodyMode::Normal,
+        StyleDirectiveHandlerSpec::new(
+            Some(StyleDirectiveArgumentType::String),
+            Default::default(),
+            None,
+        ),
+    )];
+    let registry = StyleDirectiveRegistry::merged(&directives)
+        .expect("provided directive should merge with core directives");
+    let mut token_stream = template_tokens_from_source_with_directives(
+        "[$brand(value): body]",
+        &directives,
+        &mut string_table,
+    );
+    let context = runtime_template_context_with_style_directives(
+        &token_stream.src_path,
+        &registry,
+        &mut string_table,
+    );
+
+    let error = Template::new(&mut token_stream, &context, vec![], &mut string_table)
+        .expect_err("handler directives should reject runtime-only argument values");
+    assert!(error.msg.contains("compile-time argument value"));
 }
 
 #[test]
@@ -1444,6 +1733,24 @@ fn const_css_template_emits_malformed_css_warnings() {
         warnings
             .iter()
             .any(|warning| warning.msg.contains("Expected 'property: value'"))
+    );
+}
+
+#[test]
+fn css_validation_warnings_keep_non_default_locations() {
+    let style_directives = html_project_test_style_directives();
+    let warnings = template_warnings_with_style_directives(
+        "[$css:\n.button { color red; }\n.button { color blue }\n]",
+        false,
+        &style_directives,
+    );
+
+    assert!(!warnings.is_empty());
+    assert!(
+        warnings
+            .iter()
+            .all(|warning| !is_default_error_location(&warning.location)),
+        "css warnings should keep meaningful source locations"
     );
 }
 

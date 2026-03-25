@@ -241,6 +241,37 @@ fn html_project_directives_fail_when_builder_does_not_register_them() {
 }
 
 #[test]
+fn frontend_builtin_directives_work_without_builder_registered_project_directives() {
+    let root = temp_dir("frontend_builtin_boundary");
+    fs::create_dir_all(&root).expect("should create temp root");
+
+    let entry_file = root.join("builtins.bst");
+    fs::write(
+        &entry_file,
+        "[$children([:<li>[$slot]</li>]):\n<ul>\n  [$markdown:\n# Docs\n]\n  [$raw:\n  keep\n]\n  [$fresh:\n    [: plain ]\n  ]\n</ul>\n]",
+    )
+    .expect("should write source file");
+
+    let builder = ProjectBuilder::new(Box::new(NoDirectiveBuilder));
+    let result = build_project(
+        &builder,
+        entry_file
+            .to_str()
+            .expect("temp file path should be valid UTF-8 for this test"),
+        &[],
+    )
+    .expect("frontend built-ins should compile without project-owned style registrations");
+
+    assert_eq!(result.project.output_files.len(), 1);
+    assert_eq!(
+        result.project.output_files[0].relative_output_path(),
+        PathBuf::from("index.html")
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
 fn html_project_directives_are_available_under_html_builder() {
     let root = temp_dir("directive_boundary_registered");
     fs::create_dir_all(&root).expect("should create temp root");

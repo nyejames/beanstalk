@@ -88,6 +88,10 @@ pub(crate) fn apply_body_formatter(
             return Ok((Vec::new(), Vec::new()));
         }
 
+        // Formatter-emitted text is derived from this run, not authored directly.
+        // We intentionally preserve only a coarse representative location span.
+        let representative_location = representative_text_location_for_run(&run);
+
         // Build the opaque-anchor side-table: each non-text piece gets a FormatterAnchorId
         // that the formatter sees but cannot inspect.
         let mut input_pieces = Vec::with_capacity(run.len());
@@ -121,7 +125,7 @@ pub(crate) fn apply_body_formatter(
         // 2. Style formatter
         let mut formatter_warnings = Vec::new();
         if let Some(fmt) = formatter {
-            let next_input = output_to_input(output, string_table);
+            let next_input = output_to_input(output, &representative_location, string_table);
             let formatter_result = fmt.formatter.format(next_input, string_table)?;
             formatter_warnings.extend(formatter_result.warnings);
             output = formatter_result.output;
@@ -129,7 +133,7 @@ pub(crate) fn apply_body_formatter(
 
         // 3. Post-format whitespace passes
         if !post_format_passes.is_empty() {
-            let post_input = output_to_input(output, string_table);
+            let post_input = output_to_input(output, &representative_location, string_table);
             output = apply_whitespace_passes_to_input(
                 post_input,
                 post_format_passes,
@@ -146,7 +150,7 @@ pub(crate) fn apply_body_formatter(
                     let id = string_table.intern(&text);
                     replacement_pieces.push(RenderPiece::Text(RenderTextPiece {
                         text: id,
-                        location: TextLocation::default(),
+                        location: representative_location.clone(),
                     }));
                 }
                 FormatterOutputPiece::Opaque(anchor_id) => {
@@ -211,6 +215,7 @@ pub(crate) fn apply_body_formatter(
 /// Text pieces are interned, opaque anchors are preserved as-is.
 fn output_to_input(
     output: crate::compiler_frontend::ast::templates::template_render_plan::FormatterOutput,
+    representative_location: &TextLocation,
     string_table: &mut StringTable,
 ) -> FormatterInput {
     let pieces = output
@@ -219,10 +224,72 @@ fn output_to_input(
         .map(|piece| match piece {
             FormatterOutputPiece::Text(t) => FormatterInputPiece::Text(FormatterTextPiece {
                 text: string_table.intern(&t),
-                location: TextLocation::default(),
+                location: representative_location.clone(),
             }),
             FormatterOutputPiece::Opaque(anchor_id) => FormatterInputPiece::Opaque(anchor_id),
         })
         .collect();
     FormatterInput { pieces }
+}
+
+/// Derives a coarse source location for text emitted by formatter/whitespace output.
+///
+/// WHAT:
+/// - Prefers an aggregated span across literal text pieces in the original run.
+/// - Falls back to the first available dynamic/child piece location when a run has no text.
+///
+/// WHY:
+/// - Formatter output can rewrite arbitrary text, so exact per-character mapping is
+///   not feasible here. A representative run span preserves useful provenance for
+///   diagnostics without pretending to be precise.
+fn representative_text_location_for_run(run: &[RenderPiece]) -> TextLocation {
+    if let Some(aggregated) = aggregate_text_piece_location(run) {
+        return aggregated;
+    }
+
+    for piece in run {
+        match piece {
+            RenderPiece::Text(text_piece) => return text_piece.location.clone(),
+            RenderPiece::ChildTemplate(child_piece) => {
+                return child_piece.expression.location.clone();
+            }
+            RenderPiece::DynamicExpression(dynamic_piece) => {
+                return dynamic_piece.expression.location.clone();
+            }
+            RenderPiece::HeadContent(_) | RenderPiece::Slot(_) | RenderPiece::Omitted => {}
+        }
+    }
+
+    TextLocation::default()
+}
+
+fn aggregate_text_piece_location(run: &[RenderPiece]) -> Option<TextLocation> {
+    let mut first: Option<TextLocation> = None;
+    let mut last: Option<TextLocation> = None;
+
+    for piece in run {
+        if let RenderPiece::Text(text_piece) = piece {
+            if first.is_none() {
+                first = Some(text_piece.location.clone());
+            }
+            last = Some(text_piece.location.clone());
+        }
+    }
+
+    let Some(start) = first else {
+        return None;
+    };
+    let Some(end) = last else {
+        return None;
+    };
+
+    if start.scope != end.scope {
+        return Some(start);
+    }
+
+    Some(TextLocation {
+        scope: start.scope,
+        start_pos: start.start_pos,
+        end_pos: end.end_pos,
+    })
 }

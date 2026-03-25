@@ -97,59 +97,23 @@ impl Template {
             string_table,
         )?;
 
-        // Stage 3: Composition + Formatting
-        // Match the main-branch pipeline ordering: save unformatted composed content,
-        // then format content in-place before a second composition pass.
-        // The unformatted_content preserves the pre-formatting state for deferred
-        // reformatting (e.g. after slot composition revives child outputs).
-        template.unformatted_content = apply_inherited_child_templates_to_content(
-            template.content.clone(),
-            &template.style.child_templates,
-            string_table,
-        )?;
-        template.unformatted_content = compose_template_head_chain(
-            &template.unformatted_content,
+        // Stage 3: build the composed pre-format snapshot.
+        build_unformatted_template_content(&mut template, &mut foldable, string_table)?;
+
+        // Stage 4: format body-origin text and produce a structured render plan.
+        let render_plan = format_template_body(&template, context, string_table)?;
+
+        // Stage 5: rebuild formatted content and re-run composition.
+        finalize_template_after_formatting(
+            &mut template,
+            render_plan,
             &mut foldable,
             string_table,
         )?;
 
-        // Stage 4: Formatting — normalize body content before folding/lowering.
-        // This keeps runtime templates simple: only compile-time-known body strings
-        // are rewritten, while dynamic chunks remain untouched and keep their order.
-        let formatting_result =
-            match apply_body_formatter(&template.content, &template.style, string_table) {
-                Ok(result) => result,
-                Err(messages) => {
-                    for warning in messages.warnings {
-                        context.emit_warning(warning);
-                    }
-
-                    return Err(messages.errors.into_iter().next().unwrap_or_else(|| {
-                        CompilerError::compiler_error(
-                            "Template formatter failed without returning a compiler error.",
-                        )
-                    }));
-                }
-            };
-        for warning in formatting_result.warnings {
-            context.emit_warning(warning);
-        }
-        let render_plan = formatting_result.plan;
-
-        // Rebuild formatted content from the render plan, then compose.
-        template.content = render_plan.rebuild_content();
-        template.content = apply_inherited_child_templates_to_content(
-            template.content,
-            &template.style.child_templates,
-            string_table,
-        )?;
-        template.content =
-            compose_template_head_chain(&template.content, &mut foldable, string_table)?;
-        template.render_plan = Some(TemplateRenderPlan::from_content(&template.content));
-
         template.content_needs_formatting = false;
 
-        // Stage 5: Post-parse validation
+        // Stage 6: Post-parse validation
         if matches!(
             template.kind,
             TemplateType::Comment(CommentDirectiveKind::Doc)
@@ -186,6 +150,101 @@ impl Template {
 
         Ok(template)
     }
+}
+
+/// Stage 3 helper: compute the composed pre-format content snapshot.
+///
+/// WHAT:
+/// - Applies inherited `$children(..)` wrappers and head-chain composition to the parsed
+///   content and stores the result in `template.unformatted_content`.
+///
+/// WHY:
+/// - `template.unformatted_content` is the authoritative pre-formatting structure used
+///   when later stages need the original composed shape (for example, debugging or
+///   future reformat/recomposition workflows).
+fn build_unformatted_template_content(
+    template: &mut Template,
+    foldable: &mut bool,
+    string_table: &StringTable,
+) -> Result<(), CompilerError> {
+    template.unformatted_content = apply_inherited_child_templates_to_content(
+        template.content.clone(),
+        &template.style.child_templates,
+        string_table,
+    )?;
+    template.unformatted_content =
+        compose_template_head_chain(&template.unformatted_content, foldable, string_table)?;
+    Ok(())
+}
+
+/// Stage 4 helper: run template formatting and return the produced render plan.
+///
+/// WHAT:
+/// - Runs formatter/whitespace passes over body-origin text only.
+/// - Emits formatter warnings via the shared AST context.
+///
+/// WHY:
+/// - `template.content` still contains parsed source segments at this point, and the
+///   frontend formatting pipeline is responsible for building the structured render plan
+///   that drives post-format reconstruction.
+fn format_template_body(
+    template: &Template,
+    context: &ScopeContext,
+    string_table: &mut StringTable,
+) -> Result<TemplateRenderPlan, CompilerError> {
+    let formatting_result =
+        match apply_body_formatter(&template.content, &template.style, string_table) {
+            Ok(result) => result,
+            Err(messages) => {
+                for warning in messages.warnings {
+                    context.emit_warning(warning);
+                }
+
+                return Err(messages.errors.into_iter().next().unwrap_or_else(|| {
+                    CompilerError::compiler_error(
+                        "Template formatter failed without returning a compiler error.",
+                    )
+                }));
+            }
+        };
+
+    for warning in formatting_result.warnings {
+        context.emit_warning(warning);
+    }
+
+    Ok(formatting_result.plan)
+}
+
+/// Stage 5 helper: rebuild formatted content and finalize the template outputs.
+///
+/// WHAT:
+/// - Rebuilds `template.content` from the formatter render plan.
+/// - Re-applies wrapper/head composition to account for slot/child-template composition
+///   that can reintroduce content after formatting.
+/// - Stores final `template.render_plan` from the finalized content stream.
+///
+/// WHY:
+/// - The pipeline intentionally uses compose -> format -> rebuild -> compose so formatters
+///   only rewrite direct body-origin text while structural template composition remains
+///   authoritative for the final render order.
+fn finalize_template_after_formatting(
+    template: &mut Template,
+    render_plan: TemplateRenderPlan,
+    foldable: &mut bool,
+    string_table: &StringTable,
+) -> Result<(), CompilerError> {
+    template.content = render_plan.rebuild_content();
+    template.content = apply_inherited_child_templates_to_content(
+        template.content.clone(),
+        &template.style.child_templates,
+        string_table,
+    )?;
+    template.content = compose_template_head_chain(&template.content, foldable, string_table)?;
+
+    // `template.render_plan` is always derived from the finalized content stream so lowering
+    // and runtime fallbacks observe the same authoritative piece ordering.
+    template.render_plan = Some(TemplateRenderPlan::from_content(&template.content));
+    Ok(())
 }
 
 #[cfg(test)]

@@ -288,6 +288,9 @@ impl std::fmt::Debug for dyn TemplateFormatter {
 #[derive(Clone, Debug)]
 #[allow(dead_code)] // Some fields (id, skip_if_already_formatted) are planned but not yet read
 pub struct Formatter {
+    // Concrete formatter identity used by the formatting pipeline and tests.
+    // This is intentionally separate from `Style.id`, which is the template's
+    // semantic style label after directive application.
     pub id: &'static str,
 
     // This formatter will be skipped if there is already a formatter for the template
@@ -322,8 +325,9 @@ pub struct FormatterResult {
 // This is passed into a template head to configure how it should be parsed
 #[derive(Clone, Debug)]
 pub struct Style {
-    // The name of the style,
-    // For helping other styles check compatibility with this style
+    // Semantic style label for this parsed template. Set by directive effects
+    // (`StyleDirectiveEffects.style_id`) or built-in directive handlers.
+    // This is distinct from `Formatter.id`, which identifies the actual formatter.
     pub id: &'static str,
 
     // A callback function for how the string content of the template should be parsed
