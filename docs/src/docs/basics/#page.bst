@@ -7,7 +7,7 @@ import @styles/docs {navbar, footer, title, section, header, body, palette, tabl
 [title, center: LANGUAGE BASICS]
 
 [section, $markdown:
-    Every project has a #config.bst file. 
+    Every project has a #config.bst file.
 
     If instead, you build or run a specific Beanstalk file,
     it will create a single module from that entry point and pull in all the file's dependencies.
