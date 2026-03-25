@@ -2,6 +2,7 @@ use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::templates::create_template_node::Template;
 use crate::compiler_frontend::ast::templates::styles::whitespace::TemplateWhitespacePassProfile;
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
+use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::string_interning::StringId;
 use std::sync::Arc;
 
@@ -311,21 +312,10 @@ pub enum BodyWhitespacePolicy {
     StyleDirectiveControlled,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum CssDirectiveMode {
-    Block,
-    Inline,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum TemplateDirectiveValidation {
-    Css(CssDirectiveMode),
-    Html,
-}
-
 #[derive(Clone, Debug)]
 pub struct FormatterResult {
     pub output: crate::compiler_frontend::ast::templates::template_render_plan::FormatterOutput,
+    pub warnings: Vec<CompilerWarning>,
 }
 
 // Template Config Type

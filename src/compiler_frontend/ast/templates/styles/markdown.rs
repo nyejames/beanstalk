@@ -18,6 +18,7 @@ use crate::compiler_frontend::ast::templates::template_render_plan::{
 };
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::style_directives::StyleDirectiveArgumentValue;
 use std::sync::Arc;
 
 /// Parser/render context for the lightweight markdown formatter.
@@ -94,6 +95,7 @@ impl TemplateFormatter for MarkdownTemplateFormatter {
 
         Ok(FormatterResult {
             output: FormatterOutput { pieces },
+            warnings: Vec::new(),
         })
     }
 }
@@ -107,6 +109,16 @@ pub fn markdown_formatter() -> Formatter {
         formatter: Arc::new(MarkdownTemplateFormatter),
         post_format_whitespace_passes: Vec::new(),
     }
+}
+
+pub(crate) fn markdown_formatter_factory(
+    argument: Option<&StyleDirectiveArgumentValue>,
+) -> Result<Option<Formatter>, String> {
+    if argument.is_some() {
+        return Err("'$markdown' does not accept arguments.".to_string());
+    }
+
+    Ok(Some(markdown_formatter()))
 }
 
 pub fn to_markdown(content: &str, default_tag: &str) -> String {

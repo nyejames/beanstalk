@@ -23,14 +23,17 @@ use std::path::{Path, PathBuf};
 ///
 /// Config files are optional — if none exists, this returns `Ok(())`. When present the file is
 /// tokenized, parsed, and all constant declarations are applied to `config`.
-pub fn load_project_config(config: &mut Config) -> Result<(), CompilerMessages> {
+pub fn load_project_config(
+    config: &mut Config,
+    style_directives: &StyleDirectiveRegistry,
+) -> Result<(), CompilerMessages> {
     let config_path = config.entry_dir.join(settings::CONFIG_FILE_NAME);
 
     if !config_path.exists() {
         return Ok(()); // Config file is optional
     }
 
-    parse_project_config_file(config, &config_path)
+    parse_project_config_file_with_style_directives(config, &config_path, style_directives)
 }
 
 /// Parse `#config.bst` and extract top-level constant declarations into the `Config` struct.
@@ -44,11 +47,22 @@ pub(crate) fn parse_project_config_file(
     config: &mut Config,
     config_path: &Path,
 ) -> Result<(), CompilerMessages> {
+    parse_project_config_file_with_style_directives(
+        config,
+        config_path,
+        &StyleDirectiveRegistry::built_ins(),
+    )
+}
+
+pub(crate) fn parse_project_config_file_with_style_directives(
+    config: &mut Config,
+    config_path: &Path,
+    style_directives: &StyleDirectiveRegistry,
+) -> Result<(), CompilerMessages> {
     let mut errors = Vec::new();
 
     let source = extract_source_code(config_path).map_err(CompilerMessages::from_error)?;
     let mut string_table = StringTable::new();
-    let style_directives = StyleDirectiveRegistry::built_ins();
     let interned_path = InternedPath::from_path_buf(config_path, &mut string_table);
 
     // Tokenization errors are fatal — stop immediately so later passes have a clean token stream.
@@ -56,7 +70,7 @@ pub(crate) fn parse_project_config_file(
         &source,
         &interned_path,
         TokenizeMode::Normal,
-        &style_directives,
+        style_directives,
         &mut string_table,
     ) {
         Ok(tokens) => tokens,

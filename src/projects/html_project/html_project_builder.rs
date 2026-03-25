@@ -6,7 +6,9 @@ use crate::build_system::build::{BackendBuilder, Module, OutputFile, Project};
 use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages, ErrorType};
 use crate::compiler_frontend::paths::path_resolution::resolve_project_entry_root;
+use crate::compiler_frontend::style_directives::StyleDirectiveSpec;
 use crate::projects::html_project::js_path::{compile_html_module_js, html_output_path};
+use crate::projects::html_project::style_directives::html_project_style_directives;
 use crate::projects::html_project::wasm::artifacts::{
     CompiledHtmlWasmModule, compile_html_module_wasm,
 };
@@ -112,6 +114,10 @@ impl BackendBuilder for HtmlProjectBuilder {
 
         // Empty dev/release folders are allowed and resolved by core build output logic.
         Ok(())
+    }
+
+    fn frontend_style_directives(&self) -> Vec<StyleDirectiveSpec> {
+        html_project_style_directives()
     }
 }
 

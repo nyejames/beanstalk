@@ -1,32 +1,114 @@
-//! Built-in `$css` template style support.
+//! `$css` formatter/validator implementation shared by build-system style registration.
 //!
 //! WHAT:
-//! - parse the narrow `$css` directive syntax (`$css` or `$css("inline")`)
-//! - run cheap compile-time validation over statically known CSS template bodies
+//! - provides a formatter that keeps CSS text unchanged while emitting malformed-CSS warnings.
+//! - supports optional inline mode (`$css("inline")`) via formatter configuration.
 //!
 //! WHY:
-//! - editor/highlighter tooling can treat these templates as CSS
-//! - the compiler can surface low-cost malformed-CSS warnings early, with source spans
+//! - keeps CSS validation owned by directive-provided formatter behavior.
+//! - warnings stay location-aware by mapping flattened CSS offsets back to template source spans.
 
-use crate::compiler_frontend::FrontendBuildProfile;
-use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
-use crate::compiler_frontend::ast::templates::create_template_node::Template;
 use crate::compiler_frontend::ast::templates::template::{
-    CssDirectiveMode, TemplateAtom, TemplateDirectiveValidation, TemplateSegmentOrigin,
+    Formatter, FormatterResult, TemplateFormatter,
 };
-use crate::compiler_frontend::compiler_errors::CompilerError;
+use crate::compiler_frontend::ast::templates::template_render_plan::{
+    FormatterInput, FormatterInputPiece, FormatterOutput, FormatterOutputPiece,
+};
+use crate::compiler_frontend::compiler_errors::CompilerMessages;
+use crate::compiler_frontend::compiler_warnings::{CompilerWarning, WarningKind};
 use crate::compiler_frontend::string_interning::StringTable;
-use crate::compiler_frontend::tokenizer::tokens::{
-    CharPosition, FileTokens, TextLocation, TokenKind,
-};
-use crate::return_syntax_error;
+use crate::compiler_frontend::style_directives::StyleDirectiveArgumentValue;
+use crate::compiler_frontend::tokenizer::tokens::{CharPosition, TextLocation};
+use std::sync::Arc;
 
-#[derive(Clone, Debug)]
-pub(crate) struct CssTemplateDiagnostic {
-    // WHAT: end-user diagnostic text emitted as a warning.
-    pub message: String,
-    // WHAT: mapped location inside the original template body.
-    pub location: TextLocation,
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum CssFormatterMode {
+    Block,
+    Inline,
+}
+
+#[derive(Debug)]
+struct CssValidationTemplateFormatter {
+    mode: CssFormatterMode,
+}
+
+pub(crate) fn css_validation_formatter(mode: CssFormatterMode) -> Formatter {
+    Formatter {
+        id: "css",
+        skip_if_already_formatted: false,
+        pre_format_whitespace_passes: Vec::new(),
+        formatter: Arc::new(CssValidationTemplateFormatter { mode }),
+        post_format_whitespace_passes: Vec::new(),
+    }
+}
+
+pub(crate) fn css_formatter_factory(
+    argument: Option<&StyleDirectiveArgumentValue>,
+) -> Result<Option<Formatter>, String> {
+    let mode = match argument {
+        None => CssFormatterMode::Block,
+        Some(StyleDirectiveArgumentValue::String(value)) if value == "inline" => {
+            CssFormatterMode::Inline
+        }
+        Some(StyleDirectiveArgumentValue::String(value)) => {
+            return Err(format!(
+                "Unsupported '$css(...)' argument \"{value}\". The only supported argument is \"inline\"."
+            ));
+        }
+        Some(_) => {
+            return Err(
+                "The '$css(...)' directive expects an optional string argument, for example '$css(\"inline\")'."
+                    .to_string(),
+            );
+        }
+    };
+
+    Ok(Some(css_validation_formatter(mode)))
+}
+
+impl TemplateFormatter for CssValidationTemplateFormatter {
+    fn format(
+        &self,
+        input: FormatterInput,
+        string_table: &mut StringTable,
+    ) -> Result<FormatterResult, CompilerMessages> {
+        let mut output_pieces = Vec::with_capacity(input.pieces.len());
+        let mut spans: Vec<BodySourceSpan> = Vec::new();
+        let mut flattened_source = String::new();
+        let mut offset = 0usize;
+
+        for piece in input.pieces {
+            match piece {
+                FormatterInputPiece::Text(text_piece) => {
+                    let text = string_table.resolve(text_piece.text).to_owned();
+                    let char_len = text.chars().count();
+                    if char_len > 0 {
+                        spans.push(BodySourceSpan {
+                            start_offset: offset,
+                            end_offset: offset + char_len,
+                            text: text.clone(),
+                            location: text_piece.location,
+                        });
+                        offset += char_len;
+                    }
+                    flattened_source.push_str(&text);
+                    output_pieces.push(FormatterOutputPiece::Text(text));
+                }
+                FormatterInputPiece::Opaque(anchor) => {
+                    output_pieces.push(FormatterOutputPiece::Opaque(anchor));
+                }
+            }
+        }
+
+        let warnings =
+            emit_css_formatter_warnings(&spans, &flattened_source, self.mode, string_table);
+        Ok(FormatterResult {
+            output: FormatterOutput {
+                pieces: output_pieces,
+            },
+            warnings,
+        })
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -55,157 +137,33 @@ struct ScanState {
     escaped: bool,
 }
 
-pub(crate) fn configure_css_style(
-    token_stream: &mut FileTokens,
-    template: &mut Template,
+fn emit_css_formatter_warnings(
+    spans: &[BodySourceSpan],
+    source: &str,
+    mode: CssFormatterMode,
     string_table: &StringTable,
-) -> Result<(), CompilerError> {
-    // WHAT: parse the directive-local argument syntax only.
-    // WHY: keep `$css(...)` parsing isolated from the general expression parser.
-    let mode = parse_css_mode_argument(token_stream, string_table)?;
-    template.apply_style_updates(|style| {
-        style.id = "css";
-        style.formatter = None;
-    });
-    template.set_directive_validation(TemplateDirectiveValidation::Css(mode));
-    Ok(())
-}
-
-pub(crate) fn validate_css_template(
-    template: &Template,
-    mode: CssDirectiveMode,
-    build_profile: FrontendBuildProfile,
-    string_table: &StringTable,
-) -> Vec<CssTemplateDiagnostic> {
-    // Flatten only authored body segments. Head segments are directive/args, not CSS text.
-    let spans = collect_body_source_spans(template, string_table);
-    if spans.is_empty() {
+) -> Vec<CompilerWarning> {
+    if spans.is_empty() || source.trim().is_empty() {
         return Vec::new();
     }
 
-    let source = spans
-        .iter()
-        .map(|span| span.text.as_str())
-        .collect::<String>();
-    if source.trim().is_empty() {
-        return Vec::new();
-    }
-
-    // Control flow scaffold: release path is ready to diverge later (minify/full parse).
-    let warnings = match build_profile {
-        FrontendBuildProfile::Dev => validate_dev(&source, mode),
-        FrontendBuildProfile::Release => validate_release(&source, mode),
-    };
-
-    warnings
+    validate_css_source(source, mode)
         .into_iter()
         .filter_map(|warning| {
-            map_warning_span_to_text_location(&spans, &warning).map(|location| {
-                CssTemplateDiagnostic {
-                    message: warning.message,
-                    location,
-                }
+            map_warning_span_to_text_location(spans, &warning).map(|location| {
+                let file_path = location.scope.to_path_buf(string_table);
+                CompilerWarning::new(
+                    &warning.message,
+                    location.to_error_location(string_table),
+                    WarningKind::MalformedCssTemplate,
+                    file_path,
+                )
             })
         })
         .collect()
 }
 
-fn parse_css_mode_argument(
-    token_stream: &mut FileTokens,
-    string_table: &StringTable,
-) -> Result<CssDirectiveMode, CompilerError> {
-    // `$css` with no parentheses defaults to block mode.
-    if token_stream.peek_next_token() != Some(&TokenKind::OpenParenthesis) {
-        return Ok(CssDirectiveMode::Block);
-    }
-
-    // Control flow:
-    // 1) move from `StyleDirective("css")` -> `(`
-    // 2) move once more to the first token inside the parens
-    token_stream.advance();
-    token_stream.advance();
-
-    let argument_token = token_stream.current_token_kind().to_owned();
-    match argument_token {
-        TokenKind::CloseParenthesis => {
-            return_syntax_error!(
-                "The '$css()' directive cannot use empty parentheses. Use '$css' for block CSS or '$css(\"inline\")' for inline declarations.",
-                token_stream.current_location().to_error_location(string_table),
-                {
-                    PrimarySuggestion => "Use '$css' or '$css(\"inline\")'",
-                }
-            )
-        }
-        TokenKind::StringSliceLiteral(value) => {
-            let mode = string_table.resolve(value);
-            if mode != "inline" {
-                return_syntax_error!(
-                    format!(
-                        "Unsupported '$css(...)' argument \"{mode}\". The only supported argument is \"inline\"."
-                    ),
-                    token_stream.current_location().to_error_location(string_table),
-                    {
-                        PrimarySuggestion => "Use '$css' for block CSS or '$css(\"inline\")' for inline declarations",
-                    }
-                );
-            }
-
-            token_stream.advance();
-            match token_stream.current_token_kind() {
-                TokenKind::CloseParenthesis => Ok(CssDirectiveMode::Inline),
-                TokenKind::Comma => {
-                    return_syntax_error!(
-                        "The '$css(...)' directive supports only one argument.",
-                        token_stream.current_location().to_error_location(string_table),
-                        {
-                            PrimarySuggestion => "Use '$css(\"inline\")' with a single quoted argument",
-                        }
-                    )
-                }
-                _ => {
-                    return_syntax_error!(
-                        "Expected ')' after '$css(\"inline\")'.",
-                        token_stream.current_location().to_error_location(string_table),
-                        {
-                            SuggestedInsertion => ")",
-                        }
-                    )
-                }
-            }
-        }
-        TokenKind::Eof => {
-            return_syntax_error!(
-                "Unexpected end of template head while parsing '$css(...)'. Missing ')' to close the directive.",
-                token_stream.current_location().to_error_location(string_table),
-                {
-                    PrimarySuggestion => "Close the '$css(...)' directive with ')'",
-                    SuggestedInsertion => ")",
-                }
-            )
-        }
-        _ => {
-            return_syntax_error!(
-                "The '$css(...)' directive requires a quoted string literal argument: '$css(\"inline\")'.",
-                token_stream.current_location().to_error_location(string_table),
-                {
-                    PrimarySuggestion => "Use '$css(\"inline\")' with a quoted string literal argument",
-                }
-            )
-        }
-    }
-}
-
-fn validate_dev(source: &str, mode: CssDirectiveMode) -> Vec<CssSourceWarning> {
-    // Dev path currently uses the same cheap validator as release.
-    validate_css_source(source, mode)
-}
-
-fn validate_release(source: &str, mode: CssDirectiveMode) -> Vec<CssSourceWarning> {
-    // Future hook: release-specific CSS parse/minify pipeline can replace this call.
-    validate_css_source(source, mode)
-}
-
-fn validate_css_source(source: &str, mode: CssDirectiveMode) -> Vec<CssSourceWarning> {
+fn validate_css_source(source: &str, mode: CssFormatterMode) -> Vec<CssSourceWarning> {
     // WHAT: one pass for delimiter integrity + one pass for statement/block shape.
     // WHY: keeps diagnostics cheap while still catching common malformed templates.
     let chars: Vec<char> = source.chars().collect();
@@ -292,7 +250,7 @@ fn validate_balanced_delimiters(chars: &[char], warnings: &mut Vec<CssSourceWarn
 
 fn validate_css_shape(
     chars: &[char],
-    mode: CssDirectiveMode,
+    mode: CssFormatterMode,
     warnings: &mut Vec<CssSourceWarning>,
 ) {
     let mut index = 0usize;
@@ -313,7 +271,7 @@ fn validate_css_shape(
 
         match chars[index] {
             '{' => {
-                if mode == CssDirectiveMode::Inline {
+                if mode == CssFormatterMode::Inline {
                     push_warning(
                         warnings,
                         "Inline '$css(\"inline\")' templates only allow declarations and cannot contain selector blocks.",
@@ -357,7 +315,7 @@ fn validate_css_shape(
                 prelude_start = index + 1;
             }
             '}' => {
-                if mode == CssDirectiveMode::Inline {
+                if mode == CssFormatterMode::Inline {
                     push_warning(
                         warnings,
                         "Inline '$css(\"inline\")' templates only allow declarations and cannot contain selector blocks.",
@@ -403,7 +361,7 @@ fn validate_statement_segment(
     start: usize,
     end: usize,
     depth: usize,
-    mode: CssDirectiveMode,
+    mode: CssFormatterMode,
     warnings: &mut Vec<CssSourceWarning>,
 ) {
     let Some((text, trimmed_start, trimmed_end)) = trimmed_segment(chars, start, end) else {
@@ -417,7 +375,7 @@ fn validate_statement_segment(
 
     if depth == 0 {
         match mode {
-            CssDirectiveMode::Inline => {
+            CssFormatterMode::Inline => {
                 // In inline mode the whole body is declaration-only.
                 validate_declaration_statement(
                     normalized_text,
@@ -426,7 +384,7 @@ fn validate_statement_segment(
                     warnings,
                 );
             }
-            CssDirectiveMode::Block => {
+            CssFormatterMode::Block => {
                 // At top-level block mode, bare declarations are not valid CSS unless in blocks.
                 if !normalized_text.starts_with('@') {
                     push_warning(
@@ -522,47 +480,6 @@ fn is_valid_property_name(property: &str) -> bool {
     }
 
     chars.all(|ch| ch.is_ascii_alphanumeric() || ch == '-' || ch == '_')
-}
-
-fn collect_body_source_spans(
-    template: &Template,
-    string_table: &StringTable,
-) -> Vec<BodySourceSpan> {
-    let mut spans = Vec::new();
-    let mut offset = 0usize;
-
-    // Build a mapping table from flattened CSS offsets -> original template locations.
-    for atom in &template.content.atoms {
-        let TemplateAtom::Content(segment) = atom else {
-            continue;
-        };
-
-        if segment.origin != TemplateSegmentOrigin::Body {
-            continue;
-        }
-
-        let ExpressionKind::StringSlice(text) = segment.expression.kind else {
-            continue;
-        };
-
-        let text = string_table.resolve(text).to_owned();
-        let char_len = text.chars().count();
-        if char_len == 0 {
-            continue;
-        }
-
-        spans.push(BodySourceSpan {
-            start_offset: offset,
-            end_offset: offset + char_len,
-            text,
-            location: segment.expression.location.clone(),
-        });
-
-        // Offsets advance in char-space to match how scanner offsets are produced.
-        offset += char_len;
-    }
-
-    spans
 }
 
 fn map_warning_span_to_text_location(

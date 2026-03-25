@@ -1,29 +1,89 @@
-//! Built-in `$html` template style support.
+//! `$html` formatter/validator implementation shared by build-system style registration.
 //!
 //! WHAT:
-//! - Parses `$html` as an argumentless directive.
-//! - Runs cheap compile-time sanitation checks on static HTML template bodies.
+//! - provides a formatter that preserves HTML text while emitting sanitation warnings.
+//! - keeps diagnostics source-mapped by translating flattened offsets back to text spans.
 //!
 //! WHY:
-//! - The frontend and editor tooling need a dedicated HTML style marker.
-//! - The compiler can surface fast, low-cost warnings for risky HTML constructs.
+//! - validation ownership belongs to formatter execution, not parser post-passes.
 
-use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
-use crate::compiler_frontend::ast::templates::create_template_node::Template;
 use crate::compiler_frontend::ast::templates::template::{
-    TemplateAtom, TemplateDirectiveValidation, TemplateSegmentOrigin,
+    Formatter, FormatterResult, TemplateFormatter,
 };
-use crate::compiler_frontend::compiler_errors::CompilerError;
+use crate::compiler_frontend::ast::templates::template_render_plan::{
+    FormatterInput, FormatterInputPiece, FormatterOutput, FormatterOutputPiece,
+};
+use crate::compiler_frontend::compiler_errors::CompilerMessages;
+use crate::compiler_frontend::compiler_warnings::{CompilerWarning, WarningKind};
 use crate::compiler_frontend::string_interning::StringTable;
-use crate::compiler_frontend::tokenizer::tokens::{
-    CharPosition, FileTokens, TextLocation, TokenKind,
-};
-use crate::return_syntax_error;
+use crate::compiler_frontend::style_directives::StyleDirectiveArgumentValue;
+use crate::compiler_frontend::tokenizer::tokens::{CharPosition, TextLocation};
+use std::sync::Arc;
 
-#[derive(Clone, Debug)]
-pub(crate) struct HtmlTemplateDiagnostic {
-    pub message: String,
-    pub location: TextLocation,
+#[derive(Debug)]
+struct HtmlValidationTemplateFormatter;
+
+pub(crate) fn html_validation_formatter() -> Formatter {
+    Formatter {
+        id: "html",
+        skip_if_already_formatted: false,
+        pre_format_whitespace_passes: Vec::new(),
+        formatter: Arc::new(HtmlValidationTemplateFormatter),
+        post_format_whitespace_passes: Vec::new(),
+    }
+}
+
+pub(crate) fn html_formatter_factory(
+    argument: Option<&StyleDirectiveArgumentValue>,
+) -> Result<Option<Formatter>, String> {
+    if argument.is_some() {
+        return Err("'$html' does not accept arguments.".to_string());
+    }
+    Ok(Some(html_validation_formatter()))
+}
+
+impl TemplateFormatter for HtmlValidationTemplateFormatter {
+    fn format(
+        &self,
+        input: FormatterInput,
+        string_table: &mut StringTable,
+    ) -> Result<FormatterResult, CompilerMessages> {
+        let mut output_pieces = Vec::with_capacity(input.pieces.len());
+        let mut spans: Vec<BodySourceSpan> = Vec::new();
+        let mut flattened_source = String::new();
+        let mut offset = 0usize;
+
+        for piece in input.pieces {
+            match piece {
+                FormatterInputPiece::Text(text_piece) => {
+                    let text = string_table.resolve(text_piece.text).to_owned();
+                    let char_len = text.chars().count();
+                    if char_len > 0 {
+                        spans.push(BodySourceSpan {
+                            start_offset: offset,
+                            end_offset: offset + char_len,
+                            text: text.clone(),
+                            location: text_piece.location,
+                        });
+                        offset += char_len;
+                    }
+                    flattened_source.push_str(&text);
+                    output_pieces.push(FormatterOutputPiece::Text(text));
+                }
+                FormatterInputPiece::Opaque(anchor) => {
+                    output_pieces.push(FormatterOutputPiece::Opaque(anchor));
+                }
+            }
+        }
+
+        let warnings = emit_html_formatter_warnings(&spans, &flattened_source, string_table);
+        Ok(FormatterResult {
+            output: FormatterOutput {
+                pieces: output_pieces,
+            },
+            warnings,
+        })
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -41,56 +101,26 @@ struct BodySourceSpan {
     location: TextLocation,
 }
 
-pub(crate) fn configure_html_style(
-    token_stream: &FileTokens,
-    template: &mut Template,
+fn emit_html_formatter_warnings(
+    spans: &[BodySourceSpan],
+    source: &str,
     string_table: &StringTable,
-) -> Result<(), CompilerError> {
-    if token_stream.peek_next_token() == Some(&TokenKind::OpenParenthesis) {
-        return_syntax_error!(
-            "'$html' does not accept arguments.",
-            token_stream.current_location().to_error_location(string_table),
-            {
-                PrimarySuggestion => "Use '$html' without '(...)'",
-            }
-        );
-    }
-
-    template.apply_style_updates(|style| {
-        style.id = "html";
-        style.formatter = None;
-    });
-    template.set_directive_validation(TemplateDirectiveValidation::Html);
-
-    Ok(())
-}
-
-pub(crate) fn validate_html_template(
-    template: &Template,
-    string_table: &StringTable,
-) -> Vec<HtmlTemplateDiagnostic> {
-    let spans = collect_body_source_spans(template, string_table);
-    if spans.is_empty() {
+) -> Vec<CompilerWarning> {
+    if spans.is_empty() || source.trim().is_empty() {
         return Vec::new();
     }
 
-    let source = spans
-        .iter()
-        .map(|span| span.text.as_str())
-        .collect::<String>();
-    if source.trim().is_empty() {
-        return Vec::new();
-    }
-
-    let warnings = validate_html_source(&source);
-    warnings
+    validate_html_source(source)
         .into_iter()
         .filter_map(|warning| {
-            map_warning_span_to_text_location(&spans, &warning).map(|location| {
-                HtmlTemplateDiagnostic {
-                    message: warning.message,
-                    location,
-                }
+            map_warning_span_to_text_location(spans, &warning).map(|location| {
+                let file_path = location.scope.to_path_buf(string_table);
+                CompilerWarning::new(
+                    &warning.message,
+                    location.to_error_location(string_table),
+                    WarningKind::MalformedHtmlTemplate,
+                    file_path,
+                )
             })
         })
         .collect()
@@ -192,44 +222,6 @@ fn scan_inline_event_handler_warnings(chars: &[char]) -> Vec<HtmlSourceWarning> 
 
 fn is_attribute_name_char(ch: char) -> bool {
     ch.is_ascii_alphanumeric() || ch == '_' || ch == '-'
-}
-
-fn collect_body_source_spans(
-    template: &Template,
-    string_table: &StringTable,
-) -> Vec<BodySourceSpan> {
-    let mut spans = Vec::new();
-    let mut offset = 0usize;
-
-    for atom in &template.content.atoms {
-        let TemplateAtom::Content(segment) = atom else {
-            continue;
-        };
-
-        if segment.origin != TemplateSegmentOrigin::Body {
-            continue;
-        }
-
-        let ExpressionKind::StringSlice(text) = segment.expression.kind else {
-            continue;
-        };
-
-        let text = string_table.resolve(text).to_owned();
-        let char_len = text.chars().count();
-        if char_len == 0 {
-            continue;
-        }
-
-        spans.push(BodySourceSpan {
-            start_offset: offset,
-            end_offset: offset + char_len,
-            text,
-            location: segment.expression.location.clone(),
-        });
-        offset += char_len;
-    }
-
-    spans
 }
 
 fn map_warning_span_to_text_location(

@@ -105,6 +105,7 @@ impl TemplateFormatter for CodeTemplateFormatter {
             output: FormatterOutput {
                 pieces: output_pieces,
             },
+            warnings: Vec::new(),
         })
     }
 }
@@ -136,7 +137,6 @@ pub(crate) fn configure_code_style(
         style.id = "code";
         style.formatter = Some(code_formatter(language));
     });
-    template.clear_directive_validation();
     Ok(())
 }
 

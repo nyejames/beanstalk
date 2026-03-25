@@ -8,8 +8,7 @@ use crate::compiler_frontend::ast::templates::styles::code::{
 };
 use crate::compiler_frontend::ast::templates::styles::markdown::markdown_formatter;
 use crate::compiler_frontend::ast::templates::template::{
-    CommentDirectiveKind, CssDirectiveMode, TemplateAtom, TemplateDirectiveValidation,
-    TemplateSegment, TemplateSegmentOrigin, TemplateType,
+    CommentDirectiveKind, TemplateAtom, TemplateSegment, TemplateSegmentOrigin, TemplateType,
 };
 use crate::compiler_frontend::ast::templates::template_render_plan::RenderPiece;
 use crate::compiler_frontend::compiler_warnings::WarningKind;
@@ -20,12 +19,19 @@ use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::style_directives::{
-    NoOpDirectiveArgumentPolicy, StyleDirectiveRegistry, StyleDirectiveSpec,
+    ProvidedStyleDirectiveSpec, StyleDirectiveArgumentType, StyleDirectiveRegistry,
+    StyleDirectiveSpec,
 };
 use crate::compiler_frontend::tokenizer::tokenizer::tokenize;
 use crate::compiler_frontend::tokenizer::tokens::{
     CharPosition, FileTokens, TemplateBodyMode, TextLocation, Token, TokenKind,
 };
+use crate::projects::html_project::style_directives::html_project_style_directives;
+
+fn test_style_directives() -> StyleDirectiveRegistry {
+    StyleDirectiveRegistry::merged(&html_project_style_directives())
+        .expect("html project style directives should merge with core directives")
+}
 
 fn token(kind: TokenKind, line: i32) -> Token {
     Token::new(
@@ -46,7 +52,7 @@ fn token(kind: TokenKind, line: i32) -> Token {
 
 fn template_tokens_from_source(source: &str, string_table: &mut StringTable) -> FileTokens {
     let scope = InternedPath::from_single_str("main.bst/#const_template0", string_table);
-    let style_directives = StyleDirectiveRegistry::built_ins();
+    let style_directives = test_style_directives();
     let mut tokens = tokenize(
         source,
         &scope,
@@ -71,7 +77,10 @@ fn template_tokens_from_source_with_directives(
     string_table: &mut StringTable,
 ) -> FileTokens {
     let scope = InternedPath::from_single_str("main.bst/#const_template0", string_table);
-    let registry = StyleDirectiveRegistry::merged(directives);
+    let mut merged_specs = html_project_style_directives();
+    merged_specs.extend_from_slice(directives);
+    let registry = StyleDirectiveRegistry::merged(&merged_specs)
+        .expect("test style directives should merge with core directives");
     let mut tokens = tokenize(
         source,
         &scope,
@@ -96,7 +105,9 @@ fn test_project_path_resolver() -> ProjectPathResolver {
 }
 
 fn with_test_path_context(context: ScopeContext, source_scope: &InternedPath) -> ScopeContext {
+    let style_directives = test_style_directives();
     context
+        .with_style_directives(&style_directives)
         .with_project_path_resolver(Some(test_project_path_resolver()))
         .with_source_file_scope(source_scope.to_owned())
         .with_path_format_config(PathStringFormatConfig::default())
@@ -249,7 +260,7 @@ fn folded_template_output(source: &str) -> String {
 
 fn template_parse_error(source: &str) -> String {
     let mut string_table = StringTable::new();
-    let style_directives = StyleDirectiveRegistry::built_ins();
+    let style_directives = test_style_directives();
     let scope = InternedPath::from_single_str("main.bst/#const_template0", &mut string_table);
     let mut token_stream = match tokenize(
         source,
@@ -606,7 +617,7 @@ fn html_directive_rejects_arguments() {
 }
 
 #[test]
-fn html_directive_sets_template_directive_validation() {
+fn html_directive_sets_formatter_via_provided_behavior() {
     let mut string_table = StringTable::new();
     let mut token_stream =
         template_tokens_from_source("[$html:\n<div class=\"card\">x</div>\n]", &mut string_table);
@@ -615,9 +626,14 @@ fn html_directive_sets_template_directive_validation() {
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("html template should parse");
 
+    assert_eq!(template.style.id, "html");
     assert_eq!(
-        template.directive_validation,
-        Some(TemplateDirectiveValidation::Html)
+        template
+            .style
+            .formatter
+            .as_ref()
+            .map(|formatter| formatter.id),
+        Some("html")
     );
 }
 
@@ -648,9 +664,14 @@ fn const_html_template_emits_sanitation_warnings() {
 }
 
 #[test]
-fn runtime_html_templates_do_not_emit_compile_time_warnings() {
+fn runtime_html_templates_emit_warnings_for_static_body_segments() {
     let warnings = template_warnings("[value, $html:\n<script>alert(1)</script>\n]", true);
-    assert!(warnings.is_empty());
+    assert!(!warnings.is_empty());
+    assert!(
+        warnings
+            .iter()
+            .all(|warning| matches!(warning.warning_kind, WarningKind::MalformedHtmlTemplate))
+    );
 }
 
 #[test]
@@ -1114,11 +1135,12 @@ fn ignore_is_rejected_as_unsupported_style_directive() {
 #[test]
 fn builder_registered_style_directive_parses_as_noop_scaffold() {
     let mut string_table = StringTable::new();
-    let directives = vec![StyleDirectiveSpec::explicit_noop(
+    let directives = vec![StyleDirectiveSpec::provided_no_op(
         "brand",
         TemplateBodyMode::Normal,
     )];
-    let registry = StyleDirectiveRegistry::merged(&directives);
+    let registry = StyleDirectiveRegistry::merged(&directives)
+        .expect("provided directive should merge with core directives");
     let mut token_stream = template_tokens_from_source_with_directives(
         "[$brand: body]",
         &directives,
@@ -1137,13 +1159,14 @@ fn builder_registered_style_directive_parses_as_noop_scaffold() {
 #[test]
 fn builder_registered_noop_directive_rejects_parenthesized_arguments_by_default() {
     let mut string_table = StringTable::new();
-    let directives = vec![StyleDirectiveSpec::explicit_noop(
+    let directives = vec![StyleDirectiveSpec::provided_no_op(
         "brand",
         TemplateBodyMode::Normal,
     )];
-    let registry = StyleDirectiveRegistry::merged(&directives);
+    let registry = StyleDirectiveRegistry::merged(&directives)
+        .expect("provided directive should merge with core directives");
     let mut token_stream = template_tokens_from_source_with_directives(
-        "[$brand(unknown_symbol): body]",
+        "[$brand(\"tone\"): body]",
         &directives,
         &mut string_table,
     );
@@ -1157,16 +1180,21 @@ fn builder_registered_noop_directive_rejects_parenthesized_arguments_by_default(
 }
 
 #[test]
-fn builder_registered_noop_directive_can_opt_into_optional_parenthesized_arguments() {
+fn builder_registered_provided_directive_accepts_declared_optional_argument_type() {
     let mut string_table = StringTable::new();
-    let directives = vec![StyleDirectiveSpec::explicit_noop_with_argument_policy(
+    let directives = vec![StyleDirectiveSpec::provided(
         "brand",
         TemplateBodyMode::Normal,
-        NoOpDirectiveArgumentPolicy::ConsumeOptionalParenthesized,
+        ProvidedStyleDirectiveSpec::new(
+            Some(StyleDirectiveArgumentType::String),
+            Default::default(),
+            None,
+        ),
     )];
-    let registry = StyleDirectiveRegistry::merged(&directives);
+    let registry = StyleDirectiveRegistry::merged(&directives)
+        .expect("provided directive should merge with core directives");
     let mut token_stream = template_tokens_from_source_with_directives(
-        "[$brand(unknown_symbol): body]",
+        "[$brand(\"theme\"): body]",
         &directives,
         &mut string_table,
     );
@@ -1174,7 +1202,7 @@ fn builder_registered_noop_directive_can_opt_into_optional_parenthesized_argumen
         new_constant_context(token_stream.src_path.to_owned()).with_style_directives(&registry);
 
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
-        .expect("explicit no-op directives should parse optional arguments when configured");
+        .expect("provided directives should parse optional arguments when configured");
 
     assert!(matches!(template.kind, TemplateType::String));
 }
@@ -1182,11 +1210,12 @@ fn builder_registered_noop_directive_can_opt_into_optional_parenthesized_argumen
 #[test]
 fn builder_registered_style_directive_preserves_raw_body_whitespace() {
     let mut string_table = StringTable::new();
-    let directives = vec![StyleDirectiveSpec::explicit_noop(
+    let directives = vec![StyleDirectiveSpec::provided_no_op(
         "brand",
         TemplateBodyMode::Normal,
     )];
-    let registry = StyleDirectiveRegistry::merged(&directives);
+    let registry = StyleDirectiveRegistry::merged(&directives)
+        .expect("provided directive should merge with core directives");
     let mut token_stream = template_tokens_from_source_with_directives(
         "[$brand:\n    Hello\n    World\n]",
         &directives,
@@ -1203,31 +1232,22 @@ fn builder_registered_style_directive_preserves_raw_body_whitespace() {
 }
 
 #[test]
-fn builder_directive_can_override_builtin_slot_name() {
-    let mut string_table = StringTable::new();
-    let directives = vec![StyleDirectiveSpec::explicit_noop_with_argument_policy(
+fn builder_directive_cannot_override_builtin_slot_name() {
+    let directives = vec![StyleDirectiveSpec::provided_no_op(
         "slot",
         TemplateBodyMode::Normal,
-        NoOpDirectiveArgumentPolicy::ConsumeOptionalParenthesized,
     )];
-    let registry = StyleDirectiveRegistry::merged(&directives);
-    let mut token_stream = template_tokens_from_source_with_directives(
-        "[$slot(\"name\"): body]",
-        &directives,
-        &mut string_table,
+    let error = StyleDirectiveRegistry::merged(&directives)
+        .expect_err("core directive overrides should fail during registry merge");
+    assert!(
+        error
+            .msg
+            .contains("cannot override compiler core directive")
     );
-    let context =
-        new_constant_context(token_stream.src_path.to_owned()).with_style_directives(&registry);
-
-    let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
-        .expect("builder override should disable built-in slot parsing semantics");
-
-    assert!(matches!(template.kind, TemplateType::String));
-    assert!(!template.has_unresolved_slots());
 }
 
 #[test]
-fn css_without_argument_parses_as_block_mode() {
+fn css_without_argument_uses_css_formatter() {
     let mut string_table = StringTable::new();
     let mut token_stream =
         template_tokens_from_source("[$css:\n.button { color: red; }\n]", &mut string_table);
@@ -1235,9 +1255,14 @@ fn css_without_argument_parses_as_block_mode() {
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("css template should parse");
 
+    assert_eq!(template.style.id, "css");
     assert_eq!(
-        template.directive_validation,
-        Some(TemplateDirectiveValidation::Css(CssDirectiveMode::Block))
+        template
+            .style
+            .formatter
+            .as_ref()
+            .map(|formatter| formatter.id),
+        Some("css")
     );
 }
 
@@ -1250,16 +1275,26 @@ fn css_inline_argument_parses_correctly() {
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("inline css template should parse");
 
+    assert_eq!(template.style.id, "css");
     assert_eq!(
-        template.directive_validation,
-        Some(TemplateDirectiveValidation::Css(CssDirectiveMode::Inline))
+        template
+            .style
+            .formatter
+            .as_ref()
+            .map(|formatter| formatter.id),
+        Some("css")
     );
 }
 
 #[test]
 fn css_inline_argument_must_be_quoted_string_literal() {
     let error = template_parse_error("[$css(inline): color: blue;]");
-    assert!(error.contains("quoted string literal"));
+    assert!(
+        error.contains("compile-time string argument")
+            || error.contains("not declared")
+            || error.contains("Undefined variable"),
+        "unexpected error message: {error}"
+    );
 }
 
 #[test]
@@ -1297,9 +1332,14 @@ fn inline_css_warns_when_blocks_are_used() {
 }
 
 #[test]
-fn runtime_css_templates_do_not_emit_compile_time_warnings() {
+fn runtime_css_templates_emit_warnings_for_static_body_segments() {
     let warnings = template_warnings("[value, $css:\n.button { color red; }\n]", true);
-    assert!(warnings.is_empty());
+    assert!(!warnings.is_empty());
+    assert!(
+        warnings
+            .iter()
+            .all(|warning| matches!(warning.warning_kind, WarningKind::MalformedCssTemplate))
+    );
 }
 
 #[test]

@@ -1,98 +1,88 @@
 use super::*;
 
 #[test]
-fn builder_directive_overrides_builtin_by_name() {
-    let builder_specs = vec![StyleDirectiveSpec::explicit_noop(
-        "css",
-        TemplateBodyMode::DiscardBalanced,
+fn builder_cannot_override_core_directive_by_name() {
+    let builder_specs = vec![StyleDirectiveSpec::provided_no_op(
+        "raw",
+        TemplateBodyMode::Normal,
     )];
-    let merged = StyleDirectiveRegistry::merged(&builder_specs);
-    let css = merged
-        .find("css")
-        .expect("css directive should be present after merge");
 
-    assert_eq!(css.body_mode, TemplateBodyMode::DiscardBalanced);
-    assert_eq!(css.source, StyleDirectiveSource::Builder);
-    assert_eq!(
-        css.behavior,
-        StyleDirectiveBehavior::ExplicitNoOp {
-            argument_policy: NoOpDirectiveArgumentPolicy::Reject
-        }
+    let error = StyleDirectiveRegistry::merged(&builder_specs)
+        .expect_err("overriding a core directive should fail");
+
+    assert!(
+        error
+            .msg
+            .contains("cannot override compiler core directive"),
+        "unexpected error message: {}",
+        error.msg
     );
 }
 
 #[test]
 fn builder_directive_is_added_when_name_is_new() {
-    let builder_specs = vec![StyleDirectiveSpec::explicit_noop(
+    let builder_specs = vec![StyleDirectiveSpec::provided_no_op(
         "custom",
         TemplateBodyMode::Balanced,
     )];
-    let merged = StyleDirectiveRegistry::merged(&builder_specs);
+    let merged =
+        StyleDirectiveRegistry::merged(&builder_specs).expect("registry merge should succeed");
     let custom = merged
         .find("custom")
         .expect("custom directive should be present after merge");
 
     assert_eq!(custom.body_mode, TemplateBodyMode::Balanced);
-    assert_eq!(custom.source, StyleDirectiveSource::Builder);
-    assert_eq!(
-        custom.behavior,
-        StyleDirectiveBehavior::ExplicitNoOp {
-            argument_policy: NoOpDirectiveArgumentPolicy::Reject
-        }
-    );
+    assert!(matches!(custom.kind, StyleDirectiveKind::Provided(_)));
 }
 
 #[test]
-fn explicit_noop_policy_can_allow_optional_parenthesized_arguments() {
-    let builder_specs = vec![StyleDirectiveSpec::explicit_noop_with_argument_policy(
+fn provided_directive_contract_is_preserved() {
+    let builder_specs = vec![StyleDirectiveSpec::provided(
         "brand",
         TemplateBodyMode::Normal,
-        NoOpDirectiveArgumentPolicy::ConsumeOptionalParenthesized,
+        ProvidedStyleDirectiveSpec::new(
+            Some(StyleDirectiveArgumentType::String),
+            ProvidedStyleEffects {
+                style_id: Some("brand"),
+                ..ProvidedStyleEffects::default()
+            },
+            None,
+        ),
     )];
-    let merged = StyleDirectiveRegistry::merged(&builder_specs);
+    let merged =
+        StyleDirectiveRegistry::merged(&builder_specs).expect("registry merge should succeed");
     let brand = merged
         .find("brand")
         .expect("brand directive should be present after merge");
 
+    let StyleDirectiveKind::Provided(provided) = &brand.kind else {
+        panic!("brand directive should be registered as provided behavior");
+    };
+
     assert_eq!(
-        brand.behavior,
-        StyleDirectiveBehavior::ExplicitNoOp {
-            argument_policy: NoOpDirectiveArgumentPolicy::ConsumeOptionalParenthesized,
-        }
+        provided.argument_type,
+        Some(StyleDirectiveArgumentType::String)
     );
+    assert_eq!(provided.style_effects.style_id, Some("brand"));
 }
 
 #[test]
-fn built_ins_include_new_html_raw_and_escape_html_directives() {
+fn core_built_ins_are_core_only() {
     let built_ins = StyleDirectiveRegistry::built_ins();
 
-    let html = built_ins
-        .find("html")
-        .expect("html directive should be registered as a built-in");
-    assert_eq!(html.body_mode, TemplateBodyMode::Normal);
-    assert_eq!(html.source, StyleDirectiveSource::BuiltIn);
-    assert_eq!(
-        html.behavior,
-        StyleDirectiveBehavior::BuiltIn(BuiltInStyleDirectiveKind::Html)
-    );
+    for required in [
+        "children", "slot", "insert", "fresh", "doc", "todo", "note", "code", "raw",
+    ] {
+        let directive = built_ins
+            .find(required)
+            .unwrap_or_else(|| panic!("missing core built-in directive '{required}'"));
+        assert!(matches!(directive.kind, StyleDirectiveKind::Core(_)));
+    }
 
-    let raw = built_ins
-        .find("raw")
-        .expect("raw directive should be registered as a built-in");
-    assert_eq!(raw.body_mode, TemplateBodyMode::Normal);
-    assert_eq!(raw.source, StyleDirectiveSource::BuiltIn);
-    assert_eq!(
-        raw.behavior,
-        StyleDirectiveBehavior::BuiltIn(BuiltInStyleDirectiveKind::Raw)
-    );
-
-    let escape_html = built_ins
-        .find("escape_html")
-        .expect("escape_html directive should be registered as a built-in");
-    assert_eq!(escape_html.body_mode, TemplateBodyMode::Normal);
-    assert_eq!(escape_html.source, StyleDirectiveSource::BuiltIn);
-    assert_eq!(
-        escape_html.behavior,
-        StyleDirectiveBehavior::BuiltIn(BuiltInStyleDirectiveKind::EscapeHtml)
-    );
+    for non_core in ["markdown", "css", "html", "escape_html"] {
+        assert!(
+            built_ins.find(non_core).is_none(),
+            "non-core directive '{non_core}' should not be compiler built-in"
+        );
+    }
 }

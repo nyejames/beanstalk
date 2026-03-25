@@ -1,9 +1,6 @@
 use super::*;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::templates::create_template_node::Template;
-use crate::compiler_frontend::ast::templates::template::{
-    CssDirectiveMode, TemplateDirectiveValidation,
-};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::tokenizer::tokens::TextLocation;
 
@@ -20,13 +17,11 @@ fn concat_template_preserves_full_style_state_from_last_template() {
     let mut left = Template::create_default(vec![]);
     left.style.id = "markdown";
     left.style.skip_parent_child_wrappers = true;
-    left.directive_validation = Some(TemplateDirectiveValidation::Html);
     left.explicit_style.id = "markdown";
     left.explicit_style.skip_parent_child_wrappers = true;
 
     let mut right = Template::create_default(vec![]);
     right.style.id = "css";
-    right.directive_validation = Some(TemplateDirectiveValidation::Css(CssDirectiveMode::Inline));
     right.style.skip_parent_child_wrappers = true;
     right.style.child_templates = vec![Template::create_default(vec![])];
     right.explicit_style.id = "css";
@@ -42,7 +37,6 @@ fn concat_template_preserves_full_style_state_from_last_template() {
     };
 
     assert_eq!(result.style.id, right.style.id);
-    assert_eq!(result.directive_validation, right.directive_validation);
     assert_eq!(
         result.style.skip_parent_child_wrappers,
         right.style.skip_parent_child_wrappers

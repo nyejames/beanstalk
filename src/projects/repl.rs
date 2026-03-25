@@ -10,6 +10,7 @@ use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::tokenizer::tokenizer::tokenize;
 use crate::compiler_frontend::tokenizer::tokens::TokenizeMode;
+use crate::projects::html_project::style_directives::html_project_style_directives;
 use saying::say;
 use std::env;
 use std::io::{self, Write};
@@ -108,7 +109,7 @@ fn compile_beanstalk_to_string(
         ProjectPathResolver::new(canonical_root.clone(), canonical_root, &[])?;
 
     // Tokenize the source code
-    let style_directives = StyleDirectiveRegistry::built_ins();
+    let style_directives = StyleDirectiveRegistry::merged(&html_project_style_directives())?;
     let mut tokenizer_output = tokenize(
         source_code,
         &interned_path,

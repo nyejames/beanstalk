@@ -53,6 +53,7 @@ impl Template {
                 &self.style,
                 fold_context.string_table,
             )
+            .map(|result| result.plan)
             .map_err(|messages| {
                 messages.errors.into_iter().next().unwrap_or_else(|| {
                     CompilerError::compiler_error(

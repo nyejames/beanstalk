@@ -1,10 +1,18 @@
 use super::*;
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::style_directives::{StyleDirectiveRegistry, StyleDirectiveSpec};
+use crate::compiler_frontend::style_directives::{
+    ProvidedStyleDirectiveSpec, StyleDirectiveRegistry, StyleDirectiveSpec,
+};
+use crate::projects::html_project::style_directives::html_project_style_directives;
+
+fn test_style_directives() -> StyleDirectiveRegistry {
+    StyleDirectiveRegistry::merged(&html_project_style_directives())
+        .expect("html project style directives should merge with core directives")
+}
 
 fn tokenize_source(source: &str) -> (FileTokens, StringTable) {
     let mut string_table = StringTable::new();
-    let style_directives = StyleDirectiveRegistry::built_ins();
+    let style_directives = test_style_directives();
     let source_path = InternedPath::from_single_str("test.bst", &mut string_table);
     let file_tokens = tokenize(
         source,
@@ -23,7 +31,10 @@ fn tokenize_source_with_directives(
 ) -> (FileTokens, StringTable) {
     let mut string_table = StringTable::new();
     let source_path = InternedPath::from_single_str("test.bst", &mut string_table);
-    let registry = StyleDirectiveRegistry::merged(directives);
+    let mut merged_specs = html_project_style_directives();
+    merged_specs.extend_from_slice(directives);
+    let registry = StyleDirectiveRegistry::merged(&merged_specs)
+        .expect("test style directives should merge with core directives");
     let file_tokens = tokenize(
         source,
         &source_path,
@@ -446,9 +457,10 @@ fn html_template_body_tokenizes_symbol_wrappers_with_general_template_rules() {
 
 #[test]
 fn custom_balanced_directive_uses_general_balanced_mode() {
-    let directives = vec![StyleDirectiveSpec::explicit_noop(
+    let directives = vec![StyleDirectiveSpec::provided(
         "highlight",
         TemplateBodyMode::Balanced,
+        ProvidedStyleDirectiveSpec::no_op(),
     )];
     let (file_tokens, string_table) =
         tokenize_source_with_directives("[$highlight:\n[data-kind=\"cta\"]\n]", &directives);

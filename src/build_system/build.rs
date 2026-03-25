@@ -13,7 +13,7 @@ use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages}
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::hir::hir_nodes::HirModule;
 use crate::compiler_frontend::string_interning::StringTable;
-use crate::compiler_frontend::style_directives::StyleDirectiveSpec;
+use crate::compiler_frontend::style_directives::{StyleDirectiveRegistry, StyleDirectiveSpec};
 use crate::projects::settings::Config;
 use saying::say;
 use std::collections::HashSet;
@@ -46,27 +46,21 @@ pub trait BackendBuilder {
 
     /// Validate the project configuration
     fn validate_project_config(&self, config: &Config) -> Result<(), CompilerError>;
+
+    /// Frontend style directives provided by this backend.
+    ///
+    /// Core directives are always present in frontend registry construction.
+    /// This hook supplies non-core directive behavior for tokenization/template parsing.
+    fn frontend_style_directives(&self) -> Vec<StyleDirectiveSpec>;
 }
 
 pub struct ProjectBuilder {
     pub backend: Box<dyn BackendBuilder + Send>,
-    pub frontend_style_directives: Vec<StyleDirectiveSpec>,
 }
 
 impl ProjectBuilder {
     pub fn new(backend: Box<dyn BackendBuilder + Send>) -> Self {
-        Self {
-            backend,
-            frontend_style_directives: Vec::new(),
-        }
-    }
-
-    pub fn with_frontend_style_directives(
-        mut self,
-        frontend_style_directives: Vec<StyleDirectiveSpec>,
-    ) -> Self {
-        self.frontend_style_directives = frontend_style_directives;
-        self
+        Self { backend }
     }
 }
 
@@ -174,10 +168,13 @@ pub fn build_project(
     // This discovers all the modules, parses the config,
     // and compiles each module to HIR for backend lowering.
     let mut config = Config::new(valid_path);
+    let frontend_style_directives = project_builder.backend.frontend_style_directives();
+    let style_directives = StyleDirectiveRegistry::merged(&frontend_style_directives)
+        .map_err(CompilerMessages::from_error)?;
 
     // WHAT: Load and validate project config before compilation begins (Stage 0)
     // WHY: Config must be validated early so backends can reject invalid settings before any work
-    load_project_config(&mut config)?;
+    load_project_config(&mut config, &style_directives)?;
 
     // WHAT: Validate backend-specific config requirements before compilation
     // WHY: Backend validation must occur after Stage 0 loading but before any compilation work
@@ -186,11 +183,7 @@ pub fn build_project(
         .validate_project_config(&config)
         .map_err(CompilerMessages::from_error)?;
 
-    let modules = compile_project_frontend(
-        &mut config,
-        flags,
-        &project_builder.frontend_style_directives,
-    )?;
+    let modules = compile_project_frontend(&mut config, flags, &style_directives)?;
     let mut warnings = collect_frontend_warnings(&modules);
 
     // --------------------------------------------

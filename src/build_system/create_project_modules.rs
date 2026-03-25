@@ -16,7 +16,7 @@ use crate::compiler_frontend::paths::path_resolution::{
 };
 use crate::compiler_frontend::paths::paths::collect_paths_from_tokens;
 use crate::compiler_frontend::string_interning::StringTable;
-use crate::compiler_frontend::style_directives::{StyleDirectiveRegistry, StyleDirectiveSpec};
+use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::tokenizer::tokenizer::tokenize;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenizeMode};
 use crate::compiler_frontend::{CompilerFrontend, Flag, FrontendBuildProfile};
@@ -49,9 +49,8 @@ struct ParsedImportPaths {
 pub fn compile_project_frontend(
     config: &mut Config,
     flags: &[Flag],
-    frontend_style_directives: &[StyleDirectiveSpec],
+    style_directives: &StyleDirectiveRegistry,
 ) -> Result<Vec<Module>, CompilerMessages> {
-    let style_directives = StyleDirectiveRegistry::merged(frontend_style_directives);
     let build_profile = if flags.contains(&Flag::Release) {
         FrontendBuildProfile::Release
     } else {
@@ -60,7 +59,7 @@ pub fn compile_project_frontend(
 
     // Dispatch: single-file entry vs. directory project.
     if let Some(extension) = config.entry_dir.extension() {
-        return compile_single_file_frontend(config, build_profile, &style_directives, extension);
+        return compile_single_file_frontend(config, build_profile, style_directives, extension);
     }
 
     if !config.entry_dir.is_dir() {
@@ -73,7 +72,7 @@ pub fn compile_project_frontend(
         return_err_as_messages!(err);
     }
 
-    compile_directory_frontend(config, build_profile, &style_directives)
+    compile_directory_frontend(config, build_profile, style_directives)
 }
 
 /// Compile a single `.bst` file as its own module.

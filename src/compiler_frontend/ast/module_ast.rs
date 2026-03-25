@@ -239,6 +239,7 @@ impl Ast {
                             visible_declaration_ids: &bindings.visible_symbol_paths,
                             start_import_aliases: &bindings.start_aliases,
                             host_registry,
+                            style_directives,
                             project_path_resolver: project_path_resolver.clone(),
                             path_format_config: path_format_config.clone(),
                             build_profile,

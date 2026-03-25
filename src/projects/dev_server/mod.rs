@@ -16,6 +16,7 @@ use crate::build_system::project_config::load_project_config;
 use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::basic_utility_functions::check_if_valid_path;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages, ErrorType};
+use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::projects::dev_server::build_loop::{ProjectBuildExecutor, dev_server_error_messages};
 use crate::projects::dev_server::state::DevServerState;
 use crate::projects::settings::Config;
@@ -66,7 +67,10 @@ pub fn run_dev_server(
     let output_dir = if entry_target.is_dir() {
         // Directory project: load config early and use canonical output root resolution
         let mut config = Config::new(entry_target.clone());
-        load_project_config(&mut config)?;
+        let frontend_style_directives = builder.backend.frontend_style_directives();
+        let style_directives = StyleDirectiveRegistry::merged(&frontend_style_directives)
+            .map_err(CompilerMessages::from_error)?;
+        load_project_config(&mut config, &style_directives)?;
         let resolved = resolve_project_output_root(&config, flags);
         resolved.canonicalize().unwrap_or(resolved)
     } else {

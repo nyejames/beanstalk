@@ -1,32 +1,25 @@
 //! Frontend style-directive registry used by tokenization and template parsing.
 //!
 //! WHAT:
-//! - Defines the directive contract (`StyleDirectiveSpec`) shared by builders and built-ins.
-//! - Builds a merged registry where compiler built-ins are always present.
+//! - Defines the directive contract (`StyleDirectiveSpec`) shared by core language directives
+//!   and build-system-provided directives.
+//! - Builds a merged registry where compiler core directives are always present.
 //! - Supports strict lookups used by tokenizer/AST to reject unknown `$directive` names.
 //!
 //! WHY:
 //! - The frontend must know the directive set before backend lowering.
-//! - Build systems can extend or override built-ins without changing parser code.
+//! - Build systems can provide full non-core directive behavior without changing parser code.
 //! - A single merged registry avoids tokenizer/AST drift and keeps diagnostics consistent.
 
+use crate::compiler_frontend::ast::templates::create_template_node::Template;
+use crate::compiler_frontend::ast::templates::template::{BodyWhitespacePolicy, Formatter};
+use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::tokenizer::tokens::TemplateBodyMode;
 use std::fmt::Write as _;
 
-/// Origin of a registered style directive.
-///
-/// Built-ins use compiler-owned semantics. Builder directives are explicit no-op
-/// directives by default unless they intentionally override behavior metadata.
+/// Core language directive behavior handled directly by compiler-owned template parsing.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum StyleDirectiveSource {
-    BuiltIn,
-    Builder,
-}
-
-/// Built-in directive behavior handled directly by compiler-owned template parsing.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum BuiltInStyleDirectiveKind {
-    Markdown,
+pub enum CoreStyleDirectiveKind {
     Children,
     Fresh,
     Slot,
@@ -35,83 +28,134 @@ pub enum BuiltInStyleDirectiveKind {
     Todo,
     Doc,
     Code,
-    Css,
-    Html,
     Raw,
-    EscapeHtml,
 }
 
-/// Argument policy used by explicit no-op directives.
+/// Supported optional single-argument types for build-system-provided directives.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum NoOpDirectiveArgumentPolicy {
-    /// Rejects parenthesized arguments (`$name(...)`) outright.
-    Reject,
-    /// Consumes optional parenthesized arguments but does not interpret them.
-    ConsumeOptionalParenthesized,
+pub enum StyleDirectiveArgumentType {
+    String,
+    Template,
+    Number,
+    Bool,
 }
 
-/// Parser behavior contract for one style directive.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum StyleDirectiveBehavior {
-    BuiltIn(BuiltInStyleDirectiveKind),
-    ExplicitNoOp {
-        argument_policy: NoOpDirectiveArgumentPolicy,
-    },
+/// Parsed value for a build-system-provided optional style argument.
+#[derive(Clone, Debug)]
+pub enum StyleDirectiveArgumentValue {
+    String(String),
+    Template(Template),
+    Number(f64),
+    Bool(bool),
+}
+
+/// Template-style toggles that a provided directive can apply when used.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ProvidedStyleEffects {
+    /// Optional semantic style ID used for formatter precedence/debugging.
+    pub style_id: Option<&'static str>,
+    /// Optional body-whitespace policy override.
+    pub body_whitespace_policy: Option<BodyWhitespacePolicy>,
+    /// Optional toggle for parsing `[...]` as literal body text.
+    pub suppress_child_templates: Option<bool>,
+    /// Optional toggle that opts this template out of parent `$children(..)` wrappers.
+    pub skip_parent_child_wrappers: Option<bool>,
+}
+
+/// Formatter factory used by build-system-provided directives.
+///
+/// Returns:
+/// - `Ok(Some(formatter))` to set/replace the active formatter.
+/// - `Ok(None)` to leave formatter untouched (or clear if the caller chooses).
+/// - `Err(message)` for user-facing directive argument/configuration errors.
+pub type ProvidedFormatterFactory =
+    fn(Option<&StyleDirectiveArgumentValue>) -> Result<Option<Formatter>, String>;
+
+/// Full behavior contract for one build-system-provided style directive.
+#[derive(Clone, Debug)]
+pub struct ProvidedStyleDirectiveSpec {
+    /// Optional single argument contract for `$name(...)`.
+    pub argument_type: Option<StyleDirectiveArgumentType>,
+    /// Template style-state toggles applied when this directive is parsed.
+    pub style_effects: ProvidedStyleEffects,
+    /// Optional formatter factory invoked with the parsed optional argument.
+    pub formatter_factory: Option<ProvidedFormatterFactory>,
+}
+
+impl ProvidedStyleDirectiveSpec {
+    pub fn new(
+        argument_type: Option<StyleDirectiveArgumentType>,
+        style_effects: ProvidedStyleEffects,
+        formatter_factory: Option<ProvidedFormatterFactory>,
+    ) -> Self {
+        Self {
+            argument_type,
+            style_effects,
+            formatter_factory,
+        }
+    }
+
+    pub fn no_op() -> Self {
+        Self {
+            argument_type: None,
+            style_effects: ProvidedStyleEffects::default(),
+            formatter_factory: None,
+        }
+    }
+}
+
+/// Directive class contract.
+#[derive(Clone, Debug)]
+pub enum StyleDirectiveKind {
+    Core(CoreStyleDirectiveKind),
+    Provided(ProvidedStyleDirectiveSpec),
 }
 
 /// Frontend registration contract for one style directive.
 ///
-/// `body_mode` controls template-body tokenization after the directive appears in
-/// the template head. `behavior` controls AST-level directive handling.
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// `body_mode` controls template-body tokenization after the directive appears in the template
+/// head. `kind` controls AST-level directive handling.
+#[derive(Clone, Debug)]
 pub struct StyleDirectiveSpec {
     pub name: String,
     pub body_mode: TemplateBodyMode,
-    pub source: StyleDirectiveSource,
-    pub behavior: StyleDirectiveBehavior,
+    pub kind: StyleDirectiveKind,
 }
 
 impl StyleDirectiveSpec {
-    /// Build-system API for adding explicit no-op frontend directives.
-    ///
-    /// This default rejects parenthesized arguments so no-op behavior is explicit.
-    pub fn explicit_noop(name: impl Into<String>, body_mode: TemplateBodyMode) -> Self {
-        Self {
-            name: name.into(),
-            body_mode,
-            source: StyleDirectiveSource::Builder,
-            behavior: StyleDirectiveBehavior::ExplicitNoOp {
-                argument_policy: NoOpDirectiveArgumentPolicy::Reject,
-            },
-        }
-    }
-
-    /// Build-system API for no-op directives that need a custom argument policy.
-    pub fn explicit_noop_with_argument_policy(
+    /// Build-system API for registering a fully provided style directive.
+    pub fn provided(
         name: impl Into<String>,
         body_mode: TemplateBodyMode,
-        argument_policy: NoOpDirectiveArgumentPolicy,
+        provided: ProvidedStyleDirectiveSpec,
     ) -> Self {
         Self {
             name: name.into(),
             body_mode,
-            source: StyleDirectiveSource::Builder,
-            behavior: StyleDirectiveBehavior::ExplicitNoOp { argument_policy },
+            kind: StyleDirectiveKind::Provided(provided),
         }
     }
 
-    /// Internal helper for compiler-owned built-in directives.
-    pub(crate) fn built_in(
+    /// Build-system API for explicit no-op directive registration.
+    pub fn provided_no_op(name: impl Into<String>, body_mode: TemplateBodyMode) -> Self {
+        Self::provided(name, body_mode, ProvidedStyleDirectiveSpec::no_op())
+    }
+
+    /// Internal helper for compiler-owned core directives.
+    pub(crate) fn core(
         name: &str,
         body_mode: TemplateBodyMode,
-        kind: BuiltInStyleDirectiveKind,
+        kind: CoreStyleDirectiveKind,
     ) -> Self {
         Self {
             name: name.to_string(),
             body_mode,
-            source: StyleDirectiveSource::BuiltIn,
-            behavior: StyleDirectiveBehavior::BuiltIn(kind),
+            kind: StyleDirectiveKind::Core(kind),
         }
+    }
+
+    fn is_core(&self) -> bool {
+        matches!(self.kind, StyleDirectiveKind::Core(_))
     }
 }
 
@@ -125,114 +169,99 @@ pub struct StyleDirectiveRegistry {
 }
 
 impl StyleDirectiveRegistry {
-    /// Compiler built-ins that are always available unless a builder overrides a name.
+    /// Compiler core directives that are always available.
     ///
-    /// This list defines the default frontend directive surface for the HTML builder
-    /// and test helpers that do not provide additional project directives.
+    /// Non-core directives must be provided by the active build system.
     pub fn built_ins() -> Self {
         Self {
             ordered: vec![
-                StyleDirectiveSpec::built_in(
-                    "markdown",
-                    TemplateBodyMode::Normal,
-                    BuiltInStyleDirectiveKind::Markdown,
-                ),
-                StyleDirectiveSpec::built_in(
+                StyleDirectiveSpec::core(
                     "children",
                     TemplateBodyMode::Normal,
-                    BuiltInStyleDirectiveKind::Children,
+                    CoreStyleDirectiveKind::Children,
                 ),
-                StyleDirectiveSpec::built_in(
+                StyleDirectiveSpec::core(
                     "fresh",
                     TemplateBodyMode::Normal,
-                    BuiltInStyleDirectiveKind::Fresh,
+                    CoreStyleDirectiveKind::Fresh,
                 ),
-                StyleDirectiveSpec::built_in(
+                StyleDirectiveSpec::core(
                     "slot",
                     TemplateBodyMode::Normal,
-                    BuiltInStyleDirectiveKind::Slot,
+                    CoreStyleDirectiveKind::Slot,
                 ),
-                StyleDirectiveSpec::built_in(
+                StyleDirectiveSpec::core(
                     "insert",
                     TemplateBodyMode::Normal,
-                    BuiltInStyleDirectiveKind::Insert,
+                    CoreStyleDirectiveKind::Insert,
                 ),
-                StyleDirectiveSpec::built_in(
+                StyleDirectiveSpec::core(
                     "note",
                     TemplateBodyMode::DiscardBalanced,
-                    BuiltInStyleDirectiveKind::Note,
+                    CoreStyleDirectiveKind::Note,
                 ),
-                StyleDirectiveSpec::built_in(
+                StyleDirectiveSpec::core(
                     "todo",
                     TemplateBodyMode::DiscardBalanced,
-                    BuiltInStyleDirectiveKind::Todo,
+                    CoreStyleDirectiveKind::Todo,
                 ),
-                StyleDirectiveSpec::built_in(
+                StyleDirectiveSpec::core(
                     "doc",
                     TemplateBodyMode::Normal,
-                    BuiltInStyleDirectiveKind::Doc,
+                    CoreStyleDirectiveKind::Doc,
                 ),
-                StyleDirectiveSpec::built_in(
+                StyleDirectiveSpec::core(
                     "code",
                     TemplateBodyMode::Balanced,
-                    BuiltInStyleDirectiveKind::Code,
+                    CoreStyleDirectiveKind::Code,
                 ),
-                StyleDirectiveSpec::built_in(
-                    "css",
-                    TemplateBodyMode::Balanced,
-                    BuiltInStyleDirectiveKind::Css,
-                ),
-                // `$html` uses the same normal template-body parsing as `$markdown`.
-                StyleDirectiveSpec::built_in(
-                    "html",
-                    TemplateBodyMode::Normal,
-                    BuiltInStyleDirectiveKind::Html,
-                ),
-                StyleDirectiveSpec::built_in(
+                StyleDirectiveSpec::core(
                     "raw",
                     TemplateBodyMode::Normal,
-                    BuiltInStyleDirectiveKind::Raw,
-                ),
-                StyleDirectiveSpec::built_in(
-                    "escape_html",
-                    TemplateBodyMode::Normal,
-                    BuiltInStyleDirectiveKind::EscapeHtml,
+                    CoreStyleDirectiveKind::Raw,
                 ),
             ],
         }
     }
 
-    /// Merge builder directives over compiler built-ins.
+    /// Merge build-system directives over compiler core directives.
     ///
-    /// Precedence is "built-ins first, then exact-name builder override" because:
-    /// - users still get a complete default directive set,
-    /// - builders can replace specific directive names without forking frontend code.
-    pub fn merged(builder_specs: &[StyleDirectiveSpec]) -> Self {
+    /// Rules:
+    /// - Core directive names cannot be overridden by build systems.
+    /// - Build systems may only provide `StyleDirectiveKind::Provided`.
+    /// - For non-core names, later entries replace earlier entries by exact name.
+    pub fn merged(builder_specs: &[StyleDirectiveSpec]) -> Result<Self, CompilerError> {
         let mut merged = Self::built_ins().ordered;
 
         for builder_spec in builder_specs {
+            if builder_spec.is_core() {
+                return Err(CompilerError::compiler_error(format!(
+                    "Build-system style directive '${}' cannot be registered as a core directive.",
+                    builder_spec.name
+                )));
+            }
+
+            if let Some(core_conflict) = merged
+                .iter()
+                .find(|spec| spec.name == builder_spec.name && spec.is_core())
+            {
+                return Err(CompilerError::compiler_error(format!(
+                    "Build-system style directive '${}' cannot override compiler core directive '${}'.",
+                    builder_spec.name, core_conflict.name
+                )));
+            }
+
             if let Some(existing) = merged
                 .iter_mut()
                 .find(|spec| spec.name == builder_spec.name)
             {
-                *existing = StyleDirectiveSpec {
-                    name: builder_spec.name.to_owned(),
-                    body_mode: builder_spec.body_mode,
-                    source: StyleDirectiveSource::Builder,
-                    behavior: builder_spec.behavior,
-                };
-                continue;
+                *existing = builder_spec.clone();
+            } else {
+                merged.push(builder_spec.clone());
             }
-
-            merged.push(StyleDirectiveSpec {
-                name: builder_spec.name.to_owned(),
-                body_mode: builder_spec.body_mode,
-                source: StyleDirectiveSource::Builder,
-                behavior: builder_spec.behavior,
-            });
         }
 
-        Self { ordered: merged }
+        Ok(Self { ordered: merged })
     }
 
     pub fn find(&self, name: &str) -> Option<&StyleDirectiveSpec> {

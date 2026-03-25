@@ -19,6 +19,7 @@ use crate::compiler_frontend::ast::templates::template::{
     BodyWhitespacePolicy, Style, TemplateContent,
 };
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
+use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::TextLocation;
 
@@ -26,6 +27,11 @@ use crate::compiler_frontend::ast::templates::template_render_plan::{
     FormatterAnchorId, FormatterInput, FormatterInputPiece, FormatterOutputPiece,
     FormatterTextPiece, RenderExpressionPiece, RenderPiece, RenderTextPiece, TemplateRenderPlan,
 };
+
+pub(crate) struct BodyFormattingResult {
+    pub plan: TemplateRenderPlan,
+    pub warnings: Vec<CompilerWarning>,
+}
 
 /// Applies the body formatter and whitespace passes to a template's content.
 ///
@@ -36,7 +42,7 @@ pub(crate) fn apply_body_formatter(
     content: &TemplateContent,
     style: &Style,
     string_table: &mut StringTable,
-) -> Result<TemplateRenderPlan, CompilerMessages> {
+) -> Result<BodyFormattingResult, CompilerMessages> {
     let mut plan = TemplateRenderPlan::from_content(content);
 
     let formatter = style.formatter.as_ref();
@@ -46,10 +52,14 @@ pub(crate) fn apply_body_formatter(
     .then_some(TemplateWhitespacePassProfile::default_template_body());
 
     if implicit_default_whitespace_pass.is_none() && formatter.is_none() {
-        return Ok(plan);
+        return Ok(BodyFormattingResult {
+            plan,
+            warnings: Vec::new(),
+        });
     }
 
     let mut new_plan_pieces = Vec::with_capacity(plan.pieces.len());
+    let mut all_warnings: Vec<CompilerWarning> = Vec::new();
 
     let pre_format_passes = formatter
         .map(|f| f.pre_format_whitespace_passes.as_slice())
@@ -73,9 +83,9 @@ pub(crate) fn apply_body_formatter(
     let process_run = |run: Vec<RenderPiece>,
                        run_position: TemplateBodyRunPosition,
                        string_table: &mut StringTable|
-     -> Result<Vec<RenderPiece>, CompilerMessages> {
+     -> Result<(Vec<RenderPiece>, Vec<CompilerWarning>), CompilerMessages> {
         if run.is_empty() {
-            return Ok(Vec::new());
+            return Ok((Vec::new(), Vec::new()));
         }
 
         // Build the opaque-anchor side-table: each non-text piece gets a FormatterAnchorId
@@ -109,9 +119,11 @@ pub(crate) fn apply_body_formatter(
             apply_whitespace_passes_to_input(input, pre_format_passes, run_position, string_table);
 
         // 2. Style formatter
+        let mut formatter_warnings = Vec::new();
         if let Some(fmt) = formatter {
             let next_input = output_to_input(output, string_table);
             let formatter_result = fmt.formatter.format(next_input, string_table)?;
+            formatter_warnings.extend(formatter_result.warnings);
             output = formatter_result.output;
         }
 
@@ -143,7 +155,7 @@ pub(crate) fn apply_body_formatter(
             }
         }
 
-        Ok(replacement_pieces)
+        Ok((replacement_pieces, formatter_warnings))
     };
 
     let mut is_first_run = true;
@@ -167,11 +179,10 @@ pub(crate) fn apply_body_formatter(
                         TemplateBodyRunPosition::Middle
                     };
                     is_first_run = false;
-                    new_plan_pieces.extend(process_run(
-                        std::mem::take(&mut current_run),
-                        run_position,
-                        string_table,
-                    )?);
+                    let (replacement, warnings) =
+                        process_run(std::mem::take(&mut current_run), run_position, string_table)?;
+                    all_warnings.extend(warnings);
+                    new_plan_pieces.extend(replacement);
                 }
                 new_plan_pieces.push(piece);
             }
@@ -184,11 +195,16 @@ pub(crate) fn apply_body_formatter(
         } else {
             TemplateBodyRunPosition::Last
         };
-        new_plan_pieces.extend(process_run(current_run, run_position, string_table)?);
+        let (replacement, warnings) = process_run(current_run, run_position, string_table)?;
+        all_warnings.extend(warnings);
+        new_plan_pieces.extend(replacement);
     }
 
     plan.pieces = new_plan_pieces;
-    Ok(plan)
+    Ok(BodyFormattingResult {
+        plan,
+        warnings: all_warnings,
+    })
 }
 
 /// Converts formatter output back into formatter input for chaining pipeline stages.

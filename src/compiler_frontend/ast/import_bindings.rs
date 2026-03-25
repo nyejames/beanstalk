@@ -17,6 +17,7 @@ use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
+use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::projects::settings::IMPLICIT_START_FUNC_NAME;
 use rustc_hash::{FxHashMap, FxHashSet};
 
@@ -221,6 +222,7 @@ pub(crate) struct ConstantHeaderParseContext<'a> {
     pub visible_declaration_ids: &'a FxHashSet<InternedPath>,
     pub start_import_aliases: &'a FxHashMap<StringId, InternedPath>,
     pub host_registry: &'a HostRegistry,
+    pub style_directives: &'a StyleDirectiveRegistry,
     pub project_path_resolver: Option<ProjectPathResolver>,
     pub path_format_config: PathStringFormatConfig,
     pub build_profile: FrontendBuildProfile,
@@ -237,6 +239,7 @@ pub(crate) fn parse_constant_header_declaration(
         visible_declaration_ids,
         start_import_aliases,
         host_registry,
+        style_directives,
         project_path_resolver,
         path_format_config,
         build_profile,
@@ -264,6 +267,7 @@ pub(crate) fn parse_constant_header_declaration(
         host_registry.clone(),
         vec![],
     )
+    .with_style_directives(style_directives)
     .with_build_profile(build_profile)
     .with_project_path_resolver(project_path_resolver)
     .with_path_format_config(path_format_config)

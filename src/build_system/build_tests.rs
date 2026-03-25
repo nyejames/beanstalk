@@ -9,6 +9,7 @@ use crate::compiler_frontend::compiler_errors::{
     CompilerError, CompilerMessages, ErrorLocation, ErrorType,
 };
 use crate::compiler_frontend::compiler_warnings::{CompilerWarning, WarningKind};
+use crate::compiler_frontend::style_directives::StyleDirectiveSpec;
 use crate::projects::html_project::html_project_builder::HtmlProjectBuilder;
 use crate::projects::settings::Config;
 use std::fs;
@@ -81,6 +82,10 @@ impl BackendBuilder for WarningBuilder {
     fn validate_project_config(&self, _config: &Config) -> Result<(), CompilerError> {
         Ok(())
     }
+
+    fn frontend_style_directives(&self) -> Vec<StyleDirectiveSpec> {
+        Vec::new()
+    }
 }
 
 struct ValidationTrackingBuilder {
@@ -108,6 +113,10 @@ impl BackendBuilder for ValidationTrackingBuilder {
             .store(true, std::sync::atomic::Ordering::SeqCst);
         Ok(())
     }
+
+    fn frontend_style_directives(&self) -> Vec<StyleDirectiveSpec> {
+        Vec::new()
+    }
 }
 
 struct FailingValidationBuilder;
@@ -128,6 +137,10 @@ impl BackendBuilder for FailingValidationBuilder {
             ErrorLocation::default(),
             ErrorType::Config,
         ))
+    }
+
+    fn frontend_style_directives(&self) -> Vec<StyleDirectiveSpec> {
+        Vec::new()
     }
 }
 

@@ -11,18 +11,10 @@ use crate::compiler_frontend::ast::ast::ScopeContext;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
 use crate::compiler_frontend::ast::templates::styles::code::configure_code_style;
-use crate::compiler_frontend::ast::templates::styles::css::{
-    configure_css_style, validate_css_template,
-};
-use crate::compiler_frontend::ast::templates::styles::escape_html::configure_escape_html_style;
-use crate::compiler_frontend::ast::templates::styles::html::{
-    configure_html_style, validate_html_template,
-};
 use crate::compiler_frontend::ast::templates::styles::markdown::markdown_formatter;
 use crate::compiler_frontend::ast::templates::styles::raw::configure_raw_style;
 use crate::compiler_frontend::ast::templates::template::{
-    BodyWhitespacePolicy, CommentDirectiveKind, SlotKey, Style, TemplateDirectiveValidation,
-    TemplateSegmentOrigin, TemplateType,
+    BodyWhitespacePolicy, CommentDirectiveKind, SlotKey, Style, TemplateSegmentOrigin, TemplateType,
 };
 use crate::compiler_frontend::ast::templates::template_slots::{
     parse_required_named_slot_insert_argument, parse_slot_definition_target_argument,
@@ -34,7 +26,8 @@ use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::paths::path_format::format_compile_time_paths;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::style_directives::{
-    BuiltInStyleDirectiveKind, NoOpDirectiveArgumentPolicy, StyleDirectiveBehavior,
+    CoreStyleDirectiveKind, StyleDirectiveArgumentType, StyleDirectiveArgumentValue,
+    StyleDirectiveKind,
 };
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TextLocation, TokenKind};
 use crate::compiler_frontend::traits::ContainsReferences;
@@ -340,15 +333,17 @@ pub fn parse_template_head(
                             .current_location()
                             .to_error_location(string_table),
                         {
-                            PrimarySuggestion => "Register this directive in the project builder frontend_style_directives list or use a supported built-in directive",
+                            PrimarySuggestion => "Register this directive in the active project builder style directive list or use a supported core directive",
                         }
                     )
                 };
 
                 let mut handled_slot_insert = false;
 
-                if spec.behavior == StyleDirectiveBehavior::BuiltIn(BuiltInStyleDirectiveKind::Slot)
-                {
+                if matches!(
+                    spec.kind,
+                    StyleDirectiveKind::Core(CoreStyleDirectiveKind::Slot)
+                ) {
                     if saw_meaningful_head_item {
                         return_syntax_error!(
                             "Slot helper template heads can only contain '$slot' before the optional body.",
@@ -363,9 +358,10 @@ pub fn parse_template_head(
                     template.kind = TemplateType::SlotDefinition(slot_key);
                     saw_meaningful_head_item = true;
                     handled_slot_insert = true;
-                } else if spec.behavior
-                    == StyleDirectiveBehavior::BuiltIn(BuiltInStyleDirectiveKind::Insert)
-                {
+                } else if matches!(
+                    spec.kind,
+                    StyleDirectiveKind::Core(CoreStyleDirectiveKind::Insert)
+                ) {
                     if saw_meaningful_head_item {
                         return_syntax_error!(
                             "Slot helper template heads can only contain '$insert(\"name\")' before the optional body.",
@@ -385,11 +381,11 @@ pub fn parse_template_head(
                 if !handled_slot_insert
                     && saw_meaningful_head_item
                     && matches!(
-                        spec.behavior,
-                        StyleDirectiveBehavior::BuiltIn(
-                            BuiltInStyleDirectiveKind::Note
-                                | BuiltInStyleDirectiveKind::Todo
-                                | BuiltInStyleDirectiveKind::Doc
+                        spec.kind,
+                        StyleDirectiveKind::Core(
+                            CoreStyleDirectiveKind::Note
+                                | CoreStyleDirectiveKind::Todo
+                                | CoreStyleDirectiveKind::Doc
                         )
                     )
                 {
@@ -577,94 +573,67 @@ fn parse_style_directive(
                 .current_location()
                 .to_error_location(string_table),
             {
-                PrimarySuggestion => "Register this directive in the project builder frontend_style_directives list or use a supported built-in directive",
+                PrimarySuggestion => "Register this directive in the active project builder style directive list or use a supported core directive",
             }
         )
     };
 
-    let parse_result = match spec.behavior {
-        StyleDirectiveBehavior::ExplicitNoOp { argument_policy } => {
-            apply_noop_directive_argument_policy(
-                token_stream,
-                &directive_name,
-                argument_policy,
-                string_table,
-            )?;
-            Ok(false)
-        }
-
-        StyleDirectiveBehavior::BuiltIn(kind) => match kind {
-            BuiltInStyleDirectiveKind::Markdown => {
-                apply_markdown_style(template);
-                Ok(false)
-            }
-
-            BuiltInStyleDirectiveKind::Code => {
-                // Keep the directive-specific parsing in the code formatter module so
-                // this general template parser does not accumulate every built-in style.
+    let parse_result = match &spec.kind {
+        StyleDirectiveKind::Core(kind) => match kind {
+            CoreStyleDirectiveKind::Code => {
+                // Keep directive-local argument parsing in the code style module.
                 configure_code_style(token_stream, template, string_table)?;
                 Ok(false)
             }
-
-            BuiltInStyleDirectiveKind::Css => {
-                configure_css_style(token_stream, template, string_table)?;
-                Ok(false)
-            }
-
-            BuiltInStyleDirectiveKind::Html => {
-                configure_html_style(token_stream, template, string_table)?;
-                Ok(false)
-            }
-
-            BuiltInStyleDirectiveKind::Raw => {
+            CoreStyleDirectiveKind::Raw => {
                 configure_raw_style(template);
                 Ok(false)
             }
-
-            BuiltInStyleDirectiveKind::EscapeHtml => {
-                configure_escape_html_style(template);
-                Ok(false)
-            }
-
-            BuiltInStyleDirectiveKind::Children => {
+            CoreStyleDirectiveKind::Children => {
                 parse_children_style_directive(token_stream, context, template, string_table)?;
                 Ok(false)
             }
-
-            BuiltInStyleDirectiveKind::Fresh => {
+            CoreStyleDirectiveKind::Fresh => {
                 // `$fresh` opt-outs this template from parent-applied `$children(..)`
                 // wrappers while still allowing local directives/wrappers in the same head.
                 template.apply_style_updates(|style| style.skip_parent_child_wrappers = true);
                 Ok(false)
             }
-
-            BuiltInStyleDirectiveKind::Note => {
+            CoreStyleDirectiveKind::Note => {
                 reject_directive_arguments(token_stream, "note", string_table)?;
                 template.kind = TemplateType::Comment(CommentDirectiveKind::Note);
                 template.apply_style(Style::default());
                 Ok(false)
             }
-
-            BuiltInStyleDirectiveKind::Todo => {
+            CoreStyleDirectiveKind::Todo => {
                 reject_directive_arguments(token_stream, "todo", string_table)?;
                 template.kind = TemplateType::Comment(CommentDirectiveKind::Todo);
                 template.apply_style(Style::default());
                 Ok(false)
             }
-
-            BuiltInStyleDirectiveKind::Doc => {
+            CoreStyleDirectiveKind::Doc => {
                 reject_directive_arguments(token_stream, "doc", string_table)?;
                 apply_doc_comment_defaults(template);
                 Ok(false)
             }
-
-            BuiltInStyleDirectiveKind::Slot | BuiltInStyleDirectiveKind::Insert => {
+            CoreStyleDirectiveKind::Slot | CoreStyleDirectiveKind::Insert => {
                 return_compiler_error!(
-                    "Built-in style directive '${}' reached generic style parsing but should have been handled by slot helper dispatch.",
+                    "Core style directive '${}' reached generic style parsing but should have been handled by slot helper dispatch.",
                     directive_name
                 )
             }
         },
+        StyleDirectiveKind::Provided(provided_spec) => {
+            apply_provided_style_directive(
+                token_stream,
+                context,
+                template,
+                &directive_name,
+                provided_spec,
+                string_table,
+            )?;
+            Ok(false)
+        }
     };
 
     if parse_result.is_ok() {
@@ -687,19 +656,211 @@ fn mark_template_body_whitespace_style_controlled(template: &mut Template) {
     });
 }
 
-fn apply_noop_directive_argument_policy(
+#[derive(Clone)]
+struct ParsedProvidedDirectiveArgument {
+    value: Option<StyleDirectiveArgumentValue>,
+    error_location: TextLocation,
+}
+
+fn apply_provided_style_directive(
     token_stream: &mut FileTokens,
+    context: &ScopeContext,
+    template: &mut Template,
     directive_name: &str,
-    policy: NoOpDirectiveArgumentPolicy,
-    string_table: &StringTable,
+    provided_spec: &crate::compiler_frontend::style_directives::ProvidedStyleDirectiveSpec,
+    string_table: &mut StringTable,
 ) -> Result<(), CompilerError> {
-    match policy {
-        NoOpDirectiveArgumentPolicy::Reject => {
-            reject_directive_arguments(token_stream, directive_name, string_table)
+    let parsed_argument = parse_optional_provided_style_argument(
+        token_stream,
+        context,
+        directive_name,
+        provided_spec.argument_type,
+        string_table,
+    )?;
+
+    apply_provided_style_effects(template, provided_spec.style_effects);
+
+    if let Some(factory) = provided_spec.formatter_factory {
+        let formatter = factory(parsed_argument.value.as_ref()).map_err(|message| {
+            CompilerError::new_syntax_error(
+                &message,
+                parsed_argument
+                    .error_location
+                    .to_error_location(string_table),
+            )
+        })?;
+        template.apply_style_updates(|style| {
+            style.formatter = formatter.clone();
+        });
+    }
+
+    Ok(())
+}
+
+fn apply_provided_style_effects(
+    template: &mut Template,
+    effects: crate::compiler_frontend::style_directives::ProvidedStyleEffects,
+) {
+    template.apply_style_updates(|style| {
+        if let Some(style_id) = effects.style_id {
+            style.id = style_id;
         }
-        NoOpDirectiveArgumentPolicy::ConsumeOptionalParenthesized => {
-            consume_optional_directive_arguments(token_stream, directive_name, string_table)
+        if let Some(policy) = effects.body_whitespace_policy {
+            style.body_whitespace_policy = policy;
         }
+        if let Some(suppress_child_templates) = effects.suppress_child_templates {
+            style.suppress_child_templates = suppress_child_templates;
+        }
+        if let Some(skip_parent_wrappers) = effects.skip_parent_child_wrappers {
+            style.skip_parent_child_wrappers = skip_parent_wrappers;
+        }
+    });
+}
+
+fn parse_optional_provided_style_argument(
+    token_stream: &mut FileTokens,
+    context: &ScopeContext,
+    directive_name: &str,
+    argument_type: Option<StyleDirectiveArgumentType>,
+    string_table: &mut StringTable,
+) -> Result<ParsedProvidedDirectiveArgument, CompilerError> {
+    let default_location = token_stream.current_location();
+
+    if token_stream.peek_next_token() != Some(&TokenKind::OpenParenthesis) {
+        return Ok(ParsedProvidedDirectiveArgument {
+            value: None,
+            error_location: default_location,
+        });
+    }
+
+    let Some(argument_type) = argument_type else {
+        return_syntax_error!(
+            format!("'${directive_name}' does not accept arguments."),
+            token_stream
+                .current_location()
+                .to_error_location(string_table)
+        );
+    };
+
+    // Move from '$directive' to the opening parenthesis, then to the first token inside.
+    token_stream.advance();
+    token_stream.advance();
+
+    if token_stream.current_token_kind() == &TokenKind::CloseParenthesis {
+        return_syntax_error!(
+            format!(
+                "'${directive_name}(...)' requires one compile-time argument when parentheses are present."
+            ),
+            token_stream.current_location().to_error_location(string_table),
+            {
+                PrimarySuggestion => "Provide exactly one argument inside the directive parentheses",
+            }
+        );
+    }
+
+    let argument_location = token_stream.current_location();
+    let mut inferred = DataType::Inferred;
+    let parsed_expression = create_expression(
+        token_stream,
+        context,
+        &mut inferred,
+        &Ownership::ImmutableOwned,
+        false,
+        string_table,
+    )?;
+
+    if token_stream.current_token_kind() == &TokenKind::Comma {
+        return_syntax_error!(
+            format!("'${directive_name}(...)' accepts at most one argument."),
+            token_stream
+                .current_location()
+                .to_error_location(string_table)
+        );
+    }
+
+    if token_stream.current_token_kind() != &TokenKind::CloseParenthesis {
+        return_syntax_error!(
+            format!("Expected ')' after '${directive_name}(...)' argument."),
+            token_stream.current_location().to_error_location(string_table),
+            {
+                SuggestedInsertion => ")",
+            }
+        );
+    }
+
+    if !parsed_expression.is_compile_time_constant() {
+        return_syntax_error!(
+            format!("'${directive_name}(...)' requires a compile-time argument value."),
+            argument_location.to_error_location(string_table),
+            {
+                PrimarySuggestion => "Use a literal or constant value that folds at compile time",
+            }
+        );
+    }
+
+    let normalized = normalize_provided_style_argument_value(
+        parsed_expression,
+        argument_type,
+        directive_name,
+        &argument_location,
+        string_table,
+    )?;
+
+    Ok(ParsedProvidedDirectiveArgument {
+        value: Some(normalized),
+        error_location: argument_location,
+    })
+}
+
+fn normalize_provided_style_argument_value(
+    expression: Expression,
+    argument_type: StyleDirectiveArgumentType,
+    directive_name: &str,
+    argument_location: &TextLocation,
+    string_table: &StringTable,
+) -> Result<StyleDirectiveArgumentValue, CompilerError> {
+    match argument_type {
+        StyleDirectiveArgumentType::String => match expression.kind {
+            ExpressionKind::StringSlice(text) => Ok(StyleDirectiveArgumentValue::String(
+                string_table.resolve(text).to_owned(),
+            )),
+            _ => {
+                return_syntax_error!(
+                    format!("'${directive_name}(...)' expects a compile-time string argument."),
+                    argument_location.to_error_location(string_table)
+                )
+            }
+        },
+        StyleDirectiveArgumentType::Template => match expression.kind {
+            ExpressionKind::Template(template) => Ok(StyleDirectiveArgumentValue::Template(
+                template.as_ref().to_owned(),
+            )),
+            _ => {
+                return_syntax_error!(
+                    format!("'${directive_name}(...)' expects a compile-time template argument."),
+                    argument_location.to_error_location(string_table)
+                )
+            }
+        },
+        StyleDirectiveArgumentType::Number => match expression.kind {
+            ExpressionKind::Int(value) => Ok(StyleDirectiveArgumentValue::Number(value as f64)),
+            ExpressionKind::Float(value) => Ok(StyleDirectiveArgumentValue::Number(value)),
+            _ => {
+                return_syntax_error!(
+                    format!("'${directive_name}(...)' expects a compile-time numeric argument."),
+                    argument_location.to_error_location(string_table)
+                )
+            }
+        },
+        StyleDirectiveArgumentType::Bool => match expression.kind {
+            ExpressionKind::Bool(value) => Ok(StyleDirectiveArgumentValue::Bool(value)),
+            _ => {
+                return_syntax_error!(
+                    format!("'${directive_name}(...)' expects a compile-time bool argument."),
+                    argument_location.to_error_location(string_table)
+                )
+            }
+        },
     }
 }
 
@@ -720,46 +881,6 @@ fn apply_markdown_style(template: &mut Template) {
         style.id = "markdown";
         style.formatter = Some(markdown_formatter());
     });
-    template.clear_directive_validation();
-}
-
-/// Consumes optional parenthesised arguments for builder-defined directives.
-/// These arguments are recognised syntactically but not interpreted by the AST stage.
-fn consume_optional_directive_arguments(
-    token_stream: &mut FileTokens,
-    directive_name: &str,
-    string_table: &StringTable,
-) -> Result<(), CompilerError> {
-    if token_stream.peek_next_token() != Some(&TokenKind::OpenParenthesis) {
-        return Ok(());
-    }
-
-    // Move from '$directive' to the opening parenthesis.
-    token_stream.advance();
-    let mut parenthesis_depth = 1usize;
-
-    while parenthesis_depth > 0 {
-        token_stream.advance();
-        match token_stream.current_token_kind() {
-            TokenKind::OpenParenthesis => parenthesis_depth = parenthesis_depth.saturating_add(1),
-            TokenKind::CloseParenthesis => parenthesis_depth = parenthesis_depth.saturating_sub(1),
-            TokenKind::Eof => {
-                return_syntax_error!(
-                    format!(
-                        "Unexpected end of template head while parsing '${directive_name}(...)'. Missing ')' to close the directive arguments."
-                    ),
-                    token_stream.current_location().to_error_location(string_table),
-                    {
-                        PrimarySuggestion => "Close the directive argument list with ')'",
-                        SuggestedInsertion => ")",
-                    }
-                )
-            }
-            _ => {}
-        }
-    }
-
-    Ok(())
 }
 
 /// Rejects parenthesised arguments for directives that do not accept them.
@@ -892,48 +1013,4 @@ pub(crate) fn parse_children_style_directive(
     template.style.child_templates.push(normalized.to_owned());
     template.explicit_style.child_templates.push(normalized);
     Ok(())
-}
-
-// -------------------------
-// POST-PARSE VALIDATION
-// -------------------------
-
-/// Emits directive-owned compile-time validation warnings (for example `$css` / `$html`).
-pub(crate) fn emit_template_directive_warnings(
-    template: &Template,
-    context: &ScopeContext,
-    string_table: &StringTable,
-) {
-    if !template.is_const_renderable_string() {
-        return;
-    }
-
-    match template.directive_validation {
-        Some(TemplateDirectiveValidation::Css(mode)) => {
-            let diagnostics =
-                validate_css_template(template, mode, context.build_profile, string_table);
-            for diagnostic in diagnostics {
-                let file_path = diagnostic.location.scope.to_path_buf(string_table);
-                context.emit_warning(CompilerWarning::new(
-                    &diagnostic.message,
-                    diagnostic.location.to_error_location(string_table),
-                    WarningKind::MalformedCssTemplate,
-                    file_path,
-                ));
-            }
-        }
-        Some(TemplateDirectiveValidation::Html) => {
-            let diagnostics = validate_html_template(template, string_table);
-            for diagnostic in diagnostics {
-                let file_path = diagnostic.location.scope.to_path_buf(string_table);
-                context.emit_warning(CompilerWarning::new(
-                    &diagnostic.message,
-                    diagnostic.location.to_error_location(string_table),
-                    WarningKind::MalformedHtmlTemplate,
-                    file_path,
-                ));
-            }
-        }
-        None => {}
-    };
 }

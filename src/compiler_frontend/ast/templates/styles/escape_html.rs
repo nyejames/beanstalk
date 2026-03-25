@@ -8,7 +8,6 @@
 //! - Templates often embed user-facing text into HTML output.
 //! - `$escape_html` provides an explicit, lightweight escape pass without requiring markdown.
 
-use crate::compiler_frontend::ast::templates::create_template_node::Template;
 use crate::compiler_frontend::ast::templates::template::{
     Formatter, FormatterResult, TemplateFormatter,
 };
@@ -17,6 +16,7 @@ use crate::compiler_frontend::ast::templates::template_render_plan::{
 };
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::style_directives::StyleDirectiveArgumentValue;
 use std::sync::Arc;
 
 #[derive(Debug)]
@@ -57,6 +57,7 @@ impl TemplateFormatter for EscapeHtmlTemplateFormatter {
 
         Ok(FormatterResult {
             output: FormatterOutput { pieces },
+            warnings: Vec::new(),
         })
     }
 }
@@ -71,10 +72,12 @@ pub(crate) fn escape_html_formatter() -> Formatter {
     }
 }
 
-pub(crate) fn configure_escape_html_style(template: &mut Template) {
-    template.apply_style_updates(|style| {
-        style.id = "escape_html";
-        style.formatter = Some(escape_html_formatter());
-    });
-    template.clear_directive_validation();
+pub(crate) fn escape_html_formatter_factory(
+    argument: Option<&StyleDirectiveArgumentValue>,
+) -> Result<Option<Formatter>, String> {
+    if argument.is_some() {
+        return Err("'$escape_html' does not accept arguments.".to_string());
+    }
+
+    Ok(Some(escape_html_formatter()))
 }

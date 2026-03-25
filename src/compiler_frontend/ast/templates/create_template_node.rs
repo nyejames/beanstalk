@@ -14,7 +14,7 @@ use crate::compiler_frontend::ast::templates::template_body_parser::parse_templa
 use crate::compiler_frontend::ast::templates::template_composition::compose_template_head_chain;
 use crate::compiler_frontend::ast::templates::template_formatting::apply_body_formatter;
 use crate::compiler_frontend::ast::templates::template_head_parser::{
-    apply_doc_comment_defaults, emit_template_directive_warnings, parse_template_head,
+    apply_doc_comment_defaults, parse_template_head,
 };
 use crate::compiler_frontend::ast::templates::template_render_plan::TemplateRenderPlan;
 use crate::compiler_frontend::ast::templates::template_slots::ensure_no_slot_insertions_remain;
@@ -116,9 +116,9 @@ impl Template {
         // Stage 4: Formatting — normalize body content before folding/lowering.
         // This keeps runtime templates simple: only compile-time-known body strings
         // are rewritten, while dynamic chunks remain untouched and keep their order.
-        let render_plan =
+        let formatting_result =
             match apply_body_formatter(&template.content, &template.style, string_table) {
-                Ok(plan) => plan,
+                Ok(result) => result,
                 Err(messages) => {
                     for warning in messages.warnings {
                         context.emit_warning(warning);
@@ -131,6 +131,10 @@ impl Template {
                     }));
                 }
             };
+        for warning in formatting_result.warnings {
+            context.emit_warning(warning);
+        }
+        let render_plan = formatting_result.plan;
 
         // Rebuild formatted content from the render plan, then compose.
         template.content = render_plan.rebuild_content();
@@ -179,8 +183,6 @@ impl Template {
         {
             template.kind = TemplateType::String;
         }
-
-        emit_template_directive_warnings(&template, context, string_table);
 
         Ok(template)
     }

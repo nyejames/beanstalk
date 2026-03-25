@@ -1,7 +1,7 @@
-//! Built-in template style directive modules.
+//! Template style formatter/validator modules.
 //!
 //! WHAT:
-//! - Groups compiler-owned style directive implementations (`$markdown`, `$code`, `$css`, `$html`, `$raw`, `$escape_html`).
+//! - Groups reusable formatter implementations used by core and build-system-provided directives.
 //!
 //! WHY:
 //! - Keeps style logic modular and separate from generic template parsing.
