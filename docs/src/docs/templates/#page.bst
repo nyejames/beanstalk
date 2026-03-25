@@ -32,8 +32,8 @@ import @styles/docs {navbar, footer, title, section, header, body, palette, tabl
     `$` introduces **compiler-handled directives** (so they don't collide with normal variables and can be extended in the future), such as formatter-like built-ins, precedence controls, and default child templates that are automatically applied to direct child templates.
 
     Directive availability is frontend-registry based:
-    - Compiler built-ins are available by default (`$markdown`, `$code`, `$css`, slots, etc.).
-    - Project builders can register additional directives using the same `$name` syntax.
+    - Frontend built-ins are available by default (`$markdown`, `$code`, `$raw`, slots, etc.).
+    - Project builders can register additional project-specific directives using the same `$name` syntax. In the HTML project, that includes `$html`, `$css`, and `$escape_html`.
     - Unknown directives fail as syntax/rule errors unless they are registered.
 
     [codeblock, $code("bst"):
@@ -50,17 +50,22 @@ import @styles/docs {navbar, footer, title, section, header, body, palette, tabl
         ]
     ]
 
-    **Built-in Style Directives**
+    **Frontend Built-in Style Directives**
 
     - $slot / $insert(..) - See slots below!
     - $fresh              - Opts this child template out of wrappers applied by the immediate parent's `$children(..)` directive
     - $markdown           - Parses the template bodies with a custom flavour of Markdown
+    - $code               - Highlights code blocks using the compiler's built-in formatter
     - $raw                - Parses the template body as a raw string (no escaping, no formatting)
-    - $html               - Parses the template body as raw HTML (no escaping)
-    - $css                - Provides some basic warnings for malformed CSS
     - $note / $todo       - Comments (ignored by final output)
     - $doc                - Turns the template into a documentation comment
     - $children(..)       - Accepts a template (or string slice) that will be applied only to this template's direct child templates
+
+    **HTML Project Directives**
+
+    - $html               - Parses the template body as raw HTML (no escaping)
+    - $css                - Provides some basic warnings for malformed CSS
+    - $escape_html        - Escapes HTML-sensitive characters in the template body
 
     Formatting directives do not automatically flow into nested child templates.
     If a child template should keep using a formatter such as `$markdown`, redeclare it in that child template's head.

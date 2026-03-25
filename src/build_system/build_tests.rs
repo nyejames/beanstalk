@@ -144,6 +144,34 @@ impl BackendBuilder for FailingValidationBuilder {
     }
 }
 
+struct NoDirectiveBuilder;
+
+impl BackendBuilder for NoDirectiveBuilder {
+    fn build_backend(
+        &self,
+        _modules: Vec<super::Module>,
+        _config: &Config,
+        _flags: &[Flag],
+    ) -> Result<Project, CompilerMessages> {
+        Ok(Project {
+            output_files: vec![OutputFile::new(
+                PathBuf::from("index.html"),
+                FileKind::Html(String::new()),
+            )],
+            entry_page_rel: Some(PathBuf::from("index.html")),
+            warnings: vec![],
+        })
+    }
+
+    fn validate_project_config(&self, _config: &Config) -> Result<(), CompilerError> {
+        Ok(())
+    }
+
+    fn frontend_style_directives(&self) -> Vec<StyleDirectiveSpec> {
+        Vec::new()
+    }
+}
+
 #[test]
 fn build_project_returns_result_without_writing_files() {
     let root = temp_dir("build_only");
@@ -166,6 +194,98 @@ fn build_project_returns_result_without_writing_files() {
         !root.join("index.html").exists(),
         "build_project should not write files to disk"
     );
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
+fn html_project_directives_fail_when_builder_does_not_register_them() {
+    let root = temp_dir("directive_boundary_missing");
+    fs::create_dir_all(&root).expect("should create temp root");
+
+    for (directive_name, source) in [
+        ("html", "[$html:\n<div>Hello</div>\n]"),
+        ("css", "[$css:\n.button { color: red; }\n]"),
+        ("escape_html", "[$escape_html:\n<b>Hello</b>\n]"),
+    ] {
+        let entry_file = root.join(format!("{directive_name}.bst"));
+        fs::write(&entry_file, source).expect("should write source file");
+
+        let builder = ProjectBuilder::new(Box::new(NoDirectiveBuilder));
+        let result = build_project(
+            &builder,
+            entry_file
+                .to_str()
+                .expect("temp file path should be valid UTF-8 for this test"),
+            &[],
+        );
+
+        let messages = match result {
+            Ok(_) => panic!("project-owned directives should fail when not registered"),
+            Err(messages) => messages,
+        };
+        assert!(
+            messages.errors.iter().any(|error| error
+                .msg
+                .contains(&format!("Unsupported style directive '${directive_name}'"))),
+            "expected unsupported directive error for '${directive_name}', got: {:?}",
+            messages
+                .errors
+                .iter()
+                .map(|error| error.msg.as_str())
+                .collect::<Vec<_>>()
+        );
+    }
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
+fn html_project_directives_are_available_under_html_builder() {
+    let root = temp_dir("directive_boundary_registered");
+    fs::create_dir_all(&root).expect("should create temp root");
+
+    for (directive_name, source, expected_html_fragment) in [
+        ("html", "[$html:\n<div>Hello</div>\n]", "<div>Hello</div>"),
+        (
+            "css",
+            "[$css:\n.button { color: red; }\n]",
+            ".button { color: red; }",
+        ),
+        (
+            "escape_html",
+            "[$escape_html:\n<b>Hello</b>\n]",
+            "&lt;b&gt;Hello&lt;/b&gt;",
+        ),
+    ] {
+        let entry_file = root.join(format!("{directive_name}.bst"));
+        fs::write(&entry_file, source).expect("should write source file");
+
+        let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
+        let result = build_project(
+            &builder,
+            entry_file
+                .to_str()
+                .expect("temp file path should be valid UTF-8 for this test"),
+            &[],
+        )
+        .expect("html builder should register HTML-project directives");
+
+        let rendered_html = result
+            .project
+            .output_files
+            .iter()
+            .find_map(|file| match file.file_kind() {
+                FileKind::Html(content) => Some(content.as_str()),
+                _ => None,
+            })
+            .expect("expected an HTML output file");
+
+        assert!(
+            rendered_html.contains(expected_html_fragment),
+            "expected rendered HTML for '${directive_name}' to contain '{expected_html_fragment}', got: {rendered_html}"
+        );
+    }
 
     fs::remove_dir_all(&root).expect("should remove temp dir");
 }

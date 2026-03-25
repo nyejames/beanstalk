@@ -7,63 +7,50 @@
 //! WHY:
 //! - Non-core directive behavior should be owned by build systems, not hardcoded in frontend core.
 
-use crate::compiler_frontend::ast::templates::styles::css::css_formatter_factory;
-use crate::compiler_frontend::ast::templates::styles::escape_html::escape_html_formatter_factory;
-use crate::compiler_frontend::ast::templates::styles::html::html_formatter_factory;
-use crate::compiler_frontend::ast::templates::styles::markdown::markdown_formatter_factory;
 use crate::compiler_frontend::style_directives::{
-    ProvidedStyleDirectiveSpec, ProvidedStyleEffects, StyleDirectiveArgumentType,
+    StyleDirectiveArgumentType, StyleDirectiveEffects, StyleDirectiveHandlerSpec,
     StyleDirectiveSpec,
 };
 use crate::compiler_frontend::tokenizer::tokens::TemplateBodyMode;
+use crate::projects::html_project::styles::css::css_formatter_factory;
+use crate::projects::html_project::styles::escape_html::escape_html_formatter_factory;
+use crate::projects::html_project::styles::html::html_formatter_factory;
 
-/// Full non-core style-directive set for the HTML project builder.
+/// Full project-owned style-directive set for the HTML project builder.
 pub(crate) fn html_project_style_directives() -> Vec<StyleDirectiveSpec> {
     vec![
-        StyleDirectiveSpec::provided(
-            "markdown",
-            TemplateBodyMode::Normal,
-            ProvidedStyleDirectiveSpec::new(
-                None,
-                ProvidedStyleEffects {
-                    style_id: Some("markdown"),
-                    ..ProvidedStyleEffects::default()
-                },
-                Some(markdown_formatter_factory),
-            ),
-        ),
-        StyleDirectiveSpec::provided(
+        StyleDirectiveSpec::handler(
             "html",
             TemplateBodyMode::Normal,
-            ProvidedStyleDirectiveSpec::new(
+            StyleDirectiveHandlerSpec::new(
                 None,
-                ProvidedStyleEffects {
+                StyleDirectiveEffects {
                     style_id: Some("html"),
-                    ..ProvidedStyleEffects::default()
+                    ..StyleDirectiveEffects::default()
                 },
                 Some(html_formatter_factory),
             ),
         ),
-        StyleDirectiveSpec::provided(
+        StyleDirectiveSpec::handler(
             "css",
             TemplateBodyMode::Balanced,
-            ProvidedStyleDirectiveSpec::new(
+            StyleDirectiveHandlerSpec::new(
                 Some(StyleDirectiveArgumentType::String),
-                ProvidedStyleEffects {
+                StyleDirectiveEffects {
                     style_id: Some("css"),
-                    ..ProvidedStyleEffects::default()
+                    ..StyleDirectiveEffects::default()
                 },
                 Some(css_formatter_factory),
             ),
         ),
-        StyleDirectiveSpec::provided(
+        StyleDirectiveSpec::handler(
             "escape_html",
             TemplateBodyMode::Normal,
-            ProvidedStyleDirectiveSpec::new(
+            StyleDirectiveHandlerSpec::new(
                 None,
-                ProvidedStyleEffects {
+                StyleDirectiveEffects {
                     style_id: Some("escape_html"),
-                    ..ProvidedStyleEffects::default()
+                    ..StyleDirectiveEffects::default()
                 },
                 Some(escape_html_formatter_factory),
             ),

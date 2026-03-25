@@ -1,24 +1,40 @@
 use super::*;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::style_directives::{
-    ProvidedStyleDirectiveSpec, StyleDirectiveRegistry, StyleDirectiveSpec,
+    StyleDirectiveHandlerSpec, StyleDirectiveRegistry, StyleDirectiveSpec,
 };
 use crate::projects::html_project::style_directives::html_project_style_directives;
 
-fn test_style_directives() -> StyleDirectiveRegistry {
+fn frontend_test_style_directives() -> StyleDirectiveRegistry {
+    StyleDirectiveRegistry::built_ins()
+}
+
+fn html_project_test_style_directives() -> StyleDirectiveRegistry {
     StyleDirectiveRegistry::merged(&html_project_style_directives())
         .expect("html project style directives should merge with core directives")
 }
 
 fn tokenize_source(source: &str) -> (FileTokens, StringTable) {
+    let style_directives = frontend_test_style_directives();
+    tokenize_source_with_registry(source, &style_directives)
+}
+
+fn tokenize_html_source(source: &str) -> (FileTokens, StringTable) {
+    let style_directives = html_project_test_style_directives();
+    tokenize_source_with_registry(source, &style_directives)
+}
+
+fn tokenize_source_with_registry(
+    source: &str,
+    style_directives: &StyleDirectiveRegistry,
+) -> (FileTokens, StringTable) {
     let mut string_table = StringTable::new();
-    let style_directives = test_style_directives();
     let source_path = InternedPath::from_single_str("test.bst", &mut string_table);
     let file_tokens = tokenize(
         source,
         &source_path,
         TokenizeMode::Normal,
-        &style_directives,
+        style_directives,
         &mut string_table,
     )
     .expect("tokenization should succeed");
@@ -31,9 +47,7 @@ fn tokenize_source_with_directives(
 ) -> (FileTokens, StringTable) {
     let mut string_table = StringTable::new();
     let source_path = InternedPath::from_single_str("test.bst", &mut string_table);
-    let mut merged_specs = html_project_style_directives();
-    merged_specs.extend_from_slice(directives);
-    let registry = StyleDirectiveRegistry::merged(&merged_specs)
+    let registry = StyleDirectiveRegistry::merged(directives)
         .expect("test style directives should merge with core directives");
     let file_tokens = tokenize(
         source,
@@ -310,7 +324,7 @@ fn code_template_body_keeps_nested_square_brackets_as_literal_text() {
 #[test]
 fn css_template_body_keeps_selector_brackets_as_literal_text() {
     let (file_tokens, string_table) =
-        tokenize_source("[$css:\n.button[data-kind=\"cta\"] { color: red; }\n]");
+        tokenize_html_source("[$css:\n.button[data-kind=\"cta\"] { color: red; }\n]");
 
     let template_heads = file_tokens
         .tokens
@@ -347,7 +361,7 @@ fn css_template_body_keeps_selector_brackets_as_literal_text() {
 #[test]
 fn html_template_body_tokenizes_attribute_brackets_using_normal_rules() {
     let (file_tokens, string_table) =
-        tokenize_source("[$html:\n<div data-tags=\"[one,two]\">Hello</div>\n]");
+        tokenize_html_source("[$html:\n<div data-tags=\"[one,two]\">Hello</div>\n]");
 
     let template_heads = file_tokens
         .tokens
@@ -395,8 +409,9 @@ fn html_template_body_tokenizes_attribute_brackets_using_normal_rules() {
 
 #[test]
 fn html_template_body_tokenizes_slot_templates_inside_quoted_attributes_with_normal_rules() {
-    let (file_tokens, string_table) =
-        tokenize_source("[$html:\n<h1 style=\"font-size: 2em;[$slot(\"style\")]\">[$slot]</h1>\n]");
+    let (file_tokens, string_table) = tokenize_html_source(
+        "[$html:\n<h1 style=\"font-size: 2em;[$slot(\"style\")]\">[$slot]</h1>\n]",
+    );
 
     let template_heads = file_tokens
         .tokens
@@ -428,7 +443,7 @@ fn html_template_body_tokenizes_slot_templates_inside_quoted_attributes_with_nor
 #[test]
 fn html_template_body_tokenizes_symbol_wrappers_with_general_template_rules() {
     let (file_tokens, string_table) =
-        tokenize_source("[$html:\n[title, center: LANGUAGE BASICS]\n]");
+        tokenize_html_source("[$html:\n[title, center: LANGUAGE BASICS]\n]");
 
     let template_heads = file_tokens
         .tokens
@@ -457,10 +472,10 @@ fn html_template_body_tokenizes_symbol_wrappers_with_general_template_rules() {
 
 #[test]
 fn custom_balanced_directive_uses_general_balanced_mode() {
-    let directives = vec![StyleDirectiveSpec::provided(
+    let directives = vec![StyleDirectiveSpec::handler(
         "highlight",
         TemplateBodyMode::Balanced,
-        ProvidedStyleDirectiveSpec::no_op(),
+        StyleDirectiveHandlerSpec::no_op(),
     )];
     let (file_tokens, string_table) =
         tokenize_source_with_directives("[$highlight:\n[data-kind=\"cta\"]\n]", &directives);

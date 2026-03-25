@@ -623,13 +623,13 @@ fn parse_style_directive(
                 )
             }
         },
-        StyleDirectiveKind::Provided(provided_spec) => {
-            apply_provided_style_directive(
+        StyleDirectiveKind::Handler(handler_spec) => {
+            apply_handler_style_directive(
                 token_stream,
                 context,
                 template,
                 &directive_name,
-                provided_spec,
+                handler_spec,
                 string_table,
             )?;
             Ok(false)
@@ -657,30 +657,32 @@ fn mark_template_body_whitespace_style_controlled(template: &mut Template) {
 }
 
 #[derive(Clone)]
-struct ParsedProvidedDirectiveArgument {
+struct ParsedHandlerDirectiveArgument {
     value: Option<StyleDirectiveArgumentValue>,
     error_location: TextLocation,
 }
 
-fn apply_provided_style_directive(
+fn apply_handler_style_directive(
     token_stream: &mut FileTokens,
     context: &ScopeContext,
     template: &mut Template,
     directive_name: &str,
-    provided_spec: &crate::compiler_frontend::style_directives::ProvidedStyleDirectiveSpec,
+    handler_spec: &crate::compiler_frontend::style_directives::StyleDirectiveHandlerSpec,
     string_table: &mut StringTable,
 ) -> Result<(), CompilerError> {
-    let parsed_argument = parse_optional_provided_style_argument(
+    let parsed_argument = parse_optional_handler_style_argument(
         token_stream,
         context,
         directive_name,
-        provided_spec.argument_type,
+        handler_spec.argument_type,
         string_table,
     )?;
 
-    apply_provided_style_effects(template, provided_spec.style_effects);
+    apply_style_directive_effects(template, handler_spec.effects);
 
-    if let Some(factory) = provided_spec.formatter_factory {
+    if let Some(factory) = handler_spec.formatter_factory {
+        // Frontend parsing/folding always executes the formatter factory here. Ownership of the
+        // concrete formatter stays with the directive definition module that registered it.
         let formatter = factory(parsed_argument.value.as_ref()).map_err(|message| {
             CompilerError::new_syntax_error(
                 &message,
@@ -697,9 +699,9 @@ fn apply_provided_style_directive(
     Ok(())
 }
 
-fn apply_provided_style_effects(
+fn apply_style_directive_effects(
     template: &mut Template,
-    effects: crate::compiler_frontend::style_directives::ProvidedStyleEffects,
+    effects: crate::compiler_frontend::style_directives::StyleDirectiveEffects,
 ) {
     template.apply_style_updates(|style| {
         if let Some(style_id) = effects.style_id {
@@ -717,17 +719,17 @@ fn apply_provided_style_effects(
     });
 }
 
-fn parse_optional_provided_style_argument(
+fn parse_optional_handler_style_argument(
     token_stream: &mut FileTokens,
     context: &ScopeContext,
     directive_name: &str,
     argument_type: Option<StyleDirectiveArgumentType>,
     string_table: &mut StringTable,
-) -> Result<ParsedProvidedDirectiveArgument, CompilerError> {
+) -> Result<ParsedHandlerDirectiveArgument, CompilerError> {
     let default_location = token_stream.current_location();
 
     if token_stream.peek_next_token() != Some(&TokenKind::OpenParenthesis) {
-        return Ok(ParsedProvidedDirectiveArgument {
+        return Ok(ParsedHandlerDirectiveArgument {
             value: None,
             error_location: default_location,
         });
@@ -806,7 +808,7 @@ fn parse_optional_provided_style_argument(
         string_table,
     )?;
 
-    Ok(ParsedProvidedDirectiveArgument {
+    Ok(ParsedHandlerDirectiveArgument {
         value: Some(normalized),
         error_location: argument_location,
     })

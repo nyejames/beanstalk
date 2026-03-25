@@ -1,12 +1,12 @@
-//! Built-in `$escape_html` template style support.
+//! HTML-project-owned `$escape_html` formatter.
 //!
 //! WHAT:
 //! - Escapes HTML-sensitive characters in compile-time body string runs.
-//! - Processes structured formatter input directly, preserving opaque child anchors.
+//! - Preserves opaque child anchors so frontend composition semantics remain unchanged.
 //!
 //! WHY:
-//! - Templates often embed user-facing text into HTML output.
-//! - `$escape_html` provides an explicit, lightweight escape pass without requiring markdown.
+//! - HTML escaping is output-policy behavior owned by the HTML project builder, not a core
+//!   language directive.
 
 use crate::compiler_frontend::ast::templates::template::{
     Formatter, FormatterResult, TemplateFormatter,

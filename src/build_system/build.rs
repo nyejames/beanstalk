@@ -47,10 +47,11 @@ pub trait BackendBuilder {
     /// Validate the project configuration
     fn validate_project_config(&self, config: &Config) -> Result<(), CompilerError>;
 
-    /// Frontend style directives provided by this backend.
+    /// Project-specific frontend style directives provided by this backend.
     ///
-    /// Core directives are always present in frontend registry construction.
-    /// This hook supplies non-core directive behavior for tokenization/template parsing.
+    /// Frontend-owned directives are always present in registry construction and cannot be
+    /// overridden by project builders. This hook supplies only project-owned additions for
+    /// tokenization/template parsing.
     fn frontend_style_directives(&self) -> Vec<StyleDirectiveSpec>;
 }
 

@@ -157,11 +157,11 @@ mod render_plan_tests {
 
     #[test]
     fn opaque_anchors_survive_structured_formatter() {
-        use crate::compiler_frontend::ast::templates::styles::escape_html::escape_html_formatter;
         use crate::compiler_frontend::ast::templates::template_render_plan::{
             FormatterAnchorId, FormatterInput, FormatterInputPiece, FormatterOutputPiece,
             FormatterTextPiece,
         };
+        use crate::projects::html_project::styles::escape_html::escape_html_formatter;
 
         let mut string_table = StringTable::new();
         let hello = string_table.intern("<Hello> ");

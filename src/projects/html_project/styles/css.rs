@@ -1,24 +1,22 @@
-//! `$css` formatter/validator implementation shared by build-system style registration.
+//! HTML-project-owned `$css` formatter/validator.
 //!
 //! WHAT:
-//! - provides a formatter that keeps CSS text unchanged while emitting malformed-CSS warnings.
-//! - supports optional inline mode (`$css("inline")`) via formatter configuration.
+//! - Preserves CSS text exactly as authored while emitting malformed-CSS warnings.
+//! - Supports optional inline mode (`$css("inline")`) for style-attribute use cases.
 //!
 //! WHY:
-//! - keeps CSS validation owned by directive-provided formatter behavior.
-//! - warnings stay location-aware by mapping flattened CSS offsets back to template source spans.
+//! - CSS validation and inline-style policy are owned by the HTML project builder, even though
+//!   the frontend executes the formatter during parsing and folding.
 
 use crate::compiler_frontend::ast::templates::template::{
     Formatter, FormatterResult, TemplateFormatter,
 };
-use crate::compiler_frontend::ast::templates::template_render_plan::{
-    FormatterInput, FormatterInputPiece, FormatterOutput, FormatterOutputPiece,
-};
+use crate::compiler_frontend::ast::templates::template_render_plan::FormatterInput;
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
-use crate::compiler_frontend::compiler_warnings::{CompilerWarning, WarningKind};
+use crate::compiler_frontend::compiler_warnings::WarningKind;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::style_directives::StyleDirectiveArgumentValue;
-use crate::compiler_frontend::tokenizer::tokens::{CharPosition, TextLocation};
+use crate::projects::html_project::styles::validation::{PassThroughFormatterInput, SourceWarning};
 use std::sync::Arc;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -72,60 +70,14 @@ impl TemplateFormatter for CssValidationTemplateFormatter {
         input: FormatterInput,
         string_table: &mut StringTable,
     ) -> Result<FormatterResult, CompilerMessages> {
-        let mut output_pieces = Vec::with_capacity(input.pieces.len());
-        let mut spans: Vec<BodySourceSpan> = Vec::new();
-        let mut flattened_source = String::new();
-        let mut offset = 0usize;
-
-        for piece in input.pieces {
-            match piece {
-                FormatterInputPiece::Text(text_piece) => {
-                    let text = string_table.resolve(text_piece.text).to_owned();
-                    let char_len = text.chars().count();
-                    if char_len > 0 {
-                        spans.push(BodySourceSpan {
-                            start_offset: offset,
-                            end_offset: offset + char_len,
-                            text: text.clone(),
-                            location: text_piece.location,
-                        });
-                        offset += char_len;
-                    }
-                    flattened_source.push_str(&text);
-                    output_pieces.push(FormatterOutputPiece::Text(text));
-                }
-                FormatterInputPiece::Opaque(anchor) => {
-                    output_pieces.push(FormatterOutputPiece::Opaque(anchor));
-                }
-            }
-        }
-
-        let warnings =
-            emit_css_formatter_warnings(&spans, &flattened_source, self.mode, string_table);
-        Ok(FormatterResult {
-            output: FormatterOutput {
-                pieces: output_pieces,
-            },
-            warnings,
-        })
+        let flattened_input = PassThroughFormatterInput::from_input(input, string_table);
+        let warnings = flattened_input.map_warnings(
+            validate_css_source(&flattened_input.flattened_source, self.mode),
+            WarningKind::MalformedCssTemplate,
+            string_table,
+        );
+        Ok(flattened_input.into_formatter_result(warnings))
     }
-}
-
-#[derive(Clone, Debug)]
-struct CssSourceWarning {
-    message: String,
-    start_offset: usize,
-    end_offset: usize, // exclusive
-}
-
-#[derive(Clone, Debug)]
-struct BodySourceSpan {
-    // Offsets are measured in flattened CSS-char coordinates.
-    start_offset: usize,
-    end_offset: usize, // exclusive
-    text: String,
-    // Original template location for this slice.
-    location: TextLocation,
 }
 
 #[derive(Default)]
@@ -137,33 +89,7 @@ struct ScanState {
     escaped: bool,
 }
 
-fn emit_css_formatter_warnings(
-    spans: &[BodySourceSpan],
-    source: &str,
-    mode: CssFormatterMode,
-    string_table: &StringTable,
-) -> Vec<CompilerWarning> {
-    if spans.is_empty() || source.trim().is_empty() {
-        return Vec::new();
-    }
-
-    validate_css_source(source, mode)
-        .into_iter()
-        .filter_map(|warning| {
-            map_warning_span_to_text_location(spans, &warning).map(|location| {
-                let file_path = location.scope.to_path_buf(string_table);
-                CompilerWarning::new(
-                    &warning.message,
-                    location.to_error_location(string_table),
-                    WarningKind::MalformedCssTemplate,
-                    file_path,
-                )
-            })
-        })
-        .collect()
-}
-
-fn validate_css_source(source: &str, mode: CssFormatterMode) -> Vec<CssSourceWarning> {
+fn validate_css_source(source: &str, mode: CssFormatterMode) -> Vec<SourceWarning> {
     // WHAT: one pass for delimiter integrity + one pass for statement/block shape.
     // WHY: keeps diagnostics cheap while still catching common malformed templates.
     let chars: Vec<char> = source.chars().collect();
@@ -173,7 +99,7 @@ fn validate_css_source(source: &str, mode: CssFormatterMode) -> Vec<CssSourceWar
     warnings
 }
 
-fn validate_balanced_delimiters(chars: &[char], warnings: &mut Vec<CssSourceWarning>) {
+fn validate_balanced_delimiters(chars: &[char], warnings: &mut Vec<SourceWarning>) {
     let mut index = 0usize;
     let mut state = ScanState::default();
     let mut stack: Vec<(char, usize)> = Vec::new();
@@ -248,11 +174,7 @@ fn validate_balanced_delimiters(chars: &[char], warnings: &mut Vec<CssSourceWarn
     }
 }
 
-fn validate_css_shape(
-    chars: &[char],
-    mode: CssFormatterMode,
-    warnings: &mut Vec<CssSourceWarning>,
-) {
+fn validate_css_shape(chars: &[char], mode: CssFormatterMode, warnings: &mut Vec<SourceWarning>) {
     let mut index = 0usize;
     let mut state = ScanState::default();
     let mut depth = 0usize;
@@ -362,7 +284,7 @@ fn validate_statement_segment(
     end: usize,
     depth: usize,
     mode: CssFormatterMode,
-    warnings: &mut Vec<CssSourceWarning>,
+    warnings: &mut Vec<SourceWarning>,
 ) {
     let Some((text, trimmed_start, trimmed_end)) = trimmed_segment(chars, start, end) else {
         return;
@@ -411,7 +333,7 @@ fn validate_declaration_statement(
     statement: &str,
     start_offset: usize,
     end_offset: usize,
-    warnings: &mut Vec<CssSourceWarning>,
+    warnings: &mut Vec<SourceWarning>,
 ) {
     // Declaration check intentionally stays simple:
     // - must contain one `:` split point
@@ -482,76 +404,15 @@ fn is_valid_property_name(property: &str) -> bool {
     chars.all(|ch| ch.is_ascii_alphanumeric() || ch == '-' || ch == '_')
 }
 
-fn map_warning_span_to_text_location(
-    spans: &[BodySourceSpan],
-    warning: &CssSourceWarning,
-) -> Option<TextLocation> {
-    // Warnings use an exclusive end; convert to an inclusive point for location mapping.
-    let start = warning.start_offset;
-    let end_inclusive = warning.end_offset.saturating_sub(1).max(start);
-
-    let start_point = map_offset_to_point_location(spans, start)?;
-    let end_point = map_offset_to_point_location(spans, end_inclusive)?;
-
-    if start_point.scope != end_point.scope {
-        return Some(start_point);
-    }
-
-    Some(TextLocation {
-        scope: start_point.scope,
-        start_pos: start_point.start_pos,
-        end_pos: end_point.end_pos,
-    })
-}
-
-fn map_offset_to_point_location(spans: &[BodySourceSpan], offset: usize) -> Option<TextLocation> {
-    let total_chars = spans.last().map(|span| span.end_offset)?;
-    if total_chars == 0 {
-        return None;
-    }
-
-    let clamped_offset = offset.min(total_chars.saturating_sub(1));
-    // Choose the span that owns this flattened offset.
-    let span = spans
-        .iter()
-        .find(|span| clamped_offset >= span.start_offset && clamped_offset < span.end_offset)
-        .or_else(|| spans.last())?;
-
-    let local_offset = clamped_offset.saturating_sub(span.start_offset);
-    // Walk from segment start so line/column stays accurate across newlines.
-    let position = position_after_chars(&span.location.start_pos, &span.text, local_offset);
-
-    Some(TextLocation {
-        scope: span.location.scope.to_owned(),
-        start_pos: position,
-        end_pos: position,
-    })
-}
-
-fn position_after_chars(start: &CharPosition, text: &str, consumed_chars: usize) -> CharPosition {
-    let mut position = *start;
-    // Control flow: newline resets column and increments line; all other chars advance column.
-    for ch in text.chars().take(consumed_chars) {
-        if ch == '\n' {
-            position.line_number += 1;
-            position.char_column = 0;
-        } else {
-            position.char_column += 1;
-        }
-    }
-
-    position
-}
-
 fn push_warning(
-    warnings: &mut Vec<CssSourceWarning>,
+    warnings: &mut Vec<SourceWarning>,
     message: impl Into<String>,
     start_offset: usize,
     end_offset: usize,
 ) {
     // Ensure every warning has at least a single-character highlight.
     let end_offset = end_offset.max(start_offset.saturating_add(1));
-    warnings.push(CssSourceWarning {
+    warnings.push(SourceWarning {
         message: message.into(),
         start_offset,
         end_offset,
@@ -642,8 +503,16 @@ fn strip_css_comments(text: &str) -> String {
 
         if ch == '\'' {
             state.in_single_quote = true;
-        } else if ch == '"' {
+            output.push(ch);
+            index += 1;
+            continue;
+        }
+
+        if ch == '"' {
             state.in_double_quote = true;
+            output.push(ch);
+            index += 1;
+            continue;
         }
 
         output.push(ch);
@@ -657,7 +526,6 @@ fn advance_scan_state(state: &mut ScanState, chars: &[char], index: &mut usize) 
     let ch = chars[*index];
     let next = chars.get(*index + 1).copied();
 
-    // Existing comment/string mode consumes input until its own terminator is reached.
     if state.in_comment {
         if ch == '*' && next == Some('/') {
             state.in_comment = false;
@@ -693,7 +561,6 @@ fn advance_scan_state(state: &mut ScanState, chars: &[char], index: &mut usize) 
     }
 
     if ch == '/' && next == Some('*') {
-        // CSS block comments are the only comment form we intentionally support here.
         state.in_comment = true;
         *index += 2;
         return true;
@@ -713,7 +580,3 @@ fn advance_scan_state(state: &mut ScanState, chars: &[char], index: &mut usize) 
 
     false
 }
-
-#[cfg(test)]
-#[path = "../tests/css_tests.rs"]
-mod css_tests;

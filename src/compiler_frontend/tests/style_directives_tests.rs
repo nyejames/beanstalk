@@ -1,19 +1,38 @@
 use super::*;
 
 #[test]
-fn builder_cannot_override_core_directive_by_name() {
-    let builder_specs = vec![StyleDirectiveSpec::provided_no_op(
+fn builder_cannot_override_frontend_owned_directive_by_name() {
+    let builder_specs = vec![StyleDirectiveSpec::handler_no_op(
         "raw",
         TemplateBodyMode::Normal,
     )];
 
     let error = StyleDirectiveRegistry::merged(&builder_specs)
-        .expect_err("overriding a core directive should fail");
+        .expect_err("overriding a frontend-owned directive should fail");
 
     assert!(
         error
             .msg
-            .contains("cannot override compiler core directive"),
+            .contains("cannot override frontend-owned directive"),
+        "unexpected error message: {}",
+        error.msg
+    );
+}
+
+#[test]
+fn builder_cannot_override_frontend_owned_markdown_directive_by_name() {
+    let builder_specs = vec![StyleDirectiveSpec::handler_no_op(
+        "markdown",
+        TemplateBodyMode::Normal,
+    )];
+
+    let error = StyleDirectiveRegistry::merged(&builder_specs)
+        .expect_err("overriding a frontend-owned formatter directive should fail");
+
+    assert!(
+        error
+            .msg
+            .contains("cannot override frontend-owned directive"),
         "unexpected error message: {}",
         error.msg
     );
@@ -21,7 +40,7 @@ fn builder_cannot_override_core_directive_by_name() {
 
 #[test]
 fn builder_directive_is_added_when_name_is_new() {
-    let builder_specs = vec![StyleDirectiveSpec::provided_no_op(
+    let builder_specs = vec![StyleDirectiveSpec::handler_no_op(
         "custom",
         TemplateBodyMode::Balanced,
     )];
@@ -32,19 +51,19 @@ fn builder_directive_is_added_when_name_is_new() {
         .expect("custom directive should be present after merge");
 
     assert_eq!(custom.body_mode, TemplateBodyMode::Balanced);
-    assert!(matches!(custom.kind, StyleDirectiveKind::Provided(_)));
+    assert!(matches!(custom.kind, StyleDirectiveKind::Handler(_)));
 }
 
 #[test]
-fn provided_directive_contract_is_preserved() {
-    let builder_specs = vec![StyleDirectiveSpec::provided(
+fn handler_directive_contract_is_preserved() {
+    let builder_specs = vec![StyleDirectiveSpec::handler(
         "brand",
         TemplateBodyMode::Normal,
-        ProvidedStyleDirectiveSpec::new(
+        StyleDirectiveHandlerSpec::new(
             Some(StyleDirectiveArgumentType::String),
-            ProvidedStyleEffects {
+            StyleDirectiveEffects {
                 style_id: Some("brand"),
-                ..ProvidedStyleEffects::default()
+                ..StyleDirectiveEffects::default()
             },
             None,
         ),
@@ -55,19 +74,19 @@ fn provided_directive_contract_is_preserved() {
         .find("brand")
         .expect("brand directive should be present after merge");
 
-    let StyleDirectiveKind::Provided(provided) = &brand.kind else {
-        panic!("brand directive should be registered as provided behavior");
+    let StyleDirectiveKind::Handler(handler) = &brand.kind else {
+        panic!("brand directive should be registered as handler behavior");
     };
 
     assert_eq!(
-        provided.argument_type,
+        handler.argument_type,
         Some(StyleDirectiveArgumentType::String)
     );
-    assert_eq!(provided.style_effects.style_id, Some("brand"));
+    assert_eq!(handler.effects.style_id, Some("brand"));
 }
 
 #[test]
-fn core_built_ins_are_core_only() {
+fn frontend_built_ins_have_expected_classification() {
     let built_ins = StyleDirectiveRegistry::built_ins();
 
     for required in [
@@ -79,7 +98,12 @@ fn core_built_ins_are_core_only() {
         assert!(matches!(directive.kind, StyleDirectiveKind::Core(_)));
     }
 
-    for non_core in ["markdown", "css", "html", "escape_html"] {
+    let markdown = built_ins
+        .find("markdown")
+        .expect("missing frontend-owned '$markdown' directive");
+    assert!(matches!(markdown.kind, StyleDirectiveKind::Handler(_)));
+
+    for non_core in ["css", "html", "escape_html"] {
         assert!(
             built_ins.find(non_core).is_none(),
             "non-core directive '{non_core}' should not be compiler built-in"

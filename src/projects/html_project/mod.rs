@@ -3,4 +3,5 @@ pub(crate) mod js_path;
 pub mod new_html_project;
 pub(crate) mod output_plan;
 pub(crate) mod style_directives;
+pub(crate) mod styles;
 pub(crate) mod wasm;

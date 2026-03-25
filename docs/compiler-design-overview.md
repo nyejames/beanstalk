@@ -21,7 +21,8 @@ This style of memory management can be incrementally strengthened with region an
 
 ## Overview
 Build systems create a `BackendBuilder` implementation and wrap it in a `ProjectBuilder` struct.
-`ProjectBuilder` also carries any frontend style directives the build system wants to register.
+The backend builder also exposes any project-specific frontend style directives it wants to
+register.
 The frontend compiles modules up to HIR first, then the backend builder consumes those modules.
 
 ```rust
@@ -36,11 +37,13 @@ pub trait BackendBuilder {
     
     /// Validate the project configuration
     fn validate_project_config(&self, config: &Config) -> Result<(), CompilerError>;
+
+    /// Project-specific frontend style directives.
+    fn frontend_style_directives(&self) -> Vec<StyleDirectiveSpec>;
 }
 
 pub struct ProjectBuilder {
     pub backend: Box<dyn BackendBuilder + Send>,
-    pub frontend_style_directives: Vec<StyleDirectiveSpec>,
 }
 ```
 
@@ -53,7 +56,8 @@ Project builders:
 
 Frontend style directives:
 - Compiler built-ins are always available.
-- Build systems can provide additional directives (or override a built-in name) via `frontend_style_directives`.
+- Build systems can provide additional project-specific directives via `frontend_style_directives`.
+- Build systems cannot override frontend-owned directive names.
 - Tokenizer and template parsing use the same merged registry and reject unknown directives strictly.
 
 Project builders do **not**:
