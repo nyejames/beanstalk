@@ -27,7 +27,7 @@ use crate::{ast_log, return_compiler_error};
 ///       resolver-less fallback branches.
 pub struct TemplateFoldContext<'a> {
     pub string_table: &'a mut StringTable,
-    pub project_path_resolver: &'a ProjectPathResolver,
+    pub(crate) project_path_resolver: &'a ProjectPathResolver,
     pub path_format_config: &'a PathStringFormatConfig,
     pub source_file_scope: &'a InternedPath,
 }

@@ -33,7 +33,7 @@ pub fn load_project_config(
         return Ok(()); // Config file is optional
     }
 
-    parse_project_config_file_with_style_directives(config, &config_path, style_directives)
+    parse_project_config_file(config, &config_path, style_directives)
 }
 
 /// Parse `#config.bst` and extract top-level constant declarations into the `Config` struct.
@@ -44,17 +44,6 @@ pub fn load_project_config(
 /// Error policy: tokenization and header parsing errors are collected and returned together.
 /// Value-level errors (`apply_config_constants_from_headers`) also collect all errors in one pass.
 pub(crate) fn parse_project_config_file(
-    config: &mut Config,
-    config_path: &Path,
-) -> Result<(), CompilerMessages> {
-    parse_project_config_file_with_style_directives(
-        config,
-        config_path,
-        &StyleDirectiveRegistry::built_ins(),
-    )
-}
-
-pub(crate) fn parse_project_config_file_with_style_directives(
     config: &mut Config,
     config_path: &Path,
     style_directives: &StyleDirectiveRegistry,

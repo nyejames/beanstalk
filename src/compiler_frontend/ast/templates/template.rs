@@ -293,14 +293,14 @@ pub struct Formatter {
     // This formatter will be skipped if there is already a formatter for the template
     pub skip_if_already_formatted: bool,
     // Pre-format whitespace passes are run before parser-specific formatting.
-    // This allows directive-owned formatters (for example `$markdown`) to opt into
+    // This allows directive-owned formatters (for example, `$markdown`) to opt into
     // shared dedent/trim behavior while still operating over raw template body text.
-    pub pre_format_whitespace_passes: Vec<TemplateWhitespacePassProfile>,
+    pub(crate) pre_format_whitespace_passes: Vec<TemplateWhitespacePassProfile>,
     // Shared ownership keeps formatters cheap to clone when template styles are
     // copied or explicitly inherited during AST construction.
     pub formatter: Arc<dyn TemplateFormatter>,
     // Post-format passes run after formatter output is generated.
-    pub post_format_whitespace_passes: Vec<TemplateWhitespacePassProfile>,
+    pub(crate) post_format_whitespace_passes: Vec<TemplateWhitespacePassProfile>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

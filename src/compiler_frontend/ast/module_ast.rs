@@ -851,7 +851,7 @@ impl ScopeContext {
         self
     }
 
-    pub fn with_project_path_resolver(
+    pub(crate) fn with_project_path_resolver(
         mut self,
         resolver: Option<ProjectPathResolver>,
     ) -> ScopeContext {
