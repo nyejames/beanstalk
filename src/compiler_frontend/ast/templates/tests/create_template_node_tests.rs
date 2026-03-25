@@ -8,8 +8,8 @@ use crate::compiler_frontend::ast::templates::styles::code::{
 };
 use crate::compiler_frontend::ast::templates::styles::markdown::markdown_formatter;
 use crate::compiler_frontend::ast::templates::template::{
-    CommentDirectiveKind, CssDirectiveMode, TemplateAtom, TemplateSegment, TemplateSegmentOrigin,
-    TemplateType,
+    CommentDirectiveKind, CssDirectiveMode, TemplateAtom, TemplateDirectiveValidation,
+    TemplateSegment, TemplateSegmentOrigin, TemplateType,
 };
 use crate::compiler_frontend::ast::templates::template_render_plan::RenderPiece;
 use crate::compiler_frontend::compiler_warnings::WarningKind;
@@ -19,7 +19,9 @@ use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
-use crate::compiler_frontend::style_directives::{StyleDirectiveRegistry, StyleDirectiveSpec};
+use crate::compiler_frontend::style_directives::{
+    NoOpDirectiveArgumentPolicy, StyleDirectiveRegistry, StyleDirectiveSpec,
+};
 use crate::compiler_frontend::tokenizer::tokenizer::tokenize;
 use crate::compiler_frontend::tokenizer::tokens::{
     CharPosition, FileTokens, TemplateBodyMode, TextLocation, Token, TokenKind,
@@ -604,7 +606,7 @@ fn html_directive_rejects_arguments() {
 }
 
 #[test]
-fn html_directive_sets_html_mode() {
+fn html_directive_sets_template_directive_validation() {
     let mut string_table = StringTable::new();
     let mut token_stream =
         template_tokens_from_source("[$html:\n<div class=\"card\">x</div>\n]", &mut string_table);
@@ -613,7 +615,10 @@ fn html_directive_sets_html_mode() {
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("html template should parse");
 
-    assert!(template.style.html_mode);
+    assert_eq!(
+        template.directive_validation,
+        Some(TemplateDirectiveValidation::Html)
+    );
 }
 
 #[test]
@@ -1109,10 +1114,13 @@ fn ignore_is_rejected_as_unsupported_style_directive() {
 #[test]
 fn builder_registered_style_directive_parses_as_noop_scaffold() {
     let mut string_table = StringTable::new();
-    let directives = vec![StyleDirectiveSpec::new("brand", TemplateBodyMode::Normal)];
+    let directives = vec![StyleDirectiveSpec::explicit_noop(
+        "brand",
+        TemplateBodyMode::Normal,
+    )];
     let registry = StyleDirectiveRegistry::merged(&directives);
     let mut token_stream = template_tokens_from_source_with_directives(
-        "[$brand(unknown_symbol): body]",
+        "[$brand: body]",
         &directives,
         &mut string_table,
     );
@@ -1127,9 +1135,57 @@ fn builder_registered_style_directive_parses_as_noop_scaffold() {
 }
 
 #[test]
+fn builder_registered_noop_directive_rejects_parenthesized_arguments_by_default() {
+    let mut string_table = StringTable::new();
+    let directives = vec![StyleDirectiveSpec::explicit_noop(
+        "brand",
+        TemplateBodyMode::Normal,
+    )];
+    let registry = StyleDirectiveRegistry::merged(&directives);
+    let mut token_stream = template_tokens_from_source_with_directives(
+        "[$brand(unknown_symbol): body]",
+        &directives,
+        &mut string_table,
+    );
+    let context =
+        new_constant_context(token_stream.src_path.to_owned()).with_style_directives(&registry);
+
+    let error = Template::new(&mut token_stream, &context, vec![], &mut string_table)
+        .expect_err("default no-op directives should reject parenthesized arguments");
+
+    assert!(error.msg.contains("does not accept arguments"));
+}
+
+#[test]
+fn builder_registered_noop_directive_can_opt_into_optional_parenthesized_arguments() {
+    let mut string_table = StringTable::new();
+    let directives = vec![StyleDirectiveSpec::explicit_noop_with_argument_policy(
+        "brand",
+        TemplateBodyMode::Normal,
+        NoOpDirectiveArgumentPolicy::ConsumeOptionalParenthesized,
+    )];
+    let registry = StyleDirectiveRegistry::merged(&directives);
+    let mut token_stream = template_tokens_from_source_with_directives(
+        "[$brand(unknown_symbol): body]",
+        &directives,
+        &mut string_table,
+    );
+    let context =
+        new_constant_context(token_stream.src_path.to_owned()).with_style_directives(&registry);
+
+    let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
+        .expect("explicit no-op directives should parse optional arguments when configured");
+
+    assert!(matches!(template.kind, TemplateType::String));
+}
+
+#[test]
 fn builder_registered_style_directive_preserves_raw_body_whitespace() {
     let mut string_table = StringTable::new();
-    let directives = vec![StyleDirectiveSpec::new("brand", TemplateBodyMode::Normal)];
+    let directives = vec![StyleDirectiveSpec::explicit_noop(
+        "brand",
+        TemplateBodyMode::Normal,
+    )];
     let registry = StyleDirectiveRegistry::merged(&directives);
     let mut token_stream = template_tokens_from_source_with_directives(
         "[$brand:\n    Hello\n    World\n]",
@@ -1149,7 +1205,11 @@ fn builder_registered_style_directive_preserves_raw_body_whitespace() {
 #[test]
 fn builder_directive_can_override_builtin_slot_name() {
     let mut string_table = StringTable::new();
-    let directives = vec![StyleDirectiveSpec::new("slot", TemplateBodyMode::Normal)];
+    let directives = vec![StyleDirectiveSpec::explicit_noop_with_argument_policy(
+        "slot",
+        TemplateBodyMode::Normal,
+        NoOpDirectiveArgumentPolicy::ConsumeOptionalParenthesized,
+    )];
     let registry = StyleDirectiveRegistry::merged(&directives);
     let mut token_stream = template_tokens_from_source_with_directives(
         "[$slot(\"name\"): body]",
@@ -1175,7 +1235,10 @@ fn css_without_argument_parses_as_block_mode() {
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("css template should parse");
 
-    assert_eq!(template.style.css_mode, Some(CssDirectiveMode::Block));
+    assert_eq!(
+        template.directive_validation,
+        Some(TemplateDirectiveValidation::Css(CssDirectiveMode::Block))
+    );
 }
 
 #[test]
@@ -1187,7 +1250,10 @@ fn css_inline_argument_parses_correctly() {
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("inline css template should parse");
 
-    assert_eq!(template.style.css_mode, Some(CssDirectiveMode::Inline));
+    assert_eq!(
+        template.directive_validation,
+        Some(TemplateDirectiveValidation::Css(CssDirectiveMode::Inline))
+    );
 }
 
 #[test]
@@ -2102,8 +2168,11 @@ fn code_formatter_wrapper_preserves_newlines_after_dedent() {
         )],
     };
 
-    let output = formatter.formatter.format(input, &mut string_table);
-    let content = match &output.pieces[0] {
+    let output = formatter
+        .formatter
+        .format(input, &mut string_table)
+        .expect("code formatter should succeed");
+    let content = match &output.output.pieces[0] {
         crate::compiler_frontend::ast::templates::template_render_plan::FormatterOutputPiece::Text(t) => t,
         _ => panic!("Expected text output"),
     };

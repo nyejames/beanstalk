@@ -231,21 +231,23 @@ fn opaque_anchors_preserved_between_formatted_text_pieces() {
     };
 
     let formatter = MarkdownTemplateFormatter;
-    let output = formatter.format(input, &mut string_table);
+    let output = formatter
+        .format(input, &mut string_table)
+        .expect("markdown formatter should succeed");
 
     // The opaque anchor must survive between the two formatted text pieces.
-    assert_eq!(output.pieces.len(), 3);
-    match &output.pieces[0] {
+    assert_eq!(output.output.pieces.len(), 3);
+    match &output.output.pieces[0] {
         FormatterOutputPiece::Text(t) => {
             assert!(t.contains("<li>"), "First piece should contain list markup");
         }
         _ => panic!("Expected formatted text piece"),
     }
-    match &output.pieces[1] {
+    match &output.output.pieces[1] {
         FormatterOutputPiece::Opaque(id) => assert_eq!(*id, FormatterAnchorId(7)),
         _ => panic!("Expected opaque anchor"),
     }
-    match &output.pieces[2] {
+    match &output.output.pieces[2] {
         FormatterOutputPiece::Text(t) => {
             assert!(t.contains("<li>"), "Third piece should contain list markup");
         }

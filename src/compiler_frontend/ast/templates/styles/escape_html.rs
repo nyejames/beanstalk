@@ -9,10 +9,13 @@
 //! - `$escape_html` provides an explicit, lightweight escape pass without requiring markdown.
 
 use crate::compiler_frontend::ast::templates::create_template_node::Template;
-use crate::compiler_frontend::ast::templates::template::{Formatter, TemplateFormatter};
+use crate::compiler_frontend::ast::templates::template::{
+    Formatter, FormatterResult, TemplateFormatter,
+};
 use crate::compiler_frontend::ast::templates::template_render_plan::{
     FormatterInput, FormatterInputPiece, FormatterOutput, FormatterOutputPiece,
 };
+use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::string_interning::StringTable;
 use std::sync::Arc;
 
@@ -20,7 +23,11 @@ use std::sync::Arc;
 struct EscapeHtmlTemplateFormatter;
 
 impl TemplateFormatter for EscapeHtmlTemplateFormatter {
-    fn format(&self, input: FormatterInput, string_table: &mut StringTable) -> FormatterOutput {
+    fn format(
+        &self,
+        input: FormatterInput,
+        string_table: &mut StringTable,
+    ) -> Result<FormatterResult, CompilerMessages> {
         let pieces = input
             .pieces
             .into_iter()
@@ -48,7 +55,9 @@ impl TemplateFormatter for EscapeHtmlTemplateFormatter {
             })
             .collect();
 
-        FormatterOutput { pieces }
+        Ok(FormatterResult {
+            output: FormatterOutput { pieces },
+        })
     }
 }
 
@@ -66,7 +75,6 @@ pub(crate) fn configure_escape_html_style(template: &mut Template) {
     template.apply_style_updates(|style| {
         style.id = "escape_html";
         style.formatter = Some(escape_html_formatter());
-        style.css_mode = None;
-        style.html_mode = false;
     });
+    template.clear_directive_validation();
 }

@@ -446,7 +446,7 @@ fn html_template_body_tokenizes_symbol_wrappers_with_general_template_rules() {
 
 #[test]
 fn custom_balanced_directive_uses_general_balanced_mode() {
-    let directives = vec![StyleDirectiveSpec::new(
+    let directives = vec![StyleDirectiveSpec::explicit_noop(
         "highlight",
         TemplateBodyMode::Balanced,
     )];

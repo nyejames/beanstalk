@@ -1,6 +1,7 @@
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::templates::create_template_node::Template;
 use crate::compiler_frontend::ast::templates::styles::whitespace::TemplateWhitespacePassProfile;
+use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::string_interning::StringId;
 use std::sync::Arc;
 
@@ -274,7 +275,7 @@ pub trait TemplateFormatter {
         &self,
         input: crate::compiler_frontend::ast::templates::template_render_plan::FormatterInput,
         string_table: &mut crate::compiler_frontend::string_interning::StringTable,
-    ) -> crate::compiler_frontend::ast::templates::template_render_plan::FormatterOutput;
+    ) -> Result<FormatterResult, CompilerMessages>;
 }
 
 impl std::fmt::Debug for dyn TemplateFormatter {
@@ -316,6 +317,17 @@ pub enum CssDirectiveMode {
     Inline,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TemplateDirectiveValidation {
+    Css(CssDirectiveMode),
+    Html,
+}
+
+#[derive(Clone, Debug)]
+pub struct FormatterResult {
+    pub output: crate::compiler_frontend::ast::templates::template_render_plan::FormatterOutput,
+}
+
 // Template Config Type
 // This is passed into a template head to configure how it should be parsed
 #[derive(Clone, Debug)]
@@ -331,8 +343,6 @@ pub struct Style {
     // Passes templates into the head of each direct child template of this template.
     // These wrappers do not automatically flow into grandchildren.
     pub child_templates: Vec<Template>,
-    pub css_mode: Option<CssDirectiveMode>,
-    pub html_mode: bool,
     /// When true, nested child templates skip the parent-applied `$children(..)`
     /// wrappers while still allowing wrappers declared on the child itself.
     pub skip_parent_child_wrappers: bool,
@@ -348,8 +358,6 @@ impl Style {
             id: "",
             formatter: None,
             child_templates: vec![],
-            css_mode: None,
-            html_mode: false,
             skip_parent_child_wrappers: false,
             body_whitespace_policy: BodyWhitespacePolicy::DefaultTemplateBehavior,
             suppress_child_templates: false,

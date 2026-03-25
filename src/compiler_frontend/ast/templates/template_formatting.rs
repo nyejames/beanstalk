@@ -18,6 +18,7 @@ use crate::compiler_frontend::ast::templates::styles::whitespace::{
 use crate::compiler_frontend::ast::templates::template::{
     BodyWhitespacePolicy, Style, TemplateContent,
 };
+use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::TextLocation;
 
@@ -35,7 +36,7 @@ pub(crate) fn apply_body_formatter(
     content: &TemplateContent,
     style: &Style,
     string_table: &mut StringTable,
-) -> TemplateRenderPlan {
+) -> Result<TemplateRenderPlan, CompilerMessages> {
     let mut plan = TemplateRenderPlan::from_content(content);
 
     let formatter = style.formatter.as_ref();
@@ -45,7 +46,7 @@ pub(crate) fn apply_body_formatter(
     .then_some(TemplateWhitespacePassProfile::default_template_body());
 
     if implicit_default_whitespace_pass.is_none() && formatter.is_none() {
-        return plan;
+        return Ok(plan);
     }
 
     let mut new_plan_pieces = Vec::with_capacity(plan.pieces.len());
@@ -72,9 +73,9 @@ pub(crate) fn apply_body_formatter(
     let process_run = |run: Vec<RenderPiece>,
                        run_position: TemplateBodyRunPosition,
                        string_table: &mut StringTable|
-     -> Vec<RenderPiece> {
+     -> Result<Vec<RenderPiece>, CompilerMessages> {
         if run.is_empty() {
-            return Vec::new();
+            return Ok(Vec::new());
         }
 
         // Build the opaque-anchor side-table: each non-text piece gets a FormatterAnchorId
@@ -110,7 +111,8 @@ pub(crate) fn apply_body_formatter(
         // 2. Style formatter
         if let Some(fmt) = formatter {
             let next_input = output_to_input(output, string_table);
-            output = fmt.formatter.format(next_input, string_table);
+            let formatter_result = fmt.formatter.format(next_input, string_table)?;
+            output = formatter_result.output;
         }
 
         // 3. Post-format whitespace passes
@@ -141,7 +143,7 @@ pub(crate) fn apply_body_formatter(
             }
         }
 
-        replacement_pieces
+        Ok(replacement_pieces)
     };
 
     let mut is_first_run = true;
@@ -169,7 +171,7 @@ pub(crate) fn apply_body_formatter(
                         std::mem::take(&mut current_run),
                         run_position,
                         string_table,
-                    ));
+                    )?);
                 }
                 new_plan_pieces.push(piece);
             }
@@ -182,11 +184,11 @@ pub(crate) fn apply_body_formatter(
         } else {
             TemplateBodyRunPosition::Last
         };
-        new_plan_pieces.extend(process_run(current_run, run_position, string_table));
+        new_plan_pieces.extend(process_run(current_run, run_position, string_table)?);
     }
 
     plan.pieces = new_plan_pieces;
-    plan
+    Ok(plan)
 }
 
 /// Converts formatter output back into formatter input for chaining pipeline stages.

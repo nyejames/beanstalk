@@ -14,8 +14,7 @@ use crate::compiler_frontend::ast::templates::template_body_parser::parse_templa
 use crate::compiler_frontend::ast::templates::template_composition::compose_template_head_chain;
 use crate::compiler_frontend::ast::templates::template_formatting::apply_body_formatter;
 use crate::compiler_frontend::ast::templates::template_head_parser::{
-    apply_doc_comment_defaults, emit_css_template_warnings, emit_html_template_warnings,
-    parse_template_head,
+    apply_doc_comment_defaults, emit_template_directive_warnings, parse_template_head,
 };
 use crate::compiler_frontend::ast::templates::template_render_plan::TemplateRenderPlan;
 use crate::compiler_frontend::ast::templates::template_slots::ensure_no_slot_insertions_remain;
@@ -41,7 +40,7 @@ impl Template {
     /// 2. `parse_template_body` — body string tokens, nested templates, slots
     /// 3. Composition — child wrapper application, head-chain resolution
     /// 4. Formatting — style-directed body formatting
-    /// 5. Validation — CSS/HTML warnings, slot insertion checks
+    /// 5. Validation — directive-owned warnings and slot insertion checks
     pub fn new(
         token_stream: &mut FileTokens,
         context: &ScopeContext,
@@ -117,7 +116,21 @@ impl Template {
         // Stage 4: Formatting — normalize body content before folding/lowering.
         // This keeps runtime templates simple: only compile-time-known body strings
         // are rewritten, while dynamic chunks remain untouched and keep their order.
-        let render_plan = apply_body_formatter(&template.content, &template.style, string_table);
+        let render_plan =
+            match apply_body_formatter(&template.content, &template.style, string_table) {
+                Ok(plan) => plan,
+                Err(messages) => {
+                    for warning in messages.warnings {
+                        context.emit_warning(warning);
+                    }
+
+                    return Err(messages.errors.into_iter().next().unwrap_or_else(|| {
+                        CompilerError::compiler_error(
+                            "Template formatter failed without returning a compiler error.",
+                        )
+                    }));
+                }
+            };
 
         // Rebuild formatted content from the render plan, then compose.
         template.content = render_plan.rebuild_content();
@@ -167,8 +180,7 @@ impl Template {
             template.kind = TemplateType::String;
         }
 
-        emit_css_template_warnings(&template, context, string_table);
-        emit_html_template_warnings(&template, context, string_table);
+        emit_template_directive_warnings(&template, context, string_table);
 
         Ok(template)
     }

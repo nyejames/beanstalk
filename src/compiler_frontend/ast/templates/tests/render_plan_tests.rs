@@ -184,18 +184,21 @@ mod render_plan_tests {
 
         // Run the escape_html formatter — text should be escaped, anchors preserved.
         let formatter = escape_html_formatter();
-        let output = formatter.formatter.format(input, &mut string_table);
+        let output = formatter
+            .formatter
+            .format(input, &mut string_table)
+            .expect("escape_html formatter should succeed");
 
-        assert_eq!(output.pieces.len(), 3);
-        match &output.pieces[0] {
+        assert_eq!(output.output.pieces.len(), 3);
+        match &output.output.pieces[0] {
             FormatterOutputPiece::Text(t) => assert_eq!(t, "&lt;Hello&gt; "),
             _ => panic!("Expected escaped text"),
         }
-        match &output.pieces[1] {
+        match &output.output.pieces[1] {
             FormatterOutputPiece::Opaque(id) => assert_eq!(*id, FormatterAnchorId(42)),
             _ => panic!("Expected opaque anchor"),
         }
-        match &output.pieces[2] {
+        match &output.output.pieces[2] {
             FormatterOutputPiece::Text(t) => assert_eq!(t, " &amp;World"),
             _ => panic!("Expected escaped text"),
         }

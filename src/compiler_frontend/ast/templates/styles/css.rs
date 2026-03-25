@@ -12,7 +12,7 @@ use crate::compiler_frontend::FrontendBuildProfile;
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
 use crate::compiler_frontend::ast::templates::create_template_node::Template;
 use crate::compiler_frontend::ast::templates::template::{
-    CssDirectiveMode, TemplateAtom, TemplateSegmentOrigin,
+    CssDirectiveMode, TemplateAtom, TemplateDirectiveValidation, TemplateSegmentOrigin,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::string_interning::StringTable;
@@ -66,22 +66,17 @@ pub(crate) fn configure_css_style(
     template.apply_style_updates(|style| {
         style.id = "css";
         style.formatter = None;
-        style.css_mode = Some(mode);
-        style.html_mode = false;
     });
+    template.set_directive_validation(TemplateDirectiveValidation::Css(mode));
     Ok(())
 }
 
 pub(crate) fn validate_css_template(
     template: &Template,
+    mode: CssDirectiveMode,
     build_profile: FrontendBuildProfile,
     string_table: &StringTable,
 ) -> Vec<CssTemplateDiagnostic> {
-    // Only templates explicitly marked as CSS participate in this validator.
-    let Some(mode) = template.style.css_mode else {
-        return Vec::new();
-    };
-
     // Flatten only authored body segments. Head segments are directive/args, not CSS text.
     let spans = collect_body_source_spans(template, string_table);
     if spans.is_empty() {

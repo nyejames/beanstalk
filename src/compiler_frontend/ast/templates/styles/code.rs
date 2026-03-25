@@ -5,12 +5,15 @@
 //! - converting compile-time body string runs into highlighted HTML
 
 use crate::compiler_frontend::ast::templates::create_template_node::Template;
-use crate::compiler_frontend::ast::templates::template::{Formatter, TemplateFormatter};
+use crate::compiler_frontend::ast::templates::template::{
+    Formatter, FormatterResult, TemplateFormatter,
+};
 use crate::compiler_frontend::ast::templates::template_render_plan::{
     FormatterInput, FormatterInputPiece, FormatterOutput, FormatterOutputPiece,
 };
 use crate::compiler_frontend::basic_utility_functions::NumericalParsing;
 use crate::compiler_frontend::compiler_errors::CompilerError;
+use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::return_syntax_error;
@@ -56,7 +59,11 @@ struct CodeTemplateFormatter {
 }
 
 impl TemplateFormatter for CodeTemplateFormatter {
-    fn format(&self, input: FormatterInput, string_table: &mut StringTable) -> FormatterOutput {
+    fn format(
+        &self,
+        input: FormatterInput,
+        string_table: &mut StringTable,
+    ) -> Result<FormatterResult, CompilerMessages> {
         // Process each text piece through syntax highlighting. Opaque anchors (child
         // templates, dynamic expressions) pass through without highlighting.
         let mut output_pieces: Vec<FormatterOutputPiece> = Vec::with_capacity(input.pieces.len());
@@ -94,9 +101,11 @@ impl TemplateFormatter for CodeTemplateFormatter {
             }
         }
 
-        FormatterOutput {
-            pieces: output_pieces,
-        }
+        Ok(FormatterResult {
+            output: FormatterOutput {
+                pieces: output_pieces,
+            },
+        })
     }
 }
 
@@ -126,9 +135,8 @@ pub(crate) fn configure_code_style(
     template.apply_style_updates(|style| {
         style.id = "code";
         style.formatter = Some(code_formatter(language));
-        style.css_mode = None;
-        style.html_mode = false;
     });
+    template.clear_directive_validation();
     Ok(())
 }
 

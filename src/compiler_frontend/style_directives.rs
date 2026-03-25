@@ -15,44 +15,102 @@ use std::fmt::Write as _;
 
 /// Origin of a registered style directive.
 ///
-/// Built-ins use compiler-owned semantics. Builder directives are currently parse+mode
-/// scaffolding only, which keeps future formatter hooks decoupled from core parsing.
+/// Built-ins use compiler-owned semantics. Builder directives are explicit no-op
+/// directives by default unless they intentionally override behavior metadata.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum StyleDirectiveSource {
     BuiltIn,
     Builder,
 }
 
+/// Built-in directive behavior handled directly by compiler-owned template parsing.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BuiltInStyleDirectiveKind {
+    Markdown,
+    Children,
+    Fresh,
+    Slot,
+    Insert,
+    Note,
+    Todo,
+    Doc,
+    Code,
+    Css,
+    Html,
+    Raw,
+    EscapeHtml,
+}
+
+/// Argument policy used by explicit no-op directives.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NoOpDirectiveArgumentPolicy {
+    /// Rejects parenthesized arguments (`$name(...)`) outright.
+    Reject,
+    /// Consumes optional parenthesized arguments but does not interpret them.
+    ConsumeOptionalParenthesized,
+}
+
+/// Parser behavior contract for one style directive.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StyleDirectiveBehavior {
+    BuiltIn(BuiltInStyleDirectiveKind),
+    ExplicitNoOp {
+        argument_policy: NoOpDirectiveArgumentPolicy,
+    },
+}
+
 /// Frontend registration contract for one style directive.
 ///
 /// `body_mode` controls template-body tokenization after the directive appears in
-/// the template head. Runtime formatter execution is intentionally out of scope here.
+/// the template head. `behavior` controls AST-level directive handling.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StyleDirectiveSpec {
     pub name: String,
     pub body_mode: TemplateBodyMode,
     pub source: StyleDirectiveSource,
+    pub behavior: StyleDirectiveBehavior,
 }
 
 impl StyleDirectiveSpec {
-    /// Build-system API for adding frontend directives.
+    /// Build-system API for adding explicit no-op frontend directives.
     ///
-    /// New specs default to `Builder` source because this constructor is used by
-    /// project builders that feed frontend directives into the compiler.
-    pub fn new(name: impl Into<String>, body_mode: TemplateBodyMode) -> Self {
+    /// This default rejects parenthesized arguments so no-op behavior is explicit.
+    pub fn explicit_noop(name: impl Into<String>, body_mode: TemplateBodyMode) -> Self {
         Self {
             name: name.into(),
             body_mode,
             source: StyleDirectiveSource::Builder,
+            behavior: StyleDirectiveBehavior::ExplicitNoOp {
+                argument_policy: NoOpDirectiveArgumentPolicy::Reject,
+            },
+        }
+    }
+
+    /// Build-system API for no-op directives that need a custom argument policy.
+    pub fn explicit_noop_with_argument_policy(
+        name: impl Into<String>,
+        body_mode: TemplateBodyMode,
+        argument_policy: NoOpDirectiveArgumentPolicy,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            body_mode,
+            source: StyleDirectiveSource::Builder,
+            behavior: StyleDirectiveBehavior::ExplicitNoOp { argument_policy },
         }
     }
 
     /// Internal helper for compiler-owned built-in directives.
-    pub(crate) fn built_in(name: &str, body_mode: TemplateBodyMode) -> Self {
+    pub(crate) fn built_in(
+        name: &str,
+        body_mode: TemplateBodyMode,
+        kind: BuiltInStyleDirectiveKind,
+    ) -> Self {
         Self {
             name: name.to_string(),
             body_mode,
             source: StyleDirectiveSource::BuiltIn,
+            behavior: StyleDirectiveBehavior::BuiltIn(kind),
         }
     }
 }
@@ -74,20 +132,72 @@ impl StyleDirectiveRegistry {
     pub fn built_ins() -> Self {
         Self {
             ordered: vec![
-                StyleDirectiveSpec::built_in("markdown", TemplateBodyMode::Normal),
-                StyleDirectiveSpec::built_in("children", TemplateBodyMode::Normal),
-                StyleDirectiveSpec::built_in("fresh", TemplateBodyMode::Normal),
-                StyleDirectiveSpec::built_in("slot", TemplateBodyMode::Normal),
-                StyleDirectiveSpec::built_in("insert", TemplateBodyMode::Normal),
-                StyleDirectiveSpec::built_in("note", TemplateBodyMode::DiscardBalanced),
-                StyleDirectiveSpec::built_in("todo", TemplateBodyMode::DiscardBalanced),
-                StyleDirectiveSpec::built_in("doc", TemplateBodyMode::Normal),
-                StyleDirectiveSpec::built_in("code", TemplateBodyMode::Balanced),
-                StyleDirectiveSpec::built_in("css", TemplateBodyMode::Balanced),
+                StyleDirectiveSpec::built_in(
+                    "markdown",
+                    TemplateBodyMode::Normal,
+                    BuiltInStyleDirectiveKind::Markdown,
+                ),
+                StyleDirectiveSpec::built_in(
+                    "children",
+                    TemplateBodyMode::Normal,
+                    BuiltInStyleDirectiveKind::Children,
+                ),
+                StyleDirectiveSpec::built_in(
+                    "fresh",
+                    TemplateBodyMode::Normal,
+                    BuiltInStyleDirectiveKind::Fresh,
+                ),
+                StyleDirectiveSpec::built_in(
+                    "slot",
+                    TemplateBodyMode::Normal,
+                    BuiltInStyleDirectiveKind::Slot,
+                ),
+                StyleDirectiveSpec::built_in(
+                    "insert",
+                    TemplateBodyMode::Normal,
+                    BuiltInStyleDirectiveKind::Insert,
+                ),
+                StyleDirectiveSpec::built_in(
+                    "note",
+                    TemplateBodyMode::DiscardBalanced,
+                    BuiltInStyleDirectiveKind::Note,
+                ),
+                StyleDirectiveSpec::built_in(
+                    "todo",
+                    TemplateBodyMode::DiscardBalanced,
+                    BuiltInStyleDirectiveKind::Todo,
+                ),
+                StyleDirectiveSpec::built_in(
+                    "doc",
+                    TemplateBodyMode::Normal,
+                    BuiltInStyleDirectiveKind::Doc,
+                ),
+                StyleDirectiveSpec::built_in(
+                    "code",
+                    TemplateBodyMode::Balanced,
+                    BuiltInStyleDirectiveKind::Code,
+                ),
+                StyleDirectiveSpec::built_in(
+                    "css",
+                    TemplateBodyMode::Balanced,
+                    BuiltInStyleDirectiveKind::Css,
+                ),
                 // `$html` uses the same normal template-body parsing as `$markdown`.
-                StyleDirectiveSpec::built_in("html", TemplateBodyMode::Normal),
-                StyleDirectiveSpec::built_in("raw", TemplateBodyMode::Normal),
-                StyleDirectiveSpec::built_in("escape_html", TemplateBodyMode::Normal),
+                StyleDirectiveSpec::built_in(
+                    "html",
+                    TemplateBodyMode::Normal,
+                    BuiltInStyleDirectiveKind::Html,
+                ),
+                StyleDirectiveSpec::built_in(
+                    "raw",
+                    TemplateBodyMode::Normal,
+                    BuiltInStyleDirectiveKind::Raw,
+                ),
+                StyleDirectiveSpec::built_in(
+                    "escape_html",
+                    TemplateBodyMode::Normal,
+                    BuiltInStyleDirectiveKind::EscapeHtml,
+                ),
             ],
         }
     }
@@ -109,6 +219,7 @@ impl StyleDirectiveRegistry {
                     name: builder_spec.name.to_owned(),
                     body_mode: builder_spec.body_mode,
                     source: StyleDirectiveSource::Builder,
+                    behavior: builder_spec.behavior,
                 };
                 continue;
             }
@@ -117,6 +228,7 @@ impl StyleDirectiveRegistry {
                 name: builder_spec.name.to_owned(),
                 body_mode: builder_spec.body_mode,
                 source: StyleDirectiveSource::Builder,
+                behavior: builder_spec.behavior,
             });
         }
 

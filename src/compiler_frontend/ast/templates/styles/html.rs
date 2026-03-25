@@ -10,7 +10,9 @@
 
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
 use crate::compiler_frontend::ast::templates::create_template_node::Template;
-use crate::compiler_frontend::ast::templates::template::{TemplateAtom, TemplateSegmentOrigin};
+use crate::compiler_frontend::ast::templates::template::{
+    TemplateAtom, TemplateDirectiveValidation, TemplateSegmentOrigin,
+};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{
@@ -57,9 +59,8 @@ pub(crate) fn configure_html_style(
     template.apply_style_updates(|style| {
         style.id = "html";
         style.formatter = None;
-        style.css_mode = None;
-        style.html_mode = true;
     });
+    template.set_directive_validation(TemplateDirectiveValidation::Html);
 
     Ok(())
 }
@@ -68,10 +69,6 @@ pub(crate) fn validate_html_template(
     template: &Template,
     string_table: &StringTable,
 ) -> Vec<HtmlTemplateDiagnostic> {
-    if !template.style.html_mode {
-        return Vec::new();
-    }
-
     let spans = collect_body_source_spans(template, string_table);
     if spans.is_empty() {
         return Vec::new();

@@ -343,6 +343,7 @@ pub fn concat_template(
                 // recent template style, mirroring left-to-right concatenation order.
                 template.style = template_to_concat.style.to_owned();
                 template.explicit_style = template_to_concat.explicit_style.to_owned();
+                template.directive_validation = template_to_concat.directive_validation;
             }
 
             _ => {

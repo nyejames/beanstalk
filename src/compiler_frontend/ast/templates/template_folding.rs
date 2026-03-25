@@ -53,6 +53,13 @@ impl Template {
                 &self.style,
                 fold_context.string_table,
             )
+            .map_err(|messages| {
+                messages.errors.into_iter().next().unwrap_or_else(|| {
+                    CompilerError::compiler_error(
+                        "Template formatter failed without returning a compiler error.",
+                    )
+                })
+            })?
         } else {
             self.render_plan
                 .clone()

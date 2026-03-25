@@ -7,7 +7,7 @@
 //! so other modules can depend on the struct without pulling in the full parser.
 
 use crate::compiler_frontend::ast::templates::template::{
-    Style, TemplateConstValueKind, TemplateContent, TemplateType,
+    Style, TemplateConstValueKind, TemplateContent, TemplateDirectiveValidation, TemplateType,
 };
 use crate::compiler_frontend::tokenizer::tokens::TextLocation;
 
@@ -28,6 +28,7 @@ pub struct Template {
     pub doc_children: Vec<Template>,
     pub style: Style,
     pub explicit_style: Style,
+    pub directive_validation: Option<TemplateDirectiveValidation>,
     pub id: String,
     pub location: TextLocation,
 }
@@ -63,6 +64,7 @@ impl Template {
             doc_children: vec![],
             style: Style::default(),
             explicit_style: Style::default(),
+            directive_validation: None,
             id: String::new(),
             location: TextLocation::default(),
         }
@@ -72,12 +74,23 @@ impl Template {
     pub(crate) fn apply_style(&mut self, style: Style) {
         self.style = style.to_owned();
         self.explicit_style = style;
+        self.directive_validation = None;
     }
 
     /// Applies an update function to both the effective and explicit style.
     pub(crate) fn apply_style_updates(&mut self, mut update: impl FnMut(&mut Style)) {
         update(&mut self.style);
         update(&mut self.explicit_style);
+    }
+
+    /// Applies directive-owned const-validation behavior (for example `$css` / `$html`).
+    pub(crate) fn set_directive_validation(&mut self, validation: TemplateDirectiveValidation) {
+        self.directive_validation = Some(validation);
+    }
+
+    /// Clears directive-owned const-validation behavior.
+    pub(crate) fn clear_directive_validation(&mut self) {
+        self.directive_validation = None;
     }
 
     /// Returns true if this template's content contains unresolved slot placeholders.

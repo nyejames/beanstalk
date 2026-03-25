@@ -21,7 +21,8 @@ use crate::compiler_frontend::ast::templates::styles::html::{
 use crate::compiler_frontend::ast::templates::styles::markdown::markdown_formatter;
 use crate::compiler_frontend::ast::templates::styles::raw::configure_raw_style;
 use crate::compiler_frontend::ast::templates::template::{
-    BodyWhitespacePolicy, CommentDirectiveKind, SlotKey, Style, TemplateSegmentOrigin, TemplateType,
+    BodyWhitespacePolicy, CommentDirectiveKind, SlotKey, Style, TemplateDirectiveValidation,
+    TemplateSegmentOrigin, TemplateType,
 };
 use crate::compiler_frontend::ast::templates::template_slots::{
     parse_required_named_slot_insert_argument, parse_slot_definition_target_argument,
@@ -32,7 +33,9 @@ use crate::compiler_frontend::compiler_warnings::{CompilerWarning, WarningKind};
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::paths::path_format::format_compile_time_paths;
 use crate::compiler_frontend::string_interning::StringTable;
-use crate::compiler_frontend::style_directives::StyleDirectiveSource;
+use crate::compiler_frontend::style_directives::{
+    BuiltInStyleDirectiveKind, NoOpDirectiveArgumentPolicy, StyleDirectiveBehavior,
+};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TextLocation, TokenKind};
 use crate::compiler_frontend::traits::ContainsReferences;
 use crate::projects::settings::BS_VAR_PREFIX;
@@ -344,7 +347,8 @@ pub fn parse_template_head(
 
                 let mut handled_slot_insert = false;
 
-                if spec.source == StyleDirectiveSource::BuiltIn && directive_name == "slot" {
+                if spec.behavior == StyleDirectiveBehavior::BuiltIn(BuiltInStyleDirectiveKind::Slot)
+                {
                     if saw_meaningful_head_item {
                         return_syntax_error!(
                             "Slot helper template heads can only contain '$slot' before the optional body.",
@@ -359,7 +363,8 @@ pub fn parse_template_head(
                     template.kind = TemplateType::SlotDefinition(slot_key);
                     saw_meaningful_head_item = true;
                     handled_slot_insert = true;
-                } else if spec.source == StyleDirectiveSource::BuiltIn && directive_name == "insert"
+                } else if spec.behavior
+                    == StyleDirectiveBehavior::BuiltIn(BuiltInStyleDirectiveKind::Insert)
                 {
                     if saw_meaningful_head_item {
                         return_syntax_error!(
@@ -379,8 +384,14 @@ pub fn parse_template_head(
 
                 if !handled_slot_insert
                     && saw_meaningful_head_item
-                    && spec.source == StyleDirectiveSource::BuiltIn
-                    && matches!(directive_name, "note" | "todo" | "doc")
+                    && matches!(
+                        spec.behavior,
+                        StyleDirectiveBehavior::BuiltIn(
+                            BuiltInStyleDirectiveKind::Note
+                                | BuiltInStyleDirectiveKind::Todo
+                                | BuiltInStyleDirectiveKind::Doc
+                        )
+                    )
                 {
                     return_syntax_error!(
                         "Comment template heads cannot mix '$note', '$todo', or '$doc' with other head expressions/directives.",
@@ -571,83 +582,89 @@ fn parse_style_directive(
         )
     };
 
-    if spec.source == StyleDirectiveSource::Builder {
-        consume_optional_directive_arguments(token_stream, &directive_name, string_table)?;
-        mark_template_body_whitespace_style_controlled(template);
-        return Ok(false);
-    }
-
-    let parse_result = match directive_name.as_str() {
-        "markdown" => {
-            apply_markdown_style(template);
+    let parse_result = match spec.behavior {
+        StyleDirectiveBehavior::ExplicitNoOp { argument_policy } => {
+            apply_noop_directive_argument_policy(
+                token_stream,
+                &directive_name,
+                argument_policy,
+                string_table,
+            )?;
             Ok(false)
         }
 
-        "code" => {
-            // Keep the directive-specific parsing in the code formatter module so
-            // this general template parser does not accumulate every built-in style.
-            configure_code_style(token_stream, template, string_table)?;
-            Ok(false)
-        }
+        StyleDirectiveBehavior::BuiltIn(kind) => match kind {
+            BuiltInStyleDirectiveKind::Markdown => {
+                apply_markdown_style(template);
+                Ok(false)
+            }
 
-        "css" => {
-            configure_css_style(token_stream, template, string_table)?;
-            Ok(false)
-        }
+            BuiltInStyleDirectiveKind::Code => {
+                // Keep the directive-specific parsing in the code formatter module so
+                // this general template parser does not accumulate every built-in style.
+                configure_code_style(token_stream, template, string_table)?;
+                Ok(false)
+            }
 
-        "html" => {
-            configure_html_style(token_stream, template, string_table)?;
-            Ok(false)
-        }
+            BuiltInStyleDirectiveKind::Css => {
+                configure_css_style(token_stream, template, string_table)?;
+                Ok(false)
+            }
 
-        "raw" => {
-            configure_raw_style(template);
-            Ok(false)
-        }
+            BuiltInStyleDirectiveKind::Html => {
+                configure_html_style(token_stream, template, string_table)?;
+                Ok(false)
+            }
 
-        "escape_html" => {
-            configure_escape_html_style(template);
-            Ok(false)
-        }
+            BuiltInStyleDirectiveKind::Raw => {
+                configure_raw_style(template);
+                Ok(false)
+            }
 
-        "children" => {
-            parse_children_style_directive(token_stream, context, template, string_table)?;
-            Ok(false)
-        }
+            BuiltInStyleDirectiveKind::EscapeHtml => {
+                configure_escape_html_style(template);
+                Ok(false)
+            }
 
-        "fresh" => {
-            // `$fresh` opt-outs this template from parent-applied `$children(..)`
-            // wrappers while still allowing local directives/wrappers in the same head.
-            template.apply_style_updates(|style| style.skip_parent_child_wrappers = true);
-            Ok(false)
-        }
+            BuiltInStyleDirectiveKind::Children => {
+                parse_children_style_directive(token_stream, context, template, string_table)?;
+                Ok(false)
+            }
 
-        "note" => {
-            reject_directive_arguments(token_stream, "note", string_table)?;
-            template.kind = TemplateType::Comment(CommentDirectiveKind::Note);
-            template.apply_style(Style::default());
-            Ok(false)
-        }
+            BuiltInStyleDirectiveKind::Fresh => {
+                // `$fresh` opt-outs this template from parent-applied `$children(..)`
+                // wrappers while still allowing local directives/wrappers in the same head.
+                template.apply_style_updates(|style| style.skip_parent_child_wrappers = true);
+                Ok(false)
+            }
 
-        "todo" => {
-            reject_directive_arguments(token_stream, "todo", string_table)?;
-            template.kind = TemplateType::Comment(CommentDirectiveKind::Todo);
-            template.apply_style(Style::default());
-            Ok(false)
-        }
+            BuiltInStyleDirectiveKind::Note => {
+                reject_directive_arguments(token_stream, "note", string_table)?;
+                template.kind = TemplateType::Comment(CommentDirectiveKind::Note);
+                template.apply_style(Style::default());
+                Ok(false)
+            }
 
-        "doc" => {
-            reject_directive_arguments(token_stream, "doc", string_table)?;
-            apply_doc_comment_defaults(template);
-            Ok(false)
-        }
+            BuiltInStyleDirectiveKind::Todo => {
+                reject_directive_arguments(token_stream, "todo", string_table)?;
+                template.kind = TemplateType::Comment(CommentDirectiveKind::Todo);
+                template.apply_style(Style::default());
+                Ok(false)
+            }
 
-        other => {
-            return_compiler_error!(
-                "Built-in style directive '${}' reached AST parsing but has no built-in handler.",
-                other
-            )
-        }
+            BuiltInStyleDirectiveKind::Doc => {
+                reject_directive_arguments(token_stream, "doc", string_table)?;
+                apply_doc_comment_defaults(template);
+                Ok(false)
+            }
+
+            BuiltInStyleDirectiveKind::Slot | BuiltInStyleDirectiveKind::Insert => {
+                return_compiler_error!(
+                    "Built-in style directive '${}' reached generic style parsing but should have been handled by slot helper dispatch.",
+                    directive_name
+                )
+            }
+        },
     };
 
     if parse_result.is_ok() {
@@ -670,10 +687,26 @@ fn mark_template_body_whitespace_style_controlled(template: &mut Template) {
     });
 }
 
+fn apply_noop_directive_argument_policy(
+    token_stream: &mut FileTokens,
+    directive_name: &str,
+    policy: NoOpDirectiveArgumentPolicy,
+    string_table: &StringTable,
+) -> Result<(), CompilerError> {
+    match policy {
+        NoOpDirectiveArgumentPolicy::Reject => {
+            reject_directive_arguments(token_stream, directive_name, string_table)
+        }
+        NoOpDirectiveArgumentPolicy::ConsumeOptionalParenthesized => {
+            consume_optional_directive_arguments(token_stream, directive_name, string_table)
+        }
+    }
+}
+
 pub(crate) fn apply_doc_comment_defaults(template: &mut Template) {
     template.kind = TemplateType::Comment(CommentDirectiveKind::Doc);
     template.apply_style(Style::default());
-    // Doc comments use markdown formatting with balanced bracket escaping.
+    // Doc comments use Markdown formatting with balanced bracket escaping.
     // Nested child templates are suppressed — `[...]` brackets in the body are
     // treated as literal text.
     apply_markdown_style(template);
@@ -686,9 +719,8 @@ fn apply_markdown_style(template: &mut Template) {
     template.apply_style_updates(|style| {
         style.id = "markdown";
         style.formatter = Some(markdown_formatter());
-        style.css_mode = None;
-        style.html_mode = false;
     });
+    template.clear_directive_validation();
 }
 
 /// Consumes optional parenthesised arguments for builder-defined directives.
@@ -866,8 +898,8 @@ pub(crate) fn parse_children_style_directive(
 // POST-PARSE VALIDATION
 // -------------------------
 
-/// Emits CSS validation warnings for const templates with `$css` style.
-pub(crate) fn emit_css_template_warnings(
+/// Emits directive-owned compile-time validation warnings (for example `$css` / `$html`).
+pub(crate) fn emit_template_directive_warnings(
     template: &Template,
     context: &ScopeContext,
     string_table: &StringTable,
@@ -876,36 +908,32 @@ pub(crate) fn emit_css_template_warnings(
         return;
     }
 
-    let diagnostics = validate_css_template(template, context.build_profile, string_table);
-    for diagnostic in diagnostics {
-        let file_path = diagnostic.location.scope.to_path_buf(string_table);
-        context.emit_warning(CompilerWarning::new(
-            &diagnostic.message,
-            diagnostic.location.to_error_location(string_table),
-            WarningKind::MalformedCssTemplate,
-            file_path,
-        ));
-    }
-}
-
-/// Emits HTML validation warnings for const templates with `$html` style.
-pub(crate) fn emit_html_template_warnings(
-    template: &Template,
-    context: &ScopeContext,
-    string_table: &StringTable,
-) {
-    if !template.is_const_renderable_string() {
-        return;
-    }
-
-    let diagnostics = validate_html_template(template, string_table);
-    for diagnostic in diagnostics {
-        let file_path = diagnostic.location.scope.to_path_buf(string_table);
-        context.emit_warning(CompilerWarning::new(
-            &diagnostic.message,
-            diagnostic.location.to_error_location(string_table),
-            WarningKind::MalformedHtmlTemplate,
-            file_path,
-        ));
-    }
+    match template.directive_validation {
+        Some(TemplateDirectiveValidation::Css(mode)) => {
+            let diagnostics =
+                validate_css_template(template, mode, context.build_profile, string_table);
+            for diagnostic in diagnostics {
+                let file_path = diagnostic.location.scope.to_path_buf(string_table);
+                context.emit_warning(CompilerWarning::new(
+                    &diagnostic.message,
+                    diagnostic.location.to_error_location(string_table),
+                    WarningKind::MalformedCssTemplate,
+                    file_path,
+                ));
+            }
+        }
+        Some(TemplateDirectiveValidation::Html) => {
+            let diagnostics = validate_html_template(template, string_table);
+            for diagnostic in diagnostics {
+                let file_path = diagnostic.location.scope.to_path_buf(string_table);
+                context.emit_warning(CompilerWarning::new(
+                    &diagnostic.message,
+                    diagnostic.location.to_error_location(string_table),
+                    WarningKind::MalformedHtmlTemplate,
+                    file_path,
+                ));
+            }
+        }
+        None => {}
+    };
 }

@@ -10,10 +10,13 @@
 //! - Nested template formatting must not be reparsed by parent markdown runs.
 
 use crate::compiler_frontend::ast::templates::styles::whitespace::TemplateWhitespacePassProfile;
-use crate::compiler_frontend::ast::templates::template::{Formatter, TemplateFormatter};
+use crate::compiler_frontend::ast::templates::template::{
+    Formatter, FormatterResult, TemplateFormatter,
+};
 use crate::compiler_frontend::ast::templates::template_render_plan::{
     FormatterInput, FormatterInputPiece, FormatterOutput, FormatterOutputPiece,
 };
+use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::string_interning::StringTable;
 use std::sync::Arc;
 
@@ -69,7 +72,11 @@ struct MarkdownListLevel {
 pub struct MarkdownTemplateFormatter;
 
 impl TemplateFormatter for MarkdownTemplateFormatter {
-    fn format(&self, input: FormatterInput, string_table: &mut StringTable) -> FormatterOutput {
+    fn format(
+        &self,
+        input: FormatterInput,
+        string_table: &mut StringTable,
+    ) -> Result<FormatterResult, CompilerMessages> {
         // Each text piece is processed through markdown independently. Opaque anchors
         // (child templates, dynamic expressions) pass through unchanged — their content
         // is structurally sealed and must not be reparsed by the markdown formatter.
@@ -85,7 +92,9 @@ impl TemplateFormatter for MarkdownTemplateFormatter {
             })
             .collect();
 
-        FormatterOutput { pieces }
+        Ok(FormatterResult {
+            output: FormatterOutput { pieces },
+        })
     }
 }
 
