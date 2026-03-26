@@ -1,8 +1,10 @@
 import @lib/html {format, center}
-import @styles/docs {navbar, footer, title, section, header, body, palette, table, row, header_row, codeblock}
+import @styles/docs {navbar, title, section, palette, table, row, header_row, codeblock, theme_head}
 
-#[header]
-#[body:
+# page_title = "Language Basics"
+# page_description = "Core language syntax and semantics in Beanstalk."
+# page_head = theme_head
+
 [navbar]
 [title, center: LANGUAGE BASICS]
 
@@ -17,16 +19,13 @@ import @styles/docs {navbar, footer, title, section, header, body, palette, tabl
     Web projects have their own directory based structure and config file also.
 
     [codeblock, $code("bst"):
-        import @lib/html/doc
+        # page_title = "Welcome"
 
         say_hello || -> String:
             return "Hi, welcome to Beanstalk"
         ;
         
-        -- Say hello in an HTML document
-        [doc.prelude, doc.body:
-            [say_hello()]
-        ]
+        [say_hello()]
     ]
 
     # Quick Syntax Summary
@@ -228,7 +227,3 @@ import @styles/docs {navbar, footer, title, section, header, body, palette, tabl
         [row: [: -]        [: Subtraction]          [: 2] ]
     ]
 ]
-
-]-- end of body
-
-[footer]

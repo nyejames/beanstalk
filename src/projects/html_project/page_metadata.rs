@@ -34,9 +34,11 @@ pub(crate) fn extract_html_page_metadata(
         .side_table
         .function_name_path(hir_module.start_function)
         .and_then(|path| path.parent());
+
     let entry_scope_prefix = entry_scope
         .as_ref()
         .map(|path| path.to_portable_string(string_table));
+
     let error_location = entry_scope
         .as_ref()
         .map(|path| {

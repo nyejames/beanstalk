@@ -1,8 +1,10 @@
 import @lib/html {format, center}
-import @styles/docs {navbar, footer, title, section, header, body, palette, table, row, header_row, codeblock}
+import @styles/docs {navbar, title, section, palette, table, row, header_row, codeblock, theme_head}
 
-#[header]
-#[body:
+# page_title = "Functions"
+# page_description = "Function declarations, returns, and closures in Beanstalk."
+# page_head = theme_head
+
 [navbar]
 [title, center: FUNCTIONS]
 
@@ -135,7 +137,3 @@ import @styles/docs {navbar, footer, title, section, header, body, palette, tabl
         ;
     ]
 ]
-
-]-- end of body
-
-[footer]

@@ -1,7 +1,9 @@
-import @styles/docs {navbar, footer, header, body, section, palette}
+import @styles/docs {navbar, section, theme_head}
 
-#[header]
-#[body:
+# page_title = "What is Beanstalk?"
+# page_description = "Introduction to the Beanstalk language and toolchain."
+# page_head = theme_head
+
 [navbar]
 [section, $markdown:
     # What is Beanstalk?
@@ -14,7 +16,3 @@ import @styles/docs {navbar, footer, header, body, section, palette}
 
     The source code for this website can be found on @https://github.com/nyejames/beanstalk/tree/main/docs/src (Github).
 ]
-
-] -- end of body
-
-#[footer]

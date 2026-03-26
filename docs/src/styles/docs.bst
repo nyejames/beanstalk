@@ -1,23 +1,61 @@
-import @lib/html {doc, format}
+import @lib/html {format}
 -- Some basic testing styles for the documentation website
 
-# header = [:
-    [doc.prelude, doc.en]
-    [doc.head, $html:
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <link rel="icon" href="[$slot("favicon")]">
-        [doc.title: Beanstalk Documentation]
-        [doc.style:
-            [$slot("css")]
-        ]
-    ]
+# theme_css = [$css:
+    .container {
+        width: 100%;
+        margin-right: auto;
+        margin-left: auto;
+        padding-right: var(--bst-spacing-small);
+        padding-left: var(--bst-spacing-small);
+    }
+
+    @media (min-width: 576px) {
+        .container {
+            max-width: 510px;
+            padding-right: var(--bst-spacing);
+            padding-left: var(--bst-spacing);
+            padding-bottom: var(--bst-spacing);
+        }
+    }
+
+    @media (min-width: 768px) {
+        .container {
+            max-width: 700px;
+        }
+    }
+
+    @media (min-width: 1024px) {
+        .container {
+            max-width: 950px;
+        }
+    }
+
+    @media (min-width: 1280px) {
+        .container {
+            max-width: 1200px;
+        }
+    }
+
+    @media (min-width: 1536px) {
+        .container {
+            max-width: 1450px;
+        }
+    }
+
+    .bst-nav-1 {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom-color: grey;
+        border-bottom-style: solid;
+        border-bottom-width: 1px;
+        padding: 0rem 2rem 0rem 2rem;
+    }
 ]
 
-# body = [:
-    [doc.body:
-        [$slot]
-    ]
+# theme_head = [$html:
+    <style>[theme_css]</style>
 ]
 
 # section = [$html:

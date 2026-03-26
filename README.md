@@ -53,18 +53,15 @@ import @blog_styles {section, divider}
 The HTML build system will generate an HTML page from this code:
 ```haskell
 import @generators/create_post
-import @html/doc
 import @blog_styles {page, title, pad2}
+
+# page_title = "Pointless Blog!!!"
 
 date = 2025
 post = create_post(date, [$markdown:
     I have absolutely nothing interesting to say, and never will.
 ])
 
--- Compile time generated HTML
-#[doc.prelude, title: Pointless Blog!!!]
-
--- Runtime generated HTML
 [page:
     [pad2, post]
 ]

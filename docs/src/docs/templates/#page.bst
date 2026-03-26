@@ -1,8 +1,10 @@
 import @lib/html {format, center}
-import @styles/docs {navbar, footer, title, section, header, body, palette, table, row, header_row, codeblock}
+import @styles/docs {navbar, title, section, palette, table, row, header_row, codeblock, theme_head}
 
-#[header]
-#[body:
+# page_title = "Templates"
+# page_description = "Template syntax, slots, directives, and formatting in Beanstalk."
+# page_head = theme_head
+
 [navbar]
 [title, center: TEMPLATES]
 
@@ -159,6 +161,3 @@ import @styles/docs {navbar, footer, title, section, header, body, palette, tabl
     ## Errors
     If an error is added to a template at runtime, it will be displayed in the console, rather than injected into the template. 
 ]
-
-]-- end of body
-[footer]
