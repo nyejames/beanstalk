@@ -1,3 +1,8 @@
+//! Function and CFG emission helpers for the JavaScript backend.
+//!
+//! This module decides whether a HIR function can stay structured in JS or needs the dispatcher
+//! fallback for cyclic control flow.
+
 use crate::backends::js::JsEmitter;
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
 use crate::compiler_frontend::hir::hir_nodes::{

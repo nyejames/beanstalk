@@ -12,7 +12,7 @@ use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::hir::hir_datatypes::{HirType, HirTypeKind, TypeId};
 use crate::compiler_frontend::hir::hir_nodes::{
-    FieldId, FunctionId, HirBlock, HirExpression, HirExpressionKind, HirLocal, HirNodeId, HirPlace,
+    FieldId, FunctionId, HirBlock, HirExpression, HirExpressionKind, HirLocal, HirPlace,
     HirStatement, HirStatementKind, HirUnaryOp, LocalId, RegionId, StructId, ValueKind,
 };
 use crate::compiler_frontend::host_functions::CallTarget;
@@ -846,12 +846,6 @@ impl<'a> HirBuilder<'a> {
         Ok(())
     }
 
-    pub(crate) fn allocate_node_id(&mut self) -> HirNodeId {
-        let id = HirNodeId(self.next_node_id);
-        self.next_node_id += 1;
-        id
-    }
-
     pub(crate) fn allocate_temp_local(
         &mut self,
         ty: TypeId,
@@ -860,8 +854,7 @@ impl<'a> HirBuilder<'a> {
         let location = source_info.clone().unwrap_or_default();
         let region = self.current_region_or_error(&location)?;
 
-        let local_id = LocalId(self.next_local_id);
-        self.next_local_id += 1;
+        let local_id = self.allocate_local_id();
 
         let local = HirLocal {
             id: local_id,
@@ -894,20 +887,6 @@ impl<'a> HirBuilder<'a> {
     ) -> Result<&mut HirBlock, CompilerError> {
         let block_id = self.current_block_id_or_error(location)?;
         self.block_mut_by_id_or_error(block_id, location)
-    }
-
-    pub(crate) fn current_region_or_error(
-        &self,
-        location: &TextLocation,
-    ) -> Result<RegionId, CompilerError> {
-        let Some(region) = self.current_region else {
-            return_hir_transformation_error!(
-                "No current HIR region is active",
-                self.hir_error_location(location)
-            );
-        };
-
-        Ok(region)
     }
 
     fn lower_reference_expression(

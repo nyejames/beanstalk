@@ -13,12 +13,12 @@ use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::hir::hir_builder::{HirBuilder, LoopTargets};
 use crate::compiler_frontend::hir::hir_datatypes::HirTypeKind;
-use crate::compiler_frontend::hir::hir_display::HirLocation;
 use crate::compiler_frontend::hir::hir_nodes::{
     BlockId, FunctionId, HirBinOp, HirBlock, HirConstField, HirConstValue, HirExpression,
     HirExpressionKind, HirField, HirFunction, HirLocal, HirMatchArm, HirModuleConst, HirPattern,
     HirRegion, HirStatement, HirStatementKind, HirStruct, HirTerminator, LocalId, ValueKind,
 };
+use crate::compiler_frontend::hir::hir_side_table::HirLocation;
 use crate::compiler_frontend::host_functions::CallTarget;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::projects::settings::IMPLICIT_START_FUNC_NAME;
@@ -169,6 +169,9 @@ impl<'a> HirBuilder<'a> {
     }
 
     pub(crate) fn lower_top_level_node(&mut self, node: &AstNode) -> Result<(), CompilerError> {
+        // WHAT: route each module-level AST node into the one HIR lowering path that owns it.
+        // WHY: declaration registration already built the symbol tables, so this entry point only
+        //      accepts nodes that materially contribute runtime/module semantics.
         match &node.kind {
             NodeKind::Function(name, signature, body) => {
                 self.lower_function_body(name, signature, body, &node.location)
@@ -1125,8 +1128,7 @@ impl<'a> HirBuilder<'a> {
         }
 
         let region = self.current_region_or_error(&local_location)?;
-        let local_id = LocalId(self.next_local_id);
-        self.next_local_id += 1;
+        let local_id = self.allocate_local_id();
 
         let local = HirLocal {
             id: local_id,
@@ -1148,20 +1150,6 @@ impl<'a> HirBuilder<'a> {
             .map_ast_to_hir(&local_location, HirLocation::Local(local_id));
 
         Ok(local_id)
-    }
-
-    fn current_function_id_or_error(
-        &self,
-        location: &TextLocation,
-    ) -> Result<FunctionId, CompilerError> {
-        let Some(function_id) = self.current_function else {
-            return_hir_transformation_error!(
-                "No current HIR function is active",
-                self.hir_error_location(location)
-            );
-        };
-
-        Ok(function_id)
     }
 
     fn expression_from_return_values(

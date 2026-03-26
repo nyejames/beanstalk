@@ -18,31 +18,25 @@ pub(crate) fn validate_module_for_tests(
 
 impl<'a> HirBuilder<'a> {
     pub(crate) fn test_push_block(&mut self, block: HirBlock) {
-        if block.id.0 >= self.next_block_id {
-            self.next_block_id = block.id.0 + 1;
-        }
-
-        if block.region.0 >= self.next_region_id {
-            self.next_region_id = block.region.0 + 1;
-        }
-
+        self.reserve_block_id(block.id);
+        self.reserve_region_id(block.region);
         self.push_block(block);
     }
 
     pub(crate) fn test_set_current_region(&mut self, region: RegionId) {
-        self.current_region = Some(region);
+        self.set_current_region_for_tests(region);
     }
 
     pub(crate) fn test_set_current_block(&mut self, block_id: BlockId) {
-        self.current_block = Some(block_id);
+        self.set_current_block_for_tests(block_id);
     }
 
     pub(crate) fn test_set_current_function(&mut self, function_id: FunctionId) {
-        self.current_function = Some(function_id);
+        self.set_current_function_for_tests(function_id);
     }
 
     pub(crate) fn test_register_local_in_block(&mut self, local: HirLocal, name: InternedPath) {
-        let current_block = self.current_block.unwrap_or(BlockId(0));
+        let current_block = self.current_block_id().unwrap_or(BlockId(0));
         let _ = self
             .block_mut_by_id_or_error(current_block, &TextLocation::default())
             .map(|block| block.locals.push(local.clone()));
@@ -50,19 +44,13 @@ impl<'a> HirBuilder<'a> {
         self.locals_by_name.insert(name.clone(), local.id);
         self.side_table.bind_local_name(local.id, name);
         self.side_table.map_local_source(&local);
-
-        if local.id.0 >= self.next_local_id {
-            self.next_local_id = local.id.0 + 1;
-        }
+        self.reserve_local_id(local.id);
     }
 
     pub(crate) fn test_register_function_name(&mut self, name: InternedPath, id: FunctionId) {
         self.functions_by_name.insert(name.clone(), id);
         self.side_table.bind_function_name(id, name);
-
-        if id.0 >= self.next_function_id {
-            self.next_function_id = id.0 + 1;
-        }
+        self.reserve_function_id(id);
     }
 
     pub(crate) fn test_register_struct_with_fields(
@@ -84,20 +72,14 @@ impl<'a> HirBuilder<'a> {
                 .insert((struct_id, field_name.clone()), field_id);
             self.side_table.bind_field_name(field_id, field_name);
             hir_fields.push(HirField { id: field_id, ty });
-
-            if field_id.0 >= self.next_field_id {
-                self.next_field_id = field_id.0 + 1;
-            }
+            self.reserve_field_id(field_id);
         }
 
         self.module.structs.push(HirStruct {
             id: struct_id,
             fields: hir_fields,
         });
-
-        if struct_id.0 >= self.next_struct_id {
-            self.next_struct_id = struct_id.0 + 1;
-        }
+        self.reserve_struct_id(struct_id);
     }
 
     pub(crate) fn test_register_module_constant(&mut self, name: InternedPath, value: Expression) {

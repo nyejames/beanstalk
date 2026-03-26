@@ -5,12 +5,12 @@ use crate::compiler_frontend::analysis::borrow_checker::types::{AccessKind, Loca
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::return_borrow_checker_error;
 
-use super::{BorrowTransferContext, MutableAccessCheck, SharedAccessCheck};
+use super::{AccessCheckContext, BorrowTransferContext, MutableAccessPolicy};
 
 // WHAT: Validates shared-root reads against statement-local and active mutable conflicts.
 // WHY: Shared reads must be blocked when the same root is mutably active.
 pub(super) fn check_shared_access(
-    check: &mut SharedAccessCheck<'_, '_>,
+    check: &mut AccessCheckContext<'_, '_>,
     roots: &RootSet,
 ) -> Result<(), CompilerError> {
     for root_index in roots.iter_ones() {
@@ -76,14 +76,15 @@ pub(super) fn check_shared_access(
 // WHAT: Validates mutable accesses against overlap, mutability, and alias exclusivity.
 // WHY: Mutable access is only valid when the acting root has exclusive active ownership view.
 pub(super) fn check_mutable_access(
-    check: &mut MutableAccessCheck<'_, '_>,
+    check: &mut AccessCheckContext<'_, '_>,
     roots: &RootSet,
+    policy: MutableAccessPolicy,
 ) -> Result<(), CompilerError> {
     for root_index in roots.iter_ones() {
         check.stats.conflicts_checked += 1;
 
         if let Some(existing) = check.tracker.conflict(root_index, AccessKind::Mutable)
-            && !(check.allow_prior_shared && existing == AccessKind::Shared)
+            && !(policy.allow_prior_shared && existing == AccessKind::Shared)
         {
             let root_name = check
                 .context
@@ -105,7 +106,7 @@ pub(super) fn check_mutable_access(
             );
         }
 
-        if check.require_root_mutable && !check.layout.local_mutable[root_index] {
+        if policy.require_root_mutable && !check.layout.local_mutable[root_index] {
             let root_name = check
                 .context
                 .diagnostics
@@ -128,7 +129,7 @@ pub(super) fn check_mutable_access(
             root_index,
             actor_index,
             check.current_order,
-            check.strict_move_exclusivity,
+            policy.strict_move_exclusivity,
         );
         if alias_count > 1 {
             let actor_name = check
@@ -141,7 +142,7 @@ pub(super) fn check_mutable_access(
                 root_index,
                 actor_index,
                 check.current_order,
-                check.strict_move_exclusivity,
+                policy.strict_move_exclusivity,
             )
             .map(|index| {
                 check

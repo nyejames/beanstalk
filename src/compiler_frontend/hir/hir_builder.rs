@@ -21,9 +21,9 @@ use crate::compiler_frontend::ast::ast::AstStartTemplateItem;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, TextLocation};
 use crate::compiler_frontend::ast::templates::template_folding::TemplateFoldContext;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
-use crate::compiler_frontend::hir::hir_display::HirSideTable;
 use crate::compiler_frontend::hir::hir_validation::validate_hir_module;
 use crate::compiler_frontend::hir::{hir_datatypes::*, hir_nodes::*};
+use crate::compiler_frontend::hir::hir_side_table::HirSideTable;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::string_interning::StringTable;
@@ -77,15 +77,15 @@ pub struct HirBuilder<'a> {
     pub(super) project_path_resolver: ProjectPathResolver,
 
     // === ID Counters ===
-    pub(super) next_block_id: u32,
-    pub(super) next_local_id: u32,
-    pub(super) next_node_id: u32,
-    pub(super) next_value_id: u32,
-    pub(super) next_region_id: u32,
-    pub(super) next_function_id: u32,
-    pub(super) next_struct_id: u32,
-    pub(super) next_field_id: u32,
-    pub(super) next_const_id: u32,
+    next_block_id: u32,
+    next_local_id: u32,
+    next_node_id: u32,
+    next_value_id: u32,
+    next_region_id: u32,
+    next_function_id: u32,
+    next_struct_id: u32,
+    next_field_id: u32,
+    next_const_id: u32,
     pub(super) temp_local_counter: u32,
     pub(super) template_function_counter: u32,
 
@@ -112,9 +112,9 @@ pub struct HirBuilder<'a> {
     pub(super) region_index_by_id: FxHashMap<RegionId, usize>,
 
     // === Current Function State ===
-    pub(super) current_function: Option<FunctionId>,
-    pub(super) current_block: Option<BlockId>,
-    pub(super) current_region: Option<RegionId>,
+    current_function: Option<FunctionId>,
+    current_block: Option<BlockId>,
+    current_region: Option<RegionId>,
     pub(super) loop_targets: Vec<LoopTargets>,
 }
 
@@ -374,6 +374,18 @@ impl<'a> HirBuilder<'a> {
         id
     }
 
+    pub(crate) fn allocate_local_id(&mut self) -> LocalId {
+        let id = LocalId(self.next_local_id);
+        self.next_local_id += 1;
+        id
+    }
+
+    pub(crate) fn allocate_node_id(&mut self) -> HirNodeId {
+        let id = HirNodeId(self.next_node_id);
+        self.next_node_id += 1;
+        id
+    }
+
     pub(crate) fn allocate_value_id(&mut self) -> HirValueId {
         let id = HirValueId(self.next_value_id);
         self.next_value_id += 1;
@@ -396,6 +408,41 @@ impl<'a> HirBuilder<'a> {
         let id = HirConstId(self.next_const_id);
         self.next_const_id += 1;
         id
+    }
+
+    #[cfg(test)]
+    fn advance_counter_past(next_counter: &mut u32, used_id: u32) {
+        *next_counter = (*next_counter).max(used_id.saturating_add(1));
+    }
+
+    #[cfg(test)]
+    pub(crate) fn reserve_block_id(&mut self, block_id: BlockId) {
+        Self::advance_counter_past(&mut self.next_block_id, block_id.0);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn reserve_region_id(&mut self, region_id: RegionId) {
+        Self::advance_counter_past(&mut self.next_region_id, region_id.0);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn reserve_local_id(&mut self, local_id: LocalId) {
+        Self::advance_counter_past(&mut self.next_local_id, local_id.0);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn reserve_function_id(&mut self, function_id: FunctionId) {
+        Self::advance_counter_past(&mut self.next_function_id, function_id.0);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn reserve_struct_id(&mut self, struct_id: StructId) {
+        Self::advance_counter_past(&mut self.next_struct_id, struct_id.0);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn reserve_field_id(&mut self, field_id: FieldId) {
+        Self::advance_counter_past(&mut self.next_field_id, field_id.0);
     }
 
     pub(super) fn push_region(&mut self, region: HirRegion) {
@@ -526,6 +573,54 @@ impl<'a> HirBuilder<'a> {
         };
 
         Ok(block_id)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn current_block_id(&self) -> Option<BlockId> {
+        self.current_block
+    }
+
+    pub(crate) fn current_function_id_or_error(
+        &self,
+        location: &TextLocation,
+    ) -> Result<FunctionId, CompilerError> {
+        let Some(function_id) = self.current_function else {
+            return_hir_transformation_error!(
+                "No current HIR function is active",
+                self.hir_error_location(location)
+            );
+        };
+
+        Ok(function_id)
+    }
+
+    pub(crate) fn current_region_or_error(
+        &self,
+        location: &TextLocation,
+    ) -> Result<RegionId, CompilerError> {
+        let Some(region) = self.current_region else {
+            return_hir_transformation_error!(
+                "No current HIR region is active",
+                self.hir_error_location(location)
+            );
+        };
+
+        Ok(region)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_current_function_for_tests(&mut self, function_id: FunctionId) {
+        self.current_function = Some(function_id);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_current_block_for_tests(&mut self, block_id: BlockId) {
+        self.current_block = Some(block_id);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_current_region_for_tests(&mut self, region: RegionId) {
+        self.current_region = Some(region);
     }
 
     pub(crate) fn set_block_terminator(

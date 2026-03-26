@@ -1,9 +1,14 @@
+//! Borrow-checker diagnostic naming and source-location helpers.
+//!
+//! These helpers translate HIR IDs and side-table mappings into user-facing labels and error
+//! locations without forcing the transfer code to duplicate lookup logic.
+
 use crate::compiler_frontend::analysis::borrow_checker::state::{BorrowState, FunctionLayout};
 use crate::compiler_frontend::compiler_errors::ErrorLocation;
-use crate::compiler_frontend::hir::hir_display::HirLocation;
 use crate::compiler_frontend::hir::hir_nodes::{
     BlockId, FunctionId, HirModule, HirStatement, HirTerminator, HirValueId, LocalId,
 };
+use crate::compiler_frontend::hir::hir_side_table::HirLocation;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
 
@@ -99,7 +104,7 @@ impl<'a> BorrowDiagnostics<'a> {
             .unwrap_or(fallback)
     }
 
-    #[allow(dead_code)] // todo
+    #[allow(dead_code)] // Reserved for future diagnostics that name the conflicting alias local
     pub(super) fn conflicting_local_for_root(
         &self,
         layout: &FunctionLayout,

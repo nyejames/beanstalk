@@ -1,3 +1,8 @@
+//! Borrow-checker state, layout, and bitset-backed dataflow primitives.
+//!
+//! This module owns the dense local indexing and abstract state representation used by the
+//! forward transfer engine.
+
 use crate::compiler_frontend::analysis::borrow_checker::types::{
     BorrowStateSnapshot, LocalBorrowSnapshot, LocalMode,
 };

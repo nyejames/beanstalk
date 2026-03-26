@@ -27,6 +27,10 @@ mod move_decision;
 use conflicts::{check_mutable_access, check_shared_access};
 use move_decision::{MoveDecision, classify_move_decision};
 
+// WHAT: These helper contexts split statement transfer into two concerns:
+// shared-read collection and access-conflict validation.
+// WHY: transfer threads the same diagnostics/layout/state bundle through many helpers, so keeping
+// those bundles explicit avoids wide argument lists without cloning the same context structs.
 // WHAT: Shared-read traversal context used while scanning one statement/terminator.
 // WHY: Keeps helper signatures compact while threading diagnostics and fact sinks.
 struct SharedReadEnv<'a, 'module> {
@@ -40,20 +44,9 @@ struct SharedReadEnv<'a, 'module> {
     value_fact_buffer: &'a mut ValueFactBuffer,
 }
 
-struct AssignTargetTransfer<'a, 'module> {
-    context: &'a BorrowTransferContext<'module>,
-    layout: &'a FunctionLayout,
-    block_id: BlockId,
-    current_order: i32,
-    state: &'a mut BorrowState,
-    tracker: &'a mut StatementAccessTracker,
-    location: ErrorLocation,
-    stats: &'a mut BlockTransferStats,
-}
-
-// WHAT: Immutable-access conflict check inputs.
-// WHY: Shared checks need both per-statement trackers and cross-statement state facts.
-struct SharedAccessCheck<'a, 'module> {
+// WHAT: Shared and mutable conflict checks both inspect the same transfer bundle.
+// WHY: Keeping one access-check context avoids duplicating the same layout/state/tracker fields.
+struct AccessCheckContext<'a, 'module> {
     context: &'a BorrowTransferContext<'module>,
     layout: &'a FunctionLayout,
     state: &'a BorrowState,
@@ -64,19 +57,10 @@ struct SharedAccessCheck<'a, 'module> {
     current_order: i32,
 }
 
-// WHAT: Mutable-access conflict check inputs.
-// WHY: Mutable checks enforce mutability and exclusivity rules with configurable strictness.
-struct MutableAccessCheck<'a, 'module> {
-    context: &'a BorrowTransferContext<'module>,
-    layout: &'a FunctionLayout,
-    state: &'a BorrowState,
-    tracker: &'a mut StatementAccessTracker,
-    location: ErrorLocation,
-    stats: &'a mut BlockTransferStats,
+#[derive(Clone, Copy)]
+struct MutableAccessPolicy {
     allow_prior_shared: bool,
-    actor_index_hint: Option<usize>,
     require_root_mutable: bool,
-    current_order: i32,
     strict_move_exclusivity: bool,
 }
 
@@ -165,17 +149,18 @@ pub(super) fn transfer_statement(
                 record_shared_reads_in_expression(&mut read_env, value, location.clone())?;
             }
 
-            let mut assign_env = AssignTargetTransfer {
+            transfer_assign_target(
                 context,
                 layout,
-                block_id,
-                current_order: statement_order,
                 state,
-                tracker: &mut tracker,
+                block_id,
+                statement_order,
+                &mut tracker,
                 location,
                 stats,
-            };
-            transfer_assign_target(&mut assign_env, target, value)?;
+                target,
+                value,
+            )?;
         }
 
         HirStatementKind::Call {
@@ -279,20 +264,25 @@ pub(super) fn transfer_statement(
                             argument_location.clone(),
                         )?;
                         if !mutable_roots.is_empty() {
-                            let mut check = MutableAccessCheck {
+                            let mut check = AccessCheckContext {
                                 context,
                                 layout,
                                 state,
                                 tracker: &mut tracker,
                                 location: argument_location.clone(),
                                 stats,
-                                allow_prior_shared: false,
                                 actor_index_hint: None,
-                                require_root_mutable: true,
                                 current_order: statement_order,
-                                strict_move_exclusivity: false,
                             };
-                            check_mutable_access(&mut check, &mutable_roots)?;
+                            check_mutable_access(
+                                &mut check,
+                                &mutable_roots,
+                                MutableAccessPolicy {
+                                    allow_prior_shared: false,
+                                    require_root_mutable: true,
+                                    strict_move_exclusivity: false,
+                                },
+                            )?;
                         }
 
                         value_fact_buffer.record(
@@ -318,36 +308,46 @@ pub(super) fn transfer_statement(
                                 statement_order,
                             ) {
                                 MoveDecision::Borrow => {
-                                    let mut check = MutableAccessCheck {
+                                    let mut check = AccessCheckContext {
                                         context,
                                         layout,
                                         state,
                                         tracker: &mut tracker,
                                         location: argument_location.clone(),
                                         stats,
-                                        allow_prior_shared: false,
                                         actor_index_hint: None,
-                                        require_root_mutable: true,
                                         current_order: statement_order,
-                                        strict_move_exclusivity: false,
                                     };
-                                    check_mutable_access(&mut check, &mutable_roots)?;
+                                    check_mutable_access(
+                                        &mut check,
+                                        &mutable_roots,
+                                        MutableAccessPolicy {
+                                            allow_prior_shared: false,
+                                            require_root_mutable: true,
+                                            strict_move_exclusivity: false,
+                                        },
+                                    )?;
                                 }
                                 MoveDecision::Move => {
-                                    let mut check = MutableAccessCheck {
+                                    let mut check = AccessCheckContext {
                                         context,
                                         layout,
                                         state,
                                         tracker: &mut tracker,
                                         location: argument_location.clone(),
                                         stats,
-                                        allow_prior_shared: false,
                                         actor_index_hint: None,
-                                        require_root_mutable: false,
                                         current_order: statement_order,
-                                        strict_move_exclusivity: true,
                                     };
-                                    check_mutable_access(&mut check, &mutable_roots)?;
+                                    check_mutable_access(
+                                        &mut check,
+                                        &mutable_roots,
+                                        MutableAccessPolicy {
+                                            allow_prior_shared: false,
+                                            require_root_mutable: false,
+                                            strict_move_exclusivity: true,
+                                        },
+                                    )?;
 
                                     for root_index in mutable_roots.iter_ones() {
                                         state.invalidate_root(root_index);
@@ -591,59 +591,61 @@ fn record_shared_reads_in_pattern(
 }
 
 fn transfer_assign_target(
-    env: &mut AssignTargetTransfer<'_, '_>,
+    context: &BorrowTransferContext<'_>,
+    layout: &FunctionLayout,
+    state: &mut BorrowState,
+    block_id: BlockId,
+    current_order: i32,
+    tracker: &mut StatementAccessTracker,
+    location: ErrorLocation,
+    stats: &mut BlockTransferStats,
     target: &HirPlace,
     value: &HirExpression,
 ) -> Result<(), CompilerError> {
     match target {
         HirPlace::Local(local_id) => {
-            let Some(local_index) = env.layout.index_of(*local_id) else {
+            let Some(local_index) = layout.index_of(*local_id) else {
                 return_borrow_checker_error!(
                     format!(
                         "Assignment target local '{}' is not in the active function layout",
-                        env.context.diagnostics.local_name(*local_id)
+                        context.diagnostics.local_name(*local_id)
                     ),
-                    env.location.clone(),
+                    location.clone(),
                     {
                         CompilationStage => "Borrow Checking",
                     }
                 );
             };
 
-            let local_state = env.state.local_state(local_index).clone();
+            let local_state = state.local_state(local_index).clone();
             let mut rhs_alias_roots = direct_place_roots_from_expression(
-                env.layout,
-                env.state,
+                layout,
+                state,
                 value,
-                env.location.clone(),
+                location.clone(),
             )?;
             let mut rhs_direct_alias_roots = rhs_alias_roots.as_ref().map(|rhs_roots| {
-                direct_root_aliases_from_expression(env.layout, env.state, value, rhs_roots)
+                direct_root_aliases_from_expression(layout, state, value, rhs_roots)
             });
 
             if let Some(rhs_roots) = rhs_alias_roots.as_ref().filter(|roots| !roots.is_empty()) {
                 let can_attempt_move = local_state.mode.is_definitely_uninit()
-                    && env.layout.local_mutable[local_index]
+                    && layout.local_mutable[local_index]
                     && rhs_roots
                         .iter_ones()
-                        .all(|root_index| env.layout.local_mutable[root_index]);
+                        .all(|root_index| layout.local_mutable[root_index]);
 
                 if can_attempt_move {
                     // WHAT: assignments can consume source ownership when target takes fresh slot ownership.
                     // WHY: this keeps move propagation aligned with call-site move behavior.
-                    match classify_move_decision(
-                        env.layout,
-                        env.block_id,
-                        rhs_roots,
-                        env.current_order,
-                    ) {
+                    match classify_move_decision(layout, block_id, rhs_roots, current_order) {
                         MoveDecision::Borrow | MoveDecision::Inconsistent(_) => {
                             // `May` means path-dependent usage. For assignments we conservatively
                             // keep borrow semantics and let branch joins validate consistency.
                         }
                         MoveDecision::Move => {
                             for root_index in rhs_roots.iter_ones() {
-                                env.state.invalidate_root(root_index);
+                                state.invalidate_root(root_index);
                             }
                             rhs_alias_roots = None;
                             rhs_direct_alias_roots = None;
@@ -655,42 +657,44 @@ fn transfer_assign_target(
             if local_state.mode.is_definitely_uninit() {
                 match rhs_alias_roots {
                     Some(rhs_roots) => {
-                        let target_is_mutable = env.layout.local_mutable[local_index];
+                        let target_is_mutable = layout.local_mutable[local_index];
                         if target_is_mutable && !rhs_roots.is_empty() {
-                            let mut check = MutableAccessCheck {
-                                context: env.context,
-                                layout: env.layout,
-                                state: &*env.state,
-                                tracker: env.tracker,
-                                location: env.location.clone(),
-                                stats: env.stats,
-                                allow_prior_shared: true,
+                            let mut check = AccessCheckContext {
+                                context,
+                                layout,
+                                state: &*state,
+                                tracker,
+                                location: location.clone(),
+                                stats,
                                 actor_index_hint: Some(local_index),
-                                require_root_mutable: false,
-                                current_order: env.current_order,
-                                strict_move_exclusivity: false,
+                                current_order,
                             };
-                            check_mutable_access(&mut check, &rhs_roots)?;
+                            check_mutable_access(
+                                &mut check,
+                                &rhs_roots,
+                                MutableAccessPolicy {
+                                    allow_prior_shared: true,
+                                    require_root_mutable: false,
+                                    strict_move_exclusivity: false,
+                                },
+                            )?;
                         }
 
                         let direct_roots = rhs_direct_alias_roots
-                            .unwrap_or_else(|| RootSet::empty(env.layout.local_count()));
-                        env.state.update_local_state(
+                            .unwrap_or_else(|| RootSet::empty(layout.local_count()));
+                        state.update_local_state(
                             local_index,
                             LocalState::alias_with_direct(rhs_roots, direct_roots),
                         );
                     }
                     None => {
-                        env.state.update_local_state(
-                            local_index,
-                            LocalState::slot(env.layout.local_count()),
-                        );
+                        state.update_local_state(local_index, LocalState::slot(layout.local_count()));
                     }
                 }
                 return Ok(());
             }
 
-            let mut write_roots = RootSet::empty(env.layout.local_count());
+            let mut write_roots = RootSet::empty(layout.local_count());
             if local_state.mode.contains(LocalMode::SLOT) {
                 write_roots.insert(local_index);
             }
@@ -698,20 +702,25 @@ fn transfer_assign_target(
                 write_roots.union_with(&local_state.alias_roots);
             }
 
-            let mut check = MutableAccessCheck {
-                context: env.context,
-                layout: env.layout,
-                state: &*env.state,
-                tracker: env.tracker,
-                location: env.location.clone(),
-                stats: env.stats,
-                allow_prior_shared: true,
+            let mut check = AccessCheckContext {
+                context,
+                layout,
+                state: &*state,
+                tracker,
+                location: location.clone(),
+                stats,
                 actor_index_hint: Some(local_index),
-                require_root_mutable: true,
-                current_order: env.current_order,
-                strict_move_exclusivity: false,
+                current_order,
             };
-            check_mutable_access(&mut check, &write_roots)?;
+            check_mutable_access(
+                &mut check,
+                &write_roots,
+                MutableAccessPolicy {
+                    allow_prior_shared: true,
+                    require_root_mutable: true,
+                    strict_move_exclusivity: false,
+                },
+            )?;
 
             match (
                 local_state.mode.contains(LocalMode::SLOT),
@@ -723,8 +732,8 @@ fn transfer_assign_target(
 
                 (true, false) => {
                     apply_slot_rebinding(
-                        env.state,
-                        env.layout.local_count(),
+                        state,
+                        layout.local_count(),
                         local_index,
                         rhs_alias_roots,
                         rhs_direct_alias_roots,
@@ -741,7 +750,7 @@ fn transfer_assign_target(
                         direct_alias_roots.union_with(&rhs_direct_roots);
                     }
 
-                    env.state.update_local_state(
+                    state.update_local_state(
                         local_index,
                         LocalState {
                             mode: LocalMode::SLOT.union(LocalMode::ALIAS),
@@ -752,30 +761,32 @@ fn transfer_assign_target(
                 }
 
                 (false, false) => {
-                    env.state.update_local_state(
-                        local_index,
-                        LocalState::slot(env.layout.local_count()),
-                    );
+                    state.update_local_state(local_index, LocalState::slot(layout.local_count()));
                 }
             }
         }
 
         _ => {
-            let roots = roots_for_place(env.layout, env.state, target, env.location.clone())?;
-            let mut check = MutableAccessCheck {
-                context: env.context,
-                layout: env.layout,
-                state: &*env.state,
-                tracker: env.tracker,
-                location: env.location.clone(),
-                stats: env.stats,
-                allow_prior_shared: true,
+            let roots = roots_for_place(layout, state, target, location.clone())?;
+            let mut check = AccessCheckContext {
+                context,
+                layout,
+                state: &*state,
+                tracker,
+                location: location.clone(),
+                stats,
                 actor_index_hint: None,
-                require_root_mutable: true,
-                current_order: env.current_order,
-                strict_move_exclusivity: false,
+                current_order,
             };
-            check_mutable_access(&mut check, &roots)?;
+            check_mutable_access(
+                &mut check,
+                &roots,
+                MutableAccessPolicy {
+                    allow_prior_shared: true,
+                    require_root_mutable: true,
+                    strict_move_exclusivity: false,
+                },
+            )?;
         }
     }
 
@@ -968,7 +979,7 @@ fn record_shared_reads_in_expression(
 
             let roots = roots_for_place(env.layout, env.state, place, value_location.clone())?;
             let actor_index_hint = place_root_local_index(env.layout, place);
-            let mut check = SharedAccessCheck {
+            let mut check = AccessCheckContext {
                 context: env.context,
                 layout: env.layout,
                 state: env.state,
@@ -990,7 +1001,7 @@ fn record_shared_reads_in_expression(
 
             let roots = roots_for_place(env.layout, env.state, place, value_location.clone())?;
             let actor_index_hint = place_root_local_index(env.layout, place);
-            let mut check = SharedAccessCheck {
+            let mut check = AccessCheckContext {
                 context: env.context,
                 layout: env.layout,
                 state: env.state,

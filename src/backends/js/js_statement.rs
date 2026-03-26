@@ -1,3 +1,8 @@
+//! Statement lowering helpers for the JavaScript backend.
+//!
+//! These routines emit block-local statements after HIR has already made evaluation order and
+//! control-flow edges explicit.
+
 use crate::backends::js::JsEmitter;
 use crate::backends::js::js_host_functions::resolve_host_function_path;
 use crate::compiler_frontend::analysis::borrow_checker::LocalMode;

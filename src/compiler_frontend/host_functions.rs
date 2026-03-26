@@ -275,3 +275,66 @@ pub enum ErrorHandling {
     #[allow(dead_code)] // todo
     Panics,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::compiler_frontend::ast::statements::functions::FunctionReturn;
+
+    #[test]
+    fn params_to_signature_preserves_alias_metadata() {
+        let mut string_table = StringTable::new();
+        let host_function = HostFunctionDef {
+            name: "concat_like",
+            parameters: vec![
+                HostParameter {
+                    language_type: DataType::StringSlice,
+                    abi_type: HostAbiType::Utf8Str,
+                    access_kind: HostAccessKind::Shared,
+                },
+                HostParameter {
+                    language_type: DataType::StringSlice,
+                    abi_type: HostAbiType::Utf8Str,
+                    access_kind: HostAccessKind::Shared,
+                },
+            ],
+            return_type: HostAbiType::Utf8Str,
+            return_alias: HostReturnAlias::AliasArgs(vec![1]),
+            ownership: Ownership::ImmutableReference,
+            error_handling: ErrorHandling::None,
+            description: String::from("test helper"),
+        };
+
+        let signature = host_function.params_to_signature(&mut string_table);
+        assert_eq!(signature.parameters.len(), 2);
+        assert_eq!(signature.returns.len(), 1);
+        assert!(matches!(
+            &signature.returns[0],
+            FunctionReturn::AliasCandidates {
+                parameter_indices,
+                data_type
+            } if parameter_indices == &vec![1] && data_type == &DataType::StringSlice
+        ));
+    }
+
+    #[test]
+    fn validate_required_hosts_reports_missing_host() {
+        let registry = HostRegistry::default();
+        let error = registry
+            .validate_required_hosts(&["missing"])
+            .expect_err("missing host should fail validation");
+
+        assert!(error.msg.contains("Required host function 'missing'"));
+    }
+
+    #[test]
+    fn validate_backend_bindings_requires_registered_bindings() {
+        let mut string_table = StringTable::new();
+        let registry = HostRegistry::new(&mut string_table);
+        let error = registry
+            .validate_backend_bindings(BackendKind::Js)
+            .expect_err("registered hosts without bindings should fail backend validation");
+
+        assert!(error.msg.contains("has no backend bindings registered"));
+    }
+}

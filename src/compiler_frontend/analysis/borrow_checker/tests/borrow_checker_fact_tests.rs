@@ -6,11 +6,11 @@ use crate::compiler_frontend::ast::ast_nodes::NodeKind;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
-use crate::compiler_frontend::hir::hir_display::HirLocation;
 use crate::compiler_frontend::hir::hir_nodes::{
     BlockId, HirExpression, HirExpressionKind, HirNodeId, HirPlace, HirStatement, HirStatementKind,
     HirTerminator, HirValueId,
 };
+use crate::compiler_frontend::hir::hir_side_table::HirLocation;
 use crate::compiler_frontend::string_interning::StringTable;
 use rustc_hash::FxHashSet;
 use std::collections::VecDeque;

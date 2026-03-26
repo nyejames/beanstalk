@@ -1,3 +1,8 @@
+//! Expression lowering helpers for the JavaScript backend.
+//!
+//! These routines map HIR expressions into JS source strings while preserving the backend's
+//! binding and alias helper conventions.
+
 use crate::backends::js::JsEmitter;
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
 use crate::compiler_frontend::hir::hir_datatypes::HirTypeKind;
@@ -10,6 +15,9 @@ impl<'hir> JsEmitter<'hir> {
         &mut self,
         expression: &HirExpression,
     ) -> Result<String, CompilerError> {
+        // WHAT: dispatch lowering by the fully resolved HIR expression shape.
+        // WHY: HIR has already linearized side effects, so expression lowering can stay a direct
+        //      semantic mapping from each variant to the exact JS runtime helper sequence it needs.
         match &expression.kind {
             HirExpressionKind::Int(value) => Ok(value.to_string()),
 

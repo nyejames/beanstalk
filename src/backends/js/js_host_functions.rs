@@ -1,3 +1,7 @@
+//! Host-function mapping helpers for the JavaScript backend.
+//!
+//! This keeps backend-specific JS host bindings isolated from general HIR emission logic.
+
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
 

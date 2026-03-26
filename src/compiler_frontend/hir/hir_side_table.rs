@@ -1,0 +1,448 @@
+//! HIR source-mapping and human-readable-name side tables.
+//!
+//! This module owns the reversible AST/HIR location mapping and the canonical path identity used
+//! by diagnostics, borrow checking, and debug rendering.
+
+use crate::compiler_frontend::hir::hir_nodes::{
+    BlockId, FieldId, FunctionId, HirBlock, HirFunction, HirLocal, HirNodeId, HirStatement,
+    HirValueId, LocalId, StructId,
+};
+use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::string_interning::{StringId, StringTable};
+use crate::compiler_frontend::tokenizer::tokens::TextLocation;
+use rustc_hash::FxHashMap;
+use std::fmt::{Display, Formatter, Result as FmtResult};
+
+#[allow(dead_code)] // Returned by debug-facing lookup helpers when no HIR mapping exists
+const EMPTY_HIR_LOCATIONS: [HirLocation; 0] = [];
+
+/// Stable identifier for an interned source location.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) struct SourceLocationId(pub u32);
+
+/// Canonical references into the HIR graph for source mapping.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) enum HirLocation {
+    Block(BlockId),
+    Function(FunctionId),
+    Struct(StructId),
+    Field(FieldId),
+    Local(LocalId),
+    Statement(HirNodeId),
+    Value(HirValueId),
+    Terminator(BlockId),
+}
+
+impl Display for HirLocation {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        match self {
+            HirLocation::Block(id) => write!(f, "block({})", id),
+            HirLocation::Function(id) => write!(f, "function({})", id),
+            HirLocation::Struct(id) => write!(f, "struct({})", id),
+            HirLocation::Field(id) => write!(f, "field({})", id),
+            HirLocation::Local(id) => write!(f, "local({})", id),
+            HirLocation::Statement(id) => write!(f, "statement({})", id),
+            HirLocation::Value(id) => write!(f, "value({})", id),
+            HirLocation::Terminator(block) => write!(f, "terminator({})", block),
+        }
+    }
+}
+
+impl From<BlockId> for HirLocation {
+    fn from(value: BlockId) -> Self {
+        HirLocation::Block(value)
+    }
+}
+
+impl From<FunctionId> for HirLocation {
+    fn from(value: FunctionId) -> Self {
+        HirLocation::Function(value)
+    }
+}
+
+impl From<StructId> for HirLocation {
+    fn from(value: StructId) -> Self {
+        HirLocation::Struct(value)
+    }
+}
+
+impl From<FieldId> for HirLocation {
+    fn from(value: FieldId) -> Self {
+        HirLocation::Field(value)
+    }
+}
+
+impl From<LocalId> for HirLocation {
+    fn from(value: LocalId) -> Self {
+        HirLocation::Local(value)
+    }
+}
+
+impl From<HirNodeId> for HirLocation {
+    fn from(value: HirNodeId) -> Self {
+        HirLocation::Statement(value)
+    }
+}
+
+impl From<HirValueId> for HirLocation {
+    fn from(value: HirValueId) -> Self {
+        HirLocation::Value(value)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct TextLocationKey {
+    scope: InternedPath,
+    start_line: i32,
+    start_column: i32,
+    end_line: i32,
+    end_column: i32,
+}
+
+impl From<&TextLocation> for TextLocationKey {
+    fn from(value: &TextLocation) -> Self {
+        Self {
+            scope: value.scope.clone(),
+            start_line: value.start_pos.line_number,
+            start_column: value.start_pos.char_column,
+            end_line: value.end_pos.line_number,
+            end_column: value.end_pos.char_column,
+        }
+    }
+}
+
+/// Side-table for reversible AST <-> HIR source mapping plus human-readable names for HIR IDs.
+///
+/// Design goals:
+/// - O(1) average lookups for all forward/backward mappings
+/// - Location interning to avoid repeated `TextLocation` cloning
+/// - Zero string formatting work during mapping writes
+#[derive(Debug, Clone, Default)]
+pub(crate) struct HirSideTable {
+    source_locations: Vec<TextLocation>,
+    source_location_index: FxHashMap<TextLocationKey, SourceLocationId>,
+
+    ast_to_hir: FxHashMap<SourceLocationId, Vec<HirLocation>>,
+    hir_to_ast: FxHashMap<HirLocation, SourceLocationId>,
+    hir_to_source: FxHashMap<HirLocation, SourceLocationId>,
+
+    // Store canonical path identity. Rendering and diagnostics derive leaf names from these.
+    local_names: FxHashMap<LocalId, InternedPath>,
+    function_names: FxHashMap<FunctionId, InternedPath>,
+    struct_names: FxHashMap<StructId, InternedPath>,
+    field_names: FxHashMap<FieldId, InternedPath>,
+}
+
+impl HirSideTable {
+    #[allow(dead_code)] // Reserved for future callers that want explicit construction over Default
+    pub(crate) fn new() -> Self {
+        Self::default()
+    }
+
+    #[allow(dead_code)] // Reserved for future allocation tuning in large-module lowering
+    pub(crate) fn with_capacities(location_capacity: usize, mapping_capacity: usize) -> Self {
+        Self {
+            source_locations: Vec::with_capacity(location_capacity),
+            source_location_index: FxHashMap::with_capacity_and_hasher(
+                location_capacity,
+                Default::default(),
+            ),
+            ast_to_hir: FxHashMap::with_capacity_and_hasher(mapping_capacity, Default::default()),
+            hir_to_ast: FxHashMap::with_capacity_and_hasher(mapping_capacity, Default::default()),
+            hir_to_source: FxHashMap::with_capacity_and_hasher(
+                mapping_capacity,
+                Default::default(),
+            ),
+            local_names: FxHashMap::default(),
+            function_names: FxHashMap::default(),
+            struct_names: FxHashMap::default(),
+            field_names: FxHashMap::default(),
+        }
+    }
+
+    #[allow(dead_code)] // Used only in validator tests that intentionally break side-table mappings
+    pub(crate) fn clear(&mut self) {
+        self.source_locations.clear();
+        self.source_location_index.clear();
+        self.ast_to_hir.clear();
+        self.hir_to_ast.clear();
+        self.hir_to_source.clear();
+        self.local_names.clear();
+        self.function_names.clear();
+        self.struct_names.clear();
+        self.field_names.clear();
+    }
+
+    #[inline]
+    pub(crate) fn intern_source_location(&mut self, location: &TextLocation) -> SourceLocationId {
+        let key = TextLocationKey::from(location);
+
+        if let Some(existing_id) = self.source_location_index.get(&key) {
+            return *existing_id;
+        }
+
+        let new_id = SourceLocationId(self.source_locations.len() as u32);
+        self.source_locations.push(location.clone());
+        self.source_location_index.insert(key, new_id);
+
+        new_id
+    }
+
+    #[inline]
+    pub(crate) fn source_location(&self, id: SourceLocationId) -> Option<&TextLocation> {
+        self.source_locations.get(id.0 as usize)
+    }
+
+    #[inline]
+    pub(crate) fn source_id_for_location(
+        &self,
+        location: &TextLocation,
+    ) -> Option<SourceLocationId> {
+        let key = TextLocationKey::from(location);
+        self.source_location_index.get(&key).copied()
+    }
+
+    #[inline]
+    pub(crate) fn map_ast_to_hir(
+        &mut self,
+        ast_location: &TextLocation,
+        hir_location: HirLocation,
+    ) {
+        let ast_id = self.intern_source_location(ast_location);
+
+        let entry = self.ast_to_hir.entry(ast_id).or_default();
+        if !entry.contains(&hir_location) {
+            entry.push(hir_location);
+        }
+
+        self.hir_to_ast.insert(hir_location, ast_id);
+    }
+
+    #[allow(dead_code)] // Reserved for bulk AST/HIR mapping writes in future lowering passes
+    pub(crate) fn map_ast_to_hir_many<I>(&mut self, ast_location: &TextLocation, hir_locations: I)
+    where
+        I: IntoIterator<Item = HirLocation>,
+    {
+        for hir_location in hir_locations {
+            self.map_ast_to_hir(ast_location, hir_location);
+        }
+    }
+
+    #[inline]
+    pub(crate) fn map_hir_source_location(
+        &mut self,
+        hir_location: HirLocation,
+        hir_source: &TextLocation,
+    ) {
+        let source_id = self.intern_source_location(hir_source);
+        self.hir_to_source.insert(hir_location, source_id);
+    }
+
+    pub(crate) fn map_statement(&mut self, ast_location: &TextLocation, statement: &HirStatement) {
+        let hir_location = HirLocation::Statement(statement.id);
+        self.map_ast_to_hir(ast_location, hir_location);
+        self.map_hir_source_location(hir_location, &statement.location);
+    }
+
+    pub(crate) fn map_value(
+        &mut self,
+        ast_location: &TextLocation,
+        value_id: HirValueId,
+        source_location: &TextLocation,
+    ) {
+        let hir_location = HirLocation::Value(value_id);
+        self.map_ast_to_hir(ast_location, hir_location);
+        self.map_hir_source_location(hir_location, source_location);
+    }
+
+    pub(crate) fn map_function(&mut self, ast_location: &TextLocation, function: &HirFunction) {
+        let hir_location = HirLocation::Function(function.id);
+        self.map_ast_to_hir(ast_location, hir_location);
+        self.map_hir_source_location(hir_location, ast_location);
+    }
+
+    pub(crate) fn map_block(&mut self, ast_location: &TextLocation, block: &HirBlock) {
+        let hir_location = HirLocation::Block(block.id);
+        self.map_ast_to_hir(ast_location, hir_location);
+        self.map_hir_source_location(hir_location, ast_location);
+    }
+
+    pub(crate) fn map_terminator(&mut self, ast_location: &TextLocation, block_id: BlockId) {
+        let hir_location = HirLocation::Terminator(block_id);
+        self.map_ast_to_hir(ast_location, hir_location);
+        self.map_hir_source_location(hir_location, ast_location);
+    }
+
+    pub(crate) fn map_local_source(&mut self, local: &HirLocal) {
+        if let Some(location) = &local.source_info {
+            self.map_hir_source_location(HirLocation::Local(local.id), location);
+        }
+    }
+
+    #[inline]
+    pub(crate) fn value_source_location(&self, value_id: HirValueId) -> Option<&TextLocation> {
+        self.hir_source_location_for_hir(HirLocation::Value(value_id))
+    }
+
+    #[inline]
+    pub(crate) fn value_ast_location(&self, value_id: HirValueId) -> Option<&TextLocation> {
+        self.ast_location_for_hir(HirLocation::Value(value_id))
+    }
+
+    #[inline]
+    #[allow(dead_code)] // Reserved for reverse source-mapping queries in diagnostics and tests
+    pub(crate) fn hir_locations_for_ast(&self, ast_location: &TextLocation) -> &[HirLocation] {
+        let Some(ast_id) = self.source_id_for_location(ast_location) else {
+            return &EMPTY_HIR_LOCATIONS;
+        };
+        self.hir_locations_for_source_id(ast_id)
+    }
+
+    #[inline]
+    pub(crate) fn hir_locations_for_source_id(
+        &self,
+        ast_source: SourceLocationId,
+    ) -> &[HirLocation] {
+        self.ast_to_hir
+            .get(&ast_source)
+            .map(Vec::as_slice)
+            .unwrap_or(&EMPTY_HIR_LOCATIONS)
+    }
+
+    #[inline]
+    pub(crate) fn ast_source_id_for_hir(
+        &self,
+        hir_location: HirLocation,
+    ) -> Option<SourceLocationId> {
+        self.hir_to_ast.get(&hir_location).copied()
+    }
+
+    #[inline]
+    pub(crate) fn ast_location_for_hir(&self, hir_location: HirLocation) -> Option<&TextLocation> {
+        let source_id = self.ast_source_id_for_hir(hir_location)?;
+        self.source_location(source_id)
+    }
+
+    #[inline]
+    pub(crate) fn hir_source_id_for_hir(
+        &self,
+        hir_location: HirLocation,
+    ) -> Option<SourceLocationId> {
+        self.hir_to_source.get(&hir_location).copied()
+    }
+
+    #[inline]
+    pub(crate) fn hir_source_location_for_hir(
+        &self,
+        hir_location: HirLocation,
+    ) -> Option<&TextLocation> {
+        let source_id = self.hir_source_id_for_hir(hir_location)?;
+        self.source_location(source_id)
+    }
+
+    #[inline]
+    pub(crate) fn bind_local_name(&mut self, local_id: LocalId, name: InternedPath) {
+        self.local_names.insert(local_id, name);
+    }
+
+    #[inline]
+    pub(crate) fn bind_function_name(&mut self, function_id: FunctionId, name: InternedPath) {
+        self.function_names.insert(function_id, name);
+    }
+
+    #[inline]
+    pub(crate) fn bind_struct_name(&mut self, struct_id: StructId, name: InternedPath) {
+        self.struct_names.insert(struct_id, name);
+    }
+
+    #[inline]
+    pub(crate) fn bind_field_name(&mut self, field_id: FieldId, name: InternedPath) {
+        self.field_names.insert(field_id, name);
+    }
+
+    #[inline]
+    pub(crate) fn local_name_path(&self, local_id: LocalId) -> Option<&InternedPath> {
+        self.local_names.get(&local_id)
+    }
+
+    #[inline]
+    pub(crate) fn function_name_path(&self, function_id: FunctionId) -> Option<&InternedPath> {
+        self.function_names.get(&function_id)
+    }
+
+    #[inline]
+    pub(crate) fn struct_name_path(&self, struct_id: StructId) -> Option<&InternedPath> {
+        self.struct_names.get(&struct_id)
+    }
+
+    #[inline]
+    pub(crate) fn field_name_path(&self, field_id: FieldId) -> Option<&InternedPath> {
+        self.field_names.get(&field_id)
+    }
+
+    #[inline]
+    #[allow(dead_code)] // Reserved for future call sites that want the interned local leaf directly
+    pub(crate) fn local_name_id(&self, local_id: LocalId) -> Option<StringId> {
+        self.local_name_path(local_id).and_then(InternedPath::name)
+    }
+
+    #[inline]
+    #[allow(dead_code)] // Reserved for future call sites that want the interned function leaf directly
+    pub(crate) fn function_name_id(&self, function_id: FunctionId) -> Option<StringId> {
+        self.function_name_path(function_id)
+            .and_then(InternedPath::name)
+    }
+
+    #[inline]
+    #[allow(dead_code)] // Reserved for future call sites that want the interned struct leaf directly
+    pub(crate) fn struct_name_id(&self, struct_id: StructId) -> Option<StringId> {
+        self.struct_name_path(struct_id)
+            .and_then(InternedPath::name)
+    }
+
+    #[inline]
+    #[allow(dead_code)] // Reserved for future call sites that want the interned field leaf directly
+    pub(crate) fn field_name_id(&self, field_id: FieldId) -> Option<StringId> {
+        self.field_name_path(field_id).and_then(InternedPath::name)
+    }
+
+    #[inline]
+    pub(crate) fn resolve_local_name<'a>(
+        &self,
+        local_id: LocalId,
+        string_table: &'a StringTable,
+    ) -> Option<&'a str> {
+        self.local_name_path(local_id)
+            .and_then(|path| path.name_str(string_table))
+    }
+
+    #[inline]
+    pub(crate) fn resolve_function_name<'a>(
+        &self,
+        function_id: FunctionId,
+        string_table: &'a StringTable,
+    ) -> Option<&'a str> {
+        self.function_name_path(function_id)
+            .and_then(|path| path.name_str(string_table))
+    }
+
+    #[inline]
+    pub(crate) fn resolve_struct_name<'a>(
+        &self,
+        struct_id: StructId,
+        string_table: &'a StringTable,
+    ) -> Option<&'a str> {
+        self.struct_name_path(struct_id)
+            .and_then(|path| path.name_str(string_table))
+    }
+
+    #[inline]
+    pub(crate) fn resolve_field_name<'a>(
+        &self,
+        field_id: FieldId,
+        string_table: &'a StringTable,
+    ) -> Option<&'a str> {
+        self.field_name_path(field_id)
+            .and_then(|path| path.name_str(string_table))
+    }
+}

@@ -121,7 +121,12 @@ pub fn run_single_build_cycle(
         // continue serving rebuild results instead of crashing the entire watcher loop.
         let mut build_state = match state.build_state.lock() {
             Ok(guard) => guard,
-            Err(poisoned) => poisoned.into_inner(),
+            Err(poisoned) => {
+                say!(
+                    Yellow "Dev server state warning: recovering from a poisoned build-state lock after a previous panic."
+                );
+                poisoned.into_inner()
+            }
         };
         build_state.last_build_version = build_state.last_build_version.saturating_add(1);
         build_state.last_build_ok = build_succeeded;

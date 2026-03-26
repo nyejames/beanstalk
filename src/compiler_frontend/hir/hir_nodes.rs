@@ -44,7 +44,7 @@
 //! - `fn || -> Int, String?` → returns Option<(Int, String)>
 //! - `fn || -> Int, String!` → returns Result<(Int, String), Error>
 
-use super::hir_display::HirSideTable;
+use super::hir_side_table::HirSideTable;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::hir::hir_datatypes::{TypeContext, TypeId};
 use crate::compiler_frontend::host_functions::CallTarget;

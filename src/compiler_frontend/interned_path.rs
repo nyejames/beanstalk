@@ -99,10 +99,8 @@ impl InternedPath {
         if self.components.is_empty() {
             None
         } else {
-            let mut parent_components = self.components.clone();
-            parent_components.pop();
             Some(InternedPath {
-                components: parent_components,
+                components: self.components[..self.components.len() - 1].to_vec(),
             })
         }
     }
@@ -110,14 +108,17 @@ impl InternedPath {
     /// Join this path with another path
     #[allow(dead_code)] // todo
     pub fn join(&self, other: &InternedPath) -> InternedPath {
-        let mut new_components = self.components.clone();
+        let mut new_components =
+            Vec::with_capacity(self.components.len() + other.components.len());
+        new_components.extend_from_slice(&self.components);
         new_components.extend_from_slice(&other.components);
         InternedPath {
             components: new_components,
         }
     }
     pub fn append(&self, new: StringId) -> Self {
-        let mut new_components = self.components.clone();
+        let mut new_components = Vec::with_capacity(self.components.len() + 1);
+        new_components.extend_from_slice(&self.components);
         new_components.push(new);
         Self {
             components: new_components,
@@ -126,9 +127,7 @@ impl InternedPath {
 
     /// Join this path with a string component (interns the string)
     pub fn join_str(&self, component: &str, string_table: &mut StringTable) -> InternedPath {
-        let mut new_path = self.clone();
-        new_path.push_str(component, string_table);
-        new_path
+        self.append(string_table.intern(component))
     }
 
     /// Get the number of components in this path

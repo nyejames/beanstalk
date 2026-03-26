@@ -1,10 +1,15 @@
+//! Small shared traits used by frontend scope and declaration lookups.
+//!
+//! These helpers centralize common "find the most recent visible declaration" behavior across
+//! AST-time containers.
+
 use crate::compiler_frontend::ast::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::string_interning::StringId;
 
 pub trait ContainsReferences {
     fn get_reference(&self, name: &StringId) -> Option<&Declaration>;
-    #[allow(dead_code)] // todo
+    #[allow(dead_code)] // Reserved for future AST rewrites that mutate declarations in place
     fn get_reference_mut(&mut self, name: &StringId) -> Option<&mut Declaration>;
 }
 

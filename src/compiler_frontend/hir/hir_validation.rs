@@ -5,13 +5,13 @@
 //! rely on a consistent IR contract.
 use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorLocation, ErrorType};
 use crate::compiler_frontend::hir::hir_datatypes::{HirTypeKind, TypeId};
-use crate::compiler_frontend::hir::hir_display::HirLocation;
 use crate::compiler_frontend::hir::hir_nodes::{
     BlockId, FieldId, FunctionId, HirConstValue, HirDocFragmentKind, HirExpression,
     HirExpressionKind, HirFunctionOrigin, HirMatchArm, HirModule, HirPattern, HirPlace,
     HirStatement, HirStatementKind, HirTerminator, LocalId, RegionId, StartFragment, StructId,
     ValueKind,
 };
+use crate::compiler_frontend::hir::hir_side_table::HirLocation;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::TextLocation;
 use rustc_hash::{FxHashMap, FxHashSet};

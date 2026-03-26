@@ -1,3 +1,8 @@
+//! Shared frontend utility helpers.
+//!
+//! These are small cross-cutting helpers that predate some newer subsystem boundaries and are
+//! still reused in parsing and path-validation code.
+
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::return_file_error;
 use std::path::{Path, PathBuf};
@@ -6,8 +11,9 @@ pub fn is_valid_var_char(char: &char) -> bool {
     char.is_alphanumeric() || *char == '_'
 }
 
-// Checks the path and converts it to a PathBuf
-// Resolves mixing unix and windows paths
+// WHAT: validate a user-provided filesystem path and normalize separators on Windows.
+// WHY: build-system path settings are user-facing input, so they must produce structured file
+//      diagnostics instead of leaking platform-specific path quirks downstream.
 pub fn check_if_valid_path(path: &str) -> Result<PathBuf, CompilerError> {
     // If it contains Unix-style slashes, convert them
     let path = if cfg!(windows) && path.contains('/') {

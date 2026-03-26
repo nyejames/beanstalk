@@ -75,12 +75,7 @@ impl<'a> HirBuilder<'a> {
         chunk_types: &[DataType],
         location: &TextLocation,
     ) -> Result<FunctionId, CompilerError> {
-        let Some(current_function_id) = self.current_function else {
-            return_hir_transformation_error!(
-                "Runtime template lowering requires an active function context",
-                self.hir_error_location(location)
-            );
-        };
+        let current_function_id = self.current_function_id_or_error(location)?;
 
         let Some(current_function_name) = self
             .side_table
@@ -134,8 +129,7 @@ impl<'a> HirBuilder<'a> {
         let mut params = Vec::with_capacity(chunk_types.len());
         for (index, chunk_type) in chunk_types.iter().enumerate() {
             let param_ty = self.lower_template_chunk_type(chunk_type, location)?;
-            let local_id = LocalId(self.next_local_id);
-            self.next_local_id += 1;
+            let local_id = self.allocate_local_id();
 
             let local_name =
                 template_function_name.join_str(&format!("chunk_{index}"), self.string_table);

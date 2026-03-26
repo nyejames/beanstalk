@@ -56,75 +56,55 @@ impl Ownership {
 
 #[derive(Debug, Clone)]
 pub enum DataType {
+    // Meta-types used during earlier frontend stages.
     // Type is inferred, This only exists before the type checking stage.
     // All 'inferred' variables must be evaluated to other types after the AST stage for the program to compile.
     // At the header parsing stage, 'inferred' is used where a symbol type is not yet known (as the type might be another header).
     Inferred,
-
-    Reference(Box<DataType>),
-
-    Bool,
-    Range, // Iterable that must always be owned.
-
-    // Immutable Data Types
-    // In practice, these types should not be deliberately used much at all
-    #[allow(dead_code)] // todo
-    None, // The None result of an option, or empty argument
-    #[allow(dead_code)] // todo
-    True,
-    #[allow(dead_code)] // todo
-    False,
-
-    // Strings
-    StringSlice, // UTF-8 read-only string slice
-    Char,
 
     // Any type can be used in the expression and will be coerced to a string (for scenes only).
     // Mathematical operations will still work and take priority, but strings can be used in these expressions.
     // All types will finally be coerced to strings after everything is evaluated.
     CoerceToString,
 
+    // Container and composite runtime types.
+    Collection(Box<DataType>, Ownership),
+    Struct(Vec<Declaration>, Ownership),
+    Reference(Box<DataType>),
+    Range, // Iterable that must always be owned.
+    Returns(Vec<DataType>),
+    Function(Box<Option<DataType>>, FunctionSignature), // Receiver, signature
+
+    // Compile-time/frontend-specific composite values.
     // Compile-time path value (file or directory).
     #[allow(dead_code)] // Will be needed for path expressions in the future
     Path(PathTypeKind),
-
-    // Mutable owned strings
-    // Can also become string building functions at runtime if they are not folded
     Template,
 
-    // Foldable template with a slot (becomes two string slices)
-    #[allow(dead_code)] // todo
-    TemplateWrapper,
-
-    // Numbers
-    Float,
+    // Scalar/runtime-leaf types.
+    Bool,
     Int,
+    Float,
     #[allow(dead_code)] // todo
     Decimal,
+    StringSlice, // UTF-8 read-only string slice
+    Char,
 
-    // Collections.
-    // A collection of single types, dynamically sized
-    Collection(Box<DataType>, Ownership),
-
-    // Structs
+    // Reserved or not-yet-wired variants kept for planned language work.
     #[allow(dead_code)] // todo
     Parameters(Vec<Declaration>), // Struct definitions and parameters
-    Struct(Vec<Declaration>, Ownership), // Struct instance
-
-    // Return Parameters
-    Returns(Vec<DataType>),
-
-    Function(Box<Option<DataType>>, FunctionSignature), // Receiver, signature
-
-    // Type Types
-    // Unions allow types such as option and result
-
-    // TODO: IS THIS JUST MULTIPLE TYPES FOR FUNCTION RETURNS?
-    // Choices should actually just be enums for now
     #[allow(dead_code)] // todo
     Choices(Vec<Declaration>), // Union of types
     #[allow(dead_code)] // todo
     Option(Box<DataType>), // Shorthand for a choice of a type or None
+    #[allow(dead_code)] // todo
+    TemplateWrapper, // Foldable template with a slot (becomes two string slices)
+    #[allow(dead_code)] // todo
+    None, // The None result of an option, or empty argument
+    #[allow(dead_code)] // todo
+    True,
+    #[allow(dead_code)] // todo
+    False,
 }
 
 impl DataType {

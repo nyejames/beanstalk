@@ -32,7 +32,7 @@ pub enum RenderPiece {
     DynamicExpression(RenderExpressionPiece),
     /// Unresolved slot placeholder that will be filled later.
     Slot(SlotPlaceholder),
-    #[allow(dead_code)]
+    #[allow(dead_code)] // Reserved for formatter pipelines that suppress pieces before final output
     /// Comment or suppressed content.
     Omitted,
 }
@@ -142,7 +142,7 @@ impl TemplateRenderPlan {
 
     /// Reconstructs a `TemplateContent` from this render plan.
     /// Kept for future round-trip and debug tooling — not yet wired into the main pipeline.
-    #[allow(dead_code)]
+    #[allow(dead_code)] // Reserved for render-plan round-trip tests and future debug tooling
     pub fn rebuild_content(&self) -> TemplateContent {
         use crate::compiler_frontend::ast::expressions::expression::Expression;
         use crate::compiler_frontend::ast::templates::template::{
