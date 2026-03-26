@@ -1,8 +1,11 @@
 //! Tests for the core build orchestration and output writer APIs.
 
 use super::{
-    BackendBuilder, FileKind, OutputFile, Project, ProjectBuilder, WriteOptions, build_project,
-    resolve_project_output_root, write_project_outputs,
+    BackendBuilder, CleanupPolicy, FileKind, OutputFile, Project, ProjectBuilder, WriteOptions,
+    build_project, resolve_project_output_root, write_project_outputs,
+};
+use crate::build_system::output_cleanup::{
+    BuilderKind, ManifestLimitedSafeModeReason, ManifestLoadResult,
 };
 use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::compiler_errors::{
@@ -55,6 +58,23 @@ fn current_dir_test_lock() -> &'static Mutex<()> {
     LOCK.get_or_init(|| Mutex::new(()))
 }
 
+fn html_cleanup_policy() -> CleanupPolicy {
+    CleanupPolicy::html()
+}
+
+fn generic_cleanup_policy() -> CleanupPolicy {
+    CleanupPolicy::generic([".html", ".js", ".wasm"])
+}
+
+fn html_project(output_files: Vec<OutputFile>, entry_page_rel: Option<PathBuf>) -> Project {
+    Project {
+        output_files,
+        entry_page_rel,
+        cleanup_policy: html_cleanup_policy(),
+        warnings: vec![],
+    }
+}
+
 struct WarningBuilder;
 
 impl BackendBuilder for WarningBuilder {
@@ -70,6 +90,7 @@ impl BackendBuilder for WarningBuilder {
                 FileKind::Js(String::from("console.log('ok');")),
             )],
             entry_page_rel: None,
+            cleanup_policy: CleanupPolicy::generic([".js"]),
             warnings: vec![CompilerWarning::new(
                 "builder warning",
                 ErrorLocation::default(),
@@ -104,6 +125,7 @@ impl BackendBuilder for ValidationTrackingBuilder {
         Ok(Project {
             output_files: vec![],
             entry_page_rel: None,
+            cleanup_policy: CleanupPolicy::generic(Vec::<&str>::new()),
             warnings: vec![],
         })
     }
@@ -159,6 +181,7 @@ impl BackendBuilder for NoDirectiveBuilder {
                 FileKind::Html(String::new()),
             )],
             entry_page_rel: Some(PathBuf::from("index.html")),
+            cleanup_policy: CleanupPolicy::generic([".html"]),
             warnings: vec![],
         })
     }
@@ -369,6 +392,7 @@ fn write_project_outputs_writes_all_supported_artifacts_and_skips_not_built() {
             OutputFile::new(PathBuf::new(), FileKind::NotBuilt),
         ],
         entry_page_rel: Some(PathBuf::from("index.html")),
+        cleanup_policy: generic_cleanup_policy(),
         warnings: vec![],
     };
 
@@ -410,6 +434,7 @@ fn write_project_outputs_rejects_invalid_paths() {
                 FileKind::Js(String::from("x")),
             )],
             entry_page_rel: None,
+            cleanup_policy: generic_cleanup_policy(),
             warnings: vec![],
         },
         Project {
@@ -418,6 +443,7 @@ fn write_project_outputs_rejects_invalid_paths() {
                 FileKind::Js(String::from("x")),
             )],
             entry_page_rel: None,
+            cleanup_policy: generic_cleanup_policy(),
             warnings: vec![],
         },
         Project {
@@ -426,6 +452,7 @@ fn write_project_outputs_rejects_invalid_paths() {
                 FileKind::Js(String::from("x")),
             )],
             entry_page_rel: None,
+            cleanup_policy: generic_cleanup_policy(),
             warnings: vec![],
         },
     ];
@@ -1482,14 +1509,14 @@ fn build_project_rejects_struct_constructor_with_too_many_arguments() {
 //   Stale artifact cleanup tests
 // ---------------------------------------------------------------------------
 
-use super::{
-    BUILD_MANIFEST_FILENAME, read_build_manifest, remove_stale_artifacts,
+use crate::build_system::output_cleanup::{
+    BUILD_MANIFEST_FILENAME, read_build_manifest, remove_manifest_tracked_stale_artifacts,
     validate_output_root_is_safe, write_build_manifest,
 };
 use std::collections::HashSet;
 
 #[test]
-fn cleanup_removes_stale_files_from_previous_build() {
+fn cleanup_manifest_diff_removes_stale_managed_files() {
     let root = temp_dir("cleanup_stale");
     fs::create_dir_all(&root).expect("should create temp root");
     let project_dir = root.join("project");
@@ -1497,8 +1524,8 @@ fn cleanup_removes_stale_files_from_previous_build() {
     let output_root = project_dir.join("dev");
 
     // Build A: index.html + about/index.html
-    let project_a = Project {
-        output_files: vec![
+    let project_a = html_project(
+        vec![
             OutputFile::new(
                 PathBuf::from("index.html"),
                 FileKind::Html(String::from("<html>Home</html>")),
@@ -1507,10 +1534,13 @@ fn cleanup_removes_stale_files_from_previous_build() {
                 PathBuf::from("about/index.html"),
                 FileKind::Html(String::from("<html>About</html>")),
             ),
+            OutputFile::new(
+                PathBuf::from("scripts/page.js"),
+                FileKind::Js(String::from("console.log('about');")),
+            ),
         ],
-        entry_page_rel: Some(PathBuf::from("index.html")),
-        warnings: vec![],
-    };
+        Some(PathBuf::from("index.html")),
+    );
     write_project_outputs(
         &project_a,
         &WriteOptions {
@@ -1522,17 +1552,17 @@ fn cleanup_removes_stale_files_from_previous_build() {
 
     assert!(output_root.join("index.html").exists());
     assert!(output_root.join("about/index.html").exists());
+    assert!(output_root.join("scripts/page.js").exists());
     assert!(output_root.join(BUILD_MANIFEST_FILENAME).exists());
 
     // Build B: only index.html
-    let project_b = Project {
-        output_files: vec![OutputFile::new(
+    let project_b = html_project(
+        vec![OutputFile::new(
             PathBuf::from("index.html"),
             FileKind::Html(String::from("<html>Home v2</html>")),
         )],
-        entry_page_rel: Some(PathBuf::from("index.html")),
-        warnings: vec![],
-    };
+        Some(PathBuf::from("index.html")),
+    );
     write_project_outputs(
         &project_b,
         &WriteOptions {
@@ -1548,6 +1578,10 @@ fn cleanup_removes_stale_files_from_previous_build() {
         "stale about/index.html should have been removed"
     );
     assert!(
+        !output_root.join("scripts/page.js").exists(),
+        "stale scripts/page.js should have been removed"
+    );
+    assert!(
         !output_root.join("about").exists(),
         "empty about/ directory should have been removed"
     );
@@ -1556,54 +1590,135 @@ fn cleanup_removes_stale_files_from_previous_build() {
 }
 
 #[test]
-fn cleanup_preserves_user_files_not_in_manifest() {
-    let root = temp_dir("cleanup_preserves_user");
+fn cleanup_missing_manifest_removes_stale_html_route_alias() {
+    let root = temp_dir("cleanup_missing_manifest_alias");
     fs::create_dir_all(&root).expect("should create temp root");
     let project_dir = root.join("project");
     fs::create_dir_all(&project_dir).expect("should create project dir");
     let output_root = project_dir.join("dev");
+    fs::create_dir_all(output_root.join("docs")).expect("should create docs output dir");
+    fs::write(
+        output_root.join("docs/basics.html"),
+        "<html>stale flat route</html>",
+    )
+    .expect("should write stale alias");
 
-    // Build A
-    let project_a = Project {
-        output_files: vec![OutputFile::new(
-            PathBuf::from("index.html"),
-            FileKind::Html(String::from("<html>Home</html>")),
+    let manifest = read_build_manifest(&output_root, &html_cleanup_policy());
+    assert_eq!(
+        manifest,
+        ManifestLoadResult::LimitedSafeMode {
+            reason: ManifestLimitedSafeModeReason::Missing,
+        }
+    );
+
+    let project = html_project(
+        vec![OutputFile::new(
+            PathBuf::from("docs/basics/index.html"),
+            FileKind::Html(String::from("<html>Docs</html>")),
         )],
-        entry_page_rel: Some(PathBuf::from("index.html")),
-        warnings: vec![],
-    };
+        Some(PathBuf::from("docs/basics/index.html")),
+    );
     write_project_outputs(
-        &project_a,
+        &project,
         &WriteOptions {
             output_root: output_root.clone(),
             project_entry_dir: Some(project_dir.clone()),
         },
     )
-    .expect("build A should succeed");
-
-    // User places a file manually in the output directory
-    fs::write(output_root.join("notes.txt"), "user notes").expect("should write user file");
-
-    // Build B (same outputs)
-    write_project_outputs(
-        &project_a,
-        &WriteOptions {
-            output_root: output_root.clone(),
-            project_entry_dir: Some(project_dir.clone()),
-        },
-    )
-    .expect("build B should succeed");
+    .expect("build should succeed");
 
     assert!(
-        output_root.join("notes.txt").exists(),
-        "user file should not be removed by cleanup"
+        !output_root.join("docs/basics.html").exists(),
+        "stale flat alias should have been removed in limited safe mode"
+    );
+    assert!(output_root.join("docs/basics/index.html").exists());
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
+fn cleanup_missing_manifest_preserves_unrelated_managed_files() {
+    let root = temp_dir("cleanup_missing_manifest_managed");
+    fs::create_dir_all(&root).expect("should create temp root");
+    let project_dir = root.join("project");
+    fs::create_dir_all(&project_dir).expect("should create project dir");
+    let output_root = project_dir.join("dev");
+    fs::create_dir_all(output_root.join("custom")).expect("should create custom output dir");
+    fs::write(
+        output_root.join("custom/landing.html"),
+        "<html>user managed file</html>",
+    )
+    .expect("should write unrelated html file");
+
+    let project = html_project(
+        vec![OutputFile::new(
+            PathBuf::from("docs/basics/index.html"),
+            FileKind::Html(String::from("<html>Docs</html>")),
+        )],
+        Some(PathBuf::from("docs/basics/index.html")),
+    );
+    write_project_outputs(
+        &project,
+        &WriteOptions {
+            output_root: output_root.clone(),
+            project_entry_dir: Some(project_dir.clone()),
+        },
+    )
+    .expect("build should succeed");
+
+    assert!(
+        output_root.join("custom/landing.html").exists(),
+        "missing manifests must not trigger a generic managed-file sweep"
     );
 
     fs::remove_dir_all(&root).expect("should remove temp dir");
 }
 
 #[test]
-fn cleanup_first_build_writes_manifest_without_removing() {
+fn cleanup_missing_manifest_preserves_non_managed_files() {
+    let root = temp_dir("cleanup_missing_manifest_non_managed");
+    fs::create_dir_all(&root).expect("should create temp root");
+    let project_dir = root.join("project");
+    fs::create_dir_all(&project_dir).expect("should create project dir");
+    let output_root = project_dir.join("dev");
+    fs::create_dir_all(output_root.join("docs")).expect("should create docs output dir");
+    fs::write(
+        output_root.join("docs/basics.html"),
+        "<html>stale alias</html>",
+    )
+    .expect("should write stale alias");
+    fs::write(output_root.join("docs/notes.txt"), "user notes").expect("should write notes file");
+
+    let project = html_project(
+        vec![OutputFile::new(
+            PathBuf::from("docs/basics/index.html"),
+            FileKind::Html(String::from("<html>Docs</html>")),
+        )],
+        Some(PathBuf::from("docs/basics/index.html")),
+    );
+    write_project_outputs(
+        &project,
+        &WriteOptions {
+            output_root: output_root.clone(),
+            project_entry_dir: Some(project_dir.clone()),
+        },
+    )
+    .expect("build should succeed");
+
+    assert!(
+        !output_root.join("docs/basics.html").exists(),
+        "deterministic stale alias should be removed"
+    );
+    assert!(
+        output_root.join("docs/notes.txt").exists(),
+        "non-managed files must be preserved in limited safe mode"
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
+fn cleanup_first_build_writes_v2_manifest_without_removing() {
     let root = temp_dir("cleanup_first_build");
     fs::create_dir_all(&root).expect("should create temp root");
     let project_dir = root.join("project");
@@ -1612,14 +1727,13 @@ fn cleanup_first_build_writes_manifest_without_removing() {
 
     assert!(!output_root.join(BUILD_MANIFEST_FILENAME).exists());
 
-    let project = Project {
-        output_files: vec![OutputFile::new(
+    let project = html_project(
+        vec![OutputFile::new(
             PathBuf::from("index.html"),
             FileKind::Html(String::from("<html>Home</html>")),
         )],
-        entry_page_rel: Some(PathBuf::from("index.html")),
-        warnings: vec![],
-    };
+        Some(PathBuf::from("index.html")),
+    );
     write_project_outputs(
         &project,
         &WriteOptions {
@@ -1635,29 +1749,32 @@ fn cleanup_first_build_writes_manifest_without_removing() {
         "manifest should be written on first build"
     );
 
-    let manifest = read_build_manifest(&output_root);
-    assert_eq!(manifest, vec![PathBuf::from("index.html")]);
+    assert_eq!(
+        read_build_manifest(&output_root, &html_cleanup_policy()),
+        ManifestLoadResult::ValidV2 {
+            paths: vec![PathBuf::from("index.html")],
+            builder_kind: BuilderKind::Html,
+        }
+    );
 
     fs::remove_dir_all(&root).expect("should remove temp dir");
 }
 
 #[test]
-fn cleanup_removes_empty_parent_directories() {
+fn cleanup_removes_empty_parent_directories_after_deleting_managed_files() {
     let root = temp_dir("cleanup_empty_parents");
     fs::create_dir_all(&root).expect("should create temp root");
     let project_dir = root.join("project");
     fs::create_dir_all(&project_dir).expect("should create project dir");
     let output_root = project_dir.join("dev");
 
-    // Build A: deeply nested file
-    let project_a = Project {
-        output_files: vec![OutputFile::new(
+    let project_a = html_project(
+        vec![OutputFile::new(
             PathBuf::from("a/b/c/file.js"),
             FileKind::Js(String::from("console.log('deep');")),
         )],
-        entry_page_rel: None,
-        warnings: vec![],
-    };
+        None,
+    );
     write_project_outputs(
         &project_a,
         &WriteOptions {
@@ -1668,15 +1785,13 @@ fn cleanup_removes_empty_parent_directories() {
     .expect("build A should succeed");
     assert!(output_root.join("a/b/c/file.js").exists());
 
-    // Build B: no files in a/
-    let project_b = Project {
-        output_files: vec![OutputFile::new(
+    let project_b = html_project(
+        vec![OutputFile::new(
             PathBuf::from("index.html"),
             FileKind::Html(String::from("<html></html>")),
         )],
-        entry_page_rel: Some(PathBuf::from("index.html")),
-        warnings: vec![],
-    };
+        Some(PathBuf::from("index.html")),
+    );
     write_project_outputs(
         &project_b,
         &WriteOptions {
@@ -1688,8 +1803,54 @@ fn cleanup_removes_empty_parent_directories() {
 
     assert!(
         !output_root.join("a").exists(),
-        "entire a/b/c/ chain should be removed when all contents are stale"
+        "empty parent directories should be removed after safe file deletion"
     );
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
+fn cleanup_preserves_parent_directories_when_non_managed_files_remain() {
+    let root = temp_dir("cleanup_preserves_parent_dirs");
+    fs::create_dir_all(&root).expect("should create temp root");
+    let project_dir = root.join("project");
+    fs::create_dir_all(&project_dir).expect("should create project dir");
+    let output_root = project_dir.join("dev");
+    fs::create_dir_all(output_root.join("docs/basics")).expect("should create docs output dir");
+    fs::write(
+        output_root.join("docs/basics/index.html"),
+        "<html>stale nested route</html>",
+    )
+    .expect("should write stale html file");
+    fs::write(output_root.join("docs/basics/notes.txt"), "keep me")
+        .expect("should write preserved notes file");
+    fs::write(
+        output_root.join(BUILD_MANIFEST_FILENAME),
+        "docs/basics/index.html\n",
+    )
+    .expect("should write legacy manifest");
+
+    let project = html_project(
+        vec![OutputFile::new(
+            PathBuf::from("index.html"),
+            FileKind::Html(String::from("<html>Home</html>")),
+        )],
+        Some(PathBuf::from("index.html")),
+    );
+    write_project_outputs(
+        &project,
+        &WriteOptions {
+            output_root: output_root.clone(),
+            project_entry_dir: Some(project_dir.clone()),
+        },
+    )
+    .expect("build should succeed");
+
+    assert!(
+        output_root.join("docs/basics").exists(),
+        "directories containing preserved files should not be pruned"
+    );
+    assert!(output_root.join("docs/basics/notes.txt").exists());
 
     fs::remove_dir_all(&root).expect("should remove temp dir");
 }
@@ -1731,7 +1892,7 @@ fn validate_output_root_accepts_project_subdirectory() {
 }
 
 #[test]
-fn cleanup_ignores_traversal_paths_in_corrupt_manifest() {
+fn cleanup_ignores_traversal_paths_in_legacy_manifest() {
     let root = temp_dir("cleanup_corrupt_manifest");
     fs::create_dir_all(&root).expect("should create temp root");
     let project_dir = root.join("project");
@@ -1739,24 +1900,33 @@ fn cleanup_ignores_traversal_paths_in_corrupt_manifest() {
     let output_root = project_dir.join("dev");
     fs::create_dir_all(&output_root).expect("should create output dir");
 
-    // Write a manifest containing path traversal attempts
     fs::write(
         output_root.join(BUILD_MANIFEST_FILENAME),
         "../escape.js\n/absolute/path.js\nvalid.html\n",
     )
-    .expect("should write corrupt manifest");
-
-    // Place a file that the traversal would target
+    .expect("should write legacy manifest");
     fs::write(project_dir.join("escape.js"), "should not be deleted")
         .expect("should write escape target");
 
     let current_paths: HashSet<PathBuf> = HashSet::new();
-    let previous = read_build_manifest(&output_root);
+    let previous_manifest = read_build_manifest(&output_root, &html_cleanup_policy());
+    assert_eq!(
+        previous_manifest,
+        ManifestLoadResult::ValidLegacy {
+            paths: vec![PathBuf::from("valid.html")],
+        }
+    );
 
-    // Only "valid.html" should survive manifest validation
-    assert_eq!(previous, vec![PathBuf::from("valid.html")]);
-
-    remove_stale_artifacts(&output_root, &current_paths, &previous);
+    if let ManifestLoadResult::ValidLegacy { paths } = previous_manifest {
+        remove_manifest_tracked_stale_artifacts(
+            &output_root,
+            &current_paths,
+            &paths,
+            &html_cleanup_policy(),
+        );
+    } else {
+        panic!("expected legacy manifest result");
+    }
 
     assert!(
         project_dir.join("escape.js").exists(),
@@ -1767,36 +1937,45 @@ fn cleanup_ignores_traversal_paths_in_corrupt_manifest() {
 }
 
 #[test]
-fn corrupt_manifest_treated_as_empty() {
+fn cleanup_unreadable_manifest_enters_limited_safe_mode_and_preserves_unknown_files() {
     let root = temp_dir("cleanup_garbage_manifest");
     fs::create_dir_all(&root).expect("should create temp root");
     let project_dir = root.join("project");
     fs::create_dir_all(&project_dir).expect("should create project dir");
     let output_root = project_dir.join("dev");
-    fs::create_dir_all(&output_root).expect("should create output dir");
+    fs::create_dir_all(output_root.join("docs")).expect("should create docs output dir");
+    fs::create_dir_all(output_root.join("custom")).expect("should create custom output dir");
 
-    // Write garbage to the manifest
     fs::write(
         output_root.join(BUILD_MANIFEST_FILENAME),
         b"\0\0\x01\x02 binary garbage \xFF\xFE",
     )
     .expect("should write garbage manifest");
+    fs::write(
+        output_root.join("docs/basics.html"),
+        "<html>stale alias</html>",
+    )
+    .expect("should write stale alias");
+    fs::write(
+        output_root.join("custom/landing.html"),
+        "<html>preserve me</html>",
+    )
+    .expect("should write unrelated html file");
 
-    let manifest = read_build_manifest(&output_root);
-    assert!(
-        manifest.is_empty(),
-        "corrupt manifest should be treated as empty"
+    assert_eq!(
+        read_build_manifest(&output_root, &html_cleanup_policy()),
+        ManifestLoadResult::LimitedSafeMode {
+            reason: ManifestLimitedSafeModeReason::Unreadable,
+        }
     );
 
-    // A build should succeed and overwrite with a fresh manifest
-    let project = Project {
-        output_files: vec![OutputFile::new(
-            PathBuf::from("index.html"),
-            FileKind::Html(String::from("<html></html>")),
+    let project = html_project(
+        vec![OutputFile::new(
+            PathBuf::from("docs/basics/index.html"),
+            FileKind::Html(String::from("<html>Docs</html>")),
         )],
-        entry_page_rel: Some(PathBuf::from("index.html")),
-        warnings: vec![],
-    };
+        Some(PathBuf::from("docs/basics/index.html")),
+    );
     write_project_outputs(
         &project,
         &WriteOptions {
@@ -1804,27 +1983,34 @@ fn corrupt_manifest_treated_as_empty() {
             project_entry_dir: Some(project_dir.clone()),
         },
     )
-    .expect("build should succeed despite corrupt manifest");
+    .expect("build should succeed despite unreadable manifest");
 
-    let fresh_manifest = read_build_manifest(&output_root);
-    assert_eq!(fresh_manifest, vec![PathBuf::from("index.html")]);
+    assert!(
+        !output_root.join("docs/basics.html").exists(),
+        "deterministic alias should be removed in limited safe mode"
+    );
+    assert!(
+        output_root.join("custom/landing.html").exists(),
+        "unknown managed-looking files should be preserved when full manifest cleanup is unavailable"
+    );
 
     fs::remove_dir_all(&root).expect("should remove temp dir");
 }
 
 #[test]
-fn no_cleanup_when_project_entry_dir_is_none() {
+fn cleanup_disabled_skips_manifest_and_alias_cleanup() {
     let root = temp_dir("cleanup_disabled");
-    fs::create_dir_all(&root).expect("should create temp root");
+    fs::create_dir_all(root.join("docs")).expect("should create temp root");
+    fs::write(root.join("docs/basics.html"), "<html>stale alias</html>")
+        .expect("should write stale alias");
 
-    let project = Project {
-        output_files: vec![OutputFile::new(
-            PathBuf::from("index.html"),
+    let project = html_project(
+        vec![OutputFile::new(
+            PathBuf::from("docs/basics/index.html"),
             FileKind::Html(String::from("<html></html>")),
         )],
-        entry_page_rel: Some(PathBuf::from("index.html")),
-        warnings: vec![],
-    };
+        Some(PathBuf::from("docs/basics/index.html")),
+    );
     write_project_outputs(
         &project,
         &WriteOptions {
@@ -1834,7 +2020,11 @@ fn no_cleanup_when_project_entry_dir_is_none() {
     )
     .expect("build should succeed");
 
-    assert!(root.join("index.html").exists());
+    assert!(root.join("docs/basics/index.html").exists());
+    assert!(
+        root.join("docs/basics.html").exists(),
+        "cleanup-disabled builds should not remove stale aliases"
+    );
     assert!(
         !root.join(BUILD_MANIFEST_FILENAME).exists(),
         "manifest should not be written when cleanup is disabled"
@@ -1844,7 +2034,95 @@ fn no_cleanup_when_project_entry_dir_is_none() {
 }
 
 #[test]
-fn write_build_manifest_produces_sorted_output() {
+fn legacy_manifest_cleanup_uses_current_policy_and_preserves_non_managed_paths() {
+    let root = temp_dir("cleanup_legacy_manifest");
+    fs::create_dir_all(&root).expect("should create temp root");
+    let project_dir = root.join("project");
+    fs::create_dir_all(&project_dir).expect("should create project dir");
+    let output_root = project_dir.join("dev");
+    fs::create_dir_all(output_root.join("about")).expect("should create about output dir");
+    fs::create_dir_all(output_root.join("scripts")).expect("should create scripts output dir");
+
+    fs::write(
+        output_root.join("about/index.html"),
+        "<html>stale about</html>",
+    )
+    .expect("should write stale html file");
+    fs::write(output_root.join("scripts/page.js"), "console.log('stale');")
+        .expect("should write stale js file");
+    fs::write(output_root.join("notes.txt"), "keep me").expect("should write notes file");
+    fs::write(
+        output_root.join(BUILD_MANIFEST_FILENAME),
+        "about/index.html\nscripts/page.js\nnotes.txt\n",
+    )
+    .expect("should write legacy manifest");
+
+    assert_eq!(
+        read_build_manifest(&output_root, &html_cleanup_policy()),
+        ManifestLoadResult::ValidLegacy {
+            paths: vec![
+                PathBuf::from("about/index.html"),
+                PathBuf::from("scripts/page.js"),
+                PathBuf::from("notes.txt"),
+            ],
+        }
+    );
+
+    let project = html_project(
+        vec![OutputFile::new(
+            PathBuf::from("index.html"),
+            FileKind::Html(String::from("<html>Home</html>")),
+        )],
+        Some(PathBuf::from("index.html")),
+    );
+    write_project_outputs(
+        &project,
+        &WriteOptions {
+            output_root: output_root.clone(),
+            project_entry_dir: Some(project_dir.clone()),
+        },
+    )
+    .expect("build should succeed");
+
+    assert!(
+        !output_root.join("about/index.html").exists(),
+        "legacy manifests should still drive stale html cleanup"
+    );
+    assert!(
+        !output_root.join("scripts/page.js").exists(),
+        "legacy manifests should still drive stale js cleanup"
+    );
+    assert!(
+        output_root.join("notes.txt").exists(),
+        "manifest cleanup must not delete non-managed file types"
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
+fn read_build_manifest_rejects_builder_mismatch_in_v2_manifest() {
+    let root = temp_dir("cleanup_builder_mismatch");
+    fs::create_dir_all(&root).expect("should create temp root");
+
+    let paths: HashSet<PathBuf> = [PathBuf::from("index.html")].into_iter().collect();
+    write_build_manifest(&root, &paths, &generic_cleanup_policy()).expect("should write manifest");
+
+    assert_eq!(
+        read_build_manifest(&root, &html_cleanup_policy()),
+        ManifestLoadResult::LimitedSafeMode {
+            reason: ManifestLimitedSafeModeReason::BuilderMismatch {
+                manifest_builder_kind: BuilderKind::Generic,
+                active_builder_kind: BuilderKind::Html,
+            },
+        }
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
+fn write_build_manifest_produces_sorted_v2_output() {
     let root = temp_dir("manifest_sorted");
     fs::create_dir_all(&root).expect("should create temp root");
 
@@ -1856,12 +2134,22 @@ fn write_build_manifest_produces_sorted_output() {
     .into_iter()
     .collect();
 
-    write_build_manifest(&root, &paths).expect("should write manifest");
+    write_build_manifest(&root, &paths, &html_cleanup_policy()).expect("should write manifest");
 
     let content =
         fs::read_to_string(root.join(BUILD_MANIFEST_FILENAME)).expect("should read manifest file");
     let lines: Vec<&str> = content.lines().collect();
-    assert_eq!(lines, vec!["about/index.html", "index.html", "z/page.js"]);
+    assert_eq!(
+        lines,
+        vec![
+            "# beanstalk-manifest v2",
+            "# builder: html",
+            "# managed_extensions: .html,.js,.wasm",
+            "about/index.html",
+            "index.html",
+            "z/page.js",
+        ]
+    );
 
     fs::remove_dir_all(&root).expect("should remove temp dir");
 }

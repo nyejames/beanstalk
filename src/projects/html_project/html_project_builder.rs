@@ -2,7 +2,7 @@
 //
 // WHAT: coordinates module output-path resolution, homepage checks, and backend selection.
 // WHY: project builders own artifact assembly policy while compiler backends stay generic.
-use crate::build_system::build::{BackendBuilder, Module, OutputFile, Project};
+use crate::build_system::build::{BackendBuilder, CleanupPolicy, Module, OutputFile, Project};
 use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages, ErrorType};
 use crate::compiler_frontend::paths::path_resolution::resolve_project_entry_root;
@@ -108,6 +108,7 @@ impl BackendBuilder for HtmlProjectBuilder {
         Ok(Project {
             output_files,
             entry_page_rel,
+            cleanup_policy: CleanupPolicy::html(),
             warnings: Vec::new(),
         })
     }

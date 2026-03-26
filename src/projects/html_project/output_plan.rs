@@ -8,7 +8,7 @@
 //! lives in the respective `js_path` and `wasm/artifacts` modules.
 
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 /// A resolved output plan for one HTML route.
 ///
@@ -137,6 +137,45 @@ fn derive_logical_html_path_from_entry_root(
         parent.join(route_name)
     };
     Ok(route_base.join("index.html"))
+}
+
+/// Derive the legacy flat `.html` alias for a canonical folder-backed HTML route.
+///
+/// WHAT: maps `about/index.html` to `about.html` and `docs/basics/index.html` to
+/// `docs/basics.html`.
+/// WHY: route-shape cleanup should delete only aliases that are deterministic equivalents of the
+/// current canonical route.
+pub(crate) fn derive_legacy_route_alias(canonical_html_path: &Path) -> Option<PathBuf> {
+    if canonical_html_path.is_absolute() || canonical_html_path.as_os_str().is_empty() {
+        return None;
+    }
+
+    for component in canonical_html_path.components() {
+        match component {
+            Component::Normal(_) => {}
+            Component::CurDir
+            | Component::ParentDir
+            | Component::RootDir
+            | Component::Prefix(_) => {
+                return None;
+            }
+        }
+    }
+
+    if canonical_html_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        != Some("index.html")
+    {
+        return None;
+    }
+
+    let parent = canonical_html_path.parent()?;
+    if parent.as_os_str().is_empty() {
+        return None;
+    }
+
+    Some(parent.with_extension("html"))
 }
 
 /// Derive the route folder base from a logical HTML path for Wasm artifact co-location.

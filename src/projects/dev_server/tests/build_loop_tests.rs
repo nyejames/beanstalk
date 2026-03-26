@@ -3,7 +3,9 @@
 use super::{
     DevBuildExecutor, dev_server_error_messages, run_builds_until_stable, run_single_build_cycle,
 };
-use crate::build_system::build::{self, BuildResult, FileKind, OutputFile, Project, WriteOptions};
+use crate::build_system::build::{
+    self, BuildResult, CleanupPolicy, FileKind, OutputFile, Project, WriteOptions,
+};
 use crate::compiler_frontend::compiler_errors::{
     CompilerError, CompilerMessages, ErrorMetaDataKey, ErrorType,
 };
@@ -33,6 +35,7 @@ fn html_build_result() -> BuildResult {
                 FileKind::Html(String::from("<html><body>Hello</body></html>")),
             )],
             entry_page_rel: Some(PathBuf::from("index.html")),
+            cleanup_policy: CleanupPolicy::html(),
             warnings: vec![],
         },
         config: Config::new(PathBuf::from("main.bst")),
@@ -54,6 +57,7 @@ fn multi_page_html_build_result() -> BuildResult {
                 ),
             ],
             entry_page_rel: Some(PathBuf::from("index.html")),
+            cleanup_policy: CleanupPolicy::html(),
             warnings: vec![],
         },
         config: Config::new(PathBuf::from("project")),
@@ -69,6 +73,7 @@ fn html_build_result_without_entry_page() -> BuildResult {
                 FileKind::Html(String::from("<html><body>Hello</body></html>")),
             )],
             entry_page_rel: None,
+            cleanup_policy: CleanupPolicy::html(),
             warnings: vec![],
         },
         config: Config::new(PathBuf::from("main.bst")),

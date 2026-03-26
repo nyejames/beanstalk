@@ -5,6 +5,10 @@
 //! written without reimplementing frontend/backend orchestration.
 
 use crate::build_system::create_project_modules::compile_project_frontend;
+pub use crate::build_system::output_cleanup::CleanupPolicy;
+use crate::build_system::output_cleanup::{
+    finalize_output_cleanup, prepare_output_cleanup, validate_relative_output_path,
+};
 use crate::build_system::project_config::load_project_config;
 use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::analysis::borrow_checker::BorrowCheckReport;
@@ -18,13 +22,8 @@ use crate::projects::settings::Config;
 use saying::say;
 use std::collections::HashSet;
 use std::fs;
-use std::io;
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 use std::time::Instant;
-
-/// Manifest file written to the output root to track which files the build system created.
-/// Used to identify stale artifacts from previous builds that should be cleaned up.
-const BUILD_MANIFEST_FILENAME: &str = ".beanstalk_manifest";
 
 pub struct Module {
     pub(crate) entry_point: PathBuf, // The name of the main start function
@@ -108,6 +107,8 @@ impl OutputFile {
 pub struct Project {
     pub output_files: Vec<OutputFile>,
     pub entry_page_rel: Option<PathBuf>,
+    /// Builder-owned cleanup contract for manifest tracking and stale artifact removal.
+    pub cleanup_policy: CleanupPolicy,
     pub warnings: Vec<CompilerWarning>,
 }
 
@@ -226,14 +227,11 @@ pub fn write_project_outputs(
     project: &Project,
     options: &WriteOptions,
 ) -> Result<(), CompilerMessages> {
-    // WHAT: Validate output root safety and read previous manifest when cleanup is enabled
-    // WHY: Must happen before any writes so we can compare old vs new artifact sets
-    let previous_manifest = if let Some(project_entry_dir) = &options.project_entry_dir {
-        validate_output_root_is_safe(&options.output_root, project_entry_dir)?;
-        read_build_manifest(&options.output_root)
-    } else {
-        Vec::new()
-    };
+    let cleanup_state = prepare_output_cleanup(
+        &options.output_root,
+        options.project_entry_dir.as_deref(),
+        &project.cleanup_policy,
+    )?;
 
     fs::create_dir_all(&options.output_root).map_err(|error| {
         CompilerMessages::from_error(CompilerError::file_error(
@@ -246,16 +244,24 @@ pub fn write_project_outputs(
     })?;
 
     let mut current_output_paths: HashSet<PathBuf> = HashSet::new();
+    let mut current_managed_artifact_paths: HashSet<PathBuf> = HashSet::new();
 
     for output_file in &project.output_files {
         if matches!(output_file.file_kind(), FileKind::NotBuilt) {
             continue;
         }
 
-        validate_relative_output_path(output_file.relative_output_path())?;
-        current_output_paths.insert(output_file.relative_output_path().to_path_buf());
+        let relative_output_path = output_file.relative_output_path();
+        validate_relative_output_path(relative_output_path)?;
+        current_output_paths.insert(relative_output_path.to_path_buf());
 
-        let destination = options.output_root.join(output_file.relative_output_path());
+        if !matches!(output_file.file_kind(), FileKind::Directory)
+            && project.cleanup_policy.manages_path(relative_output_path)
+        {
+            current_managed_artifact_paths.insert(relative_output_path.to_path_buf());
+        }
+
+        let destination = options.output_root.join(relative_output_path);
 
         match output_file.file_kind() {
             FileKind::NotBuilt => {}
@@ -299,14 +305,13 @@ pub fn write_project_outputs(
 
     // WHAT: Clean up stale artifacts and write updated manifest when cleanup is enabled
     // WHY: Artifacts from removed pages must not persist in the output folder between builds
-    if options.project_entry_dir.is_some() {
-        remove_stale_artifacts(
-            &options.output_root,
-            &current_output_paths,
-            &previous_manifest,
-        );
-        write_build_manifest(&options.output_root, &current_output_paths)?;
-    }
+    finalize_output_cleanup(
+        &cleanup_state,
+        &options.output_root,
+        &current_output_paths,
+        &current_managed_artifact_paths,
+        &project.cleanup_policy,
+    )?;
 
     Ok(())
 }
@@ -333,284 +338,6 @@ fn create_parent_dir_if_needed(path: &Path) -> Result<(), CompilerMessages> {
             ),
         ))
     })
-}
-
-fn validate_relative_output_path(relative_output_path: &Path) -> Result<(), CompilerMessages> {
-    if relative_output_path.as_os_str().is_empty() {
-        return Err(CompilerMessages::from_error(CompilerError::file_error(
-            relative_output_path,
-            "Output path cannot be empty for built artifacts.",
-        )));
-    }
-
-    if relative_output_path.is_absolute() {
-        return Err(CompilerMessages::from_error(CompilerError::file_error(
-            relative_output_path,
-            "Output path must be relative, not absolute.",
-        )));
-    }
-
-    for component in relative_output_path.components() {
-        match component {
-            Component::Normal(_) => {}
-            Component::ParentDir => {
-                return Err(CompilerMessages::from_error(CompilerError::file_error(
-                    relative_output_path,
-                    "Output path cannot contain '..' traversal components.",
-                )));
-            }
-            Component::CurDir | Component::RootDir | Component::Prefix(_) => {
-                return Err(CompilerMessages::from_error(CompilerError::file_error(
-                    relative_output_path,
-                    "Output path must only contain normal path components.",
-                )));
-            }
-        }
-    }
-
-    Ok(())
-}
-
-/// Reject output roots that are dangerous system paths or suspiciously far from the project.
-///
-/// WHY: Stale artifact cleanup deletes files, so the output root must be validated before any
-/// removal to prevent accidental deletion on system-critical or unrelated paths.
-fn validate_output_root_is_safe(
-    output_root: &Path,
-    project_entry_dir: &Path,
-) -> Result<(), CompilerMessages> {
-    // WHAT: Canonicalize the output root, falling back to the nearest existing ancestor
-    // WHY: Symlinks or relative segments could disguise a dangerous target path
-    let canonical_root = canonicalize_or_nearest_ancestor(output_root);
-
-    if is_dangerous_system_path(&canonical_root) {
-        return Err(CompilerMessages::from_error(CompilerError::file_error(
-            output_root,
-            format!(
-                "Refusing to use '{}' as the build output root because it is a protected system path. \
-                 Configure a project-relative output folder in #config.bst.",
-                output_root.display()
-            ),
-        )));
-    }
-
-    // WHAT: Verify the output root is near the project directory
-    // WHY: An output root in a completely unrelated location is likely a misconfiguration
-    let canonical_project = canonicalize_or_nearest_ancestor(project_entry_dir);
-    let project_parent = canonical_project.parent().unwrap_or(&canonical_project);
-
-    let is_inside_project = canonical_root.starts_with(&canonical_project);
-    let is_sibling_of_project = canonical_root.starts_with(project_parent);
-
-    if !is_inside_project && !is_sibling_of_project {
-        return Err(CompilerMessages::from_error(CompilerError::file_error(
-            output_root,
-            format!(
-                "Build output root '{}' is not inside or adjacent to the project directory '{}'. \
-                 Stale artifact cleanup requires the output root to be near the project to prevent \
-                 accidental file deletion.",
-                output_root.display(),
-                project_entry_dir.display()
-            ),
-        )));
-    }
-
-    Ok(())
-}
-
-/// Canonicalize a path, falling back to the nearest existing ancestor if the path does not exist.
-fn canonicalize_or_nearest_ancestor(path: &Path) -> PathBuf {
-    if let Ok(canonical) = fs::canonicalize(path) {
-        return canonical;
-    }
-
-    let mut ancestor = path.to_path_buf();
-    while let Some(parent) = ancestor.parent() {
-        if let Ok(canonical) = fs::canonicalize(parent) {
-            // Re-append the non-existent suffix to the canonical ancestor
-            let suffix = path.strip_prefix(parent).unwrap_or(Path::new(""));
-            return canonical.join(suffix);
-        }
-        ancestor = parent.to_path_buf();
-    }
-
-    path.to_path_buf()
-}
-
-/// Check whether a path matches a known dangerous system directory.
-///
-/// WHY: The cleanup process removes files, so it must never operate on OS-critical directories
-/// like /, /usr, /etc, or their Windows equivalents.
-fn is_dangerous_system_path(path: &Path) -> bool {
-    let component_count = path.components().count();
-
-    // Reject filesystem root and paths with very few components (e.g. /foo on Unix)
-    if component_count < 2 {
-        return true;
-    }
-
-    #[cfg(unix)]
-    {
-        let path_str = path.to_string_lossy();
-        let dangerous_unix_paths: &[&str] = &[
-            "/usr", "/bin", "/sbin", "/etc", "/var", "/lib", "/boot", "/sys", "/proc", "/dev",
-            "/home", "/tmp", "/opt", "/root", "/run", "/snap", "/srv",
-        ];
-        for dangerous in dangerous_unix_paths {
-            if path_str == *dangerous || path_str.as_ref() == format!("{dangerous}/") {
-                return true;
-            }
-        }
-    }
-
-    #[cfg(windows)]
-    {
-        let path_str = path.to_string_lossy().to_lowercase();
-        let dangerous_windows_paths: &[&str] = &[
-            r"c:\",
-            r"c:\windows",
-            r"c:\program files",
-            r"c:\program files (x86)",
-            r"c:\users",
-            r"c:\system32",
-        ];
-        for dangerous in dangerous_windows_paths {
-            if path_str == *dangerous || path_str == dangerous.trim_end_matches('\\') {
-                return true;
-            }
-        }
-    }
-
-    false
-}
-
-/// Read the build manifest from the output root, returning the list of previously written paths.
-///
-/// Returns an empty list if the manifest does not exist, is unreadable, or contains corrupt data.
-/// Invalid lines (path traversal, absolute paths) are silently skipped for safety.
-fn read_build_manifest(output_root: &Path) -> Vec<PathBuf> {
-    let manifest_path = output_root.join(BUILD_MANIFEST_FILENAME);
-    let content = match fs::read_to_string(&manifest_path) {
-        Ok(content) => content,
-        Err(_) => return Vec::new(),
-    };
-
-    let mut paths = Vec::new();
-    for line in content.lines() {
-        let line = line.trim();
-        if line.is_empty() {
-            continue;
-        }
-        let path = PathBuf::from(line);
-        if validate_relative_output_path(&path).is_ok() {
-            paths.push(path);
-        }
-    }
-    paths
-}
-
-/// Write the build manifest listing all current output artifact paths.
-///
-/// The manifest is a sorted, deduplicated plain text file with one relative path per line.
-fn write_build_manifest(
-    output_root: &Path,
-    current_paths: &HashSet<PathBuf>,
-) -> Result<(), CompilerMessages> {
-    let manifest_path = output_root.join(BUILD_MANIFEST_FILENAME);
-
-    let mut sorted_paths: Vec<String> = current_paths
-        .iter()
-        .map(|path| path.to_string_lossy().into_owned())
-        .collect();
-    sorted_paths.sort();
-
-    let content = sorted_paths.join("\n");
-    fs::write(&manifest_path, content).map_err(|error| {
-        CompilerMessages::from_error(CompilerError::file_error(
-            &manifest_path,
-            format!(
-                "Failed to write build manifest '{}': {error}",
-                manifest_path.display()
-            ),
-        ))
-    })
-}
-
-/// Remove files from previous builds that are no longer in the current output set.
-///
-/// Only removes files that appear in the previous manifest but not in the current output paths.
-/// Each path is re-validated before removal. After removing a file, empty parent directories
-/// are cleaned up toward (but never including) the output root.
-fn remove_stale_artifacts(
-    output_root: &Path,
-    current_output_paths: &HashSet<PathBuf>,
-    previous_manifest_paths: &[PathBuf],
-) {
-    let canonical_output_root = canonicalize_or_nearest_ancestor(output_root);
-
-    for stale_relative in previous_manifest_paths {
-        if current_output_paths.contains(stale_relative) {
-            continue;
-        }
-
-        // Re-validate each manifest entry before deletion as defense against corrupted manifests
-        if validate_relative_output_path(stale_relative).is_err() {
-            continue;
-        }
-
-        let absolute_path = output_root.join(stale_relative);
-
-        // Verify the resolved path stays within the output root after symlink resolution
-        let canonical_target = canonicalize_or_nearest_ancestor(&absolute_path);
-        if !canonical_target.starts_with(&canonical_output_root) {
-            continue;
-        }
-
-        if absolute_path.is_file() {
-            if let Err(error) = fs::remove_file(&absolute_path) {
-                say!(
-                    Yellow "Warning: failed to remove stale artifact '",
-                    Yellow absolute_path.display(),
-                    Yellow "': ",
-                    Yellow error.to_string()
-                );
-                continue;
-            }
-            remove_empty_parent_dirs(output_root, &absolute_path);
-        } else if absolute_path.is_dir() {
-            // Only remove empty directories — never recursively delete
-            let _ = remove_empty_dir_if_safe(&absolute_path);
-        }
-    }
-}
-
-/// Walk from a removed file's parent directory upward toward the output root, removing each
-/// directory if it is empty. Stops as soon as a removal fails (directory not empty) or the
-/// output root is reached.
-fn remove_empty_parent_dirs(output_root: &Path, removed_file: &Path) {
-    let mut current = match removed_file.parent() {
-        Some(parent) => parent.to_path_buf(),
-        None => return,
-    };
-
-    let output_root_canonical = canonicalize_or_nearest_ancestor(output_root);
-
-    while current != output_root
-        && canonicalize_or_nearest_ancestor(&current) != output_root_canonical
-    {
-        if remove_empty_dir_if_safe(&current).is_err() {
-            break;
-        }
-        current = match current.parent() {
-            Some(parent) => parent.to_path_buf(),
-            None => break,
-        };
-    }
-}
-
-/// Attempt to remove a directory only if it is empty. Returns Ok(()) if removed, Err otherwise.
-fn remove_empty_dir_if_safe(path: &Path) -> io::Result<()> {
-    fs::remove_dir(path)
 }
 
 #[cfg(test)]
