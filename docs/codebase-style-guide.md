@@ -36,6 +36,12 @@ Before finishing changes, always run:
 - Prefer `.to_owned()` over `.clone()` when copying owned string-like data.
 - Use `.clone()` when a general copy is genuinely required and clearer.
 
+### API Breakage
+- Beanstalk is prealpha. Backward compatibility is not a priority.
+- When APIs change, thread the new shape through the compiler and remove the old one.
+- Do not add compatibility wrappers, forwarding shims, parallel structs, or defaulted legacy entry points just to preserve an older interface.
+- Prefer one current API shape, not transitional layers.
+
 ### Type Ordering
 Order types in a file from higher-level abstractions to lower-level supporting types.
 
