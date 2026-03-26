@@ -23,7 +23,9 @@ pub(crate) struct HtmlPageMetadata {
     pub lang: Option<String>,
     pub favicon: Option<String>,
     pub body_style: Option<String>,
-    pub head_html: Option<String>,
+
+    // This is used for <style> and to extend any html inside the <head> tag.
+    pub extra_head_html: Option<String>,
 }
 
 pub(crate) fn extract_html_page_metadata(
@@ -82,7 +84,7 @@ pub(crate) fn extract_html_page_metadata(
             PAGE_LANG => &mut metadata.lang,
             PAGE_FAVICON => &mut metadata.favicon,
             PAGE_BODY_STYLE => &mut metadata.body_style,
-            PAGE_HEAD => &mut metadata.head_html,
+            PAGE_HEAD => &mut metadata.extra_head_html,
             _ => continue,
         };
 

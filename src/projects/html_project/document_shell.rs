@@ -79,7 +79,7 @@ fn resolve_html_document(
         inject_charset: config.inject_charset,
         inject_viewport: config.inject_viewport,
         inject_color_scheme: config.inject_color_scheme,
-        head_html: page_metadata.head_html.clone().unwrap_or_default(),
+        head_html: page_metadata.extra_head_html.clone().unwrap_or_default(),
         body_style: page_metadata
             .body_style
             .clone()

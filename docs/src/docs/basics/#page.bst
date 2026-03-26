@@ -9,14 +9,10 @@ import @styles/docs {navbar, title, section, palette, table, row, header_row, co
 [title, center: LANGUAGE BASICS]
 
 [section, $markdown:
-    Every project has a #config.bst file.
+    Every project has a #config.bst file that defines the entry points and dependencies of the project.
 
     If instead, you build or run a specific Beanstalk file,
     it will create a single module from that entry point and pull in all the file's dependencies.
-
-    From the config file you can define a Beanstalk file as the entry point of a program.
-
-    Web projects have their own directory based structure and config file also.
 
     [codeblock, $code("bst"):
         # page_title = "Welcome"

@@ -46,7 +46,7 @@ fn extracts_reserved_entry_metadata() {
         extract_html_page_metadata(&module, &string_table).expect("metadata should parse");
     assert_eq!(metadata.title, Some(String::from("Home")));
     assert_eq!(
-        metadata.head_html,
+        metadata.extra_head_html,
         Some(String::from("<meta name=\"x\" content=\"y\">"))
     );
     assert_eq!(metadata.description, Some(String::from("Landing page")));
