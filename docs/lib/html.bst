@@ -20,4 +20,4 @@ Format = |
 # left String = [$insert("style"):text-align: left;]
 
 -- Basic HTML components
-# img String = [$html:<img src="[$slot("src")]" style="[$slot("style")]" alt="[$slot]">]
+# img String = [$html:<img src="[$slot(1)]" style="[$slot("style")]" alt="[$slot]">]

@@ -9,7 +9,7 @@ import @styles/docs {navbar, title, section, palette, table, row, header_row, co
 [title, center: THE DOCS]
 
 [section, $markdown:
-    Welcome to the Beanstalk documentation [img: [$insert("src"):/assets/seedling_icon.png] Beanstalk logo]
+    Welcome to the Beanstalk documentation [img, @assets/seedling_icon.png: Beanstalk logo]
 
     This website is built using Beanstalk's built in HTML project builder, and all the content you see here is written in Beanstalk code.
 
