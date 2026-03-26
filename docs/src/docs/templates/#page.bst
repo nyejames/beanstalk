@@ -5,10 +5,10 @@ import @styles/docs {navbar, title, section, palette, table, row, header_row, co
 # page_description = "Template syntax, slots, directives, and formatting in Beanstalk."
 # page_head = theme_head
 
-[navbar]
-[title, center: TEMPLATES]
+#[navbar]
+#[title, center: TEMPLATES]
 
-[section, $markdown:
+#[section, $markdown:
     Beanstalk has unique, superpowered templating strings. Templates use [$code:[]] exclusively - never confuse with collections [$code:{}].
 
     These are the only way to create mutable strings, as double quotes are only used for string slices.

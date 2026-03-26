@@ -5,10 +5,10 @@ import @styles/docs {navbar, title, section, palette, table, row, header_row, co
 # page_description = "Core language syntax and semantics in Beanstalk."
 # page_head = theme_head
 
-[navbar]
-[title, center: LANGUAGE BASICS]
+#[navbar]
+#[title, center: LANGUAGE BASICS]
 
-[section, $markdown:
+#[section, $markdown:
     Every project has a #config.bst file that defines the entry points and dependencies of the project.
 
     If instead, you build or run a specific Beanstalk file,
@@ -173,7 +173,7 @@ import @styles/docs {navbar, title, section, palette, table, row, header_row, co
     ]
 ]
 
-[section, $markdown:
+#[section, $markdown:
     # Data Types
     Beanstalk data type keywords use UpperCamelCase.
     Mutibility can change the underlaying data type but is not actually part of the type.

@@ -5,10 +5,10 @@ import @styles/docs {navbar, title, section, palette, table, row, header_row, co
 # page_description = "Function declarations, returns, and closures in Beanstalk."
 # page_head = theme_head
 
-[navbar]
-[title, center: FUNCTIONS]
+#[navbar]
+#[title, center: FUNCTIONS]
 
-[section, $markdown:
+#[section, $markdown:
     [codeblock, $code("bst"):
         -- The simplest possible function
         -- The name of the function first,
