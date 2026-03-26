@@ -1,0 +1,13 @@
+mode = "success"
+entry = "."
+warnings = "forbid"
+
+[[artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain = ["<body style=\"margin: 0;\">", "<main>Root</main>"]
+
+[[artifact_assertions]]
+path = "about/index.html"
+kind = "html"
+must_contain = ["<body style=\"padding: 1rem;\">", "<main>About</main>"]

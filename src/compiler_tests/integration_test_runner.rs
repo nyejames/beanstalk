@@ -1526,10 +1526,26 @@ fn validate_html_baseline_contract(build_result: &BuildResult) -> Option<String>
         }
     };
 
-    if output_text_content(index_html, ArtifactKind::Html).is_none() {
+    let Some(html) = output_text_content(index_html, ArtifactKind::Html) else {
         return Some(
             "html baseline contract expected 'index.html' as an HTML artifact.".to_string(),
         );
+    };
+
+    for required_fragment in [
+        "<!DOCTYPE html>",
+        "<html",
+        "<head>",
+        "<body",
+        "</body>",
+        "</html>",
+    ] {
+        if !html.contains(required_fragment) {
+            return Some(format!(
+                "html baseline contract expected 'index.html' to contain '{}'.",
+                required_fragment
+            ));
+        }
     }
 
     None
@@ -1551,9 +1567,40 @@ fn validate_html_wasm_baseline_contract(build_result: &BuildResult) -> Option<St
             "html_wasm baseline contract expected 'index.html' as an HTML artifact.".to_string(),
         );
     };
+    for required_fragment in [
+        "<!DOCTYPE html>",
+        "<html",
+        "<head>",
+        "<body",
+        "</body>",
+        "</html>",
+    ] {
+        if !html.contains(required_fragment) {
+            return Some(format!(
+                "html_wasm baseline contract expected 'index.html' to contain '{}'.",
+                required_fragment
+            ));
+        }
+    }
     if !html.contains("<script src=\"./page.js\"></script>") {
         return Some(
             "html_wasm baseline contract expected 'index.html' to include './page.js'.".to_string(),
+        );
+    }
+    let Some(script_pos) = html.find("<script src=\"./page.js\"></script>") else {
+        return Some(
+            "html_wasm baseline contract expected 'index.html' to include './page.js'.".to_string(),
+        );
+    };
+    let Some(body_close) = html.find("</body>") else {
+        return Some(
+            "html_wasm baseline contract expected 'index.html' to contain '</body>'.".to_string(),
+        );
+    };
+    if script_pos > body_close {
+        return Some(
+            "html_wasm baseline contract expected './page.js' to appear before '</body>'."
+                .to_string(),
         );
     }
 

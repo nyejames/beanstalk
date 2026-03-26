@@ -1,0 +1,21 @@
+entry = "."
+
+[backends.html_wasm]
+mode = "success"
+warnings = "forbid"
+
+[[backends.html_wasm.artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain = ["<script src=\"./page.js\"></script>"]
+must_not_contain = ["</html>\n<script src=\"./page.js\"></script>"]
+
+[[backends.html_wasm.artifact_assertions]]
+path = "page.js"
+kind = "js"
+must_contain = ["\"./page.wasm\""]
+
+[[backends.html_wasm.artifact_assertions]]
+path = "page.wasm"
+kind = "wasm"
+validate_wasm = true

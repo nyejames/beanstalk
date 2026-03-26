@@ -19,6 +19,9 @@ use crate::compiler_frontend::analysis::borrow_checker::BorrowCheckReport;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::hir::hir_nodes::{FunctionId, HirModule, StartFragment};
 use crate::compiler_frontend::string_interning::StringTable;
+use crate::projects::html_project::document_config::HtmlDocumentConfig;
+use crate::projects::html_project::document_shell::render_html_document_shell;
+use crate::projects::html_project::page_metadata::extract_html_page_metadata;
 use std::collections::HashMap;
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
@@ -40,6 +43,8 @@ pub(crate) fn compile_html_module_js(
     borrow_analysis: &BorrowCheckReport,
     string_table: &StringTable,
     output_path: PathBuf,
+    project_name: &str,
+    document_config: &HtmlDocumentConfig,
     release_build: bool,
 ) -> Result<OutputFile, CompilerError> {
     let js_lowering_config = JsLoweringConfig::standard_html(release_build);
@@ -52,6 +57,10 @@ pub(crate) fn compile_html_module_js(
     )?;
     let html = render_html_document(
         hir_module,
+        string_table,
+        document_config,
+        &output_path,
+        project_name,
         &js_module.source,
         &js_module.function_name_by_id,
     )?;
@@ -102,11 +111,40 @@ pub(crate) fn render_entry_fragments(
 
 pub(crate) fn render_html_document(
     hir_module: &HirModule,
+    string_table: &StringTable,
+    document_config: &HtmlDocumentConfig,
+    logical_html_path: &Path,
+    project_name: &str,
     js_bundle: &str,
     function_names: &HashMap<FunctionId, String>,
 ) -> Result<String, CompilerError> {
-    // Build static HTML and runtime slot list first so hydration preserves source ordering.
-    let (mut html, runtime_slots) = render_entry_fragments(hir_module)?;
+    // Build static body content and runtime slot list first so hydration preserves source order.
+    let (body_html, runtime_slots) = render_entry_fragments(hir_module)?;
+    let page_metadata = extract_html_page_metadata(hir_module, string_table)?;
+    let script_html = render_runtime_bootstrap_script_html(
+        hir_module,
+        js_bundle,
+        function_names,
+        &runtime_slots,
+    )?;
+
+    Ok(render_html_document_shell(
+        document_config,
+        &page_metadata,
+        logical_html_path,
+        project_name,
+        body_html,
+        script_html,
+    ))
+}
+
+fn render_runtime_bootstrap_script_html(
+    hir_module: &HirModule,
+    js_bundle: &str,
+    function_names: &HashMap<FunctionId, String>,
+    runtime_slots: &[RuntimeSlotMount],
+) -> Result<String, CompilerError> {
+    let mut html = String::new();
 
     // Escape the bundle so any `</script>` sequence inside string literals or comments cannot
     // prematurely terminate the HTML script tag and corrupt the page.
@@ -117,7 +155,7 @@ pub(crate) fn render_html_document(
     html.push_str("<script>\n");
     html.push_str("(function () {\n");
     html.push_str("  const slots = [\n");
-    for runtime_slot in &runtime_slots {
+    for runtime_slot in runtime_slots {
         let Some(function_name) = function_names.get(&runtime_slot.function_id) else {
             return Err(CompilerError::compiler_error(format!(
                 "HTML builder could not resolve runtime fragment function {:?}",
@@ -177,3 +215,7 @@ pub(crate) fn html_output_path(
 pub(crate) fn escape_inline_script(js: &str) -> String {
     js.replace("</", "<\\/")
 }
+
+#[cfg(test)]
+#[path = "tests/js_path_tests.rs"]
+mod tests;

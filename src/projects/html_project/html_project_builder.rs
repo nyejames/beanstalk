@@ -7,6 +7,7 @@ use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages, ErrorType};
 use crate::compiler_frontend::paths::path_resolution::resolve_project_entry_root;
 use crate::compiler_frontend::style_directives::StyleDirectiveSpec;
+use crate::projects::html_project::document_config::parse_html_document_config;
 use crate::projects::html_project::js_path::{compile_html_module_js, html_output_path};
 use crate::projects::html_project::style_directives::html_project_style_directives;
 use crate::projects::html_project::wasm::artifacts::{
@@ -39,6 +40,8 @@ impl BackendBuilder for HtmlProjectBuilder {
         flags: &[Flag],
     ) -> Result<Project, CompilerMessages> {
         parse_html_site_config(config).map_err(CompilerMessages::from_error)?;
+        let document_config =
+            parse_html_document_config(config).map_err(CompilerMessages::from_error)?;
 
         if modules.is_empty() {
             return Err(CompilerMessages::from_error(CompilerError::compiler_error(
@@ -68,6 +71,8 @@ impl BackendBuilder for HtmlProjectBuilder {
             let compiled_artifacts = compile_one_module(
                 &module,
                 &logical_html_output_path,
+                config.project_name.as_str(),
+                &document_config,
                 release_build,
                 wasm_enabled,
             )?;
@@ -111,6 +116,7 @@ impl BackendBuilder for HtmlProjectBuilder {
         // Validate HTML-specific configuration up front so build/dev runtime behavior stays
         // deterministic and all routing-policy mistakes are surfaced as config errors.
         parse_html_site_config(config)?;
+        parse_html_document_config(config)?;
 
         // Empty dev/release folders are allowed and resolved by core build output logic.
         Ok(())
@@ -148,6 +154,8 @@ fn resolve_canonical_entry_root(
 fn compile_one_module(
     module: &Module,
     logical_html_output_path: &PathBuf,
+    project_name: &str,
+    document_config: &crate::projects::html_project::document_config::HtmlDocumentConfig,
     release_build: bool,
     wasm_enabled: bool,
 ) -> Result<CompiledHtmlModuleArtifacts, CompilerMessages> {
@@ -157,6 +165,8 @@ fn compile_one_module(
             &module.borrow_analysis,
             &module.string_table,
             logical_html_output_path,
+            project_name,
+            document_config,
             release_build,
         )?;
         Ok(CompiledHtmlModuleArtifacts::from_wasm(compiled_wasm))
@@ -166,6 +176,8 @@ fn compile_one_module(
             &module.borrow_analysis,
             &module.string_table,
             logical_html_output_path.clone(),
+            project_name,
+            document_config,
             release_build,
         )
         .map_err(CompilerMessages::from_error)?;
@@ -238,5 +250,5 @@ impl CompiledHtmlModuleArtifacts {
 }
 
 #[cfg(test)]
-#[path = "html_project_builder_tests.rs"]
+#[path = "tests/html_project_builder_tests.rs"]
 mod tests;

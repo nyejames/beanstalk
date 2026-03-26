@@ -1,0 +1,9 @@
+mode = "success"
+entry = "."
+warnings = "forbid"
+
+[[artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain = ["<script>"]
+must_not_contain = ["</html>\n<script>"]

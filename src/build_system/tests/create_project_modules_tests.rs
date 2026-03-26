@@ -3,6 +3,7 @@ use crate::compiler_frontend::compiler_errors::ErrorType;
 use crate::compiler_frontend::paths::path_resolution::{
     ProjectPathResolver, resolve_project_entry_root,
 };
+use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use std::collections::HashSet;
 use std::ffi::OsStr;
 use std::path::PathBuf;
@@ -27,6 +28,10 @@ fn configured_resolver(config: &Config) -> ProjectPathResolver {
         .expect("project path resolver should build")
 }
 
+fn test_style_directives() -> StyleDirectiveRegistry {
+    StyleDirectiveRegistry::built_ins()
+}
+
 #[test]
 fn parses_config_constant_declarations() {
     let root = temp_dir("config_constants");
@@ -40,7 +45,9 @@ fn parses_config_constant_declarations() {
     .expect("should write config");
 
     let mut config = Config::new(root.clone());
-    parse_project_config_file(&mut config, &config_path).expect("config should parse");
+    let style_directives = test_style_directives();
+    parse_project_config_file(&mut config, &config_path, &style_directives)
+        .expect("config should parse");
 
     assert_eq!(config.entry_root, PathBuf::from("src"));
     assert_eq!(config.dev_folder, PathBuf::from("dev"));
@@ -77,8 +84,9 @@ fn rejects_legacy_config_assignment_syntax() {
     fs::write(&config_path, "#output_folder dist\n").expect("should write config");
 
     let mut config = Config::new(root.clone());
-    let messages =
-        parse_project_config_file(&mut config, &config_path).expect_err("config should fail");
+    let style_directives = test_style_directives();
+    let messages = parse_project_config_file(&mut config, &config_path, &style_directives)
+        .expect_err("config should fail");
 
     assert!(
         !messages.errors.is_empty(),
@@ -105,8 +113,9 @@ fn rejects_deprecated_src_config_key() {
     fs::write(&config_path, "#src = \"src\"\n").expect("should write config");
 
     let mut config = Config::new(root.clone());
-    let messages =
-        parse_project_config_file(&mut config, &config_path).expect_err("config should fail");
+    let style_directives = test_style_directives();
+    let messages = parse_project_config_file(&mut config, &config_path, &style_directives)
+        .expect_err("config should fail");
 
     assert!(
         !messages.errors.is_empty(),
@@ -131,8 +140,9 @@ fn rejects_legacy_libraries_config_key() {
     fs::write(&config_path, "#libraries = { @lib }\n").expect("should write config");
 
     let mut config = Config::new(root.clone());
-    let messages =
-        parse_project_config_file(&mut config, &config_path).expect_err("config should fail");
+    let style_directives = test_style_directives();
+    let messages = parse_project_config_file(&mut config, &config_path, &style_directives)
+        .expect_err("config should fail");
 
     assert!(
         !messages.errors.is_empty(),
@@ -157,8 +167,9 @@ fn rejects_invalid_root_folder_entries() {
     fs::write(&config_path, "#root_folders = { @core/html }\n").expect("should write config");
 
     let mut config = Config::new(root.clone());
-    let messages =
-        parse_project_config_file(&mut config, &config_path).expect_err("config should fail");
+    let style_directives = test_style_directives();
+    let messages = parse_project_config_file(&mut config, &config_path, &style_directives)
+        .expect_err("config should fail");
 
     assert!(
         !messages.errors.is_empty(),
@@ -196,10 +207,14 @@ fn discover_modules_uses_reachable_files_only() {
         .expect("should write outdated file");
 
     let mut config = Config::new(root.clone());
-    parse_project_config_file(&mut config, &root.join(settings::CONFIG_FILE_NAME))
-        .expect("config parse");
+    let style_directives = test_style_directives();
+    parse_project_config_file(
+        &mut config,
+        &root.join(settings::CONFIG_FILE_NAME),
+        &style_directives,
+    )
+    .expect("config parse");
     let resolver = configured_resolver(&config);
-    let style_directives = StyleDirectiveRegistry::built_ins();
 
     let modules = discover_all_modules_in_project(&config, &resolver, &style_directives)
         .expect("module discovery should pass");
@@ -242,7 +257,9 @@ fn parses_root_folders_variants_and_dedupes_entries() {
     .expect("should write config");
 
     let mut config = Config::new(root.clone());
-    parse_project_config_file(&mut config, &config_path).expect("config should parse");
+    let style_directives = test_style_directives();
+    parse_project_config_file(&mut config, &config_path, &style_directives)
+        .expect("config should parse");
 
     assert_eq!(
         config.root_folders,
@@ -278,10 +295,14 @@ fn discover_modules_resolves_relative_imports_with_dot_segments() {
     fs::write(src.join("shared/common.bst"), "io(\"common\")\n").expect("should write common");
 
     let mut config = Config::new(root.clone());
-    parse_project_config_file(&mut config, &root.join(settings::CONFIG_FILE_NAME))
-        .expect("config parse");
+    let style_directives = test_style_directives();
+    parse_project_config_file(
+        &mut config,
+        &root.join(settings::CONFIG_FILE_NAME),
+        &style_directives,
+    )
+    .expect("config parse");
     let resolver = configured_resolver(&config);
-    let style_directives = StyleDirectiveRegistry::built_ins();
 
     let modules = discover_all_modules_in_project(&config, &resolver, &style_directives)
         .expect("module discovery should pass");
@@ -329,10 +350,14 @@ fn entry_root_fallback_wins_for_unmatched_non_relative_imports() {
         .expect("should write root-folder helper");
 
     let mut config = Config::new(root.clone());
-    parse_project_config_file(&mut config, &root.join(settings::CONFIG_FILE_NAME))
-        .expect("config parse");
+    let style_directives = test_style_directives();
+    parse_project_config_file(
+        &mut config,
+        &root.join(settings::CONFIG_FILE_NAME),
+        &style_directives,
+    )
+    .expect("config parse");
     let resolver = configured_resolver(&config);
-    let style_directives = StyleDirectiveRegistry::built_ins();
 
     let modules = discover_all_modules_in_project(&config, &resolver, &style_directives)
         .expect("module discovery should pass");
@@ -375,10 +400,14 @@ fn discover_all_modules_finds_multiple_hash_entries_per_root() {
     fs::write(src.join("nested/file.bst"), "io(\"regular\")\n").expect("should write regular");
 
     let mut config = Config::new(root.clone());
-    parse_project_config_file(&mut config, &root.join(settings::CONFIG_FILE_NAME))
-        .expect("config parse");
+    let style_directives = test_style_directives();
+    parse_project_config_file(
+        &mut config,
+        &root.join(settings::CONFIG_FILE_NAME),
+        &style_directives,
+    )
+    .expect("config parse");
     let resolver = configured_resolver(&config);
-    let style_directives = StyleDirectiveRegistry::built_ins();
 
     let modules = discover_all_modules_in_project(&config, &resolver, &style_directives)
         .expect("module discovery should pass");
@@ -432,10 +461,14 @@ fn explicit_root_folder_imports_resolve_from_project_root() {
     .expect("should write root-folder helper");
 
     let mut config = Config::new(root.clone());
-    parse_project_config_file(&mut config, &root.join(settings::CONFIG_FILE_NAME))
-        .expect("config parse");
+    let style_directives = test_style_directives();
+    parse_project_config_file(
+        &mut config,
+        &root.join(settings::CONFIG_FILE_NAME),
+        &style_directives,
+    )
+    .expect("config parse");
     let resolver = configured_resolver(&config);
-    let style_directives = StyleDirectiveRegistry::built_ins();
 
     let modules = discover_all_modules_in_project(&config, &resolver, &style_directives)
         .expect("module discovery should pass");
@@ -467,10 +500,14 @@ fn rejects_entry_root_folder_that_conflicts_with_root_folder_name() {
     fs::write(src.join("#page.bst"), "import @lib/html {center}\n").expect("should write page");
 
     let mut config = Config::new(root.clone());
-    parse_project_config_file(&mut config, &root.join(settings::CONFIG_FILE_NAME))
-        .expect("config parse");
+    let style_directives = test_style_directives();
+    parse_project_config_file(
+        &mut config,
+        &root.join(settings::CONFIG_FILE_NAME),
+        &style_directives,
+    )
+    .expect("config parse");
     let resolver = configured_resolver(&config);
-    let style_directives = StyleDirectiveRegistry::built_ins();
 
     let error = match discover_all_modules_in_project(&config, &resolver, &style_directives) {
         Ok(_) => panic!("conflicting src/lib folder should fail"),
@@ -508,8 +545,9 @@ fn detects_duplicate_config_keys() {
     .expect("should write config");
 
     let mut config = Config::new(root.clone());
-    let messages =
-        parse_project_config_file(&mut config, &config_path).expect_err("config should fail");
+    let style_directives = test_style_directives();
+    let messages = parse_project_config_file(&mut config, &config_path, &style_directives)
+        .expect_err("config should fail");
 
     assert!(
         !messages.errors.is_empty(),

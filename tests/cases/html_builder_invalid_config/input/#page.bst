@@ -1,0 +1,1 @@
+#[:<main>Bad config</main>]

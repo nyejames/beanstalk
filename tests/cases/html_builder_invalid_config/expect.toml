@@ -1,0 +1,5 @@
+mode = "failure"
+entry = "."
+warnings = "forbid"
+error_type = "config"
+message_contains = ["#html_inject_core_css", "true or false"]

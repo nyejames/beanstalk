@@ -12,8 +12,11 @@ use crate::compiler_frontend::analysis::borrow_checker::BorrowCheckReport;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::hir::hir_nodes::{FunctionId, HirModule};
 use crate::compiler_frontend::string_interning::StringTable;
+use crate::projects::html_project::document_config::HtmlDocumentConfig;
+use crate::projects::html_project::document_shell::render_html_document_shell;
 use crate::projects::html_project::js_path::{RuntimeSlotMount, render_entry_fragments};
 use crate::projects::html_project::output_plan::plan_wasm_output;
+use crate::projects::html_project::page_metadata::extract_html_page_metadata;
 use crate::projects::html_project::wasm::export_plan::{
     HtmlWasmExportPlan, build_html_wasm_export_plan,
 };
@@ -78,6 +81,8 @@ pub(crate) fn compile_html_module_wasm(
     borrow_analysis: &BorrowCheckReport,
     string_table: &StringTable,
     logical_html_output_path: &Path,
+    project_name: &str,
+    document_config: &HtmlDocumentConfig,
     release_build: bool,
 ) -> Result<CompiledHtmlWasmModule, CompilerMessages> {
     // Derive per-route artifact paths from the logical HTML path using the canonical planner.
@@ -114,6 +119,10 @@ pub(crate) fn compile_html_module_wasm(
     let artifacts = emit_html_wasm_artifacts(
         &build_plan,
         &entry_fragment_html,
+        string_table,
+        logical_html_output_path,
+        project_name,
+        document_config,
         hir_module,
         &js_module.source,
         &js_module.function_name_by_id,
@@ -184,6 +193,10 @@ pub(crate) fn build_html_wasm_plan(
 pub(crate) fn emit_html_wasm_artifacts(
     plan: &HtmlWasmBuildPlan,
     entry_fragment_html: &str,
+    string_table: &StringTable,
+    logical_html_output_path: &Path,
+    project_name: &str,
+    document_config: &HtmlDocumentConfig,
     hir_module: &HirModule,
     js_bundle: &str,
     function_name_by_id: &std::collections::HashMap<FunctionId, String>,
@@ -197,7 +210,14 @@ pub(crate) fn emit_html_wasm_artifacts(
         &plan.js_entry_fragments,
         &plan.js_start_invocation,
     )?;
-    let html = render_wasm_html_document(entry_fragment_html);
+    let page_metadata = extract_html_page_metadata(hir_module, string_table)?;
+    let html = render_wasm_html_document(
+        document_config,
+        &page_metadata,
+        logical_html_output_path,
+        project_name,
+        entry_fragment_html,
+    );
 
     Ok(HtmlWasmArtifacts {
         wasm_bytes,
@@ -206,12 +226,21 @@ pub(crate) fn emit_html_wasm_artifacts(
     })
 }
 
-fn render_wasm_html_document(entry_fragment_html: &str) -> String {
-    // Keep Wasm mode HTML shell minimal and delegate runtime orchestration to `page.js`.
-    let mut html = String::new();
-    html.push_str(entry_fragment_html);
-    html.push_str("<script src=\"./page.js\"></script>\n");
-    html
+fn render_wasm_html_document(
+    document_config: &HtmlDocumentConfig,
+    page_metadata: &crate::projects::html_project::page_metadata::HtmlPageMetadata,
+    logical_html_output_path: &Path,
+    project_name: &str,
+    entry_fragment_html: &str,
+) -> String {
+    render_html_document_shell(
+        document_config,
+        page_metadata,
+        logical_html_output_path,
+        project_name,
+        entry_fragment_html.to_string(),
+        String::from("<script src=\"./page.js\"></script>\n"),
+    )
 }
 
 fn build_debug_outputs(
@@ -281,3 +310,7 @@ fn emit_debug_outputs_if_enabled(debug: &HtmlWasmDebugOutputs) {
         println!("{text}");
     }
 }
+
+#[cfg(test)]
+#[path = "tests/artifacts_tests.rs"]
+mod tests;
