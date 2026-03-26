@@ -102,3 +102,43 @@ tags = ["success", "paths", "tokenizer"]
 id = "path_unquoted_whitespace_error"
 path = "path_unquoted_whitespace_error"
 tags = ["diagnostics", "paths", "tokenizer"]
+
+[[case]]
+id = "html_tracked_asset_root_folder_basic"
+path = "html_tracked_asset_root_folder_basic"
+tags = ["success", "html", "paths", "assets"]
+
+[[case]]
+id = "html_tracked_asset_origin_prefixed"
+path = "html_tracked_asset_origin_prefixed"
+tags = ["success", "html", "paths", "assets", "config"]
+
+[[case]]
+id = "html_tracked_asset_relative_basic"
+path = "html_tracked_asset_relative_basic"
+tags = ["success", "html", "paths", "assets"]
+
+[[case]]
+id = "html_tracked_asset_relative_parent_normalization"
+path = "html_tracked_asset_relative_parent_normalization"
+tags = ["success", "html", "paths", "assets", "config"]
+
+[[case]]
+id = "html_tracked_asset_entry_root_basic"
+path = "html_tracked_asset_entry_root_basic"
+tags = ["success", "html", "paths", "assets", "config"]
+
+[[case]]
+id = "html_tracked_asset_large_warning"
+path = "html_tracked_asset_large_warning"
+tags = ["success", "html", "paths", "assets", "diagnostics"]
+
+[[case]]
+id = "html_tracked_asset_directory_error"
+path = "html_tracked_asset_directory_error"
+tags = ["diagnostics", "html", "paths", "assets"]
+
+[[case]]
+id = "html_tracked_asset_unreferenced_not_emitted"
+path = "html_tracked_asset_unreferenced_not_emitted"
+tags = ["success", "html", "paths", "assets"]

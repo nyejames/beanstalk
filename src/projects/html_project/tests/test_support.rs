@@ -15,6 +15,8 @@ use crate::compiler_frontend::hir::hir_nodes::{
 };
 use crate::compiler_frontend::host_functions::CallTarget;
 use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::paths::path_resolution::{CompileTimePathBase, CompileTimePathKind};
+use crate::compiler_frontend::paths::rendered_path_usage::RenderedPathUsage;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::TextLocation;
 use std::path::PathBuf;
@@ -82,6 +84,46 @@ pub(crate) fn create_test_module(entry_point: PathBuf) -> Module {
         borrow_analysis: BorrowCheckReport::default(),
         warnings: vec![],
         string_table,
+    }
+}
+
+pub(crate) fn interned_path(string_table: &mut StringTable, components: &[&str]) -> InternedPath {
+    let mut path = InternedPath::new();
+    for component in components {
+        path.push_str(component, string_table);
+    }
+    path
+}
+
+pub(crate) fn rendered_path_usage(
+    string_table: &mut StringTable,
+    source_path_components: &[&str],
+    public_path_components: &[&str],
+    filesystem_path: PathBuf,
+    base: CompileTimePathBase,
+    kind: CompileTimePathKind,
+    source_file_scope_components: &[&str],
+    line_number: i32,
+) -> RenderedPathUsage {
+    let scope = interned_path(string_table, source_file_scope_components);
+    RenderedPathUsage {
+        source_path: interned_path(string_table, source_path_components),
+        filesystem_path,
+        public_path: interned_path(string_table, public_path_components),
+        base,
+        kind,
+        source_file_scope: scope.clone(),
+        render_location: TextLocation::new(
+            scope,
+            crate::compiler_frontend::tokenizer::tokens::CharPosition {
+                line_number,
+                char_column: 1,
+            },
+            crate::compiler_frontend::tokenizer::tokens::CharPosition {
+                line_number,
+                char_column: 10,
+            },
+        ),
     }
 }
 
@@ -192,6 +234,23 @@ pub(crate) fn expect_js_output<'a>(output_files: &'a [OutputFile], relative_path
             _ => None,
         })
         .expect("expected JS output artifact")
+}
+
+/// Extract an emitted binary artifact by relative path.
+pub(crate) fn expect_bytes_output<'a>(
+    output_files: &'a [OutputFile],
+    relative_path: &str,
+) -> &'a [u8] {
+    let expected_path = PathBuf::from(relative_path);
+    output_files
+        .iter()
+        .find_map(|file| match file.file_kind() {
+            FileKind::Bytes(bytes) if file.relative_output_path() == expected_path.as_path() => {
+                Some(bytes.as_slice())
+            }
+            _ => None,
+        })
+        .expect("expected binary output artifact")
 }
 
 /// Assert the basic full-document shell contract shared by all HTML builder outputs.

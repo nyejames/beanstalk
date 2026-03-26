@@ -16,10 +16,13 @@ use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
+use crate::compiler_frontend::paths::rendered_path_usage::RenderedPathUsage;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::projects::settings::IMPLICIT_START_FUNC_NAME;
 use rustc_hash::{FxHashMap, FxHashSet};
+use std::cell::RefCell;
+use std::rc::Rc;
 
 #[derive(Clone, Default)]
 pub(crate) struct FileImportBindings {
@@ -227,6 +230,7 @@ pub(crate) struct ConstantHeaderParseContext<'a> {
     pub path_format_config: PathStringFormatConfig,
     pub build_profile: FrontendBuildProfile,
     pub warnings: &'a mut Vec<CompilerWarning>,
+    pub rendered_path_usages: Rc<RefCell<Vec<RenderedPathUsage>>>,
     pub string_table: &'a mut StringTable,
 }
 
@@ -244,6 +248,7 @@ pub(crate) fn parse_constant_header_declaration(
         path_format_config,
         build_profile,
         warnings,
+        rendered_path_usages,
         string_table,
     } = context;
 
@@ -271,6 +276,7 @@ pub(crate) fn parse_constant_header_declaration(
     .with_build_profile(build_profile)
     .with_project_path_resolver(project_path_resolver)
     .with_path_format_config(path_format_config)
+    .with_rendered_path_usage_sink(rendered_path_usages)
     // Keep full module declarations for path identity, but explicitly gate what this file
     // can see to enforce import boundaries and prevent cross-file leakage.
     .with_visible_declarations(visible_declaration_ids.to_owned())

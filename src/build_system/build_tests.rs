@@ -388,6 +388,10 @@ fn write_project_outputs_writes_all_supported_artifacts_and_skips_not_built() {
                 PathBuf::from("index.html"),
                 FileKind::Html(String::from("<html></html>")),
             ),
+            OutputFile::new(
+                PathBuf::from("assets/logo.png"),
+                FileKind::Bytes(vec![9, 8, 7, 6]),
+            ),
             OutputFile::new(PathBuf::from("bin/app.wasm"), FileKind::Wasm(vec![0, 1, 2])),
             OutputFile::new(PathBuf::new(), FileKind::NotBuilt),
         ],
@@ -413,6 +417,10 @@ fn write_project_outputs_writes_all_supported_artifacts_and_skips_not_built() {
     assert_eq!(
         fs::read_to_string(root.join("index.html")).expect("should read HTML file"),
         "<html></html>"
+    );
+    assert_eq!(
+        fs::read(root.join("assets/logo.png")).expect("should read binary file"),
+        vec![9, 8, 7, 6]
     );
     assert_eq!(
         fs::read(root.join("bin/app.wasm")).expect("should read wasm file"),
@@ -1590,6 +1598,72 @@ fn cleanup_manifest_diff_removes_stale_managed_files() {
 }
 
 #[test]
+fn cleanup_manifest_diff_removes_stale_tracked_byte_assets_from_v2_manifest() {
+    let root = temp_dir("cleanup_stale_bytes");
+    fs::create_dir_all(&root).expect("should create temp root");
+    let project_dir = root.join("project");
+    fs::create_dir_all(&project_dir).expect("should create project dir");
+    let output_root = project_dir.join("dev");
+
+    let project_a = html_project(
+        vec![
+            OutputFile::new(
+                PathBuf::from("index.html"),
+                FileKind::Html(String::from("<html>Home</html>")),
+            ),
+            OutputFile::new(
+                PathBuf::from("assets/logo.png"),
+                FileKind::Bytes(vec![1, 2, 3, 4]),
+            ),
+        ],
+        Some(PathBuf::from("index.html")),
+    );
+    write_project_outputs(
+        &project_a,
+        &WriteOptions {
+            output_root: output_root.clone(),
+            project_entry_dir: Some(project_dir.clone()),
+        },
+    )
+    .expect("build A should succeed");
+
+    assert_eq!(
+        read_build_manifest(&output_root, &html_cleanup_policy()),
+        ManifestLoadResult::ValidV2 {
+            paths: vec![
+                PathBuf::from("assets/logo.png"),
+                PathBuf::from("index.html")
+            ],
+            builder_kind: BuilderKind::Html,
+        }
+    );
+    assert!(output_root.join("assets/logo.png").exists());
+
+    let project_b = html_project(
+        vec![OutputFile::new(
+            PathBuf::from("index.html"),
+            FileKind::Html(String::from("<html>Home v2</html>")),
+        )],
+        Some(PathBuf::from("index.html")),
+    );
+    write_project_outputs(
+        &project_b,
+        &WriteOptions {
+            output_root: output_root.clone(),
+            project_entry_dir: Some(project_dir.clone()),
+        },
+    )
+    .expect("build B should succeed");
+
+    assert!(
+        !output_root.join("assets/logo.png").exists(),
+        "stale tracked byte asset should have been removed"
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
 fn cleanup_missing_manifest_removes_stale_html_route_alias() {
     let root = temp_dir("cleanup_missing_manifest_alias");
     fs::create_dir_all(&root).expect("should create temp root");
@@ -1923,6 +1997,7 @@ fn cleanup_ignores_traversal_paths_in_legacy_manifest() {
             &current_paths,
             &paths,
             &html_cleanup_policy(),
+            true,
         );
     } else {
         panic!("expected legacy manifest result");

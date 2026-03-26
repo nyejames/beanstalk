@@ -618,12 +618,8 @@ fn transfer_assign_target(
             };
 
             let local_state = state.local_state(local_index).clone();
-            let mut rhs_alias_roots = direct_place_roots_from_expression(
-                layout,
-                state,
-                value,
-                location.clone(),
-            )?;
+            let mut rhs_alias_roots =
+                direct_place_roots_from_expression(layout, state, value, location.clone())?;
             let mut rhs_direct_alias_roots = rhs_alias_roots.as_ref().map(|rhs_roots| {
                 direct_root_aliases_from_expression(layout, state, value, rhs_roots)
             });
@@ -688,7 +684,10 @@ fn transfer_assign_target(
                         );
                     }
                     None => {
-                        state.update_local_state(local_index, LocalState::slot(layout.local_count()));
+                        state.update_local_state(
+                            local_index,
+                            LocalState::slot(layout.local_count()),
+                        );
                     }
                 }
                 return Ok(());

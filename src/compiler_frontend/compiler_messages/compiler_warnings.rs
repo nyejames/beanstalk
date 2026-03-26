@@ -46,6 +46,7 @@ pub enum WarningKind {
     MalformedCssTemplate,
     MalformedHtmlTemplate,
     BstFilePathInTemplateOutput,
+    LargeTrackedAsset,
 }
 
 pub fn print_formatted_warning(w: CompilerWarning) {
@@ -93,6 +94,9 @@ pub fn print_formatted_warning(w: CompilerWarning) {
                 "Path to Beanstalk source file is being inserted into template output: {}",
                 w.msg
             );
+        }
+        WarningKind::LargeTrackedAsset => {
+            println!("{msg}", msg = w.msg);
         }
     }
 }

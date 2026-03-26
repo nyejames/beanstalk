@@ -46,6 +46,7 @@ fn build_ast(
         entry_path,
         external_exports: Vec::<ModuleExport>::new(),
         start_template_items,
+        rendered_path_usages: vec![],
         warnings: vec![],
     }
 }

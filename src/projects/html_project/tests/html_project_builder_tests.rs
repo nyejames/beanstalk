@@ -6,9 +6,11 @@ use crate::build_system::build::FileKind;
 use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::compiler_errors::ErrorType;
 use crate::compiler_frontend::hir::hir_nodes::{ConstStringId, FunctionId, StartFragment};
+use crate::compiler_frontend::paths::path_resolution::{CompileTimePathBase, CompileTimePathKind};
 use crate::projects::html_project::tests::test_support::{
     assert_fragment_before_body_close, assert_has_basic_shell, collect_output_paths,
-    create_test_module, expect_html_output, expect_js_output, temp_dir,
+    create_test_module, expect_bytes_output, expect_html_output, expect_js_output,
+    rendered_path_usage, temp_dir,
 };
 use crate::projects::settings::Config;
 use std::fs;
@@ -357,4 +359,162 @@ fn builder_rejects_invalid_origin_config() {
             .msg
             .contains("'#origin' must start with '/'")
     );
+}
+
+#[test]
+fn build_backend_emits_tracked_assets_and_dedupes_same_source_output() {
+    let root = temp_dir("builder_tracked_asset_dedupe");
+    fs::create_dir_all(root.join("assets")).expect("should create assets dir");
+    fs::create_dir_all(root.join("docs")).expect("should create docs dir");
+    fs::write(root.join("assets/logo.png"), [1_u8, 2, 3]).expect("should write asset");
+    let canonical_root = fs::canonicalize(&root).expect("root should resolve");
+
+    let builder = HtmlProjectBuilder::new();
+    let config = Config::new(root.clone());
+
+    let mut homepage = create_test_module(canonical_root.join("#page.bst"));
+    homepage.hir.rendered_path_usages.push(rendered_path_usage(
+        &mut homepage.string_table,
+        &["assets", "logo.png"],
+        &["assets", "logo.png"],
+        canonical_root.join("assets/logo.png"),
+        CompileTimePathBase::ProjectRootFolder,
+        CompileTimePathKind::File,
+        &["#page.bst"],
+        1,
+    ));
+
+    let mut docs_page = create_test_module(canonical_root.join("docs/#page.bst"));
+    docs_page.hir.rendered_path_usages.push(rendered_path_usage(
+        &mut docs_page.string_table,
+        &["assets", "logo.png"],
+        &["assets", "logo.png"],
+        canonical_root.join("assets/logo.png"),
+        CompileTimePathBase::ProjectRootFolder,
+        CompileTimePathKind::File,
+        &["docs", "#page.bst"],
+        1,
+    ));
+
+    let project = builder
+        .build_backend(vec![homepage, docs_page], &config, &[])
+        .expect("tracked-asset build should succeed");
+
+    let output_paths = collect_output_paths(&project.output_files);
+    assert!(output_paths.contains(&PathBuf::from("assets/logo.png")));
+    assert_eq!(
+        expect_bytes_output(&project.output_files, "assets/logo.png"),
+        [1_u8, 2, 3]
+    );
+    assert_eq!(
+        project
+            .output_files
+            .iter()
+            .filter(|file| matches!(file.file_kind(), FileKind::Bytes(_)))
+            .count(),
+        1,
+        "same source/same emitted path should dedupe"
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
+fn build_backend_allows_same_source_file_to_emit_multiple_relative_outputs() {
+    let root = temp_dir("builder_tracked_asset_relative_copies");
+    fs::create_dir_all(root.join("blog/post")).expect("should create blog dir");
+    fs::create_dir_all(root.join("shared")).expect("should create shared dir");
+    fs::write(root.join("shared/logo.png"), [4_u8, 5, 6]).expect("should write asset");
+    let canonical_root = fs::canonicalize(&root).expect("root should resolve");
+
+    let builder = HtmlProjectBuilder::new();
+    let config = Config::new(root.clone());
+
+    let mut homepage = create_test_module(canonical_root.join("#page.bst"));
+    homepage.hir.rendered_path_usages.push(rendered_path_usage(
+        &mut homepage.string_table,
+        &[".", "logo.png"],
+        &[".", "logo.png"],
+        canonical_root.join("shared/logo.png"),
+        CompileTimePathBase::RelativeToFile,
+        CompileTimePathKind::File,
+        &["#page.bst"],
+        1,
+    ));
+
+    let mut blog_page = create_test_module(canonical_root.join("blog/post/#page.bst"));
+    blog_page.hir.rendered_path_usages.push(rendered_path_usage(
+        &mut blog_page.string_table,
+        &["..", "shared", "logo.png"],
+        &["..", "shared", "logo.png"],
+        canonical_root.join("shared/logo.png"),
+        CompileTimePathBase::RelativeToFile,
+        CompileTimePathKind::File,
+        &["blog", "post", "#page.bst"],
+        1,
+    ));
+
+    let project = builder
+        .build_backend(vec![homepage, blog_page], &config, &[])
+        .expect("tracked-asset build should succeed");
+
+    assert_eq!(
+        expect_bytes_output(&project.output_files, "logo.png"),
+        [4_u8, 5, 6]
+    );
+    assert_eq!(
+        expect_bytes_output(&project.output_files, "blog/shared/logo.png"),
+        [4_u8, 5, 6]
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
+fn build_backend_rejects_conflicting_tracked_asset_output_paths() {
+    let root = temp_dir("builder_tracked_asset_conflict");
+    fs::create_dir_all(root.join("assets")).expect("should create assets dir");
+    fs::create_dir_all(root.join("docs")).expect("should create docs dir");
+    fs::write(root.join("assets/logo-a.png"), [1_u8]).expect("should write first asset");
+    fs::write(root.join("assets/logo-b.png"), [2_u8]).expect("should write second asset");
+    let canonical_root = fs::canonicalize(&root).expect("root should resolve");
+
+    let builder = HtmlProjectBuilder::new();
+    let config = Config::new(root.clone());
+
+    let mut homepage = create_test_module(canonical_root.join("#page.bst"));
+    homepage.hir.rendered_path_usages.push(rendered_path_usage(
+        &mut homepage.string_table,
+        &["assets", "logo.png"],
+        &["assets", "logo.png"],
+        canonical_root.join("assets/logo-a.png"),
+        CompileTimePathBase::ProjectRootFolder,
+        CompileTimePathKind::File,
+        &["#page.bst"],
+        1,
+    ));
+
+    let mut docs_page = create_test_module(canonical_root.join("docs/#page.bst"));
+    docs_page.hir.rendered_path_usages.push(rendered_path_usage(
+        &mut docs_page.string_table,
+        &["assets", "logo.png"],
+        &["assets", "logo.png"],
+        canonical_root.join("assets/logo-b.png"),
+        CompileTimePathBase::ProjectRootFolder,
+        CompileTimePathKind::File,
+        &["docs", "#page.bst"],
+        1,
+    ));
+
+    let error = match builder.build_backend(vec![homepage, docs_page], &config, &[]) {
+        Err(messages) => messages,
+        Ok(_) => panic!("conflicting tracked assets should fail"),
+    };
+
+    assert!(
+        error.errors[0].msg.contains("already claimed"),
+        "expected conflicting tracked-asset output error"
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
 }

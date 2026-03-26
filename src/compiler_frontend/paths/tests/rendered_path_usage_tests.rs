@@ -1,0 +1,212 @@
+//! Unit tests for semantic rendered-path capture helpers.
+
+use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
+use crate::compiler_frontend::paths::path_resolution::{
+    CompileTimePathBase, CompileTimePathKind, ProjectPathResolver,
+};
+use crate::compiler_frontend::paths::rendered_path_usage::resolve_compile_time_paths_for_rendered_output;
+use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::tokenizer::tokens::{CharPosition, TextLocation};
+use std::fs;
+use std::path::PathBuf;
+
+struct TestHarness {
+    project_root: PathBuf,
+    resolver: ProjectPathResolver,
+    string_table: StringTable,
+    _temp_dir: tempfile::TempDir,
+}
+
+impl TestHarness {
+    fn new(root_folders: &[&str]) -> Self {
+        let temp_dir = tempfile::tempdir().expect("failed to create temp dir");
+        let project_root = temp_dir.path().to_path_buf();
+        let entry_root = project_root.join("src");
+
+        fs::create_dir_all(&entry_root).expect("should create entry root");
+        fs::create_dir_all(project_root.join("assets/images")).expect("should create assets dir");
+        fs::create_dir_all(project_root.join("src/images")).expect("should create image dir");
+        fs::create_dir_all(project_root.join("src/docs")).expect("should create docs dir");
+        fs::write(project_root.join("assets/images/logo.png"), b"asset").expect("write asset");
+        fs::write(project_root.join("src/images/entry.png"), b"entry").expect("write entry asset");
+        fs::write(project_root.join("src/docs/local.png"), b"local").expect("write local asset");
+        fs::write(project_root.join("src/#page.bst"), b"").expect("write page");
+
+        let root_folder_paths: Vec<PathBuf> = root_folders
+            .iter()
+            .map(|folder| PathBuf::from(folder))
+            .collect();
+        let resolver =
+            ProjectPathResolver::new(project_root.clone(), entry_root, &root_folder_paths)
+                .expect("resolver should build");
+
+        Self {
+            project_root,
+            resolver,
+            string_table: StringTable::new(),
+            _temp_dir: temp_dir,
+        }
+    }
+
+    fn path(&mut self, components: &[&str]) -> InternedPath {
+        let mut path = InternedPath::new();
+        for component in components {
+            path.push_str(component, &mut self.string_table);
+        }
+        path
+    }
+
+    fn source_scope(&mut self) -> InternedPath {
+        self.path(&["src", "#page.bst"])
+    }
+
+    fn importer_file(&self) -> PathBuf {
+        self.project_root.join("src/#page.bst")
+    }
+
+    fn render_location(&mut self) -> TextLocation {
+        TextLocation::new(
+            self.source_scope(),
+            CharPosition {
+                line_number: 2,
+                char_column: 1,
+            },
+            CharPosition {
+                line_number: 2,
+                char_column: 12,
+            },
+        )
+    }
+}
+
+#[test]
+fn root_folder_render_capture_records_semantics_and_origin_aware_text() {
+    let mut harness = TestHarness::new(&["assets"]);
+    let source_scope = harness.source_scope();
+    let path = harness.path(&["assets", "images", "logo.png"]);
+    let importer_file = harness.importer_file();
+    let render_location = harness.render_location();
+
+    let (_, recorded) = resolve_compile_time_paths_for_rendered_output(
+        &[path],
+        &harness.resolver,
+        &importer_file,
+        &source_scope,
+        &render_location,
+        &PathStringFormatConfig {
+            origin: String::from("/beanstalk"),
+            ..PathStringFormatConfig::default()
+        },
+        &harness.string_table,
+    )
+    .expect("capture should succeed");
+
+    assert_eq!(recorded.rendered_text, "/beanstalk/assets/images/logo.png");
+    assert_eq!(recorded.usages.len(), 1);
+    let usage = &recorded.usages[0];
+    assert_eq!(usage.base, CompileTimePathBase::ProjectRootFolder);
+    assert_eq!(usage.kind, CompileTimePathKind::File);
+    assert_eq!(
+        usage.source_path.to_portable_string(&harness.string_table),
+        "assets/images/logo.png"
+    );
+    assert_eq!(
+        usage.public_path.to_portable_string(&harness.string_table),
+        "assets/images/logo.png"
+    );
+    assert_eq!(usage.source_file_scope, source_scope);
+    assert!(usage.filesystem_path.ends_with("assets/images/logo.png"));
+}
+
+#[test]
+fn entry_root_render_capture_records_entry_root_semantics() {
+    let mut harness = TestHarness::new(&["assets"]);
+    let source_scope = harness.source_scope();
+    let path = harness.path(&["images", "entry.png"]);
+    let importer_file = harness.importer_file();
+    let render_location = harness.render_location();
+
+    let (_, recorded) = resolve_compile_time_paths_for_rendered_output(
+        &[path],
+        &harness.resolver,
+        &importer_file,
+        &source_scope,
+        &render_location,
+        &PathStringFormatConfig::default(),
+        &harness.string_table,
+    )
+    .expect("capture should succeed");
+
+    assert_eq!(recorded.rendered_text, "/images/entry.png");
+    assert_eq!(recorded.usages[0].base, CompileTimePathBase::EntryRoot);
+    assert_eq!(
+        recorded.usages[0]
+            .public_path
+            .to_portable_string(&harness.string_table),
+        "images/entry.png"
+    );
+}
+
+#[test]
+fn relative_render_capture_preserves_relative_text() {
+    let mut harness = TestHarness::new(&["assets"]);
+    let source_scope = harness.source_scope();
+    let path = harness.path(&[".", "docs", "local.png"]);
+    let importer_file = harness.importer_file();
+    let render_location = harness.render_location();
+
+    let (_, recorded) = resolve_compile_time_paths_for_rendered_output(
+        &[path],
+        &harness.resolver,
+        &importer_file,
+        &source_scope,
+        &render_location,
+        &PathStringFormatConfig {
+            origin: String::from("/beanstalk"),
+            ..PathStringFormatConfig::default()
+        },
+        &harness.string_table,
+    )
+    .expect("capture should succeed");
+
+    assert_eq!(recorded.rendered_text, "./docs/local.png");
+    assert_eq!(recorded.usages[0].base, CompileTimePathBase::RelativeToFile);
+    assert_eq!(
+        recorded.usages[0]
+            .public_path
+            .to_portable_string(&harness.string_table),
+        "./docs/local.png"
+    );
+}
+
+#[test]
+fn custom_origin_changes_rendered_text_but_not_semantic_public_path() {
+    let mut harness = TestHarness::new(&["assets"]);
+    let source_scope = harness.source_scope();
+    let path = harness.path(&["assets", "images", "logo.png"]);
+    let importer_file = harness.importer_file();
+    let render_location = harness.render_location();
+
+    let (_, recorded) = resolve_compile_time_paths_for_rendered_output(
+        &[path],
+        &harness.resolver,
+        &importer_file,
+        &source_scope,
+        &render_location,
+        &PathStringFormatConfig {
+            origin: String::from("/custom"),
+            ..PathStringFormatConfig::default()
+        },
+        &harness.string_table,
+    )
+    .expect("capture should succeed");
+
+    assert_eq!(recorded.rendered_text, "/custom/assets/images/logo.png");
+    assert_eq!(
+        recorded.usages[0]
+            .public_path
+            .to_portable_string(&harness.string_table),
+        "assets/images/logo.png"
+    );
+}

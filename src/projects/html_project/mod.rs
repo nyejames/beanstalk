@@ -7,6 +7,7 @@ pub(crate) mod output_plan;
 pub(crate) mod page_metadata;
 pub(crate) mod style_directives;
 pub(crate) mod styles;
+pub(crate) mod tracked_assets;
 pub(crate) mod wasm;
 
 #[cfg(test)]

@@ -1,0 +1,5 @@
+mode = "failure"
+entry = "."
+warnings = "forbid"
+error_type = "rule"
+message_contains = ["tracked asset", "file-only"]

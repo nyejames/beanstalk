@@ -6,7 +6,6 @@
 //! (CompilerMessages)
 //! It will also enable printing out Hir structures for easy debugging also.
 
-use crate::compiler_frontend::hir::hir_side_table::{HirLocation, HirSideTable};
 use crate::compiler_frontend::hir::hir_datatypes::{HirTypeKind, TypeContext, TypeId};
 use crate::compiler_frontend::hir::hir_nodes::{
     BlockId, FieldId, FunctionId, HirBinOp, HirBlock, HirExpression, HirExpressionKind, HirField,
@@ -14,6 +13,7 @@ use crate::compiler_frontend::hir::hir_nodes::{
     HirStatementKind, HirStruct, HirTerminator, HirValueId, LocalId, OptionVariant, RegionId,
     ResultVariant, StructId, ValueKind,
 };
+use crate::compiler_frontend::hir::hir_side_table::{HirLocation, HirSideTable};
 use crate::compiler_frontend::host_functions::CallTarget;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::TextLocation;

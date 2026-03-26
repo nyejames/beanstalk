@@ -108,8 +108,7 @@ impl InternedPath {
     /// Join this path with another path
     #[allow(dead_code)] // todo
     pub fn join(&self, other: &InternedPath) -> InternedPath {
-        let mut new_components =
-            Vec::with_capacity(self.components.len() + other.components.len());
+        let mut new_components = Vec::with_capacity(self.components.len() + other.components.len());
         new_components.extend_from_slice(&self.components);
         new_components.extend_from_slice(&other.components);
         InternedPath {

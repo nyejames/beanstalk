@@ -107,6 +107,7 @@ enum ArtifactKind {
     Html,
     Js,
     Wasm,
+    Binary,
 }
 
 #[derive(Clone)]
@@ -886,6 +887,20 @@ fn parse_artifact_assertions(
                     ));
                 }
             }
+            ArtifactKind::Binary => {
+                if !assertion.must_contain.is_empty()
+                    || !assertion.must_not_contain.is_empty()
+                    || assertion.validate_wasm
+                    || !assertion.must_export.is_empty()
+                    || !assertion.must_import.is_empty()
+                {
+                    return Err(format!(
+                        "Expectation file '{}' {} uses text-only or wasm-only fields on a binary artifact assertion.",
+                        path.display(),
+                        assertion_label
+                    ));
+                }
+            }
         }
 
         parsed_assertions.push(ArtifactAssertion {
@@ -931,6 +946,7 @@ fn parse_artifact_kind(
         "html" => Ok(ArtifactKind::Html),
         "js" => Ok(ArtifactKind::Js),
         "wasm" => Ok(ArtifactKind::Wasm),
+        "binary" => Ok(ArtifactKind::Binary),
         other => Err(format!(
             "Expectation file '{}' {} has unsupported artifact kind '{}'.",
             path.display(),
@@ -1498,6 +1514,14 @@ fn validate_single_artifact_assertion(
                 }
             }
         }
+        ArtifactKind::Binary => {
+            if output_binary_bytes(output).is_none() {
+                return Some(format!(
+                    "Artifact '{}' expected kind 'binary', but produced a different file kind.",
+                    assertion.path
+                ));
+            }
+        }
     }
 
     None
@@ -1508,6 +1532,7 @@ fn artifact_kind_name(kind: ArtifactKind) -> &'static str {
         ArtifactKind::Html => "html",
         ArtifactKind::Js => "js",
         ArtifactKind::Wasm => "wasm",
+        ArtifactKind::Binary => "binary",
     }
 }
 
@@ -1742,6 +1767,13 @@ fn output_wasm_bytes(output: &OutputFile) -> Option<&[u8]> {
     }
 }
 
+fn output_binary_bytes(output: &OutputFile) -> Option<&[u8]> {
+    match output.file_kind() {
+        FileKind::Bytes(bytes) => Some(bytes.as_slice()),
+        _ => None,
+    }
+}
+
 fn normalize_relative_path(path: &Path) -> String {
     path.to_string_lossy().replace('\\', "/")
 }
@@ -1796,6 +1828,7 @@ fn validate_golden_outputs(build_result: &BuildResult, golden_dir: &Path) -> Opt
         let actual_bytes = match output.file_kind() {
             FileKind::Html(content) | FileKind::Js(content) => content.as_bytes().to_vec(),
             FileKind::Wasm(bytes) => bytes.clone(),
+            FileKind::Bytes(bytes) => bytes.clone(),
             FileKind::Directory => Vec::new(),
             FileKind::NotBuilt => Vec::new(),
         };

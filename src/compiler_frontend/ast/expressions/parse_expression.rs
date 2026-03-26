@@ -782,7 +782,7 @@ pub fn create_expression(
                 // Breaks out of the current expression and changes the type to Range
                 token_stream.advance();
                 return evaluate_expression(
-                    &context.scope,
+                    context,
                     expression,
                     &mut DataType::Range,
                     &ownership.get_reference(),
@@ -868,7 +868,7 @@ pub fn create_expression(
                         }
 
                         return evaluate_expression(
-                            &context.scope,
+                            context,
                             expression,
                             data_type,
                             ownership,
@@ -997,13 +997,7 @@ pub fn create_expression(
 
     token_stream.skip_newlines();
 
-    evaluate_expression(
-        &context.scope,
-        expression,
-        data_type,
-        ownership,
-        string_table,
-    )
+    evaluate_expression(context, expression, data_type, ownership, string_table)
 }
 
 fn parse_copy_place_expression(

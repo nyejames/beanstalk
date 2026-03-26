@@ -1,11 +1,14 @@
+use crate::compiler_frontend::ast::ast::ScopeContext;
 use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorLocation};
-use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::compiler_warnings::{CompilerWarning, WarningKind};
 use crate::compiler_frontend::optimizers::constant_folding::constant_fold;
 
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::templates::create_template_node::Template;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::paths::path_resolution::CompileTimePaths;
+use crate::compiler_frontend::paths::rendered_path_usage::record_compile_time_paths_for_rendered_output;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::TextLocation;
 use crate::return_type_error;
@@ -18,7 +21,7 @@ use crate::{eval_log, return_compiler_error, return_syntax_error};
  *
  * # Parameters
  *
- * * `scope` - A `PathBuf` representing the current scope in which the evaluation is performed.
+ * * `context` - The current AST scope context, including rendered-output path capture state.
  * * `nodes` - A vector of `AstNode` which represents the sequence of nodes in the expression.
  * * `current_type` - A mutable reference to a `DataType`. Used to determine the data type of the evaluated result.
  *
@@ -64,7 +67,7 @@ use crate::{eval_log, return_compiler_error, return_syntax_error};
  * let scope = PathBuf::from("path/to/scope");
  * let mut current_type = DataType::Inferred;
  *
- * let result = evaluate_expression(scope, nodes, &mut current_type);
+ * let result = evaluate_expression(context, nodes, &mut current_type);
  *
  * match result {
  *     Ok(expression) => println!("Evaluated Expression: {:?}", expression),
@@ -79,7 +82,7 @@ use crate::{eval_log, return_compiler_error, return_syntax_error};
  * - Implements defensive checks for edge cases, such as invalid or unsupported AST nodes.
  */
 pub fn evaluate_expression(
-    scope: &InternedPath,
+    context: &ScopeContext,
     nodes: Vec<AstNode>,
     current_type: &mut DataType,
     ownership: &Ownership,
@@ -237,7 +240,9 @@ pub fn evaluate_expression(
             // red_ln!("Treating this as simplified exp: {:#?}", simplified_expression);
 
             for node in simplified_expression {
-                new_string += &node.get_expr()?.as_string(string_table);
+                let expression = node.get_expr()?;
+                new_string +=
+                    &coerce_expression_to_rendered_string(&expression, context, string_table)?;
             }
 
             let new_id = string_table.intern(&new_string);
@@ -289,9 +294,60 @@ pub fn evaluate_expression(
             Ok(Expression::runtime(
                 stack,
                 current_type.to_owned(),
-                TextLocation::new(scope.to_owned(), first_node_start, last_node_end),
+                TextLocation::new(context.scope.to_owned(), first_node_start, last_node_end),
                 ownership,
             ))
+        }
+    }
+}
+
+fn coerce_expression_to_rendered_string(
+    expr: &Expression,
+    context: &ScopeContext,
+    string_table: &mut StringTable,
+) -> Result<String, CompilerError> {
+    let ExpressionKind::Path(paths) = &expr.kind else {
+        return Ok(expr.as_string(string_table));
+    };
+
+    emit_bst_file_path_output_warnings(paths, &expr.location, context, string_table);
+
+    let source_file_scope =
+        context.required_source_file_scope("rendered compile-time path string coercion")?;
+    let recorded = record_compile_time_paths_for_rendered_output(
+        paths,
+        source_file_scope,
+        &expr.location,
+        &context.path_format_config,
+        string_table,
+    );
+    context.record_rendered_path_usages(recorded.usages);
+
+    Ok(recorded.rendered_text)
+}
+
+fn emit_bst_file_path_output_warnings(
+    paths: &CompileTimePaths,
+    render_location: &TextLocation,
+    context: &ScopeContext,
+    string_table: &StringTable,
+) {
+    for path in &paths.paths {
+        if path
+            .filesystem_path
+            .extension()
+            .is_some_and(|extension| extension == "bst")
+        {
+            let file_path = render_location.scope.to_path_buf(string_table);
+            context.emit_warning(CompilerWarning::new(
+                &format!(
+                    "Path to Beanstalk source file is being inserted into template output: '{}'",
+                    path.source_path.to_portable_string(string_table)
+                ),
+                render_location.to_error_location(string_table),
+                WarningKind::BstFilePathInTemplateOutput,
+                file_path,
+            ));
         }
     }
 }

@@ -21,9 +21,9 @@ use crate::compiler_frontend::ast::ast::AstStartTemplateItem;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, TextLocation};
 use crate::compiler_frontend::ast::templates::template_folding::TemplateFoldContext;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
+use crate::compiler_frontend::hir::hir_side_table::HirSideTable;
 use crate::compiler_frontend::hir::hir_validation::validate_hir_module;
 use crate::compiler_frontend::hir::{hir_datatypes::*, hir_nodes::*};
-use crate::compiler_frontend::hir::hir_side_table::HirSideTable;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::string_interning::StringTable;
@@ -187,6 +187,7 @@ impl<'a> HirBuilder<'a> {
     /// This is the main entry point for HIR generation.
     pub fn build_hir_module(mut self, ast: Ast) -> Result<HirModule, CompilerMessages> {
         self.module.warnings = ast.warnings.clone();
+        self.module.rendered_path_usages = ast.rendered_path_usages.clone();
 
         if let Err(error) = self.prepare_hir_declarations(&ast) {
             return Err(CompilerMessages {

@@ -10,12 +10,15 @@ use crate::compiler_frontend::style_directives::StyleDirectiveSpec;
 use crate::projects::html_project::document_config::parse_html_document_config;
 use crate::projects::html_project::js_path::{compile_html_module_js, html_output_path};
 use crate::projects::html_project::style_directives::html_project_style_directives;
+use crate::projects::html_project::tracked_assets::{
+    emit_tracked_assets, plan_module_tracked_assets,
+};
 use crate::projects::html_project::wasm::artifacts::{
     CompiledHtmlWasmModule, compile_html_module_wasm,
 };
 use crate::projects::routing::parse_html_site_config;
 use crate::projects::settings::Config;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -62,8 +65,10 @@ impl BackendBuilder for HtmlProjectBuilder {
         let mut output_paths = HashSet::new();
         let mut entry_page_rel = None;
         let mut has_directory_homepage = false;
+        let mut compiled_html_output_paths = Vec::with_capacity(modules.len());
+        let mut warnings = Vec::new();
 
-        for module in modules {
+        for (module_index, module) in modules.iter().enumerate() {
             let logical_html_output_path =
                 html_output_path(&module.entry_point, resolved_entry_root.as_deref())
                     .map_err(CompilerMessages::from_error)?;
@@ -77,6 +82,7 @@ impl BackendBuilder for HtmlProjectBuilder {
                 wasm_enabled,
             )?;
 
+            let html_output_path = compiled_artifacts.html_output_path.clone();
             for output_file in compiled_artifacts.output_files {
                 let output_path = output_file.relative_output_path().to_path_buf();
                 if !output_paths.insert(output_path.clone()) {
@@ -87,14 +93,15 @@ impl BackendBuilder for HtmlProjectBuilder {
                 }
                 output_files.push(output_file);
             }
+            compiled_html_output_paths.push((module_index, html_output_path.clone()));
 
             if let Some(homepage_entry) = expected_homepage_entry.as_ref() {
                 if module.entry_point == *homepage_entry {
                     has_directory_homepage = true;
-                    entry_page_rel = Some(compiled_artifacts.html_output_path.clone());
+                    entry_page_rel = Some(html_output_path.clone());
                 }
             } else if entry_page_rel.is_none() {
-                entry_page_rel = Some(compiled_artifacts.html_output_path.clone());
+                entry_page_rel = Some(html_output_path);
             }
         }
 
@@ -105,11 +112,47 @@ impl BackendBuilder for HtmlProjectBuilder {
             ));
         }
 
+        let mut tracked_assets = Vec::new();
+        let mut tracked_asset_sources_by_output: HashMap<PathBuf, PathBuf> = HashMap::new();
+        for (module_index, html_output_path) in &compiled_html_output_paths {
+            let module = &modules[*module_index];
+            let planned_assets = plan_module_tracked_assets(module, html_output_path)?;
+            warnings.extend(planned_assets.warnings);
+
+            for asset in planned_assets.assets {
+                let output_path = asset.emitted_output_path.clone();
+
+                if let Some(existing_source) = tracked_asset_sources_by_output.get(&output_path) {
+                    if *existing_source == asset.source_filesystem_path {
+                        continue;
+                    }
+
+                    return Err(conflicting_tracked_asset_output_error(
+                        &asset.source_filesystem_path,
+                        existing_source,
+                        &output_path,
+                    ));
+                }
+
+                if !output_paths.insert(output_path.clone()) {
+                    return Err(tracked_asset_conflicts_with_existing_output_error(
+                        &asset.source_filesystem_path,
+                        &output_path,
+                    ));
+                }
+
+                tracked_asset_sources_by_output
+                    .insert(output_path.clone(), asset.source_filesystem_path.clone());
+                tracked_assets.push(asset);
+            }
+        }
+        output_files.extend(emit_tracked_assets(&tracked_assets)?);
+
         Ok(Project {
             output_files,
             entry_page_rel,
             cleanup_policy: CleanupPolicy::html(),
-            warnings: Vec::new(),
+            warnings,
         })
     }
 
@@ -220,6 +263,36 @@ fn missing_homepage_error(config: &Config, resolved_entry_root: Option<&Path>) -
         format!("Create a '#page.bst' file in '{}'", entry_root.display()),
     );
     CompilerMessages::from_error(error)
+}
+
+fn conflicting_tracked_asset_output_error(
+    source_path: &Path,
+    existing_source_path: &Path,
+    output_path: &Path,
+) -> CompilerMessages {
+    CompilerMessages::from_error(CompilerError::file_error(
+        source_path,
+        format!(
+            "Tracked asset '{}' would emit to '{}', but that output path is already claimed by '{}'.",
+            source_path.display(),
+            output_path.display(),
+            existing_source_path.display(),
+        ),
+    ))
+}
+
+fn tracked_asset_conflicts_with_existing_output_error(
+    source_path: &Path,
+    output_path: &Path,
+) -> CompilerMessages {
+    CompilerMessages::from_error(CompilerError::file_error(
+        source_path,
+        format!(
+            "Tracked asset '{}' would emit to '{}', but that output path is already claimed by another emitted HTML builder artifact.",
+            source_path.display(),
+            output_path.display(),
+        ),
+    ))
 }
 
 struct CompiledHtmlModuleArtifacts {

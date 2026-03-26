@@ -17,7 +17,7 @@ use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::{CompilerWarning, WarningKind};
 use crate::compiler_frontend::datatypes::Ownership;
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::paths::path_format::format_compile_time_paths;
+use crate::compiler_frontend::paths::rendered_path_usage::resolve_compile_time_paths_for_rendered_output;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TextLocation};
 use crate::{ast_log, return_syntax_error};
@@ -118,10 +118,17 @@ pub(super) fn push_template_head_path_expression(
         );
     }
 
-    let resolver = context.required_project_path_resolver("template head path coercion")?;
     let source_scope = context.required_source_file_scope("template head path coercion")?;
     let importer_file = source_scope.to_path_buf(string_table);
-    let resolved = resolver.resolve_compile_time_paths(paths, &importer_file, string_table)?;
+    let (resolved, recorded) = resolve_compile_time_paths_for_rendered_output(
+        paths,
+        context.required_project_path_resolver("template head path coercion")?,
+        &importer_file,
+        source_scope,
+        &token_stream.current_location(),
+        &context.path_format_config,
+        string_table,
+    )?;
 
     // Warn when a .bst source file path is coerced into template output.
     for path in &resolved.paths {
@@ -145,8 +152,8 @@ pub(super) fn push_template_head_path_expression(
     }
 
     // Templates always fold to strings, so path text is eagerly formatted here.
-    let formatted = format_compile_time_paths(&resolved, &context.path_format_config, string_table);
-    let interned = string_table.get_or_intern(formatted);
+    context.record_rendered_path_usages(recorded.usages);
+    let interned = string_table.get_or_intern(recorded.rendered_text);
     template.content.add_with_origin(
         Expression::string_slice(
             interned,

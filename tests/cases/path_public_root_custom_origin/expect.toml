@@ -1,9 +1,5 @@
-mode = "success"
+mode = "failure"
 entry = "."
 warnings = "forbid"
-
-[[artifact_assertions]]
-path = "index.html"
-kind = "html"
-must_contain = ["href=\"/beanstalk/\""]
-must_not_contain = ["/beanstalk/beanstalk/"]
+error_type = "rule"
+message_contains = ["directory path", "file-only"]

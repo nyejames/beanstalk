@@ -80,6 +80,7 @@ pub enum FileKind {
     NotBuilt,
 
     Wasm(Vec<u8>),
+    Bytes(Vec<u8>),
     Js(String), // Either just glue code for web or pure JS backend
     Html(String),
     Directory, // So the build system can create empty folders if needed
@@ -256,7 +257,8 @@ pub fn write_project_outputs(
         current_output_paths.insert(relative_output_path.to_path_buf());
 
         if !matches!(output_file.file_kind(), FileKind::Directory)
-            && project.cleanup_policy.manages_path(relative_output_path)
+            && (project.cleanup_policy.manages_path(relative_output_path)
+                || matches!(output_file.file_kind(), FileKind::Bytes(_)))
         {
             current_managed_artifact_paths.insert(relative_output_path.to_path_buf());
         }
@@ -288,7 +290,7 @@ pub fn write_project_outputs(
                     ))
                 })?;
             }
-            FileKind::Wasm(bytes) => {
+            FileKind::Wasm(bytes) | FileKind::Bytes(bytes) => {
                 create_parent_dir_if_needed(&destination)?;
                 fs::write(&destination, bytes).map_err(|error| {
                     CompilerMessages::from_error(CompilerError::file_error(

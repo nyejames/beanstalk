@@ -48,6 +48,7 @@ use super::hir_side_table::HirSideTable;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::hir::hir_datatypes::{TypeContext, TypeId};
 use crate::compiler_frontend::host_functions::CallTarget;
+use crate::compiler_frontend::paths::rendered_path_usage::RenderedPathUsage;
 use crate::compiler_frontend::tokenizer::tokens::TextLocation;
 
 // ============================================================
@@ -169,6 +170,7 @@ pub struct HirModule {
     pub const_string_pool: Vec<String>,
     pub doc_fragments: Vec<HirDocFragment>,
     pub module_constants: Vec<HirModuleConst>,
+    pub rendered_path_usages: Vec<RenderedPathUsage>,
 
     /// Region tree
     pub regions: Vec<HirRegion>,
@@ -191,6 +193,7 @@ impl HirModule {
             const_string_pool: vec![],
             doc_fragments: vec![],
             module_constants: vec![],
+            rendered_path_usages: vec![],
             regions: vec![],
             warnings: vec![],
         }

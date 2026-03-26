@@ -1,8 +1,5 @@
-mode = "success"
+mode = "failure"
 entry = "."
 warnings = "forbid"
-
-[[artifact_assertions]]
-path = "index.html"
-kind = "html"
-must_contain = ["./mydir/"]
+error_type = "rule"
+message_contains = ["directory path", "file-only"]

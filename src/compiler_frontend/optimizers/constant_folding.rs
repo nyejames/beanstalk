@@ -357,7 +357,9 @@ mod tests {
             .expect("integer exponentiation should succeed")
             .expect("integer exponentiation should fold");
 
-        assert!(matches!(result.kind, ExpressionKind::Float(value) if (value - 0.5).abs() < f64::EPSILON));
+        assert!(
+            matches!(result.kind, ExpressionKind::Float(value) if (value - 0.5).abs() < f64::EPSILON)
+        );
         assert_eq!(result.data_type, DataType::Float);
     }
 

@@ -109,6 +109,7 @@ fn build_ast(nodes: Vec<AstNode>, entry_path: InternedPath) -> Ast {
         entry_path,
         external_exports: Vec::<ModuleExport>::new(),
         start_template_items: vec![],
+        rendered_path_usages: vec![],
         warnings: vec![],
     }
 }

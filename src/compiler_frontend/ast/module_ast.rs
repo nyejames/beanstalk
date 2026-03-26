@@ -34,6 +34,7 @@ pub use crate::compiler_frontend::ast::templates::top_level_templates::{
 };
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
+use crate::compiler_frontend::paths::rendered_path_usage::RenderedPathUsage;
 use crate::return_compiler_error;
 
 static CONTROL_FLOW_SCOPE_COUNTER: AtomicUsize = AtomicUsize::new(0);
@@ -58,6 +59,7 @@ pub struct Ast {
     #[allow(dead_code)] // Used only in tests
     pub external_exports: Vec<ModuleExport>,
     pub start_template_items: Vec<AstStartTemplateItem>,
+    pub rendered_path_usages: Vec<RenderedPathUsage>,
     pub warnings: Vec<CompilerWarning>,
 }
 
@@ -90,6 +92,7 @@ impl Ast {
         let mut module_file_paths: FxHashSet<InternedPath> = FxHashSet::default();
         let mut resolved_struct_fields_by_path: FxHashMap<InternedPath, Vec<Declaration>> =
             FxHashMap::default();
+        let rendered_path_usages = Rc::new(RefCell::new(Vec::new()));
         let Some(project_path_resolver_for_folding) = project_path_resolver.as_ref() else {
             return Err(CompilerMessages {
                 errors: vec![CompilerError::compiler_error(
@@ -244,6 +247,7 @@ impl Ast {
                             path_format_config: path_format_config.clone(),
                             build_profile,
                             warnings: &mut warnings,
+                            rendered_path_usages: rendered_path_usages.clone(),
                             string_table,
                         },
                     ) {
@@ -273,6 +277,7 @@ impl Ast {
                     .with_start_import_aliases(bindings.start_aliases.to_owned())
                     .with_project_path_resolver(project_path_resolver.clone())
                     .with_path_format_config(path_format_config.clone())
+                    .with_rendered_path_usage_sink(rendered_path_usages.clone())
                     .with_source_file_scope(source_file_scope);
 
                     let mut struct_tokens = header.tokens.to_owned();
@@ -342,6 +347,7 @@ impl Ast {
                     .with_start_import_aliases(bindings.start_aliases.to_owned())
                     .with_project_path_resolver(project_path_resolver.clone())
                     .with_path_format_config(path_format_config.clone())
+                    .with_rendered_path_usage_sink(rendered_path_usages.clone())
                     .with_source_file_scope(source_file_scope.to_owned());
 
                     let mut token_stream = header.tokens;
@@ -392,6 +398,7 @@ impl Ast {
                     .with_start_import_aliases(bindings.start_aliases.to_owned())
                     .with_project_path_resolver(project_path_resolver.clone())
                     .with_path_format_config(path_format_config.clone())
+                    .with_rendered_path_usage_sink(rendered_path_usages.clone())
                     .with_source_file_scope(source_file_scope.to_owned());
 
                     let mut token_stream = header.tokens;
@@ -494,6 +501,7 @@ impl Ast {
                     .with_start_import_aliases(bindings.start_aliases.to_owned())
                     .with_project_path_resolver(project_path_resolver.clone())
                     .with_path_format_config(path_format_config.clone())
+                    .with_rendered_path_usage_sink(rendered_path_usages.clone())
                     .with_source_file_scope(source_file_scope);
 
                     let template_result =
@@ -597,6 +605,7 @@ impl Ast {
             entry_path: entry_dir,
             external_exports,
             start_template_items,
+            rendered_path_usages: std::mem::take(&mut *rendered_path_usages.borrow_mut()),
             warnings,
         })
     }
@@ -630,6 +639,8 @@ pub struct ScopeContext {
     pub(crate) source_file_scope: Option<InternedPath>,
     /// Path formatting config for `#origin`-aware path string coercion.
     pub(crate) path_format_config: PathStringFormatConfig,
+    /// Shared rendered-path usage sink for builder-visible template/output facts.
+    pub(crate) rendered_path_usages: Rc<RefCell<Vec<RenderedPathUsage>>>,
 }
 #[derive(PartialEq, Clone)]
 pub enum ContextKind {
@@ -677,6 +688,7 @@ impl ScopeContext {
             project_path_resolver: None,
             source_file_scope: None,
             path_format_config: PathStringFormatConfig::default(),
+            rendered_path_usages: Rc::new(RefCell::new(Vec::new())),
         }
     }
 
@@ -752,6 +764,7 @@ impl ScopeContext {
             project_path_resolver: self.project_path_resolver.clone(),
             source_file_scope: self.source_file_scope.clone(),
             path_format_config: self.path_format_config.clone(),
+            rendered_path_usages: self.rendered_path_usages.clone(),
         }
     }
 
@@ -777,6 +790,7 @@ impl ScopeContext {
             project_path_resolver: parent.project_path_resolver.clone(),
             source_file_scope: parent.source_file_scope.clone(),
             path_format_config: parent.path_format_config.clone(),
+            rendered_path_usages: parent.rendered_path_usages.clone(),
         }
     }
 
@@ -869,6 +883,14 @@ impl ScopeContext {
         self
     }
 
+    pub fn with_rendered_path_usage_sink(
+        mut self,
+        sink: Rc<RefCell<Vec<RenderedPathUsage>>>,
+    ) -> ScopeContext {
+        self.rendered_path_usages = sink;
+        self
+    }
+
     pub fn resolve_start_import(&self, name: &StringId) -> Option<&InternedPath> {
         self.start_import_aliases.get(name)
     }
@@ -892,6 +914,14 @@ impl ScopeContext {
 
     pub fn take_emitted_warnings(&self) -> Vec<CompilerWarning> {
         std::mem::take(&mut *self.emitted_warnings.borrow_mut())
+    }
+
+    pub fn record_rendered_path_usages(&self, usages: Vec<RenderedPathUsage>) {
+        self.rendered_path_usages.borrow_mut().extend(usages);
+    }
+
+    pub fn take_rendered_path_usages(&self) -> Vec<RenderedPathUsage> {
+        std::mem::take(&mut *self.rendered_path_usages.borrow_mut())
     }
 }
 
@@ -921,6 +951,7 @@ macro_rules! new_template_context {
             project_path_resolver: $context.project_path_resolver.clone(),
             source_file_scope: $context.source_file_scope.clone(),
             path_format_config: $context.path_format_config.clone(),
+            rendered_path_usages: $context.rendered_path_usages.clone(),
         }
     };
 }
@@ -949,6 +980,7 @@ macro_rules! new_config_context {
             project_path_resolver: None,
             source_file_scope: None,
             path_format_config: PathStringFormatConfig::default(),
+            rendered_path_usages: std::rc::Rc::new(std::cell::RefCell::new(Vec::new())),
         }
     }};
 }
@@ -977,6 +1009,7 @@ macro_rules! new_condition_context {
             project_path_resolver: None,
             source_file_scope: None,
             path_format_config: PathStringFormatConfig::default(),
+            rendered_path_usages: std::rc::Rc::new(std::cell::RefCell::new(Vec::new())),
         }
     }};
 }

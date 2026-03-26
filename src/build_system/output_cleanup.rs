@@ -118,15 +118,6 @@ pub(crate) enum ManifestLoadResult {
     },
 }
 
-impl ManifestLoadResult {
-    fn tracked_paths(&self) -> Option<&[PathBuf]> {
-        match self {
-            Self::ValidV2 { paths, .. } | Self::ValidLegacy { paths } => Some(paths),
-            Self::LimitedSafeMode { .. } => None,
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum ManifestLimitedSafeModeReason {
     Missing,
@@ -205,13 +196,26 @@ pub(crate) fn finalize_output_cleanup(
         return Ok(());
     };
 
-    if let Some(previous_manifest_paths) = manifest_load_result.tracked_paths() {
-        remove_manifest_tracked_stale_artifacts(
-            output_root,
-            current_managed_artifact_paths,
-            previous_manifest_paths,
-            cleanup_policy,
-        );
+    match manifest_load_result {
+        ManifestLoadResult::ValidV2 { paths, .. } => {
+            remove_manifest_tracked_stale_artifacts(
+                output_root,
+                current_managed_artifact_paths,
+                paths,
+                cleanup_policy,
+                false,
+            );
+        }
+        ManifestLoadResult::ValidLegacy { paths } => {
+            remove_manifest_tracked_stale_artifacts(
+                output_root,
+                current_managed_artifact_paths,
+                paths,
+                cleanup_policy,
+                true,
+            );
+        }
+        ManifestLoadResult::LimitedSafeMode { .. } => {}
     }
 
     let route_alias_cleanup_report =
@@ -404,23 +408,26 @@ pub(crate) fn write_build_manifest(
 
 /// Remove stale managed files tracked by the previous manifest.
 ///
-/// WHAT: deletes only manifest-tracked files with extensions explicitly owned by the active
-/// builder policy.
-/// WHY: stale cleanup should stay conservative even if the manifest drifts or contains unexpected
-/// entries.
+/// WHAT: deletes stale manifest-tracked files, optionally filtering legacy manifests through the
+/// active cleanup policy.
+/// WHY: v2 manifests are explicit emitted-path ownership, while legacy manifests still need
+/// extension-based conservatism to avoid broadening deletion behavior retroactively.
 pub(crate) fn remove_manifest_tracked_stale_artifacts(
     output_root: &Path,
     current_managed_artifact_paths: &HashSet<PathBuf>,
     previous_manifest_paths: &[PathBuf],
     cleanup_policy: &CleanupPolicy,
+    require_managed_path_match: bool,
 ) -> ManifestCleanupReport {
     let canonical_output_root = canonicalize_or_nearest_ancestor(output_root);
     let mut report = ManifestCleanupReport::default();
 
     for stale_relative in previous_manifest_paths {
-        if current_managed_artifact_paths.contains(stale_relative)
-            || !cleanup_policy.manages_path(stale_relative)
-        {
+        if current_managed_artifact_paths.contains(stale_relative) {
+            continue;
+        }
+
+        if require_managed_path_match && !cleanup_policy.manages_path(stale_relative) {
             continue;
         }
 
