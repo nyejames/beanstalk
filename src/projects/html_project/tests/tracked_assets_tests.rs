@@ -167,6 +167,58 @@ fn directory_usage_is_rejected() {
 }
 
 #[test]
+fn public_root_directory_usage_is_ignored() {
+    let root = temp_dir("tracked_assets_public_root_directory");
+    fs::create_dir_all(root.join("src")).expect("should create entry root");
+
+    let mut module = create_test_module(root.join("src/#page.bst"));
+    module.hir.rendered_path_usages.push(rendered_path_usage(
+        &mut module.string_table,
+        &[],
+        &[],
+        root.join("src"),
+        CompileTimePathBase::EntryRoot,
+        CompileTimePathKind::Directory,
+        &["src", "#page.bst"],
+        2,
+    ));
+
+    let planned =
+        plan_module_tracked_assets(&module, Path::new("index.html")).expect("planning succeeds");
+
+    assert!(planned.assets.is_empty());
+    assert!(planned.warnings.is_empty());
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
+fn non_asset_directory_link_is_ignored() {
+    let root = temp_dir("tracked_assets_directory_link");
+    fs::create_dir_all(root.join("src/docs/guide/subdir")).expect("should create nested dir");
+
+    let mut module = create_test_module(root.join("src/docs/guide/#page.bst"));
+    module.hir.rendered_path_usages.push(rendered_path_usage(
+        &mut module.string_table,
+        &[".", "subdir"],
+        &[".", "subdir"],
+        root.join("src/docs/guide/subdir"),
+        CompileTimePathBase::RelativeToFile,
+        CompileTimePathKind::Directory,
+        &["src", "docs", "guide", "#page.bst"],
+        5,
+    ));
+
+    let planned = plan_module_tracked_assets(&module, Path::new("docs/guide/index.html"))
+        .expect("planning succeeds");
+
+    assert!(planned.assets.is_empty());
+    assert!(planned.warnings.is_empty());
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
 fn large_asset_warning_dedupes_to_first_render_location() {
     let root = temp_dir("tracked_assets_large_warning");
     fs::create_dir_all(root.join("assets")).expect("should create assets dir");

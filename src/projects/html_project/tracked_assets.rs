@@ -1,10 +1,12 @@
 //! HTML tracked-asset planning and passthrough emission.
 //!
-//! WHAT: interprets frontend-rendered path usages as HTML builder tracked assets, chooses emitted
-//! output paths, emits warnings, and converts files into ordinary `OutputFile` artifacts.
+//! WHAT: interprets frontend-rendered path usages as HTML builder tracked assets when they map to
+//! emitted files, chooses output paths, emits warnings, and converts files into ordinary
+//! `OutputFile` artifacts.
 //!
 //! WHY: tracked-asset placement and emission are builder policy. The frontend records semantic
-//! path facts, then the HTML builder decides which rendered file paths become emitted artifacts.
+//! path facts, then the HTML builder decides which rendered file paths become emitted artifacts
+//! and which directory-like links remain plain rendered URLs.
 
 use crate::build_system::build::{FileKind, Module, OutputFile};
 use crate::build_system::output_cleanup::validate_relative_output_path;
@@ -78,7 +80,9 @@ pub(crate) fn plan_module_tracked_assets(
         FxHashMap::default();
 
     for usage in &module.hir.rendered_path_usages {
-        let asset = plan_one_tracked_asset(module, usage, html_output_path)?;
+        let Some(asset) = plan_one_tracked_asset(module, usage, html_output_path)? else {
+            continue;
+        };
 
         if asset.byte_size >= DEFAULT_LARGE_TRACKED_ASSET_WARNING_BYTES {
             match large_warning_locations_by_source.entry(asset.source_filesystem_path.clone()) {
@@ -147,11 +151,15 @@ fn plan_one_tracked_asset(
     module: &Module,
     usage: &RenderedPathUsage,
     html_output_path: &Path,
-) -> Result<HtmlTrackedAsset, CompilerMessages> {
+) -> Result<Option<HtmlTrackedAsset>, CompilerMessages> {
     if usage.kind == CompileTimePathKind::Directory {
-        return Err(CompilerMessages::from_error(directory_asset_error(
-            module, usage,
-        )));
+        if directory_usage_requires_tracked_asset_error(module, usage) {
+            return Err(CompilerMessages::from_error(directory_asset_error(
+                module, usage,
+            )));
+        }
+
+        return Ok(None);
     }
 
     let canonical_source = fs::canonicalize(&usage.filesystem_path).map_err(|error| {
@@ -178,7 +186,7 @@ fn plan_one_tracked_asset(
     let (emitted_output_path, reference_kind) =
         derive_emitted_output_path(module, usage, html_output_path)?;
 
-    Ok(HtmlTrackedAsset {
+    Ok(Some(HtmlTrackedAsset {
         source_filesystem_path: canonical_source,
         source_path: usage.source_path.clone(),
         emitted_output_path,
@@ -186,7 +194,22 @@ fn plan_one_tracked_asset(
         byte_size,
         source_location: usage.render_location.clone(),
         pipeline_plan: AssetPipelinePlan::Passthrough,
-    })
+    }))
+}
+
+/// Decide whether a rendered directory usage should stay a plain link or fail as a tracked asset.
+///
+/// WHAT: keeps general directory links such as `@/` and `@./subdir` renderable without emission.
+/// WHY: tracked assets are file-only in v1, but the legacy `@assets/...` directory lane would
+/// imply recursive copying behavior and must still fail instead of silently doing nothing.
+fn directory_usage_requires_tracked_asset_error(module: &Module, usage: &RenderedPathUsage) -> bool {
+    usage.base == CompileTimePathBase::ProjectRootFolder
+        && usage
+            .public_path
+            .as_components()
+            .first()
+            .map(|segment| module.string_table.resolve(*segment) == "assets")
+            .unwrap_or(false)
 }
 
 fn derive_emitted_output_path(
