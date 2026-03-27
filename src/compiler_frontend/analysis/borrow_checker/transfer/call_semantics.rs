@@ -26,6 +26,8 @@ pub(super) struct CallSemantics {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum ArgEffect {
     SharedBorrow,
+    #[cfg_attr(not(test), allow(dead_code))]
+    // Tests register mutable host calls that exercise this path.
     MutableBorrow,
     MayConsume,
 }
@@ -132,12 +134,14 @@ pub(super) fn resolve_call_semantics(
                 .iter()
                 .map(|param| match param.access_kind {
                     HostAccessKind::Shared => ArgEffect::SharedBorrow,
+                    #[cfg(test)]
                     HostAccessKind::Mutable => ArgEffect::MutableBorrow,
                 })
                 .collect::<Vec<_>>();
 
             let return_alias = match host_def.return_alias {
                 HostReturnAlias::Fresh => CallResultAlias::Fresh,
+                #[cfg(test)]
                 HostReturnAlias::AliasArgs(ref indices) => {
                     validate_alias_indices(
                         indices,

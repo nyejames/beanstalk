@@ -25,7 +25,7 @@ fn parse_module_headers(files: &[(&str, &str)], entry_path: &str) -> (Vec<Header
         tokenized_files.push(tokens);
     }
 
-    let host_registry = HostRegistry::new(&mut string_table);
+    let host_registry = HostRegistry::new();
     let mut warnings = Vec::new();
     let parsed_headers = parse_headers(
         tokenized_files,

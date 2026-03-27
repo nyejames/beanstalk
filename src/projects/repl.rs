@@ -121,7 +121,7 @@ fn compile_beanstalk_to_string(
         ContextKind::Template,
         interned_path.to_owned(),
         &[],
-        HostRegistry::new(&mut string_table),
+        HostRegistry::new(),
         Vec::new(),
     )
     .with_project_path_resolver(Some(project_path_resolver))

@@ -7,8 +7,7 @@ use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::host_functions::{
-    ErrorHandling, HostAbiType, HostAccessKind, HostFunctionDef, HostParameter, HostRegistry,
-    HostReturnAlias,
+    HostAbiType, HostAccessKind, HostFunctionDef, HostParameter, HostRegistry, HostReturnAlias,
 };
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
@@ -135,8 +134,8 @@ pub(crate) fn lower_hir(
     .expect("HIR lowering should succeed")
 }
 
-pub(crate) fn default_host_registry(string_table: &mut StringTable) -> HostRegistry {
-    HostRegistry::new(string_table)
+pub(crate) fn default_host_registry(_string_table: &mut StringTable) -> HostRegistry {
+    HostRegistry::new()
 }
 
 pub(crate) fn register_host_function(
@@ -150,7 +149,6 @@ pub(crate) fn register_host_function(
         .into_iter()
         .map(|access_kind| HostParameter {
             language_type: DataType::Int,
-            abi_type: HostAbiType::I32,
             access_kind,
         })
         .collect::<Vec<_>>();
@@ -161,9 +159,6 @@ pub(crate) fn register_host_function(
             parameters,
             return_type,
             return_alias,
-            ownership: Ownership::ImmutableReference,
-            error_handling: ErrorHandling::None,
-            description: format!("test host function {name}"),
         })
         .expect("host function registration should succeed");
 }

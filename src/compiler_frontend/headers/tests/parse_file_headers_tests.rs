@@ -21,7 +21,7 @@ fn parse_single_file_headers(source: &str) -> Headers {
     )
     .expect("tokenization should succeed");
 
-    let host_registry = HostRegistry::new(&mut string_table);
+    let host_registry = HostRegistry::new();
     let mut warnings = Vec::new();
 
     parse_headers(
@@ -53,7 +53,7 @@ fn parse_single_file_headers_with_entry(
     )
     .expect("tokenization should succeed");
 
-    let host_registry = HostRegistry::new(&mut string_table);
+    let host_registry = HostRegistry::new();
     let mut warnings = Vec::new();
 
     parse_headers(

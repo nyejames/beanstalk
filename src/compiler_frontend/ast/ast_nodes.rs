@@ -180,9 +180,9 @@ impl AstNode {
             )),
             // Compiler tried to get the expression of a node that cannot contain expressions
             _ => {
-                println!("{:?}", self.kind);
                 return_compiler_error!(
-                    "Compiler tried to get the expression of a node that cannot contain expressions in src/compiler_frontend/headers/ast_nodes.rs"
+                    "Compiler tried to get the expression of a non-expression AST node: {:?}",
+                    &self.kind
                 );
             }
         }

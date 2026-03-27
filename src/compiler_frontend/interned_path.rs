@@ -1,4 +1,3 @@
-use crate::compiler_frontend::basic_utility_functions::is_valid_var_char;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use std::path::{Path, PathBuf};
 
@@ -6,7 +5,7 @@ use std::path::{Path, PathBuf};
 ///
 /// InternedPath stores path components as a Vec<StringId>, allowing for:
 /// - Memory-efficient storage when paths share common components
-/// - Fast path operations (push, pop, parent, join) using vector operations
+/// - Fast path operations (append, parent, join_str) using vector operations
 /// - Efficient comparison and hashing using StringId equality
 /// - Conversion to/from standard PathBuf when needed for file system operations
 ///
@@ -24,13 +23,6 @@ impl InternedPath {
     pub fn new() -> Self {
         Self {
             components: Vec::new(),
-        }
-    }
-
-    #[allow(dead_code)] // todo
-    pub fn with_capacity(capacity: usize) -> Self {
-        Self {
-            components: Vec::with_capacity(capacity),
         }
     }
 
@@ -75,22 +67,10 @@ impl InternedPath {
         path
     }
 
-    /// Push a new component to the end of this path
-    #[allow(dead_code)] // todo
-    pub fn push(&mut self, component: StringId) {
-        self.components.push(component);
-    }
-
     /// Push a string component to the end of this path (interns the string)
     pub fn push_str(&mut self, component: &str, string_table: &mut StringTable) {
         let component_id = string_table.intern(component);
         self.components.push(component_id);
-    }
-
-    /// Remove and return the last component of this path
-    #[allow(dead_code)] // todo
-    pub fn pop(&mut self) -> Option<StringId> {
-        self.components.pop()
     }
 
     /// Get the parent path (all components except the last)
@@ -105,8 +85,8 @@ impl InternedPath {
         }
     }
 
-    /// Join this path with another path
-    #[allow(dead_code)] // todo
+    /// Test-only helper for verifying component concatenation semantics directly.
+    #[cfg(test)]
     pub fn join(&self, other: &InternedPath) -> InternedPath {
         let mut new_components = Vec::with_capacity(self.components.len() + other.components.len());
         new_components.extend_from_slice(&self.components);
@@ -115,6 +95,7 @@ impl InternedPath {
             components: new_components,
         }
     }
+
     pub fn append(&self, new: StringId) -> Self {
         let mut new_components = Vec::with_capacity(self.components.len() + 1);
         new_components.extend_from_slice(&self.components);
@@ -134,8 +115,8 @@ impl InternedPath {
         self.components.len()
     }
 
-    /// Check if this path is empty (root path)
-    #[allow(dead_code)] // todo
+    /// Test-only convenience helper for asserting empty-root behavior.
+    #[cfg(test)]
     pub fn is_empty(&self) -> bool {
         self.components.is_empty()
     }
@@ -148,12 +129,6 @@ impl InternedPath {
     /// Get the last component as a string
     pub fn name_str<'a>(&self, string_table: &'a StringTable) -> Option<&'a str> {
         self.name().map(|id| string_table.resolve(id))
-    }
-
-    /// Get an iterator over the components
-    #[allow(dead_code)] // todo
-    pub fn components(&self) -> impl Iterator<Item = StringId> + '_ {
-        self.components.iter().copied()
     }
 
     /// Get the components as a slice
@@ -186,31 +161,6 @@ impl InternedPath {
             .all(|(a, b)| a == b)
     }
 
-    /// Create a relative path from this path to the target path
-    /// Returns None if no relative path can be constructed
-    #[allow(dead_code)] // todo
-    pub fn relative_to(&self, base: &InternedPath) -> Option<InternedPath> {
-        if !self.starts_with(base) {
-            return None;
-        }
-
-        let relative_components = self.components[base.components.len()..].to_vec();
-        Some(InternedPath {
-            components: relative_components,
-        })
-    }
-
-    /// Compare this path with a PathBuf efficiently
-    /// Note: This creates a temporary StringTable for comparison, which is not ideal
-    /// but necessary since we can't mutate the provided StringTable
-    #[allow(dead_code)] // todo
-    pub fn eq_path_buf(&self, other: &Path, string_table: &StringTable) -> bool {
-        // For now, convert self to PathBuf and compare
-        // This is less efficient but avoids the need to mutate string_table
-        let self_path = self.to_path_buf(string_table);
-        self_path == other
-    }
-
     /// Render with the platform-native path separator.
     /// Use this only for diagnostics and filesystem-adjacent display.
     pub fn to_native_string(&self, string_table: &StringTable) -> String {
@@ -225,36 +175,6 @@ impl InternedPath {
 
     pub fn to_string(&self, string_table: &StringTable) -> String {
         self.to_portable_string(string_table)
-    }
-
-    #[allow(dead_code)] // todo
-    pub fn to_interned_string(&self, string_table: &mut StringTable) -> StringId {
-        let path_str = self.to_string(string_table);
-        string_table.get_or_intern(path_str)
-    }
-
-    /// Extract the simple name from a header path by creating a name from the components,
-    /// removing any invalid characters
-    /// For a path like "file.bst/function_name.header", returns StringId for "file_function_name"
-    #[allow(dead_code)] // todo
-    pub fn extract_header_name(&self, string_table: &mut StringTable) -> StringId {
-        // Combine each part of the path with underscores to create a unique name for the header
-        let mut name = String::with_capacity(self.len() * 2);
-        for component in self.components.iter() {
-            let chars = string_table.resolve(*component).chars();
-
-            // Strip any invalid characters from the component
-            // Then add it to the string
-            for c in chars {
-                if is_valid_var_char(&c) {
-                    name.push(c);
-                } else {
-                    name.push('_');
-                }
-            }
-        }
-
-        string_table.intern(&name)
     }
 }
 

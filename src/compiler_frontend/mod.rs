@@ -85,12 +85,12 @@ pub struct CompilerFrontend {
 impl CompilerFrontend {
     pub(crate) fn new(
         project_config: &Config,
-        mut string_table: StringTable,
+        string_table: StringTable,
         style_directives: StyleDirectiveRegistry,
         project_path_resolver: Option<ProjectPathResolver>,
     ) -> Self {
         // Create a builtin host function registry with print and other host functions
-        let host_function_registry = HostRegistry::new(&mut string_table);
+        let host_function_registry = HostRegistry::new();
 
         // Build path formatting config from project settings.
         let origin = project_config

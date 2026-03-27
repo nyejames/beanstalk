@@ -85,7 +85,7 @@ fn coerce_to_string_records_rendered_path_usages_for_path_values() {
         ContextKind::Template,
         source_scope.clone(),
         &[],
-        HostRegistry::new(&mut string_table),
+        HostRegistry::new(),
         vec![],
     )
     .with_source_file_scope(source_scope.clone())

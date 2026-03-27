@@ -13,10 +13,9 @@ use crate::compiler_frontend::hir::hir_nodes::{
     HirStatementKind, HirStruct, HirTerminator, HirValueId, LocalId, OptionVariant, RegionId,
     ResultVariant, StructId, ValueKind,
 };
-use crate::compiler_frontend::hir::hir_side_table::{HirLocation, HirSideTable};
+use crate::compiler_frontend::hir::hir_side_table::HirSideTable;
 use crate::compiler_frontend::host_functions::CallTarget;
 use crate::compiler_frontend::string_interning::StringTable;
-use crate::compiler_frontend::tokenizer::tokens::TextLocation;
 use std::fmt::{Display, Formatter, Result as FmtResult, Write as _};
 
 const MAX_TYPE_RENDER_DEPTH: usize = 24;
@@ -26,10 +25,7 @@ pub(crate) struct HirDisplayOptions {
     pub include_ids: bool,
     pub include_types: bool,
     pub include_value_kinds: bool,
-    #[allow(dead_code)] // Reserved for region-aware dumps while borrow-checker diagnostics mature
     pub include_regions: bool,
-    #[allow(dead_code)] // Reserved for source-rich dumps when debugging side-table mappings
-    pub include_locations: bool,
     pub multiline_match_arms: bool,
 }
 
@@ -40,7 +36,6 @@ impl Default for HirDisplayOptions {
             include_types: true,
             include_value_kinds: false,
             include_regions: true,
-            include_locations: false,
             multiline_match_arms: true,
         }
     }
@@ -64,21 +59,15 @@ impl<'a> HirDisplayContext<'a> {
         }
     }
 
-    #[allow(dead_code)] // Reserved for callers that want source-aware HIR dumps
+    #[allow(dead_code)] // Used by feature-gated HIR logging and debug rendering helpers.
     pub(crate) fn with_side_table(mut self, side_table: &'a HirSideTable) -> Self {
         self.side_table = Some(side_table);
         self
     }
 
-    #[allow(dead_code)] // Reserved for callers that want fully rendered type names in dumps
+    #[allow(dead_code)] // Used by feature-gated HIR logging and debug rendering helpers.
     pub(crate) fn with_type_context(mut self, type_context: &'a TypeContext) -> Self {
         self.type_context = Some(type_context);
-        self
-    }
-
-    #[allow(dead_code)] // Reserved for display callers that need compact or location-rich formatting
-    pub(crate) fn with_options(mut self, options: HirDisplayOptions) -> Self {
-        self.options = options;
         self
     }
 
@@ -216,13 +205,6 @@ impl<'a> HirDisplayContext<'a> {
         }
 
         out.push_str("  terminator: ");
-        if self.options.include_locations
-            && let Some(location) = self.side_table.and_then(|side| {
-                side.hir_source_location_for_hir(HirLocation::Terminator(block.id))
-            })
-        {
-            let _ = write!(out, "@{} ", self.render_text_location(location));
-        }
         out.push_str(&self.render_terminator(&block.terminator));
         out.push('\n');
 
@@ -246,15 +228,6 @@ impl<'a> HirDisplayContext<'a> {
             let _ = write!(out, " [{}]", self.region_label(local.region));
         }
 
-        if self.options.include_locations
-            && let Some(location) = local.source_info.as_ref().or_else(|| {
-                self.side_table
-                    .and_then(|side| side.hir_source_location_for_hir(HirLocation::Local(local.id)))
-            })
-        {
-            let _ = write!(out, " @{}", self.render_text_location(location));
-        }
-
         out
     }
 
@@ -263,10 +236,6 @@ impl<'a> HirDisplayContext<'a> {
 
         if self.options.include_ids {
             let _ = write!(out, "[{}] ", self.node_label(statement.id));
-        }
-
-        if self.options.include_locations {
-            let _ = write!(out, "@{} ", self.render_text_location(&statement.location));
         }
 
         out.push_str(&self.render_statement_kind(&statement.kind));
@@ -770,18 +739,6 @@ impl<'a> HirDisplayContext<'a> {
 
     fn region_label(&self, region_id: RegionId) -> String {
         format!("r{}", region_id.0)
-    }
-
-    fn render_text_location(&self, location: &TextLocation) -> String {
-        let scope = location.scope.to_string(self.string_table);
-        format!(
-            "{}:{}:{}-{}:{}",
-            scope,
-            location.start_pos.line_number,
-            location.start_pos.char_column,
-            location.end_pos.line_number,
-            location.end_pos.char_column
-        )
     }
 
     fn push_indented_line(&self, out: &mut String, indent: usize, line: &str) {

@@ -1,6 +1,6 @@
-//! Frontend identity types and side tables.
+//! Frontend file identity types and source-file tables.
 //!
-//! WHAT: defines explicit file/scope/symbol identifiers plus source-file metadata.
+//! WHAT: defines explicit file identifiers plus canonical/logical path metadata.
 //! WHY: semantic identity must not be reconstructed from filesystem/path strings.
 
 use crate::compiler_frontend::compiler_errors::CompilerError;
@@ -12,18 +12,6 @@ use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct FileId(pub u32);
-
-/// Scope identity for the path-to-ID migration.
-/// WHY: scope-based visibility replaces path-prefix matching for import/export gating.
-#[allow(dead_code)] // scaffolding: wired in when import visibility uses ScopeId instead of path prefixes
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct ScopeId(pub u32);
-
-/// Declaration identity for the path-to-ID migration.
-/// WHY: declarations need stable IDs so cross-module references survive path refactors.
-#[allow(dead_code)] // scaffolding: wired in when declaration ownership tracks SymbolId instead of InternedPath
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct SymbolId(pub u32);
 
 #[derive(Debug, Clone)]
 pub struct SourceFileIdentity {

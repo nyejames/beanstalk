@@ -8,12 +8,12 @@ use crate::compiler_frontend::hir::hir_nodes::{
     HirValueId, LocalId, StructId,
 };
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::string_interning::{StringId, StringTable};
+use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::TextLocation;
 use rustc_hash::FxHashMap;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 
-#[allow(dead_code)] // Returned by debug-facing lookup helpers when no HIR mapping exists
+#[cfg(test)]
 const EMPTY_HIR_LOCATIONS: [HirLocation; 0] = [];
 
 /// Stable identifier for an interned source location.
@@ -134,33 +134,7 @@ pub(crate) struct HirSideTable {
 }
 
 impl HirSideTable {
-    #[allow(dead_code)] // Reserved for future callers that want explicit construction over Default
-    pub(crate) fn new() -> Self {
-        Self::default()
-    }
-
-    #[allow(dead_code)] // Reserved for future allocation tuning in large-module lowering
-    pub(crate) fn with_capacities(location_capacity: usize, mapping_capacity: usize) -> Self {
-        Self {
-            source_locations: Vec::with_capacity(location_capacity),
-            source_location_index: FxHashMap::with_capacity_and_hasher(
-                location_capacity,
-                Default::default(),
-            ),
-            ast_to_hir: FxHashMap::with_capacity_and_hasher(mapping_capacity, Default::default()),
-            hir_to_ast: FxHashMap::with_capacity_and_hasher(mapping_capacity, Default::default()),
-            hir_to_source: FxHashMap::with_capacity_and_hasher(
-                mapping_capacity,
-                Default::default(),
-            ),
-            local_names: FxHashMap::default(),
-            function_names: FxHashMap::default(),
-            struct_names: FxHashMap::default(),
-            field_names: FxHashMap::default(),
-        }
-    }
-
-    #[allow(dead_code)] // Used only in validator tests that intentionally break side-table mappings
+    #[cfg(test)]
     pub(crate) fn clear(&mut self) {
         self.source_locations.clear();
         self.source_location_index.clear();
@@ -193,6 +167,7 @@ impl HirSideTable {
         self.source_locations.get(id.0 as usize)
     }
 
+    #[cfg(test)]
     #[inline]
     pub(crate) fn source_id_for_location(
         &self,
@@ -216,16 +191,6 @@ impl HirSideTable {
         }
 
         self.hir_to_ast.insert(hir_location, ast_id);
-    }
-
-    #[allow(dead_code)] // Reserved for bulk AST/HIR mapping writes in future lowering passes
-    pub(crate) fn map_ast_to_hir_many<I>(&mut self, ast_location: &TextLocation, hir_locations: I)
-    where
-        I: IntoIterator<Item = HirLocation>,
-    {
-        for hir_location in hir_locations {
-            self.map_ast_to_hir(ast_location, hir_location);
-        }
     }
 
     #[inline]
@@ -289,22 +254,13 @@ impl HirSideTable {
         self.ast_location_for_hir(HirLocation::Value(value_id))
     }
 
-    #[inline]
-    #[allow(dead_code)] // Reserved for reverse source-mapping queries in diagnostics and tests
+    #[cfg(test)]
     pub(crate) fn hir_locations_for_ast(&self, ast_location: &TextLocation) -> &[HirLocation] {
         let Some(ast_id) = self.source_id_for_location(ast_location) else {
             return &EMPTY_HIR_LOCATIONS;
         };
-        self.hir_locations_for_source_id(ast_id)
-    }
-
-    #[inline]
-    pub(crate) fn hir_locations_for_source_id(
-        &self,
-        ast_source: SourceLocationId,
-    ) -> &[HirLocation] {
         self.ast_to_hir
-            .get(&ast_source)
+            .get(&ast_id)
             .map(Vec::as_slice)
             .unwrap_or(&EMPTY_HIR_LOCATIONS)
     }
@@ -378,32 +334,6 @@ impl HirSideTable {
     #[inline]
     pub(crate) fn field_name_path(&self, field_id: FieldId) -> Option<&InternedPath> {
         self.field_names.get(&field_id)
-    }
-
-    #[inline]
-    #[allow(dead_code)] // Reserved for future call sites that want the interned local leaf directly
-    pub(crate) fn local_name_id(&self, local_id: LocalId) -> Option<StringId> {
-        self.local_name_path(local_id).and_then(InternedPath::name)
-    }
-
-    #[inline]
-    #[allow(dead_code)] // Reserved for future call sites that want the interned function leaf directly
-    pub(crate) fn function_name_id(&self, function_id: FunctionId) -> Option<StringId> {
-        self.function_name_path(function_id)
-            .and_then(InternedPath::name)
-    }
-
-    #[inline]
-    #[allow(dead_code)] // Reserved for future call sites that want the interned struct leaf directly
-    pub(crate) fn struct_name_id(&self, struct_id: StructId) -> Option<StringId> {
-        self.struct_name_path(struct_id)
-            .and_then(InternedPath::name)
-    }
-
-    #[inline]
-    #[allow(dead_code)] // Reserved for future call sites that want the interned field leaf directly
-    pub(crate) fn field_name_id(&self, field_id: FieldId) -> Option<StringId> {
-        self.field_name_path(field_id).and_then(InternedPath::name)
     }
 
     #[inline]

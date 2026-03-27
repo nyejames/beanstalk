@@ -76,7 +76,7 @@ pub(crate) fn parse_project_config_file(
     let legacy_errors = validate_config_hash_assignments(&token_stream.tokens, &string_table);
     errors.extend(legacy_errors);
 
-    let host_registry = HostRegistry::new(&mut string_table);
+    let host_registry = HostRegistry::new();
     let mut warnings = Vec::new();
 
     // WHY: duplicate-key detection runs separately rather than relying solely on parse_headers,
