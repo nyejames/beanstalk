@@ -1,3 +1,9 @@
+//! AST expression values and constructor helpers used before HIR lowering.
+//!
+//! WHAT: defines frontend expression kinds plus the factory methods that build typed AST values.
+//! WHY: parser and folding code should create expressions through one readable surface instead of
+//! manually reassembling `Expression` fields at each call site.
+
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration};
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::ast::templates::create_template_node::Template;
@@ -107,14 +113,54 @@ impl Expression {
             ownership,
         }
     }
+
+    /// Centralises scalar literal construction so literal factories stay structurally identical.
+    fn scalar_literal(
+        kind: ExpressionKind,
+        data_type: DataType,
+        location: TextLocation,
+        ownership: Ownership,
+    ) -> Self {
+        Self::new(kind, location, data_type, ownership)
+    }
+
+    /// Collapse function return signatures into the AST expression type model.
+    ///
+    /// WHY: single-return calls should stay ergonomic while multi-return calls preserve the full
+    /// tuple-like `Returns` wrapper expected by later lowering stages.
+    fn call_result_type(mut result_types: Vec<DataType>) -> DataType {
+        if result_types.len() == 1 {
+            result_types.pop().unwrap_or(DataType::None)
+        } else {
+            DataType::Returns(result_types)
+        }
+    }
+
+    /// Build a function or host-function call with the shared return-type/ownership policy.
+    fn call_expression(
+        kind: ExpressionKind,
+        result_types: Vec<DataType>,
+        location: TextLocation,
+    ) -> Self {
+        Self::new(
+            kind,
+            location,
+            Self::call_result_type(result_types),
+            // TODO: Need to set the ownership based on the return signature.
+            // If the return signature is a reference (the name of a parameter passed in),
+            // then this is a reference to that parameter.
+            Ownership::MutableOwned,
+        )
+    }
+
     #[allow(dead_code)] // todo
     pub fn none() -> Self {
-        Self {
-            data_type: DataType::None,
-            kind: ExpressionKind::None,
-            location: TextLocation::default(),
-            ownership: Ownership::default(),
-        }
+        Self::new(
+            ExpressionKind::None,
+            TextLocation::default(),
+            DataType::None,
+            Ownership::default(),
+        )
     }
     pub fn runtime(
         expressions: Vec<AstNode>,
@@ -122,52 +168,52 @@ impl Expression {
         location: TextLocation,
         ownership: Ownership,
     ) -> Self {
-        Self {
-            data_type,
-            kind: ExpressionKind::Runtime(expressions),
+        Self::new(
+            ExpressionKind::Runtime(expressions),
             location,
+            data_type,
             ownership,
-        }
+        )
     }
     pub fn int(value: i64, location: TextLocation, ownership: Ownership) -> Self {
-        Self {
-            data_type: DataType::Int,
-            kind: ExpressionKind::Int(value),
+        Self::scalar_literal(
+            ExpressionKind::Int(value),
+            DataType::Int,
             location,
             ownership,
-        }
+        )
     }
     pub fn float(value: f64, location: TextLocation, ownership: Ownership) -> Self {
-        Self {
-            data_type: DataType::Float,
-            kind: ExpressionKind::Float(value),
+        Self::scalar_literal(
+            ExpressionKind::Float(value),
+            DataType::Float,
             location,
             ownership,
-        }
+        )
     }
     pub fn string_slice(value: StringId, location: TextLocation, ownership: Ownership) -> Self {
-        Self {
-            data_type: DataType::StringSlice,
-            kind: ExpressionKind::StringSlice(value),
+        Self::scalar_literal(
+            ExpressionKind::StringSlice(value),
+            DataType::StringSlice,
             location,
             ownership,
-        }
+        )
     }
     pub fn bool(value: bool, location: TextLocation, ownership: Ownership) -> Self {
-        Self {
-            data_type: DataType::Bool,
-            kind: ExpressionKind::Bool(value),
+        Self::scalar_literal(
+            ExpressionKind::Bool(value),
+            DataType::Bool,
             location,
             ownership,
-        }
+        )
     }
     pub fn char(value: char, location: TextLocation, ownership: Ownership) -> Self {
-        Self {
-            data_type: DataType::Char,
-            kind: ExpressionKind::Char(value),
+        Self::scalar_literal(
+            ExpressionKind::Char(value),
+            DataType::Char,
             location,
             ownership,
-        }
+        )
     }
 
     #[allow(dead_code)] // TODO - path expressions MAYBE????
@@ -178,12 +224,12 @@ impl Expression {
             .first()
             .map(|p| PathTypeKind::from(p.kind.clone()))
             .unwrap_or(PathTypeKind::File);
-        Self {
-            data_type: DataType::Path(path_type_kind),
-            kind: ExpressionKind::Path(Box::new(compile_time_paths)),
+        Self::new(
+            ExpressionKind::Path(Box::new(compile_time_paths)),
             location,
-            ownership: Ownership::ImmutableOwned,
-        }
+            DataType::Path(path_type_kind),
+            Ownership::ImmutableOwned,
+        )
     }
 
     pub fn reference(
@@ -192,12 +238,12 @@ impl Expression {
         location: TextLocation,
         ownership: Ownership,
     ) -> Self {
-        Self {
-            data_type,
-            kind: ExpressionKind::Reference(id),
+        Self::new(
+            ExpressionKind::Reference(id),
             location,
+            data_type,
             ownership,
-        }
+        )
     }
 
     // Creating Functions
@@ -207,12 +253,13 @@ impl Expression {
         body: Vec<AstNode>,
         location: TextLocation,
     ) -> Self {
-        Self {
-            data_type: DataType::Function(Box::new(receiver), signature.to_owned()),
-            kind: ExpressionKind::Function(signature, body),
+        let function_data_type = DataType::Function(Box::new(receiver), signature.clone());
+        Self::new(
+            ExpressionKind::Function(signature, body),
             location,
-            ownership: Ownership::ImmutableReference,
-        }
+            function_data_type,
+            Ownership::ImmutableReference,
+        )
     }
 
     // Function calls
@@ -222,21 +269,11 @@ impl Expression {
         result_types: Vec<DataType>,
         location: TextLocation,
     ) -> Self {
-        let return_type = if result_types.len() == 1 {
-            result_types[0].to_owned()
-        } else {
-            DataType::Returns(result_types)
-        };
-
-        Self {
-            data_type: return_type,
-            kind: ExpressionKind::FunctionCall(name, args),
+        Self::call_expression(
+            ExpressionKind::FunctionCall(name, args),
+            result_types,
             location,
-            // TODO: Need to set the ownership based on the return signature
-            // If the return signature is a reference (the name of a parameter passed in)
-            // Then this is a reference to that parameter
-            ownership: Ownership::MutableOwned,
-        }
+        )
     }
 
     pub fn host_function_call(
@@ -245,18 +282,11 @@ impl Expression {
         result_types: Vec<DataType>,
         location: TextLocation,
     ) -> Self {
-        let return_type = if result_types.len() == 1 {
-            result_types[0].to_owned()
-        } else {
-            DataType::Returns(result_types)
-        };
-
-        Self {
-            data_type: return_type,
-            kind: ExpressionKind::HostFunctionCall(name, args),
+        Self::call_expression(
+            ExpressionKind::HostFunctionCall(name, args),
+            result_types,
             location,
-            ownership: Ownership::MutableOwned,
-        }
+        )
     }
 
     pub fn collection(
@@ -269,12 +299,12 @@ impl Expression {
             .map(|item| item.data_type.to_owned())
             .unwrap_or(DataType::Int);
 
-        Self {
-            data_type: DataType::Collection(Box::new(inner_type), ownership.to_owned()),
-            kind: ExpressionKind::Collection(items),
+        Self::new(
+            ExpressionKind::Collection(items),
             location,
+            DataType::Collection(Box::new(inner_type), ownership.to_owned()),
             ownership,
-        }
+        )
     }
     pub fn struct_instance(
         args: Vec<Declaration>,
@@ -282,32 +312,33 @@ impl Expression {
         ownership: Ownership,
     ) -> Self {
         let struct_type = DataType::Struct(args.to_owned(), ownership.to_owned());
-        Self {
-            data_type: struct_type,
-            kind: ExpressionKind::StructInstance(args),
+        Self::new(
+            ExpressionKind::StructInstance(args),
             location,
+            struct_type,
             ownership,
-        }
+        )
     }
     pub fn struct_definition(
         args: Vec<Declaration>,
         location: TextLocation,
         ownership: Ownership,
     ) -> Self {
-        Self {
-            data_type: DataType::Inferred,
-            kind: ExpressionKind::StructDefinition(args),
+        Self::new(
+            ExpressionKind::StructDefinition(args),
             location,
+            DataType::Inferred,
             ownership,
-        }
+        )
     }
     pub fn template(template: Template, ownership: Ownership) -> Self {
-        Self {
-            data_type: DataType::Template,
-            location: template.location.to_owned(),
-            kind: ExpressionKind::Template(Box::new(template)),
+        let location = template.location.to_owned();
+        Self::new(
+            ExpressionKind::Template(Box::new(template)),
+            location,
+            DataType::Template,
             ownership,
-        }
+        )
     }
 
     #[allow(dead_code)] // todo
@@ -317,12 +348,12 @@ impl Expression {
         location: TextLocation,
         ownership: Ownership,
     ) -> Self {
-        Self {
-            data_type: DataType::Inferred,
-            kind: ExpressionKind::Range(Box::new(lower), Box::new(upper)),
+        Self::new(
+            ExpressionKind::Range(Box::new(lower), Box::new(upper)),
             location,
+            DataType::Inferred,
             ownership,
-        }
+        )
     }
 
     #[allow(dead_code)] // todo
@@ -332,12 +363,12 @@ impl Expression {
         location: TextLocation,
         ownership: Ownership,
     ) -> Self {
-        Self {
-            data_type,
-            kind: ExpressionKind::Reference(name),
+        Self::new(
+            ExpressionKind::Reference(name),
             location,
+            data_type,
             ownership,
-        }
+        )
     }
 
     pub fn copy(
@@ -346,12 +377,12 @@ impl Expression {
         location: TextLocation,
         ownership: Ownership,
     ) -> Self {
-        Self {
-            data_type,
-            kind: ExpressionKind::Copy(Box::new(place)),
+        Self::new(
+            ExpressionKind::Copy(Box::new(place)),
             location,
-            ownership: ownership.get_owned(),
-        }
+            data_type,
+            ownership.get_owned(),
+        )
     }
 
     #[allow(dead_code)] // todo

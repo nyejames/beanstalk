@@ -310,3 +310,7 @@ fn create_match_node(
         scope: match_context.scope,
     })
 }
+
+#[cfg(test)]
+#[path = "tests/branching_tests.rs"]
+mod branching_tests;

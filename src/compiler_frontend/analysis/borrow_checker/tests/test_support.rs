@@ -17,8 +17,8 @@ use crate::compiler_frontend::host_functions::{
 };
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
-use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::string_interning::StringTable;
+pub(crate) use crate::compiler_frontend::test_support::test_project_path_resolver;
 use crate::compiler_frontend::tokenizer::tokens::CharPosition;
 use crate::projects::settings::IMPLICIT_START_FUNC_NAME;
 
@@ -120,11 +120,6 @@ pub(crate) fn entry_and_start(string_table: &mut StringTable) -> (InternedPath, 
     let entry_path = InternedPath::from_single_str("main.bst", string_table);
     let start_name = entry_path.join_str(IMPLICIT_START_FUNC_NAME, string_table);
     (entry_path, start_name)
-}
-
-pub(crate) fn test_project_path_resolver() -> ProjectPathResolver {
-    let cwd = std::env::temp_dir();
-    ProjectPathResolver::new(cwd.clone(), cwd, &[]).expect("test path resolver should be valid")
 }
 
 pub(crate) fn lower_hir(

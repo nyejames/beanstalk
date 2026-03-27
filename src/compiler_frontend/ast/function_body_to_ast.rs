@@ -705,3 +705,7 @@ pub fn function_body_to_ast(
 
     Ok(ast)
 }
+
+#[cfg(test)]
+#[path = "tests/parser_error_recovery_tests.rs"]
+mod parser_error_recovery_tests;

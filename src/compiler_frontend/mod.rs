@@ -31,6 +31,8 @@ pub(crate) mod hir;
 pub(crate) mod analysis;
 pub(crate) mod identity;
 pub(crate) mod paths;
+#[cfg(test)]
+pub(crate) mod test_support;
 
 use crate::compiler_frontend::analysis::borrow_checker::{
     BorrowCheckReport, check_borrows as run_borrow_checker,

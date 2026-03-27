@@ -170,3 +170,7 @@ pub fn resolve_declaration_syntax(
         value: parsed_expr,
     })
 }
+
+#[cfg(test)]
+#[path = "tests/declaration_tests.rs"]
+mod declaration_tests;

@@ -740,3 +740,7 @@ pub fn validate_host_function_call(
 
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "tests/function_parsing_tests.rs"]
+mod function_parsing_tests;

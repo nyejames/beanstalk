@@ -472,3 +472,7 @@ fn validate_struct_default_values(
 
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "tests/struct_parsing_tests.rs"]
+mod struct_parsing_tests;

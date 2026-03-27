@@ -333,3 +333,7 @@ fn is_zero_numeric_literal(expression: &Expression) -> bool {
         _ => false,
     }
 }
+
+#[cfg(test)]
+#[path = "tests/loop_parsing_tests.rs"]
+mod loop_parsing_tests;
