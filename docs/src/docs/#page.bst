@@ -1,15 +1,15 @@
-import @lib/html {format, center, img}
-import @styles/docs {navbar, title, section, palette, table, row, header_row, codeblock, theme_head}
+import @lib/html {format, style, img, large}
+import @styles/docs {navbar, title, section, palette, codeblock, theme_head}
 
 # page_title = "Documentation"
 # page_description = "Beanstalk documentation index."
 # page_head = theme_head
 
-[navbar]
-[title, center: THE DOCS]
+#[navbar]
+#[title, style.center: THE DOCS]
 
-[section, $markdown:
-    Welcome to the Beanstalk documentation [img, @assets/seedling_icon.png: Beanstalk logo]
+#[section, $markdown:
+    [large: Welcome to the Beanstalk documentation] [img, @assets/seedling_icon.png: Beanstalk logo]
 
     This website is built using Beanstalk's built in HTML project builder, and all the content you see here is written in Beanstalk code.
 

@@ -1,12 +1,12 @@
-import @lib/html {format, center}
-import @styles/docs {navbar, title, section, palette, table, row, header_row, codeblock, theme_head}
+import @lib/html {format, style}
+import @styles/docs {navbar, title, section, palette, table, data, codeblock, theme_head}
 
 # page_title = "Language Basics"
 # page_description = "Core language syntax and semantics in Beanstalk."
 # page_head = theme_head
 
 #[navbar]
-#[title, center: LANGUAGE BASICS]
+#[title, style.center: LANGUAGE BASICS]
 
 #[section, $markdown:
     Every project has a #config.bst file that defines the entry points and dependencies of the project.
@@ -101,7 +101,6 @@ import @styles/docs {navbar, title, section, palette, table, row, header_row, co
     The compiler might decide to make an immutable copy of a primative value,
     but the assignment will **always** behave the same way no matter what the type is.
 
-
     [codeblock, $code("bst"):
         -- 64 bit immutable float
         number = 420.69
@@ -179,13 +178,13 @@ import @styles/docs {navbar, title, section, palette, table, row, header_row, co
     Mutibility can change the underlaying data type but is not actually part of the type.
 
     [table:
-        [header_row: [: Type] [: Description] ] 
+        [: [: Type] [: Description] ] 
 
-        [row: [: Float ] [: 64-bit floating point number] ]
+        [data: [: Float ] [: 64-bit floating point number] ]
 
-        [row: [: Int ] [:  64-bit signed integer ] ]
+        [data: [: Int ] [:  64-bit signed integer ] ]
 
-        [row: [: String ] [: UTF-8 string slice or string template] ]
+        [data: [: String ] [: UTF-8 string slice or string template] ]
     ]
 
     ## Numerical Types
@@ -212,14 +211,14 @@ import @styles/docs {navbar, title, section, palette, table, row, header_row, co
 
     ## Mathematical Operators
     [table:
-        [header_row: [: Operator] [: Description]          [: Precedence] ]
-        [row: [: ^]        [: Exponent]            [: 4] ]
-        [row: [: //]       [: Root]                [: 4] ]
-        [row: [: *]        [: Multiplication]       [: 3] ]
-        [row: [: /]        [: Division]             [: 3] ]
-        [row: [: %]          [: Modulo (truncated)]   [: 3] ]
-        [row: [: %%]         [: Remainder (floored)]  [: 3] ]
-        [row: [: +]          [: Sum]                  [: 2] ]
-        [row: [: -]        [: Subtraction]          [: 2] ]
+        [: [: Operator] [: Description]          [: Precedence] ]
+        [data: [: ^]        [: Exponent]            [: 4] ]
+        [data: [: //]       [: Root]                [: 4] ]
+        [data: [: *]        [: Multiplication]       [: 3] ]
+        [data: [: /]        [: Division]             [: 3] ]
+        [data: [: %]          [: Modulo (truncated)]   [: 3] ]
+        [data: [: %%]         [: Remainder (floored)]  [: 3] ]
+        [data: [: +]          [: Sum]                  [: 2] ]
+        [data: [: -]        [: Subtraction]          [: 2] ]
     ]
 ]

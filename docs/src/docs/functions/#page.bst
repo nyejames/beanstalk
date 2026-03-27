@@ -1,12 +1,12 @@
-import @lib/html {format, center}
-import @styles/docs {navbar, title, section, palette, table, row, header_row, codeblock, theme_head}
+import @lib/html {format, style}
+import @styles/docs {navbar, title, section, palette, table, codeblock, theme_head}
 
 # page_title = "Functions"
 # page_description = "Function declarations, returns, and closures in Beanstalk."
 # page_head = theme_head
 
 #[navbar]
-#[title, center: FUNCTIONS]
+#[title, style.center: FUNCTIONS]
 
 #[section, $markdown:
     [codeblock, $code("bst"):

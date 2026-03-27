@@ -146,21 +146,20 @@ import @lib/html {format}
     <div></div>
 ]
 
-# table = [format.table:
+# table = [format.table, $html:
     [$insert("style"):border-collapse: collapse; border: 1px solid; padding: 1em;]
-    [$slot]
-]
-
-# row = [$html:
-    <tr style="border-bottom: 1px dotted grey;">[$fresh, $children([$html:<td style="padding: 0.2em 0.5em;">[$slot]</td>]):[$slot]]</tr>
-]
-
-# header_row = [$html:
     <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
-        [$fresh, $children([$html:
+        [$children([$html:
             <th style="border: 1px solid; padding: 0.5em; text-align: left;">[$slot]</th>
-        ]):[$slot]]
+        ]):[$slot(1)]]
     </tr>
+    [$children([$html:<tr style="border-bottom: 1px dotted grey;">[$slot]</tr>]):
+        [$slot]
+    ]
+]
+
+# data = [$html:
+    <td style="padding: 0.2em 0.5em;">[$slot]</td>
 ]
 
 # codeblock = [$html:

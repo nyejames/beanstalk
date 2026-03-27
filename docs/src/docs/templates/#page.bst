@@ -1,12 +1,12 @@
-import @lib/html {format, center}
-import @styles/docs {navbar, title, section, palette, table, row, header_row, codeblock, theme_head}
+import @lib/html {format, style}
+import @styles/docs {navbar, title, section, palette, table, codeblock, theme_head}
 
 # page_title = "Templates"
 # page_description = "Template syntax, slots, directives, and formatting in Beanstalk."
 # page_head = theme_head
 
 #[navbar]
-#[title, center: TEMPLATES]
+#[title, style.center: TEMPLATES]
 
 #[section, $markdown:
     Beanstalk has unique, superpowered templating strings. Templates use [$code:[]] exclusively - never confuse with collections [$code:{}].

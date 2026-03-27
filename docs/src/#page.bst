@@ -4,8 +4,8 @@ import @styles/docs {navbar, section, theme_head}
 # page_description = "Introduction to the Beanstalk language and toolchain."
 # page_head = theme_head
 
-[navbar]
-[section, $markdown:
+#[navbar]
+#[section, $markdown:
     # What is Beanstalk?
     Beanstalk is a new programming language and toolchain.
 

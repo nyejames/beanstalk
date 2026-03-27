@@ -1,8 +1,21 @@
 -- Basic HTML components and utility formatters for docs/theme code.
 -- The HTML project builder now owns the outer document shell and baseline CSS reset.
 
+-- Basic tags
+# p String = [$html:<p style="[$slot("style")]">[$slot]</p>]
+# h1 String = [$html:<h1 style="[$slot("style")]">[$slot]</h1>]
+# h2 String = [$html:<h2 style="[$slot("style")]">[$slot]</h2>]
+# h3 String = [$html:<h3 style="[$slot("style")]">[$slot]</h3>]
+# h4 String = [$html:<h4 style="[$slot("style")]">[$slot]</h4>]
+# h5 String = [$html:<h5 style="[$slot("style")]">[$slot]</h5>]
+# h6 String = [$html:<h6 style="[$slot("style")]">[$slot]</h6>]
+
+# img String = [$html:<img src="[$slot(1)]" style="[$slot("style")]" alt="[$slot]">]
+# small String = [$html:<small style="[$slot("style")]">[$slot]</small>]
+# large String = [$html:<large style="[$slot("style")]">[$slot]</large>]
+
+-- Basic formatting helpers
 Format = |
-    -- Basic formatting helpers
     underline String = [$html:<u style="[$slot("style")]">[$slot]</u>],
     strikethrough String = [$html:<s style="[$slot("style")]">[$slot]</s>],
     table String = [$html:
@@ -15,9 +28,16 @@ Format = |
 # format = Format()
 
 -- Inline utility styles
-# center String = [$insert("style"):text-align: center;]
-# right String = [$insert("style"):text-align: right;]
-# left String = [$insert("style"):text-align: left;]
+Style = |
+    -- Text alignment
+    center String = [$insert("style"):text-align: center;],
+    right String = [$insert("style"):text-align: right;],
+    left String = [$insert("style"):text-align: left;],
 
--- Basic HTML components
-# img String = [$html:<img src="[$slot(1)]" style="[$slot("style")]" alt="[$slot]">]
+    -- Font size
+    smaller String = [$insert("style"):font-size: smaller;],
+    medium String = [$insert("style"):font-size: medium;],
+    larger String = [$insert("style"):font-size: larger;],
+|
+
+# style = Style()
