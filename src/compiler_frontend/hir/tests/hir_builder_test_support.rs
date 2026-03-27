@@ -1,3 +1,8 @@
+//! Shared HIR builder test hooks and validation helpers.
+//!
+//! WHAT: exposes extra builder utilities needed only by HIR unit tests.
+//! WHY: tests need direct access to internal builder state without widening the production API.
+
 use crate::compiler_frontend::ast::ast_nodes::{Declaration, TextLocation};
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::compiler_errors::CompilerError;

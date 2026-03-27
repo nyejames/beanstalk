@@ -1,3 +1,8 @@
+//! Operator-specific HIR expression lowering helpers.
+//!
+//! WHAT: lowers unary and binary AST operators into explicit HIR expression nodes.
+//! WHY: keeping operator handling separate makes the core expression lowering loop easier to follow.
+
 use crate::compiler_frontend::ast::expressions::expression::Operator;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;

@@ -1,3 +1,8 @@
+//! Token definitions and source-location primitives for the frontend tokenizer.
+//!
+//! WHAT: defines token kinds, token records, and the location metadata threaded through parsing.
+//! WHY: every frontend stage past lexing depends on one canonical token and location model.
+
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::identity::FileId;
 use crate::compiler_frontend::interned_path::InternedPath;

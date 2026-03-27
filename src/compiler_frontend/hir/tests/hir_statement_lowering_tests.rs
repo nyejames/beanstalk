@@ -1,3 +1,8 @@
+//! HIR statement lowering regression tests.
+//!
+//! WHAT: checks how statement-level AST nodes become HIR blocks, statements, and terminators.
+//! WHY: statement lowering owns most CFG construction and benefits from targeted regression coverage.
+
 use crate::compiler_frontend::ast::ast::{
     Ast, AstDocFragment, AstDocFragmentKind, AstStartTemplateItem, ModuleExport,
 };
@@ -34,7 +39,7 @@ fn node(kind: NodeKind, location: TextLocation) -> AstNode {
     }
 }
 
-fn var(name: InternedPath, value: Expression) -> Declaration {
+fn make_test_variable(name: InternedPath, value: Expression) -> Declaration {
     Declaration { id: name, value }
 }
 
@@ -151,7 +156,7 @@ fn registers_declarations_and_resolves_start_function() {
     let struct_node = node(
         NodeKind::StructDefinition(
             struct_name,
-            vec![var(
+            vec![make_test_variable(
                 field_name,
                 Expression::new(
                     ExpressionKind::None,
@@ -205,7 +210,7 @@ fn lowers_module_constants_into_hir_const_pool() {
 
     let mut ast = build_ast(vec![start_function], entry_path);
     let const_name = symbol("SITE_NAME", &mut string_table);
-    ast.module_constants.push(var(
+    ast.module_constants.push(make_test_variable(
         const_name,
         Expression::string_slice(
             string_table.intern("Beanstalk"),
@@ -250,7 +255,7 @@ fn start_function_can_reference_module_constant() {
     );
 
     let mut ast = build_ast(vec![start_function], entry_path);
-    ast.module_constants.push(var(
+    ast.module_constants.push(make_test_variable(
         third_const,
         Expression::int(3, test_location(1), Ownership::ImmutableOwned),
     ));
@@ -306,11 +311,11 @@ fn omits_unresolved_slot_wrapper_constants_from_hir_const_pool() {
     ));
 
     let mut ast = build_ast(vec![start_function], entry_path);
-    ast.module_constants.push(var(
+    ast.module_constants.push(make_test_variable(
         symbol("WRAPPER", &mut string_table),
         Expression::template(wrapper_template, Ownership::ImmutableOwned),
     ));
-    ast.module_constants.push(var(
+    ast.module_constants.push(make_test_variable(
         symbol("READY", &mut string_table),
         Expression::string_slice(
             string_table.intern("materialized"),
@@ -369,10 +374,10 @@ fn omits_nested_struct_constants_with_unresolved_template_helpers_from_hir_const
     let body_field = page_const_name.append(string_table.intern("body"));
 
     let mut ast = build_ast(vec![start_function], entry_path);
-    ast.module_constants.push(var(
+    ast.module_constants.push(make_test_variable(
         page_const_name,
         Expression::struct_instance(
-            vec![var(
+            vec![make_test_variable(
                 body_field,
                 Expression::template(wrapper_template, Ownership::ImmutableOwned),
             )],
@@ -380,7 +385,7 @@ fn omits_nested_struct_constants_with_unresolved_template_helpers_from_hir_const
             Ownership::ImmutableOwned,
         ),
     ));
-    ast.module_constants.push(var(
+    ast.module_constants.push(make_test_variable(
         symbol("READY", &mut string_table),
         Expression::string_slice(
             string_table.intern("materialized"),
@@ -413,7 +418,7 @@ fn lowers_struct_module_constant_into_record_with_ordered_fields() {
         NodeKind::StructDefinition(
             struct_name,
             vec![
-                var(
+                make_test_variable(
                     x_field.clone(),
                     Expression::new(
                         ExpressionKind::None,
@@ -422,7 +427,7 @@ fn lowers_struct_module_constant_into_record_with_ordered_fields() {
                         Ownership::ImmutableOwned,
                     ),
                 ),
-                var(
+                make_test_variable(
                     y_field.clone(),
                     Expression::new(
                         ExpressionKind::None,
@@ -449,15 +454,15 @@ fn lowers_struct_module_constant_into_record_with_ordered_fields() {
     let mut ast = build_ast(vec![struct_node, start_function], entry_path);
     let const_name = symbol("POINT", &mut string_table);
 
-    ast.module_constants.push(var(
+    ast.module_constants.push(make_test_variable(
         const_name,
         Expression::struct_instance(
             vec![
-                var(
+                make_test_variable(
                     x_field,
                     Expression::int(5, test_location(2), Ownership::ImmutableOwned),
                 ),
-                var(
+                make_test_variable(
                     y_field,
                     Expression::int(99, test_location(2), Ownership::ImmutableOwned),
                 ),
@@ -664,7 +669,7 @@ fn variable_declaration_emits_local_and_assign_statement() {
             returns: vec![],
         },
         vec![node(
-            NodeKind::VariableDeclaration(var(
+            NodeKind::VariableDeclaration(make_test_variable(
                 x,
                 Expression::int(42, test_location(4), Ownership::ImmutableOwned),
             )),
@@ -740,7 +745,7 @@ fn top_level_template_declarations_require_unique_symbols() {
         },
         vec![
             node(
-                NodeKind::VariableDeclaration(var(
+                NodeKind::VariableDeclaration(make_test_variable(
                     template_name.clone(),
                     runtime_template_expression(
                         test_location(2),
@@ -754,7 +759,7 @@ fn top_level_template_declarations_require_unique_symbols() {
                 test_location(2),
             ),
             node(
-                NodeKind::VariableDeclaration(var(
+                NodeKind::VariableDeclaration(make_test_variable(
                     template_name.clone(),
                     runtime_template_expression(
                         test_location(3),
@@ -1027,14 +1032,14 @@ fn lowers_if_to_then_else_merge_blocks() {
         NodeKind::If(
             Expression::bool(true, test_location(2), Ownership::ImmutableOwned),
             vec![node(
-                NodeKind::VariableDeclaration(var(
+                NodeKind::VariableDeclaration(make_test_variable(
                     x,
                     Expression::int(1, test_location(2), Ownership::ImmutableOwned),
                 )),
                 test_location(2),
             )],
             Some(vec![node(
-                NodeKind::VariableDeclaration(var(
+                NodeKind::VariableDeclaration(make_test_variable(
                     y,
                     Expression::int(2, test_location(3), Ownership::ImmutableOwned),
                 )),
@@ -1247,7 +1252,7 @@ fn continue_in_for_targets_step_block() {
 
     let for_node = node(
         NodeKind::ForLoop(
-            Box::new(var(
+            Box::new(make_test_variable(
                 i,
                 Expression::new(
                     ExpressionKind::None,
@@ -1519,7 +1524,7 @@ fn for_loop_lowers_to_header_body_step_exit_shape() {
 
     let for_loop = node(
         NodeKind::ForLoop(
-            Box::new(var(
+            Box::new(make_test_variable(
                 i,
                 Expression::new(
                     ExpressionKind::None,
@@ -1613,7 +1618,7 @@ fn inclusive_range_header_uses_less_equal_comparison() {
 
     let for_loop = node(
         NodeKind::ForLoop(
-            Box::new(var(
+            Box::new(make_test_variable(
                 i,
                 Expression::new(
                     ExpressionKind::None,
@@ -1687,7 +1692,7 @@ fn descending_range_with_positive_step_normalizes_to_negative_delta() {
 
     let for_loop = node(
         NodeKind::ForLoop(
-            Box::new(var(
+            Box::new(make_test_variable(
                 i,
                 Expression::new(
                     ExpressionKind::None,
@@ -1881,7 +1886,7 @@ fn side_table_maps_statement_and_terminator_locations() {
         },
         vec![
             node(
-                NodeKind::VariableDeclaration(var(
+                NodeKind::VariableDeclaration(make_test_variable(
                     x,
                     Expression::int(1, decl_loc.clone(), Ownership::ImmutableOwned),
                 )),

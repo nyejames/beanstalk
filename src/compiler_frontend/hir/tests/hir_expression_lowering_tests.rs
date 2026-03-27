@@ -1,3 +1,8 @@
+//! HIR expression lowering regression tests.
+//!
+//! WHAT: covers how typed AST expressions become HIR values, preludes, and places.
+//! WHY: expression lowering is broad and subtle enough that behavior changes need focused regression tests.
+
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, Operator,

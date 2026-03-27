@@ -1,7 +1,12 @@
+//! Borrow-checker call-summary regression tests.
+//!
+//! WHAT: verifies how call return aliases and host-call access summaries affect borrow facts.
+//! WHY: call boundaries are where alias metadata is easiest to get wrong and hardest to debug.
+
 use crate::compiler_frontend::analysis::borrow_checker::tests::test_support::{
     assignment_target, build_ast, default_host_registry, entry_and_start, function_node, location,
-    lower_hir, node, param, reference_expr, register_host_function, run_borrow_checker, symbol,
-    var,
+    lower_hir, make_test_variable, node, param, reference_expr, register_host_function,
+    run_borrow_checker, symbol,
 };
 use crate::compiler_frontend::ast::ast_nodes::NodeKind;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
@@ -53,14 +58,14 @@ fn user_function_returning_param_aliases_caller_root() {
         },
         vec![
             node(
-                NodeKind::VariableDeclaration(var(
+                NodeKind::VariableDeclaration(make_test_variable(
                     x.clone(),
                     Expression::int(1, location(10), Ownership::MutableOwned),
                 )),
                 location(10),
             ),
             node(
-                NodeKind::VariableDeclaration(var(
+                NodeKind::VariableDeclaration(make_test_variable(
                     y,
                     Expression::function_call(
                         alias_fn,
@@ -128,14 +133,14 @@ fn fresh_user_return_does_not_alias_caller_roots() {
         },
         vec![
             node(
-                NodeKind::VariableDeclaration(var(
+                NodeKind::VariableDeclaration(make_test_variable(
                     x.clone(),
                     Expression::int(1, location(10), Ownership::MutableOwned),
                 )),
                 location(10),
             ),
             node(
-                NodeKind::VariableDeclaration(var(
+                NodeKind::VariableDeclaration(make_test_variable(
                     y,
                     Expression::function_call(
                         fresh_fn,
@@ -185,7 +190,7 @@ fn default_user_returning_param_is_fresh_by_default() {
         },
         vec![
             node(
-                NodeKind::VariableDeclaration(var(
+                NodeKind::VariableDeclaration(make_test_variable(
                     q.clone(),
                     reference_expr(p, DataType::Int, location(2)),
                 )),
@@ -207,14 +212,14 @@ fn default_user_returning_param_is_fresh_by_default() {
         },
         vec![
             node(
-                NodeKind::VariableDeclaration(var(
+                NodeKind::VariableDeclaration(make_test_variable(
                     x.clone(),
                     Expression::int(1, location(10), Ownership::MutableOwned),
                 )),
                 location(10),
             ),
             node(
-                NodeKind::VariableDeclaration(var(
+                NodeKind::VariableDeclaration(make_test_variable(
                     y,
                     Expression::function_call(
                         unknown_fn,
@@ -272,7 +277,7 @@ fn mutable_user_argument_is_accepted_without_false_shared_conflict() {
         },
         vec![
             node(
-                NodeKind::VariableDeclaration(var(
+                NodeKind::VariableDeclaration(make_test_variable(
                     x.clone(),
                     Expression::int(1, location(10), Ownership::MutableOwned),
                 )),
@@ -323,7 +328,7 @@ fn host_mutable_parameter_requires_mutable_access() {
         },
         vec![
             node(
-                NodeKind::VariableDeclaration(var(
+                NodeKind::VariableDeclaration(make_test_variable(
                     x.clone(),
                     Expression::int(1, location(1), Ownership::ImmutableOwned),
                 )),
@@ -373,7 +378,7 @@ fn host_mutable_parameter_accepts_mutable_local_argument() {
         },
         vec![
             node(
-                NodeKind::VariableDeclaration(var(
+                NodeKind::VariableDeclaration(make_test_variable(
                     x.clone(),
                     Expression::int(1, location(1), Ownership::MutableOwned),
                 )),
@@ -421,7 +426,7 @@ fn host_shared_parameter_is_shared_only() {
         },
         vec![
             node(
-                NodeKind::VariableDeclaration(var(
+                NodeKind::VariableDeclaration(make_test_variable(
                     x.clone(),
                     Expression::int(1, location(1), Ownership::ImmutableOwned),
                 )),
@@ -477,7 +482,7 @@ fn two_mutable_args_to_same_root_are_rejected() {
         },
         vec![
             node(
-                NodeKind::VariableDeclaration(var(
+                NodeKind::VariableDeclaration(make_test_variable(
                     x.clone(),
                     Expression::int(1, location(10), Ownership::MutableOwned),
                 )),
@@ -540,7 +545,7 @@ fn shared_then_mutable_args_to_same_root_are_rejected() {
         },
         vec![
             node(
-                NodeKind::VariableDeclaration(var(
+                NodeKind::VariableDeclaration(make_test_variable(
                     x.clone(),
                     Expression::int(1, location(10), Ownership::MutableOwned),
                 )),
@@ -666,7 +671,7 @@ fn mutable_user_parameter_rejects_immutable_argument_reused_after_call() {
         },
         vec![
             node(
-                NodeKind::VariableDeclaration(var(
+                NodeKind::VariableDeclaration(make_test_variable(
                     x.clone(),
                     Expression::int(1, location(10), Ownership::ImmutableOwned),
                 )),
@@ -682,7 +687,7 @@ fn mutable_user_parameter_rejects_immutable_argument_reused_after_call() {
                 location(11),
             ),
             node(
-                NodeKind::VariableDeclaration(var(
+                NodeKind::VariableDeclaration(make_test_variable(
                     y,
                     reference_expr(x, DataType::Int, location(12)),
                 )),
@@ -726,7 +731,7 @@ fn out_of_range_return_alias_metadata_is_reported_at_call_site() {
         },
         vec![
             node(
-                NodeKind::VariableDeclaration(var(
+                NodeKind::VariableDeclaration(make_test_variable(
                     x.clone(),
                     Expression::int(1, location(10), Ownership::MutableOwned),
                 )),
@@ -785,7 +790,7 @@ fn same_line_mutable_call_then_reuse_uses_order_keys() {
         },
         vec![
             node(
-                NodeKind::VariableDeclaration(var(
+                NodeKind::VariableDeclaration(make_test_variable(
                     x.clone(),
                     Expression::int(1, location(10), Ownership::MutableOwned),
                 )),
@@ -801,7 +806,7 @@ fn same_line_mutable_call_then_reuse_uses_order_keys() {
                 same_line.clone(),
             ),
             node(
-                NodeKind::VariableDeclaration(var(
+                NodeKind::VariableDeclaration(make_test_variable(
                     y,
                     reference_expr(x, DataType::Int, same_line.clone()),
                 )),

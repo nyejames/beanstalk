@@ -1,3 +1,8 @@
+//! HIR function-origin tracking tests.
+//!
+//! WHAT: verifies how HIR records entry, imported-start, and generated-fragment function origins.
+//! WHY: backends rely on stable function-origin metadata when deciding which functions to emit and call.
+
 use crate::compiler_frontend::ast::ast::{Ast, AstStartTemplateItem, ModuleExport};
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind, TextLocation};
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;

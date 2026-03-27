@@ -1,3 +1,8 @@
+//! Runtime-template lowering helpers for HIR expression construction.
+//!
+//! WHAT: lowers AST templates that survive constant folding into runtime HIR fragments and calls.
+//! WHY: template lowering has enough control-flow and naming detail to warrant its own focused module.
+
 use crate::compiler_frontend::ast::templates::create_template_node::Template;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;

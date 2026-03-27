@@ -35,6 +35,9 @@ pub(crate) struct LoweredExpression {
 }
 
 impl<'a> HirBuilder<'a> {
+    // WHAT: lowers one typed AST expression into a linearized HIR prelude/value pair.
+    // WHY: HIR cannot keep nested side effects inside expressions, so every entry point must
+    //      return both the value and any statements required to produce it.
     pub(crate) fn lower_expression(
         &mut self,
         expr: &Expression,
@@ -184,7 +187,7 @@ impl<'a> HirBuilder<'a> {
             }
 
             ExpressionKind::HostFunctionCall(host_id, args) => self.lower_call_expression(
-                CallTarget::HostFunction(host_id.clone()),
+                CallTarget::HostFunction(host_id.to_owned()),
                 args,
                 &self.extract_return_types_from_datatype(&expr.data_type),
                 &expr.location,
@@ -299,6 +302,9 @@ impl<'a> HirBuilder<'a> {
         Ok(lowered)
     }
 
+    // WHAT: evaluates AST runtime expressions stored in RPN order into HIR values.
+    // WHY: AST already normalized runtime operator precedence into stack order, so HIR lowering
+    //      can preserve that sequencing without rebuilding precedence logic.
     pub(crate) fn lower_runtime_rpn_expression(
         &mut self,
         nodes: &[AstNode],
@@ -342,7 +348,7 @@ impl<'a> HirBuilder<'a> {
                     location,
                 } => {
                     let lowered = self.lower_call_expression(
-                        CallTarget::HostFunction(host_function_id.clone()),
+                        CallTarget::HostFunction(host_function_id.to_owned()),
                         args,
                         result_types,
                         location,
@@ -482,6 +488,9 @@ impl<'a> HirBuilder<'a> {
         Ok(LoweredExpression { prelude, value })
     }
 
+    // WHAT: converts an AST node that semantically yields a value into HIR expression form.
+    // WHY: some runtime AST containers store expressions as general nodes, and HIR still needs a
+    //      single value-producing lowering path for them.
     pub(crate) fn lower_ast_node_as_expression(
         &mut self,
         node: &AstNode,
@@ -510,7 +519,7 @@ impl<'a> HirBuilder<'a> {
                 result_types,
                 location,
             } => self.lower_call_expression(
-                CallTarget::HostFunction(host_function_id.clone()),
+                CallTarget::HostFunction(host_function_id.to_owned()),
                 args,
                 result_types,
                 location,
@@ -547,6 +556,9 @@ impl<'a> HirBuilder<'a> {
         }
     }
 
+    // WHAT: resolves an AST node into a concrete HIR place for loads, stores, and copies.
+    // WHY: place lowering must distinguish between value-producing expressions and assignable
+    //      storage locations before later borrow and mutation analysis runs.
     pub(crate) fn lower_ast_node_to_place(
         &mut self,
         node: &AstNode,
@@ -564,18 +576,18 @@ impl<'a> HirBuilder<'a> {
                     let lowered =
                         self.lower_reference_expression(name, &expr.data_type, &node.location)?;
                     if let HirExpressionKind::Load(place) = &lowered.value.kind {
-                        return Ok((lowered.prelude, place.clone()));
+                        return Ok((lowered.prelude, place.to_owned()));
                     }
 
                     let temp_local =
-                        self.allocate_temp_local(lowered.value.ty, Some(node.location.clone()))?;
+                        self.allocate_temp_local(lowered.value.ty, Some(node.location.to_owned()))?;
                     let assign_statement = HirStatement {
                         id: self.allocate_node_id(),
                         kind: HirStatementKind::Assign {
                             target: HirPlace::Local(temp_local),
                             value: lowered.value,
                         },
-                        location: node.location.clone(),
+                        location: node.location.to_owned(),
                     };
 
                     self.side_table
@@ -617,7 +629,7 @@ impl<'a> HirBuilder<'a> {
                 location,
             } => {
                 let lowered = self.lower_call_expression(
-                    CallTarget::HostFunction(host_function_id.clone()),
+                    CallTarget::HostFunction(host_function_id.to_owned()),
                     args,
                     result_types,
                     location,
@@ -652,6 +664,9 @@ impl<'a> HirBuilder<'a> {
         }
     }
 
+    // WHAT: lowers a resolved call target plus arguments into HIR call statements and values.
+    // WHY: calls may emit preludes, temporary bindings, and tuple shaping, so the lowering needs
+    //      one dedicated path instead of being duplicated across expression forms.
     pub(crate) fn lower_call_expression(
         &mut self,
         target: CallTarget,
@@ -680,7 +695,7 @@ impl<'a> HirBuilder<'a> {
                     args: lowered_args,
                     result: None,
                 },
-                location: location.clone(),
+                location: location.to_owned(),
             };
 
             self.side_table.map_statement(location, &statement);
@@ -703,7 +718,7 @@ impl<'a> HirBuilder<'a> {
             })
         };
 
-        let temp_local = self.allocate_temp_local(call_result_type, Some(location.clone()))?;
+        let temp_local = self.allocate_temp_local(call_result_type, Some(location.to_owned()))?;
 
         let statement = HirStatement {
             id: statement_id,
@@ -712,7 +727,7 @@ impl<'a> HirBuilder<'a> {
                 args: lowered_args,
                 result: Some(temp_local),
             },
-            location: location.clone(),
+            location: location.to_owned(),
         };
 
         self.side_table.map_statement(location, &statement);
@@ -731,6 +746,9 @@ impl<'a> HirBuilder<'a> {
         Ok(LoweredExpression { prelude, value })
     }
 
+    // WHAT: maps frontend `DataType` values into interned HIR types.
+    // WHY: HIR stores canonical type IDs so downstream analyses can compare types cheaply and
+    //      deterministically.
     pub(crate) fn lower_data_type(
         &mut self,
         data_type: &DataType,
@@ -826,6 +844,9 @@ impl<'a> HirBuilder<'a> {
         Ok(self.intern_type_kind(kind))
     }
 
+    // WHAT: interns a HIR type kind and returns its canonical ID.
+    // WHY: type interning keeps repeated type shapes stable across the module and avoids arena
+    //      duplication during lowering.
     pub(crate) fn intern_type_kind(&mut self, kind: HirTypeKind) -> TypeId {
         if let Some(existing) = self.type_interner.get(&kind) {
             return *existing;
@@ -836,6 +857,9 @@ impl<'a> HirBuilder<'a> {
         id
     }
 
+    // WHAT: appends a prebuilt statement to the current block.
+    // WHY: expression helpers sometimes manufacture statements outside the main statement
+    //      dispatcher but still need to preserve explicit execution order.
     pub(crate) fn emit_statement_to_current_block(
         &mut self,
         statement: HirStatement,
@@ -846,12 +870,15 @@ impl<'a> HirBuilder<'a> {
         Ok(())
     }
 
+    // WHAT: allocates an unnamed temporary local in the current block.
+    // WHY: complex expression lowering needs scratch storage to preserve evaluation order and
+    //      explicit place/value distinctions in HIR.
     pub(crate) fn allocate_temp_local(
         &mut self,
         ty: TypeId,
         source_info: Option<TextLocation>,
     ) -> Result<LocalId, CompilerError> {
-        let location = source_info.clone().unwrap_or_default();
+        let location = source_info.to_owned().unwrap_or_default();
         let region = self.current_region_or_error(&location)?;
 
         let local_id = self.allocate_local_id();
@@ -864,9 +891,11 @@ impl<'a> HirBuilder<'a> {
             source_info,
         };
 
+        self.side_table.map_local_source(&local);
+
         {
             let block = self.current_block_mut_or_error(&location)?;
-            block.locals.push(local.clone());
+            block.locals.push(local);
         }
 
         let temp_name = format!("__hir_tmp_{}", self.temp_local_counter);
@@ -876,11 +905,13 @@ impl<'a> HirBuilder<'a> {
         // Compiler-introduced temporaries are intentionally excluded from AST symbol resolution.
         // They are named only for diagnostics/debug rendering via the side table.
         self.side_table.bind_local_name(local_id, temp_name_id);
-        self.side_table.map_local_source(&local);
 
         Ok(local_id)
     }
 
+    // WHAT: returns mutable access to the active block or a structured lowering error.
+    // WHY: most expression helpers need to append locals or statements, and failing early
+    //      produces clearer diagnostics than assuming block state exists.
     pub(crate) fn current_block_mut_or_error(
         &mut self,
         location: &TextLocation,
@@ -1016,6 +1047,9 @@ impl<'a> HirBuilder<'a> {
         Ok(Some(lowered_constant.value))
     }
 
+    // WHAT: resolves a function path through the HIR declaration table.
+    // WHY: expression lowering should fail with a structured HIR error instead of assuming AST
+    //      declaration registration stayed in sync.
     pub(crate) fn resolve_function_id_or_error(
         &self,
         name: &InternedPath,
@@ -1034,6 +1068,9 @@ impl<'a> HirBuilder<'a> {
         Ok(function_id)
     }
 
+    // WHAT: resolves a field path within one nominal struct declaration.
+    // WHY: field access lowering must use declaration-time IDs so later passes can reason about
+    //      fields without path scans.
     pub(crate) fn resolve_field_id_or_error(
         &self,
         struct_id: StructId,
@@ -1042,7 +1079,7 @@ impl<'a> HirBuilder<'a> {
     ) -> Result<FieldId, CompilerError> {
         let Some(field_id) = self
             .fields_by_struct_and_name
-            .get(&(struct_id, field_name.clone()))
+            .get(&(struct_id, field_name.to_owned()))
             .copied()
         else {
             return_hir_transformation_error!(
@@ -1114,7 +1151,7 @@ impl<'a> HirBuilder<'a> {
 
             if !self
                 .fields_by_struct_and_name
-                .contains_key(&(struct_id, field.id.clone()))
+                .contains_key(&(struct_id, field.id.to_owned()))
             {
                 return_hir_transformation_error!(
                     format!(
@@ -1263,9 +1300,12 @@ impl<'a> HirBuilder<'a> {
             );
         };
 
-        Ok(place.clone())
+        Ok(place.to_owned())
     }
 
+    // WHAT: allocates one HIR expression node with its identity and typing metadata attached.
+    // WHY: centralizing expression construction keeps IDs, source mappings, and value kinds
+    //      uniform across every lowering helper.
     pub(crate) fn make_expression(
         &mut self,
         location: &TextLocation,
@@ -1286,6 +1326,8 @@ impl<'a> HirBuilder<'a> {
         }
     }
 
+    // WHAT: builds the canonical HIR representation of unit.
+    // WHY: unit values should lower through the same tuple machinery every other pass expects.
     pub(crate) fn unit_expression(
         &mut self,
         location: &TextLocation,
@@ -1301,6 +1343,8 @@ impl<'a> HirBuilder<'a> {
         )
     }
 
+    // WHAT: converts a frontend text location into the shared compiler error-location format.
+    // WHY: HIR lowering uses one helper so all transformation errors preserve consistent source metadata.
     pub(crate) fn hir_error_location(&self, location: &TextLocation) -> ErrorLocation {
         location.to_error_location(self.string_table)
     }

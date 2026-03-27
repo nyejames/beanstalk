@@ -1,6 +1,11 @@
+//! Borrow-checker scope and nesting regression tests.
+//!
+//! WHAT: validates how lexical scopes and nested blocks constrain borrow visibility and drops.
+//! WHY: scope boundaries drive many lifetime rules, so regressions here tend to cascade widely.
+
 use crate::compiler_frontend::analysis::borrow_checker::tests::test_support::{
     assignment_target, build_ast, default_host_registry, entry_and_start, function_node, location,
-    lower_hir, node, reference_expr, run_borrow_checker, symbol, var,
+    lower_hir, make_test_variable, node, reference_expr, run_borrow_checker, symbol,
 };
 use crate::compiler_frontend::ast::ast_nodes::NodeKind;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
@@ -31,7 +36,7 @@ fn if_branch_local_alias_does_not_escape_merge() {
         },
         vec![
             node(
-                NodeKind::VariableDeclaration(var(
+                NodeKind::VariableDeclaration(make_test_variable(
                     x.clone(),
                     Expression::int(1, location(1), Ownership::MutableOwned),
                 )),
@@ -41,7 +46,7 @@ fn if_branch_local_alias_does_not_escape_merge() {
                 NodeKind::If(
                     Expression::bool(true, location(2), Ownership::ImmutableOwned),
                     vec![node(
-                        NodeKind::VariableDeclaration(var(
+                        NodeKind::VariableDeclaration(make_test_variable(
                             y,
                             reference_expr(x.clone(), DataType::Int, location(3)),
                         )),
@@ -79,7 +84,7 @@ fn match_arm_local_alias_does_not_escape_merge() {
     let arm = MatchArm {
         condition: Expression::int(1, location(3), Ownership::ImmutableOwned),
         body: vec![node(
-            NodeKind::VariableDeclaration(var(
+            NodeKind::VariableDeclaration(make_test_variable(
                 y,
                 reference_expr(x.clone(), DataType::Int, location(4)),
             )),
@@ -95,7 +100,7 @@ fn match_arm_local_alias_does_not_escape_merge() {
         },
         vec![
             node(
-                NodeKind::VariableDeclaration(var(
+                NodeKind::VariableDeclaration(make_test_variable(
                     x.clone(),
                     Expression::int(1, location(1), Ownership::MutableOwned),
                 )),
@@ -142,7 +147,7 @@ fn while_body_local_alias_does_not_escape_exit() {
         },
         vec![
             node(
-                NodeKind::VariableDeclaration(var(
+                NodeKind::VariableDeclaration(make_test_variable(
                     x.clone(),
                     Expression::int(1, location(1), Ownership::MutableOwned),
                 )),
@@ -152,7 +157,7 @@ fn while_body_local_alias_does_not_escape_exit() {
                 NodeKind::WhileLoop(
                     Expression::bool(false, location(2), Ownership::ImmutableOwned),
                     vec![node(
-                        NodeKind::VariableDeclaration(var(
+                        NodeKind::VariableDeclaration(make_test_variable(
                             y,
                             reference_expr(x.clone(), DataType::Int, location(3)),
                         )),
@@ -194,7 +199,7 @@ fn dead_local_access_reports_borrow_error() {
         },
         vec![
             node(
-                NodeKind::VariableDeclaration(var(
+                NodeKind::VariableDeclaration(make_test_variable(
                     x.clone(),
                     Expression::int(1, location(1), Ownership::MutableOwned),
                 )),
@@ -204,7 +209,7 @@ fn dead_local_access_reports_borrow_error() {
                 NodeKind::If(
                     Expression::bool(true, location(2), Ownership::ImmutableOwned),
                     vec![node(
-                        NodeKind::VariableDeclaration(var(
+                        NodeKind::VariableDeclaration(make_test_variable(
                             y.clone(),
                             reference_expr(x.clone(), DataType::Int, location(3)),
                         )),

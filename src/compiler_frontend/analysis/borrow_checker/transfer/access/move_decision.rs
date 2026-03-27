@@ -1,3 +1,8 @@
+//! Move-versus-borrow decision helpers for access transfer.
+//!
+//! WHAT: decides when mutable access should consume ownership instead of creating a borrow.
+//! WHY: last-use-aware move refinement belongs in one focused helper instead of being duplicated across transfer code.
+
 use crate::compiler_frontend::analysis::borrow_checker::state::{
     FunctionLayout, FutureUseKind, RootSet,
 };

@@ -1,7 +1,12 @@
+//! Borrow-checker drop-site regression tests.
+//!
+//! WHAT: exercises where locals are considered dropped as scopes and statements complete.
+//! WHY: incorrect drop placement can silently change borrow lifetimes and ownership outcomes.
+
 use crate::compiler_frontend::analysis::borrow_checker::BorrowDropSiteKind;
 use crate::compiler_frontend::analysis::borrow_checker::tests::test_support::{
     assignment_target, build_ast, default_host_registry, entry_and_start, function_node, location,
-    node, run_borrow_checker, symbol, test_project_path_resolver, var,
+    make_test_variable, node, run_borrow_checker, symbol, test_project_path_resolver,
 };
 use crate::compiler_frontend::ast::ast_nodes::NodeKind;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
@@ -38,7 +43,7 @@ fn emits_advisory_return_drop_sites() {
             returns: vec![],
         },
         vec![node(
-            NodeKind::VariableDeclaration(var(
+            NodeKind::VariableDeclaration(make_test_variable(
                 value,
                 Expression::int(1, location(1), Ownership::MutableOwned),
             )),
@@ -87,7 +92,7 @@ fn emits_advisory_break_and_region_exit_drop_sites() {
         },
         vec![
             node(
-                NodeKind::VariableDeclaration(var(
+                NodeKind::VariableDeclaration(make_test_variable(
                     x.clone(),
                     Expression::int(1, location(1), Ownership::MutableOwned),
                 )),

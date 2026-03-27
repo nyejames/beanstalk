@@ -1,3 +1,8 @@
+//! HIR lowering test modules and shared harness utilities.
+//!
+//! WHAT: groups the HIR test suites and exposes common resolver helpers for them.
+//! WHY: HIR tests share path-resolution setup and should discover one another through a single module entry.
+
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 
 pub(crate) fn test_project_path_resolver() -> ProjectPathResolver {

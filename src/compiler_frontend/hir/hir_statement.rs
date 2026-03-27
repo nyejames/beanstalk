@@ -14,9 +14,9 @@ use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::hir::hir_builder::{HirBuilder, LoopTargets};
 use crate::compiler_frontend::hir::hir_datatypes::HirTypeKind;
 use crate::compiler_frontend::hir::hir_nodes::{
-    BlockId, FunctionId, HirBinOp, HirBlock, HirConstField, HirConstValue, HirExpression,
-    HirExpressionKind, HirField, HirFunction, HirLocal, HirMatchArm, HirModuleConst, HirPattern,
-    HirRegion, HirStatement, HirStatementKind, HirStruct, HirTerminator, LocalId, ValueKind,
+    BlockId, FunctionId, HirBlock, HirConstField, HirConstValue, HirExpression, HirExpressionKind,
+    HirField, HirFunction, HirLocal, HirMatchArm, HirModuleConst, HirPattern, HirRegion,
+    HirStatement, HirStatementKind, HirStruct, HirTerminator, LocalId, ValueKind,
 };
 use crate::compiler_frontend::hir::hir_side_table::HirLocation;
 use crate::compiler_frontend::host_functions::CallTarget;
@@ -29,6 +29,8 @@ use crate::hir_log;
 mod for_loop_lowering;
 
 impl<'a> HirBuilder<'a> {
+    // WHAT: pre-registers all structs and functions before any HIR body lowering starts.
+    // WHY: later statement and expression lowering relies on complete symbol tables for stable ID lookups.
     pub(crate) fn prepare_hir_declarations(&mut self, ast: &Ast) -> Result<(), CompilerError> {
         for node in &ast.nodes {
             if let NodeKind::StructDefinition(name, fields) = &node.kind {
@@ -45,6 +47,8 @@ impl<'a> HirBuilder<'a> {
         self.resolve_start_function(ast)
     }
 
+    // WHAT: lowers the AST module-constant pool into HIR's dedicated constant metadata arena.
+    // WHY: module constants should remain compile-time data instead of turning into runtime statements.
     pub(crate) fn lower_module_constants(&mut self, ast: &Ast) -> Result<(), CompilerError> {
         self.module.module_constants.clear();
         self.module_constants_by_name.clear();
@@ -168,6 +172,9 @@ impl<'a> HirBuilder<'a> {
         }
     }
 
+    // WHAT: routes one top-level AST node into the HIR lowering path that owns it.
+    // WHY: declaration registration already built the symbol tables, so top-level lowering should
+    //      only accept nodes that materially contribute module/runtime semantics.
     pub(crate) fn lower_top_level_node(&mut self, node: &AstNode) -> Result<(), CompilerError> {
         // WHAT: route each module-level AST node into the one HIR lowering path that owns it.
         // WHY: declaration registration already built the symbol tables, so this entry point only
@@ -198,6 +205,9 @@ impl<'a> HirBuilder<'a> {
         }
     }
 
+    // WHAT: enters one function's lowering context, lowers its body, then restores builder state.
+    // WHY: function lowering needs scoped block/region/current-function state that must not leak
+    //      into the next function.
     pub(crate) fn lower_function_body(
         &mut self,
         function_name: &InternedPath,
@@ -215,6 +225,9 @@ impl<'a> HirBuilder<'a> {
         lower_result
     }
 
+    // WHAT: lowers a run of AST statements until a terminating control-flow edge is emitted.
+    // WHY: once a block has an explicit terminator, later statements in the sequence are dead for
+    //      the current CFG path and must not be appended.
     pub(crate) fn lower_statement_sequence(
         &mut self,
         nodes: &[AstNode],
@@ -231,6 +244,9 @@ impl<'a> HirBuilder<'a> {
         Ok(())
     }
 
+    // WHAT: lowers one AST statement node into HIR statements, blocks, or terminators.
+    // WHY: statement lowering is the control-flow dispatcher for the builder and centralizes the
+    //      mapping from AST statement kinds to explicit HIR form.
     pub(crate) fn lower_statement_node(&mut self, node: &AstNode) -> Result<(), CompilerError> {
         self.log_statement_input(node);
 
@@ -259,7 +275,7 @@ impl<'a> HirBuilder<'a> {
                 result_types: _,
                 location,
             } => self.lower_call_statement(
-                CallTarget::HostFunction(host_function_id.clone()),
+                CallTarget::HostFunction(host_function_id.to_owned()),
                 args,
                 location,
             ),
@@ -357,7 +373,7 @@ impl<'a> HirBuilder<'a> {
 
             if self
                 .fields_by_struct_and_name
-                .contains_key(&(struct_id, field.id.clone()))
+                .contains_key(&(struct_id, field.id.to_owned()))
             {
                 return_hir_transformation_error!(
                     format!(
@@ -379,8 +395,9 @@ impl<'a> HirBuilder<'a> {
             let field_id = self.allocate_field_id();
 
             self.fields_by_struct_and_name
-                .insert((struct_id, field.id.clone()), field_id);
-            self.side_table.bind_field_name(field_id, field.id.clone());
+                .insert((struct_id, field.id.to_owned()), field_id);
+            self.side_table
+                .bind_field_name(field_id, field.id.to_owned());
             self.side_table
                 .map_ast_to_hir(&field_location, HirLocation::Field(field_id));
             self.side_table
@@ -397,8 +414,8 @@ impl<'a> HirBuilder<'a> {
             fields: hir_fields,
         };
 
-        self.structs_by_name.insert(name.clone(), struct_id);
-        self.side_table.bind_struct_name(struct_id, name.clone());
+        self.structs_by_name.insert(name.to_owned(), struct_id);
+        self.side_table.bind_struct_name(struct_id, name.to_owned());
         self.side_table
             .map_ast_to_hir(location, HirLocation::Struct(struct_id));
         self.side_table
@@ -462,9 +479,9 @@ impl<'a> HirBuilder<'a> {
                 .collect(),
         };
 
-        self.functions_by_name.insert(name.clone(), function_id);
+        self.functions_by_name.insert(name.to_owned(), function_id);
         self.side_table
-            .bind_function_name(function_id, name.clone());
+            .bind_function_name(function_id, name.to_owned());
         self.side_table.map_function(location, &function);
         self.push_function(function);
 
@@ -551,7 +568,7 @@ impl<'a> HirBuilder<'a> {
 
             let param_type = self.lower_data_type(&param.value.data_type, &param_location)?;
             let local_id = self.allocate_named_local(
-                param.id.clone(),
+                param.id.to_owned(),
                 param_type,
                 param.value.ownership.is_mutable(),
                 Some(param_location.clone()),
@@ -577,7 +594,7 @@ impl<'a> HirBuilder<'a> {
 
         let local_type = self.lower_data_type(&variable.value.data_type, &source_location)?;
         let local_id = self.allocate_named_local(
-            variable.id.clone(),
+            variable.id.to_owned(),
             local_type,
             variable.value.ownership.is_mutable(),
             Some(source_location),
@@ -1113,7 +1130,7 @@ impl<'a> HirBuilder<'a> {
         mutable: bool,
         source_info: Option<TextLocation>,
     ) -> Result<LocalId, CompilerError> {
-        let local_location = source_info.clone().unwrap_or_default();
+        let local_location = source_info.to_owned().unwrap_or_default();
 
         // AST forbids shadowing and provides module-wide unique symbol paths, so a duplicate
         // path here indicates invalid redeclaration in the current function lowering context.
@@ -1138,14 +1155,15 @@ impl<'a> HirBuilder<'a> {
             source_info,
         };
 
+        self.side_table.map_local_source(&local);
+
         {
             let block = self.current_block_mut_or_error(&local_location)?;
-            block.locals.push(local.clone());
+            block.locals.push(local);
         }
 
-        self.locals_by_name.insert(name.clone(), local_id);
+        self.locals_by_name.insert(name.to_owned(), local_id);
         self.side_table.bind_local_name(local_id, name);
-        self.side_table.map_local_source(&local);
         self.side_table
             .map_ast_to_hir(&local_location, HirLocation::Local(local_id));
 
@@ -1161,7 +1179,7 @@ impl<'a> HirBuilder<'a> {
 
         match values {
             [] => Ok(self.unit_expression(location, region)),
-            [single] => Ok(single.clone()),
+            [single] => Ok(single.to_owned()),
             many => {
                 let field_types = many.iter().map(|value| value.ty).collect::<Vec<_>>();
                 let tuple_type = self.intern_type_kind(HirTypeKind::Tuple {

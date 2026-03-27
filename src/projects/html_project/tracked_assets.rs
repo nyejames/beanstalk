@@ -202,7 +202,10 @@ fn plan_one_tracked_asset(
 /// WHAT: keeps general directory links such as `@/` and `@./subdir` renderable without emission.
 /// WHY: tracked assets are file-only in v1, but the legacy `@assets/...` directory lane would
 /// imply recursive copying behavior and must still fail instead of silently doing nothing.
-fn directory_usage_requires_tracked_asset_error(module: &Module, usage: &RenderedPathUsage) -> bool {
+fn directory_usage_requires_tracked_asset_error(
+    module: &Module,
+    usage: &RenderedPathUsage,
+) -> bool {
     usage.base == CompileTimePathBase::ProjectRootFolder
         && usage
             .public_path

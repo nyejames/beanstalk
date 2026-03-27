@@ -21,10 +21,16 @@ use crate::compiler_frontend::ast::ast::AstStartTemplateItem;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, TextLocation};
 use crate::compiler_frontend::ast::templates::template_folding::TemplateFoldContext;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
+use crate::compiler_frontend::hir::hir_datatypes::{HirTypeKind, TypeContext, TypeId};
+use crate::compiler_frontend::hir::hir_nodes::{
+    BlockId, ConstStringId, FieldId, FunctionId, HirBlock, HirConstId, HirDocFragment,
+    HirDocFragmentKind, HirFunction, HirFunctionOrigin, HirModule, HirNodeId, HirRegion,
+    HirTerminator, HirValueId, LocalId, RegionId, StartFragment, StructId,
+};
 use crate::compiler_frontend::hir::hir_side_table::HirSideTable;
 use crate::compiler_frontend::hir::hir_validation::validate_hir_module;
-use crate::compiler_frontend::hir::{hir_datatypes::*, hir_nodes::*};
 use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::projects::settings::IMPLICIT_START_FUNC_NAME;
@@ -53,7 +59,6 @@ pub(super) struct LoopTargets {
 #[cfg(test)]
 #[path = "tests/hir_builder_test_support.rs"]
 mod hir_builder_test_support;
-use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 #[cfg(test)]
 pub(crate) use hir_builder_test_support::validate_module_for_tests;
 // -------------------
@@ -186,34 +191,34 @@ impl<'a> HirBuilder<'a> {
     /// Builds an HIR module from an AST.
     /// This is the main entry point for HIR generation.
     pub fn build_hir_module(mut self, ast: Ast) -> Result<HirModule, CompilerMessages> {
-        self.module.warnings = ast.warnings.clone();
-        self.module.rendered_path_usages = ast.rendered_path_usages.clone();
+        self.module.warnings = ast.warnings.to_owned();
+        self.module.rendered_path_usages = ast.rendered_path_usages.to_owned();
 
         if let Err(error) = self.prepare_hir_declarations(&ast) {
             return Err(CompilerMessages {
                 errors: vec![error],
-                warnings: self.module.warnings.clone(),
+                warnings: self.module.warnings.to_owned(),
             });
         }
 
         if let Err(error) = self.lower_module_constants(&ast) {
             return Err(CompilerMessages {
                 errors: vec![error],
-                warnings: self.module.warnings.clone(),
+                warnings: self.module.warnings.to_owned(),
             });
         }
 
         if let Err(error) = self.resolve_start_fragments(&ast) {
             return Err(CompilerMessages {
                 errors: vec![error],
-                warnings: self.module.warnings.clone(),
+                warnings: self.module.warnings.to_owned(),
             });
         }
 
         if let Err(error) = self.resolve_doc_fragments(&ast) {
             return Err(CompilerMessages {
                 errors: vec![error],
-                warnings: self.module.warnings.clone(),
+                warnings: self.module.warnings.to_owned(),
             });
         }
 
@@ -221,7 +226,7 @@ impl<'a> HirBuilder<'a> {
             if let Err(error) = self.process_ast_node(node) {
                 return Err(CompilerMessages {
                     errors: vec![error],
-                    warnings: self.module.warnings.clone(),
+                    warnings: self.module.warnings.to_owned(),
                 });
             }
         }
@@ -229,7 +234,7 @@ impl<'a> HirBuilder<'a> {
         if let Err(error) = self.assign_function_origins() {
             return Err(CompilerMessages {
                 errors: vec![error],
-                warnings: self.module.warnings.clone(),
+                warnings: self.module.warnings.to_owned(),
             });
         }
 
@@ -239,7 +244,7 @@ impl<'a> HirBuilder<'a> {
         if let Err(error) = validate_hir_module(&self.module, self.string_table) {
             return Err(CompilerMessages {
                 errors: vec![error],
-                warnings: self.module.warnings.clone(),
+                warnings: self.module.warnings.to_owned(),
             });
         }
 

@@ -1,6 +1,12 @@
+//! Borrow-checker fact-generation regression tests.
+//!
+//! WHAT: checks the low-level facts emitted for borrows, moves, assignments, and returns.
+//! WHY: these facts are the borrow checker's source of truth, so targeted tests catch drift
+//! before it reaches higher-level diagnostics.
+
 use crate::compiler_frontend::analysis::borrow_checker::tests::test_support::{
-    build_ast, default_host_registry, entry_and_start, function_node, location, lower_hir, node,
-    reference_expr, run_borrow_checker, symbol, var,
+    build_ast, default_host_registry, entry_and_start, function_node, location, lower_hir,
+    make_test_variable, node, reference_expr, run_borrow_checker, symbol,
 };
 use crate::compiler_frontend::ast::ast_nodes::NodeKind;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
@@ -32,14 +38,14 @@ fn statement_terminator_and_value_facts_are_populated() {
         },
         vec![
             node(
-                NodeKind::VariableDeclaration(var(
+                NodeKind::VariableDeclaration(make_test_variable(
                     x.clone(),
                     Expression::int(1, location(1), Ownership::MutableOwned),
                 )),
                 location(1),
             ),
             node(
-                NodeKind::VariableDeclaration(var(
+                NodeKind::VariableDeclaration(make_test_variable(
                     y.clone(),
                     Expression::int(0, location(2), Ownership::ImmutableOwned),
                 )),
@@ -148,7 +154,7 @@ fn drop_statement_produces_statement_fact() {
             returns: vec![],
         },
         vec![node(
-            NodeKind::VariableDeclaration(var(
+            NodeKind::VariableDeclaration(make_test_variable(
                 value,
                 Expression::int(1, location(1), Ownership::MutableOwned),
             )),
@@ -210,14 +216,14 @@ fn statement_entry_state_reflects_last_use_reborrow_window() {
         },
         vec![
             node(
-                NodeKind::VariableDeclaration(var(
+                NodeKind::VariableDeclaration(make_test_variable(
                     data.clone(),
                     Expression::int(7, location(1), Ownership::MutableOwned),
                 )),
                 location(1),
             ),
             node(
-                NodeKind::VariableDeclaration(var(
+                NodeKind::VariableDeclaration(make_test_variable(
                     first_ref.clone(),
                     Expression::reference(
                         data.clone(),
@@ -229,14 +235,14 @@ fn statement_entry_state_reflects_last_use_reborrow_window() {
                 location(2),
             ),
             node(
-                NodeKind::VariableDeclaration(var(
+                NodeKind::VariableDeclaration(make_test_variable(
                     sink,
                     reference_expr(first_ref, DataType::Int, location(3)),
                 )),
                 location(3),
             ),
             node(
-                NodeKind::VariableDeclaration(var(
+                NodeKind::VariableDeclaration(make_test_variable(
                     second_ref,
                     Expression::reference(
                         data,

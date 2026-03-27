@@ -1,3 +1,8 @@
+//! Conflict detection helpers for borrow-transfer access checks.
+//!
+//! WHAT: classifies when a requested access overlaps an active borrow state.
+//! WHY: transfer logic needs one place to keep borrow-conflict rules deterministic and testable.
+
 use crate::compiler_frontend::analysis::borrow_checker::state::{
     BorrowState, FunctionLayout, RootSet,
 };

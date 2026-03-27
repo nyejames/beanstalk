@@ -1,3 +1,8 @@
+//! HIR validation regression tests.
+//!
+//! WHAT: exercises the post-lowering HIR validator against valid and intentionally broken modules.
+//! WHY: validator coverage needs focused tests that isolate invariants from the rest of lowering.
+
 use crate::compiler_frontend::ast::ast::{Ast, AstDocFragment, AstDocFragmentKind, ModuleExport};
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind, TextLocation};
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
@@ -27,7 +32,7 @@ fn node(kind: NodeKind, location: TextLocation) -> AstNode {
     }
 }
 
-fn var(name: InternedPath, value: Expression) -> Declaration {
+fn make_test_variable(name: InternedPath, value: Expression) -> Declaration {
     Declaration { id: name, value }
 }
 
@@ -219,7 +224,7 @@ fn validator_rejects_missing_side_table_mappings() {
         },
         vec![
             node(
-                NodeKind::VariableDeclaration(var(
+                NodeKind::VariableDeclaration(make_test_variable(
                     x,
                     Expression::int(1, test_location(4), Ownership::ImmutableOwned),
                 )),

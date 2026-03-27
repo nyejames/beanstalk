@@ -1,8 +1,13 @@
+//! Borrow-checker frontend pipeline regression tests.
+//!
+//! WHAT: runs full frontend entrypoints and asserts borrow-check failures surface through them.
+//! WHY: the borrow checker is only useful if orchestration preserves and reports its diagnostics.
+
 use crate::build_system::build::Module;
 use crate::compiler_frontend::CompilerFrontend;
 use crate::compiler_frontend::analysis::borrow_checker::tests::test_support::{
     assignment_target, build_ast, default_host_registry, entry_and_start, function_node, location,
-    lower_hir, node, reference_expr, run_borrow_checker, symbol, var,
+    lower_hir, make_test_variable, node, reference_expr, run_borrow_checker, symbol,
 };
 use crate::compiler_frontend::ast::ast_nodes::NodeKind;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
@@ -30,14 +35,14 @@ fn frontend_check_borrows_propagates_failures() {
         },
         vec![
             node(
-                NodeKind::VariableDeclaration(var(
+                NodeKind::VariableDeclaration(make_test_variable(
                     x.clone(),
                     Expression::int(1, location(1), Ownership::MutableOwned),
                 )),
                 location(1),
             ),
             node(
-                NodeKind::VariableDeclaration(var(
+                NodeKind::VariableDeclaration(make_test_variable(
                     y,
                     Expression::reference(
                         x.clone(),
@@ -49,7 +54,7 @@ fn frontend_check_borrows_propagates_failures() {
                 location(2),
             ),
             node(
-                NodeKind::VariableDeclaration(var(
+                NodeKind::VariableDeclaration(make_test_variable(
                     z,
                     reference_expr(x, DataType::Int, location(3)),
                 )),
@@ -96,7 +101,7 @@ fn successful_borrow_report_can_be_stored_on_module() {
         },
         vec![
             node(
-                NodeKind::VariableDeclaration(var(
+                NodeKind::VariableDeclaration(make_test_variable(
                     counter.clone(),
                     Expression::int(0, location(1), Ownership::MutableOwned),
                 )),

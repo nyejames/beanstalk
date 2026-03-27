@@ -1,3 +1,8 @@
+//! AST expression parsing and expression-list helpers.
+//!
+//! WHAT: parses token streams into typed AST expressions before evaluation and lowering.
+//! WHY: expression parsing centralizes precedence, call parsing, and place-expression rules in one pass.
+
 use super::eval_expression::evaluate_expression;
 use crate::compiler_frontend::ast::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
@@ -21,8 +26,9 @@ use crate::{
     ast_log, return_compiler_error, return_rule_error, return_syntax_error, return_type_error,
 };
 
-// For multiple returns or function calls
-// MUST know all the types
+// WHAT: parses a comma-separated expression list against already-known expected result types.
+// WHY: function calls and multi-return contexts must preserve arity and per-slot type
+//      expectations while still sharing the normal expression parser.
 pub fn create_multiple_expressions(
     token_stream: &mut FileTokens,
     context: &ScopeContext,
@@ -92,9 +98,9 @@ pub fn create_multiple_expressions(
     Ok(expressions)
 }
 
-// If the datatype is a collection,
-// the expression must only contain references to collections
-// or collection literals.
+// WHAT: parses one expression and evaluates the AST fragment into a typed expression node.
+// WHY: expression parsing is the choke point where token structure, place rules, and expected
+//      type information meet before later lowering stages.
 pub fn create_expression(
     token_stream: &mut FileTokens,
     context: &ScopeContext,
@@ -1073,8 +1079,9 @@ fn parse_copy_place_expression(
     }
 }
 
-/// Parse an expression until one of the provided stop tokens is reached.
-/// The stop token is not consumed from the original stream.
+// WHAT: parses an expression from a bounded token slice without consuming the stop token.
+// WHY: some parent parsers need normal expression semantics while reserving a delimiter for the
+//      surrounding grammar layer to inspect and consume itself.
 pub(crate) fn create_expression_until(
     token_stream: &mut FileTokens,
     context: &ScopeContext,

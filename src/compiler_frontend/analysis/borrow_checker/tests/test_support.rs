@@ -1,3 +1,9 @@
+//! Borrow-checker test fixtures and lowering helpers.
+//!
+//! WHAT: builds small AST/HIR programs and host registries used across borrow-checker tests.
+//! WHY: centralizing fixture construction keeps each test focused on the aliasing rule it is
+//! exercising instead of repeating setup noise.
+
 use crate::compiler_frontend::analysis::borrow_checker::{BorrowCheckReport, check_borrows};
 use crate::compiler_frontend::ast::ast::{Ast, ModuleExport};
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind, TextLocation};
@@ -42,7 +48,7 @@ pub(crate) fn symbol(name: &str, string_table: &mut StringTable) -> InternedPath
     InternedPath::from_single_str(name, string_table)
 }
 
-pub(crate) fn var(id: InternedPath, value: Expression) -> Declaration {
+pub(crate) fn make_test_variable(id: InternedPath, value: Expression) -> Declaration {
     Declaration { id, value }
 }
 

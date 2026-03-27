@@ -1,3 +1,8 @@
+//! Function-signature parsing and function-call AST helpers.
+//!
+//! WHAT: parses function signatures, return lists, and host/user call metadata used by AST construction.
+//! WHY: function syntax has enough dedicated parsing and type-shape rules to live outside the general statement parser.
+
 use crate::compiler_frontend::ast::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};

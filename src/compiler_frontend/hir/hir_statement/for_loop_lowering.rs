@@ -1,5 +1,17 @@
-use super::*;
-use crate::compiler_frontend::ast::ast_nodes::RangeEndKind;
+//! Extracted HIR lowering for `for` loops.
+//!
+//! WHAT: lowers range-based `for` loops into explicit control-flow blocks and normalized step logic.
+//! WHY: `for` lowering is the densest statement transformation in HIR and benefits from its own module boundary.
+
+use crate::compiler_frontend::ast::ast_nodes::{
+    AstNode, Declaration, ForLoopRange, RangeEndKind, TextLocation,
+};
+use crate::compiler_frontend::compiler_errors::CompilerError;
+use crate::compiler_frontend::hir::hir_builder::HirBuilder;
+use crate::compiler_frontend::hir::hir_datatypes::HirTypeKind;
+use crate::compiler_frontend::hir::hir_nodes::{
+    HirBinOp, HirExpressionKind, HirStatementKind, HirTerminator, ValueKind,
+};
 use crate::return_hir_transformation_error;
 
 impl<'a> HirBuilder<'a> {

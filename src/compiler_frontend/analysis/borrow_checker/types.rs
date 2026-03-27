@@ -1,3 +1,8 @@
+//! Borrow-checker snapshots, facts, and summary data structures.
+//!
+//! WHAT: defines the immutable analysis records produced while validating HIR borrows.
+//! WHY: transfer and diagnostics need a shared vocabulary for states, facts, and summaries.
+
 use crate::compiler_frontend::hir::hir_nodes::{
     BlockId, FunctionId, HirNodeId, HirValueId, LocalId,
 };
