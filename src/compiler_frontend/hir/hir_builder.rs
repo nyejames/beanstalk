@@ -115,6 +115,9 @@ pub struct HirBuilder<'a> {
     pub(super) block_index_by_id: FxHashMap<BlockId, usize>,
     pub(super) function_index_by_id: FxHashMap<FunctionId, usize>,
     pub(super) region_index_by_id: FxHashMap<RegionId, usize>,
+    pub(super) local_index_by_id: FxHashMap<LocalId, (usize, usize)>,
+    pub(super) struct_index_by_id: FxHashMap<StructId, usize>,
+    pub(super) field_index_by_id: FxHashMap<FieldId, (usize, usize)>,
 
     // === Current Function State ===
     current_function: Option<FunctionId>,
@@ -165,6 +168,9 @@ impl<'a> HirBuilder<'a> {
             block_index_by_id: FxHashMap::default(),
             function_index_by_id: FxHashMap::default(),
             region_index_by_id: FxHashMap::default(),
+            local_index_by_id: FxHashMap::default(),
+            struct_index_by_id: FxHashMap::default(),
+            field_index_by_id: FxHashMap::default(),
 
             current_function: None,
             current_block: None,
@@ -467,6 +473,67 @@ impl<'a> HirBuilder<'a> {
         let index = self.module.functions.len();
         self.function_index_by_id.insert(function.id, index);
         self.module.functions.push(function);
+    }
+
+    pub(super) fn push_struct(
+        &mut self,
+        hir_struct: crate::compiler_frontend::hir::hir_nodes::HirStruct,
+    ) {
+        let struct_index = self.module.structs.len();
+        self.struct_index_by_id.insert(hir_struct.id, struct_index);
+
+        for (field_index, field) in hir_struct.fields.iter().enumerate() {
+            self.field_index_by_id
+                .insert(field.id, (struct_index, field_index));
+        }
+
+        self.module.structs.push(hir_struct);
+    }
+
+    pub(super) fn register_local_in_block(
+        &mut self,
+        block_id: BlockId,
+        local: crate::compiler_frontend::hir::hir_nodes::HirLocal,
+        location: &TextLocation,
+    ) -> Result<(), CompilerError> {
+        let block_index = self.block_index_or_error(block_id, location)?;
+        let local_index = self.module.blocks[block_index].locals.len();
+        self.local_index_by_id
+            .insert(local.id, (block_index, local_index));
+        self.module.blocks[block_index].locals.push(local);
+        Ok(())
+    }
+
+    pub(super) fn local_type_id_or_error(
+        &self,
+        local_id: LocalId,
+        location: &TextLocation,
+    ) -> Result<TypeId, CompilerError> {
+        let Some((block_index, local_index)) = self.local_index_by_id.get(&local_id).copied()
+        else {
+            return_hir_transformation_error!(
+                format!("Local {:?} is not registered in HIR blocks", local_id),
+                location.to_error_location(self.string_table)
+            );
+        };
+
+        Ok(self.module.blocks[block_index].locals[local_index].ty)
+    }
+
+    pub(super) fn field_type_id_or_error(
+        &self,
+        field_id: FieldId,
+        location: &TextLocation,
+    ) -> Result<TypeId, CompilerError> {
+        let Some((struct_index, field_index)) = self.field_index_by_id.get(&field_id).copied()
+        else {
+            return_hir_transformation_error!(
+                format!("Field {:?} is not registered in HIR structs", field_id),
+                location.to_error_location(self.string_table)
+            );
+        };
+
+        Ok(self.module.structs[struct_index].fields[field_index].ty)
     }
 
     pub(super) fn block_index_or_error(

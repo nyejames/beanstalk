@@ -54,35 +54,23 @@ use crate::compiler_frontend::tokenizer::tokens::TextLocation;
 // ============================================================
 // Stable IDs
 // ============================================================
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct HirNodeId(pub u32);
+macro_rules! define_hir_id {
+    ($name:ident) => {
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+        pub struct $name(pub u32);
+    };
+}
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct HirValueId(pub u32);
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct BlockId(pub u32);
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct LocalId(pub u32);
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct StructId(pub u32);
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct FieldId(pub u32);
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct FunctionId(pub u32);
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct RegionId(pub u32);
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct ConstStringId(pub u32);
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct HirConstId(pub u32);
+define_hir_id!(HirNodeId);
+define_hir_id!(HirValueId);
+define_hir_id!(BlockId);
+define_hir_id!(LocalId);
+define_hir_id!(StructId);
+define_hir_id!(FieldId);
+define_hir_id!(FunctionId);
+define_hir_id!(RegionId);
+define_hir_id!(ConstStringId);
+define_hir_id!(HirConstId);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum StartFragment {

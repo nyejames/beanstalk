@@ -64,45 +64,6 @@ struct MutableAccessPolicy {
     strict_move_exclusivity: bool,
 }
 
-// WHAT: Input bundle for constructing `SharedReadEnv`.
-// WHY: This keeps call sites readable while avoiding a wide helper signature.
-struct SharedReadEnvInputs<'a, 'module> {
-    context: &'a BorrowTransferContext<'module>,
-    layout: &'a FunctionLayout,
-    state: &'a BorrowState,
-    tracker: &'a mut StatementAccessTracker,
-    location: ErrorLocation,
-    current_order: i32,
-    stats: &'a mut BlockTransferStats,
-    value_fact_buffer: &'a mut ValueFactBuffer,
-}
-
-fn shared_read_env<'a, 'module>(
-    inputs: SharedReadEnvInputs<'a, 'module>,
-) -> SharedReadEnv<'a, 'module> {
-    let SharedReadEnvInputs {
-        context,
-        layout,
-        state,
-        tracker,
-        location,
-        current_order,
-        stats,
-        value_fact_buffer,
-    } = inputs;
-
-    SharedReadEnv {
-        context,
-        layout,
-        state,
-        tracker,
-        location,
-        current_order,
-        stats,
-        value_fact_buffer,
-    }
-}
-
 pub(super) fn transfer_statement(
     context: &BorrowTransferContext<'_>,
     layout: &FunctionLayout,
@@ -123,7 +84,7 @@ pub(super) fn transfer_statement(
             let location = context.diagnostics.statement_error_location(statement);
 
             {
-                let mut read_env = shared_read_env(SharedReadEnvInputs {
+                let mut read_env = SharedReadEnv {
                     context,
                     layout,
                     state,
@@ -132,11 +93,11 @@ pub(super) fn transfer_statement(
                     current_order: statement_order,
                     stats,
                     value_fact_buffer,
-                });
+                };
                 record_shared_reads_in_place_indices(&mut read_env, target, location.clone())?;
             }
             {
-                let mut read_env = shared_read_env(SharedReadEnvInputs {
+                let mut read_env = SharedReadEnv {
                     context,
                     layout,
                     state,
@@ -145,7 +106,7 @@ pub(super) fn transfer_statement(
                     current_order: statement_order,
                     stats,
                     value_fact_buffer,
-                });
+                };
                 record_shared_reads_in_expression(&mut read_env, value, location.clone())?;
             }
 
@@ -192,7 +153,7 @@ pub(super) fn transfer_statement(
                     // reads needed to evaluate projections (for example index expressions).
                     match &argument.kind {
                         HirExpressionKind::Load(place) => {
-                            let mut read_env = shared_read_env(SharedReadEnvInputs {
+                            let mut read_env = SharedReadEnv {
                                 context,
                                 layout,
                                 state,
@@ -201,7 +162,7 @@ pub(super) fn transfer_statement(
                                 current_order: statement_order,
                                 stats,
                                 value_fact_buffer,
-                            });
+                            };
                             record_shared_reads_in_place_indices(
                                 &mut read_env,
                                 place,
@@ -209,7 +170,7 @@ pub(super) fn transfer_statement(
                             )?;
                         }
                         _ => {
-                            let mut read_env = shared_read_env(SharedReadEnvInputs {
+                            let mut read_env = SharedReadEnv {
                                 context,
                                 layout,
                                 state,
@@ -218,7 +179,7 @@ pub(super) fn transfer_statement(
                                 current_order: statement_order,
                                 stats,
                                 value_fact_buffer,
-                            });
+                            };
                             record_shared_reads_in_expression(
                                 &mut read_env,
                                 argument,
@@ -227,7 +188,7 @@ pub(super) fn transfer_statement(
                         }
                     }
                 } else {
-                    let mut read_env = shared_read_env(SharedReadEnvInputs {
+                    let mut read_env = SharedReadEnv {
                         context,
                         layout,
                         state,
@@ -236,7 +197,7 @@ pub(super) fn transfer_statement(
                         current_order: statement_order,
                         stats,
                         value_fact_buffer,
-                    });
+                    };
                     record_shared_reads_in_expression(
                         &mut read_env,
                         argument,
@@ -434,7 +395,7 @@ pub(super) fn transfer_statement(
 
         HirStatementKind::Expr(expression) => {
             let location = context.diagnostics.statement_error_location(statement);
-            let mut read_env = shared_read_env(SharedReadEnvInputs {
+            let mut read_env = SharedReadEnv {
                 context,
                 layout,
                 state,
@@ -443,7 +404,7 @@ pub(super) fn transfer_statement(
                 current_order: statement_order,
                 stats,
                 value_fact_buffer,
-            });
+            };
             record_shared_reads_in_expression(&mut read_env, expression, location.clone())?;
         }
 
@@ -483,7 +444,7 @@ pub(super) fn transfer_terminator(
         HirTerminator::Jump { .. } => {}
 
         HirTerminator::If { condition, .. } => {
-            let mut read_env = shared_read_env(SharedReadEnvInputs {
+            let mut read_env = SharedReadEnv {
                 context,
                 layout,
                 state,
@@ -492,13 +453,13 @@ pub(super) fn transfer_terminator(
                 current_order: terminator_order,
                 stats,
                 value_fact_buffer,
-            });
+            };
             record_shared_reads_in_expression(&mut read_env, condition, location.clone())?;
         }
 
         HirTerminator::Match { scrutinee, arms } => {
             {
-                let mut read_env = shared_read_env(SharedReadEnvInputs {
+                let mut read_env = SharedReadEnv {
                     context,
                     layout,
                     state,
@@ -507,12 +468,12 @@ pub(super) fn transfer_terminator(
                     current_order: terminator_order,
                     stats,
                     value_fact_buffer,
-                });
+                };
                 record_shared_reads_in_expression(&mut read_env, scrutinee, location.clone())?;
             }
 
             for arm in arms {
-                let mut read_env = shared_read_env(SharedReadEnvInputs {
+                let mut read_env = SharedReadEnv {
                     context,
                     layout,
                     state,
@@ -521,13 +482,13 @@ pub(super) fn transfer_terminator(
                     current_order: terminator_order,
                     stats,
                     value_fact_buffer,
-                });
+                };
                 record_shared_reads_in_pattern(&mut read_env, arm)?;
             }
         }
 
         HirTerminator::Return(value) => {
-            let mut read_env = shared_read_env(SharedReadEnvInputs {
+            let mut read_env = SharedReadEnv {
                 context,
                 layout,
                 state,
@@ -536,13 +497,13 @@ pub(super) fn transfer_terminator(
                 current_order: terminator_order,
                 stats,
                 value_fact_buffer,
-            });
+            };
             record_shared_reads_in_expression(&mut read_env, value, location.clone())?;
         }
 
         HirTerminator::Panic { message } => {
             if let Some(message) = message {
-                let mut read_env = shared_read_env(SharedReadEnvInputs {
+                let mut read_env = SharedReadEnv {
                     context,
                     layout,
                     state,
@@ -551,7 +512,7 @@ pub(super) fn transfer_terminator(
                     current_order: terminator_order,
                     stats,
                     value_fact_buffer,
-                });
+                };
                 record_shared_reads_in_expression(&mut read_env, message, location.clone())?;
             }
         }

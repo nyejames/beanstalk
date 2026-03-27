@@ -146,10 +146,7 @@ impl<'a> HirBuilder<'a> {
                 source_info: Some(location.clone()),
             };
 
-            {
-                let block = self.block_mut_by_id_or_error(entry_block_id, location)?;
-                block.locals.push(local.clone());
-            }
+            self.register_local_in_block(entry_block_id, local.clone(), location)?;
 
             {
                 let function = self.function_mut_by_id_or_error(template_function_id, location)?;

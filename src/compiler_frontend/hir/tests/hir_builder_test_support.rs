@@ -42,9 +42,8 @@ impl<'a> HirBuilder<'a> {
 
     pub(crate) fn test_register_local_in_block(&mut self, local: HirLocal, name: InternedPath) {
         let current_block = self.current_block_id().unwrap_or(BlockId(0));
-        let _ = self
-            .block_mut_by_id_or_error(current_block, &TextLocation::default())
-            .map(|block| block.locals.push(local.clone()));
+        let _ =
+            self.register_local_in_block(current_block, local.clone(), &TextLocation::default());
 
         self.locals_by_name.insert(name.clone(), local.id);
         self.side_table.bind_local_name(local.id, name);
@@ -80,7 +79,7 @@ impl<'a> HirBuilder<'a> {
             self.reserve_field_id(field_id);
         }
 
-        self.module.structs.push(HirStruct {
+        self.push_struct(HirStruct {
             id: struct_id,
             fields: hir_fields,
         });
