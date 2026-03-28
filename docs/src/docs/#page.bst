@@ -9,7 +9,11 @@ import @styles/docs {navbar, title, section, palette, codeblock, theme_head}
 #[title, style.center: THE DOCS]
 
 #[section, $markdown:
-    [large: Welcome to the Beanstalk documentation] [img, @assets/seedling_icon.png: Beanstalk logo]
+    [large: Welcome to the Beanstalk documentation] 
+    [$todo: 
+        [$img, @assets/seedling_icon.png: Beanstalk logo]
+    ]
+    
 
     This website is built using Beanstalk's built in HTML project builder, and all the content you see here is written in Beanstalk code.
 

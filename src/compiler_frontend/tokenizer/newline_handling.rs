@@ -18,7 +18,7 @@ pub enum NewlineMode {
 
 /// Consume a newline that started with `\r`.
 ///
-/// Autoamtically handles both `\r\n` and bare `\r` newlines, 
+/// Automatically handles both `\r\n` and bare `\r` newlines, 
 /// and advances the stream position accordingly.
 /// Returns the appropriate newline string based on the specified `NewlineMode`.
 pub fn consume_carriage_return_newline(

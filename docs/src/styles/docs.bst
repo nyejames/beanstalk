@@ -168,6 +168,12 @@ import @lib/html {format}
     </pre>
 ]
 
+# codesnippet = [$html:
+    <pre style="padding: 0.5em; border-radius: 5px;">
+        [$slot]
+    </pre>
+]
+
 # title = [$html: <h1 style="font-size: 2em;[$slot("style")]">[$slot]</h1>]
 
 Palette = |
