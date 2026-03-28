@@ -9,6 +9,7 @@ use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 
 use crate::compiler_frontend::compiler_errors::ErrorLocation;
+use crate::compiler_frontend::tokenizer::newline_handling::NewlineMode;
 use crate::token_log;
 use std::cmp::Ordering;
 use std::iter::Peekable;
@@ -262,6 +263,7 @@ pub struct TokenStream<'a> {
     // keep code-specific state on the current template frame and pop it naturally
     // when that template closes.
     pub template_mode_stack: Vec<TemplateModeFrame>,
+    pub newline_mode: NewlineMode,
 }
 
 // WHAT: Metadata for one template nesting level in the tokenizer.
@@ -290,7 +292,7 @@ impl TemplateModeFrame {
 }
 
 impl<'a> TokenStream<'a> {
-    pub fn new(source_code: &'a str, file_path: &'a InternedPath, mode: TokenizeMode) -> Self {
+    pub fn new(source_code: &'a str, file_path: &'a InternedPath, mode: TokenizeMode, newline_mode: NewlineMode) -> Self {
         Self {
             file_path,
             chars: source_code.chars().peekable(),
@@ -298,6 +300,7 @@ impl<'a> TokenStream<'a> {
             start_position: Default::default(),
             mode,
             template_mode_stack: vec![TemplateModeFrame::new(mode)],
+            newline_mode,
         }
     }
 

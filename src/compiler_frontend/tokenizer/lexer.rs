@@ -43,7 +43,7 @@ pub fn tokenize(
     let initial_capacity = source_code.len() / settings::SRC_TO_TOKEN_RATIO;
 
     let mut tokens: Vec<Token> = Vec::with_capacity(initial_capacity);
-    let mut stream = TokenStream::new(source_code, src_path, mode);
+    let mut stream = TokenStream::new(source_code, src_path, mode, newline_mode);
 
     let mut token: Token = Token::new(TokenKind::ModuleStart, TextLocation::default());
 
@@ -55,7 +55,7 @@ pub fn tokenize(
         }
 
         tokens.push(token);
-        token = get_token_kind(&mut stream, style_directives, newline_mode, string_table)?;
+        token = get_token_kind(&mut stream, style_directives, string_table)?;
     }
 
     tokens.push(token);
@@ -71,7 +71,6 @@ pub fn tokenize(
 pub fn get_token_kind(
     mut stream: &mut TokenStream<'_>,
     style_directives: &StyleDirectiveRegistry,
-    newline_mode: NewlineMode,
     string_table: &mut StringTable,
 ) -> Result<Token, CompilerError> {
     let mut current_char = match stream.next() {
@@ -142,7 +141,7 @@ pub fn get_token_kind(
 
             return_token!(TokenKind::Newline, stream);
         } else if current_char == '\r' {
-            let _ = consume_carriage_return_newline(&mut stream, newline_mode);
+            let _ = consume_carriage_return_newline(&mut stream);
 
             while let Some(next_char) = stream.peek() {
                 if next_char.is_whitespace() {
@@ -381,7 +380,7 @@ pub fn get_token_kind(
             }
 
             // Do not add any token to the stream, call this function again
-            return get_token_kind(stream, style_directives, newline_mode, string_table);
+            return get_token_kind(stream, style_directives, string_table);
         }
 
         // Subtraction / Negative / Return / Subtract Assign
@@ -786,6 +785,13 @@ fn tokenize_string(
             return_token!(TokenKind::StringSliceLiteral(interned_string), stream);
         }
 
+        // Check for carage returns (Windows Compatibility)
+        if ch == '\r' {
+            let normalized_char = consume_carriage_return_newline(stream);
+            token_value.push_str(normalized_char);
+            continue;
+        }
+
         token_value.push(ch);
     }
 
@@ -811,24 +817,35 @@ fn tokenize_template_body(
 
     // Currently should be at the character that started the String
     while let Some(ch) = stream.peek() {
-        // Check for escape characters
-        if ch == &'\\' {
-            stream.next();
-
-            if let Some(next_char) = stream.next() {
-                token_value.push(next_char);
+        match ch {
+            // Check for escape characters
+            &'\\' => {
+                stream.next();
+                if let Some(next_char) = stream.next() {
+                    token_value.push(next_char);
+                }
             }
-        } else if ch == &'[' || ch == &']' {
-            let interned_string = string_table.intern(&token_value);
-            return_token!(TokenKind::StringSliceLiteral(interned_string), stream);
-        }
 
-        // Should always be a valid char
-        token_value.push(
-            stream
-                .next()
-                .expect("string tokenization loop should only consume available characters"),
-        );
+            // Starts or ends template
+            &'[' | &']' => {
+                let interned_string = string_table.intern(&token_value);
+                return_token!(TokenKind::StringSliceLiteral(interned_string), stream);
+            }
+
+            // Needs to be normalized for windows compatibility
+            '\r' => {
+                let normalized_char = consume_carriage_return_newline(stream);
+                token_value.push_str(normalized_char);
+            }
+
+            _=> {
+                token_value.push(
+                    stream
+                        .next()
+                        .expect("string tokenization loop should only consume available characters"),
+                );
+            }
+        }
     }
 
     let interned_string = string_table.intern(&token_value);
@@ -877,6 +894,11 @@ fn append_code_template_body_char(
     match ch {
         '[' => stream.register_template_body_open_square_bracket(),
         ']' => stream.register_template_body_close_square_bracket(),
+        '\r' => {
+            let normalized_char = consume_carriage_return_newline(stream);
+            token_value.push_str(normalized_char);
+            return;
+        }
         _ => {}
     }
 

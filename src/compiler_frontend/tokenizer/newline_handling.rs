@@ -23,7 +23,6 @@ pub enum NewlineMode {
 /// Returns the appropriate newline string based on the specified `NewlineMode`.
 pub fn consume_carriage_return_newline(
     stream: &mut TokenStream,
-    mode: NewlineMode,
 ) -> &'static str {
     // Consume the \r and move past it in the stream
     // Not invoking stream.next() here so column isn't advanced
@@ -39,7 +38,7 @@ pub fn consume_carriage_return_newline(
         stream.position.char_column = 0;
     }
 
-    match mode {
+    match stream.newline_mode {
         NewlineMode::NormalizeToLf => "\n",
         NewlineMode::PreserveRaw => if has_following_lf { "\r\n" } else { "\r" },
     }
