@@ -1,3 +1,4 @@
+use crate::compiler_frontend::basic_utility_functions::normalize_path;
 use crate::compiler_frontend::compiler_errors::{
     CompilerError, CompilerMessages, ErrorMetaDataKey, ErrorType,
 };
@@ -6,18 +7,9 @@ use saying::say;
 use std::path::{Path, PathBuf};
 use std::{env, fs};
 
-pub(crate) fn normalize_display_path(path: &Path) -> PathBuf {
-    let path_string = path.to_string_lossy();
-    if let Some(stripped) = path_string.strip_prefix(r"\\?\") {
-        return PathBuf::from(stripped);
-    }
-
-    path.to_path_buf()
-}
-
 pub(crate) fn relative_display_path_from_root(scope: &Path, root: &Path) -> String {
-    let normalized_scope = normalize_display_path(scope);
-    let normalized_root = normalize_display_path(root);
+    let normalized_scope = normalize_path(scope);
+    let normalized_root = normalize_path(root);
 
     normalized_scope
         .strip_prefix(&normalized_root)
@@ -34,13 +26,13 @@ fn relative_display_path(scope: &Path) -> String {
                 "Compiler failed to find the file to give you the snippet. Another compiler_frontend developer skill issue. ",
                 err
             );
-            normalize_display_path(scope).to_string_lossy().to_string()
+            normalize_path(scope).to_string_lossy().to_string()
         }
     }
 }
 
 pub(crate) fn resolve_source_file_path(scope: &Path) -> PathBuf {
-    let mut source_file = normalize_display_path(scope);
+    let mut source_file = normalize_path(scope);
 
     // Header diagnostics use a synthetic "file.bst/header_name.header" scope so the terminal and
     // dev-server error pages both need to strip that suffix back to the original source file.
@@ -56,7 +48,7 @@ pub(crate) fn resolve_source_file_path(scope: &Path) -> PathBuf {
     }
 
     match fs::canonicalize(&source_file) {
-        Ok(canonical_path) => normalize_display_path(&canonical_path),
+        Ok(canonical_path) => normalize_path(&canonical_path),
         Err(_) => source_file,
     }
 }

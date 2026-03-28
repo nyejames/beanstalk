@@ -1,4 +1,6 @@
 //! Tests for the core build orchestration and output writer APIs.
+// NOTE: temp file creation processes have to be explicitly dropped
+// Or these tests will fail on Windows due to attempts to delete non-empty temp directories while files are still open.
 
 use super::{
     BackendBuilder, CleanupPolicy, FileKind, OutputFile, Project, ProjectBuilder, WriteOptions,
@@ -359,15 +361,18 @@ fn build_single_file_project_includes_reachable_import_files() {
         "#greet||:\n    io(\"hello\")\n;\n",
     )
     .expect("should write helper file");
-    let _cwd_guard = CurrentDirGuard::set_to(&root);
 
-    let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
-    let result = build_project(&builder, "main.bst", &[]).expect("build should succeed");
+    {
+        let _cwd_guard = CurrentDirGuard::set_to(&root);
 
-    assert!(
-        !result.project.output_files.is_empty(),
-        "single-file build should compile reachable imported files"
-    );
+        let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
+        let result = build_project(&builder, "main.bst", &[]).expect("build should succeed");
+
+        assert!(
+            !result.project.output_files.is_empty(),
+            "single-file build should compile reachable imported files"
+        );
+    }
 
     fs::remove_dir_all(&root).expect("should remove temp dir");
 }
@@ -484,22 +489,26 @@ fn build_project_preserves_builder_warnings_in_build_result() {
     let root = temp_dir("warnings");
     fs::create_dir_all(&root).expect("should create temp root");
     fs::write(root.join("main.bst"), "value = 1\n").expect("should write source file");
-    let _cwd_guard = CurrentDirGuard::set_to(&root);
 
-    let result = build_project(
-        &ProjectBuilder::new(Box::new(WarningBuilder)),
-        "main.bst",
-        &[],
-    )
-    .expect("build should succeed");
+    {
+        let _cwd_guard = CurrentDirGuard::set_to(&root);
 
-    assert!(
-        result
-            .warnings
-            .iter()
-            .any(|warning| warning.msg == "builder warning"),
-        "build result should include backend warnings"
-    );
+        let result = build_project(
+            &ProjectBuilder::new(Box::new(WarningBuilder)),
+            "main.bst",
+            &[],
+        )
+        .expect("build should succeed");
+
+        assert!(
+            result
+                .warnings
+                .iter()
+                .any(|warning| warning.msg == "builder warning"),
+            "build result should include backend warnings"
+        );
+    }
+    
 
     fs::remove_dir_all(&root).expect("should remove temp dir");
 }
@@ -509,27 +518,28 @@ fn build_project_calls_validate_project_config() {
     let root = temp_dir("validation_tracking");
     fs::create_dir_all(&root).expect("should create temp root");
     fs::write(root.join("main.bst"), "value = 1\n").expect("should write source file");
-    let _cwd_guard = CurrentDirGuard::set_to(&root);
+    {
+        let _cwd_guard = CurrentDirGuard::set_to(&root);
 
-    let validated = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
-    let built = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let validated = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let built = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
 
-    let builder = ProjectBuilder::new(Box::new(ValidationTrackingBuilder {
-        validated: validated.clone(),
-        built: built.clone(),
-    }));
+        let builder = ProjectBuilder::new(Box::new(ValidationTrackingBuilder {
+            validated: validated.clone(),
+            built: built.clone(),
+        }));
 
-    build_project(&builder, "main.bst", &[]).expect("build should succeed");
+        build_project(&builder, "main.bst", &[]).expect("build should succeed");
 
-    assert!(
-        validated.load(std::sync::atomic::Ordering::SeqCst),
-        "build_project should call validate_project_config"
-    );
-    assert!(
-        built.load(std::sync::atomic::Ordering::SeqCst),
-        "build_project should call build_backend"
-    );
-
+        assert!(
+            validated.load(std::sync::atomic::Ordering::SeqCst),
+            "build_project should call validate_project_config"
+        );
+        assert!(
+            built.load(std::sync::atomic::Ordering::SeqCst),
+            "build_project should call build_backend"
+        );
+    }
     fs::remove_dir_all(&root).expect("should remove temp dir");
 }
 
@@ -539,17 +549,19 @@ fn config_validation_failure_returns_config_error_before_compilation() {
     fs::create_dir_all(&root).expect("should create temp root");
     // Invalid frontend syntax to prove it fails BEFORE frontend compilation
     fs::write(root.join("main.bst"), "invalid syntax;;;;;").expect("should write source file");
-    let _cwd_guard = CurrentDirGuard::set_to(&root);
+    {
+        let _cwd_guard = CurrentDirGuard::set_to(&root);
 
-    let builder = ProjectBuilder::new(Box::new(FailingValidationBuilder));
-    let result = build_project(&builder, "main.bst", &[]);
+        let builder = ProjectBuilder::new(Box::new(FailingValidationBuilder));
+        let result = build_project(&builder, "main.bst", &[]);
 
-    let messages = match result {
-        Err(messages) => messages,
-        Ok(_) => panic!("build_project should fail when config validation fails"),
-    };
-    assert_eq!(messages.errors[0].msg, "Fake config error");
-    assert_eq!(messages.errors[0].error_type, ErrorType::Config);
+        let messages = match result {
+            Err(messages) => messages,
+            Ok(_) => panic!("build_project should fail when config validation fails"),
+        };
+        assert_eq!(messages.errors[0].msg, "Fake config error");
+        assert_eq!(messages.errors[0].error_type, ErrorType::Config);
+    }
 
     fs::remove_dir_all(&root).expect("should remove temp dir");
 }
@@ -563,28 +575,31 @@ fn build_project_emits_runtime_fragment_with_captured_start_local() {
         "get_name|| -> String:\n    return \"Beanstalk\"\n;\nname = get_name()\n[:Hello [name]]\n",
     )
     .expect("should write source file");
-    let _cwd_guard = CurrentDirGuard::set_to(&root);
 
-    let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
-    let build_result = build_project(&builder, "main.bst", &[]).expect("build should succeed");
+    {
+        let _cwd_guard = CurrentDirGuard::set_to(&root);
 
-    let html = match build_result.project.output_files[0].file_kind() {
-        FileKind::Html(content) => content,
-        other => panic!(
-            "expected HTML output, got {:?}",
-            std::mem::discriminant(other)
-        ),
-    };
+        let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
+        let build_result = build_project(&builder, "main.bst", &[]).expect("build should succeed");
 
-    assert!(html.contains("<div id=\"bst-slot-0\"></div>"));
-    assert!(
-        html.contains("__bst_frag_0"),
-        "runtime fragment function should be emitted and bootstrapped"
-    );
-    assert!(
-        html.contains("Beanstalk"),
-        "captured start-local value should be preserved in generated fragment code"
-    );
+        let html = match build_result.project.output_files[0].file_kind() {
+            FileKind::Html(content) => content,
+            other => panic!(
+                "expected HTML output, got {:?}",
+                std::mem::discriminant(other)
+            ),
+        };
+
+        assert!(html.contains("<div id=\"bst-slot-0\"></div>"));
+        assert!(
+            html.contains("__bst_frag_0"),
+            "runtime fragment function should be emitted and bootstrapped"
+        );
+        assert!(
+            html.contains("Beanstalk"),
+            "captured start-local value should be preserved in generated fragment code"
+        );
+    }
 
     fs::remove_dir_all(&root).expect("should remove temp dir");
 }
@@ -598,30 +613,33 @@ fn build_project_preserves_const_and_runtime_fragment_order() {
         "#[:<meta charset=\"utf-8\">]\nname = \"Beanstalk\"\n[:<title>[name]</title>]\n",
     )
     .expect("should write source file");
-    let _cwd_guard = CurrentDirGuard::set_to(&root);
 
-    let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
-    let build_result = build_project(&builder, "main.bst", &[]).expect("build should succeed");
+    {
+        let _cwd_guard = CurrentDirGuard::set_to(&root);
 
-    let html = match build_result.project.output_files[0].file_kind() {
-        FileKind::Html(content) => content,
-        other => panic!(
-            "expected HTML output, got {:?}",
-            std::mem::discriminant(other)
-        ),
-    };
+        let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
+        let build_result = build_project(&builder, "main.bst", &[]).expect("build should succeed");
 
-    let const_index = html
-        .find("<meta charset=\"utf-8\">")
-        .expect("const fragment should be inlined");
-    let slot_index = html
-        .find("<div id=\"bst-slot-0\"></div>")
-        .expect("runtime fragment slot should be emitted");
+        let html = match build_result.project.output_files[0].file_kind() {
+            FileKind::Html(content) => content,
+            other => panic!(
+                "expected HTML output, got {:?}",
+                std::mem::discriminant(other)
+            ),
+        };
 
-    assert!(
-        const_index < slot_index,
-        "const fragment should appear before runtime slot in source order"
-    );
+        let const_index = html
+            .find("<meta charset=\"utf-8\">")
+            .expect("const fragment should be inlined");
+        let slot_index = html
+            .find("<div id=\"bst-slot-0\"></div>")
+            .expect("runtime fragment slot should be emitted");
+
+        assert!(
+            const_index < slot_index,
+            "const fragment should appear before runtime slot in source order"
+        );
+    }
 
     fs::remove_dir_all(&root).expect("should remove temp dir");
 }
@@ -891,14 +909,20 @@ fn build_project_allows_const_record_coercion_with_all_defaults() {
         "Basic = |\n    body String = \"ok\",\n|\n#basic = Basic()\n",
     )
     .expect("should write source file");
-    let _cwd_guard = CurrentDirGuard::set_to(&root);
+    
+    // Explictly dropping the build result here to ensure all references to builder are released before we remove the temp dir
+    // This fixed a mutex poisoning bug specifically on Windows
+    {
+        let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
 
-    let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
-    let result = build_project(&builder, "main.bst", &[]);
-    assert!(
-        result.is_ok(),
-        "const struct coercion with defaults should compile"
-    );
+        let _cwd_guard = CurrentDirGuard::set_to(&root);
+
+        let result = build_project(&builder, "main.bst", &[]);
+        assert!(
+            result.is_ok(),
+            "const struct coercion with defaults should compile"
+        );
+    } // everything dropped here
 
     fs::remove_dir_all(&root).expect("should remove temp dir");
 }
@@ -912,14 +936,17 @@ fn build_project_allows_const_record_coercion_with_constant_arguments() {
         "Basic = |\n    body String = \"default\",\n    color String = \"red\",\n|\n#label = \"Docs\"\n#basic = Basic(label, \"green\")\n",
     )
     .expect("should write source file");
-    let _cwd_guard = CurrentDirGuard::set_to(&root);
+    {
+        let _cwd_guard = CurrentDirGuard::set_to(&root);
 
-    let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
-    let result = build_project(&builder, "main.bst", &[]);
-    assert!(
-        result.is_ok(),
-        "const struct coercion with constant arguments should compile"
-    );
+        let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
+        let result = build_project(&builder, "main.bst", &[]);
+        assert!(
+            result.is_ok(),
+            "const struct coercion with constant arguments should compile"
+        );
+
+    }
 
     fs::remove_dir_all(&root).expect("should remove temp dir");
 }
@@ -933,24 +960,27 @@ fn build_project_runtime_struct_constructor_supports_partial_defaults() {
         "Point = |\n    x Int,\n    y Int = 99,\n|\npoint = Point(5)\nio([: point.y])\n",
     )
     .expect("should write source file");
-    let _cwd_guard = CurrentDirGuard::set_to(&root);
 
-    let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
-    let build_result = build_project(&builder, "main.bst", &[])
-        .expect("runtime struct constructor with defaults should compile");
+    {
+        let _cwd_guard = CurrentDirGuard::set_to(&root);
 
-    let html = match build_result.project.output_files[0].file_kind() {
-        FileKind::Html(content) => content,
-        other => panic!(
-            "expected HTML output, got {:?}",
-            std::mem::discriminant(other)
-        ),
-    };
-    assert!(
-        html.contains("99"),
-        "runtime constructor should include the struct default value in emitted output"
-    );
+        let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
+        let build_result = build_project(&builder, "main.bst", &[])
+            .expect("runtime struct constructor with defaults should compile");
 
+        let html = match build_result.project.output_files[0].file_kind() {
+            FileKind::Html(content) => content,
+            other => panic!(
+                "expected HTML output, got {:?}",
+                std::mem::discriminant(other)
+            ),
+        };
+        assert!(
+            html.contains("99"),
+            "runtime constructor should include the struct default value in emitted output"
+        );
+    }
+    
     fs::remove_dir_all(&root).expect("should remove temp dir");
 }
 
@@ -963,23 +993,26 @@ fn build_project_struct_default_uses_same_file_constant_declared_later() {
         "Card = |\n    color String = base + \"!\",\n|\n#base = \"red\"\ncard = Card()\nio([: card.color])\n",
     )
     .expect("should write source file");
-    let _cwd_guard = CurrentDirGuard::set_to(&root);
 
-    let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
-    let build_result = build_project(&builder, "main.bst", &[])
-        .expect("struct default should resolve same-file constants declared later");
+    {
+        let _cwd_guard = CurrentDirGuard::set_to(&root);
 
-    let html = match build_result.project.output_files[0].file_kind() {
-        FileKind::Html(content) => content,
-        other => panic!(
-            "expected HTML output, got {:?}",
-            std::mem::discriminant(other)
-        ),
-    };
-    assert!(
-        html.contains("red!"),
-        "forward constant dependency should be sorted before struct parsing and fold into one value",
-    );
+        let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
+        let build_result = build_project(&builder, "main.bst", &[])
+            .expect("struct default should resolve same-file constants declared later");
+
+        let html = match build_result.project.output_files[0].file_kind() {
+            FileKind::Html(content) => content,
+            other => panic!(
+                "expected HTML output, got {:?}",
+                std::mem::discriminant(other)
+            ),
+        };
+        assert!(
+            html.contains("red!"),
+            "forward constant dependency should be sorted before struct parsing and fold into one value",
+        );
+    }
 
     fs::remove_dir_all(&root).expect("should remove temp dir");
 }
@@ -993,23 +1026,26 @@ fn build_project_constant_can_reference_same_file_struct_declared_later() {
         "#basic = Basic()\nBasic = |\n    body String = \"ok\",\n|\nio([: basic.body])\n",
     )
     .expect("should write source file");
-    let _cwd_guard = CurrentDirGuard::set_to(&root);
 
-    let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
-    let build_result = build_project(&builder, "main.bst", &[])
-        .expect("constant should resolve same-file struct declared later");
+    {
+        let _cwd_guard = CurrentDirGuard::set_to(&root);
 
-    let html = match build_result.project.output_files[0].file_kind() {
-        FileKind::Html(content) => content,
-        other => panic!(
-            "expected HTML output, got {:?}",
-            std::mem::discriminant(other)
-        ),
-    };
-    assert!(
-        !html.is_empty(),
-        "build output should still be produced when constant references forward-declared struct"
-    );
+        let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
+        let build_result = build_project(&builder, "main.bst", &[])
+            .expect("constant should resolve same-file struct declared later");
+
+        let html = match build_result.project.output_files[0].file_kind() {
+            FileKind::Html(content) => content,
+            other => panic!(
+                "expected HTML output, got {:?}",
+                std::mem::discriminant(other)
+            ),
+        };
+        assert!(
+            !html.is_empty(),
+            "build output should still be produced when constant references forward-declared struct"
+        );
+    }
 
     fs::remove_dir_all(&root).expect("should remove temp dir");
 }
@@ -1023,23 +1059,25 @@ fn build_project_typed_constant_template_head_can_reference_prior_constant() {
         "# page String = [: world]\n# test = [page: Hello ]\nio(test)\n",
     )
     .expect("should write source file");
-    let _cwd_guard = CurrentDirGuard::set_to(&root);
+    {    
+        let _cwd_guard = CurrentDirGuard::set_to(&root);
 
-    let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
-    let build_result = build_project(&builder, "main.bst", &[])
-        .expect("typed constant should remain visible to later constants");
+        let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
+        let build_result = build_project(&builder, "main.bst", &[])
+            .expect("typed constant should remain visible to later constants");
 
-    let html = match build_result.project.output_files[0].file_kind() {
-        FileKind::Html(content) => content,
-        other => panic!(
-            "expected HTML output, got {:?}",
-            std::mem::discriminant(other)
-        ),
-    };
-    assert!(
-        html.contains("world Hello"),
-        "typed constant reference in template head should compile and render expected output"
-    );
+        let html = match build_result.project.output_files[0].file_kind() {
+            FileKind::Html(content) => content,
+            other => panic!(
+                "expected HTML output, got {:?}",
+                std::mem::discriminant(other)
+            ),
+        };
+        assert!(
+            html.contains("world Hello"),
+            "typed constant reference in template head should compile and render expected output"
+        );
+    }
 
     fs::remove_dir_all(&root).expect("should remove temp dir");
 }
@@ -1053,23 +1091,25 @@ fn build_project_const_struct_template_field_can_fill_template_slots() {
         "Basic = |\n    page String = [:<section>[$slot]</section>],\n|\n#basic = Basic()\n#[basic.page: Hello world]\n",
     )
     .expect("should write source file");
-    let _cwd_guard = CurrentDirGuard::set_to(&root);
 
-    let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
-    let build_result = build_project(&builder, "main.bst", &[])
-        .expect("const struct template field should remain foldable in const template heads");
+    {
+        let _cwd_guard = CurrentDirGuard::set_to(&root);
+        let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
+        let build_result = build_project(&builder, "main.bst", &[])
+            .expect("const struct template field should remain foldable in const template heads");
 
-    let html = match build_result.project.output_files[0].file_kind() {
-        FileKind::Html(content) => content,
-        other => panic!(
-            "expected HTML output, got {:?}",
-            std::mem::discriminant(other)
-        ),
-    };
-    assert!(
-        html.contains("<section>") && html.contains("Hello world") && html.contains("</section>"),
-        "const struct wrapper field should compose slot content in place",
-    );
+        let html = match build_result.project.output_files[0].file_kind() {
+            FileKind::Html(content) => content,
+            other => panic!(
+                "expected HTML output, got {:?}",
+                std::mem::discriminant(other)
+            ),
+        };
+        assert!(
+            html.contains("<section>") && html.contains("Hello world") && html.contains("</section>"),
+            "const struct wrapper field should compose slot content in place",
+        );
+    }
 
     fs::remove_dir_all(&root).expect("should remove temp dir");
 }
@@ -1083,23 +1123,26 @@ fn build_project_const_slot_insertion_constant_is_composed_at_use_site() {
         "#wrapper = [:<section>[$slot(\"content\")]</section>]\n#slot_1 = [$insert(\"content\"): Hello world]\n#[wrapper, slot_1]\n",
     )
     .expect("should write source file");
-    let _cwd_guard = CurrentDirGuard::set_to(&root);
+    {
+        let _cwd_guard = CurrentDirGuard::set_to(&root);
 
-    let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
-    let build_result = build_project(&builder, "main.bst", &[])
-        .expect("slot insertion constants should fold when consumed by wrapper templates");
+        let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
+        let build_result = build_project(&builder, "main.bst", &[])
+            .expect("slot insertion constants should fold when consumed by wrapper templates");
 
-    let html = match build_result.project.output_files[0].file_kind() {
-        FileKind::Html(content) => content,
-        other => panic!(
-            "expected HTML output, got {:?}",
-            std::mem::discriminant(other)
-        ),
-    };
-    assert!(
-        html.contains("<section>") && html.contains("Hello world") && html.contains("</section>"),
-        "slot insertion constant should be resolved at the wrapper use-site",
-    );
+        let html = match build_result.project.output_files[0].file_kind() {
+            FileKind::Html(content) => content,
+            other => panic!(
+                "expected HTML output, got {:?}",
+                std::mem::discriminant(other)
+            ),
+        };
+        assert!(
+            html.contains("<section>") && html.contains("Hello world") && html.contains("</section>"),
+            "slot insertion constant should be resolved at the wrapper use-site",
+        );
+
+    }
 
     fs::remove_dir_all(&root).expect("should remove temp dir");
 }
@@ -1136,31 +1179,35 @@ fn build_project_const_top_level_header_with_unfilled_named_slots_folds_to_empty
 "#,
     )
     .expect("should write source file");
-    let _cwd_guard = CurrentDirGuard::set_to(&root);
 
-    let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
-    let build_result = build_project(&builder, "main.bst", &[])
-        .expect("top-level const wrappers should fold even when named slots are unfilled");
+    {
+        let _cwd_guard = CurrentDirGuard::set_to(&root);
 
-    let html = match build_result.project.output_files[0].file_kind() {
-        FileKind::Html(content) => content,
-        other => panic!(
-            "expected HTML output, got {:?}",
-            std::mem::discriminant(other)
-        ),
-    };
-    assert!(
-        html.contains("rel=\"icon\"") && html.contains("href=\"\""),
-        "unfilled named slots should render as empty strings instead of failing compile-time folding",
-    );
-    assert!(
-        html.contains("<meta charset=\"UTF-8\">"),
-        "expected folded header content to remain present in output",
-    );
-    assert!(
-        !html.contains("$slot(") && !html.contains("$insert("),
-        "slot markers should not leak into folded output",
-    );
+        let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
+        let build_result = build_project(&builder, "main.bst", &[])
+            .expect("top-level const wrappers should fold even when named slots are unfilled");
+
+        let html = match build_result.project.output_files[0].file_kind() {
+            FileKind::Html(content) => content,
+            other => panic!(
+                "expected HTML output, got {:?}",
+                std::mem::discriminant(other)
+            ),
+        };
+        assert!(
+            html.contains("rel=\"icon\"") && html.contains("href=\"\""),
+            "unfilled named slots should render as empty strings instead of failing compile-time folding",
+        );
+        assert!(
+            html.contains("<meta charset=\"UTF-8\">"),
+            "expected folded header content to remain present in output",
+        );
+        assert!(
+            !html.contains("$slot(") && !html.contains("$insert("),
+            "slot markers should not leak into folded output",
+        );
+
+    }
 
     fs::remove_dir_all(&root).expect("should remove temp dir");
 }
@@ -1174,25 +1221,27 @@ fn build_project_rejects_slot_insertion_constant_without_active_wrapper() {
         "#slot_1 = [$insert(\"content\"): hello]\n#[slot_1]\n",
     )
     .expect("should write source file");
-    let _cwd_guard = CurrentDirGuard::set_to(&root);
+    {
+        let _cwd_guard = CurrentDirGuard::set_to(&root);
 
-    let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
-    let result = build_project(&builder, "main.bst", &[]);
-    assert!(
-        result.is_err(),
-        "slot insertion constants should fail when used outside wrapper composition",
-    );
-    let messages = match result {
-        Err(messages) => messages,
-        Ok(_) => unreachable!("assert above guarantees this is an error"),
-    };
+        let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
+        let result = build_project(&builder, "main.bst", &[]);
+        assert!(
+            result.is_err(),
+            "slot insertion constants should fail when used outside wrapper composition",
+        );
+        let messages = match result {
+            Err(messages) => messages,
+            Ok(_) => unreachable!("assert above guarantees this is an error"),
+        };
 
-    assert!(
-        messages.errors.iter().any(|error| error.msg.contains(
-            "'$insert(...)' can only be used while filling an immediate parent template"
-        )),
-        "expected a targeted slot insertion usage diagnostic",
-    );
+        assert!(
+            messages.errors.iter().any(|error| error.msg.contains(
+                "'$insert(...)' can only be used while filling an immediate parent template"
+            )),
+            "expected a targeted slot insertion usage diagnostic",
+        );
+    }
 
     fs::remove_dir_all(&root).expect("should remove temp dir");
 }
@@ -1211,25 +1260,27 @@ fn build_project_const_slot_children_wrap_table_rows_and_cells_without_cross_app
         "import @libs/html {table}\n[table:\n    [: [:Type] [:Description] ]\n    [: [:float] [:64 bit floating point number] ]\n]\n",
     )
     .expect("should write source file");
-    let _cwd_guard = CurrentDirGuard::set_to(&root);
 
-    let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
-    let build_result = build_project(&builder, "main.bst", &[])
-        .expect("slot child wrapper tables should build successfully");
+    {
+        let _cwd_guard = CurrentDirGuard::set_to(&root);
+        let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
+        let build_result = build_project(&builder, "main.bst", &[])
+            .expect("slot child wrapper tables should build successfully");
 
-    let html = match build_result.project.output_files[0].file_kind() {
-        FileKind::Html(content) => content,
-        other => panic!(
-            "expected HTML output, got {:?}",
-            std::mem::discriminant(other)
-        ),
-    };
+        let html = match build_result.project.output_files[0].file_kind() {
+            FileKind::Html(content) => content,
+            other => panic!(
+                "expected HTML output, got {:?}",
+                std::mem::discriminant(other)
+            ),
+        };
 
-    assert_eq!(html.matches("<tr>").count(), 2);
-    assert!(html.contains("<td>Type</td>"));
-    assert!(html.contains("<td>Description</td>"));
-    assert!(html.contains("<td>float</td>"));
-    assert_eq!(html.matches("<td>").count(), 4);
+        assert_eq!(html.matches("<tr>").count(), 2);
+        assert!(html.contains("<td>Type</td>"));
+        assert!(html.contains("<td>Description</td>"));
+        assert!(html.contains("<td>float</td>"));
+        assert_eq!(html.matches("<td>").count(), 4);
+    }
 
     fs::remove_dir_all(&root).expect("should remove temp dir");
 }
@@ -1254,26 +1305,30 @@ fn build_project_markdown_page_reexported_table_keeps_rows_and_cells_inside_tabl
         "import @styles/docs {page, table}\n[page, $markdown:\n[table:\n    [: [:Type] [:Description] ]\n    [: [:float] [:64 bit floating point number] ]\n]\n]\n",
     )
     .expect("should write source file");
-    let _cwd_guard = CurrentDirGuard::set_to(&root);
 
-    let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
-    let build_result = build_project(&builder, "main.bst", &[])
-        .expect("markdown page with re-exported table should build successfully");
+    {
+        let _cwd_guard = CurrentDirGuard::set_to(&root);
 
-    let html = match build_result.project.output_files[0].file_kind() {
-        FileKind::Html(content) => content,
-        other => panic!(
-            "expected HTML output, got {:?}",
-            std::mem::discriminant(other)
-        ),
-    };
+        let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
+        let build_result = build_project(&builder, "main.bst", &[])
+            .expect("markdown page with re-exported table should build successfully");
 
-    assert!(!html.contains('\u{FFFC}'));
-    assert_eq!(html.matches("<tr>").count(), 2);
-    assert!(html.contains("<td>Type</td>"));
-    assert!(html.contains("<td>Description</td>"));
-    assert_eq!(html.matches("<td>").count(), 4);
-    assert!(!html.contains("<p>"));
+        let html = match build_result.project.output_files[0].file_kind() {
+            FileKind::Html(content) => content,
+            other => panic!(
+                "expected HTML output, got {:?}",
+                std::mem::discriminant(other)
+            ),
+        };
+
+        assert!(!html.contains('\u{FFFC}'));
+        assert_eq!(html.matches("<tr>").count(), 2);
+        assert!(html.contains("<td>Type</td>"));
+        assert!(html.contains("<td>Description</td>"));
+        assert_eq!(html.matches("<td>").count(), 4);
+        assert!(!html.contains("<p>"));
+    }
+    
 
     fs::remove_dir_all(&root).expect("should remove temp dir");
 }
@@ -1352,33 +1407,35 @@ fn build_project_markdown_docs_row_wrappers_render_plain_cells_and_headers() {
         "import @styles/docs {page, table, row, header_row}\n[page, $markdown:\n[table:\n    [header_row: [: Type] [: Description] ]\n\n    [row: [: float ] [: 64 bit floating point number] ]\n\n    [row: [: int ] [:  64 bit signed integer ] ]\n]\n]\n",
     )
     .expect("should write source file");
-    let _cwd_guard = CurrentDirGuard::set_to(&root);
+    {        
+        let _cwd_guard = CurrentDirGuard::set_to(&root);
 
-    let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
-    let build_result = build_project(&builder, "main.bst", &[])
-        .expect("markdown docs-style row wrappers should build successfully");
+        let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
+        let build_result = build_project(&builder, "main.bst", &[])
+            .expect("markdown docs-style row wrappers should build successfully");
 
-    let html = match build_result.project.output_files[0].file_kind() {
-        FileKind::Html(content) => content,
-        other => panic!(
-            "expected HTML output, got {:?}",
-            std::mem::discriminant(other)
-        ),
-    };
+        let html = match build_result.project.output_files[0].file_kind() {
+            FileKind::Html(content) => content,
+            other => panic!(
+                "expected HTML output, got {:?}",
+                std::mem::discriminant(other)
+            ),
+        };
 
-    assert!(!html.contains('\u{FFFC}'));
-    assert!(html.contains("border-collapse: collapse; border: 1px solid; padding: 0.5em;"));
-    assert_eq!(
-        html.matches("<th style=\"border: 1px solid; padding: 0.5em; text-align: left;\">")
-            .count(),
-        2
-    );
-    assert_eq!(html.matches("<td>").count(), 4);
-    assert!(html.contains("Type</th>"));
-    assert!(html.contains("Description</th>"));
-    assert!(html.contains("float"));
-    assert!(html.contains("64 bit floating point number"));
-    assert!(!html.contains("<p>"));
+        assert!(!html.contains('\u{FFFC}'));
+        assert!(html.contains("border-collapse: collapse; border: 1px solid; padding: 0.5em;"));
+        assert_eq!(
+            html.matches("<th style=\"border: 1px solid; padding: 0.5em; text-align: left;\">")
+                .count(),
+            2
+        );
+        assert_eq!(html.matches("<td>").count(), 4);
+        assert!(html.contains("Type</th>"));
+        assert!(html.contains("Description</th>"));
+        assert!(html.contains("float"));
+        assert!(html.contains("64 bit floating point number"));
+        assert!(!html.contains("<p>"));
+    }
 
     fs::remove_dir_all(&root).expect("should remove temp dir");
 }
@@ -1394,23 +1451,25 @@ fn build_project_struct_default_uses_imported_constant() {
     .expect("should write main source file");
     fs::write(root.join("styles/theme.bst"), "#base = \"green\"\n")
         .expect("should write imported constant source file");
-    let _cwd_guard = CurrentDirGuard::set_to(&root);
+    {    
+        let _cwd_guard = CurrentDirGuard::set_to(&root);
 
-    let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
-    let build_result = build_project(&builder, "main.bst", &[])
-        .expect("struct default should resolve imported constants");
+        let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
+        let build_result = build_project(&builder, "main.bst", &[])
+            .expect("struct default should resolve imported constants");
 
-    let html = match build_result.project.output_files[0].file_kind() {
-        FileKind::Html(content) => content,
-        other => panic!(
-            "expected HTML output, got {:?}",
-            std::mem::discriminant(other)
-        ),
-    };
-    assert!(
-        html.contains("green"),
-        "imported constant should be available in struct default value resolution",
-    );
+        let html = match build_result.project.output_files[0].file_kind() {
+            FileKind::Html(content) => content,
+            other => panic!(
+                "expected HTML output, got {:?}",
+                std::mem::discriminant(other)
+            ),
+        };
+        assert!(
+            html.contains("green"),
+            "imported constant should be available in struct default value resolution",
+        );
+    }
 
     fs::remove_dir_all(&root).expect("should remove temp dir");
 }
@@ -1424,25 +1483,27 @@ fn build_project_rejects_const_record_with_non_constant_argument() {
         "Basic = |\n    body String = \"ok\",\n|\nget_value || -> String:\n    return \"dynamic\"\n;\n#basic = Basic(get_value())\n",
     )
     .expect("should write source file");
-    let _cwd_guard = CurrentDirGuard::set_to(&root);
+    {
+        let _cwd_guard = CurrentDirGuard::set_to(&root);
 
-    let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
-    let result = build_project(&builder, "main.bst", &[]);
-    assert!(
-        result.is_err(),
-        "non-constant struct constructor argument in '#'-constant should fail"
-    );
-    let messages = match result {
-        Err(messages) => messages,
-        Ok(_) => unreachable!("assert above guarantees this is an error"),
-    };
+        let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
+        let result = build_project(&builder, "main.bst", &[]);
+        assert!(
+            result.is_err(),
+            "non-constant struct constructor argument in '#'-constant should fail"
+        );
+        let messages = match result {
+            Err(messages) => messages,
+            Ok(_) => unreachable!("assert above guarantees this is an error"),
+        };
 
-    assert!(
-        messages.errors.iter().any(|error| {
-            error.msg.contains("get_value") && error.msg.contains("non-constant value")
-        }),
-        "expected a targeted error describing the non-constant argument"
-    );
+        assert!(
+            messages.errors.iter().any(|error| {
+                error.msg.contains("get_value") && error.msg.contains("non-constant value")
+            }),
+            "expected a targeted error describing the non-constant argument"
+        );
+    }
 
     fs::remove_dir_all(&root).expect("should remove temp dir");
 }
@@ -1456,27 +1517,30 @@ fn build_project_rejects_const_record_when_required_fields_are_missing() {
         "Basic = |\n    body String,\n    color String = \"blue\",\n|\n#basic = Basic()\n",
     )
     .expect("should write source file");
-    let _cwd_guard = CurrentDirGuard::set_to(&root);
+    {
+        let _cwd_guard = CurrentDirGuard::set_to(&root);
 
-    let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
-    let result = build_project(&builder, "main.bst", &[]);
-    assert!(
-        result.is_err(),
-        "missing required fields in const record constructor should fail"
-    );
-    let messages = match result {
-        Err(messages) => messages,
-        Ok(_) => unreachable!("assert above guarantees this is an error"),
-    };
+        let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
+        let result = build_project(&builder, "main.bst", &[]);
+        assert!(
+            result.is_err(),
+            "missing required fields in const record constructor should fail"
+        );
+        let messages = match result {
+            Err(messages) => messages,
+            Ok(_) => unreachable!("assert above guarantees this is an error"),
+        };
 
-    assert!(
-        messages
-            .errors
-            .iter()
-            .any(|error| error.msg.contains("missing 1 required field argument")),
-        "expected a missing-required-fields constructor diagnostic"
-    );
+        assert!(
+            messages
+                .errors
+                .iter()
+                .any(|error| error.msg.contains("missing 1 required field argument")),
+            "expected a missing-required-fields constructor diagnostic"
+        );
 
+    }
+    
     fs::remove_dir_all(&root).expect("should remove temp dir");
 }
 
@@ -1489,27 +1553,28 @@ fn build_project_rejects_struct_constructor_with_too_many_arguments() {
         "Point = |\n    x Int,\n    y Int = 1,\n|\n#point = Point(1, 2, 3)\n",
     )
     .expect("should write source file");
-    let _cwd_guard = CurrentDirGuard::set_to(&root);
+    {
+        let _cwd_guard = CurrentDirGuard::set_to(&root);
 
-    let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
-    let result = build_project(&builder, "main.bst", &[]);
-    assert!(
-        result.is_err(),
-        "too many struct constructor arguments should fail"
-    );
-    let messages = match result {
-        Err(messages) => messages,
-        Ok(_) => unreachable!("assert above guarantees this is an error"),
-    };
+        let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
+        let result = build_project(&builder, "main.bst", &[]);
+        assert!(
+            result.is_err(),
+            "too many struct constructor arguments should fail"
+        );
+        let messages = match result {
+            Err(messages) => messages,
+            Ok(_) => unreachable!("assert above guarantees this is an error"),
+        };
 
-    assert!(
-        messages
-            .errors
-            .iter()
-            .any(|error| error.msg.contains("received too many arguments")),
-        "expected a too-many-arguments constructor diagnostic"
-    );
-
+        assert!(
+            messages
+                .errors
+                .iter()
+                .any(|error| error.msg.contains("received too many arguments")),
+            "expected a too-many-arguments constructor diagnostic"
+        );
+    }
     fs::remove_dir_all(&root).expect("should remove temp dir");
 }
 

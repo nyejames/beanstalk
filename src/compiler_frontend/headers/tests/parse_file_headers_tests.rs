@@ -3,6 +3,7 @@ use crate::compiler_frontend::ast::statements::functions::{FunctionReturn, Funct
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
+use crate::compiler_frontend::tokenizer::newline_handling::NewlineMode;
 use crate::compiler_frontend::tokenizer::tokenizer::tokenize;
 use crate::compiler_frontend::tokenizer::tokens::TokenizeMode;
 use std::path::PathBuf;
@@ -16,8 +17,10 @@ fn parse_single_file_headers(source: &str) -> Headers {
         source,
         &interned_path,
         TokenizeMode::Normal,
+        NewlineMode::NormalizeToLf,
         &style_directives,
         &mut string_table,
+        None,
     )
     .expect("tokenization should succeed");
 
@@ -48,8 +51,10 @@ fn parse_single_file_headers_with_entry(
         source,
         &interned_path,
         TokenizeMode::Normal,
+        NewlineMode::NormalizeToLf,
         &style_directives,
         &mut string_table,
+        None,
     )
     .expect("tokenization should succeed");
 

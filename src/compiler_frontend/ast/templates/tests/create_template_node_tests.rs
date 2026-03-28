@@ -22,6 +22,7 @@ use crate::compiler_frontend::style_directives::{
     StyleDirectiveArgumentType, StyleDirectiveEffects, StyleDirectiveHandlerSpec,
     StyleDirectiveRegistry, StyleDirectiveSpec,
 };
+use crate::compiler_frontend::tokenizer::newline_handling::NewlineMode;
 use crate::compiler_frontend::tokenizer::tokenizer::tokenize;
 use crate::compiler_frontend::tokenizer::tokens::{
     CharPosition, FileTokens, TemplateBodyMode, TextLocation, Token, TokenKind,
@@ -69,8 +70,10 @@ fn template_tokens_from_source_with_style_directives(
         source,
         &scope,
         crate::compiler_frontend::tokenizer::tokens::TokenizeMode::Normal,
+        NewlineMode::NormalizeToLf,
         style_directives,
         string_table,
+        None,
     )
     .expect("tokenization should succeed");
 
@@ -323,8 +326,10 @@ fn template_parse_error_with_style_directives(
         source,
         &scope,
         crate::compiler_frontend::tokenizer::tokens::TokenizeMode::Normal,
+        NewlineMode::NormalizeToLf,
         style_directives,
         &mut string_table,
+        None,
     ) {
         Ok(tokens) => tokens,
         Err(error) => return error.msg,

@@ -53,7 +53,8 @@ use crate::compiler_frontend::paths::path_format::{OutputPathStyle, PathStringFo
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
-use crate::compiler_frontend::tokenizer::tokenizer::tokenize_with_file_id;
+use crate::compiler_frontend::tokenizer::lexer::tokenize;
+use crate::compiler_frontend::tokenizer::newline_handling::NewlineMode;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenizeMode};
 use crate::projects::settings::Config;
 use std::path::{Path, PathBuf};
@@ -82,6 +83,7 @@ pub struct CompilerFrontend {
     pub(crate) project_path_resolver: Option<ProjectPathResolver>,
     pub(crate) path_format_config: PathStringFormatConfig,
     pub(crate) source_files: SourceFileTable,
+    pub(crate) newline_mode: NewlineMode,
 }
 
 impl CompilerFrontend {
@@ -90,6 +92,7 @@ impl CompilerFrontend {
         string_table: StringTable,
         style_directives: StyleDirectiveRegistry,
         project_path_resolver: Option<ProjectPathResolver>,
+        newline_mode: NewlineMode,
     ) -> Self {
         // Create a builtin host function registry with print and other host functions
         let host_function_registry = HostRegistry::new();
@@ -112,6 +115,7 @@ impl CompilerFrontend {
             project_path_resolver,
             path_format_config,
             source_files: SourceFileTable::empty(),
+            newline_mode,
         }
     }
 
@@ -148,10 +152,11 @@ impl CompilerFrontend {
             ),
         };
 
-        match tokenize_with_file_id(
+        match tokenize(
             source_code,
             &logical_path,
             tokenizer_mode,
+            self.newline_mode,
             &self.style_directives,
             &mut self.string_table,
             file_id,

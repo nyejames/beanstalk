@@ -12,6 +12,7 @@ use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
+use crate::compiler_frontend::tokenizer::newline_handling::NewlineMode;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenizeMode};
 use crate::compiler_frontend::{CompilerFrontend, FrontendBuildProfile};
 use crate::projects::settings::Config;
@@ -82,6 +83,7 @@ impl FrontendProject {
             string_table,
             StyleDirectiveRegistry::built_ins(),
             Some(resolver),
+            NewlineMode::NormalizeToLf,
         );
         frontend.set_source_files(source_files);
 

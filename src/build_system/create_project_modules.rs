@@ -17,6 +17,7 @@ use crate::compiler_frontend::paths::path_resolution::{
 use crate::compiler_frontend::paths::paths::collect_paths_from_tokens;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
+use crate::compiler_frontend::tokenizer::newline_handling::NewlineMode;
 use crate::compiler_frontend::tokenizer::tokenizer::tokenize;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenizeMode};
 use crate::compiler_frontend::{CompilerFrontend, Flag, FrontendBuildProfile};
@@ -253,6 +254,7 @@ pub fn compile_module(
         string_table,
         style_directives.to_owned(),
         project_path_resolver,
+        NewlineMode::NormalizeToLf,
     );
 
     let canonical_files = module
@@ -551,7 +553,7 @@ fn discover_reachable_files(
             continue;
         }
 
-        let import_paths = extract_import_paths(&canonical_file, style_directives)?;
+        let import_paths = extract_import_paths(&canonical_file, style_directives, NewlineMode::NormalizeToLf)?;
         for import_path in &import_paths.paths {
             let resolved = project_path_resolver.resolve_import_to_file(
                 import_path,
@@ -570,6 +572,7 @@ fn discover_reachable_files(
 fn extract_import_paths(
     file_path: &Path,
     style_directives: &StyleDirectiveRegistry,
+    newline_mode: NewlineMode,
 ) -> Result<ParsedImportPaths, CompilerError> {
     let source = extract_source_code(file_path)?;
     let mut string_table = StringTable::new();
@@ -578,8 +581,10 @@ fn extract_import_paths(
         &source,
         &interned_path,
         TokenizeMode::Normal,
+        newline_mode,
         style_directives,
         &mut string_table,
+        None,
     )
     .map_err(|error| error.with_file_path(file_path.to_path_buf()))?;
 
@@ -591,6 +596,7 @@ fn extract_import_paths(
         string_table,
     })
 }
+
 pub fn extract_source_code(file_path: &Path) -> Result<String, CompilerError> {
     match fs::read_to_string(file_path) {
         Ok(content) => Ok(content),

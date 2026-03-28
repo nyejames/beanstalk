@@ -2,6 +2,7 @@ use super::*;
 use crate::compiler_frontend::headers::parse_file_headers::{Header, HeaderKind, parse_headers};
 use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
+use crate::compiler_frontend::tokenizer::newline_handling::NewlineMode;
 use crate::compiler_frontend::tokenizer::tokenizer::tokenize;
 use crate::compiler_frontend::tokenizer::tokens::TokenizeMode;
 use std::path::PathBuf;
@@ -18,8 +19,10 @@ fn parse_module_headers(files: &[(&str, &str)], entry_path: &str) -> (Vec<Header
             source,
             &interned_path,
             TokenizeMode::Normal,
+            NewlineMode::NormalizeToLf,
             &style_directives,
             &mut string_table,
+            None,
         )
         .expect("tokenization should succeed");
         tokenized_files.push(tokens);

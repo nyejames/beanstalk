@@ -2,6 +2,7 @@
 //!
 //! Compiler diagnostics are converted into escaped HTML so failed builds still render safely and
 //! remain connected to hot reload via the injected SSE client snippet.
+use crate::compiler_frontend::basic_utility_functions::file_url_from_path;
 use crate::compiler_frontend::compiler_errors::{
     CompilerError, CompilerMessages, ErrorMetaDataKey, error_type_to_str,
 };
@@ -358,39 +359,12 @@ fn resolve_source_path_link(scope: &Path, project_root: &Path) -> Option<SourceP
         Err(_) => project_root.to_path_buf(),
     };
     let display_label = relative_display_path_from_root(&resolved_path, &display_root);
-    let href = file_url_from_path(&resolved_path);
+    let href = file_url_from_path(&resolved_path, false);
 
     Some(SourcePathLink {
         display_label,
         href,
     })
-}
-
-fn file_url_from_path(path: &Path) -> String {
-    let mut path_string = path.to_string_lossy().replace('\\', "/");
-    if !path_string.starts_with('/') {
-        path_string = format!("/{path_string}");
-    }
-
-    // Browsers expect file links to be URL-safe, so encode the filesystem path before embedding it.
-    format!("file://{}", percent_encode_file_url_path(&path_string))
-}
-
-fn percent_encode_file_url_path(path: &str) -> String {
-    let mut encoded = String::with_capacity(path.len());
-
-    for byte in path.bytes() {
-        match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'/' | b'-' | b'_' | b'.' | b'~' | b':' => {
-                encoded.push(byte as char)
-            }
-            _ => {
-                let _ = write!(encoded, "%{byte:02X}");
-            }
-        }
-    }
-
-    encoded
 }
 
 #[cfg(test)]

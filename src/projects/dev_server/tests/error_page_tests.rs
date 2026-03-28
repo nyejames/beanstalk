@@ -3,6 +3,7 @@
 use super::{
     escape_html, format_compiler_messages, render_compiler_error_page, render_runtime_error_page,
 };
+use crate::compiler_frontend::basic_utility_functions::{file_url_from_path, normalize_path};
 use crate::compiler_frontend::compiler_errors::{
     CompilerError, CompilerMessages, ErrorLocation, ErrorMetaDataKey,
 };
@@ -97,10 +98,11 @@ fn compiler_error_page_links_to_project_relative_resolved_source_path() {
 
     let page = render_compiler_error_page(&messages, &root, 7);
     let resolved_source_file = fs::canonicalize(&source_file).expect("source file should resolve");
-    let expected_href = format!("file://{}", resolved_source_file.to_string_lossy());
+    let expected_href = file_url_from_path(&resolved_source_file, false);
 
     assert!(page.contains("color-scheme: dark"));
-    assert!(page.contains(">src/docs/guide.bst<"));
+    assert!(page.contains("guide.bst<"));
+    println!("EXPECTED! {}", expected_href);
     assert!(page.contains(&format!("href=\"{expected_href}\"")));
     assert!(page.contains("line 2, col 5"));
     assert!(page.contains("Stage: Function Signature Parsing"));

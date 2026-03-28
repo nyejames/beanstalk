@@ -142,6 +142,11 @@ use crate::compiler_frontend::tokenizer::tokens::CharPosition;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+// TODO: thread this through all functions returning errors
+// CompileError will be boxed from now on
+pub type CompilerResult<T> = Result<T, Box<CompilerError>>;
+pub type CompilerMessagesResult<T> = Result<T, Box<CompilerMessages>>;
+
 // The final set of errors and warnings emitted from the compiler_frontend
 #[derive(Debug, Clone)]
 pub struct CompilerMessages {

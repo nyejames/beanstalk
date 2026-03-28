@@ -16,6 +16,7 @@ use crate::compiler_frontend::compiler_errors::ErrorType;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
+use crate::compiler_frontend::tokenizer::newline_handling::NewlineMode;
 use crate::projects::settings::Config;
 
 #[test]
@@ -72,6 +73,7 @@ fn frontend_check_borrows_propagates_failures() {
         string_table,
         StyleDirectiveRegistry::built_ins(),
         None,
+        NewlineMode::NormalizeToLf,
     );
     let messages = frontend
         .check_borrows(&hir)

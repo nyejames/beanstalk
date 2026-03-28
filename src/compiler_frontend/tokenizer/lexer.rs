@@ -10,6 +10,7 @@ use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::paths::parse_file_path;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
+use crate::compiler_frontend::tokenizer::newline_handling::{NewlineMode, consume_carriage_return_newline};
 use crate::compiler_frontend::tokenizer::tokens::{
     FileTokens, TemplateBodyMode, TextLocation, Token, TokenKind, TokenStream, TokenizeMode,
 };
@@ -25,31 +26,15 @@ macro_rules! return_token {
     };
 }
 
-pub fn tokenize(
-    source_code: &str,
-    src_path: &InternedPath,
-    mode: TokenizeMode,
-    style_directives: &StyleDirectiveRegistry,
-    string_table: &mut StringTable,
-) -> Result<FileTokens, CompilerError> {
-    tokenize_with_file_id(
-        source_code,
-        src_path,
-        mode,
-        style_directives,
-        string_table,
-        None,
-    )
-}
-
 /// Tokenize one source file and optionally attach stable file identity metadata.
 ///
 /// WHAT: wraps lexing output in `FileTokens` carrying both logical path and optional `FileId`.
 /// WHY: later frontend stages should prefer explicit file identity over path string comparisons.
-pub fn tokenize_with_file_id(
+pub fn tokenize(
     source_code: &str,
     src_path: &InternedPath,
     mode: TokenizeMode,
+    newline_mode: NewlineMode,
     style_directives: &StyleDirectiveRegistry,
     string_table: &mut StringTable,
     file_id: Option<FileId>,
@@ -70,7 +55,7 @@ pub fn tokenize_with_file_id(
         }
 
         tokens.push(token);
-        token = get_token_kind(&mut stream, style_directives, string_table)?;
+        token = get_token_kind(&mut stream, style_directives, newline_mode, string_table)?;
     }
 
     tokens.push(token);
@@ -84,8 +69,9 @@ pub fn tokenize_with_file_id(
 }
 
 pub fn get_token_kind(
-    stream: &mut TokenStream<'_>,
+    mut stream: &mut TokenStream<'_>,
     style_directives: &StyleDirectiveRegistry,
+    newline_mode: NewlineMode,
     string_table: &mut StringTable,
 ) -> Result<Token, CompilerError> {
     let mut current_char = match stream.next() {
@@ -145,6 +131,7 @@ pub fn get_token_kind(
             // Skip any whitespace after this before returning it to save on tokens.
             // There is no semantic reason that the parser needs to distinguish multiple newlines.
             // Scene Bodies are already parsed separately above this.
+            // Same goes for carriage returns, but those are handled in their own function to properly handle CRLF pairs and different newline modes.
             while let Some(next_char) = stream.peek() {
                 if next_char.is_whitespace() {
                     stream.next();
@@ -155,26 +142,17 @@ pub fn get_token_kind(
 
             return_token!(TokenKind::Newline, stream);
         } else if current_char == '\r' {
-            if stream.peek() == Some(&'\n') {
-                stream.next();
+            let _ = consume_carriage_return_newline(&mut stream, newline_mode);
 
-                while let Some(next_char) = stream.peek() {
-                    if next_char.is_whitespace() {
-                        stream.next();
-                    } else {
-                        break;
-                    }
+            while let Some(next_char) = stream.peek() {
+                if next_char.is_whitespace() {
+                    stream.next();
+                } else {
+                    break;
                 }
-
-                return_token!(TokenKind::Newline, stream);
-            } else {
-                // Count as a newline?
-                // This should maybe be a warning or something in the future as this is weird
-                current_char = match stream.next() {
-                    Some(ch) => ch,
-                    None => return_token!(TokenKind::Newline, stream),
-                };
             }
+
+            return_token!(TokenKind::Newline, stream);
         } else {
             current_char = match stream.next() {
                 Some(ch) => ch,
@@ -403,7 +381,7 @@ pub fn get_token_kind(
             }
 
             // Do not add any token to the stream, call this function again
-            return get_token_kind(stream, style_directives, string_table);
+            return get_token_kind(stream, style_directives, newline_mode, string_table);
         }
 
         // Subtraction / Negative / Return / Subtract Assign

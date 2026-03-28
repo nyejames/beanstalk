@@ -34,8 +34,10 @@ fn tokenize_source_with_registry(
         source,
         &source_path,
         TokenizeMode::Normal,
+        NewlineMode::NormalizeToLf,
         style_directives,
         &mut string_table,
+        None,
     )
     .expect("tokenization should succeed");
     (file_tokens, string_table)
@@ -53,8 +55,10 @@ fn tokenize_source_with_directives(
         source,
         &source_path,
         TokenizeMode::Normal,
+        NewlineMode::NormalizeToLf,
         &registry,
         &mut string_table,
+        None,
     )
     .expect("tokenization should succeed");
     (file_tokens, string_table)
@@ -104,8 +108,10 @@ fn rejects_legacy_reset_style_directive_name() {
         "[$reset: body]",
         &source_path,
         TokenizeMode::Normal,
+        NewlineMode::NormalizeToLf,
         &style_directives,
         &mut string_table,
+        None,
     )
     .expect_err("legacy reset directive should be rejected");
 
@@ -191,8 +197,10 @@ fn rejects_legacy_style_child_template_prefix_syntax() {
         "[$[:prefix], $markdown:\nhello\n]",
         &source_path,
         TokenizeMode::Normal,
+        NewlineMode::NormalizeToLf,
         &style_directives,
         &mut string_table,
+        None,
     );
     assert!(
         result.is_err(),
@@ -210,8 +218,10 @@ fn rejects_style_directives_outside_template_heads() {
         "$markdown\n",
         &source_path,
         TokenizeMode::Normal,
+        NewlineMode::NormalizeToLf,
         &style_directives,
         &mut string_table,
+        None,
     );
     assert!(
         result.is_err(),
@@ -229,8 +239,10 @@ fn unknown_style_directives_fail_under_strict_registry() {
         "[$unknown: value]",
         &source_path,
         TokenizeMode::Normal,
+        NewlineMode::NormalizeToLf,
         &style_directives,
         &mut string_table,
+        None,
     );
     let error = result.expect_err("unknown directive should fail during tokenization");
     assert!(error.msg.contains("Unsupported style directive"));
@@ -273,8 +285,10 @@ fn rejects_numeric_slot_directive_prefixes() {
         "[wrapper: [$1: first]]",
         &source_path,
         TokenizeMode::Normal,
+        NewlineMode::NormalizeToLf,
         &style_directives,
         &mut string_table,
+        None,
     );
     assert!(
         result.is_err(),

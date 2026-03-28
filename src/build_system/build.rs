@@ -343,5 +343,5 @@ fn create_parent_dir_if_needed(path: &Path) -> Result<(), CompilerMessages> {
 }
 
 #[cfg(test)]
-#[path = "build_tests.rs"]
+#[path = "tests/build_tests.rs"]
 mod tests;

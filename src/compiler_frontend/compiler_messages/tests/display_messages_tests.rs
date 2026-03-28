@@ -1,7 +1,8 @@
 use super::{
-    format_error_guidance_lines, normalize_display_path, relative_display_path_from_root,
+    format_error_guidance_lines, relative_display_path_from_root,
     resolve_source_file_path,
 };
+use crate::compiler_frontend::basic_utility_functions::normalize_path;
 use crate::compiler_frontend::compiler_errors::{
     CompilerError, CompilerMessages, ErrorLocation, ErrorMetaDataKey, ErrorType,
 };
@@ -137,21 +138,24 @@ fn relative_display_path_strips_root_prefix() {
 
 #[test]
 fn normalize_display_path_strips_windows_extended_prefix() {
-    let normalized = normalize_display_path(Path::new(r"\\?\C:\workspace\main.bst"));
+    let normalized = normalize_path(Path::new(r"\\?\C:\workspace\main.bst"));
     assert_eq!(normalized, PathBuf::from(r"C:\workspace\main.bst"));
 }
 
 #[test]
 fn resolve_source_file_path_strips_header_suffix_before_lookup() {
-    let root = temp_dir("header_scope");
+    let root: PathBuf = temp_dir("header_scope");
     let source_file = root.join("main.bst");
     fs::write(&source_file, "#page = []").expect("should write source file");
 
     let header_scope = source_file.join("title.header");
     let resolved = resolve_source_file_path(&header_scope);
+    
     let expected = fs::canonicalize(&source_file).expect("should canonicalize source file");
 
-    assert_eq!(resolved, expected);
+    let normalized_resolved = normalize_path(&resolved);
+    let normalized_expected = normalize_path(&expected);
+    assert_eq!(normalized_resolved, normalized_expected);
 
     fs::remove_dir_all(&root).expect("should remove temp dir");
 }

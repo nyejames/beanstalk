@@ -1,6 +1,7 @@
 use super::*;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
+use crate::compiler_frontend::tokenizer::newline_handling::NewlineMode;
 use crate::compiler_frontend::tokenizer::tokenizer::tokenize;
 use crate::compiler_frontend::tokenizer::tokens::TokenizeMode;
 
@@ -21,8 +22,10 @@ fn first_path_token(source: &str) -> (Vec<InternedPath>, StringTable) {
         source,
         &source_path,
         TokenizeMode::Normal,
+        NewlineMode::NormalizeToLf,
         &style_directives,
         &mut string_table,
+        None,
     )
     .expect("tokenization should succeed");
 
@@ -48,8 +51,10 @@ fn collect_import_path_values(source: &str) -> Vec<String> {
         source,
         &source_path,
         TokenizeMode::Normal,
+        NewlineMode::NormalizeToLf,
         &style_directives,
         &mut string_table,
+        None,
     )
     .expect("tokenization should succeed");
 
@@ -84,8 +89,10 @@ fn parse_file_path_rejects_bare_at_symbol() {
         "import @\n",
         &source_path,
         TokenizeMode::Normal,
+        NewlineMode::NormalizeToLf,
         &style_directives,
         &mut string_table,
+        None,
     );
 
     assert!(result.is_err(), "bare '@' should fail");
@@ -103,8 +110,10 @@ fn parse_file_path_rejects_public_root_with_suffix() {
         "import @/foo\n",
         &source_path,
         TokenizeMode::Normal,
+        NewlineMode::NormalizeToLf,
         &style_directives,
         &mut string_table,
+        None,
     );
 
     assert!(result.is_err(), "'@/foo' should fail");
@@ -122,8 +131,10 @@ fn parse_file_path_rejects_public_root_grouped_expansion() {
         "import @/{a,b}\n",
         &source_path,
         TokenizeMode::Normal,
+        NewlineMode::NormalizeToLf,
         &style_directives,
         &mut string_table,
+        None,
     );
 
     assert!(result.is_err(), "'@/{{a,b}}' should fail");
@@ -141,8 +152,10 @@ fn parse_file_path_rejects_public_root_with_double_slash() {
         "import @//\n",
         &source_path,
         TokenizeMode::Normal,
+        NewlineMode::NormalizeToLf,
         &style_directives,
         &mut string_table,
+        None,
     );
 
     assert!(result.is_err(), "'@//' should fail");
@@ -160,8 +173,10 @@ fn parse_file_path_rejects_public_root_backslash_variant() {
         "import @\\\n",
         &source_path,
         TokenizeMode::Normal,
+        NewlineMode::NormalizeToLf,
         &style_directives,
         &mut string_table,
+        None,
     );
 
     assert!(result.is_err(), "'@\\' should fail");
@@ -177,8 +192,10 @@ fn parse_file_path_rejects_parenthesis_wrapper_syntax() {
         "import @(a/b/c)\n",
         &source_path,
         TokenizeMode::Normal,
+        NewlineMode::NormalizeToLf,
         &style_directives,
         &mut string_table,
+        None,
     );
 
     assert!(result.is_err(), "parenthesis wrapper should fail");
@@ -194,8 +211,10 @@ fn parse_file_path_rejects_unquoted_whitespace_for_non_grouped_path() {
         "import @docs/my file.md\n",
         &source_path,
         TokenizeMode::Normal,
+        NewlineMode::NormalizeToLf,
         &style_directives,
         &mut string_table,
+        None,
     );
 
     assert!(result.is_err(), "unquoted whitespace should fail");
@@ -384,8 +403,10 @@ fn parse_file_path_rejects_grouped_path_with_empty_block() {
         "import @docs {}\n",
         &source_path,
         TokenizeMode::Normal,
+        NewlineMode::NormalizeToLf,
         &style_directives,
         &mut string_table,
+        None,
     );
 
     assert!(result.is_err(), "empty grouped path should fail");
@@ -403,8 +424,10 @@ fn parse_file_path_rejects_grouped_path_with_multiple_commas() {
         "import @docs { a.md,, b.md }\n",
         &source_path,
         TokenizeMode::Normal,
+        NewlineMode::NormalizeToLf,
         &style_directives,
         &mut string_table,
+        None,
     );
 
     assert!(result.is_err(), "double commas should fail");
@@ -420,8 +443,10 @@ fn parse_file_path_rejects_grouped_path_missing_closing_brace() {
         "import @docs { a.md, b.md\n",
         &source_path,
         TokenizeMode::Normal,
+        NewlineMode::NormalizeToLf,
         &style_directives,
         &mut string_table,
+        None,
     );
 
     assert!(result.is_err(), "missing grouped closing brace should fail");
@@ -439,8 +464,10 @@ fn parse_file_path_rejects_unterminated_quoted_component_non_grouped() {
         "import @docs/\"my file.md\n",
         &source_path,
         TokenizeMode::Normal,
+        NewlineMode::NormalizeToLf,
         &style_directives,
         &mut string_table,
+        None,
     );
 
     assert!(result.is_err(), "unterminated quote should fail");
@@ -458,8 +485,10 @@ fn parse_file_path_rejects_unterminated_quoted_component_grouped() {
         "import @docs { \"my file.md }\n",
         &source_path,
         TokenizeMode::Normal,
+        NewlineMode::NormalizeToLf,
         &style_directives,
         &mut string_table,
+        None,
     );
 
     assert!(result.is_err(), "unterminated grouped quote should fail");
@@ -477,8 +506,10 @@ fn parse_file_path_rejects_unknown_escape_in_quoted_component() {
         "import @docs/\"my\\nfile.md\"\n",
         &source_path,
         TokenizeMode::Normal,
+        NewlineMode::NormalizeToLf,
         &style_directives,
         &mut string_table,
+        None,
     );
 
     assert!(result.is_err(), "unknown escape should fail");
@@ -500,8 +531,10 @@ fn parse_file_path_rejects_slash_before_group_top_level() {
         "import @docs/{a.md, b.md}\n",
         &source_path,
         TokenizeMode::Normal,
+        NewlineMode::NormalizeToLf,
         &style_directives,
         &mut string_table,
+        None,
     );
 
     assert!(result.is_err(), "legacy slash-before-group should fail");
@@ -523,8 +556,10 @@ fn parse_file_path_rejects_slash_before_group_with_whitespace() {
         "import @docs/   {a.md}\n",
         &source_path,
         TokenizeMode::Normal,
+        NewlineMode::NormalizeToLf,
         &style_directives,
         &mut string_table,
+        None,
     );
 
     assert!(
@@ -543,8 +578,10 @@ fn parse_file_path_rejects_nested_slash_before_group() {
         "import @docs { subfolder/ { a.md } }\n",
         &source_path,
         TokenizeMode::Normal,
+        NewlineMode::NormalizeToLf,
         &style_directives,
         &mut string_table,
+        None,
     );
 
     assert!(result.is_err(), "nested slash-before-group should fail");
@@ -560,8 +597,10 @@ fn parse_file_path_rejects_grouped_prefix_with_trailing_separator() {
         "import @docs { subfolder/ }\n",
         &source_path,
         TokenizeMode::Normal,
+        NewlineMode::NormalizeToLf,
         &style_directives,
         &mut string_table,
+        None,
     );
 
     assert!(result.is_err(), "trailing separator prefix should fail");
@@ -579,8 +618,10 @@ fn parse_file_path_rejects_empty_path_component_in_grouped_entry() {
         "import @docs { subfolder//a.md }\n",
         &source_path,
         TokenizeMode::Normal,
+        NewlineMode::NormalizeToLf,
         &style_directives,
         &mut string_table,
+        None,
     );
 
     assert!(result.is_err(), "empty grouped component should fail");
@@ -596,8 +637,10 @@ fn parse_file_path_rejects_nested_group_with_empty_prefix() {
         "import @docs { { a.md } }\n",
         &source_path,
         TokenizeMode::Normal,
+        NewlineMode::NormalizeToLf,
         &style_directives,
         &mut string_table,
+        None,
     );
 
     assert!(result.is_err(), "nested group without prefix should fail");
@@ -615,8 +658,10 @@ fn parse_file_path_rejects_reserved_device_name_component() {
         "import @docs/CON\n",
         &source_path,
         TokenizeMode::Normal,
+        NewlineMode::NormalizeToLf,
         &style_directives,
         &mut string_table,
+        None,
     );
 
     assert!(result.is_err(), "reserved device name should fail");
@@ -634,8 +679,10 @@ fn parse_file_path_rejects_non_leading_dot_segments() {
         "import @docs/../content\n",
         &source_path,
         TokenizeMode::Normal,
+        NewlineMode::NormalizeToLf,
         &style_directives,
         &mut string_table,
+        None,
     );
 
     assert!(result.is_err(), "non-leading '..' should fail");
@@ -657,8 +704,10 @@ fn parse_file_path_rejects_unquoted_whitespace_for_grouped_entry() {
         "import @docs { my file.md }\n",
         &source_path,
         TokenizeMode::Normal,
+        NewlineMode::NormalizeToLf,
         &style_directives,
         &mut string_table,
+        None,
     );
 
     assert!(result.is_err(), "unquoted grouped whitespace should fail");
@@ -676,8 +725,10 @@ fn parse_file_path_rejects_unquoted_whitespace_for_grouped_nested_prefix() {
         "import @docs { my folder { a.md } }\n",
         &source_path,
         TokenizeMode::Normal,
+        NewlineMode::NormalizeToLf,
         &style_directives,
         &mut string_table,
+        None,
     );
 
     assert!(
@@ -698,8 +749,10 @@ fn parse_file_path_rejects_quoted_component_with_structural_separator_character(
         "import @docs/\"a/b.md\"\n",
         &source_path,
         TokenizeMode::Normal,
+        NewlineMode::NormalizeToLf,
         &style_directives,
         &mut string_table,
+        None,
     );
 
     assert!(
@@ -720,8 +773,10 @@ fn parse_file_path_rejects_quoted_component_with_grouped_delimiter_character() {
         "import @docs { \"a,b.md\" }\n",
         &source_path,
         TokenizeMode::Normal,
+        NewlineMode::NormalizeToLf,
         &style_directives,
         &mut string_table,
+        None,
     );
 
     assert!(
@@ -742,8 +797,10 @@ fn parse_file_path_rejects_missing_comma_between_grouped_entries() {
         "import @docs { subfolder { a.md } other { b.md } }\n",
         &source_path,
         TokenizeMode::Normal,
+        NewlineMode::NormalizeToLf,
         &style_directives,
         &mut string_table,
+        None,
     );
 
     assert!(
@@ -781,8 +838,10 @@ fn collect_import_paths_from_tokens_rejects_missing_path() {
         "import\nfooter\n",
         &source_path,
         TokenizeMode::Normal,
+        NewlineMode::NormalizeToLf,
         &style_directives,
         &mut string_table,
+        None
     )
     .expect("tokenization should succeed");
 
