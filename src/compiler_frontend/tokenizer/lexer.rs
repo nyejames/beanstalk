@@ -3,14 +3,16 @@
 //! WHAT: converts source text into token streams while switching modes for templates, strings, and directives.
 //! WHY: lexing owns the first precise source-location mapping and all delimiter-balancing rules.
 
-use crate::compiler_frontend::basic_utility_functions::is_valid_var_char;
+use crate::compiler_frontend::basic_utility_functions::{NumericalParsing, is_valid_var_char};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::identity::FileId;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::paths::parse_file_path;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
-use crate::compiler_frontend::tokenizer::newline_handling::{NewlineMode, consume_carriage_return_newline};
+use crate::compiler_frontend::tokenizer::newline_handling::{
+    NewlineMode, consume_carriage_return_newline,
+};
 use crate::compiler_frontend::tokenizer::tokens::{
     FileTokens, TemplateBodyMode, TextLocation, Token, TokenKind, TokenStream, TokenizeMode,
 };
@@ -131,26 +133,12 @@ pub fn get_token_kind(
             // There is no semantic reason that the parser needs to distinguish multiple newlines.
             // Scene Bodies are already parsed separately above this.
             // Same goes for carriage returns, but those are handled in their own function to properly handle CRLF pairs and different newline modes.
-            while let Some(next_char) = stream.peek() {
-                if next_char.is_whitespace() {
-                    stream.next();
-                } else {
-                    break;
-                }
-            }
+            consume_all_whitespace(stream);
 
             return_token!(TokenKind::Newline, stream);
         } else if current_char == '\r' {
             let _ = consume_carriage_return_newline(&mut stream);
-
-            while let Some(next_char) = stream.peek() {
-                if next_char.is_whitespace() {
-                    stream.next();
-                } else {
-                    break;
-                }
-            }
-
+            consume_all_whitespace(stream);
             return_token!(TokenKind::Newline, stream);
         } else {
             current_char = match stream.next() {
@@ -372,7 +360,7 @@ pub fn get_token_kind(
             stream.next();
 
             while let Some(ch) = stream.peek() {
-                if ch == &'\n' {
+                if ch == &'\n' || ch == &'\r' {
                     break;
                 }
 
@@ -838,11 +826,11 @@ fn tokenize_template_body(
                 token_value.push_str(normalized_char);
             }
 
-            _=> {
+            _ => {
                 token_value.push(
-                    stream
-                        .next()
-                        .expect("string tokenization loop should only consume available characters"),
+                    stream.next().expect(
+                        "string tokenization loop should only consume available characters",
+                    ),
                 );
             }
         }
@@ -945,6 +933,33 @@ fn tokenize_discard_template_body(
     }
 
     return_token!(TokenKind::Eof, stream)
+}
+
+pub fn consume_non_newline_whitespace(stream: &mut TokenStream) -> bool {
+    let mut consumed = false;
+
+    while stream
+        .peek()
+        .is_some_and(|character| character.is_non_newline_whitespace())
+    {
+        stream.next();
+        consumed = true;
+    }
+
+    consumed
+}
+pub fn consume_all_whitespace(stream: &mut TokenStream) -> bool {
+    let mut consumed = false;
+
+    while stream
+        .peek()
+        .is_some_and(|character| character.is_whitespace())
+    {
+        stream.next();
+        consumed = true;
+    }
+
+    consumed
 }
 
 #[cfg(test)]

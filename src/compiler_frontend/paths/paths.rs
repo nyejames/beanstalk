@@ -1,9 +1,9 @@
-use crate::compiler_frontend::basic_utility_functions::NumericalParsing;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{Token, TokenKind, TokenStream, TokenizeMode};
 use crate::{return_syntax_error, return_token};
+use crate::compiler_frontend::tokenizer::lexer::{consume_all_whitespace, consume_non_newline_whitespace};
 
 type PathComponents = Vec<StringId>;
 type RelativePathExpansions = Vec<PathComponents>;
@@ -900,34 +900,6 @@ fn is_component_terminator(
         ParseComponentContext::OrdinaryPath => ordinary_stop_reason(mode, character).is_some(),
         ParseComponentContext::GroupedEntry => is_grouped_entry_stop_char(character),
     }
-}
-
-fn consume_non_newline_whitespace(stream: &mut TokenStream) -> bool {
-    let mut consumed = false;
-
-    while stream
-        .peek()
-        .is_some_and(|character| character.is_non_newline_whitespace())
-    {
-        stream.next();
-        consumed = true;
-    }
-
-    consumed
-}
-
-fn consume_all_whitespace(stream: &mut TokenStream) -> bool {
-    let mut consumed = false;
-
-    while stream
-        .peek()
-        .is_some_and(|character| character.is_whitespace())
-    {
-        stream.next();
-        consumed = true;
-    }
-
-    consumed
 }
 
 #[cfg(test)]

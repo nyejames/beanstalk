@@ -1,8 +1,8 @@
 use super::*;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
+use crate::compiler_frontend::tokenizer::lexer::tokenize;
 use crate::compiler_frontend::tokenizer::newline_handling::NewlineMode;
-use crate::compiler_frontend::tokenizer::tokenizer::tokenize;
 use crate::compiler_frontend::tokenizer::tokens::TokenizeMode;
 
 fn first_path_token_values(source: &str) -> Vec<String> {
@@ -841,7 +841,7 @@ fn collect_import_paths_from_tokens_rejects_missing_path() {
         NewlineMode::NormalizeToLf,
         &style_directives,
         &mut string_table,
-        None
+        None,
     )
     .expect("tokenization should succeed");
 

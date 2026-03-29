@@ -97,7 +97,7 @@ pub trait NumericalParsing {
 }
 impl NumericalParsing for char {
     fn is_non_newline_whitespace(&self) -> bool {
-        self.is_whitespace() && self != &'\n'
+        self.is_whitespace() && self != &'\n' && self != &'\r'
     }
     fn is_bracket(&self) -> bool {
         matches!(self, '(' | ')' | '{' | '}' | '[' | ']')
