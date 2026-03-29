@@ -17,8 +17,8 @@ use crate::compiler_frontend::paths::path_resolution::{
 use crate::compiler_frontend::paths::paths::collect_paths_from_tokens;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
+use crate::compiler_frontend::tokenizer::lexer::tokenize;
 use crate::compiler_frontend::tokenizer::newline_handling::NewlineMode;
-use crate::compiler_frontend::tokenizer::tokenizer::tokenize;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenizeMode};
 use crate::compiler_frontend::{CompilerFrontend, Flag, FrontendBuildProfile};
 use crate::projects::settings;
@@ -553,7 +553,11 @@ fn discover_reachable_files(
             continue;
         }
 
-        let import_paths = extract_import_paths(&canonical_file, style_directives, NewlineMode::NormalizeToLf)?;
+        let import_paths = extract_import_paths(
+            &canonical_file,
+            style_directives,
+            NewlineMode::NormalizeToLf,
+        )?;
         for import_path in &import_paths.paths {
             let resolved = project_path_resolver.resolve_import_to_file(
                 import_path,

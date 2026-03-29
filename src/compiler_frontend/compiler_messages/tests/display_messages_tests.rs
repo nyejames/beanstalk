@@ -1,6 +1,5 @@
 use super::{
-    format_error_guidance_lines, relative_display_path_from_root,
-    resolve_source_file_path,
+    format_error_guidance_lines, relative_display_path_from_root, resolve_source_file_path,
 };
 use crate::compiler_frontend::basic_utility_functions::normalize_path;
 use crate::compiler_frontend::compiler_errors::{
@@ -150,7 +149,7 @@ fn resolve_source_file_path_strips_header_suffix_before_lookup() {
 
     let header_scope = source_file.join("title.header");
     let resolved = resolve_source_file_path(&header_scope);
-    
+
     let expected = fs::canonicalize(&source_file).expect("should canonicalize source file");
 
     let normalized_resolved = normalize_path(&resolved);

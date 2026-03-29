@@ -75,7 +75,7 @@ impl<'a> BorrowDiagnostics<'a> {
                     .ast_location_for_hir(HirLocation::Block(block_id))
             })
             .map(|location| location.to_error_location(self.string_table))
-            .unwrap_or_else(ErrorLocation::default)
+            .unwrap_or_default()
     }
 
     pub(super) fn function_error_location(&self, function_id: FunctionId) -> ErrorLocation {
@@ -88,7 +88,7 @@ impl<'a> BorrowDiagnostics<'a> {
                     .ast_location_for_hir(HirLocation::Function(function_id))
             })
             .map(|location| location.to_error_location(self.string_table))
-            .unwrap_or_else(ErrorLocation::default)
+            .unwrap_or_default()
     }
 
     pub(super) fn value_error_location(

@@ -71,7 +71,7 @@ pub fn tokenize(
 }
 
 pub fn get_token_kind(
-    mut stream: &mut TokenStream<'_>,
+    stream: &mut TokenStream<'_>,
     style_directives: &StyleDirectiveRegistry,
     string_table: &mut StringTable,
 ) -> Result<Token, CompilerError> {
@@ -137,7 +137,7 @@ pub fn get_token_kind(
 
             return_token!(TokenKind::Newline, stream);
         } else if current_char == '\r' {
-            let _ = consume_carriage_return_newline(&mut stream);
+            let _ = consume_carriage_return_newline(stream);
             consume_all_whitespace(stream);
             return_token!(TokenKind::Newline, stream);
         } else {

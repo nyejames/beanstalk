@@ -5,8 +5,8 @@
 
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::return_file_error;
-use std::path::{Path, PathBuf};
 use std::fmt::Write;
+use std::path::{Path, PathBuf};
 
 pub fn is_valid_var_char(char: &char) -> bool {
     char.is_alphanumeric() || *char == '_'
@@ -50,9 +50,7 @@ pub fn normalize_path(path: &Path) -> PathBuf {
 // Turns any path to a local file into the correct format for a URL
 // Needed particularly for windows compatability
 pub fn file_url_from_path(path: &Path, encoded: bool) -> String {
-    let path = path
-        .canonicalize()
-        .unwrap_or_else(|_| path.to_path_buf());
+    let path = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
 
     let path_string = path.to_string_lossy();
 
@@ -60,7 +58,7 @@ pub fn file_url_from_path(path: &Path, encoded: bool) -> String {
     let path_string = path_string.strip_prefix(r"\\?\").unwrap_or(&path_string);
 
     let mut path_string = path_string.replace('\\', "/");
-    
+
     if !path_string.starts_with('/') {
         path_string = format!("/{path_string}");
     }

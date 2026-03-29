@@ -22,8 +22,8 @@ use crate::compiler_frontend::style_directives::{
     StyleDirectiveArgumentType, StyleDirectiveEffects, StyleDirectiveHandlerSpec,
     StyleDirectiveRegistry, StyleDirectiveSpec,
 };
+use crate::compiler_frontend::tokenizer::lexer::tokenize;
 use crate::compiler_frontend::tokenizer::newline_handling::NewlineMode;
-use crate::compiler_frontend::tokenizer::tokenizer::tokenize;
 use crate::compiler_frontend::tokenizer::tokens::{
     CharPosition, FileTokens, TemplateBodyMode, TextLocation, Token, TokenKind,
 };

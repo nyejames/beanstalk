@@ -508,7 +508,6 @@ fn build_project_preserves_builder_warnings_in_build_result() {
             "build result should include backend warnings"
         );
     }
-    
 
     fs::remove_dir_all(&root).expect("should remove temp dir");
 }
@@ -909,7 +908,7 @@ fn build_project_allows_const_record_coercion_with_all_defaults() {
         "Basic = |\n    body String = \"ok\",\n|\n#basic = Basic()\n",
     )
     .expect("should write source file");
-    
+
     // Explictly dropping the build result here to ensure all references to builder are released before we remove the temp dir
     // This fixed a mutex poisoning bug specifically on Windows
     {
@@ -945,7 +944,6 @@ fn build_project_allows_const_record_coercion_with_constant_arguments() {
             result.is_ok(),
             "const struct coercion with constant arguments should compile"
         );
-
     }
 
     fs::remove_dir_all(&root).expect("should remove temp dir");
@@ -980,7 +978,7 @@ fn build_project_runtime_struct_constructor_supports_partial_defaults() {
             "runtime constructor should include the struct default value in emitted output"
         );
     }
-    
+
     fs::remove_dir_all(&root).expect("should remove temp dir");
 }
 
@@ -1059,7 +1057,7 @@ fn build_project_typed_constant_template_head_can_reference_prior_constant() {
         "# page String = [: world]\n# test = [page: Hello ]\nio(test)\n",
     )
     .expect("should write source file");
-    {    
+    {
         let _cwd_guard = CurrentDirGuard::set_to(&root);
 
         let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
@@ -1106,7 +1104,9 @@ fn build_project_const_struct_template_field_can_fill_template_slots() {
             ),
         };
         assert!(
-            html.contains("<section>") && html.contains("Hello world") && html.contains("</section>"),
+            html.contains("<section>")
+                && html.contains("Hello world")
+                && html.contains("</section>"),
             "const struct wrapper field should compose slot content in place",
         );
     }
@@ -1138,10 +1138,11 @@ fn build_project_const_slot_insertion_constant_is_composed_at_use_site() {
             ),
         };
         assert!(
-            html.contains("<section>") && html.contains("Hello world") && html.contains("</section>"),
+            html.contains("<section>")
+                && html.contains("Hello world")
+                && html.contains("</section>"),
             "slot insertion constant should be resolved at the wrapper use-site",
         );
-
     }
 
     fs::remove_dir_all(&root).expect("should remove temp dir");
@@ -1206,7 +1207,6 @@ fn build_project_const_top_level_header_with_unfilled_named_slots_folds_to_empty
             !html.contains("$slot(") && !html.contains("$insert("),
             "slot markers should not leak into folded output",
         );
-
     }
 
     fs::remove_dir_all(&root).expect("should remove temp dir");
@@ -1328,7 +1328,6 @@ fn build_project_markdown_page_reexported_table_keeps_rows_and_cells_inside_tabl
         assert_eq!(html.matches("<td>").count(), 4);
         assert!(!html.contains("<p>"));
     }
-    
 
     fs::remove_dir_all(&root).expect("should remove temp dir");
 }
@@ -1407,7 +1406,7 @@ fn build_project_markdown_docs_row_wrappers_render_plain_cells_and_headers() {
         "import @styles/docs {page, table, row, header_row}\n[page, $markdown:\n[table:\n    [header_row: [: Type] [: Description] ]\n\n    [row: [: float ] [: 64 bit floating point number] ]\n\n    [row: [: int ] [:  64 bit signed integer ] ]\n]\n]\n",
     )
     .expect("should write source file");
-    {        
+    {
         let _cwd_guard = CurrentDirGuard::set_to(&root);
 
         let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
@@ -1451,7 +1450,7 @@ fn build_project_struct_default_uses_imported_constant() {
     .expect("should write main source file");
     fs::write(root.join("styles/theme.bst"), "#base = \"green\"\n")
         .expect("should write imported constant source file");
-    {    
+    {
         let _cwd_guard = CurrentDirGuard::set_to(&root);
 
         let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
@@ -1538,9 +1537,8 @@ fn build_project_rejects_const_record_when_required_fields_are_missing() {
                 .any(|error| error.msg.contains("missing 1 required field argument")),
             "expected a missing-required-fields constructor diagnostic"
         );
-
     }
-    
+
     fs::remove_dir_all(&root).expect("should remove temp dir");
 }
 

@@ -1,5 +1,4 @@
 use crate::compiler_frontend::ast::expressions::expression::Expression;
-use crate::compiler_frontend::compiler_errors::ErrorLocation;
 use crate::compiler_frontend::datatypes::Ownership;
 use crate::{
     compiler_frontend::{
@@ -64,7 +63,7 @@ pub fn parse_field_access(
                 .tokens
                 .last()
                 .map(|token| token.location.to_error_location(string_table))
-                .unwrap_or_else(ErrorLocation::default);
+                .unwrap_or_default();
             return_rule_error!(
                 "Expected property or method name after '.', but reached the end of input.",
                 fallback_location, {

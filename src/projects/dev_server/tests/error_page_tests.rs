@@ -3,7 +3,7 @@
 use super::{
     escape_html, format_compiler_messages, render_compiler_error_page, render_runtime_error_page,
 };
-use crate::compiler_frontend::basic_utility_functions::{file_url_from_path, normalize_path};
+use crate::compiler_frontend::basic_utility_functions::file_url_from_path;
 use crate::compiler_frontend::compiler_errors::{
     CompilerError, CompilerMessages, ErrorLocation, ErrorMetaDataKey,
 };

@@ -7,7 +7,7 @@
 //!
 //! The error system is built around three core types:
 //! - [`CompilerError`]: The unified error type with owned data and structured metadata
-//! - [`ErrorLocation`]: Owned location information without string interning dependencies
+//! - [`ErrorLocation`]: Shared source-location model specialized to owned filesystem paths
 //! - [`ErrorMetaDataKey`]: Structured metadata keys for intelligent error analysis
 //!
 //! ## Error Types
@@ -138,16 +138,17 @@
 //! ```
 
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
-use crate::compiler_frontend::tokenizer::tokens::CharPosition;
+use crate::compiler_frontend::source_location::CharPosition;
+pub use crate::compiler_frontend::source_location::ErrorLocation;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
 // TODO: thread this through all functions returning errors
 // CompileError will be boxed from now on
-pub type CompilerResult<T> = Result<T, Box<CompilerError>>;
-pub type CompilerMessagesResult<T> = Result<T, Box<CompilerMessages>>;
-
 // The final set of errors and warnings emitted from the compiler_frontend
+// pub type CompilerResult<T> = Result<T, Box<CompilerError>>;
+// pub type CompilerMessagesResult<T> = Result<T, Box<CompilerMessages>>;
+
 #[derive(Debug, Clone)]
 pub struct CompilerMessages {
     pub errors: Vec<CompilerError>,
@@ -209,32 +210,6 @@ pub enum ErrorMetaDataKey {
     ConflictingPlace,    // Place that conflicts with another
     ExistingBorrowPlace, // Place that has an existing borrow
     ConflictType,        // Type of conflict (e.g., "WholeObjectBorrowingViolation")
-}
-
-// A completely owned version of TextLocation
-// Without interning to avoid having to pass the string table up with compiler_frontend messages
-#[derive(Debug, Clone)]
-pub struct ErrorLocation {
-    pub scope: PathBuf,
-    pub start_pos: CharPosition,
-    pub end_pos: CharPosition,
-}
-
-impl ErrorLocation {
-    pub fn new(path_buf: PathBuf, start: CharPosition, end: CharPosition) -> ErrorLocation {
-        ErrorLocation {
-            scope: path_buf,
-            start_pos: start,
-            end_pos: end,
-        }
-    }
-    pub fn default() -> ErrorLocation {
-        ErrorLocation {
-            scope: PathBuf::new(),
-            start_pos: CharPosition::default(),
-            end_pos: CharPosition::default(),
-        }
-    }
 }
 
 #[derive(Debug, Clone)]

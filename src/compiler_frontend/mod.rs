@@ -1,5 +1,6 @@
 pub(crate) mod ast;
 pub(crate) mod headers;
+pub(crate) mod source_location;
 pub(crate) mod style_directives;
 pub(crate) mod tokenizer;
 pub(crate) mod optimizers {

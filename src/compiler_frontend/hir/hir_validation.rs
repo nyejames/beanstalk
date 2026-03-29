@@ -1120,7 +1120,7 @@ impl<'a> HirValidator<'a> {
     ) -> CompilerError {
         let location = anchor
             .and_then(|hir_location| self.hir_error_location(hir_location))
-            .unwrap_or_else(ErrorLocation::default);
+            .unwrap_or_default();
 
         CompilerError::new(message, location, ErrorType::HirTransformation)
     }

@@ -1,9 +1,11 @@
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
+use crate::compiler_frontend::tokenizer::lexer::{
+    consume_all_whitespace, consume_non_newline_whitespace,
+};
 use crate::compiler_frontend::tokenizer::tokens::{Token, TokenKind, TokenStream, TokenizeMode};
 use crate::{return_syntax_error, return_token};
-use crate::compiler_frontend::tokenizer::lexer::{consume_all_whitespace, consume_non_newline_whitespace};
 
 type PathComponents = Vec<StringId>;
 type RelativePathExpansions = Vec<PathComponents>;

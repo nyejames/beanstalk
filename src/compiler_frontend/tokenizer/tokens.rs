@@ -6,12 +6,10 @@
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::identity::FileId;
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::string_interning::{StringId, StringTable};
-
-use crate::compiler_frontend::compiler_errors::ErrorLocation;
+pub use crate::compiler_frontend::source_location::{CharPosition, TextLocation};
+use crate::compiler_frontend::string_interning::StringId;
 use crate::compiler_frontend::tokenizer::newline_handling::NewlineMode;
 use crate::token_log;
-use std::cmp::Ordering;
 use std::iter::Peekable;
 use std::path::PathBuf;
 use std::str::Chars;
@@ -37,106 +35,6 @@ impl TemplateBodyMode {
             self,
             TemplateBodyMode::Balanced | TemplateBodyMode::DiscardBalanced
         )
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
-pub struct CharPosition {
-    pub line_number: i32,
-    pub char_column: i32,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Default)]
-pub struct TextLocation {
-    pub scope: InternedPath,
-    pub start_pos: CharPosition,
-    pub end_pos: CharPosition,
-}
-
-impl TextLocation {
-    pub fn new(scope: InternedPath, start: CharPosition, end: CharPosition) -> Self {
-        Self {
-            scope,
-            start_pos: start,
-            end_pos: end,
-        }
-    }
-
-    pub fn to_error_location(&self, string_table: &StringTable) -> ErrorLocation {
-        ErrorLocation {
-            scope: self.scope.to_path_buf(string_table),
-            start_pos: self.start_pos,
-            end_pos: self.end_pos,
-        }
-    }
-}
-
-impl PartialOrd for TextLocation {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        // Check if self's start position is before other's start position
-        let self_start_line = self.start_pos.line_number;
-        let other_start_line = other.start_pos.line_number;
-
-        if self_start_line < other_start_line {
-            // Self starts on an earlier line than other
-            let self_end_line = self.end_pos.line_number;
-
-            // If self ends before other starts, it's definitely less
-            if self_end_line < other_start_line {
-                Some(Ordering::Less)
-            } else {
-                // Self starts before but extends into or beyond other's range - considered equivalent
-                Some(Ordering::Equal)
-            }
-        } else if self_start_line > other_start_line {
-            // Self starts on a later line than other
-            let other_end_line = other.end_pos.line_number;
-
-            // If other ends before self starts, self is definitely greater
-            if other_end_line < self_start_line {
-                Some(Ordering::Greater)
-            } else {
-                // Other starts before but extends into or beyond self's range - considered equivalent
-                Some(Ordering::Equal)
-            }
-        } else {
-            // Same start line, compare columns
-            let self_start_col = self.start_pos.char_column;
-            let other_start_col = other.start_pos.char_column;
-
-            if self_start_col < other_start_col {
-                // Self starts before other on the same line
-                let self_end_line = self.end_pos.line_number;
-                let self_end_col = self.end_pos.char_column;
-
-                // If self ends before other starts on the same line
-                if self_end_line < other_start_line
-                    || (self_end_line == other_start_line && self_end_col < other_start_col)
-                {
-                    Some(Ordering::Less)
-                } else {
-                    // Self overlaps with other - considered equivalent
-                    Some(Ordering::Equal)
-                }
-            } else if self_start_col > other_start_col {
-                // Other starts before self on the same line
-                let other_end_line = other.end_pos.line_number;
-                let other_end_col = other.end_pos.char_column;
-
-                // If other ends before self starts on the same line
-                if other_end_line < self_start_line
-                    || (other_end_line == self_start_line && other_end_col < self_start_col)
-                {
-                    Some(Ordering::Greater)
-                } else {
-                    // Other overlaps with self - considered equivalent
-                    Some(Ordering::Equal)
-                }
-            } else {
-                // Exactly the same start position - considered equivalent
-                Some(Ordering::Equal)
-            }
-        }
     }
 }
 
@@ -292,7 +190,12 @@ impl TemplateModeFrame {
 }
 
 impl<'a> TokenStream<'a> {
-    pub fn new(source_code: &'a str, file_path: &'a InternedPath, mode: TokenizeMode, newline_mode: NewlineMode) -> Self {
+    pub fn new(
+        source_code: &'a str,
+        file_path: &'a InternedPath,
+        mode: TokenizeMode,
+        newline_mode: NewlineMode,
+    ) -> Self {
         Self {
             file_path,
             chars: source_code.chars().peekable(),
