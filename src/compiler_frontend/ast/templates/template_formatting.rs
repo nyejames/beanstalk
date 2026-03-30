@@ -24,8 +24,9 @@ use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
 use crate::compiler_frontend::ast::templates::template_render_plan::{
-    FormatterAnchorId, FormatterInput, FormatterInputPiece, FormatterOutputPiece,
-    FormatterTextPiece, RenderExpressionPiece, RenderPiece, RenderTextPiece, TemplateRenderPlan,
+    FormatterAnchorId, FormatterInput, FormatterInputPiece, FormatterOpaqueKind,
+    FormatterOpaquePiece, FormatterOutputPiece, FormatterTextPiece, RenderExpressionPiece,
+    RenderPiece, RenderTextPiece, TemplateRenderPlan,
 };
 
 pub(crate) struct BodyFormattingResult {
@@ -109,7 +110,10 @@ pub(crate) fn apply_body_formatter(
                 other => {
                     let anchor_id = FormatterAnchorId(anchor_side_table.len());
                     anchor_side_table.push(other.clone());
-                    input_pieces.push(FormatterInputPiece::Opaque(anchor_id));
+                    input_pieces.push(FormatterInputPiece::Opaque(FormatterOpaquePiece {
+                        id: anchor_id,
+                        kind: opaque_kind_for_render_piece(other),
+                    }));
                 }
             }
         }
@@ -153,8 +157,8 @@ pub(crate) fn apply_body_formatter(
                         location: representative_location.clone(),
                     }));
                 }
-                FormatterOutputPiece::Opaque(anchor_id) => {
-                    replacement_pieces.push(anchor_side_table[anchor_id.0].clone());
+                FormatterOutputPiece::Opaque(anchor) => {
+                    replacement_pieces.push(anchor_side_table[anchor.id.0].clone());
                 }
             }
         }
@@ -226,10 +230,21 @@ fn output_to_input(
                 text: string_table.intern(&t),
                 location: representative_location.clone(),
             }),
-            FormatterOutputPiece::Opaque(anchor_id) => FormatterInputPiece::Opaque(anchor_id),
+            FormatterOutputPiece::Opaque(anchor) => FormatterInputPiece::Opaque(anchor),
         })
         .collect();
     FormatterInput { pieces }
+}
+
+/// Narrows render-plan pieces into the formatter-visible opaque anchor kinds.
+fn opaque_kind_for_render_piece(piece: &RenderPiece) -> FormatterOpaqueKind {
+    match piece {
+        RenderPiece::ChildTemplate(_) => FormatterOpaqueKind::ChildTemplate,
+        RenderPiece::DynamicExpression(_) => FormatterOpaqueKind::DynamicExpression,
+        other => unreachable!(
+            "only non-text formatter-run pieces should be converted to opaque anchors: {other:?}"
+        ),
+    }
 }
 
 /// Derives a coarse source location for text emitted by formatter/whitespace output.

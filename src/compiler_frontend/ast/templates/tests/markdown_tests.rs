@@ -1,4 +1,68 @@
-use super::to_markdown;
+use super::{MarkdownTemplateFormatter, to_markdown};
+use crate::compiler_frontend::ast::templates::template::TemplateFormatter;
+use crate::compiler_frontend::ast::templates::template_render_plan::{
+    FormatterAnchorId, FormatterInput, FormatterInputPiece, FormatterOpaqueKind,
+    FormatterOpaquePiece, FormatterOutputPiece, FormatterTextPiece,
+};
+use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
+
+fn child_anchor(id: usize) -> FormatterOpaquePiece {
+    FormatterOpaquePiece {
+        id: FormatterAnchorId(id),
+        kind: FormatterOpaqueKind::ChildTemplate,
+    }
+}
+
+fn dynamic_anchor(id: usize) -> FormatterOpaquePiece {
+    FormatterOpaquePiece {
+        id: FormatterAnchorId(id),
+        kind: FormatterOpaqueKind::DynamicExpression,
+    }
+}
+
+fn formatter_text_piece(text: &str, string_table: &mut StringTable) -> FormatterInputPiece {
+    FormatterInputPiece::Text(FormatterTextPiece {
+        text: string_table.intern(text),
+        location: SourceLocation::default(),
+    })
+}
+
+fn markdown_formatter_output_from_text_and_anchors(
+    pieces: &[(Option<&str>, Option<FormatterOpaquePiece>)],
+) -> String {
+    let mut string_table = StringTable::new();
+    let input_pieces = pieces
+        .iter()
+        .map(|(text, anchor)| match (text, anchor) {
+            (Some(text), None) => formatter_text_piece(text, &mut string_table),
+            (None, Some(anchor)) => FormatterInputPiece::Opaque(*anchor),
+            _ => unreachable!("test pieces should be either text or anchor"),
+        })
+        .collect();
+
+    MarkdownTemplateFormatter
+        .format(
+            FormatterInput {
+                pieces: input_pieces,
+            },
+            &mut string_table,
+        )
+        .expect("markdown formatter should succeed")
+        .output
+        .pieces
+        .into_iter()
+        .map(|piece| match piece {
+            FormatterOutputPiece::Text(text) => text,
+            FormatterOutputPiece::Opaque(anchor) => match anchor.kind {
+                FormatterOpaqueKind::ChildTemplate => format!("{{child:{}}}", anchor.id.0),
+                FormatterOpaqueKind::DynamicExpression => {
+                    format!("{{dynamic:{}}}", anchor.id.0)
+                }
+            },
+        })
+        .collect()
+}
 
 #[test]
 fn parses_links_for_all_supported_target_prefixes() {
@@ -80,7 +144,7 @@ fn link_parsing_works_inside_heading_and_emphasis() {
     assert_eq!(heading, "<h1><a href=\"/docs\">Docs</a></h1>");
 
     let emphasis = to_markdown("\n*@/docs (Docs)*\n", "p");
-    assert_eq!(emphasis, "<p><em>@/docs (Docs)</em> </p>");
+    assert_eq!(emphasis, "<p><em><a href=\"/docs\">Docs</a></em></p>");
 }
 
 #[test]
@@ -202,55 +266,103 @@ fn non_list_lines_remain_plain_markdown_blocks() {
 }
 
 #[test]
-fn opaque_anchors_preserved_between_formatted_text_pieces() {
-    use crate::compiler_frontend::ast::templates::styles::markdown::MarkdownTemplateFormatter;
-    use crate::compiler_frontend::ast::templates::template::TemplateFormatter;
-    use crate::compiler_frontend::ast::templates::template_render_plan::{
-        FormatterAnchorId, FormatterInput, FormatterInputPiece, FormatterOutputPiece,
-        FormatterTextPiece,
-    };
-    use crate::compiler_frontend::string_interning::StringTable;
-    use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
+fn inline_child_anchor_stays_inside_one_paragraph() {
+    let rendered = markdown_formatter_output_from_text_and_anchors(&[
+        (Some("hello "), None),
+        (None, Some(child_anchor(7))),
+        (Some(" world"), None),
+    ]);
 
-    let mut string_table = StringTable::new();
-    let list_start = string_table.intern("- item one");
-    let list_end = string_table.intern("\n- item two");
+    assert_eq!(rendered, "<p>hello {child:7} world</p>");
+}
 
-    let input = FormatterInput {
-        pieces: vec![
-            FormatterInputPiece::Text(FormatterTextPiece {
-                text: list_start,
-                location: SourceLocation::default(),
-            }),
-            FormatterInputPiece::Opaque(FormatterAnchorId(7)),
-            FormatterInputPiece::Text(FormatterTextPiece {
-                text: list_end,
-                location: SourceLocation::default(),
-            }),
-        ],
-    };
+#[test]
+fn single_newline_before_child_anchor_closes_current_paragraph() {
+    let rendered = markdown_formatter_output_from_text_and_anchors(&[
+        (Some("hello\n"), None),
+        (None, Some(child_anchor(7))),
+        (Some("\nworld"), None),
+    ]);
 
-    let formatter = MarkdownTemplateFormatter;
-    let output = formatter
-        .format(input, &mut string_table)
-        .expect("markdown formatter should succeed");
+    assert_eq!(rendered, "<p>hello</p>{child:7}<p>world</p>");
+}
 
-    // The opaque anchor must survive between the two formatted text pieces.
-    assert_eq!(output.output.pieces.len(), 3);
-    match &output.output.pieces[0] {
-        FormatterOutputPiece::Text(t) => {
-            assert!(t.contains("<li>"), "First piece should contain list markup");
-        }
-        _ => panic!("Expected formatted text piece"),
-    }
-    match &output.output.pieces[1] {
-        FormatterOutputPiece::Opaque(id) => assert_eq!(*id, FormatterAnchorId(7)),
-        _ => panic!("Expected opaque anchor"),
-    }
-    match &output.output.pieces[2] {
-        FormatterOutputPiece::Text(t) => {
-            assert!(t.contains("<li>"), "Third piece should contain list markup");
-        }
-        _ => panic!("Expected formatted text piece"),
-    }
+#[test]
+fn two_newlines_before_child_anchor_keep_normal_paragraph_break_behavior() {
+    let rendered = markdown_formatter_output_from_text_and_anchors(&[
+        (Some("hello\n\n"), None),
+        (None, Some(child_anchor(7))),
+        (Some("\nworld"), None),
+    ]);
+
+    assert_eq!(rendered, "<p>hello</p>{child:7}<p>world</p>");
+}
+
+#[test]
+fn single_newline_before_normal_text_keeps_paragraph_open() {
+    let rendered = to_markdown("hello\nworld", "p");
+    assert_eq!(rendered, "<p>hello world</p>");
+}
+
+#[test]
+fn single_newline_before_dynamic_anchor_does_not_use_child_rule() {
+    let rendered = markdown_formatter_output_from_text_and_anchors(&[
+        (Some("hello\n"), None),
+        (None, Some(dynamic_anchor(9))),
+        (Some("\nworld"), None),
+    ]);
+
+    assert_eq!(rendered, "<p>hello {dynamic:9} world</p>");
+}
+
+#[test]
+fn inline_child_anchor_stays_inside_same_list_item() {
+    let rendered = markdown_formatter_output_from_text_and_anchors(&[
+        (Some("- hello "), None),
+        (None, Some(child_anchor(4))),
+        (Some(" world"), None),
+    ]);
+
+    assert_eq!(rendered, "<ul><li>hello {child:4} world</li></ul>");
+}
+
+#[test]
+fn single_newline_before_child_anchor_inside_list_keeps_same_li() {
+    let rendered = markdown_formatter_output_from_text_and_anchors(&[
+        (Some("- hello\n"), None),
+        (None, Some(child_anchor(4))),
+        (Some("\nworld"), None),
+    ]);
+
+    assert_eq!(
+        rendered,
+        "<ul><li><p>hello</p>{child:4}<p>world</p></li></ul>"
+    );
+}
+
+#[test]
+fn list_continuation_text_remains_inside_item_around_inline_child_anchor() {
+    let rendered = markdown_formatter_output_from_text_and_anchors(&[
+        (Some("- hello "), None),
+        (None, Some(child_anchor(4))),
+        (Some("\nworld"), None),
+    ]);
+
+    assert_eq!(rendered, "<ul><li>hello {child:4} world</li></ul>");
+}
+
+#[test]
+fn list_items_support_italic_bold_and_bold_italic_at_block_start() {
+    assert_eq!(
+        to_markdown("- *italic*", "p"),
+        "<ul><li><em>italic</em></li></ul>"
+    );
+    assert_eq!(
+        to_markdown("- **bold**", "p"),
+        "<ul><li><strong>bold</strong></li></ul>"
+    );
+    assert_eq!(
+        to_markdown("- ***bold italic***", "p"),
+        "<ul><li><em><strong>bold italic</strong></em></li></ul>"
+    );
 }

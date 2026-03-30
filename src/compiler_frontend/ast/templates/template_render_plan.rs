@@ -60,6 +60,34 @@ pub struct RenderExpressionPiece {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct FormatterAnchorId(pub usize);
 
+/// Structural classification for opaque formatter anchors.
+///
+/// WHAT:
+/// - Distinguishes folded child-template outputs from generic dynamic expressions.
+///
+/// WHY:
+/// - Some formatters such as `$markdown` need narrow structural behavior changes
+///   for direct child templates without inspecting their sealed content.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum FormatterOpaqueKind {
+    ChildTemplate,
+    DynamicExpression,
+}
+
+/// Opaque formatter piece metadata carried through whitespace/formatter pipelines.
+///
+/// WHAT:
+/// - Preserves both the stable side-table id and the anchor classification.
+///
+/// WHY:
+/// - Formatter chaining must retain whether an anchor is a child template or a
+///   generic runtime expression without exposing the underlying content.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct FormatterOpaquePiece {
+    pub id: FormatterAnchorId,
+    pub kind: FormatterOpaqueKind,
+}
+
 /// The only data a formatter should see:
 /// - body text it may rewrite
 /// - opaque anchors that preserve ordering around non-text content
@@ -72,7 +100,7 @@ pub struct FormatterInput {
 #[derive(Debug, Clone)]
 pub enum FormatterInputPiece {
     Text(FormatterTextPiece),
-    Opaque(FormatterAnchorId),
+    Opaque(FormatterOpaquePiece),
 }
 
 /// Body text visible to a formatter, with source location for diagnostics.
@@ -94,7 +122,7 @@ pub struct FormatterOutput {
 #[derive(Debug, Clone)]
 pub enum FormatterOutputPiece {
     Text(String),
-    Opaque(FormatterAnchorId),
+    Opaque(FormatterOpaquePiece),
 }
 
 impl TemplateRenderPlan {

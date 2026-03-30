@@ -12,7 +12,8 @@
 //!   opaque child-template anchors into a temporary string buffer.
 
 use crate::compiler_frontend::ast::templates::template_render_plan::{
-    FormatterAnchorId, FormatterInput, FormatterInputPiece, FormatterOutput, FormatterOutputPiece,
+    FormatterInput, FormatterInputPiece, FormatterOpaquePiece, FormatterOutput,
+    FormatterOutputPiece,
 };
 use crate::compiler_frontend::basic_utility_functions::NumericalParsing;
 use crate::compiler_frontend::string_interning::StringTable;
@@ -215,7 +216,7 @@ pub(crate) fn apply_whitespace_passes_to_input(
 /// Text pieces hold owned strings so they can be modified in-place across passes.
 enum ResolvedInputPiece {
     Text(String),
-    Opaque(FormatterAnchorId),
+    Opaque(FormatterOpaquePiece),
 }
 
 /// Applies a single whitespace pass across a list of resolved pieces.

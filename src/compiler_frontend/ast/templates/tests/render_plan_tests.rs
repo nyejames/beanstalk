@@ -162,8 +162,8 @@ mod render_plan_tests {
     #[test]
     fn opaque_anchors_survive_structured_formatter() {
         use crate::compiler_frontend::ast::templates::template_render_plan::{
-            FormatterAnchorId, FormatterInput, FormatterInputPiece, FormatterOutputPiece,
-            FormatterTextPiece,
+            FormatterAnchorId, FormatterInput, FormatterInputPiece, FormatterOpaqueKind,
+            FormatterOpaquePiece, FormatterOutputPiece, FormatterTextPiece,
         };
         use crate::projects::html_project::styles::escape_html::escape_html_formatter;
 
@@ -178,7 +178,10 @@ mod render_plan_tests {
                     text: hello,
                     location: SourceLocation::default(),
                 }),
-                FormatterInputPiece::Opaque(FormatterAnchorId(42)),
+                FormatterInputPiece::Opaque(FormatterOpaquePiece {
+                    id: FormatterAnchorId(42),
+                    kind: FormatterOpaqueKind::ChildTemplate,
+                }),
                 FormatterInputPiece::Text(FormatterTextPiece {
                     text: world,
                     location: SourceLocation::default(),
@@ -199,7 +202,10 @@ mod render_plan_tests {
             _ => panic!("Expected escaped text"),
         }
         match &output.output.pieces[1] {
-            FormatterOutputPiece::Opaque(id) => assert_eq!(*id, FormatterAnchorId(42)),
+            FormatterOutputPiece::Opaque(anchor) => {
+                assert_eq!(anchor.id, FormatterAnchorId(42));
+                assert_eq!(anchor.kind, FormatterOpaqueKind::ChildTemplate);
+            }
             _ => panic!("Expected opaque anchor"),
         }
         match &output.output.pieces[2] {

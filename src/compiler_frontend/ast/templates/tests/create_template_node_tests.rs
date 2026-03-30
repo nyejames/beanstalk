@@ -584,6 +584,20 @@ fn markdown_redeclaration_formats_child_template_bodies() {
 }
 
 #[test]
+fn markdown_keeps_inline_child_templates_inside_current_paragraph() {
+    let rendered = folded_template_output("[$markdown:\nhello [:child] world\n]");
+
+    assert_eq!(rendered, "<p>hello child world</p>");
+}
+
+#[test]
+fn markdown_single_newline_before_child_template_closes_paragraph() {
+    let rendered = folded_template_output("[$markdown:\nhello\n[:child]\nworld\n]");
+
+    assert_eq!(rendered, "<p>hello</p>child<p>world</p>");
+}
+
+#[test]
 fn markdown_escapes_html_characters_in_body_text() {
     let rendered = folded_template_output("[$markdown:\n<b>Hello & \"World\" 'x'</b>\n]");
 
@@ -629,6 +643,20 @@ fn markdown_list_breaks_immediately_on_heading_line() {
         rendered,
         "<ul><li>first</li></ul><h2>Heading</h2><p>plain paragraph</p>"
     );
+}
+
+#[test]
+fn markdown_keeps_inline_child_templates_inside_same_list_item() {
+    let rendered = folded_template_output("[$markdown:\n- hello [:child] world\n]");
+
+    assert_eq!(rendered, "<ul><li>hello child world</li></ul>");
+}
+
+#[test]
+fn markdown_single_newline_before_child_template_stays_in_same_list_item() {
+    let rendered = folded_template_output("[$markdown:\n- hello\n[:child]\nworld\n]");
+
+    assert_eq!(rendered, "<ul><li><p>hello</p>child<p>world</p></li></ul>");
 }
 
 #[test]
