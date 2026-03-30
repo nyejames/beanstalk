@@ -14,14 +14,14 @@ use crate::compiler_frontend::hir::hir_nodes::{
     BlockId, HirBlock, HirExpression, HirExpressionKind, HirMatchArm, HirPattern, HirRegion,
     HirTerminator, ValueKind,
 };
-use crate::compiler_frontend::tokenizer::tokens::TextLocation;
+use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::return_hir_transformation_error;
 
 impl<'a> HirBuilder<'a> {
     pub(super) fn lower_return_statement(
         &mut self,
         values: &[Expression],
-        location: &TextLocation,
+        location: &SourceLocation,
     ) -> Result<(), CompilerError> {
         let function_id = self.current_function_id_or_error(location)?;
         let return_aliases = self
@@ -78,7 +78,7 @@ impl<'a> HirBuilder<'a> {
         condition: &Expression,
         then_body: &[AstNode],
         else_body: Option<&[AstNode]>,
-        location: &TextLocation,
+        location: &SourceLocation,
     ) -> Result<(), CompilerError> {
         let current_block = self.current_block_id_or_error(location)?;
         let condition_lowered = self.lower_expression(condition)?;
@@ -145,7 +145,7 @@ impl<'a> HirBuilder<'a> {
 
     pub(super) fn lower_break_statement(
         &mut self,
-        location: &TextLocation,
+        location: &SourceLocation,
     ) -> Result<(), CompilerError> {
         let current_block = self.current_block_id_or_error(location)?;
         let targets = self.current_loop_targets_or_error("break", location)?;
@@ -164,7 +164,7 @@ impl<'a> HirBuilder<'a> {
 
     pub(super) fn lower_continue_statement(
         &mut self,
-        location: &TextLocation,
+        location: &SourceLocation,
     ) -> Result<(), CompilerError> {
         let current_block = self.current_block_id_or_error(location)?;
         let targets = self.current_loop_targets_or_error("continue", location)?;
@@ -185,7 +185,7 @@ impl<'a> HirBuilder<'a> {
         &mut self,
         condition: &Expression,
         body: &[AstNode],
-        location: &TextLocation,
+        location: &SourceLocation,
     ) -> Result<(), CompilerError> {
         let pre_header_block = self.current_block_id_or_error(location)?;
         let parent_region = self.current_region_or_error(location)?;
@@ -234,7 +234,7 @@ impl<'a> HirBuilder<'a> {
         scrutinee: &Expression,
         arms: &[MatchArm],
         default: Option<&[AstNode]>,
-        location: &TextLocation,
+        location: &SourceLocation,
     ) -> Result<(), CompilerError> {
         let current_block = self.current_block_id_or_error(location)?;
 
@@ -389,7 +389,7 @@ impl<'a> HirBuilder<'a> {
     fn ensure_match_merge_block(
         &mut self,
         region: crate::compiler_frontend::hir::hir_nodes::RegionId,
-        location: &TextLocation,
+        location: &SourceLocation,
         merge_block: &mut Option<BlockId>,
     ) -> Result<BlockId, CompilerError> {
         if let Some(existing) = *merge_block {
@@ -413,7 +413,7 @@ impl<'a> HirBuilder<'a> {
     pub(super) fn create_block(
         &mut self,
         region: crate::compiler_frontend::hir::hir_nodes::RegionId,
-        source_location: &TextLocation,
+        source_location: &SourceLocation,
         label: &str,
     ) -> Result<BlockId, CompilerError> {
         let block = HirBlock {
@@ -435,7 +435,7 @@ impl<'a> HirBuilder<'a> {
     fn expression_from_return_values(
         &mut self,
         values: &[HirExpression],
-        location: &TextLocation,
+        location: &SourceLocation,
     ) -> Result<HirExpression, CompilerError> {
         let region = self.current_region_or_error(location)?;
 
@@ -465,7 +465,7 @@ impl<'a> HirBuilder<'a> {
         &mut self,
         from_block: BlockId,
         target: BlockId,
-        location: &TextLocation,
+        location: &SourceLocation,
         edge_label: &str,
     ) -> Result<(), CompilerError> {
         self.emit_terminator(
@@ -485,7 +485,7 @@ impl<'a> HirBuilder<'a> {
         &mut self,
         block_id: BlockId,
         terminator: HirTerminator,
-        location: &TextLocation,
+        location: &SourceLocation,
     ) -> Result<(), CompilerError> {
         self.log_terminator_emitted(block_id, &terminator, location);
         self.set_block_terminator(block_id, terminator, location)
@@ -505,7 +505,7 @@ impl<'a> HirBuilder<'a> {
     pub(super) fn current_loop_targets_or_error(
         &self,
         keyword: &str,
-        location: &TextLocation,
+        location: &SourceLocation,
     ) -> Result<LoopTargets, CompilerError> {
         let Some(targets) = self.loop_targets.last().copied() else {
             return_hir_transformation_error!(

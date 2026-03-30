@@ -3,8 +3,9 @@
 //! WHAT: parses routing-related `#config.bst` settings into typed values.
 //! WHY: keeping one parser avoids drift between builder validation and dev-server runtime behavior.
 
-use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorLocation, ErrorType};
-use crate::projects::settings::{CONFIG_FILE_NAME, Config};
+use crate::compiler_frontend::compiler_errors::CompilerError;
+use crate::compiler_frontend::string_interning::StringTable;
+use crate::projects::settings::Config;
 
 /// Canonical page URL style used for directory-backed HTML routes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -39,10 +40,13 @@ impl Default for HtmlSiteConfig {
 ///
 /// WHAT: resolves defaults plus optional overrides from `#config.bst`.
 /// WHY: site configuration must be explicit and strict so all runtime/build tooling stays aligned.
-pub fn parse_html_site_config(config: &Config) -> Result<HtmlSiteConfig, CompilerError> {
-    let origin = parse_origin(config)?;
-    let page_url_style = parse_page_url_style(config)?;
-    let redirect_index_html = parse_redirect_index_html(config)?;
+pub fn parse_html_site_config(
+    config: &Config,
+    string_table: &mut StringTable,
+) -> Result<HtmlSiteConfig, CompilerError> {
+    let origin = parse_origin(config, string_table)?;
+    let page_url_style = parse_page_url_style(config, string_table)?;
+    let redirect_index_html = parse_redirect_index_html(config, string_table)?;
 
     Ok(HtmlSiteConfig {
         origin,
@@ -51,22 +55,28 @@ pub fn parse_html_site_config(config: &Config) -> Result<HtmlSiteConfig, Compile
     })
 }
 
-fn parse_origin(config: &Config) -> Result<String, CompilerError> {
+fn parse_origin(config: &Config, string_table: &mut StringTable) -> Result<String, CompilerError> {
     let Some(raw_value) = config.settings.get("origin") else {
         return Ok(String::from("/"));
     };
 
-    validate_origin(config, raw_value)?;
+    validate_origin(config, raw_value, string_table)?;
 
     Ok(raw_value.to_owned())
 }
 
-fn validate_origin(config: &Config, origin: &str) -> Result<(), CompilerError> {
+fn validate_origin(
+    config: &Config,
+    origin: &str,
+    string_table: &mut StringTable,
+) -> Result<(), CompilerError> {
     if origin.is_empty() {
         return Err(config_error(
             config,
             "origin",
             String::from("'#origin' cannot be empty."),
+            "Use '/' for the site root or a leading-slash prefix such as '/docs'",
+            string_table,
         ));
     }
 
@@ -75,6 +85,8 @@ fn validate_origin(config: &Config, origin: &str) -> Result<(), CompilerError> {
             config,
             "origin",
             format!("'#origin' must start with '/'. Found: '{origin}'"),
+            "Add a leading '/' to the origin, for example '/docs'",
+            string_table,
         ));
     }
 
@@ -83,6 +95,8 @@ fn validate_origin(config: &Config, origin: &str) -> Result<(), CompilerError> {
             config,
             "origin",
             format!("'#origin' must not end with '/' unless it is exactly '/'. Found: '{origin}'"),
+            "Remove the trailing '/' unless the value is exactly '/'",
+            string_table,
         ));
     }
 
@@ -93,6 +107,8 @@ fn validate_origin(config: &Config, origin: &str) -> Result<(), CompilerError> {
             format!(
                 "'#origin' must not contain query (?) or fragment (#) characters. Found: '{origin}'"
             ),
+            "Use only the path prefix, for example '/docs' instead of '/docs?preview'",
+            string_table,
         ));
     }
 
@@ -101,13 +117,18 @@ fn validate_origin(config: &Config, origin: &str) -> Result<(), CompilerError> {
             config,
             "origin",
             format!("'#origin' must not contain backslashes. Found: '{origin}'"),
+            "Use forward slashes in origins, for example '/docs'",
+            string_table,
         ));
     }
 
     Ok(())
 }
 
-fn parse_page_url_style(config: &Config) -> Result<PageUrlStyle, CompilerError> {
+fn parse_page_url_style(
+    config: &Config,
+    string_table: &mut StringTable,
+) -> Result<PageUrlStyle, CompilerError> {
     let Some(raw_value) = config.settings.get("page_url_style") else {
         return Ok(PageUrlStyle::TrailingSlash);
     };
@@ -122,11 +143,16 @@ fn parse_page_url_style(config: &Config) -> Result<PageUrlStyle, CompilerError> 
             format!(
                 "Invalid '#page_url_style' value '{raw_value}'. Allowed values: \"trailing_slash\", \"no_trailing_slash\", \"ignore\"."
             ),
+            "Use 'trailing_slash', 'no_trailing_slash', or 'ignore'",
+            string_table,
         )),
     }
 }
 
-fn parse_redirect_index_html(config: &Config) -> Result<bool, CompilerError> {
+fn parse_redirect_index_html(
+    config: &Config,
+    string_table: &mut StringTable,
+) -> Result<bool, CompilerError> {
     let Some(raw_value) = config.settings.get("redirect_index_html") else {
         return Ok(true);
     };
@@ -140,35 +166,22 @@ fn parse_redirect_index_html(config: &Config) -> Result<bool, CompilerError> {
             format!(
                 "Invalid '#redirect_index_html' value '{raw_value}'. Allowed values: true or false."
             ),
+            "Use 'true' to redirect or 'false' to keep index.html URLs",
+            string_table,
         )),
     }
 }
 
 /// WHAT: creates a config error with precise location from setting_locations if available.
 /// WHY: precise error locations help users quickly identify and fix config issues.
-fn config_error(config: &Config, key: &str, message: String) -> CompilerError {
-    let location = config
-        .setting_locations
-        .get(key)
-        .cloned()
-        .unwrap_or_else(|| {
-            // Fall back to file-level location if key location not found
-            let config_path = config.entry_dir.join(CONFIG_FILE_NAME);
-            ErrorLocation::new(config_path, Default::default(), Default::default())
-        });
-
-    let mut error = CompilerError::new(message, location, ErrorType::Config);
-    // Add actionable suggestion based on the key
-    let suggestion = match key {
-        "page_url_style" => "Use 'trailing_slash', 'no_trailing_slash', or 'ignore'",
-        "redirect_index_html" => "Use 'true' to redirect or 'false' to keep index.html URLs",
-        _ => "Check the config documentation for valid values",
-    };
-    error.metadata.insert(
-        crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
-        suggestion.to_string(),
-    );
-    error
+fn config_error(
+    config: &Config,
+    key: &str,
+    message: String,
+    suggestion: &str,
+    string_table: &mut StringTable,
+) -> CompilerError {
+    config.config_error_with_suggestion(key, message, suggestion, string_table)
 }
 
 // --- Public Path Helpers ---

@@ -6,7 +6,7 @@
 
 use crate::compiler_frontend::analysis::borrow_checker::{BorrowCheckReport, check_borrows};
 use crate::compiler_frontend::ast::ast::{Ast, ModuleExport};
-use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind, TextLocation};
+use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind, SourceLocation};
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::compiler_errors::CompilerError;
@@ -22,8 +22,8 @@ pub(crate) use crate::compiler_frontend::test_support::test_project_path_resolve
 use crate::compiler_frontend::tokenizer::tokens::CharPosition;
 use crate::projects::settings::IMPLICIT_START_FUNC_NAME;
 
-pub(crate) fn location(line: i32) -> TextLocation {
-    TextLocation {
+pub(crate) fn location(line: i32) -> SourceLocation {
+    SourceLocation {
         scope: InternedPath::new(),
         start_pos: CharPosition {
             line_number: line,
@@ -36,7 +36,7 @@ pub(crate) fn location(line: i32) -> TextLocation {
     }
 }
 
-pub(crate) fn node(kind: NodeKind, location: TextLocation) -> AstNode {
+pub(crate) fn node(kind: NodeKind, location: SourceLocation) -> AstNode {
     AstNode {
         kind,
         location,
@@ -56,7 +56,7 @@ pub(crate) fn param(
     id: InternedPath,
     data_type: DataType,
     mutable: bool,
-    location: TextLocation,
+    location: SourceLocation,
 ) -> Declaration {
     let ownership = if mutable {
         Ownership::MutableOwned
@@ -73,7 +73,7 @@ pub(crate) fn param(
 pub(crate) fn reference_expr(
     name: InternedPath,
     data_type: DataType,
-    location: TextLocation,
+    location: SourceLocation,
 ) -> Expression {
     Expression::reference(name, data_type, location, Ownership::ImmutableReference)
 }
@@ -81,7 +81,7 @@ pub(crate) fn reference_expr(
 pub(crate) fn assignment_target(
     name: InternedPath,
     data_type: DataType,
-    location: TextLocation,
+    location: SourceLocation,
 ) -> AstNode {
     node(
         NodeKind::Rvalue(Expression::reference(
@@ -98,7 +98,7 @@ pub(crate) fn function_node(
     name: InternedPath,
     signature: FunctionSignature,
     body: Vec<AstNode>,
-    location: TextLocation,
+    location: SourceLocation,
 ) -> AstNode {
     node(NodeKind::Function(name, signature, body), location)
 }

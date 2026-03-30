@@ -21,7 +21,8 @@ pub(crate) fn lower_hir_to_wasm_lir(
 ) -> Result<WasmLirBackendResult, CompilerMessages> {
     // WHAT: fail fast on builder/backend contract issues.
     // WHY: avoid partial lowering and keep diagnostics deterministic.
-    validate_request(hir_module, request).map_err(CompilerMessages::from_error)?;
+    validate_request(hir_module, request)
+        .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;
 
     // WHAT: perform full module lowering using HIR + borrow side tables.
     // WHY: phase-1 establishes the stable HIR->LIR seam for later Wasm emission.
@@ -52,7 +53,7 @@ pub(crate) fn lower_hir_to_wasm_module(
     // WHAT: perform pure Wasm encoding from already-lowered LIR.
     // WHY: emitter must stay backend-encoding focused and avoid reinterpreting frontend semantics.
     let emit_result = emit_lir_to_wasm_module(&result.lir_module, request)
-        .map_err(CompilerMessages::from_error)?;
+        .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;
     result.wasm_bytes = Some(emit_result.wasm_bytes);
 
     if request.debug_flags.show_wasm_sections {

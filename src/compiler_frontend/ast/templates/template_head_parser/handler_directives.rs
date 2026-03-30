@@ -20,13 +20,13 @@ use crate::compiler_frontend::style_directives::{
     StyleDirectiveArgumentType, StyleDirectiveArgumentValue, StyleDirectiveEffects,
     StyleDirectiveHandlerSpec,
 };
-use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TextLocation, TokenKind};
+use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
 use crate::return_syntax_error;
 
 #[derive(Clone)]
 struct ParsedHandlerDirectiveArgument {
     value: Option<StyleDirectiveArgumentValue>,
-    error_location: TextLocation,
+    error_location: SourceLocation,
 }
 
 pub(super) fn apply_handler_style_directive(
@@ -51,12 +51,7 @@ pub(super) fn apply_handler_style_directive(
         // Frontend parsing/folding always executes formatter factories here. Directive
         // definition modules own the factory and formatter implementation details.
         let formatter = factory(parsed_argument.value.as_ref()).map_err(|message| {
-            CompilerError::new_syntax_error(
-                &message,
-                parsed_argument
-                    .error_location
-                    .to_error_location(string_table),
-            )
+            CompilerError::new_syntax_error(&message, parsed_argument.error_location)
         })?;
         template.apply_style_updates(|style| {
             style.formatter = formatter.clone();
@@ -104,9 +99,7 @@ fn parse_optional_handler_style_argument(
     let Some(argument_type) = argument_type else {
         return_syntax_error!(
             format!("'${directive_name}' does not accept arguments."),
-            token_stream
-                .current_location()
-                .to_error_location(string_table)
+            token_stream.current_location()
         );
     };
 
@@ -119,7 +112,7 @@ fn parse_optional_handler_style_argument(
             format!(
                 "'${directive_name}(...)' requires one compile-time argument when parentheses are present."
             ),
-            token_stream.current_location().to_error_location(string_table),
+            token_stream.current_location(),
             {
                 PrimarySuggestion => "Provide exactly one argument inside the directive parentheses",
             }
@@ -140,16 +133,14 @@ fn parse_optional_handler_style_argument(
     if token_stream.current_token_kind() == &TokenKind::Comma {
         return_syntax_error!(
             format!("'${directive_name}(...)' accepts at most one argument."),
-            token_stream
-                .current_location()
-                .to_error_location(string_table)
+            token_stream.current_location()
         );
     }
 
     if token_stream.current_token_kind() != &TokenKind::CloseParenthesis {
         return_syntax_error!(
             format!("Expected ')' after '${directive_name}(...)' argument."),
-            token_stream.current_location().to_error_location(string_table),
+            token_stream.current_location(),
             {
                 SuggestedInsertion => ")",
             }
@@ -159,7 +150,7 @@ fn parse_optional_handler_style_argument(
     if !parsed_expression.is_compile_time_constant() {
         return_syntax_error!(
             format!("'${directive_name}(...)' requires a compile-time argument value."),
-            argument_location.to_error_location(string_table),
+            argument_location,
             {
                 PrimarySuggestion => "Use a literal or constant value that folds at compile time",
             }
@@ -184,7 +175,7 @@ fn normalize_provided_style_argument_value(
     expression: Expression,
     argument_type: StyleDirectiveArgumentType,
     directive_name: &str,
-    argument_location: &TextLocation,
+    argument_location: &SourceLocation,
     string_table: &StringTable,
 ) -> Result<StyleDirectiveArgumentValue, CompilerError> {
     match argument_type {
@@ -195,7 +186,7 @@ fn normalize_provided_style_argument_value(
             _ => {
                 return_syntax_error!(
                     format!("'${directive_name}(...)' expects a compile-time string argument."),
-                    argument_location.to_error_location(string_table)
+                    argument_location.clone()
                 )
             }
         },
@@ -206,7 +197,7 @@ fn normalize_provided_style_argument_value(
             _ => {
                 return_syntax_error!(
                     format!("'${directive_name}(...)' expects a compile-time template argument."),
-                    argument_location.to_error_location(string_table)
+                    argument_location.clone()
                 )
             }
         },
@@ -216,7 +207,7 @@ fn normalize_provided_style_argument_value(
             _ => {
                 return_syntax_error!(
                     format!("'${directive_name}(...)' expects a compile-time numeric argument."),
-                    argument_location.to_error_location(string_table)
+                    argument_location.clone()
                 )
             }
         },
@@ -225,7 +216,7 @@ fn normalize_provided_style_argument_value(
             _ => {
                 return_syntax_error!(
                     format!("'${directive_name}(...)' expects a compile-time bool argument."),
-                    argument_location.to_error_location(string_table)
+                    argument_location.clone()
                 )
             }
         },

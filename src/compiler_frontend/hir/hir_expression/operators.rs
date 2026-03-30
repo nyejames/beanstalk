@@ -9,14 +9,14 @@ use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::hir::hir_datatypes::{HirTypeKind, TypeId};
 use crate::compiler_frontend::hir::hir_nodes::{HirBinOp, HirUnaryOp};
-use crate::compiler_frontend::tokenizer::tokens::TextLocation;
+use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::return_hir_transformation_error;
 
 impl<'a> HirBuilder<'a> {
     pub(super) fn lower_bin_op(
         &self,
         op: &Operator,
-        location: &TextLocation,
+        location: &SourceLocation,
     ) -> Result<HirBinOp, CompilerError> {
         match op {
             Operator::Add => Ok(HirBinOp::Add),
@@ -52,7 +52,7 @@ impl<'a> HirBuilder<'a> {
     pub(super) fn lower_unary_op(
         &self,
         op: &Operator,
-        location: &TextLocation,
+        location: &SourceLocation,
     ) -> Result<HirUnaryOp, CompilerError> {
         match op {
             Operator::Not => Ok(HirUnaryOp::Not),

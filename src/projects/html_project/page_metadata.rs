@@ -4,10 +4,9 @@
 //! WHY: page metadata should stay builder-local and deterministic without introducing new
 //!      language surface area or hidden imports.
 
-use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorLocation, ErrorType};
+use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorType, SourceLocation};
 use crate::compiler_frontend::hir::hir_nodes::{HirConstValue, HirModule};
 use crate::compiler_frontend::string_interning::StringTable;
-use std::path::PathBuf;
 
 const PAGE_TITLE: &str = "page_title";
 const PAGE_DESCRIPTION: &str = "page_description";
@@ -43,20 +42,8 @@ pub(crate) fn extract_html_page_metadata(
 
     let error_location = entry_scope
         .as_ref()
-        .map(|path| {
-            ErrorLocation::new(
-                path.to_path_buf(string_table),
-                Default::default(),
-                Default::default(),
-            )
-        })
-        .unwrap_or_else(|| {
-            ErrorLocation::new(
-                PathBuf::from("#page.bst"),
-                Default::default(),
-                Default::default(),
-            )
-        });
+        .map(|path| SourceLocation::new(path.to_owned(), Default::default(), Default::default()))
+        .unwrap_or_default();
 
     let mut metadata = HtmlPageMetadata::default();
 
@@ -124,7 +111,7 @@ fn is_reserved_page_key(name: &str) -> bool {
     )
 }
 
-fn metadata_error(location: &ErrorLocation, key: &str, reason: &str) -> CompilerError {
+fn metadata_error(location: &SourceLocation, key: &str, reason: &str) -> CompilerError {
     let mut error = CompilerError::new(
         format!("Reserved HTML page metadata constant '{key}' {reason}."),
         location.clone(),

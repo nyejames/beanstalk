@@ -51,7 +51,7 @@ pub(crate) fn parse_struct_constructor_expression(
                     string_table.resolve(struct_name),
                     fields.len()
                 ),
-                token_stream.current_location().to_error_location(string_table),
+                token_stream.current_location(),
                 {
                     CompilationStage => "Expression Parsing",
                     PrimarySuggestion => "Remove extra struct constructor arguments so they match the declared fields",
@@ -80,7 +80,7 @@ pub(crate) fn parse_struct_constructor_expression(
                 if token_stream.current_token_kind() == &TokenKind::CloseParenthesis {
                     return_syntax_error!(
                         "Trailing commas in struct constructor arguments are not supported.",
-                        token_stream.current_location().to_error_location(string_table),
+                        token_stream.current_location(),
                         {
                             CompilationStage => "Expression Parsing",
                             PrimarySuggestion => "Remove the trailing comma in this constructor call",
@@ -95,7 +95,7 @@ pub(crate) fn parse_struct_constructor_expression(
                         "Expected ',' or ')' after struct constructor argument, found '{:?}'",
                         token_stream.current_token_kind()
                     ),
-                    token_stream.current_location().to_error_location(string_table),
+                    token_stream.current_location(),
                     {
                         CompilationStage => "Expression Parsing",
                         PrimarySuggestion => "Separate constructor arguments with ',' and close with ')'",
@@ -121,7 +121,7 @@ pub(crate) fn parse_struct_constructor_expression(
                 "Struct constructor for '{}' is missing {missing_required} required field argument(s) without defaults.",
                 string_table.resolve(struct_name)
             ),
-            constructor_location.to_error_location(string_table),
+            constructor_location,
             {
                 CompilationStage => "Expression Parsing",
                 PrimarySuggestion => "Provide all required field arguments or add defaults for those struct fields",
@@ -152,7 +152,7 @@ pub(crate) fn parse_struct_constructor_expression(
                         field_name,
                         string_table.resolve(struct_name)
                     ),
-                    value.location.to_error_location(string_table),
+                    value.location,
                     {
                         CompilationStage => "Expression Parsing",
                         PrimarySuggestion => "Use only compile-time values when constructing structs for top-level '#' constants",

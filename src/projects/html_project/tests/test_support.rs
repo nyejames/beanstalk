@@ -18,7 +18,7 @@ use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_resolution::{CompileTimePathBase, CompileTimePathKind};
 use crate::compiler_frontend::paths::rendered_path_usage::RenderedPathUsage;
 use crate::compiler_frontend::string_interning::StringTable;
-use crate::compiler_frontend::tokenizer::tokens::TextLocation;
+use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use std::path::PathBuf;
 use std::time::SystemTime;
 
@@ -70,12 +70,14 @@ pub(crate) fn create_test_hir_module() -> HirModule {
 }
 
 /// Wrap the base HIR fixture in the build-system `Module` shape used by the HTML builder.
-pub(crate) fn create_test_module(entry_point: PathBuf) -> Module {
-    let mut string_table = StringTable::new();
+///
+/// WHAT: binds the test module's names into the caller-owned shared string table.
+/// WHY: HTML builder tests now need the same one-table diagnostic model as production builds.
+pub(crate) fn create_test_module(entry_point: PathBuf, string_table: &mut StringTable) -> Module {
     let mut hir_module = create_test_hir_module();
     hir_module.side_table.bind_function_name(
         FunctionId(0),
-        InternedPath::from_single_str("start_entry", &mut string_table),
+        InternedPath::from_single_str("start_entry", string_table),
     );
 
     Module {
@@ -83,7 +85,6 @@ pub(crate) fn create_test_module(entry_point: PathBuf) -> Module {
         hir: hir_module,
         borrow_analysis: BorrowCheckReport::default(),
         warnings: vec![],
-        string_table,
     }
 }
 
@@ -113,7 +114,7 @@ pub(crate) fn rendered_path_usage(
         base,
         kind,
         source_file_scope: scope.clone(),
-        render_location: TextLocation::new(
+        render_location: SourceLocation::new(
             scope,
             crate::compiler_frontend::tokenizer::tokens::CharPosition {
                 line_number,
@@ -128,7 +129,12 @@ pub(crate) fn rendered_path_usage(
 }
 
 /// Add a callable zero-argument unit-returning function to the test module.
-pub(crate) fn add_callable_function(module: &mut Module, function_id: FunctionId, name: &str) {
+pub(crate) fn add_callable_function(
+    module: &mut Module,
+    function_id: FunctionId,
+    name: &str,
+    string_table: &mut StringTable,
+) {
     let unit_type = module.hir.functions[0].return_type;
     let block_id = BlockId(module.hir.blocks.len() as u32);
     let value_id =
@@ -160,13 +166,18 @@ pub(crate) fn add_callable_function(module: &mut Module, function_id: FunctionId
         .insert(function_id, HirFunctionOrigin::Normal);
     module.hir.side_table.bind_function_name(
         function_id,
-        InternedPath::from_single_str(name, &mut module.string_table),
+        InternedPath::from_single_str(name, string_table),
     );
 }
 
 /// Append a start-function call targeting an already-registered function name.
-pub(crate) fn add_start_call(module: &mut Module, target_name: &str, statement_id: u32) {
-    let target_path = InternedPath::from_single_str(target_name, &mut module.string_table);
+pub(crate) fn add_start_call(
+    module: &mut Module,
+    target_name: &str,
+    statement_id: u32,
+    string_table: &mut StringTable,
+) {
+    let target_path = InternedPath::from_single_str(target_name, string_table);
     let target_function_id = module
         .hir
         .functions
@@ -193,7 +204,7 @@ pub(crate) fn add_start_call(module: &mut Module, target_name: &str, statement_i
             args: vec![],
             result: None,
         },
-        location: TextLocation::default(),
+        location: SourceLocation::default(),
     });
 }
 

@@ -5,6 +5,7 @@
 use crate::build_system::build::{BackendBuilder, CleanupPolicy, Module, OutputFile, Project};
 use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages, ErrorType};
+use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::style_directives::StyleDirectiveSpec;
 use crate::projects::html_project::document_config::parse_html_document_config;
 use crate::projects::html_project::js_path::{compile_html_module_js, html_output_path};
@@ -40,20 +41,25 @@ impl BackendBuilder for HtmlProjectBuilder {
         modules: Vec<Module>,
         config: &Config,
         flags: &[Flag],
+        string_table: &mut StringTable,
     ) -> Result<Project, CompilerMessages> {
-        parse_html_site_config(config).map_err(CompilerMessages::from_error)?;
-        let document_config =
-            parse_html_document_config(config).map_err(CompilerMessages::from_error)?;
+        parse_html_site_config(config, string_table)
+            .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;
+        let document_config = parse_html_document_config(config, string_table)
+            .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;
 
         if modules.is_empty() {
-            return Err(CompilerMessages::from_error(CompilerError::compiler_error(
-                "HTML builder expected at least one compiled module but got 0.",
-            )));
+            return Err(CompilerMessages::from_error(
+                CompilerError::compiler_error(
+                    "HTML builder expected at least one compiled module but got 0.",
+                ),
+                string_table.clone(),
+            ));
         }
 
         let release_build = flags.contains(&Flag::Release);
         let wasm_enabled = flags.contains(&Flag::HtmlWasm);
-        let entry_paths = HtmlEntryPathPlan::from_config(config)?;
+        let entry_paths = HtmlEntryPathPlan::from_config(config, string_table)?;
 
         let mut output_files = Vec::new();
         let mut output_paths = HashSet::new();
@@ -66,8 +72,9 @@ impl BackendBuilder for HtmlProjectBuilder {
             let logical_html_output_path = html_output_path(
                 &module.entry_point,
                 entry_paths.resolved_entry_root.as_deref(),
+                string_table,
             )
-            .map_err(CompilerMessages::from_error)?;
+            .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;
 
             let compiled_artifacts = compile_one_module(
                 module,
@@ -76,6 +83,7 @@ impl BackendBuilder for HtmlProjectBuilder {
                 &document_config,
                 release_build,
                 wasm_enabled,
+                string_table,
             )?;
 
             let html_output_path = compiled_artifacts.html_output_path.clone();
@@ -85,6 +93,7 @@ impl BackendBuilder for HtmlProjectBuilder {
                     return Err(duplicate_output_path_error(
                         &module.entry_point,
                         &output_path,
+                        string_table,
                     ));
                 }
                 output_files.push(output_file);
@@ -101,13 +110,18 @@ impl BackendBuilder for HtmlProjectBuilder {
             }
         }
 
-        entry_paths.require_homepage_if_directory_build(config, has_directory_homepage)?;
+        entry_paths.require_homepage_if_directory_build(
+            config,
+            has_directory_homepage,
+            string_table,
+        )?;
 
         let mut tracked_assets = Vec::new();
         let mut tracked_asset_sources_by_output: HashMap<PathBuf, PathBuf> = HashMap::new();
         for (module_index, html_output_path) in &compiled_html_output_paths {
             let module = &modules[*module_index];
-            let planned_assets = plan_module_tracked_assets(module, html_output_path)?;
+            let planned_assets =
+                plan_module_tracked_assets(module, html_output_path, string_table)?;
             warnings.extend(planned_assets.warnings);
 
             for asset in planned_assets.assets {
@@ -122,6 +136,7 @@ impl BackendBuilder for HtmlProjectBuilder {
                         &asset.source_filesystem_path,
                         existing_source,
                         &output_path,
+                        string_table,
                     ));
                 }
 
@@ -129,6 +144,7 @@ impl BackendBuilder for HtmlProjectBuilder {
                     return Err(tracked_asset_conflicts_with_existing_output_error(
                         &asset.source_filesystem_path,
                         &output_path,
+                        string_table,
                     ));
                 }
 
@@ -137,7 +153,7 @@ impl BackendBuilder for HtmlProjectBuilder {
                 tracked_assets.push(asset);
             }
         }
-        output_files.extend(emit_tracked_assets(&tracked_assets)?);
+        output_files.extend(emit_tracked_assets(&tracked_assets, string_table)?);
 
         Ok(Project {
             output_files,
@@ -147,11 +163,15 @@ impl BackendBuilder for HtmlProjectBuilder {
         })
     }
 
-    fn validate_project_config(&self, config: &Config) -> Result<(), CompilerError> {
+    fn validate_project_config(
+        &self,
+        config: &Config,
+        string_table: &mut StringTable,
+    ) -> Result<(), CompilerError> {
         // Validate HTML-specific configuration up front so build/dev runtime behavior stays
         // deterministic and all routing-policy mistakes are surfaced as config errors.
-        parse_html_site_config(config)?;
-        parse_html_document_config(config)?;
+        parse_html_site_config(config, string_table)?;
+        parse_html_document_config(config, string_table)?;
 
         // Empty dev/release folders are allowed and resolved by core build output logic.
         Ok(())
@@ -170,12 +190,13 @@ fn compile_one_module(
     document_config: &crate::projects::html_project::document_config::HtmlDocumentConfig,
     release_build: bool,
     wasm_enabled: bool,
+    string_table: &mut StringTable,
 ) -> Result<CompiledHtmlModuleArtifacts, CompilerMessages> {
     if wasm_enabled {
         let compiled_wasm = compile_html_module_wasm(
             &module.hir,
             &module.borrow_analysis,
-            &module.string_table,
+            string_table,
             logical_html_output_path,
             project_name,
             document_config,
@@ -186,13 +207,13 @@ fn compile_one_module(
         let output_file = compile_html_module_js(
             &module.hir,
             &module.borrow_analysis,
-            &module.string_table,
+            string_table,
             logical_html_output_path.to_path_buf(),
             project_name,
             document_config,
             release_build,
         )
-        .map_err(CompilerMessages::from_error)?;
+        .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;
         Ok(CompiledHtmlModuleArtifacts::from_js(
             logical_html_output_path.to_path_buf(),
             output_file,
@@ -200,28 +221,35 @@ fn compile_one_module(
     }
 }
 
-fn duplicate_output_path_error(entry_point: &Path, output_path: &Path) -> CompilerMessages {
+fn duplicate_output_path_error(
+    entry_point: &Path,
+    output_path: &Path,
+    string_table: &StringTable,
+) -> CompilerMessages {
+    let mut error_string_table = string_table.clone();
     let mut error = CompilerError::file_error(
         entry_point,
         format!(
             "HTML builder produced duplicate output path '{}'. Ensure each '#*.bst' entry maps to a unique page output.",
             output_path.display(),
         ),
+        &mut error_string_table,
     )
     .with_error_type(ErrorType::Config);
     error.metadata.insert(
         crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
         "Check your page routing configuration to ensure unique output paths".to_string(),
     );
-    CompilerMessages::from_error(error)
+    CompilerMessages::from_error(error, error_string_table)
 }
 
 fn conflicting_tracked_asset_output_error(
     source_path: &Path,
     existing_source_path: &Path,
     output_path: &Path,
+    string_table: &StringTable,
 ) -> CompilerMessages {
-    CompilerMessages::from_error(CompilerError::file_error(
+    file_error_messages(
         source_path,
         format!(
             "Tracked asset '{}' would emit to '{}', but that output path is already claimed by '{}'.",
@@ -229,21 +257,32 @@ fn conflicting_tracked_asset_output_error(
             output_path.display(),
             existing_source_path.display(),
         ),
-    ))
+        string_table,
+    )
 }
 
 fn tracked_asset_conflicts_with_existing_output_error(
     source_path: &Path,
     output_path: &Path,
+    string_table: &StringTable,
 ) -> CompilerMessages {
-    CompilerMessages::from_error(CompilerError::file_error(
+    file_error_messages(
         source_path,
         format!(
             "Tracked asset '{}' would emit to '{}', but that output path is already claimed by another emitted HTML builder artifact.",
             source_path.display(),
             output_path.display(),
         ),
-    ))
+        string_table,
+    )
+}
+
+fn file_error_messages(
+    path: &Path,
+    msg: impl Into<String>,
+    string_table: &StringTable,
+) -> CompilerMessages {
+    CompilerMessages::file_error(path, msg, string_table)
 }
 
 struct CompiledHtmlModuleArtifacts {

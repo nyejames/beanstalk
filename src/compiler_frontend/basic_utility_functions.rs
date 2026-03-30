@@ -4,6 +4,7 @@
 //! still reused in parsing and path-validation code.
 
 use crate::compiler_frontend::compiler_errors::CompilerError;
+use crate::compiler_frontend::string_interning::StringTable;
 use crate::return_file_error;
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
@@ -15,7 +16,10 @@ pub fn is_valid_var_char(char: &char) -> bool {
 // WHAT: validate a user-provided filesystem path and normalize separators on Windows.
 // WHY: build-system path settings are user-facing input, so they must produce structured file
 //      diagnostics instead of leaking platform-specific path quirks downstream.
-pub fn check_if_valid_path(path: &str) -> Result<PathBuf, CompilerError> {
+pub fn check_if_valid_path(
+    path: &str,
+    string_table: &mut StringTable,
+) -> Result<PathBuf, CompilerError> {
     // If it contains Unix-style slashes, convert them
     let path = if cfg!(windows) && path.contains('/') {
         // Replace forward slashes with backslashes
@@ -28,7 +32,7 @@ pub fn check_if_valid_path(path: &str) -> Result<PathBuf, CompilerError> {
 
     // Check if the path exists
     if !path.exists() {
-        return_file_error!(path, "Path does not exist", {
+        return_file_error!(string_table, path, "Path does not exist", {
             CompilationStage => String::from("Build system path checking")
         });
     }

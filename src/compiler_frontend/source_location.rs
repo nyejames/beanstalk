@@ -1,14 +1,13 @@
-//! Shared source-location model for frontend and diagnostic scopes.
+//! Shared source-location model for frontend and diagnostics.
 //!
-//! WHAT: defines one generic location shape plus the `TextLocation` and `ErrorLocation`
-//! specializations used throughout the compiler.
-//! WHY: frontend source locations and owned diagnostic locations represent the same source span
-//! concept and should differ only in how the scope path is stored.
+//! WHAT: defines the one canonical source span type used throughout the compiler pipeline.
+//! WHY: all diagnostics now preserve interned paths and resolve them through the shared
+//!      `StringTable` only at rendering or filesystem-adjacent boundaries.
 
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
 use std::cmp::Ordering;
-use std::path::PathBuf;
+use std::path::Path;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default, Hash)]
 pub struct CharPosition {
@@ -17,36 +16,37 @@ pub struct CharPosition {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Default, Hash)]
-pub struct SourceLocation<Scope> {
-    pub scope: Scope,
+pub struct SourceLocation {
+    pub scope: InternedPath,
     pub start_pos: CharPosition,
     pub end_pos: CharPosition,
 }
 
-pub type TextLocation = SourceLocation<InternedPath>;
-pub type ErrorLocation = SourceLocation<PathBuf>;
-
-impl<Scope> SourceLocation<Scope> {
-    pub fn new(scope: Scope, start: CharPosition, end: CharPosition) -> Self {
+impl SourceLocation {
+    pub fn new(scope: InternedPath, start: CharPosition, end: CharPosition) -> Self {
         Self {
             scope,
             start_pos: start,
             end_pos: end,
         }
     }
-}
 
-impl SourceLocation<InternedPath> {
-    pub fn to_error_location(&self, string_table: &StringTable) -> ErrorLocation {
-        ErrorLocation::new(
-            self.scope.to_path_buf(string_table),
-            self.start_pos,
-            self.end_pos,
+    /// Create a file-level location by interning the provided filesystem path.
+    ///
+    /// WHAT: preserves non-tokenized file diagnostics in the same interned-path model as parsed
+    /// source locations.
+    /// WHY: terminal/dev-server renderers now resolve all diagnostic paths through the shared
+    /// string table instead of storing owned `PathBuf`s on errors or warnings.
+    pub fn from_path(path: &Path, string_table: &mut StringTable) -> Self {
+        Self::new(
+            InternedPath::from_path_buf(path, string_table),
+            CharPosition::default(),
+            CharPosition::default(),
         )
     }
 }
 
-impl<Scope: PartialEq> PartialOrd for SourceLocation<Scope> {
+impl PartialOrd for SourceLocation {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         let self_start_line = self.start_pos.line_number;
         let other_start_line = other.start_pos.line_number;

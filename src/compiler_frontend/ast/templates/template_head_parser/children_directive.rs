@@ -33,7 +33,7 @@ pub(super) fn parse_children_style_directive(
             "The '$children(..)' directive requires one argument: a template or string value.",
             token_stream
                 .current_location()
-                .to_error_location(string_table),
+                ,
             {
                 PrimarySuggestion => "Use '$children([:prefix])' or '$children(\"prefix\")'",
             }
@@ -47,9 +47,7 @@ pub(super) fn parse_children_style_directive(
     if token_stream.current_token_kind() == &TokenKind::CloseParenthesis {
         return_syntax_error!(
             "The '$children(..)' directive cannot be empty. Provide a template or string argument.",
-            token_stream
-                .current_location()
-                .to_error_location(string_table)
+            token_stream.current_location()
         );
     }
 
@@ -68,7 +66,7 @@ pub(super) fn parse_children_style_directive(
             "The '$children(..)' directive supports exactly one argument and must end with ')'.",
             token_stream
                 .current_location()
-                .to_error_location(string_table),
+                ,
             {
                 PrimarySuggestion => "Use '$children(template_or_string)'",
                 SuggestedInsertion => ")",
@@ -79,7 +77,7 @@ pub(super) fn parse_children_style_directive(
     if !argument.is_compile_time_constant() {
         return_syntax_error!(
             "The '$children(..)' directive only accepts compile-time values.",
-            argument_location.to_error_location(string_table),
+            argument_location,
             {
                 PrimarySuggestion => "Use a template literal, string literal, or constant reference that folds at compile time",
             }
@@ -97,7 +95,7 @@ pub(super) fn parse_children_style_directive(
             ) {
                 return_syntax_error!(
                     "The '$children(..)' directive only accepts compile-time template/string values.",
-                    argument_location.to_error_location(string_table)
+                    argument_location
                 );
             }
 
@@ -120,7 +118,7 @@ pub(super) fn parse_children_style_directive(
         _ => {
             return_syntax_error!(
                 "The '$children(..)' directive only accepts template or string arguments.",
-                argument_location.to_error_location(string_table)
+                argument_location
             )
         }
     };

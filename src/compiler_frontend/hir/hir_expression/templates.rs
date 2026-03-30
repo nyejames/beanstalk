@@ -14,7 +14,7 @@ use crate::compiler_frontend::hir::hir_nodes::{
 };
 use crate::compiler_frontend::host_functions::CallTarget;
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::tokenizer::tokens::TextLocation;
+use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::return_hir_transformation_error;
 
 use super::LoweredExpression;
@@ -25,7 +25,7 @@ impl<'a> HirBuilder<'a> {
     pub(crate) fn lower_runtime_template_expression(
         &mut self,
         template: &Template,
-        location: &TextLocation,
+        location: &SourceLocation,
     ) -> Result<LoweredExpression, CompilerError> {
         if !self.currently_lowering_constants.is_empty() {
             // Module constant evaluation must stay statement-free. When constant structs carry
@@ -78,7 +78,7 @@ impl<'a> HirBuilder<'a> {
     fn create_runtime_template_function(
         &mut self,
         chunk_types: &[DataType],
-        location: &TextLocation,
+        location: &SourceLocation,
     ) -> Result<FunctionId, CompilerError> {
         let current_function_id = self.current_function_id_or_error(location)?;
 
@@ -189,7 +189,7 @@ impl<'a> HirBuilder<'a> {
     fn lower_template_chunk_type(
         &mut self,
         chunk_type: &DataType,
-        location: &TextLocation,
+        location: &SourceLocation,
     ) -> Result<TypeId, CompilerError> {
         let normalized = match chunk_type {
             // Runtime template chunks must have a concrete lowered type.
@@ -203,7 +203,7 @@ impl<'a> HirBuilder<'a> {
     fn build_runtime_template_return_expression(
         &mut self,
         params: &[(LocalId, TypeId)],
-        location: &TextLocation,
+        location: &SourceLocation,
         region: RegionId,
     ) -> HirExpression {
         let string_ty = self.intern_type_kind(HirTypeKind::String);
@@ -245,7 +245,7 @@ impl<'a> HirBuilder<'a> {
     pub(crate) fn coerce_expression_to_string(
         &mut self,
         expression: HirExpression,
-        location: &TextLocation,
+        location: &SourceLocation,
         string_ty: TypeId,
         region: RegionId,
     ) -> HirExpression {

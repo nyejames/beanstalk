@@ -4,8 +4,9 @@
 //! WHY: keeping document policy separate from routing config avoids one oversized parser and
 //!      gives the HTML builder a single source of truth for shell defaults.
 
-use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorLocation, ErrorType};
-use crate::projects::settings::{CONFIG_FILE_NAME, Config};
+use crate::compiler_frontend::compiler_errors::CompilerError;
+use crate::compiler_frontend::string_interning::StringTable;
+use crate::projects::settings::Config;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct HtmlDocumentConfig {
@@ -38,17 +39,24 @@ impl Default for HtmlDocumentConfig {
 
 pub(crate) fn parse_html_document_config(
     config: &Config,
+    string_table: &mut StringTable,
 ) -> Result<HtmlDocumentConfig, CompilerError> {
     Ok(HtmlDocumentConfig {
-        lang: parse_required_string(config, "html_lang", "en", true)?,
-        title_prefix: parse_required_string(config, "html_title_prefix", "", false)?,
-        title_postfix: parse_required_string(config, "html_title_postfix", "", false)?,
-        favicon: parse_optional_string(config, "html_favicon")?,
-        inject_charset: parse_bool(config, "html_inject_charset", true)?,
-        inject_viewport: parse_bool(config, "html_inject_viewport", true)?,
-        inject_color_scheme: parse_bool(config, "html_inject_color_scheme", true)?,
-        inject_core_css: parse_bool(config, "html_inject_core_css", true)?,
-        body_style: parse_required_string(config, "html_body_style", "", false)?,
+        lang: parse_required_string(config, "html_lang", "en", true, string_table)?,
+        title_prefix: parse_required_string(config, "html_title_prefix", "", false, string_table)?,
+        title_postfix: parse_required_string(
+            config,
+            "html_title_postfix",
+            "",
+            false,
+            string_table,
+        )?,
+        favicon: parse_optional_string(config, "html_favicon", string_table)?,
+        inject_charset: parse_bool(config, "html_inject_charset", true, string_table)?,
+        inject_viewport: parse_bool(config, "html_inject_viewport", true, string_table)?,
+        inject_color_scheme: parse_bool(config, "html_inject_color_scheme", true, string_table)?,
+        inject_core_css: parse_bool(config, "html_inject_core_css", true, string_table)?,
+        body_style: parse_required_string(config, "html_body_style", "", false, string_table)?,
     })
 }
 
@@ -57,6 +65,7 @@ fn parse_required_string(
     key: &str,
     default: &str,
     reject_empty: bool,
+    string_table: &mut StringTable,
 ) -> Result<String, CompilerError> {
     let Some(raw_value) = config.settings.get(key) else {
         return Ok(default.to_string());
@@ -67,13 +76,19 @@ fn parse_required_string(
             config,
             key,
             format!("'#{key}' cannot be empty."),
+            "Use a non-empty value for this HTML document setting",
+            string_table,
         ));
     }
 
     Ok(raw_value.to_owned())
 }
 
-fn parse_optional_string(config: &Config, key: &str) -> Result<Option<String>, CompilerError> {
+fn parse_optional_string(
+    config: &Config,
+    key: &str,
+    string_table: &mut StringTable,
+) -> Result<Option<String>, CompilerError> {
     let Some(raw_value) = config.settings.get(key) else {
         return Ok(None);
     };
@@ -83,13 +98,20 @@ fn parse_optional_string(config: &Config, key: &str) -> Result<Option<String>, C
             config,
             key,
             format!("'#{key}' cannot be empty when provided."),
+            "Use a non-empty string value when this setting is present",
+            string_table,
         ));
     }
 
     Ok(Some(raw_value.to_owned()))
 }
 
-fn parse_bool(config: &Config, key: &str, default: bool) -> Result<bool, CompilerError> {
+fn parse_bool(
+    config: &Config,
+    key: &str,
+    default: bool,
+    string_table: &mut StringTable,
+) -> Result<bool, CompilerError> {
     let Some(raw_value) = config.settings.get(key) else {
         return Ok(default);
     };
@@ -101,21 +123,19 @@ fn parse_bool(config: &Config, key: &str, default: bool) -> Result<bool, Compile
             config,
             key,
             format!("Invalid '#{key}' value '{raw_value}'. Allowed values: true or false."),
+            "Use 'true' or 'false'",
+            string_table,
         )),
     }
 }
 
-fn config_error(config: &Config, key: &str, message: String) -> CompilerError {
-    let location = config
-        .setting_locations
-        .get(key)
-        .cloned()
-        .unwrap_or_else(|| {
-            let config_path = config.entry_dir.join(CONFIG_FILE_NAME);
-            ErrorLocation::new(config_path, Default::default(), Default::default())
-        });
-
-    let mut error = CompilerError::new(message, location, ErrorType::Config);
+fn config_error(
+    config: &Config,
+    key: &str,
+    message: String,
+    fallback_suggestion: &str,
+    string_table: &mut StringTable,
+) -> CompilerError {
     let suggestion = match key {
         "html_lang" => "Use a non-empty language tag such as 'en' or 'en-GB'",
         "html_favicon" => "Use a non-empty favicon path such as '/assets/favicon.ico'",
@@ -123,13 +143,9 @@ fn config_error(config: &Config, key: &str, message: String) -> CompilerError {
         | "html_inject_viewport"
         | "html_inject_color_scheme"
         | "html_inject_core_css" => "Use 'true' or 'false'",
-        _ => "Check the HTML builder config documentation for valid values",
+        _ => fallback_suggestion,
     };
-    error.metadata.insert(
-        crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
-        suggestion.to_string(),
-    );
-    error
+    config.config_error_with_suggestion(key, message, suggestion, string_table)
 }
 
 #[cfg(test)]

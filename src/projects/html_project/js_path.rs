@@ -199,9 +199,10 @@ fn render_runtime_bootstrap_script_html(
 pub(crate) fn html_output_path(
     entry_point: &Path,
     entry_root: Option<&Path>,
+    string_table: &mut StringTable,
 ) -> Result<PathBuf, CompilerError> {
     use crate::projects::html_project::output_plan::derive_logical_html_path;
-    derive_logical_html_path(entry_point, entry_root)
+    derive_logical_html_path(entry_point, entry_root, string_table)
 }
 
 /// Escapes JS source so it is safe to embed inside an HTML `<script>` block.

@@ -12,8 +12,8 @@ use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::compiler_messages::compiler_errors::{
     CompilerMessages, ErrorType, error_type_to_str,
 };
-use crate::compiler_frontend::compiler_messages::compiler_warnings::print_formatted_warning;
 use crate::compiler_frontend::display_messages::print_formatted_error;
+use crate::compiler_frontend::display_messages::print_formatted_warning;
 use crate::projects::html_project::html_project_builder::HtmlProjectBuilder;
 use saying::say;
 use serde::Deserialize;
@@ -1866,19 +1866,19 @@ fn render_case_result(case: &TestCaseSpec, result: &CaseExecutionResult, show_wa
                 continue;
             }
 
-            print_formatted_error(error.to_owned());
+            print_formatted_error(error.to_owned(), &messages.string_table);
         }
 
         if show_warnings {
             for warning in &messages.warnings {
-                print_formatted_warning(warning.to_owned());
+                print_formatted_warning(warning.to_owned(), &messages.string_table);
             }
         }
     } else if let Some(build_result) = &result.build_result
         && show_warnings
     {
         for warning in &build_result.warnings {
-            print_formatted_warning(warning.to_owned());
+            print_formatted_warning(warning.to_owned(), &build_result.string_table);
         }
     }
 }

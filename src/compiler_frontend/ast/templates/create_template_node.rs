@@ -121,7 +121,7 @@ impl Template {
         {
             return_syntax_error!(
                 "'$doc' comments can only contain compile-time values.",
-                template.location.to_error_location(string_table),
+                template.location,
                 {
                     PrimarySuggestion => "Use constants and foldable template/string values inside '$doc' comments",
                 }

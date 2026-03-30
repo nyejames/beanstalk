@@ -11,15 +11,15 @@ mod state;
 mod static_files;
 mod watch;
 
-use crate::build_system::build::{ProjectBuilder, resolve_project_output_root};
-use crate::build_system::project_config::load_project_config;
+use crate::build_system::build::{
+    ProjectBuilder, bootstrap_project_build, resolve_project_output_root,
+};
 use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::basic_utility_functions::check_if_valid_path;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages, ErrorType};
-use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
+use crate::compiler_frontend::string_interning::StringTable;
 use crate::projects::dev_server::build_loop::{ProjectBuildExecutor, dev_server_error_messages};
 use crate::projects::dev_server::state::DevServerState;
-use crate::projects::settings::Config;
 use saying::say;
 use std::net::TcpListener;
 use std::path::{Path, PathBuf};
@@ -64,19 +64,7 @@ pub fn run_dev_server(
     // WHY: Dev server and core compilation must use consistent output root policy for directory projects.
     //       The path is canonicalized when it exists so that `should_ignore_path`'s `starts_with`
     //       comparison works reliably against the canonicalized `watch_root`.
-    let output_dir = if entry_target.is_dir() {
-        // Directory project: load config early and use canonical output root resolution
-        let mut config = Config::new(entry_target.clone());
-        let frontend_style_directives = builder.backend.frontend_style_directives();
-        let style_directives = StyleDirectiveRegistry::merged(&frontend_style_directives)
-            .map_err(CompilerMessages::from_error)?;
-        load_project_config(&mut config, &style_directives)?;
-        let resolved = resolve_project_output_root(&config, flags);
-        resolved.canonicalize().unwrap_or(resolved)
-    } else {
-        // Single-file build: preserve existing fallback behavior (parent dir + "dev")
-        watch_root.join("dev")
-    };
+    let output_dir = resolve_dev_output_dir(&builder, &entry_target, flags)?;
 
     let state = Arc::new(DevServerState::new(output_dir.clone()));
     let mut executor = ProjectBuildExecutor::new(builder);
@@ -163,6 +151,24 @@ pub fn run_dev_server(
     Ok(())
 }
 
+fn resolve_dev_output_dir(
+    builder: &ProjectBuilder,
+    entry_target: &Path,
+    flags: &[Flag],
+) -> Result<PathBuf, CompilerMessages> {
+    if !entry_target.is_dir() {
+        return Ok(entry_target
+            .parent()
+            .map(Path::to_path_buf)
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join("dev"));
+    }
+
+    let bootstrap = bootstrap_project_build(builder, entry_target.to_path_buf())?;
+    let resolved = resolve_project_output_root(&bootstrap.config, flags);
+    Ok(resolved.canonicalize().unwrap_or(resolved))
+}
+
 fn validate_dev_entry_path(entry_path: &str) -> Result<PathBuf, CompilerMessages> {
     let resolved_path = if entry_path.trim().is_empty() {
         std::env::current_dir().map_err(|error| {
@@ -172,25 +178,32 @@ fn validate_dev_entry_path(entry_path: &str) -> Result<PathBuf, CompilerMessages
             )
         })?
     } else {
-        check_if_valid_path(entry_path).map_err(|error| CompilerMessages {
+        let mut string_table = StringTable::new();
+        check_if_valid_path(entry_path, &mut string_table).map_err(|error| CompilerMessages {
             errors: vec![error.with_error_type(ErrorType::DevServer)],
             warnings: Vec::new(),
+            string_table,
         })?
     };
 
     if resolved_path.is_dir() {
         return match resolved_path.canonicalize() {
             Ok(canonical_path) => Ok(canonical_path),
-            Err(error) => Err(CompilerMessages {
-                errors: vec![
-                    CompilerError::file_error(
-                        &resolved_path,
-                        format!("Failed to canonicalize dev entry path: {error}"),
-                    )
-                    .with_error_type(ErrorType::DevServer),
-                ],
-                warnings: Vec::new(),
-            }),
+            Err(error) => {
+                let mut string_table = StringTable::new();
+                Err(CompilerMessages {
+                    errors: vec![
+                        CompilerError::file_error(
+                            &resolved_path,
+                            format!("Failed to canonicalize dev entry path: {error}"),
+                            &mut string_table,
+                        )
+                        .with_error_type(ErrorType::DevServer),
+                    ],
+                    warnings: Vec::new(),
+                    string_table,
+                })
+            }
         };
     }
 
@@ -214,16 +227,21 @@ fn validate_dev_entry_path(entry_path: &str) -> Result<PathBuf, CompilerMessages
 
     match resolved_path.canonicalize() {
         Ok(canonical_path) => Ok(canonical_path),
-        Err(error) => Err(CompilerMessages {
-            errors: vec![
-                CompilerError::file_error(
-                    &resolved_path,
-                    format!("Failed to canonicalize dev entry path: {error}"),
-                )
-                .with_error_type(ErrorType::DevServer),
-            ],
-            warnings: Vec::new(),
-        }),
+        Err(error) => {
+            let mut string_table = StringTable::new();
+            Err(CompilerMessages {
+                errors: vec![
+                    CompilerError::file_error(
+                        &resolved_path,
+                        format!("Failed to canonicalize dev entry path: {error}"),
+                        &mut string_table,
+                    )
+                    .with_error_type(ErrorType::DevServer),
+                ],
+                warnings: Vec::new(),
+                string_table,
+            })
+        }
     }
 }
 

@@ -33,10 +33,15 @@ pub trait BackendBuilder {
         modules: Vec<Module>, // Each collection of files the frontend has compiled into modules
         config: &Config,      // Persistent settings across the whole project
         flags: &[Flag],       // Settings only relevant to this build
+        string_table: &mut StringTable, // Shared path interning table for the whole build
     ) -> Result<Project, CompilerMessages>;
     
     /// Validate the project configuration
-    fn validate_project_config(&self, config: &Config) -> Result<(), CompilerError>;
+    fn validate_project_config(
+        &self,
+        config: &Config,
+        string_table: &mut StringTable,
+    ) -> Result<(), CompilerError>;
 
     /// Project-specific frontend style directives.
     fn frontend_style_directives(&self) -> Vec<StyleDirectiveSpec>;
@@ -46,6 +51,13 @@ pub struct ProjectBuilder {
     pub backend: Box<dyn BackendBuilder + Send>,
 }
 ```
+
+Build and diagnostic path handling:
+- Each top-level build/config-parse lifecycle creates one shared mutable `StringTable`.
+- Stage 0 config loading, frontend compilation, backend validation/build, and final diagnostic rendering all reuse that same table.
+- `SourceLocation` stores an interned scope/path, not an owned diagnostic `PathBuf`.
+- Rendering and filesystem-adjacent code resolve `SourceLocation.scope` through the shared `StringTable`.
+- `BuildResult` and failed `CompilerMessages` own that table at the boundary so later output writing, terminal rendering, and dev-server reporting can still resolve paths consistently.
 
 Project builders:
 - Decide how modules are interpreted

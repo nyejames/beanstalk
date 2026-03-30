@@ -8,7 +8,10 @@ use crate::compiler_frontend::compiler_errors::{
 };
 use crate::compiler_frontend::display_messages::{
     format_error_guidance_lines, relative_display_path_from_root, resolve_source_file_path,
+    resolved_display_path,
 };
+use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::string_interning::StringTable;
 use std::fmt::Write;
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -57,8 +60,12 @@ pub fn format_compiler_messages(messages: &CompilerMessages) -> String {
             error_type_to_str(&error.error_type),
             error.msg
         );
-        if !error.location.scope.as_os_str().is_empty() {
-            let _ = writeln!(output, "  at: {}", error.location.scope.display());
+        if !error.location.scope.as_components().is_empty() {
+            let _ = writeln!(
+                output,
+                "  at: {}",
+                resolved_display_path(&error.location.scope, &messages.string_table)
+            );
         }
         if error.location.start_pos.line_number > 0 {
             let _ = writeln!(
@@ -99,8 +106,12 @@ pub fn format_compiler_messages(messages: &CompilerMessages) -> String {
 
     for warning in &messages.warnings {
         let _ = writeln!(output, "[WARNING] {}", warning.msg);
-        if !warning.location.scope.as_os_str().is_empty() {
-            let _ = writeln!(output, "  at: {}", warning.location.scope.display());
+        if !warning.location.scope.as_components().is_empty() {
+            let _ = writeln!(
+                output,
+                "  at: {}",
+                resolved_display_path(&warning.location.scope, &messages.string_table)
+            );
         }
     }
 
@@ -293,7 +304,12 @@ fn render_compiler_diagnostics(messages: &CompilerMessages, project_root: &Path)
     }
 
     for error in &messages.errors {
-        diagnostics_html.push_str(&render_diagnostic_card(error, project_root, true));
+        diagnostics_html.push_str(&render_diagnostic_card(
+            error,
+            project_root,
+            true,
+            &messages.string_table,
+        ));
     }
 
     for warning in &messages.warnings {
@@ -308,10 +324,17 @@ fn render_compiler_diagnostics(messages: &CompilerMessages, project_root: &Path)
     diagnostics_html
 }
 
-fn render_diagnostic_card(error: &CompilerError, project_root: &Path, is_error: bool) -> String {
+fn render_diagnostic_card(
+    error: &CompilerError,
+    project_root: &Path,
+    is_error: bool,
+    string_table: &StringTable,
+) -> String {
     let mut details = String::from("<ul class=\"detail-list\">");
 
-    if let Some(source_link) = resolve_source_path_link(&error.location.scope, project_root) {
+    if let Some(source_link) =
+        resolve_source_path_link(&error.location.scope, project_root, string_table)
+    {
         let file_label = escape_html(&source_link.display_label);
         let file_href = escape_html(&source_link.href);
         let _ = write!(
@@ -346,14 +369,18 @@ fn render_diagnostic_card(error: &CompilerError, project_root: &Path, is_error: 
     )
 }
 
-fn resolve_source_path_link(scope: &Path, project_root: &Path) -> Option<SourcePathLink> {
-    if scope.as_os_str().is_empty() {
+fn resolve_source_path_link(
+    scope: &InternedPath,
+    project_root: &Path,
+    string_table: &StringTable,
+) -> Option<SourcePathLink> {
+    if scope.as_components().is_empty() {
         return None;
     }
 
     // Dev-server pages should mirror terminal diagnostics by linking header-scoped errors back to
     // the original source file while still displaying a project-relative label for quick scanning.
-    let resolved_path = resolve_source_file_path(scope);
+    let resolved_path = resolve_source_file_path(scope, string_table);
     let display_root = match std::fs::canonicalize(project_root) {
         Ok(canonical_root) => canonical_root,
         Err(_) => project_root.to_path_buf(),

@@ -1,5 +1,6 @@
 use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::basic_utility_functions::check_if_valid_path;
+use crate::compiler_frontend::string_interning::StringTable;
 use std::{env, fs};
 
 pub fn create_html_project_template(
@@ -10,7 +11,8 @@ pub fn create_html_project_template(
     // Get the current directory
     let current_dir = env::current_dir().map_err(|e| e.to_string())?;
 
-    let valid_path = match check_if_valid_path(&user_project_path) {
+    let mut string_table = StringTable::new();
+    let valid_path = match check_if_valid_path(&user_project_path, &mut string_table) {
         Ok(path) => path,
         Err(e) => return Err(e.msg),
     };

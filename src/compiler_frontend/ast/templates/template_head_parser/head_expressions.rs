@@ -19,7 +19,7 @@ use crate::compiler_frontend::datatypes::Ownership;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::rendered_path_usage::resolve_compile_time_paths_for_rendered_output;
 use crate::compiler_frontend::string_interning::StringTable;
-use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TextLocation};
+use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation};
 use crate::{ast_log, return_syntax_error};
 
 /// Handles a template-typed value found in the template head.
@@ -29,13 +29,13 @@ pub(super) fn handle_template_value_in_template_head(
     context: &ScopeContext,
     template: &mut Template,
     foldable: &mut bool,
-    location: &TextLocation,
-    string_table: &StringTable,
+    location: &SourceLocation,
+    _string_table: &StringTable,
 ) -> Result<(), CompilerError> {
     if context.kind.is_constant_context() && matches!(value.kind, TemplateType::StringFunction) {
         return_syntax_error!(
             "Const templates can only capture compile-time templates.",
-            location.to_owned().to_error_location(string_table)
+            location.to_owned()
         );
     }
 
@@ -46,7 +46,7 @@ pub(super) fn handle_template_value_in_template_head(
     if matches!(value.kind, TemplateType::SlotDefinition(_)) {
         return_syntax_error!(
             "'$slot' markers are only valid as direct nested templates inside template bodies.",
-            location.to_owned().to_error_location(string_table)
+            location.to_owned()
         );
     }
 
@@ -68,7 +68,7 @@ pub(super) fn push_template_head_expression(
     context: &ScopeContext,
     template: &mut Template,
     foldable: &mut bool,
-    location: &TextLocation,
+    location: &SourceLocation,
     string_table: &StringTable,
 ) -> Result<(), CompilerError> {
     if let ExpressionKind::Template(template_value) = &expr.kind {
@@ -85,7 +85,7 @@ pub(super) fn push_template_head_expression(
     if context.kind.is_constant_context() && !expr.is_compile_time_constant() {
         return_syntax_error!(
             "Const templates can only capture compile-time values in the template head.",
-            location.to_owned().to_error_location(string_table)
+            location.to_owned()
         );
     }
 
@@ -112,9 +112,7 @@ pub(super) fn push_template_head_path_expression(
     if paths.is_empty() {
         return_syntax_error!(
             "Path token in template head cannot be empty.",
-            token_stream
-                .current_location()
-                .to_error_location(string_table)
+            token_stream.current_location()
         );
     }
 
@@ -138,15 +136,13 @@ pub(super) fn push_template_head_path_expression(
             .is_some_and(|extension| extension == "bst")
         {
             let location = token_stream.current_location();
-            let file_path = location.scope.to_path_buf(string_table);
             context.emit_warning(CompilerWarning::new(
                 &format!(
                     "Path to Beanstalk source file is being inserted into template output: '{}'",
                     path.source_path.to_portable_string(string_table)
                 ),
-                location.to_error_location(string_table),
+                location,
                 WarningKind::BstFilePathInTemplateOutput,
-                file_path,
             ));
         }
     }

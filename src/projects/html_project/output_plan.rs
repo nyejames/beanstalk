@@ -8,6 +8,7 @@
 //! lives in the respective `js_path` and `wasm/artifacts` modules.
 
 use crate::compiler_frontend::compiler_errors::CompilerError;
+use crate::compiler_frontend::string_interning::StringTable;
 use std::path::{Component, Path, PathBuf};
 
 /// A resolved output plan for one HTML route.
@@ -35,8 +36,9 @@ pub(crate) struct HtmlRouteOutputPlan {
 pub(crate) fn plan_wasm_output(
     entry_point: &Path,
     entry_root: Option<&Path>,
+    string_table: &mut StringTable,
 ) -> Result<HtmlRouteOutputPlan, CompilerError> {
-    let logical_html_path = derive_logical_html_path(entry_point, entry_root)?;
+    let logical_html_path = derive_logical_html_path(entry_point, entry_root, string_table)?;
     let route_base = derive_wasm_route_base(&logical_html_path)?;
 
     let (html_path, js_path, wasm_path) = if route_base.as_os_str().is_empty() {
@@ -71,9 +73,10 @@ pub(crate) fn plan_wasm_output(
 pub(crate) fn derive_logical_html_path(
     entry_point: &Path,
     entry_root: Option<&Path>,
+    string_table: &mut StringTable,
 ) -> Result<PathBuf, CompilerError> {
     if let Some(entry_root) = entry_root {
-        return derive_logical_html_path_from_entry_root(entry_point, entry_root);
+        return derive_logical_html_path_from_entry_root(entry_point, entry_root, string_table);
     }
 
     // Single-file build: legacy flat naming.
@@ -94,6 +97,7 @@ pub(crate) fn derive_logical_html_path(
 fn derive_logical_html_path_from_entry_root(
     entry_point: &Path,
     entry_root: &Path,
+    string_table: &mut StringTable,
 ) -> Result<PathBuf, CompilerError> {
     // Route derivation is deterministic: discovery order never affects output paths.
     let relative_entry = entry_point.strip_prefix(entry_root).map_err(|_| {
@@ -104,6 +108,7 @@ fn derive_logical_html_path_from_entry_root(
                 entry_point.display(),
                 entry_root.display(),
             ),
+            string_table,
         )
     })?;
     let file_stem = relative_entry
@@ -117,6 +122,7 @@ fn derive_logical_html_path_from_entry_root(
                     "HTML entry '{}' is missing a valid file stem.",
                     entry_point.display(),
                 ),
+                string_table,
             )
         })?;
     let parent = relative_entry.parent().unwrap_or_else(|| Path::new(""));
@@ -197,13 +203,10 @@ fn derive_wasm_route_base(logical_html_path: &Path) -> Result<PathBuf, CompilerE
 
     // Legacy flat path: normalise to route folder.
     if logical_html_path.extension().and_then(|ext| ext.to_str()) != Some("html") {
-        return Err(CompilerError::file_error(
-            logical_html_path,
-            format!(
-                "HTML Wasm output conversion expected an '.html' path, got '{}'",
-                logical_html_path.display()
-            ),
-        ));
+        return Err(CompilerError::compiler_error(format!(
+            "HTML Wasm output conversion expected an '.html' path, got '{}'",
+            logical_html_path.display()
+        )));
     }
     Ok(logical_html_path.with_extension(""))
 }

@@ -7,7 +7,7 @@
 //!
 //! The error system is built around three core types:
 //! - [`CompilerError`]: The unified error type with owned data and structured metadata
-//! - [`ErrorLocation`]: Shared source-location model specialized to owned filesystem paths
+//! - [`SourceLocation`]: Shared source-location model with interned paths
 //! - [`ErrorMetaDataKey`]: Structured metadata keys for intelligent error analysis
 //!
 //! ## Error Types
@@ -80,15 +80,12 @@
 //! return_multiple_mutable_borrows_error!(place, existing_loc, new_loc);
 //! ```
 //!
-//! ### ErrorLocation Conversion
+//! ### Source Location Usage
 //! ```text
-//! // Convert from TextLocation (used in frontend)
-//! let error_location = text_location.to_error_location(string_table);
-//!
-//! // Use in error creation
+//! // Frontend stages now use SourceLocation directly.
 //! return_hir_transformation_error!(
 //!     format!("Cannot transform expression type {:?}", expr_type),
-//!     error_location,
+//!     location,
 //!     {
 //!         CompilationStage => "HIR Transformation",
 //!         PrimarySuggestion => "This is a compiler_frontend bug - please report it"
@@ -98,10 +95,9 @@
 //!
 //! ## Design Principles
 //!
-//! ### No StringTable Dependencies
-//! All error types use owned `String` and `PathBuf` data, eliminating the need to pass
-//! `StringTable` through the call stack. This simplifies error propagation and allows
-//! errors to be created and returned without additional context.
+//! ### Shared StringTable Context
+//! Errors preserve interned path scopes, so top-level renderers and file-adjacent helpers must
+//! resolve paths through the shared `StringTable` for the current build or parse lifecycle.
 //!
 //! ### Structured Metadata
 //! Errors include structured metadata via `ErrorMetaDataKey` for:
@@ -138,36 +134,28 @@
 //! ```
 
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
-use crate::compiler_frontend::source_location::CharPosition;
-pub use crate::compiler_frontend::source_location::ErrorLocation;
+use crate::compiler_frontend::interned_path::InternedPath;
+pub use crate::compiler_frontend::source_location::SourceLocation;
+use crate::compiler_frontend::string_interning::StringTable;
 use std::collections::HashMap;
-use std::path::PathBuf;
-
-// TODO: thread this through all functions returning errors
-// CompileError will be boxed from now on
-// The final set of errors and warnings emitted from the compiler_frontend
-// pub type CompilerResult<T> = Result<T, Box<CompilerError>>;
-// pub type CompilerMessagesResult<T> = Result<T, Box<CompilerMessages>>;
+use std::path::Path;
 
 #[derive(Debug, Clone)]
 pub struct CompilerMessages {
     pub errors: Vec<CompilerError>,
     pub warnings: Vec<CompilerWarning>,
-}
-
-impl Default for CompilerMessages {
-    fn default() -> Self {
-        Self::new()
-    }
+    pub string_table: StringTable,
 }
 
 impl CompilerMessages {
-    pub fn new() -> Self {
-        CompilerMessages {
+    pub fn empty(string_table: StringTable) -> Self {
+        Self {
             errors: Vec::new(),
             warnings: Vec::new(),
+            string_table,
         }
     }
+
     pub fn has_errors(&self) -> bool {
         !self.errors.is_empty()
     }
@@ -177,11 +165,24 @@ impl CompilerMessages {
     /// WHY: Several build/backend modules need to convert a `CompilerError` into the richer
     /// `CompilerMessages` type at a boundary. Centralising this avoids repeated inline struct
     /// literals scattered across callers.
-    pub fn from_error(error: CompilerError) -> Self {
-        CompilerMessages {
+    pub fn from_error(error: CompilerError, string_table: StringTable) -> Self {
+        Self {
             errors: vec![error],
             warnings: Vec::new(),
+            string_table,
         }
+    }
+
+    /// Build a single file-scoped message set while preserving the caller's existing table state.
+    ///
+    /// WHAT: clones the current table, interns the failing path into that clone, and returns a
+    /// message set that owns the resulting diagnostic context.
+    /// WHY: file-system errors often arise after the current build already interned many other
+    /// paths, so the returned diagnostics must preserve those older interned IDs as well.
+    pub fn file_error(path: &Path, msg: impl Into<String>, string_table: &StringTable) -> Self {
+        let mut error_string_table = string_table.clone();
+        let error = CompilerError::file_error(path, msg, &mut error_string_table);
+        Self::from_error(error, error_string_table)
     }
 }
 
@@ -216,10 +217,9 @@ pub enum ErrorMetaDataKey {
 pub struct CompilerError {
     pub msg: String,
 
-    // Includes the scope path, which will have the file name and header data.
-    // This file path will need to be resolved to the actual file path when the error is displayed.
-    // As this path will include the actual name of the header that the error came from.
-    pub location: ErrorLocation,
+    // Stores the interned source scope for this diagnostic. Header-local scopes may include a
+    // synthetic `.header` suffix and are resolved back to real file paths only at render time.
+    pub location: SourceLocation,
     pub error_type: ErrorType,
 
     // This is for creating more structured and detailed error messages
@@ -230,7 +230,7 @@ pub struct CompilerError {
 impl CompilerError {
     pub fn new(
         msg: impl Into<String>,
-        location: ErrorLocation,
+        location: SourceLocation,
         error_type: ErrorType,
     ) -> CompilerError {
         CompilerError {
@@ -241,8 +241,13 @@ impl CompilerError {
         }
     }
 
-    pub fn with_file_path(mut self, file_path: PathBuf) -> Self {
-        self.location.scope = file_path;
+    /// Replace only the location scope path while preserving the existing span positions.
+    ///
+    /// WHAT: rewrites the interned path for a diagnostic without touching its line/column data.
+    /// WHY: some helpers need to attach a resolved file path after building a precise span-based
+    /// error, and downgrading that span to a file-level location would lose useful diagnostics.
+    pub fn with_scope_path(mut self, file_path: &Path, string_table: &mut StringTable) -> Self {
+        self.location.scope = InternedPath::from_path_buf(file_path, string_table);
         self
     }
 
@@ -256,7 +261,7 @@ impl CompilerError {
     }
 
     /// Create a new syntax error with a clear explanation
-    pub fn new_syntax_error(msg: impl Into<String>, location: ErrorLocation) -> Self {
+    pub fn new_syntax_error(msg: impl Into<String>, location: SourceLocation) -> Self {
         CompilerError {
             msg: msg.into(),
             location,
@@ -266,7 +271,7 @@ impl CompilerError {
     }
 
     /// Create a new rule error with a descriptive message (no metadata)
-    pub fn new_rule_error(msg: impl Into<String>, location: ErrorLocation) -> Self {
+    pub fn new_rule_error(msg: impl Into<String>, location: SourceLocation) -> Self {
         CompilerError {
             msg: msg.into(),
             location,
@@ -278,7 +283,7 @@ impl CompilerError {
     /// Create a new rule error with metadata
     pub fn new_rule_error_with_metadata(
         msg: impl Into<String>,
-        location: ErrorLocation,
+        location: SourceLocation,
         metadata: HashMap<ErrorMetaDataKey, String>,
     ) -> Self {
         CompilerError {
@@ -290,7 +295,7 @@ impl CompilerError {
     }
 
     /// Create a new type error with type information and suggestions
-    pub fn new_type_error(msg: impl Into<String>, location: ErrorLocation) -> Self {
+    pub fn new_type_error(msg: impl Into<String>, location: SourceLocation) -> Self {
         CompilerError {
             msg: msg.into(),
             location,
@@ -303,7 +308,7 @@ impl CompilerError {
     pub fn new_thread_panic(msg: impl Into<String>) -> Self {
         CompilerError {
             msg: msg.into(),
-            location: ErrorLocation::default(),
+            location: SourceLocation::default(),
             error_type: ErrorType::Compiler,
             metadata: HashMap::new(),
         }
@@ -314,7 +319,7 @@ impl CompilerError {
     pub fn compiler_error(msg: impl Into<String>) -> Self {
         CompilerError {
             msg: msg.into(),
-            location: ErrorLocation::default(),
+            location: SourceLocation::default(),
             error_type: ErrorType::Compiler,
             metadata: HashMap::new(),
         }
@@ -324,7 +329,7 @@ impl CompilerError {
     pub fn lir_transformation(msg: impl Into<String>) -> Self {
         CompilerError {
             msg: msg.into(),
-            location: ErrorLocation::default(),
+            location: SourceLocation::default(),
             error_type: ErrorType::LirTransformation,
             metadata: HashMap::new(),
         }
@@ -333,7 +338,7 @@ impl CompilerError {
     /// Create a new borrow checker error with metadata
     pub fn new_borrow_checker_error(
         msg: impl Into<String>,
-        location: ErrorLocation,
+        location: SourceLocation,
         metadata: HashMap<ErrorMetaDataKey, String>,
     ) -> Self {
         CompilerError {
@@ -345,14 +350,10 @@ impl CompilerError {
     }
 
     /// Create a file system error from a Path
-    pub fn file_error(path: &std::path::Path, msg: impl Into<String>) -> Self {
+    pub fn file_error(path: &Path, msg: impl Into<String>, string_table: &mut StringTable) -> Self {
         CompilerError {
             msg: msg.into(),
-            location: ErrorLocation::new(
-                path.to_path_buf(),
-                CharPosition::default(),
-                CharPosition::default(),
-            ),
+            location: SourceLocation::from_path(path, string_table),
             error_type: ErrorType::File,
             metadata: HashMap::new(),
         }
@@ -360,17 +361,14 @@ impl CompilerError {
 
     /// Create a file system error from Path with metadata
     pub fn new_file_error(
-        path: &std::path::Path,
+        path: &Path,
         msg: impl Into<String>,
         metadata: HashMap<ErrorMetaDataKey, String>,
+        string_table: &mut StringTable,
     ) -> Self {
         CompilerError {
             msg: msg.into(),
-            location: ErrorLocation::new(
-                path.to_path_buf(),
-                CharPosition::default(),
-                CharPosition::default(),
-            ),
+            location: SourceLocation::from_path(path, string_table),
             error_type: ErrorType::File,
             metadata,
         }
@@ -523,7 +521,7 @@ macro_rules! return_rule_error {
 #[macro_export]
 macro_rules! return_file_error {
     // New usage with metadata (Path)
-    ($path:expr, $msg:expr, { $( $key:ident => $value:expr ),* $(,)? }) => {{
+    ($string_table:expr, $path:expr, $msg:expr, { $( $key:ident => $value:expr ),* $(,)? }) => {{
         return Err($crate::compiler_frontend::compiler_errors::CompilerError::new_file_error(
             $path,
             $msg,
@@ -532,12 +530,15 @@ macro_rules! return_file_error {
                 $( map.insert($crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::$key, $value.into()); )*
                 map
             },
+            $string_table,
         ));
     }};
     // Simplified usage without metadata
-    ($path:expr, $msg:expr) => {{
+    ($string_table:expr, $path:expr, $msg:expr) => {{
         return Err($crate::compiler_frontend::compiler_errors::CompilerError::file_error(
-            $path, $msg,
+            $path,
+            $msg,
+            $string_table,
         ));
     }};
 }
@@ -581,7 +582,7 @@ macro_rules! return_compiler_error {
     ($fmt:expr, $($arg:expr),+ ; { $( $key:ident => $value:expr ),* $(,)? }) => {{
         return Err($crate::compiler_frontend::compiler_errors::CompilerError {
             msg: format!($fmt, $($arg),+),
-            location: $crate::compiler_frontend::compiler_errors::ErrorLocation::default(),
+            location: $crate::compiler_frontend::compiler_errors::SourceLocation::default(),
             error_type: $crate::compiler_frontend::compiler_errors::ErrorType::Compiler,
             metadata: {
                 let mut map = std::collections::HashMap::new();
@@ -594,7 +595,7 @@ macro_rules! return_compiler_error {
     ($fmt:expr, $($arg:expr),+ $(,)?) => {{
         return Err($crate::compiler_frontend::compiler_errors::CompilerError {
             msg: format!($fmt, $($arg),+),
-            location: $crate::compiler_frontend::compiler_errors::ErrorLocation::default(),
+            location: $crate::compiler_frontend::compiler_errors::SourceLocation::default(),
             error_type: $crate::compiler_frontend::compiler_errors::ErrorType::Compiler,
             metadata: std::collections::HashMap::new(),
         });
@@ -603,7 +604,7 @@ macro_rules! return_compiler_error {
     ($msg:expr ; { $( $key:ident => $value:expr ),* $(,)? }) => {{
         return Err($crate::compiler_frontend::compiler_errors::CompilerError {
             msg: $msg.into(),
-            location: $crate::compiler_frontend::compiler_errors::ErrorLocation::default(),
+            location: $crate::compiler_frontend::compiler_errors::SourceLocation::default(),
             error_type: $crate::compiler_frontend::compiler_errors::ErrorType::Compiler,
             metadata: {
                 let mut map = std::collections::HashMap::new();
@@ -616,7 +617,7 @@ macro_rules! return_compiler_error {
     ($msg:expr) => {{
         return Err($crate::compiler_frontend::compiler_errors::CompilerError {
             msg: $msg.into(),
-            location: $crate::compiler_frontend::compiler_errors::ErrorLocation::default(),
+            location: $crate::compiler_frontend::compiler_errors::SourceLocation::default(),
             error_type: $crate::compiler_frontend::compiler_errors::ErrorType::Compiler,
             metadata: std::collections::HashMap::new(),
         });
@@ -1207,7 +1208,7 @@ macro_rules! return_wasm_generation_error {
     ($msg:expr) => {
         return Err($crate::compiler_frontend::compiler_errors::CompilerError {
             msg: $msg.into(),
-            location: $crate::compiler_frontend::compiler_errors::ErrorLocation::default(),
+            location: $crate::compiler_frontend::compiler_errors::SourceLocation::default(),
             error_type: $crate::compiler_frontend::compiler_errors::ErrorType::WasmGeneration,
             metadata: std::collections::HashMap::new(),
         })
@@ -1219,7 +1220,7 @@ macro_rules! return_thread_err {
     ($process:expr) => {
         return Err($crate::compiler_frontend::compiler_errors::CompilerError {
             msg: format!("Thread panicked during {}", $process),
-            location: $crate::compiler_frontend::compiler_errors::ErrorLocation::default(),
+            location: $crate::compiler_frontend::compiler_errors::SourceLocation::default(),
             error_type: $crate::compiler_frontend::compiler_errors::ErrorType::Compiler,
             metadata: std::collections::HashMap::new(),
         })
@@ -1241,6 +1242,7 @@ macro_rules! return_err_as_messages {
             $crate::compiler_frontend::compiler_messages::compiler_errors::CompilerMessages {
                 errors: vec![$new_err],
                 warnings: Vec::new(),
+                string_table: Default::default(),
             },
         )
     };

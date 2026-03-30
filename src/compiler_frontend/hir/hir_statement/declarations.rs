@@ -5,7 +5,7 @@
 //! lowering depends on.
 
 use crate::compiler_frontend::ast::ast::Ast;
-use crate::compiler_frontend::ast::ast_nodes::{Declaration, NodeKind, TextLocation};
+use crate::compiler_frontend::ast::ast_nodes::{Declaration, NodeKind, SourceLocation};
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::compiler_errors::CompilerError;
@@ -73,7 +73,7 @@ impl<'a> HirBuilder<'a> {
     fn lower_const_value_for_module_pool(
         &mut self,
         expression: &Expression,
-        location: &TextLocation,
+        location: &SourceLocation,
     ) -> Result<Option<HirConstValue>, CompilerError> {
         self.lower_const_value(expression, location)
     }
@@ -81,7 +81,7 @@ impl<'a> HirBuilder<'a> {
     fn lower_const_value(
         &mut self,
         expression: &Expression,
-        location: &TextLocation,
+        location: &SourceLocation,
     ) -> Result<Option<HirConstValue>, CompilerError> {
         match &expression.kind {
             ExpressionKind::Int(value) => Ok(Some(HirConstValue::Int(*value))),
@@ -168,7 +168,7 @@ impl<'a> HirBuilder<'a> {
         &mut self,
         name: &InternedPath,
         fields: &[Declaration],
-        location: &TextLocation,
+        location: &SourceLocation,
     ) -> Result<(), CompilerError> {
         if self.structs_by_name.contains_key(name) {
             return_hir_transformation_error!(
@@ -221,7 +221,7 @@ impl<'a> HirBuilder<'a> {
                 );
             }
 
-            let field_location = if field.value.location == TextLocation::default() {
+            let field_location = if field.value.location == SourceLocation::default() {
                 location.clone()
             } else {
                 field.value.location.clone()
@@ -265,7 +265,7 @@ impl<'a> HirBuilder<'a> {
         &mut self,
         name: &InternedPath,
         signature: &FunctionSignature,
-        location: &TextLocation,
+        location: &SourceLocation,
     ) -> Result<(), CompilerError> {
         if self.functions_by_name.contains_key(name) {
             return_hir_transformation_error!(
@@ -350,10 +350,10 @@ impl<'a> HirBuilder<'a> {
         &mut self,
         function_id: crate::compiler_frontend::hir::hir_nodes::FunctionId,
         signature: &FunctionSignature,
-        fallback_location: &TextLocation,
+        fallback_location: &SourceLocation,
     ) -> Result<(), CompilerError> {
         for param in &signature.parameters {
-            let param_location = if param.value.location == TextLocation::default() {
+            let param_location = if param.value.location == SourceLocation::default() {
                 fallback_location.clone()
             } else {
                 param.value.location.clone()
@@ -377,9 +377,9 @@ impl<'a> HirBuilder<'a> {
     pub(super) fn lower_variable_declaration_statement(
         &mut self,
         variable: &Declaration,
-        location: &TextLocation,
+        location: &SourceLocation,
     ) -> Result<(), CompilerError> {
-        let source_location = if variable.value.location == TextLocation::default() {
+        let source_location = if variable.value.location == SourceLocation::default() {
             location.clone()
         } else {
             variable.value.location.clone()
@@ -413,7 +413,7 @@ impl<'a> HirBuilder<'a> {
         name: InternedPath,
         ty: crate::compiler_frontend::hir::hir_datatypes::TypeId,
         mutable: bool,
-        source_info: Option<TextLocation>,
+        source_info: Option<SourceLocation>,
     ) -> Result<LocalId, CompilerError> {
         let local_location = source_info.to_owned().unwrap_or_default();
 

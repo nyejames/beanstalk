@@ -83,13 +83,19 @@ impl DevBuildExecutor for ProjectBuildExecutor {
             .map(Path::to_path_buf)
             .or_else(|| Some(entry_file.to_path_buf()))
             .filter(|path| path.is_dir());
-        build::write_project_outputs(
+        if let Err(mut messages) = build::write_project_outputs(
             &build_result.project,
             &WriteOptions {
                 output_root: output_dir.to_path_buf(),
                 project_entry_dir,
             },
-        )?;
+            &build_result.string_table,
+        ) {
+            messages
+                .warnings
+                .extend(build_result.warnings.iter().cloned());
+            return Err(messages);
+        }
 
         Ok(build_result)
     }
@@ -304,7 +310,7 @@ fn build_once(
     flags: &[Flag],
     output_dir: &Path,
 ) -> BuildOutcome {
-    let build_result = match executor.build_and_write(entry_file, flags, output_dir) {
+    let mut build_result = match executor.build_and_write(entry_file, flags, output_dir) {
         Ok(build_result) => build_result,
         Err(messages) => {
             return BuildOutcome {
@@ -317,22 +323,24 @@ fn build_once(
         }
     };
 
-    let html_site_config = match parse_html_site_config(&build_result.config) {
-        Ok(config) => config,
-        Err(error) => {
-            let messages = CompilerMessages {
-                errors: vec![error],
-                warnings: Vec::new(),
-            };
-            return BuildOutcome {
-                build_succeeded: false,
-                entry_page_rel: None,
-                html_site_config: None,
-                diagnostics_summary: format_compiler_messages(&messages),
-                failed_build: Some(BuildFailure::CompilerMessages(messages)),
-            };
-        }
-    };
+    let html_site_config =
+        match parse_html_site_config(&build_result.config, &mut build_result.string_table) {
+            Ok(config) => config,
+            Err(error) => {
+                let messages = CompilerMessages {
+                    errors: vec![error],
+                    warnings: Vec::new(),
+                    string_table: build_result.string_table.clone(),
+                };
+                return BuildOutcome {
+                    build_succeeded: false,
+                    entry_page_rel: None,
+                    html_site_config: None,
+                    diagnostics_summary: format_compiler_messages(&messages),
+                    failed_build: Some(BuildFailure::CompilerMessages(messages)),
+                };
+            }
+        };
 
     let warnings_summary = build_result
         .warnings
@@ -385,10 +393,13 @@ fn dev_server_project_root(entry_file: &Path) -> PathBuf {
 }
 
 pub fn dev_server_error_messages(path: &Path, msg: impl Into<String>) -> CompilerMessages {
-    let error = CompilerError::file_error(path, msg.into()).with_error_type(ErrorType::DevServer);
+    let mut string_table = Default::default();
+    let error = CompilerError::file_error(path, msg.into(), &mut string_table)
+        .with_error_type(ErrorType::DevServer);
     CompilerMessages {
         errors: vec![error],
         warnings: Vec::new(),
+        string_table,
     }
 }
 

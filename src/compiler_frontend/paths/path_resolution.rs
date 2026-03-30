@@ -108,6 +108,7 @@ impl ProjectPathResolver {
     pub(crate) fn logical_path_for_canonical_file(
         &self,
         canonical_file: &Path,
+        string_table: &mut StringTable,
     ) -> Result<PathBuf, CompilerError> {
         if let Ok(relative_to_entry_root) = canonical_file.strip_prefix(&self.entry_root) {
             return Ok(relative_to_entry_root.to_path_buf());
@@ -143,6 +144,7 @@ impl ProjectPathResolver {
                 self.entry_root.display(),
                 self.project_root.display()
             ),
+            string_table,
         ))
     }
 
@@ -152,7 +154,7 @@ impl ProjectPathResolver {
         &self,
         import_path: &InternedPath,
         importer_file: &Path,
-        string_table: &StringTable,
+        string_table: &mut StringTable,
     ) -> Result<PathBuf, CompilerError> {
         let (_, canonical) =
             self.resolve_import_as_compile_time_path(import_path, importer_file, string_table)?;
@@ -167,7 +169,7 @@ impl ProjectPathResolver {
         &self,
         import_path: &InternedPath,
         importer_file: &Path,
-        string_table: &StringTable,
+        string_table: &mut StringTable,
     ) -> Result<(CompileTimePath, PathBuf), CompilerError> {
         let (base_kind, filesystem_base) =
             self.resolve_path_base(import_path, importer_file, string_table)?;
@@ -182,6 +184,7 @@ impl ProjectPathResolver {
                             "Failed to canonicalize resolved import '{}': {error}",
                             import_path.to_portable_string(string_table)
                         ),
+                        string_table,
                     )
                 })?;
                 let public_path = build_public_path(import_path, &base_kind, string_table);
@@ -203,12 +206,16 @@ impl ProjectPathResolver {
                 import_path.to_portable_string(string_table),
                 self.entry_root.display()
             ),
+            string_table,
         ))
     }
 
     /// WHAT: rejects entry-root folders that can never be reached through non-relative imports.
     /// WHY: configured root folders win before the entry-root fallback, so matching source folder names become dead paths.
-    pub(crate) fn validate_entry_root_collisions(&self) -> Result<(), CompilerError> {
+    pub(crate) fn validate_entry_root_collisions(
+        &self,
+        string_table: &mut StringTable,
+    ) -> Result<(), CompilerError> {
         let entries = fs::read_dir(&self.entry_root).map_err(|error| {
             CompilerError::file_error(
                 &self.entry_root,
@@ -216,6 +223,7 @@ impl ProjectPathResolver {
                     "Failed to read configured entry root '{}' while validating '#root_folders': {error}",
                     self.entry_root.display()
                 ),
+                string_table,
             )
         })?;
 
@@ -224,6 +232,7 @@ impl ProjectPathResolver {
                 CompilerError::file_error(
                     &self.entry_root,
                     format!("Failed to read entry-root directory entry: {error}"),
+                    string_table,
                 )
             })?;
             let path = entry.path();
@@ -242,6 +251,7 @@ impl ProjectPathResolver {
 
             let unreachable_path = self.entry_root.join(name);
             return_file_error!(
+                string_table,
                 &unreachable_path,
                 format!(
                     "The source folder '{}' is unreachable because '{}' is also configured in '#root_folders'.",
@@ -285,7 +295,7 @@ impl ProjectPathResolver {
         &self,
         path: &InternedPath,
         importer_file: &Path,
-        string_table: &StringTable,
+        string_table: &mut StringTable,
     ) -> Result<CompileTimePath, CompilerError> {
         let (base_kind, filesystem_base) =
             self.resolve_path_base(path, importer_file, string_table)?;
@@ -314,7 +324,7 @@ impl ProjectPathResolver {
         &self,
         paths: &[InternedPath],
         importer_file: &Path,
-        string_table: &StringTable,
+        string_table: &mut StringTable,
     ) -> Result<CompileTimePaths, CompilerError> {
         let mut resolved = Vec::with_capacity(paths.len());
         for path in paths {
@@ -333,12 +343,13 @@ impl ProjectPathResolver {
         &self,
         path: &InternedPath,
         importer_file: &Path,
-        string_table: &StringTable,
+        string_table: &mut StringTable,
     ) -> Result<(CompileTimePathBase, PathBuf), CompilerError> {
         let importer_dir = importer_file.parent().ok_or_else(|| {
             CompilerError::file_error(
                 importer_file,
                 "Could not determine parent directory for importing file.",
+                string_table,
             )
         })?;
 
@@ -364,7 +375,7 @@ impl ProjectPathResolver {
         resolved: &Path,
         source_path: &InternedPath,
         importer_file: &Path,
-        string_table: &StringTable,
+        string_table: &mut StringTable,
     ) -> Result<(), CompilerError> {
         // Canonicalize the project root once (it must exist).
         let canonical_root = fs::canonicalize(&self.project_root).map_err(|error| {
@@ -374,6 +385,7 @@ impl ProjectPathResolver {
                     "Failed to canonicalize project root '{}': {error}",
                     self.project_root.display()
                 ),
+                string_table,
             )
         })?;
 
@@ -384,6 +396,7 @@ impl ProjectPathResolver {
 
         if !canonical_resolved.starts_with(&canonical_root) {
             return_file_error!(
+                string_table,
                 importer_file,
                 format!(
                     "Compile-time path escapes the project root and is not allowed: '{}'",
@@ -513,7 +526,7 @@ fn classify_existing_target(
     filesystem_path: &Path,
     source_path: &InternedPath,
     importer_file: &Path,
-    string_table: &StringTable,
+    string_table: &mut StringTable,
 ) -> Result<CompileTimePathKind, CompilerError> {
     if filesystem_path.is_file() {
         Ok(CompileTimePathKind::File)
@@ -521,6 +534,7 @@ fn classify_existing_target(
         Ok(CompileTimePathKind::Directory)
     } else {
         return_file_error!(
+            string_table,
             importer_file,
             format!(
                 "Compile-time path does not exist: '{}'",

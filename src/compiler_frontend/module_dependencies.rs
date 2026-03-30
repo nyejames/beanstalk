@@ -3,7 +3,7 @@
 //! This pass topologically sorts header definitions after header parsing so AST construction sees
 //! import, constant, and soft struct-default dependencies in a deterministic order.
 
-use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorLocation};
+use crate::compiler_frontend::compiler_errors::{CompilerError, SourceLocation};
 use crate::compiler_frontend::headers::parse_file_headers::{Header, HeaderKind};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
@@ -94,7 +94,7 @@ fn visit_node(
                 "Missing import target '{}'. Could not resolve this dependency in the current module.",
                 node_path.to_portable_string(string_table)
             ),
-            ErrorLocation::default(),
+            SourceLocation::default(),
             {
                 CompilationStage => "Dependency Resolution",
                 PrimarySuggestion => "Import an existing file/symbol path or fix the import path spelling",
@@ -107,7 +107,7 @@ fn visit_node(
         let path_str = resolved_path.to_portable_string(string_table);
         return_rule_error!(
             format!("Circular dependency detected at {}", path_str),
-            ErrorLocation::default(),
+            SourceLocation::default(),
             {
                 CompilationStage => "Dependency Resolution",
                 PrimarySuggestion => "Refactor shared code into a separate module to break the cycle",

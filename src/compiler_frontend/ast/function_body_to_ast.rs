@@ -39,15 +39,12 @@ fn normalize_return_expression_type(data_type: &DataType) -> DataType {
 fn unexpected_function_body_token_error(
     token: &TokenKind,
     token_stream: &FileTokens,
-    string_table: &StringTable,
 ) -> CompilerError {
     match token {
         TokenKind::Comma => {
             let mut error = CompilerError::new_syntax_error(
                 "Unexpected ',' in function body. Commas only separate items in lists, arguments, or return declarations.",
-                token_stream
-                    .current_location()
-                    .to_error_location(string_table),
+                token_stream.current_location(),
             );
             error.new_metadata_entry(
                 ErrorMetaDataKey::CompilationStage,
@@ -63,9 +60,7 @@ fn unexpected_function_body_token_error(
         TokenKind::CloseParenthesis => {
             let mut error = CompilerError::new_syntax_error(
                 "Unexpected ')' in function body. This usually means an earlier '(' was not parsed in a valid expression or call.",
-                token_stream
-                    .current_location()
-                    .to_error_location(string_table),
+                token_stream.current_location(),
             );
             error.new_metadata_entry(
                 ErrorMetaDataKey::CompilationStage,
@@ -83,9 +78,7 @@ fn unexpected_function_body_token_error(
         TokenKind::CloseCurly => {
             let mut error = CompilerError::new_syntax_error(
                 "Unexpected '}' in function body. Curly braces are only valid for collection syntax.",
-                token_stream
-                    .current_location()
-                    .to_error_location(string_table),
+                token_stream.current_location(),
             );
             error.new_metadata_entry(
                 ErrorMetaDataKey::CompilationStage,
@@ -103,9 +96,7 @@ fn unexpected_function_body_token_error(
         TokenKind::TypeParameterBracket => {
             let mut error = CompilerError::new_syntax_error(
                 "Unexpected '|' in function body. '|' is only used in function signatures and struct field/type declarations.",
-                token_stream
-                    .current_location()
-                    .to_error_location(string_table),
+                token_stream.current_location(),
             );
             error.new_metadata_entry(
                 ErrorMetaDataKey::CompilationStage,
@@ -121,9 +112,7 @@ fn unexpected_function_body_token_error(
         TokenKind::Arrow => {
             let mut error = CompilerError::new_syntax_error(
                 "Unexpected '->' in function body. Arrow syntax is only valid in function signatures.",
-                token_stream
-                    .current_location()
-                    .to_error_location(string_table),
+                token_stream.current_location(),
             );
             error.new_metadata_entry(
                 ErrorMetaDataKey::CompilationStage,
@@ -139,9 +128,7 @@ fn unexpected_function_body_token_error(
         TokenKind::Wildcard => {
             let mut error = CompilerError::new_syntax_error(
                 "Unexpected wildcard '_' in function body. Wildcards are not standalone statements.",
-                token_stream
-                    .current_location()
-                    .to_error_location(string_table),
+                token_stream.current_location(),
             );
             error.new_metadata_entry(
                 ErrorMetaDataKey::CompilationStage,
@@ -157,9 +144,7 @@ fn unexpected_function_body_token_error(
         other => {
             let mut error = CompilerError::new_syntax_error(
                 format!("Unexpected token '{other:?}' in a function body."),
-                token_stream
-                    .current_location()
-                    .to_error_location(string_table),
+                token_stream.current_location(),
             );
             error.new_metadata_entry(
                 ErrorMetaDataKey::CompilationStage,
@@ -223,7 +208,7 @@ pub fn function_body_to_ast(
                                     string_table.resolve(id),
                                     string_table.resolve(id),
                                 ),
-                                token_stream.current_location().to_error_location(string_table), {
+                                token_stream.current_location(), {
                                     CompilationStage => "AST Construction",
                                     PrimarySuggestion => "Import exports directly with '@path/to/file/symbol' or '@path/to/file {a, b}'",
                                 }
@@ -237,7 +222,7 @@ pub fn function_body_to_ast(
                                     string_table.resolve(id),
                                     string_table.resolve(id),
                                 ),
-                                token_stream.current_location().to_error_location(string_table), {
+                                token_stream.current_location(), {
                                     CompilationStage => "AST Construction",
                                     PrimarySuggestion => "Call the file start function with 'file()' or import specific exports directly",
                                 }
@@ -290,7 +275,7 @@ pub fn function_body_to_ast(
                                 // ~= should only be used for initial declarations, not reassignments
                                 return_syntax_error!(
                                     format!("Invalid use of '~=' for reassignment. Variable '{}' is already declared. Use '=' to mutate it or create a new variable with a different name.", string_table.resolve(id)),
-                                    token_stream.current_location().to_error_location(string_table), {
+                                    token_stream.current_location(), {
                                         CompilationStage => "AST Construction",
                                         PrimarySuggestion => "Use '=' to mutate the existing variable instead of '~='",
                                     }
@@ -298,7 +283,7 @@ pub fn function_body_to_ast(
                             } else {
                                 return_rule_error!(
                                     format!("Variable '{}' is already declared. Shadowing is not supported in Beanstalk. Use '=' to mutate its value or choose a different variable name", string_table.resolve(id)),
-                                    token_stream.current_location().to_error_location(string_table), {
+                                    token_stream.current_location(), {
                                         CompilationStage => "AST Construction",
                                         PrimarySuggestion => "Use '=' to mutate the existing variable or choose a different name",
                                     }
@@ -318,7 +303,7 @@ pub fn function_body_to_ast(
                                 if receiver.is_some() {
                                     return_rule_error!(
                                         "This only exists as a method, not a standalone function. Method calls can only be made on the reciever of a function",
-                                        token_stream.current_location().to_error_location(string_table), {
+                                        token_stream.current_location(), {
                                             CompilationStage => "AST Construction",
                                             PrimarySuggestion => "Call this method from an instance of its reciever, or define this as its own function",
                                         }
@@ -339,7 +324,7 @@ pub fn function_body_to_ast(
                         _ => {
                             return_syntax_error!(
                                 format!("Unexpected token '{:?}' after variable reference '{}'. Expected assignment operator (=, +=, -=, etc.) for mutation", token_stream.current_token_kind(), string_table.resolve(id)),
-                                token_stream.current_location().to_error_location(string_table), {
+                                token_stream.current_location(), {
                                     CompilationStage => "AST Construction",
                                     PrimarySuggestion => "Add an assignment operator like '=' or '+=' after the variable",
                                 }
@@ -377,7 +362,7 @@ pub fn function_body_to_ast(
                                 "Call target '{}' is not declared in this scope and is not a registered host function.",
                                 string_table.resolve(id)
                             ),
-                            token_stream.current_location().to_error_location(string_table), {
+                            token_stream.current_location(), {
                                 CompilationStage => "AST Construction",
                                 PrimarySuggestion => "Declare/import this function before calling it, or check the function name spelling",
                                 AlternativeSuggestion => "If this should be a host function, register it in the host registry for this backend",
@@ -464,7 +449,7 @@ pub fn function_body_to_ast(
                 } else {
                     return_rule_error!(
                         "Unexpected use of 'else' keyword. It can only be used inside an if statement or match statement",
-                        token_stream.current_location().to_error_location(string_table), {
+                        token_stream.current_location(), {
                             CompilationStage => "AST Construction",
                             PrimarySuggestion => "Remove the 'else' or place it inside an if/match statement",
                         }
@@ -484,9 +469,7 @@ pub fn function_body_to_ast(
                 {
                     return_rule_error!(
                         "Return statements can only be used inside functions",
-                        token_stream
-                            .current_location()
-                            .to_error_location(string_table)
+                        token_stream.current_location()
                     )
                 }
 
@@ -500,7 +483,7 @@ pub fn function_body_to_ast(
                             "This function has no return signature, so 'return' must be bare (no return values).",
                             token_stream
                                 .current_location()
-                                .to_error_location(string_table),
+                                ,
                             {
                                 CompilationStage => "AST Construction",
                                 PrimarySuggestion => "Use bare 'return' with no value in this function",
@@ -519,7 +502,7 @@ pub fn function_body_to_ast(
                             ),
                             token_stream
                                 .current_location()
-                                .to_error_location(string_table),
+                                ,
                             {
                                 CompilationStage => "AST Construction",
                                 PrimarySuggestion => "Provide return values that match the function signature",
@@ -540,7 +523,7 @@ pub fn function_body_to_ast(
                             ),
                             token_stream
                                 .current_location()
-                                .to_error_location(string_table),
+                                ,
                             {
                                 CompilationStage => "AST Construction",
                                 PrimarySuggestion => "Remove extra return values or update the function return signature",
@@ -564,7 +547,7 @@ pub fn function_body_to_ast(
                                     expected_type.display_with_table(string_table),
                                     normalized_actual.display_with_table(string_table)
                                 ),
-                                returned_value.location.to_error_location(string_table),
+                                returned_value.location.clone(),
                                 {
                                     CompilationStage => "AST Construction",
                                     PrimarySuggestion => "Update the returned expression to match the declared return type",
@@ -594,7 +577,7 @@ pub fn function_body_to_ast(
                         "Break statements can only be used inside loops",
                         token_stream
                             .current_location()
-                            .to_error_location(string_table),
+                            ,
                         {
                             CompilationStage => "AST Construction",
                             PrimarySuggestion => "Move this break statement inside a loop body",
@@ -616,7 +599,7 @@ pub fn function_body_to_ast(
                         "Continue statements can only be used inside loops",
                         token_stream
                             .current_location()
-                            .to_error_location(string_table),
+                            ,
                         {
                             CompilationStage => "AST Construction",
                             PrimarySuggestion => "Move this continue statement inside a loop body",
@@ -640,14 +623,14 @@ pub fn function_body_to_ast(
                         return_syntax_error!(
                             "Unexpected scope close. Expressions are not terminated like this.
                             Surround the expression with brackets if you need it to be multi-line. This might just be a compiler_frontend bug.",
-                            token_stream.current_location().to_error_location(string_table)
+                            token_stream.current_location()
                         );
                     }
                     ContextKind::Template => {
                         return_syntax_error!(
                             "Unexpected use of ';' inside a template. Templates are not closed with ';'.
                             If you are seeing this error, this might be a compiler_frontend bug instead.",
-                            token_stream.current_location().to_error_location(string_table)
+                            token_stream.current_location()
                         )
                     }
                     _ => {
@@ -665,9 +648,7 @@ pub fn function_body_to_ast(
                 if context.kind != ContextKind::Module {
                     return_rule_error!(
                         "Templates can only be used like this at the top level. Not inside the body of a function",
-                        token_stream
-                            .current_location()
-                            .to_error_location(string_table)
+                        token_stream.current_location()
                     )
                 }
 
@@ -697,7 +678,6 @@ pub fn function_body_to_ast(
                 return Err(unexpected_function_body_token_error(
                     token_stream.current_token_kind(),
                     token_stream,
-                    string_table,
                 ));
             }
         }

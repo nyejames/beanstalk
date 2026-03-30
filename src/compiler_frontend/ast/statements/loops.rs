@@ -58,7 +58,7 @@ fn create_conditional_loop(
                 "Loop condition must be a boolean expression. Found '{}'",
                 condition.data_type.display_with_table(string_table)
             ),
-            token_stream.current_location().to_error_location(string_table),
+            token_stream.current_location(),
             {
                 FoundType => found_type,
                 ExpectedType => "Bool",
@@ -71,7 +71,7 @@ fn create_conditional_loop(
     if token_stream.current_token_kind() != &TokenKind::Colon {
         return_syntax_error!(
             "A loop must have ':' after the loop header",
-            token_stream.current_location().to_error_location(string_table),
+            token_stream.current_location(),
             {
                 CompilationStage => "Loop Parsing",
                 PrimarySuggestion => "Add ':' after the loop condition",
@@ -107,7 +107,7 @@ fn create_iteration_loop(
                 "Loop binder '{}' is already declared in this scope",
                 string_table.resolve(binder_name)
             ),
-            token_stream.current_location().to_error_location(string_table),
+            token_stream.current_location(),
             {
                 CompilationStage => "Loop Parsing",
                 PrimarySuggestion => "Use a new binder name for the loop item",
@@ -119,7 +119,7 @@ fn create_iteration_loop(
     if token_stream.current_token_kind() != &TokenKind::In {
         return_syntax_error!(
             "Iteration loops must include 'in' after the binder name",
-            token_stream.current_location().to_error_location(string_table),
+            token_stream.current_location(),
             {
                 CompilationStage => "Loop Parsing",
                 PrimarySuggestion => "Use syntax like: loop i in 0 to 10:",
@@ -151,7 +151,7 @@ fn create_iteration_loop(
         TokenKind::Colon => {
             return_syntax_error!(
                 "Collection iteration is not implemented yet; use a range loop with 'to' or 'upto'",
-                token_stream.current_location().to_error_location(string_table),
+                token_stream.current_location(),
                 {
                     CompilationStage => "Loop Parsing",
                     PrimarySuggestion => "Use range syntax like: loop i in 0 to 10:",
@@ -161,7 +161,7 @@ fn create_iteration_loop(
         _ => {
             return_syntax_error!(
                 "Range loops must include 'to' or 'upto' between bounds",
-                token_stream.current_location().to_error_location(string_table),
+                token_stream.current_location(),
                 {
                     CompilationStage => "Loop Parsing",
                     PrimarySuggestion => "Use syntax like: loop i in start to end:",
@@ -202,17 +202,13 @@ fn create_iteration_loop(
     let start_numeric = numeric_type_for_expression(&start).ok_or_else(|| {
         CompilerError::new_syntax_error(
             "Range start must be numeric (Int or Float)",
-            token_stream
-                .current_location()
-                .to_error_location(string_table),
+            token_stream.current_location(),
         )
     })?;
     let end_numeric = numeric_type_for_expression(&end).ok_or_else(|| {
         CompilerError::new_syntax_error(
             "Range end must be numeric (Int or Float)",
-            token_stream
-                .current_location()
-                .to_error_location(string_table),
+            token_stream.current_location(),
         )
     })?;
 
@@ -220,9 +216,7 @@ fn create_iteration_loop(
         Some(numeric_type_for_expression(step_expr).ok_or_else(|| {
             CompilerError::new_syntax_error(
                 "Range step must be numeric (Int or Float)",
-                token_stream
-                    .current_location()
-                    .to_error_location(string_table),
+                token_stream.current_location(),
             )
         })?)
     } else {
@@ -237,7 +231,7 @@ fn create_iteration_loop(
     if uses_float && step.is_none() {
         return_syntax_error!(
             "Float ranges require an explicit 'by' step",
-            token_stream.current_location().to_error_location(string_table),
+            token_stream.current_location(),
             {
                 CompilationStage => "Loop Parsing",
                 PrimarySuggestion => "Add an explicit step, e.g. loop t in 0.0 to 1.0 by 0.1:",
@@ -250,7 +244,7 @@ fn create_iteration_loop(
     {
         return_syntax_error!(
             "Range step cannot be zero",
-            token_stream.current_location().to_error_location(string_table),
+            token_stream.current_location(),
             {
                 CompilationStage => "Loop Parsing",
                 PrimarySuggestion => "Use a non-zero step value after 'by'",
@@ -261,7 +255,7 @@ fn create_iteration_loop(
     if token_stream.current_token_kind() != &TokenKind::Colon {
         return_syntax_error!(
             "A loop must have ':' after the loop header",
-            token_stream.current_location().to_error_location(string_table),
+            token_stream.current_location(),
             {
                 CompilationStage => "Loop Parsing",
                 PrimarySuggestion => "Add ':' after the loop header",

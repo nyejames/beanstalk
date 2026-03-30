@@ -9,7 +9,7 @@ use crate::compiler_frontend::ast::templates::template::{
     SlotPlaceholder, TemplateAtom, TemplateContent, TemplateSegmentOrigin,
 };
 use crate::compiler_frontend::string_interning::StringId;
-use crate::compiler_frontend::tokenizer::tokens::TextLocation;
+use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
 /// A template's content after composition, represented as an ordered
 /// sequence of typed pieces ready for formatter runs and final folding.
@@ -40,7 +40,7 @@ pub enum RenderPiece {
 #[derive(Debug, Clone)]
 pub struct RenderTextPiece {
     pub text: StringId,
-    pub location: TextLocation,
+    pub location: SourceLocation,
 }
 
 #[derive(Debug, Clone)]
@@ -80,7 +80,7 @@ pub enum FormatterInputPiece {
 pub struct FormatterTextPiece {
     pub text: StringId,
     #[allow(dead_code)] // Preserved for future formatter diagnostics and source mapping
-    pub location: TextLocation,
+    pub location: SourceLocation,
 }
 
 /// Formatter output — newly generated text and preserved opaque anchors.

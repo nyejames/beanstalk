@@ -98,7 +98,7 @@ pub fn resolve_declaration_syntax(
         if context.kind.is_constant_context() {
             return_rule_error!(
                 "Constants can't be mutable!",
-                declaration_syntax.location.to_error_location(string_table), {
+                declaration_syntax.location, {
                     CompilationStage => "Variable Declaration",
                     PrimarySuggestion => "Remove the '~' symbol from the variable declaration",
                 }
@@ -118,7 +118,7 @@ pub fn resolve_declaration_syntax(
                     "Unknown type '{}'. Type names must be declared before use.",
                     string_table.resolve(type_name)
                 ),
-                declaration_syntax.location.to_error_location(string_table),
+                declaration_syntax.location.clone(),
             )
         })?;
 

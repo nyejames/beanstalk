@@ -1,7 +1,9 @@
 //! Tests for HTML document-shell config parsing.
 
 use super::*;
-use crate::compiler_frontend::compiler_errors::{ErrorLocation, ErrorType};
+use crate::compiler_frontend::compiler_errors::{ErrorType, SourceLocation};
+use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::string_interning::StringTable;
 use crate::projects::settings::Config;
 use std::path::PathBuf;
 
@@ -16,8 +18,9 @@ fn set_setting(config: &mut Config, key: &str, value: &str) {
 #[test]
 fn defaults_are_applied_when_settings_are_missing() {
     let config = project_config();
+    let mut string_table = StringTable::new();
     assert_eq!(
-        parse_html_document_config(&config).expect("defaults should parse"),
+        parse_html_document_config(&config, &mut string_table).expect("defaults should parse"),
         HtmlDocumentConfig::default()
     );
 }
@@ -35,7 +38,9 @@ fn parser_accepts_valid_overrides() {
     set_setting(&mut config, "html_inject_core_css", "false");
     set_setting(&mut config, "html_body_style", "margin: 0;");
 
-    let parsed = parse_html_document_config(&config).expect("valid settings should parse");
+    let mut string_table = StringTable::new();
+    let parsed = parse_html_document_config(&config, &mut string_table)
+        .expect("valid settings should parse");
     assert_eq!(parsed.lang, "en-GB");
     assert_eq!(parsed.title_prefix, "Docs | ");
     assert_eq!(parsed.title_postfix, " | Beanstalk");
@@ -52,7 +57,9 @@ fn parser_rejects_empty_lang() {
     let mut config = project_config();
     set_setting(&mut config, "html_lang", "");
 
-    let error = parse_html_document_config(&config).expect_err("empty lang should fail");
+    let mut string_table = StringTable::new();
+    let error =
+        parse_html_document_config(&config, &mut string_table).expect_err("empty lang should fail");
     assert_eq!(error.error_type, ErrorType::Config);
     assert!(error.msg.contains("#html_lang"));
 }
@@ -62,7 +69,9 @@ fn parser_rejects_invalid_bool_values() {
     let mut config = project_config();
     set_setting(&mut config, "html_inject_core_css", "yes");
 
-    let error = parse_html_document_config(&config).expect_err("invalid bool should fail");
+    let mut string_table = StringTable::new();
+    let error = parse_html_document_config(&config, &mut string_table)
+        .expect_err("invalid bool should fail");
     assert_eq!(error.error_type, ErrorType::Config);
     assert!(error.msg.contains("#html_inject_core_css"));
 }
@@ -71,8 +80,12 @@ fn parser_rejects_invalid_bool_values() {
 fn parser_uses_precise_location_from_setting_locations() {
     let mut config = project_config();
     set_setting(&mut config, "html_lang", "");
-    let precise_location = ErrorLocation::new(
-        PathBuf::from("project/#config.bst"),
+    let mut string_table = StringTable::new();
+    let precise_location = SourceLocation::new(
+        InternedPath::from_path_buf(
+            PathBuf::from("project/#config.bst").as_path(),
+            &mut string_table,
+        ),
         Default::default(),
         Default::default(),
     );
@@ -80,7 +93,8 @@ fn parser_uses_precise_location_from_setting_locations() {
         .setting_locations
         .insert(String::from("html_lang"), precise_location.clone());
 
-    let error = parse_html_document_config(&config).expect_err("invalid lang should fail");
+    let error = parse_html_document_config(&config, &mut string_table)
+        .expect_err("invalid lang should fail");
     assert_eq!(error.location.scope, precise_location.scope);
 }
 
@@ -89,6 +103,11 @@ fn parser_falls_back_to_config_file_location() {
     let mut config = project_config();
     set_setting(&mut config, "html_inject_core_css", "invalid");
 
-    let error = parse_html_document_config(&config).expect_err("invalid bool should fail");
-    assert_eq!(error.location.scope, PathBuf::from("project/#config.bst"));
+    let mut string_table = StringTable::new();
+    let error = parse_html_document_config(&config, &mut string_table)
+        .expect_err("invalid bool should fail");
+    assert_eq!(
+        error.location.scope.to_path_buf(&string_table),
+        PathBuf::from("project/#config.bst")
+    );
 }

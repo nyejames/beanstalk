@@ -18,7 +18,7 @@
 use crate::compiler_frontend::ast::ast::Ast;
 use crate::compiler_frontend::ast::ast::AstDocFragmentKind;
 use crate::compiler_frontend::ast::ast::AstStartTemplateItem;
-use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, TextLocation};
+use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, SourceLocation};
 use crate::compiler_frontend::ast::templates::template_folding::TemplateFoldContext;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::hir::hir_datatypes::{HirTypeKind, TypeContext, TypeId};
@@ -204,6 +204,7 @@ impl<'a> HirBuilder<'a> {
             return Err(CompilerMessages {
                 errors: vec![error],
                 warnings: self.module.warnings.to_owned(),
+                string_table: Default::default(),
             });
         }
 
@@ -211,6 +212,7 @@ impl<'a> HirBuilder<'a> {
             return Err(CompilerMessages {
                 errors: vec![error],
                 warnings: self.module.warnings.to_owned(),
+                string_table: Default::default(),
             });
         }
 
@@ -218,6 +220,7 @@ impl<'a> HirBuilder<'a> {
             return Err(CompilerMessages {
                 errors: vec![error],
                 warnings: self.module.warnings.to_owned(),
+                string_table: Default::default(),
             });
         }
 
@@ -225,6 +228,7 @@ impl<'a> HirBuilder<'a> {
             return Err(CompilerMessages {
                 errors: vec![error],
                 warnings: self.module.warnings.to_owned(),
+                string_table: Default::default(),
             });
         }
 
@@ -233,6 +237,7 @@ impl<'a> HirBuilder<'a> {
                 return Err(CompilerMessages {
                     errors: vec![error],
                     warnings: self.module.warnings.to_owned(),
+                    string_table: Default::default(),
                 });
             }
         }
@@ -241,6 +246,7 @@ impl<'a> HirBuilder<'a> {
             return Err(CompilerMessages {
                 errors: vec![error],
                 warnings: self.module.warnings.to_owned(),
+                string_table: Default::default(),
             });
         }
 
@@ -251,6 +257,7 @@ impl<'a> HirBuilder<'a> {
             return Err(CompilerMessages {
                 errors: vec![error],
                 warnings: self.module.warnings.to_owned(),
+                string_table: Default::default(),
             });
         }
 
@@ -289,7 +296,7 @@ impl<'a> HirBuilder<'a> {
                         "Missing function symbol path for {:?} while assigning function origins",
                         function.id
                     ),
-                    TextLocation::default().to_error_location(self.string_table)
+                    SourceLocation::default()
                 );
             };
 
@@ -494,7 +501,7 @@ impl<'a> HirBuilder<'a> {
         &mut self,
         block_id: BlockId,
         local: crate::compiler_frontend::hir::hir_nodes::HirLocal,
-        location: &TextLocation,
+        location: &SourceLocation,
     ) -> Result<(), CompilerError> {
         let block_index = self.block_index_or_error(block_id, location)?;
         let local_index = self.module.blocks[block_index].locals.len();
@@ -507,13 +514,13 @@ impl<'a> HirBuilder<'a> {
     pub(super) fn local_type_id_or_error(
         &self,
         local_id: LocalId,
-        location: &TextLocation,
+        location: &SourceLocation,
     ) -> Result<TypeId, CompilerError> {
         let Some((block_index, local_index)) = self.local_index_by_id.get(&local_id).copied()
         else {
             return_hir_transformation_error!(
                 format!("Local {:?} is not registered in HIR blocks", local_id),
-                location.to_error_location(self.string_table)
+                location.clone()
             );
         };
 
@@ -523,13 +530,13 @@ impl<'a> HirBuilder<'a> {
     pub(super) fn field_type_id_or_error(
         &self,
         field_id: FieldId,
-        location: &TextLocation,
+        location: &SourceLocation,
     ) -> Result<TypeId, CompilerError> {
         let Some((struct_index, field_index)) = self.field_index_by_id.get(&field_id).copied()
         else {
             return_hir_transformation_error!(
                 format!("Field {:?} is not registered in HIR structs", field_id),
-                location.to_error_location(self.string_table)
+                location.clone()
             );
         };
 
@@ -539,12 +546,12 @@ impl<'a> HirBuilder<'a> {
     pub(super) fn block_index_or_error(
         &self,
         block_id: BlockId,
-        location: &TextLocation,
+        location: &SourceLocation,
     ) -> Result<usize, CompilerError> {
         let Some(index) = self.block_index_by_id.get(&block_id).copied() else {
             return_hir_transformation_error!(
                 format!("Block {:?} is not registered in HIR module", block_id),
-                location.to_error_location(self.string_table)
+                location.clone()
             );
         };
 
@@ -554,12 +561,12 @@ impl<'a> HirBuilder<'a> {
     pub(super) fn function_index_or_error(
         &self,
         function_id: FunctionId,
-        location: &TextLocation,
+        location: &SourceLocation,
     ) -> Result<usize, CompilerError> {
         let Some(index) = self.function_index_by_id.get(&function_id).copied() else {
             return_hir_transformation_error!(
                 format!("Function {:?} is not registered in HIR module", function_id),
-                location.to_error_location(self.string_table)
+                location.clone()
             );
         };
 
@@ -569,7 +576,7 @@ impl<'a> HirBuilder<'a> {
     pub(super) fn block_by_id_or_error(
         &self,
         block_id: BlockId,
-        location: &TextLocation,
+        location: &SourceLocation,
     ) -> Result<&HirBlock, CompilerError> {
         let index = self.block_index_or_error(block_id, location)?;
         Ok(&self.module.blocks[index])
@@ -578,7 +585,7 @@ impl<'a> HirBuilder<'a> {
     pub(super) fn block_mut_by_id_or_error(
         &mut self,
         block_id: BlockId,
-        location: &TextLocation,
+        location: &SourceLocation,
     ) -> Result<&mut HirBlock, CompilerError> {
         let index = self.block_index_or_error(block_id, location)?;
         Ok(&mut self.module.blocks[index])
@@ -587,7 +594,7 @@ impl<'a> HirBuilder<'a> {
     pub(super) fn function_by_id_or_error(
         &self,
         function_id: FunctionId,
-        location: &TextLocation,
+        location: &SourceLocation,
     ) -> Result<&HirFunction, CompilerError> {
         let index = self.function_index_or_error(function_id, location)?;
         Ok(&self.module.functions[index])
@@ -596,7 +603,7 @@ impl<'a> HirBuilder<'a> {
     pub(super) fn function_mut_by_id_or_error(
         &mut self,
         function_id: FunctionId,
-        location: &TextLocation,
+        location: &SourceLocation,
     ) -> Result<&mut HirFunction, CompilerError> {
         let index = self.function_index_or_error(function_id, location)?;
         Ok(&mut self.module.functions[index])
@@ -605,7 +612,7 @@ impl<'a> HirBuilder<'a> {
     pub(crate) fn enter_function(
         &mut self,
         function_id: FunctionId,
-        location: &TextLocation,
+        location: &SourceLocation,
     ) -> Result<(), CompilerError> {
         let entry_block = self.function_by_id_or_error(function_id, location)?.entry;
 
@@ -626,7 +633,7 @@ impl<'a> HirBuilder<'a> {
     pub(crate) fn set_current_block(
         &mut self,
         block_id: BlockId,
-        location: &TextLocation,
+        location: &SourceLocation,
     ) -> Result<(), CompilerError> {
         let region = self.block_by_id_or_error(block_id, location)?.region;
         self.current_block = Some(block_id);
@@ -636,13 +643,10 @@ impl<'a> HirBuilder<'a> {
 
     pub(crate) fn current_block_id_or_error(
         &self,
-        location: &TextLocation,
+        location: &SourceLocation,
     ) -> Result<BlockId, CompilerError> {
         let Some(block_id) = self.current_block else {
-            return_hir_transformation_error!(
-                "No current HIR block is active",
-                location.to_error_location(self.string_table)
-            );
+            return_hir_transformation_error!("No current HIR block is active", location.clone());
         };
 
         Ok(block_id)
@@ -655,7 +659,7 @@ impl<'a> HirBuilder<'a> {
 
     pub(crate) fn current_function_id_or_error(
         &self,
-        location: &TextLocation,
+        location: &SourceLocation,
     ) -> Result<FunctionId, CompilerError> {
         let Some(function_id) = self.current_function else {
             return_hir_transformation_error!(
@@ -669,7 +673,7 @@ impl<'a> HirBuilder<'a> {
 
     pub(crate) fn current_region_or_error(
         &self,
-        location: &TextLocation,
+        location: &SourceLocation,
     ) -> Result<RegionId, CompilerError> {
         let Some(region) = self.current_region else {
             return_hir_transformation_error!(
@@ -700,14 +704,14 @@ impl<'a> HirBuilder<'a> {
         &mut self,
         block_id: BlockId,
         terminator: HirTerminator,
-        source_location: &TextLocation,
+        source_location: &SourceLocation,
     ) -> Result<(), CompilerError> {
         {
             let block = self.block_mut_by_id_or_error(block_id, source_location)?;
             if !Self::is_placeholder_terminator(&block.terminator) {
                 return_hir_transformation_error!(
                     format!("Block {} already has an explicit terminator", block_id),
-                    source_location.to_error_location(self.string_table)
+                    source_location.clone()
                 );
             }
 
@@ -721,7 +725,7 @@ impl<'a> HirBuilder<'a> {
     pub(crate) fn block_has_explicit_terminator(
         &self,
         block_id: BlockId,
-        location: &TextLocation,
+        location: &SourceLocation,
     ) -> Result<bool, CompilerError> {
         let block = self.block_by_id_or_error(block_id, location)?;
         Ok(!Self::is_placeholder_terminator(&block.terminator))

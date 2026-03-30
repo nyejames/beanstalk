@@ -69,6 +69,12 @@ pub struct StringTable {
     next_id: u32,
 }
 
+impl Default for StringTable {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl StringTable {
     /// Create a new empty string table
     pub fn new() -> Self {

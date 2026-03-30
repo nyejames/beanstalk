@@ -1,7 +1,7 @@
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
-use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TextLocation, Token, TokenKind};
+use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
 use crate::{return_rule_error, return_syntax_error};
 
 // All the component parts of a declaration before it is resolved / parsed
@@ -17,7 +17,7 @@ pub struct DeclarationSyntax {
     // Named type annotations are resolved later after symbol tables are available.
     pub explicit_named_type: Option<StringId>,
     pub initializer_tokens: Vec<Token>,
-    pub location: TextLocation,
+    pub location: SourceLocation,
 }
 
 impl DeclarationSyntax {
@@ -89,7 +89,7 @@ pub fn parse_declaration_syntax(
             let var_name = string_table.resolve(name);
             return_rule_error!(
                 format!("Variable '{}' must be initialized with a value", var_name),
-                token_stream.current_location().to_error_location(string_table), {
+                token_stream.current_location(), {
                     CompilationStage => "Variable Declaration",
                     PrimarySuggestion => "Add '= value' after the variable declaration",
                 }
@@ -101,7 +101,7 @@ pub fn parse_declaration_syntax(
                     "Unexpected token '{:?}' in declaration. Expected '=' after declaration type.",
                     token_stream.current_token_kind()
                 ),
-                token_stream.current_location().to_error_location(string_table), {
+                token_stream.current_location(), {
                     CompilationStage => "Variable Declaration",
                     PrimarySuggestion => "Add '=' after the declaration before the initializer",
                     SuggestedInsertion => "=",
@@ -115,7 +115,7 @@ pub fn parse_declaration_syntax(
         let var_name = string_table.resolve(name);
         return_rule_error!(
             format!("Variable '{}' must be initialized with a value", var_name),
-            declaration_location.to_error_location(string_table), {
+            declaration_location, {
                 CompilationStage => "Variable Declaration",
                 PrimarySuggestion => "Add an initializer expression after '='",
             }
@@ -134,7 +134,7 @@ pub fn parse_declaration_syntax(
 
 fn parse_explicit_type_annotation(
     token_stream: &mut FileTokens,
-    string_table: &StringTable,
+    _string_table: &StringTable,
 ) -> Result<(DataType, Option<StringId>), CompilerError> {
     match token_stream.current_token_kind() {
         TokenKind::Assign | TokenKind::Newline => Ok((DataType::Inferred, None)),
@@ -165,7 +165,7 @@ fn parse_explicit_type_annotation(
             if token_stream.current_token_kind() != &TokenKind::CloseCurly {
                 return_syntax_error!(
                     "Missing closing curly brace for collection type declaration",
-                    token_stream.current_location().to_error_location(string_table), {
+                    token_stream.current_location(), {
                         CompilationStage => "Variable Declaration",
                         PrimarySuggestion => "Add '}' to close the collection type declaration",
                         SuggestedInsertion => "}",
@@ -190,7 +190,7 @@ fn parse_explicit_type_annotation(
         TokenKind::Colon => {
             return_rule_error!(
                 "Labeled scopes are not yet implemented in the language.",
-                token_stream.current_location().to_error_location(string_table),
+                token_stream.current_location(),
                 {
                     CompilationStage => "Variable Declaration",
                     PrimarySuggestion => "Remove the label syntax for now or rewrite this as supported control flow",
@@ -207,7 +207,7 @@ fn parse_explicit_type_annotation(
                     "Invalid token '{:?}' after declaration name. Expected a type or assignment operator.",
                     token_stream.current_token_kind()
                 ),
-                token_stream.current_location().to_error_location(string_table), {
+                token_stream.current_location(), {
                     CompilationStage => "Variable Declaration",
                     PrimarySuggestion => "Use a type declaration (Int, String, etc.) or assignment operator '='",
                 }
@@ -219,7 +219,7 @@ fn parse_explicit_type_annotation(
                     "Invalid token '{:?}' after declaration name. Expected a type or assignment operator.",
                     token_stream.current_token_kind()
                 ),
-                token_stream.current_location().to_error_location(string_table), {
+                token_stream.current_location(), {
                     CompilationStage => "Variable Declaration",
                     PrimarySuggestion => "Use a type declaration (Int, String, etc.) or assignment operator '='",
                 }
@@ -231,7 +231,7 @@ fn parse_explicit_type_annotation(
 fn append_explicit_type_tokens(
     tokens: &mut Vec<Token>,
     explicit_type: &DataType,
-    location: &TextLocation,
+    location: &SourceLocation,
 ) {
     match explicit_type {
         DataType::Inferred => {}

@@ -133,7 +133,7 @@ fn test_positional_composition_basic() {
         ],
     };
 
-    let location = TextLocation::default();
+    let location = SourceLocation::default();
     let result =
         compose_template_with_slots(&wrapper, &fill_content, &location, &string_table).unwrap();
 
@@ -173,7 +173,7 @@ fn test_positional_composition_with_default_overflow() {
         ],
     };
 
-    let location = TextLocation::default();
+    let location = SourceLocation::default();
     let result =
         compose_template_with_slots(&wrapper, &fill_content, &location, &string_table).unwrap();
 
@@ -206,7 +206,7 @@ fn test_positional_composition_overflow_error() {
         ],
     };
 
-    let location = TextLocation::default();
+    let location = SourceLocation::default();
     let result = compose_template_with_slots(&wrapper, &fill_content, &location, &string_table);
 
     assert!(result.is_err());
@@ -233,7 +233,7 @@ fn test_positional_composition_repeated_slots() {
         ))],
     };
 
-    let location = TextLocation::default();
+    let location = SourceLocation::default();
     let result =
         compose_template_with_slots(&wrapper, &fill_content, &location, &string_table).unwrap();
 
@@ -259,7 +259,7 @@ fn test_positional_composition_mixed_content() {
             TemplateAtom::Content(TemplateSegment::new(
                 Expression::string_slice(
                     string_table.intern(" text "),
-                    TextLocation::default(),
+                    SourceLocation::default(),
                     Ownership::ImmutableOwned,
                 ),
                 TemplateSegmentOrigin::Body,
@@ -274,7 +274,7 @@ fn test_positional_composition_mixed_content() {
         ],
     };
 
-    let location = TextLocation::default();
+    let location = SourceLocation::default();
     let result =
         compose_template_with_slots(&wrapper, &fill_content, &location, &string_table).unwrap();
 

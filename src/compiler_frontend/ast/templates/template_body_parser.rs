@@ -87,9 +87,7 @@ pub(crate) fn parse_template_body(
                         "Invalid Token Used Inside template body when creating template node. Token: {:?}",
                         token_stream.current_token_kind()
                     ),
-                    token_stream
-                        .current_location()
-                        .to_error_location(string_table)
+                    token_stream.current_location()
                 )
             }
         }

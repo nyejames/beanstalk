@@ -20,7 +20,7 @@ use crate::compiler_frontend::host_functions::CallTarget;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::string_interning::StringTable;
-use crate::compiler_frontend::tokenizer::tokens::{CharPosition, TextLocation};
+use crate::compiler_frontend::tokenizer::tokens::{CharPosition, SourceLocation};
 
 fn setup_builder(string_table: &'_ mut StringTable) -> HirBuilder<'_> {
     let test_function_name = InternedPath::from_single_str("__expr_test_fn", string_table);
@@ -49,8 +49,8 @@ fn setup_builder(string_table: &'_ mut StringTable) -> HirBuilder<'_> {
     builder
 }
 
-pub(crate) fn location(line: i32) -> TextLocation {
-    TextLocation {
+pub(crate) fn location(line: i32) -> SourceLocation {
+    SourceLocation {
         scope: InternedPath::new(),
         start_pos: CharPosition {
             line_number: line,
@@ -68,7 +68,7 @@ fn register_local(
     name: InternedPath,
     local_id: LocalId,
     data_type: DataType,
-    location: TextLocation,
+    location: SourceLocation,
 ) {
     let ty = builder
         .lower_data_type(&data_type, &location)
@@ -106,7 +106,7 @@ fn rvalue_node(expr: Expression) -> AstNode {
     }
 }
 
-fn operator_node(op: Operator, location: TextLocation) -> AstNode {
+fn operator_node(op: Operator, location: SourceLocation) -> AstNode {
     AstNode {
         kind: NodeKind::Operator(op),
         location,
@@ -114,7 +114,7 @@ fn operator_node(op: Operator, location: TextLocation) -> AstNode {
     }
 }
 
-fn runtime_template_expression(location: TextLocation, content: Vec<Expression>) -> Expression {
+fn runtime_template_expression(location: SourceLocation, content: Vec<Expression>) -> Expression {
     let mut template = Template::create_default(vec![]);
     template.location = location.clone();
 

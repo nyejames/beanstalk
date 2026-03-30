@@ -89,7 +89,7 @@ pub(crate) fn resolve_file_import_bindings(
                     else {
                         return Err(CompilerError::new_rule_error(
                             "Imported file path must include a valid file name.",
-                            import.location.to_error_location(string_table),
+                            import.location,
                         ));
                     };
 
@@ -99,7 +99,7 @@ pub(crate) fn resolve_file_import_bindings(
                                 "Import name collision: '{}' is already declared in this file.",
                                 string_table.resolve(alias_name)
                             ),
-                            import.location.to_error_location(string_table),
+                            import.location,
                         ));
                     }
 
@@ -112,7 +112,7 @@ pub(crate) fn resolve_file_import_bindings(
                                 "Import name collision: '{}' conflicts with a host function name.",
                                 string_table.resolve(alias_name)
                             ),
-                            import.location.to_error_location(string_table),
+                            import.location,
                         ));
                     }
 
@@ -127,7 +127,7 @@ pub(crate) fn resolve_file_import_bindings(
                             "Ambiguous import target '{}'. Use a more specific path.",
                             import.header_path.to_portable_string(string_table)
                         ),
-                        import.location.to_error_location(string_table),
+                        import.location,
                     ));
                 }
                 ImportPathResolution::Missing => {}
@@ -151,14 +151,14 @@ pub(crate) fn resolve_file_import_bindings(
                                 "Cannot import '{}' because it is not exported. Add '#' to export it from its source file.",
                                 symbol_path.to_portable_string(string_table)
                             ),
-                            import.location.to_error_location(string_table),
+                            import.location,
                         ));
                     }
 
                     let Some(symbol_name) = symbol_path.name() else {
                         return Err(CompilerError::new_rule_error(
                             "Imported symbol path is missing a symbol name.",
-                            import.location.to_error_location(string_table),
+                            import.location,
                         ));
                     };
 
@@ -171,7 +171,7 @@ pub(crate) fn resolve_file_import_bindings(
                                 "Import name collision: '{}' conflicts with a host function name.",
                                 string_table.resolve(symbol_name)
                             ),
-                            import.location.to_error_location(string_table),
+                            import.location,
                         ));
                     }
 
@@ -183,7 +183,7 @@ pub(crate) fn resolve_file_import_bindings(
                                 "Import name collision: '{}' is already declared in this file.",
                                 string_table.resolve(symbol_name)
                             ),
-                            import.location.to_error_location(string_table),
+                            import.location,
                         ));
                     }
 
@@ -196,7 +196,7 @@ pub(crate) fn resolve_file_import_bindings(
                             "Ambiguous import target '{}'. Use a more specific path.",
                             import.header_path.to_portable_string(string_table)
                         ),
-                        import.location.to_error_location(string_table),
+                        import.location,
                     ));
                 }
                 ImportPathResolution::Missing => {
@@ -205,7 +205,7 @@ pub(crate) fn resolve_file_import_bindings(
                             "Missing import target '{}'. Could not resolve this dependency in the current module.",
                             import.header_path.to_portable_string(string_table)
                         ),
-                        import.location.to_error_location(string_table),
+                        import.location,
                     ));
                 }
             }
@@ -298,7 +298,7 @@ pub(crate) fn parse_constant_header_declaration(
                 "Constant '{}' is not compile-time resolvable. Constants may only contain compile-time values and constant references.",
                 declaration.id.to_portable_string(string_table)
             ),
-            header.name_location.to_error_location(string_table),
+            header.name_location.clone(),
         ));
     }
 

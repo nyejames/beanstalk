@@ -166,7 +166,7 @@ impl CompilerFrontend {
                 tokens.canonical_os_path = canonical_os_path;
                 Ok(tokens)
             }
-            Err(e) => Err(e.with_file_path(module_path.to_owned())),
+            Err(error) => Err(error),
         }
     }
 
@@ -265,6 +265,7 @@ impl CompilerFrontend {
                     "HIR generation requires a project path resolver for template folding.",
                 )],
                 warnings: vec![],
+                string_table: Default::default(),
             });
         };
         let hir_module = lower_module(
@@ -290,6 +291,7 @@ impl CompilerFrontend {
             Err(error) => Err(CompilerMessages {
                 errors: vec![error],
                 warnings: Vec::new(),
+                string_table: Default::default(),
             }),
         }
     }

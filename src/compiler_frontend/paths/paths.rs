@@ -83,7 +83,7 @@ pub fn parse_file_path(
 
                 return_syntax_error!(
                     "Only exact \"@/\" is supported as the public root path. Use '@name/...' for rooted paths.",
-                    stream.new_location().to_error_location(string_table), {
+                    stream.new_location(), {
                         CompilationStage => "Tokenization",
                         PrimarySuggestion => "Use exactly '@/' for the public root, or use '@name/...' for non-root paths",
                     }
@@ -97,7 +97,7 @@ pub fn parse_file_path(
     if parsed_prefix.components.is_empty() {
         return_syntax_error!(
             "Path cannot be empty.",
-            stream.new_location().to_error_location(string_table), {
+            stream.new_location(), {
                 CompilationStage => "Tokenization",
                 PrimarySuggestion => "Provide a valid file path",
             }
@@ -108,7 +108,7 @@ pub fn parse_file_path(
     {
         return_syntax_error!(
             "Slash-before-group syntax is not supported. Use 'base { ... }'.",
-            stream.new_location().to_error_location(string_table), {
+            stream.new_location(), {
                 CompilationStage => "Tokenization",
                 PrimarySuggestion => "Remove the separator before '{' and write the group as 'base { ... }'",
             }
@@ -118,7 +118,7 @@ pub fn parse_file_path(
     if parsed_prefix.ended_with_separator {
         return_syntax_error!(
             "Path cannot end with a separator.",
-            stream.new_location().to_error_location(string_table), {
+            stream.new_location(), {
                 CompilationStage => "Tokenization",
                 PrimarySuggestion => "Remove the trailing '/' or '\\' from this path",
             }
@@ -148,7 +148,6 @@ pub fn parse_file_path(
 pub fn parse_import_clause_tokens(
     tokens: &[Token],
     start_index: usize,
-    string_table: &StringTable,
 ) -> Result<(Vec<InternedPath>, usize), CompilerError> {
     let Some(import_token) = tokens.get(start_index) else {
         return Err(CompilerError::compiler_error(
@@ -173,7 +172,7 @@ pub fn parse_import_clause_tokens(
     let Some(path_token) = tokens.get(index) else {
         return_syntax_error!(
             "Expected a path after the 'import' keyword.",
-            import_token.location.to_error_location(string_table), {
+            import_token.location.clone(), {
                 CompilationStage => "Header Parsing",
                 PrimarySuggestion => "Add an import path like '@folder/file' after 'import'",
             }
@@ -186,7 +185,7 @@ pub fn parse_import_clause_tokens(
                 "Expected a path after the 'import' keyword, found '{:?}'.",
                 path_token.kind
             ),
-            path_token.location.to_error_location(string_table), {
+            path_token.location.clone(), {
                 CompilationStage => "Header Parsing",
                 PrimarySuggestion => "Use import syntax like 'import @folder/file'",
             }
@@ -196,16 +195,13 @@ pub fn parse_import_clause_tokens(
     Ok((paths.to_owned(), index + 1))
 }
 
-pub fn collect_paths_from_tokens(
-    tokens: &[Token],
-    string_table: &StringTable,
-) -> Result<Vec<InternedPath>, CompilerError> {
+pub fn collect_paths_from_tokens(tokens: &[Token]) -> Result<Vec<InternedPath>, CompilerError> {
     let mut parsed_paths = Vec::new();
     let mut index = 0usize;
 
     while index < tokens.len() {
         if matches!(tokens[index].kind, TokenKind::Import) {
-            let (paths, next_index) = parse_import_clause_tokens(tokens, index, string_table)?;
+            let (paths, next_index) = parse_import_clause_tokens(tokens, index)?;
             parsed_paths.extend(paths);
             index = next_index;
             continue;
@@ -251,7 +247,7 @@ fn parse_path_prefix(
             if matches!(next, '/' | '\\') {
                 return_syntax_error!(
                     "Empty path component is not allowed here.",
-                    stream.new_location().to_error_location(string_table), {
+                    stream.new_location(), {
                         CompilationStage => "Tokenization",
                         PrimarySuggestion => "Remove repeated separators and keep exactly one '/' between components",
                     }
@@ -302,7 +298,7 @@ fn parse_path_prefix(
         if skipped_whitespace {
             return_syntax_error!(
                 "Path components with whitespace must be quoted.",
-                stream.new_location().to_error_location(string_table), {
+                stream.new_location(), {
                     CompilationStage => "Tokenization",
                     PrimarySuggestion => "Quote this path component, for example: \"my file.md\".",
                 }
@@ -311,7 +307,7 @@ fn parse_path_prefix(
 
         return_syntax_error!(
             "Path components must be separated by '/'.",
-            stream.new_location().to_error_location(string_table), {
+            stream.new_location(), {
                 CompilationStage => "Tokenization",
                 PrimarySuggestion => "Insert '/' between path components",
             }
@@ -336,7 +332,7 @@ fn parse_grouped_block(
         let Some(next) = stream.peek().copied() else {
             return_syntax_error!(
                 "Grouped path is missing a closing '}'.",
-                stream.new_location().to_error_location(string_table), {
+                stream.new_location(), {
                     CompilationStage => "Tokenization",
                     PrimarySuggestion => "Close the grouped path with '}'",
                     SuggestedInsertion => "}",
@@ -358,7 +354,7 @@ fn parse_grouped_block(
                 _ => {
                     return_syntax_error!(
                         "Grouped path entries must be separated by commas.",
-                        stream.new_location().to_error_location(string_table), {
+                        stream.new_location(), {
                             CompilationStage => "Tokenization",
                             PrimarySuggestion => "Add a comma between grouped path entries",
                         }
@@ -371,7 +367,7 @@ fn parse_grouped_block(
             if !saw_entry {
                 return_syntax_error!(
                     "Grouped path requires at least one entry.",
-                    stream.new_location().to_error_location(string_table), {
+                    stream.new_location(), {
                         CompilationStage => "Tokenization",
                         PrimarySuggestion => "Add at least one grouped path entry inside '{}'",
                     }
@@ -385,7 +381,7 @@ fn parse_grouped_block(
         if next == ',' {
             return_syntax_error!(
                 "Multiple commas in a row are not allowed in grouped paths.",
-                stream.new_location().to_error_location(string_table), {
+                stream.new_location(), {
                     CompilationStage => "Tokenization",
                     PrimarySuggestion => "Remove the extra comma",
                 }
@@ -400,7 +396,7 @@ fn parse_grouped_block(
             if parsed_prefix.ended_with_separator {
                 return_syntax_error!(
                     "Slash-before-group syntax is not supported. Use 'base { ... }'.",
-                    stream.new_location().to_error_location(string_table), {
+                    stream.new_location(), {
                         CompilationStage => "Tokenization",
                         PrimarySuggestion => "Remove the separator before '{' and write the group as 'base { ... }'",
                     }
@@ -410,7 +406,7 @@ fn parse_grouped_block(
             if parsed_prefix.components.is_empty() {
                 return_syntax_error!(
                     "Nested grouped paths require a non-empty prefix before '{'.",
-                    stream.new_location().to_error_location(string_table), {
+                    stream.new_location(), {
                         CompilationStage => "Tokenization",
                         PrimarySuggestion => "Add a path prefix before the nested grouped block",
                     }
@@ -429,7 +425,7 @@ fn parse_grouped_block(
             if parsed_prefix.ended_with_separator {
                 return_syntax_error!(
                     "A grouped path prefix cannot end with a separator.",
-                    stream.new_location().to_error_location(string_table), {
+                    stream.new_location(), {
                         CompilationStage => "Tokenization",
                         PrimarySuggestion => "Remove the trailing '/' or '\\' from this grouped path prefix",
                     }
@@ -439,7 +435,7 @@ fn parse_grouped_block(
             if parsed_prefix.components.is_empty() {
                 return_syntax_error!(
                     "Grouped path entry cannot be empty.",
-                    stream.new_location().to_error_location(string_table), {
+                    stream.new_location(), {
                         CompilationStage => "Tokenization",
                         PrimarySuggestion => "Provide a valid grouped path entry",
                     }
@@ -488,7 +484,7 @@ fn parse_grouped_entry_prefix(
             if matches!(next, '/' | '\\') {
                 return_syntax_error!(
                     "Empty path component is not allowed here.",
-                    stream.new_location().to_error_location(string_table), {
+                    stream.new_location(), {
                         CompilationStage => "Tokenization",
                         PrimarySuggestion => "Remove repeated separators and keep exactly one '/' between components",
                     }
@@ -537,7 +533,7 @@ fn parse_grouped_entry_prefix(
         if skipped_whitespace {
             return_syntax_error!(
                 "Path components with whitespace must be quoted.",
-                stream.new_location().to_error_location(string_table), {
+                stream.new_location(), {
                     CompilationStage => "Tokenization",
                     PrimarySuggestion => "Quote this path component, for example: \"my file.md\".",
                 }
@@ -546,7 +542,7 @@ fn parse_grouped_entry_prefix(
 
         return_syntax_error!(
             "Path components must be separated by '/'.",
-            stream.new_location().to_error_location(string_table), {
+            stream.new_location(), {
                 CompilationStage => "Tokenization",
                 PrimarySuggestion => "Insert '/' between path components",
             }
@@ -572,7 +568,7 @@ fn parse_component(
 /// WHY: Quoted components are the only syntax that allows whitespace inside a component.
 fn parse_quoted_component(
     stream: &mut TokenStream,
-    string_table: &StringTable,
+    _string_table: &StringTable,
 ) -> Result<ParsedComponent, CompilerError> {
     let Some('"') = stream.peek().copied() else {
         return Err(CompilerError::compiler_error(
@@ -587,7 +583,7 @@ fn parse_quoted_component(
         let Some(next) = stream.peek().copied() else {
             return_syntax_error!(
                 "Unclosed quoted path component.",
-                stream.new_location().to_error_location(string_table), {
+                stream.new_location(), {
                     CompilationStage => "Tokenization",
                     PrimarySuggestion => "Add a closing double quote to finish this path component.",
                     SuggestedInsertion => "\"",
@@ -609,7 +605,7 @@ fn parse_quoted_component(
             let Some(escaped) = stream.peek().copied() else {
                 return_syntax_error!(
                     "Unclosed quoted path component.",
-                    stream.new_location().to_error_location(string_table), {
+                    stream.new_location(), {
                         CompilationStage => "Tokenization",
                         PrimarySuggestion => "Add a closing double quote to finish this path component.",
                         SuggestedInsertion => "\"",
@@ -625,7 +621,7 @@ fn parse_quoted_component(
                 _ => {
                     return_syntax_error!(
                         "Invalid escape in quoted path component. Only '\\\"' and '\\\\' are supported.",
-                        stream.new_location().to_error_location(string_table), {
+                        stream.new_location(), {
                             CompilationStage => "Tokenization",
                             PrimarySuggestion => "Use '\\\"' for a quote or '\\\\' for a backslash in quoted path components",
                         }
@@ -646,7 +642,7 @@ fn parse_quoted_component(
 fn parse_bare_component(
     stream: &mut TokenStream,
     context: ParseComponentContext,
-    string_table: &StringTable,
+    _string_table: &StringTable,
 ) -> Result<ParsedComponent, CompilerError> {
     let mut value = String::new();
 
@@ -666,7 +662,7 @@ fn parse_bare_component(
     if value.is_empty() {
         return_syntax_error!(
             "Path component cannot be empty.",
-            stream.new_location().to_error_location(string_table), {
+            stream.new_location(), {
                 CompilationStage => "Tokenization",
                 PrimarySuggestion => "Provide a valid path component",
             }
@@ -693,7 +689,7 @@ fn parse_bare_component(
         {
             return_syntax_error!(
                 "Path components with whitespace must be quoted.",
-                stream.new_location().to_error_location(string_table), {
+                stream.new_location(), {
                     CompilationStage => "Tokenization",
                     PrimarySuggestion => "Quote this path component, for example: \"my file.md\".",
                 }
@@ -740,12 +736,12 @@ fn validate_path_component(
     allow_relative_marker: bool,
     was_quoted: bool,
     stream: &mut TokenStream,
-    string_table: &StringTable,
+    _string_table: &StringTable,
 ) -> Result<(), CompilerError> {
     if component.is_empty() {
         return_syntax_error!(
             "Path component cannot be empty.",
-            stream.new_location().to_error_location(string_table), {
+            stream.new_location(), {
                 CompilationStage => "Tokenization",
                 PrimarySuggestion => "Provide a valid path component",
             }
@@ -759,7 +755,7 @@ fn validate_path_component(
 
         return_syntax_error!(
             format!("Invalid path component '{}'.", component),
-            stream.new_location().to_error_location(string_table), {
+            stream.new_location(), {
                 CompilationStage => "Tokenization",
                 PrimarySuggestion => "Use '.' and '..' only as leading relative path markers",
             }
@@ -769,7 +765,7 @@ fn validate_path_component(
     if component.ends_with('.') {
         return_syntax_error!(
             format!("Invalid path component '{}'.", component),
-            stream.new_location().to_error_location(string_table), {
+            stream.new_location(), {
                 CompilationStage => "Tokenization",
                 PrimarySuggestion => "Remove trailing '.' from this path component",
             }
@@ -782,7 +778,7 @@ fn validate_path_component(
     {
         return_syntax_error!(
             format!("Invalid path component '{}'.", component),
-            stream.new_location().to_error_location(string_table), {
+            stream.new_location(), {
                 CompilationStage => "Tokenization",
                 PrimarySuggestion => "Use path components without syntax delimiters or cross-platform reserved filename characters",
             }
@@ -792,7 +788,7 @@ fn validate_path_component(
     if is_reserved_windows_name(component) {
         return_syntax_error!(
             format!("Invalid path component '{}'.", component),
-            stream.new_location().to_error_location(string_table), {
+            stream.new_location(), {
                 CompilationStage => "Tokenization",
                 PrimarySuggestion => "Use a file or directory name that is not a reserved Windows device name",
             }

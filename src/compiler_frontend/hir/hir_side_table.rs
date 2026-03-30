@@ -9,7 +9,7 @@ use crate::compiler_frontend::hir::hir_nodes::{
 };
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
-use crate::compiler_frontend::tokenizer::tokens::TextLocation;
+use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use rustc_hash::FxHashMap;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 
@@ -91,7 +91,7 @@ impl From<HirValueId> for HirLocation {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-struct TextLocationKey {
+struct SourceLocationKey {
     scope: InternedPath,
     start_line: i32,
     start_column: i32,
@@ -99,8 +99,8 @@ struct TextLocationKey {
     end_column: i32,
 }
 
-impl From<&TextLocation> for TextLocationKey {
-    fn from(value: &TextLocation) -> Self {
+impl From<&SourceLocation> for SourceLocationKey {
+    fn from(value: &SourceLocation) -> Self {
         Self {
             scope: value.scope.clone(),
             start_line: value.start_pos.line_number,
@@ -115,12 +115,12 @@ impl From<&TextLocation> for TextLocationKey {
 ///
 /// Design goals:
 /// - O(1) average lookups for all forward/backward mappings
-/// - Location interning to avoid repeated `TextLocation` cloning
+/// - Location interning to avoid repeated `SourceLocation` cloning
 /// - Zero string formatting work during mapping writes
 #[derive(Debug, Clone, Default)]
 pub(crate) struct HirSideTable {
-    source_locations: Vec<TextLocation>,
-    source_location_index: FxHashMap<TextLocationKey, SourceLocationId>,
+    source_locations: Vec<SourceLocation>,
+    source_location_index: FxHashMap<SourceLocationKey, SourceLocationId>,
 
     ast_to_hir: FxHashMap<SourceLocationId, Vec<HirLocation>>,
     hir_to_ast: FxHashMap<HirLocation, SourceLocationId>,
@@ -148,8 +148,8 @@ impl HirSideTable {
     }
 
     #[inline]
-    pub(crate) fn intern_source_location(&mut self, location: &TextLocation) -> SourceLocationId {
-        let key = TextLocationKey::from(location);
+    pub(crate) fn intern_source_location(&mut self, location: &SourceLocation) -> SourceLocationId {
+        let key = SourceLocationKey::from(location);
 
         if let Some(existing_id) = self.source_location_index.get(&key) {
             return *existing_id;
@@ -163,7 +163,7 @@ impl HirSideTable {
     }
 
     #[inline]
-    pub(crate) fn source_location(&self, id: SourceLocationId) -> Option<&TextLocation> {
+    pub(crate) fn source_location(&self, id: SourceLocationId) -> Option<&SourceLocation> {
         self.source_locations.get(id.0 as usize)
     }
 
@@ -171,16 +171,16 @@ impl HirSideTable {
     #[inline]
     pub(crate) fn source_id_for_location(
         &self,
-        location: &TextLocation,
+        location: &SourceLocation,
     ) -> Option<SourceLocationId> {
-        let key = TextLocationKey::from(location);
+        let key = SourceLocationKey::from(location);
         self.source_location_index.get(&key).copied()
     }
 
     #[inline]
     pub(crate) fn map_ast_to_hir(
         &mut self,
-        ast_location: &TextLocation,
+        ast_location: &SourceLocation,
         hir_location: HirLocation,
     ) {
         let ast_id = self.intern_source_location(ast_location);
@@ -197,13 +197,17 @@ impl HirSideTable {
     pub(crate) fn map_hir_source_location(
         &mut self,
         hir_location: HirLocation,
-        hir_source: &TextLocation,
+        hir_source: &SourceLocation,
     ) {
         let source_id = self.intern_source_location(hir_source);
         self.hir_to_source.insert(hir_location, source_id);
     }
 
-    pub(crate) fn map_statement(&mut self, ast_location: &TextLocation, statement: &HirStatement) {
+    pub(crate) fn map_statement(
+        &mut self,
+        ast_location: &SourceLocation,
+        statement: &HirStatement,
+    ) {
         let hir_location = HirLocation::Statement(statement.id);
         self.map_ast_to_hir(ast_location, hir_location);
         self.map_hir_source_location(hir_location, &statement.location);
@@ -211,28 +215,28 @@ impl HirSideTable {
 
     pub(crate) fn map_value(
         &mut self,
-        ast_location: &TextLocation,
+        ast_location: &SourceLocation,
         value_id: HirValueId,
-        source_location: &TextLocation,
+        source_location: &SourceLocation,
     ) {
         let hir_location = HirLocation::Value(value_id);
         self.map_ast_to_hir(ast_location, hir_location);
         self.map_hir_source_location(hir_location, source_location);
     }
 
-    pub(crate) fn map_function(&mut self, ast_location: &TextLocation, function: &HirFunction) {
+    pub(crate) fn map_function(&mut self, ast_location: &SourceLocation, function: &HirFunction) {
         let hir_location = HirLocation::Function(function.id);
         self.map_ast_to_hir(ast_location, hir_location);
         self.map_hir_source_location(hir_location, ast_location);
     }
 
-    pub(crate) fn map_block(&mut self, ast_location: &TextLocation, block: &HirBlock) {
+    pub(crate) fn map_block(&mut self, ast_location: &SourceLocation, block: &HirBlock) {
         let hir_location = HirLocation::Block(block.id);
         self.map_ast_to_hir(ast_location, hir_location);
         self.map_hir_source_location(hir_location, ast_location);
     }
 
-    pub(crate) fn map_terminator(&mut self, ast_location: &TextLocation, block_id: BlockId) {
+    pub(crate) fn map_terminator(&mut self, ast_location: &SourceLocation, block_id: BlockId) {
         let hir_location = HirLocation::Terminator(block_id);
         self.map_ast_to_hir(ast_location, hir_location);
         self.map_hir_source_location(hir_location, ast_location);
@@ -245,17 +249,17 @@ impl HirSideTable {
     }
 
     #[inline]
-    pub(crate) fn value_source_location(&self, value_id: HirValueId) -> Option<&TextLocation> {
+    pub(crate) fn value_source_location(&self, value_id: HirValueId) -> Option<&SourceLocation> {
         self.hir_source_location_for_hir(HirLocation::Value(value_id))
     }
 
     #[inline]
-    pub(crate) fn value_ast_location(&self, value_id: HirValueId) -> Option<&TextLocation> {
+    pub(crate) fn value_ast_location(&self, value_id: HirValueId) -> Option<&SourceLocation> {
         self.ast_location_for_hir(HirLocation::Value(value_id))
     }
 
     #[cfg(test)]
-    pub(crate) fn hir_locations_for_ast(&self, ast_location: &TextLocation) -> &[HirLocation] {
+    pub(crate) fn hir_locations_for_ast(&self, ast_location: &SourceLocation) -> &[HirLocation] {
         let Some(ast_id) = self.source_id_for_location(ast_location) else {
             return &EMPTY_HIR_LOCATIONS;
         };
@@ -274,7 +278,10 @@ impl HirSideTable {
     }
 
     #[inline]
-    pub(crate) fn ast_location_for_hir(&self, hir_location: HirLocation) -> Option<&TextLocation> {
+    pub(crate) fn ast_location_for_hir(
+        &self,
+        hir_location: HirLocation,
+    ) -> Option<&SourceLocation> {
         let source_id = self.ast_source_id_for_hir(hir_location)?;
         self.source_location(source_id)
     }
@@ -291,7 +298,7 @@ impl HirSideTable {
     pub(crate) fn hir_source_location_for_hir(
         &self,
         hir_location: HirLocation,
-    ) -> Option<&TextLocation> {
+    ) -> Option<&SourceLocation> {
         let source_id = self.hir_source_id_for_hir(hir_location)?;
         self.source_location(source_id)
     }

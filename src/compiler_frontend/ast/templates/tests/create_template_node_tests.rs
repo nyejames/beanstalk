@@ -25,7 +25,7 @@ use crate::compiler_frontend::style_directives::{
 use crate::compiler_frontend::tokenizer::lexer::tokenize;
 use crate::compiler_frontend::tokenizer::newline_handling::NewlineMode;
 use crate::compiler_frontend::tokenizer::tokens::{
-    CharPosition, FileTokens, TemplateBodyMode, TextLocation, Token, TokenKind,
+    CharPosition, FileTokens, SourceLocation, TemplateBodyMode, Token, TokenKind,
 };
 use crate::projects::html_project::style_directives::html_project_style_directives;
 
@@ -41,7 +41,7 @@ fn html_project_test_style_directives() -> StyleDirectiveRegistry {
 fn token(kind: TokenKind, line: i32) -> Token {
     Token::new(
         kind,
-        TextLocation {
+        SourceLocation {
             scope: InternedPath::new(),
             start_pos: CharPosition {
                 line_number: line,
@@ -173,7 +173,7 @@ fn runtime_template_context_with_style_directives(
         id: scope.append(value_name),
         value: Expression::string_slice(
             string_table.intern("dynamic"),
-            TextLocation {
+            SourceLocation {
                 scope: InternedPath::new(),
                 start_pos: CharPosition {
                     line_number: 1,
@@ -415,7 +415,7 @@ fn collect_body_text_from_render_plan(
         .collect()
 }
 
-fn collect_body_text_locations_from_render_plan(template: &Template) -> Vec<TextLocation> {
+fn collect_body_text_locations_from_render_plan(template: &Template) -> Vec<SourceLocation> {
     use crate::compiler_frontend::ast::templates::template_render_plan::TemplateRenderPlan;
 
     let plan = template
@@ -433,16 +433,16 @@ fn collect_body_text_locations_from_render_plan(template: &Template) -> Vec<Text
         .collect()
 }
 
-fn is_default_text_location(location: &TextLocation) -> bool {
+fn is_default_text_location(location: &SourceLocation) -> bool {
     location.scope == InternedPath::new()
         && location.start_pos == CharPosition::default()
         && location.end_pos == CharPosition::default()
 }
 
 fn is_default_error_location(
-    location: &crate::compiler_frontend::compiler_errors::ErrorLocation,
+    location: &crate::compiler_frontend::compiler_errors::SourceLocation,
 ) -> bool {
-    location.scope.as_os_str().is_empty()
+    location.scope == InternedPath::new()
         && location.start_pos == CharPosition::default()
         && location.end_pos == CharPosition::default()
 }
@@ -1055,7 +1055,7 @@ fn children_directive_accepts_const_string_reference() {
         id: scope.append(prefix_name),
         value: Expression::string_slice(
             string_table.intern("prefix: "),
-            TextLocation {
+            SourceLocation {
                 scope: InternedPath::new(),
                 start_pos: CharPosition {
                     line_number: 1,
@@ -1991,7 +1991,7 @@ fn constant_context_template_head_with_constant_references_folds_to_string_slice
             id: scope.append(const_before),
             value: Expression::string_slice(
                 string_table.intern("Hello "),
-                TextLocation {
+                SourceLocation {
                     scope: InternedPath::new(),
                     start_pos: CharPosition {
                         line_number: 1,
@@ -2009,7 +2009,7 @@ fn constant_context_template_head_with_constant_references_folds_to_string_slice
             id: scope.append(const_after),
             value: Expression::string_slice(
                 string_table.intern("World!"),
-                TextLocation {
+                SourceLocation {
                     scope: InternedPath::new(),
                     start_pos: CharPosition {
                         line_number: 1,
@@ -2438,7 +2438,7 @@ fn fills_nested_slots_for_runtime_wrappers() {
         id: scope.append(value_name),
         value: Expression::string_slice(
             string_table.intern("runtime"),
-            TextLocation {
+            SourceLocation {
                 scope: InternedPath::new(),
                 start_pos: CharPosition {
                     line_number: 1,
@@ -2654,7 +2654,7 @@ fn code_formatter_wrapper_preserves_newlines_after_dedent() {
         pieces: vec![crate::compiler_frontend::ast::templates::template_render_plan::FormatterInputPiece::Text(
             crate::compiler_frontend::ast::templates::template_render_plan::FormatterTextPiece {
                 text: id,
-                location: crate::compiler_frontend::tokenizer::tokens::TextLocation::default(),
+                location: crate::compiler_frontend::tokenizer::tokens::SourceLocation::default(),
             },
         )],
     };

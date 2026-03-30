@@ -14,7 +14,8 @@ use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages}
 use crate::compiler_frontend::compiler_warnings::{CompilerWarning, WarningKind};
 use crate::compiler_frontend::paths::path_resolution::{CompileTimePathBase, CompileTimePathKind};
 use crate::compiler_frontend::paths::rendered_path_usage::RenderedPathUsage;
-use crate::compiler_frontend::tokenizer::tokens::TextLocation;
+use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use rustc_hash::FxHashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -54,7 +55,7 @@ pub(crate) struct HtmlTrackedAsset {
     /// Source byte size used for large-asset warnings and future pipeline planning.
     pub byte_size: u64,
     /// First render location retained for diagnostics and warning anchoring.
-    pub source_location: TextLocation,
+    pub source_location: SourceLocation,
     /// Current/future pipeline behavior for this asset.
     pub pipeline_plan: AssetPipelinePlan,
 }
@@ -73,14 +74,16 @@ pub(crate) struct PlannedTrackedAssets {
 pub(crate) fn plan_module_tracked_assets(
     module: &Module,
     html_output_path: &Path,
+    string_table: &mut StringTable,
 ) -> Result<PlannedTrackedAssets, CompilerMessages> {
     let mut assets_by_output: FxHashMap<PathBuf, HtmlTrackedAsset> = FxHashMap::default();
     let mut warnings = Vec::new();
-    let mut large_warning_locations_by_source: FxHashMap<PathBuf, TextLocation> =
+    let mut large_warning_locations_by_source: FxHashMap<PathBuf, SourceLocation> =
         FxHashMap::default();
 
     for usage in &module.hir.rendered_path_usages {
-        let Some(asset) = plan_one_tracked_asset(module, usage, html_output_path)? else {
+        let Some(asset) = plan_one_tracked_asset(module, usage, html_output_path, string_table)?
+        else {
             continue;
         };
 
@@ -92,6 +95,7 @@ pub(crate) fn plan_module_tracked_assets(
                         module,
                         &asset,
                         &asset.source_location,
+                        string_table,
                     ));
                 }
                 std::collections::hash_map::Entry::Occupied(_) => {}
@@ -105,7 +109,8 @@ pub(crate) fn plan_module_tracked_assets(
             std::collections::hash_map::Entry::Occupied(existing) => {
                 if existing.get().source_filesystem_path != asset.source_filesystem_path {
                     return Err(CompilerMessages::from_error(
-                        conflicting_asset_output_error(&asset, existing.get()),
+                        conflicting_asset_output_error(&asset, existing.get(), string_table),
+                        string_table.clone(),
                     ));
                 }
             }
@@ -124,18 +129,20 @@ pub(crate) fn plan_module_tracked_assets(
 /// WHY: manifest tracking and stale cleanup already operate on `OutputFile`.
 pub(crate) fn emit_tracked_assets(
     assets: &[HtmlTrackedAsset],
+    string_table: &StringTable,
 ) -> Result<Vec<OutputFile>, CompilerMessages> {
     let mut output_files = Vec::with_capacity(assets.len());
 
     for asset in assets {
         let bytes = fs::read(&asset.source_filesystem_path).map_err(|error| {
-            CompilerMessages::from_error(CompilerError::file_error(
+            file_error_messages(
                 &asset.source_filesystem_path,
                 format!(
                     "Failed to read tracked asset '{}': {error}",
                     asset.source_filesystem_path.display()
                 ),
-            ))
+                string_table,
+            )
         })?;
 
         output_files.push(OutputFile::new(
@@ -151,40 +158,46 @@ fn plan_one_tracked_asset(
     module: &Module,
     usage: &RenderedPathUsage,
     html_output_path: &Path,
+    string_table: &mut StringTable,
 ) -> Result<Option<HtmlTrackedAsset>, CompilerMessages> {
     if usage.kind == CompileTimePathKind::Directory {
-        if directory_usage_requires_tracked_asset_error(module, usage) {
-            return Err(CompilerMessages::from_error(directory_asset_error(
-                module, usage,
-            )));
+        if directory_usage_requires_tracked_asset_error(module, usage, string_table) {
+            return Err(CompilerMessages::from_error(
+                directory_asset_error(module, usage, string_table),
+                string_table.clone(),
+            ));
         }
 
         return Ok(None);
     }
 
     let canonical_source = fs::canonicalize(&usage.filesystem_path).map_err(|error| {
-        CompilerMessages::from_error(CompilerError::file_error(
+        let error = CompilerError::file_error(
             &usage.filesystem_path,
             format!(
                 "Failed to canonicalize tracked asset source '{}': {error}",
                 usage.filesystem_path.display()
             ),
-        ))
+            string_table,
+        );
+        CompilerMessages::from_error(error, string_table.clone())
     })?;
     let byte_size = fs::metadata(&canonical_source)
         .map_err(|error| {
-            CompilerMessages::from_error(CompilerError::file_error(
+            let error = CompilerError::file_error(
                 &canonical_source,
                 format!(
                     "Failed to read tracked asset metadata '{}': {error}",
                     canonical_source.display()
                 ),
-            ))
+                string_table,
+            );
+            CompilerMessages::from_error(error, string_table.clone())
         })?
         .len();
 
     let (emitted_output_path, reference_kind) =
-        derive_emitted_output_path(module, usage, html_output_path)?;
+        derive_emitted_output_path(module, usage, html_output_path, string_table)?;
 
     Ok(Some(HtmlTrackedAsset {
         source_filesystem_path: canonical_source,
@@ -203,26 +216,28 @@ fn plan_one_tracked_asset(
 /// WHY: tracked assets are file-only in v1, but the legacy `@assets/...` directory lane would
 /// imply recursive copying behavior and must still fail instead of silently doing nothing.
 fn directory_usage_requires_tracked_asset_error(
-    module: &Module,
+    _module: &Module,
     usage: &RenderedPathUsage,
+    string_table: &StringTable,
 ) -> bool {
     usage.base == CompileTimePathBase::ProjectRootFolder
         && usage
             .public_path
             .as_components()
             .first()
-            .map(|segment| module.string_table.resolve(*segment) == "assets")
+            .map(|segment| string_table.resolve(*segment) == "assets")
             .unwrap_or(false)
 }
 
 fn derive_emitted_output_path(
-    module: &Module,
+    _module: &Module,
     usage: &RenderedPathUsage,
     html_output_path: &Path,
+    string_table: &StringTable,
 ) -> Result<(PathBuf, HtmlTrackedAssetReferenceKind), CompilerMessages> {
     let emitted_output_path = match usage.base {
         CompileTimePathBase::ProjectRootFolder | CompileTimePathBase::EntryRoot => {
-            usage.public_path.to_path_buf(&module.string_table)
+            usage.public_path.to_path_buf(string_table)
         }
         CompileTimePathBase::RelativeToFile => {
             let mut emitted_output_path = html_output_path
@@ -231,7 +246,7 @@ fn derive_emitted_output_path(
                 .unwrap_or_default();
 
             for component in usage.source_path.as_components() {
-                match module.string_table.resolve(*component) {
+                match string_table.resolve(*component) {
                     "." => {}
                     ".." => {
                         emitted_output_path.pop();
@@ -244,12 +259,15 @@ fn derive_emitted_output_path(
         }
     };
 
-    validate_relative_output_path(&emitted_output_path).map_err(|messages| {
-        CompilerMessages::from_error(messages.errors.into_iter().next().unwrap_or_else(|| {
-            CompilerError::compiler_error(
-                "Tracked asset output validation failed without an error.",
-            )
-        }))
+    validate_relative_output_path(&emitted_output_path, string_table).map_err(|messages| {
+        CompilerMessages::from_error(
+            messages.errors.into_iter().next().unwrap_or_else(|| {
+                CompilerError::compiler_error(
+                    "Tracked asset output validation failed without an error.",
+                )
+            }),
+            messages.string_table,
+        )
     })?;
 
     let reference_kind = match usage.base {
@@ -262,21 +280,24 @@ fn derive_emitted_output_path(
     Ok((emitted_output_path, reference_kind))
 }
 
-fn directory_asset_error(module: &Module, usage: &RenderedPathUsage) -> CompilerError {
+fn directory_asset_error(
+    _module: &Module,
+    usage: &RenderedPathUsage,
+    string_table: &StringTable,
+) -> CompilerError {
     CompilerError::new_rule_error(
         format!(
             "Rendered directory path '{}' cannot be emitted as an HTML tracked asset. Tracked assets are file-only in this pass.",
-            usage.source_path.to_portable_string(&module.string_table)
+            usage.source_path.to_portable_string(string_table)
         ),
-        usage
-            .render_location
-            .to_error_location(&module.string_table),
+        usage.render_location.clone(),
     )
 }
 
 fn conflicting_asset_output_error(
     new_asset: &HtmlTrackedAsset,
     existing_asset: &HtmlTrackedAsset,
+    string_table: &mut StringTable,
 ) -> CompilerError {
     CompilerError::file_error(
         &new_asset.source_filesystem_path,
@@ -286,24 +307,33 @@ fn conflicting_asset_output_error(
             new_asset.emitted_output_path.display(),
             existing_asset.source_filesystem_path.display(),
         ),
+        string_table,
     )
 }
 
 fn build_large_tracked_asset_warning(
-    module: &Module,
+    _module: &Module,
     asset: &HtmlTrackedAsset,
-    first_location: &TextLocation,
+    first_location: &SourceLocation,
+    string_table: &StringTable,
 ) -> CompilerWarning {
-    let authored_path = asset.source_path.to_portable_string(&module.string_table);
+    let authored_path = asset.source_path.to_portable_string(string_table);
     CompilerWarning::new(
         &format!(
             "Tracked asset '{authored_path}' is {} and will be emitted unchanged in the current HTML tracked-asset pipeline. Consider external hosting or a lighter asset when appropriate; future optimization support will not make large media automatically suitable for bundling.",
             format_byte_size(asset.byte_size)
         ),
-        first_location.to_error_location(&module.string_table),
+        first_location.clone(),
         WarningKind::LargeTrackedAsset,
-        first_location.scope.to_path_buf(&module.string_table),
     )
+}
+
+fn file_error_messages(
+    path: &Path,
+    msg: impl Into<String>,
+    string_table: &StringTable,
+) -> CompilerMessages {
+    CompilerMessages::file_error(path, msg, string_table)
 }
 
 fn format_byte_size(byte_size: u64) -> String {

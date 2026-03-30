@@ -72,7 +72,7 @@ fn relative_file_resolves_from_importer_directory() {
 
     let result = h
         .resolver
-        .resolve_compile_time_path(&path, &importer, &h.string_table)
+        .resolve_compile_time_path(&path, &importer, &mut h.string_table)
         .expect("relative file should resolve");
 
     assert_eq!(result.base, CompileTimePathBase::RelativeToFile);
@@ -92,7 +92,7 @@ fn relative_directory_resolves_and_classifies_as_directory() {
 
     let result = h
         .resolver
-        .resolve_compile_time_path(&path, &importer, &h.string_table)
+        .resolve_compile_time_path(&path, &importer, &mut h.string_table)
         .expect("relative directory should resolve");
 
     assert_eq!(result.base, CompileTimePathBase::RelativeToFile);
@@ -111,7 +111,7 @@ fn root_folder_file_resolves_from_project_root() {
 
     let result = h
         .resolver
-        .resolve_compile_time_path(&path, &importer, &h.string_table)
+        .resolve_compile_time_path(&path, &importer, &mut h.string_table)
         .expect("root folder file should resolve");
 
     assert_eq!(result.base, CompileTimePathBase::ProjectRootFolder);
@@ -135,7 +135,7 @@ fn entry_root_file_resolves_through_fallback() {
 
     let result = h
         .resolver
-        .resolve_compile_time_path(&path, &importer, &h.string_table)
+        .resolve_compile_time_path(&path, &importer, &mut h.string_table)
         .expect("entry root file should resolve");
 
     assert_eq!(result.base, CompileTimePathBase::EntryRoot);
@@ -154,7 +154,7 @@ fn non_existent_target_is_rejected() {
 
     let err = h
         .resolver
-        .resolve_compile_time_path(&path, &importer, &h.string_table)
+        .resolve_compile_time_path(&path, &importer, &mut h.string_table)
         .expect_err("missing file should produce error");
 
     assert!(err.msg.contains("does not exist"));
@@ -173,7 +173,7 @@ fn path_escaping_project_root_is_rejected() {
 
     let err = h
         .resolver
-        .resolve_compile_time_path(&path, &importer, &h.string_table)
+        .resolve_compile_time_path(&path, &importer, &mut h.string_table)
         .expect_err("escape should produce error");
 
     assert!(err.msg.contains("escapes the project root"));
@@ -191,7 +191,7 @@ fn root_folder_directory_classifies_correctly() {
 
     let result = h
         .resolver
-        .resolve_compile_time_path(&path, &importer, &h.string_table)
+        .resolve_compile_time_path(&path, &importer, &mut h.string_table)
         .expect("directory should resolve");
 
     assert_eq!(result.kind, CompileTimePathKind::Directory);
@@ -209,7 +209,7 @@ fn relative_path_public_path_keeps_dot_prefix() {
 
     let result = h
         .resolver
-        .resolve_compile_time_path(&path, &importer, &h.string_table)
+        .resolve_compile_time_path(&path, &importer, &mut h.string_table)
         .expect("should resolve");
 
     let public = result.public_path.to_portable_string(&h.string_table);
@@ -229,7 +229,7 @@ fn resolve_compile_time_paths_resolves_multiple_paths() {
 
     let result = h
         .resolver
-        .resolve_compile_time_paths(&[path_a, path_b], &importer, &h.string_table)
+        .resolve_compile_time_paths(&[path_a, path_b], &importer, &mut h.string_table)
         .expect("multi-path resolution should succeed");
 
     assert_eq!(result.paths.len(), 2);
@@ -248,7 +248,7 @@ fn resolve_compile_time_paths_fails_if_any_path_missing() {
 
     let err = h
         .resolver
-        .resolve_compile_time_paths(&[good, bad], &importer, &h.string_table)
+        .resolve_compile_time_paths(&[good, bad], &importer, &mut h.string_table)
         .expect_err("should fail when any path is missing");
 
     assert!(err.msg.contains("does not exist"));
@@ -256,13 +256,13 @@ fn resolve_compile_time_paths_fails_if_any_path_missing() {
 
 #[test]
 fn empty_path_resolves_as_entry_root_public_directory() {
-    let h = TestHarness::new(&["assets"]);
+    let mut h = TestHarness::new(&["assets"]);
     let path = InternedPath::new();
     let importer = h.importer();
 
     let result = h
         .resolver
-        .resolve_compile_time_path(&path, &importer, &h.string_table)
+        .resolve_compile_time_path(&path, &importer, &mut h.string_table)
         .expect("empty path should resolve to entry root");
 
     assert_eq!(result.base, CompileTimePathBase::EntryRoot);

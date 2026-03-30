@@ -17,7 +17,7 @@ use crate::compiler_frontend::hir::hir_nodes::{
 use crate::compiler_frontend::host_functions::CallTarget;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringId;
-use crate::compiler_frontend::tokenizer::tokens::TextLocation;
+use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::return_hir_transformation_error;
 
 use super::LoweredExpression;
@@ -203,7 +203,7 @@ impl<'a> HirBuilder<'a> {
         &mut self,
         name: &InternedPath,
         data_type: &DataType,
-        location: &TextLocation,
+        location: &SourceLocation,
     ) -> Result<LoweredExpression, CompilerError> {
         let region = self.current_region_or_error(location)?;
         let ty = self.lower_data_type(data_type, location)?;
@@ -247,7 +247,7 @@ impl<'a> HirBuilder<'a> {
     fn try_lower_module_constant_reference(
         &mut self,
         name: &InternedPath,
-        location: &TextLocation,
+        location: &SourceLocation,
     ) -> Result<Option<HirExpression>, CompilerError> {
         let Some(constant_declaration) = self.module_constants_by_name.get(name).cloned() else {
             return Ok(None);
@@ -332,7 +332,7 @@ impl<'a> HirBuilder<'a> {
     pub(crate) fn resolve_function_id_or_error(
         &self,
         name: &InternedPath,
-        location: &TextLocation,
+        location: &SourceLocation,
     ) -> Result<FunctionId, CompilerError> {
         let Some(function_id) = self.functions_by_name.get(name).copied() else {
             return_hir_transformation_error!(
@@ -354,7 +354,7 @@ impl<'a> HirBuilder<'a> {
         &self,
         struct_id: StructId,
         field_name: &InternedPath,
-        location: &TextLocation,
+        location: &SourceLocation,
     ) -> Result<FieldId, CompilerError> {
         let Some(field_id) = self
             .fields_by_struct_and_name
@@ -377,7 +377,7 @@ impl<'a> HirBuilder<'a> {
     pub(super) fn resolve_struct_id_from_nominal_fields(
         &self,
         fields: &[Declaration],
-        location: &TextLocation,
+        location: &SourceLocation,
     ) -> Result<StructId, CompilerError> {
         let Some(first_field) = fields.first() else {
             return_hir_transformation_error!(
@@ -450,7 +450,7 @@ impl<'a> HirBuilder<'a> {
         &self,
         base_place: &HirPlace,
         field_name: StringId,
-        location: &TextLocation,
+        location: &SourceLocation,
     ) -> Result<FieldId, CompilerError> {
         let struct_id = self.resolve_struct_id_for_place_or_error(base_place, location)?;
         let Some(struct_path) = self.side_table.struct_name_path(struct_id) else {
@@ -471,7 +471,7 @@ impl<'a> HirBuilder<'a> {
     fn resolve_struct_id_for_place_or_error(
         &self,
         place: &HirPlace,
-        location: &TextLocation,
+        location: &SourceLocation,
     ) -> Result<StructId, CompilerError> {
         let ty = self.resolve_place_type_id_or_error(place, location)?;
         match &self.type_context.get(ty).kind {
@@ -488,7 +488,7 @@ impl<'a> HirBuilder<'a> {
     fn resolve_place_type_id_or_error(
         &self,
         place: &HirPlace,
-        location: &TextLocation,
+        location: &SourceLocation,
     ) -> Result<TypeId, CompilerError> {
         match place {
             HirPlace::Local(local_id) => self.resolve_local_type_id_or_error(*local_id, location),
@@ -511,7 +511,7 @@ impl<'a> HirBuilder<'a> {
     fn resolve_local_type_id_or_error(
         &self,
         local_id: LocalId,
-        location: &TextLocation,
+        location: &SourceLocation,
     ) -> Result<TypeId, CompilerError> {
         self.local_type_id_or_error(local_id, location)
     }
@@ -519,7 +519,7 @@ impl<'a> HirBuilder<'a> {
     fn resolve_field_type_id_or_error(
         &self,
         field_id: FieldId,
-        location: &TextLocation,
+        location: &SourceLocation,
     ) -> Result<TypeId, CompilerError> {
         self.field_type_id_or_error(field_id, location)
     }
@@ -527,7 +527,7 @@ impl<'a> HirBuilder<'a> {
     fn place_from_expression(
         &self,
         value: &HirExpression,
-        location: &TextLocation,
+        location: &SourceLocation,
     ) -> Result<HirPlace, CompilerError> {
         let HirExpressionKind::Load(place) = &value.kind else {
             return_hir_transformation_error!(

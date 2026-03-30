@@ -14,7 +14,7 @@ use crate::compiler_frontend::hir::hir_nodes::{
     HirExpression, HirExpressionKind, HirUnaryOp, ValueKind,
 };
 use crate::compiler_frontend::host_functions::CallTarget;
-use crate::compiler_frontend::tokenizer::tokens::TextLocation;
+use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::return_hir_transformation_error;
 
 use super::LoweredExpression;
@@ -26,7 +26,7 @@ impl<'a> HirBuilder<'a> {
     pub(crate) fn lower_runtime_rpn_expression(
         &mut self,
         nodes: &[AstNode],
-        location: &TextLocation,
+        location: &SourceLocation,
         expr_type: &DataType,
     ) -> Result<LoweredExpression, CompilerError> {
         let mut prelude = Vec::new();

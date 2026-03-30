@@ -3,7 +3,7 @@
 //! Maps call targets to per-argument effects and result alias behavior.
 
 use crate::compiler_frontend::analysis::borrow_checker::types::FunctionReturnAliasSummary;
-use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorLocation};
+use crate::compiler_frontend::compiler_errors::{CompilerError, SourceLocation};
 use crate::compiler_frontend::host_functions::{
     CallTarget, HostAccessKind, HostFunctionDef, HostReturnAlias,
 };
@@ -43,7 +43,7 @@ pub(super) fn resolve_call_semantics(
     context: &BorrowTransferContext<'_>,
     target: &CallTarget,
     arg_len: usize,
-    location: ErrorLocation,
+    location: SourceLocation,
 ) -> Result<CallSemantics, CompilerError> {
     match target {
         CallTarget::UserFunction(function_id) => {
@@ -164,7 +164,7 @@ pub(super) fn resolve_call_semantics(
 fn resolve_host_definition<'a>(
     context: &'a BorrowTransferContext<'_>,
     path: &InternedPath,
-    location: ErrorLocation,
+    location: SourceLocation,
 ) -> Result<&'a HostFunctionDef, CompilerError> {
     // Full path lookup is authoritative. Leaf lookup is a compatibility fallback
     // for host registrations that only expose the leaf symbol.
@@ -195,7 +195,7 @@ fn resolve_host_definition<'a>(
 fn validate_alias_indices(
     indices: &[usize],
     arg_len: usize,
-    location: ErrorLocation,
+    location: SourceLocation,
     callee_name: String,
 ) -> Result<(), CompilerError> {
     for index in indices {

@@ -2,7 +2,9 @@ use crate::compiler_frontend::basic_utility_functions::normalize_path;
 use crate::compiler_frontend::compiler_errors::{
     CompilerError, CompilerMessages, ErrorMetaDataKey, ErrorType,
 };
-use crate::compiler_frontend::compiler_warnings::print_formatted_warning;
+use crate::compiler_frontend::compiler_warnings::{CompilerWarning, WarningKind};
+use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::string_interning::StringTable;
 use saying::say;
 use std::path::{Path, PathBuf};
 use std::{env, fs};
@@ -18,21 +20,26 @@ pub(crate) fn relative_display_path_from_root(scope: &Path, root: &Path) -> Stri
         .to_string()
 }
 
-fn relative_display_path(scope: &Path) -> String {
+pub(crate) fn resolved_display_path(scope: &InternedPath, string_table: &StringTable) -> String {
+    let source_file = resolve_source_file_path(scope, string_table);
+
     match env::current_dir() {
-        Ok(dir) => relative_display_path_from_root(scope, &dir),
+        Ok(dir) => relative_display_path_from_root(&source_file, &dir),
         Err(err) => {
             say!(Red
-                "Compiler failed to find the file to give you the snippet. Another compiler_frontend developer skill issue. ",
+                "Compiler failed to determine the current directory for diagnostic display. ",
                 err
             );
-            normalize_path(scope).to_string_lossy().to_string()
+            source_file.to_string_lossy().to_string()
         }
     }
 }
 
-pub(crate) fn resolve_source_file_path(scope: &Path) -> PathBuf {
-    let mut source_file = normalize_path(scope);
+pub(crate) fn resolve_source_file_path(
+    scope: &InternedPath,
+    string_table: &StringTable,
+) -> PathBuf {
+    let mut source_file = normalize_path(&scope.to_path_buf(string_table));
 
     // Header diagnostics use a synthetic "file.bst/header_name.header" scope so the terminal and
     // dev-server error pages both need to strip that suffix back to the original source file.
@@ -88,26 +95,69 @@ pub(crate) fn format_error_guidance_lines(error: &CompilerError) -> Vec<String> 
 }
 
 pub fn print_compiler_messages(messages: CompilerMessages) {
+    let CompilerMessages {
+        errors,
+        warnings,
+        string_table,
+    } = messages;
+
     // Format and print out the messages:
-    for err in messages.errors {
-        print_formatted_error(err);
+    for err in errors {
+        print_formatted_error(err, &string_table);
     }
 
-    for warning in messages.warnings {
-        print_formatted_warning(warning);
+    for warning in warnings {
+        print_formatted_warning(warning, &string_table);
     }
 }
 
-pub fn print_formatted_error(e: CompilerError) {
-    // Walk back through the file path until it's the current directory.
-    // Normalize windows extended paths first (e.g. \\?\C:\...) for readable output.
-    let relative_dir = relative_display_path(&e.location.scope);
+pub fn print_formatted_warning(warning: CompilerWarning, string_table: &StringTable) {
+    say!(Yellow Bold "WARNING: ");
+    println!(
+        "File: {}",
+        resolved_display_path(&warning.location.scope, string_table)
+    );
+
+    match warning.warning_kind {
+        WarningKind::UnusedVariable => println!("Unused variable '{}'", warning.msg),
+        WarningKind::UnusedFunction => println!("Unused function '{}'", warning.msg),
+        WarningKind::UnusedImport => println!("Unused import '{}'", warning.msg),
+        WarningKind::UnusedType => println!("Unused type '{}'", warning.msg),
+        WarningKind::UnusedConstant => println!("Unused constant '{}'", warning.msg),
+        WarningKind::UnusedFunctionArgument => {
+            println!("Unused function argument '{}'", warning.msg)
+        }
+        WarningKind::UnusedFunctionReturnValue => {
+            println!("Unused function return value '{}'", warning.msg)
+        }
+        WarningKind::UnusedFunctionParameter => {
+            println!("Unused function parameter '{}'", warning.msg)
+        }
+        WarningKind::UnusedFunctionParameterDefaultValue => {
+            println!("Unused function parameter default value '{}'", warning.msg)
+        }
+        WarningKind::PointlessExport => println!("Pointless export '{}'", warning.msg),
+        WarningKind::MalformedCssTemplate => println!("Malformed CSS template: {}", warning.msg),
+        WarningKind::MalformedHtmlTemplate => {
+            println!("Malformed HTML template: {}", warning.msg)
+        }
+        WarningKind::BstFilePathInTemplateOutput => println!(
+            "Path to Beanstalk source file is being inserted into template output: {}",
+            warning.msg
+        ),
+        WarningKind::LargeTrackedAsset => println!("{}", warning.msg),
+    }
+}
+
+pub fn print_formatted_error(e: CompilerError, string_table: &StringTable) {
+    // Resolve synthetic header scopes back to source files before choosing a human-readable path.
+    let relative_dir = resolved_display_path(&e.location.scope, string_table);
 
     let line_number = e.location.start_pos.line_number as usize;
 
     // Read the file and get the actual line as a string from the code
     // Strip the actual header at the end of the path (.header extension)
-    let actual_file = resolve_source_file_path(&e.location.scope);
+    let actual_file = resolve_source_file_path(&e.location.scope, string_table);
 
     let line = match fs::read_to_string(&actual_file) {
         Ok(file) => file
@@ -115,18 +165,8 @@ pub fn print_formatted_error(e: CompilerError) {
             .nth(line_number)
             .unwrap_or_default()
             .to_string(),
-        Err(_) => {
-            // say!(Red
-            //     "Compiler Skill Issue: Error with printing error. File path is invalid: {}",
-            //     actual_file.display()
-            // );
-            "".to_string()
-        }
+        Err(_) => String::new(),
     };
-
-    // say!(Red "Error with printing error ヽ༼☉ ‿ ⚆༽ﾉ Line number is out of range of file. If you see this, it confirms the compiler_frontend developer is an idiot");
-
-    // e_dark_yellow!("Error: ");
 
     match e.error_type {
         ErrorType::Syntax => {

@@ -1,4 +1,7 @@
-use crate::compiler_frontend::compiler_errors::ErrorLocation;
+use crate::compiler_frontend::compiler_errors::{
+    CompilerError, ErrorMetaDataKey, ErrorType, SourceLocation,
+};
+use crate::compiler_frontend::string_interning::StringTable;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -65,7 +68,7 @@ pub struct Config {
     /// Custom settings for any project builder to use
     pub settings: HashMap<String, String>,
     /// Source locations for each config key, used for precise error reporting
-    pub setting_locations: HashMap<String, ErrorLocation>,
+    pub setting_locations: HashMap<String, SourceLocation>,
 }
 
 impl Config {
@@ -87,6 +90,49 @@ impl Config {
             settings: HashMap::new(),
             setting_locations: HashMap::new(),
         }
+    }
+
+    /// Resolve the most specific location for a config key, falling back to `#config.bst`.
+    ///
+    /// WHAT: uses the recorded setting location when available, otherwise creates a file-level
+    /// location for the config file itself.
+    /// WHY: config parsers should not duplicate fallback logic every time they report a bad value.
+    pub fn setting_location_or_config_file(
+        &self,
+        key: &str,
+        string_table: &mut StringTable,
+    ) -> SourceLocation {
+        self.setting_locations
+            .get(key)
+            .cloned()
+            .unwrap_or_else(|| SourceLocation::from_path(&self.config_file_path(), string_table))
+    }
+
+    /// Build a config error with the standard location and suggestion wiring.
+    ///
+    /// WHAT: centralizes config-setting diagnostics on `Config`.
+    /// WHY: parsers for routing/document/html settings should only define value semantics, not
+    /// duplicate location lookup and metadata plumbing.
+    pub fn config_error_with_suggestion(
+        &self,
+        key: &str,
+        message: impl Into<String>,
+        suggestion: impl Into<String>,
+        string_table: &mut StringTable,
+    ) -> CompilerError {
+        let mut error = CompilerError::new(
+            message.into(),
+            self.setting_location_or_config_file(key, string_table),
+            ErrorType::Config,
+        );
+        error
+            .metadata
+            .insert(ErrorMetaDataKey::PrimarySuggestion, suggestion.into());
+        error
+    }
+
+    pub fn config_file_path(&self) -> PathBuf {
+        self.entry_dir.join(CONFIG_FILE_NAME)
     }
 }
 

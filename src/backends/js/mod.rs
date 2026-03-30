@@ -19,7 +19,7 @@ use crate::compiler_frontend::hir::hir_nodes::{
     BlockId, FieldId, FunctionId, HirBlock, HirModule, HirTerminator, LocalId,
 };
 use crate::compiler_frontend::string_interning::StringTable;
-use crate::compiler_frontend::tokenizer::tokens::TextLocation;
+use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use std::collections::{HashMap, HashSet, VecDeque};
 
 /// Configuration for JS lowering.
@@ -581,7 +581,7 @@ impl<'hir> JsEmitter<'hir> {
         self.out.push('\n');
     }
 
-    pub(crate) fn emit_location_comment(&mut self, location: &TextLocation) {
+    pub(crate) fn emit_location_comment(&mut self, location: &SourceLocation) {
         if !self.config.emit_locations {
             return;
         }

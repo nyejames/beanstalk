@@ -62,7 +62,7 @@ pub fn parse_field_access(
             let fallback_location = token_stream
                 .tokens
                 .last()
-                .map(|token| token.location.to_error_location(string_table))
+                .map(|token| token.location.clone())
                 .unwrap_or_default();
             return_rule_error!(
                 "Expected property or method name after '.', but reached the end of input.",
@@ -82,7 +82,7 @@ pub fn parse_field_access(
                     "Expected property or method name after '.', found '{:?}'",
                     token_stream.current_token_kind()
                 ),
-                token_stream.current_location().to_error_location(string_table), {
+                token_stream.current_location(), {
                     CompilationStage => "AST Construction",
                     PrimarySuggestion => "Use a valid property or method name after the dot"
                 }
@@ -110,7 +110,7 @@ pub fn parse_field_access(
                     "'{:?}' has no methods or properties to access",
                     current_type
                 ),
-                token_stream.current_location().to_error_location(string_table), {
+                token_stream.current_location(), {
                     CompilationStage => "AST Construction",
                     PrimarySuggestion => "This type doesn't support property or method access"
                 }
@@ -126,7 +126,7 @@ pub fn parse_field_access(
                         "Property or method '{}' not found",
                         string_table.resolve(field_id)
                     ),
-                    token_stream.current_location().to_error_location(string_table), {
+                    token_stream.current_location(), {
                         CompilationStage => "AST Construction",
                         PrimarySuggestion => "Check the available methods and properties for this type"
                     }

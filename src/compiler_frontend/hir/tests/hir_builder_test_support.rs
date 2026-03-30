@@ -3,7 +3,7 @@
 //! WHAT: exposes extra builder utilities needed only by HIR unit tests.
 //! WHY: tests need direct access to internal builder state without widening the production API.
 
-use crate::compiler_frontend::ast::ast_nodes::{Declaration, TextLocation};
+use crate::compiler_frontend::ast::ast_nodes::{Declaration, SourceLocation};
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
@@ -43,7 +43,7 @@ impl<'a> HirBuilder<'a> {
     pub(crate) fn test_register_local_in_block(&mut self, local: HirLocal, name: InternedPath) {
         let current_block = self.current_block_id().unwrap_or(BlockId(0));
         let _ =
-            self.register_local_in_block(current_block, local.clone(), &TextLocation::default());
+            self.register_local_in_block(current_block, local.clone(), &SourceLocation::default());
 
         self.locals_by_name.insert(name.clone(), local.id);
         self.side_table.bind_local_name(local.id, name);

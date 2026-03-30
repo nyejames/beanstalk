@@ -44,7 +44,7 @@ use crate::compiler_frontend::hir::hir_nodes::{
 use crate::compiler_frontend::host_functions::CallTarget;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
-use crate::compiler_frontend::tokenizer::tokens::{CharPosition, TextLocation};
+use crate::compiler_frontend::tokenizer::tokens::{CharPosition, SourceLocation};
 
 // ---------------------------------------------------------------------------
 // Shared test helpers
@@ -59,8 +59,8 @@ struct TypeIds {
     option_int: TypeId,
 }
 
-fn loc(start: i32) -> TextLocation {
-    TextLocation {
+fn loc(start: i32) -> SourceLocation {
+    SourceLocation {
         scope: InternedPath::new(),
         start_pos: CharPosition {
             line_number: start,

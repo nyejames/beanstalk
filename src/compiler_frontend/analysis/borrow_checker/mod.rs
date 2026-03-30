@@ -502,7 +502,7 @@ impl<'a> BorrowChecker<'a> {
                         .side_table
                         .ast_location_for_hir(HirLocation::Block(successor))
                 })
-                .map(|source| source.to_error_location(self.string_table))
+                .cloned()
                 .unwrap_or_else(|| self.diagnostics.function_error_location(function_id));
 
             return_borrow_checker_error!(
@@ -510,7 +510,7 @@ impl<'a> BorrowChecker<'a> {
                     "Inconsistent ownership outcome for '{}' across control-flow paths",
                     self.diagnostics.local_name(layout.local_ids[local_index])
                 ),
-                location,
+                location.clone(),
                 {
                     CompilationStage => "Borrow Checking",
                     LifetimeHint => "A value cannot be moved on one path and borrowed on another",

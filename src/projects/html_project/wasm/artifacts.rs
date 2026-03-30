@@ -79,7 +79,7 @@ pub(crate) struct CompiledHtmlWasmModule {
 pub(crate) fn compile_html_module_wasm(
     hir_module: &HirModule,
     borrow_analysis: &BorrowCheckReport,
-    string_table: &StringTable,
+    string_table: &mut StringTable,
     logical_html_output_path: &Path,
     project_name: &str,
     document_config: &HtmlDocumentConfig,
@@ -87,8 +87,8 @@ pub(crate) fn compile_html_module_wasm(
 ) -> Result<CompiledHtmlWasmModule, CompilerMessages> {
     // Derive per-route artifact paths from the logical HTML path using the canonical planner.
     // WHY: plan_wasm_output owns the filesystem layout policy for all Wasm routes.
-    let output_plan =
-        plan_wasm_output(logical_html_output_path, None).map_err(CompilerMessages::from_error)?;
+    let output_plan = plan_wasm_output(logical_html_output_path, None, string_table)
+        .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;
 
     let js_lowering_config = JsLoweringConfig::standard_html(release_build);
     let js_module = lower_hir_to_js(
@@ -97,12 +97,12 @@ pub(crate) fn compile_html_module_wasm(
         string_table,
         js_lowering_config,
     )
-    .map_err(CompilerMessages::from_error)?;
-    let (entry_fragment_html, runtime_slots) =
-        render_entry_fragments(hir_module).map_err(CompilerMessages::from_error)?;
+    .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;
+    let (entry_fragment_html, runtime_slots) = render_entry_fragments(hir_module)
+        .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;
     let build_plan =
         build_html_wasm_plan(hir_module, &js_module.function_name_by_id, runtime_slots)
-            .map_err(CompilerMessages::from_error)?;
+            .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;
 
     let wasm_result = lower_hir_to_wasm_module(
         hir_module,
@@ -111,9 +111,12 @@ pub(crate) fn compile_html_module_wasm(
         string_table,
     )?;
     let wasm_bytes = wasm_result.wasm_bytes.ok_or_else(|| {
-        CompilerMessages::from_error(CompilerError::compiler_error(
-            "HTML Wasm mode expected emitted wasm bytes, but the backend returned none",
-        ))
+        CompilerMessages::from_error(
+            CompilerError::compiler_error(
+                "HTML Wasm mode expected emitted wasm bytes, but the backend returned none",
+            ),
+            string_table.clone(),
+        )
     })?;
 
     let artifacts = emit_html_wasm_artifacts(
@@ -128,7 +131,7 @@ pub(crate) fn compile_html_module_wasm(
         &js_module.function_name_by_id,
         wasm_bytes,
     )
-    .map_err(CompilerMessages::from_error)?;
+    .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;
     let debug_outputs = build_debug_outputs(
         &build_plan,
         &artifacts,

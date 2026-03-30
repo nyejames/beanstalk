@@ -21,7 +21,7 @@ use crate::compiler_frontend::ast::templates::template::{
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::string_interning::StringTable;
-use crate::compiler_frontend::tokenizer::tokens::TextLocation;
+use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
 use crate::compiler_frontend::ast::templates::template_render_plan::{
     FormatterAnchorId, FormatterInput, FormatterInputPiece, FormatterOutputPiece,
@@ -215,7 +215,7 @@ pub(crate) fn apply_body_formatter(
 /// Text pieces are interned, opaque anchors are preserved as-is.
 fn output_to_input(
     output: crate::compiler_frontend::ast::templates::template_render_plan::FormatterOutput,
-    representative_location: &TextLocation,
+    representative_location: &SourceLocation,
     string_table: &mut StringTable,
 ) -> FormatterInput {
     let pieces = output
@@ -242,7 +242,7 @@ fn output_to_input(
 /// - Formatter output can rewrite arbitrary text, so exact per-character mapping is
 ///   not feasible here. A representative run span preserves useful provenance for
 ///   diagnostics without pretending to be precise.
-fn representative_text_location_for_run(run: &[RenderPiece]) -> TextLocation {
+fn representative_text_location_for_run(run: &[RenderPiece]) -> SourceLocation {
     if let Some(aggregated) = aggregate_text_piece_location(run) {
         return aggregated;
     }
@@ -260,12 +260,12 @@ fn representative_text_location_for_run(run: &[RenderPiece]) -> TextLocation {
         }
     }
 
-    TextLocation::default()
+    SourceLocation::default()
 }
 
-fn aggregate_text_piece_location(run: &[RenderPiece]) -> Option<TextLocation> {
-    let mut first: Option<TextLocation> = None;
-    let mut last: Option<TextLocation> = None;
+fn aggregate_text_piece_location(run: &[RenderPiece]) -> Option<SourceLocation> {
+    let mut first: Option<SourceLocation> = None;
+    let mut last: Option<SourceLocation> = None;
 
     for piece in run {
         if let RenderPiece::Text(text_piece) = piece {
@@ -287,7 +287,7 @@ fn aggregate_text_piece_location(run: &[RenderPiece]) -> Option<TextLocation> {
         return Some(start);
     }
 
-    Some(TextLocation {
+    Some(SourceLocation {
         scope: start.scope,
         start_pos: start.start_pos,
         end_pos: end.end_pos,

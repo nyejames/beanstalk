@@ -3,6 +3,7 @@
 use super::*;
 use crate::compiler_frontend::compiler_warnings::WarningKind;
 use crate::compiler_frontend::paths::path_resolution::{CompileTimePathBase, CompileTimePathKind};
+use crate::compiler_frontend::string_interning::StringTable;
 use crate::projects::html_project::tests::test_support::{
     create_test_module, expect_bytes_output, rendered_path_usage, temp_dir,
 };
@@ -15,9 +16,10 @@ fn root_folder_asset_emits_site_relative_output_path() {
     fs::create_dir_all(root.join("assets")).expect("should create assets dir");
     fs::write(root.join("assets/logo.png"), [1_u8, 2, 3]).expect("should write asset");
 
-    let mut module = create_test_module(root.join("#page.bst"));
+    let mut string_table = StringTable::new();
+    let mut module = create_test_module(root.join("#page.bst"), &mut string_table);
     module.hir.rendered_path_usages.push(rendered_path_usage(
-        &mut module.string_table,
+        &mut string_table,
         &["assets", "logo.png"],
         &["assets", "logo.png"],
         root.join("assets/logo.png"),
@@ -27,8 +29,8 @@ fn root_folder_asset_emits_site_relative_output_path() {
         1,
     ));
 
-    let planned =
-        plan_module_tracked_assets(&module, Path::new("index.html")).expect("planning succeeds");
+    let planned = plan_module_tracked_assets(&module, Path::new("index.html"), &mut string_table)
+        .expect("planning succeeds");
 
     assert_eq!(planned.assets.len(), 1);
     assert!(planned.warnings.is_empty());
@@ -50,9 +52,10 @@ fn entry_root_asset_emits_visible_entry_root_path() {
     fs::create_dir_all(root.join("src/images")).expect("should create entry-root dir");
     fs::write(root.join("src/images/logo.png"), [4_u8, 5, 6]).expect("should write asset");
 
-    let mut module = create_test_module(root.join("src/#page.bst"));
+    let mut string_table = StringTable::new();
+    let mut module = create_test_module(root.join("src/#page.bst"), &mut string_table);
     module.hir.rendered_path_usages.push(rendered_path_usage(
-        &mut module.string_table,
+        &mut string_table,
         &["images", "logo.png"],
         &["images", "logo.png"],
         root.join("src/images/logo.png"),
@@ -62,8 +65,8 @@ fn entry_root_asset_emits_visible_entry_root_path() {
         1,
     ));
 
-    let planned =
-        plan_module_tracked_assets(&module, Path::new("index.html")).expect("planning succeeds");
+    let planned = plan_module_tracked_assets(&module, Path::new("index.html"), &mut string_table)
+        .expect("planning succeeds");
 
     assert_eq!(
         planned.assets[0].emitted_output_path,
@@ -83,9 +86,10 @@ fn relative_asset_emits_relative_to_final_page_directory() {
     fs::create_dir_all(root.join("src/docs/guide/img")).expect("should create nested dir");
     fs::write(root.join("src/docs/guide/img/logo.png"), [7_u8, 8, 9]).expect("should write asset");
 
-    let mut module = create_test_module(root.join("src/docs/guide/#page.bst"));
+    let mut string_table = StringTable::new();
+    let mut module = create_test_module(root.join("src/docs/guide/#page.bst"), &mut string_table);
     module.hir.rendered_path_usages.push(rendered_path_usage(
-        &mut module.string_table,
+        &mut string_table,
         &[".", "img", "logo.png"],
         &[".", "img", "logo.png"],
         root.join("src/docs/guide/img/logo.png"),
@@ -95,8 +99,12 @@ fn relative_asset_emits_relative_to_final_page_directory() {
         3,
     ));
 
-    let planned = plan_module_tracked_assets(&module, Path::new("docs/guide/index.html"))
-        .expect("planning succeeds");
+    let planned = plan_module_tracked_assets(
+        &module,
+        Path::new("docs/guide/index.html"),
+        &mut string_table,
+    )
+    .expect("planning succeeds");
 
     assert_eq!(
         planned.assets[0].emitted_output_path,
@@ -116,9 +124,10 @@ fn duplicate_same_source_and_output_dedupes_within_module() {
     fs::create_dir_all(root.join("assets")).expect("should create assets dir");
     fs::write(root.join("assets/logo.png"), [1_u8, 2, 3]).expect("should write asset");
 
-    let mut module = create_test_module(root.join("#page.bst"));
+    let mut string_table = StringTable::new();
+    let mut module = create_test_module(root.join("#page.bst"), &mut string_table);
     let usage = rendered_path_usage(
-        &mut module.string_table,
+        &mut string_table,
         &["assets", "logo.png"],
         &["assets", "logo.png"],
         root.join("assets/logo.png"),
@@ -130,8 +139,8 @@ fn duplicate_same_source_and_output_dedupes_within_module() {
     module.hir.rendered_path_usages.push(usage.clone());
     module.hir.rendered_path_usages.push(usage);
 
-    let planned =
-        plan_module_tracked_assets(&module, Path::new("index.html")).expect("planning succeeds");
+    let planned = plan_module_tracked_assets(&module, Path::new("index.html"), &mut string_table)
+        .expect("planning succeeds");
 
     assert_eq!(planned.assets.len(), 1);
 
@@ -143,9 +152,10 @@ fn directory_usage_is_rejected() {
     let root = temp_dir("tracked_assets_directory");
     fs::create_dir_all(root.join("assets/icons")).expect("should create asset dir");
 
-    let mut module = create_test_module(root.join("#page.bst"));
+    let mut string_table = StringTable::new();
+    let mut module = create_test_module(root.join("#page.bst"), &mut string_table);
     module.hir.rendered_path_usages.push(rendered_path_usage(
-        &mut module.string_table,
+        &mut string_table,
         &["assets", "icons"],
         &["assets", "icons"],
         root.join("assets/icons"),
@@ -155,7 +165,7 @@ fn directory_usage_is_rejected() {
         4,
     ));
 
-    let error = plan_module_tracked_assets(&module, Path::new("index.html"))
+    let error = plan_module_tracked_assets(&module, Path::new("index.html"), &mut string_table)
         .expect_err("directory assets should fail");
 
     assert!(
@@ -171,9 +181,10 @@ fn public_root_directory_usage_is_ignored() {
     let root = temp_dir("tracked_assets_public_root_directory");
     fs::create_dir_all(root.join("src")).expect("should create entry root");
 
-    let mut module = create_test_module(root.join("src/#page.bst"));
+    let mut string_table = StringTable::new();
+    let mut module = create_test_module(root.join("src/#page.bst"), &mut string_table);
     module.hir.rendered_path_usages.push(rendered_path_usage(
-        &mut module.string_table,
+        &mut string_table,
         &[],
         &[],
         root.join("src"),
@@ -183,8 +194,8 @@ fn public_root_directory_usage_is_ignored() {
         2,
     ));
 
-    let planned =
-        plan_module_tracked_assets(&module, Path::new("index.html")).expect("planning succeeds");
+    let planned = plan_module_tracked_assets(&module, Path::new("index.html"), &mut string_table)
+        .expect("planning succeeds");
 
     assert!(planned.assets.is_empty());
     assert!(planned.warnings.is_empty());
@@ -197,9 +208,10 @@ fn non_asset_directory_link_is_ignored() {
     let root = temp_dir("tracked_assets_directory_link");
     fs::create_dir_all(root.join("src/docs/guide/subdir")).expect("should create nested dir");
 
-    let mut module = create_test_module(root.join("src/docs/guide/#page.bst"));
+    let mut string_table = StringTable::new();
+    let mut module = create_test_module(root.join("src/docs/guide/#page.bst"), &mut string_table);
     module.hir.rendered_path_usages.push(rendered_path_usage(
-        &mut module.string_table,
+        &mut string_table,
         &[".", "subdir"],
         &[".", "subdir"],
         root.join("src/docs/guide/subdir"),
@@ -209,8 +221,12 @@ fn non_asset_directory_link_is_ignored() {
         5,
     ));
 
-    let planned = plan_module_tracked_assets(&module, Path::new("docs/guide/index.html"))
-        .expect("planning succeeds");
+    let planned = plan_module_tracked_assets(
+        &module,
+        Path::new("docs/guide/index.html"),
+        &mut string_table,
+    )
+    .expect("planning succeeds");
 
     assert!(planned.assets.is_empty());
     assert!(planned.warnings.is_empty());
@@ -228,9 +244,10 @@ fn large_asset_warning_dedupes_to_first_render_location() {
     )
     .expect("should write large asset");
 
-    let mut module = create_test_module(root.join("#page.bst"));
+    let mut string_table = StringTable::new();
+    let mut module = create_test_module(root.join("#page.bst"), &mut string_table);
     let first_usage = rendered_path_usage(
-        &mut module.string_table,
+        &mut string_table,
         &["assets", "video.mp4"],
         &["assets", "video.mp4"],
         root.join("assets/video.mp4"),
@@ -240,7 +257,7 @@ fn large_asset_warning_dedupes_to_first_render_location() {
         2,
     );
     let second_usage = rendered_path_usage(
-        &mut module.string_table,
+        &mut string_table,
         &["assets", "video.mp4"],
         &["assets", "video.mp4"],
         root.join("assets/video.mp4"),
@@ -252,8 +269,8 @@ fn large_asset_warning_dedupes_to_first_render_location() {
     module.hir.rendered_path_usages.push(first_usage);
     module.hir.rendered_path_usages.push(second_usage);
 
-    let planned =
-        plan_module_tracked_assets(&module, Path::new("index.html")).expect("planning succeeds");
+    let planned = plan_module_tracked_assets(&module, Path::new("index.html"), &mut string_table)
+        .expect("planning succeeds");
 
     assert_eq!(planned.warnings.len(), 1);
     assert!(matches!(
@@ -271,9 +288,10 @@ fn emit_tracked_assets_reads_source_bytes_into_binary_outputs() {
     fs::create_dir_all(root.join("assets")).expect("should create assets dir");
     fs::write(root.join("assets/logo.png"), [9_u8, 8, 7, 6]).expect("should write asset");
 
-    let mut module = create_test_module(root.join("#page.bst"));
+    let mut string_table = StringTable::new();
+    let mut module = create_test_module(root.join("#page.bst"), &mut string_table);
     module.hir.rendered_path_usages.push(rendered_path_usage(
-        &mut module.string_table,
+        &mut string_table,
         &["assets", "logo.png"],
         &["assets", "logo.png"],
         root.join("assets/logo.png"),
@@ -282,10 +300,11 @@ fn emit_tracked_assets_reads_source_bytes_into_binary_outputs() {
         &["#page.bst"],
         1,
     ));
-    let planned =
-        plan_module_tracked_assets(&module, Path::new("index.html")).expect("planning succeeds");
+    let planned = plan_module_tracked_assets(&module, Path::new("index.html"), &mut string_table)
+        .expect("planning succeeds");
 
-    let output_files = emit_tracked_assets(&planned.assets).expect("emission succeeds");
+    let output_files =
+        emit_tracked_assets(&planned.assets, &string_table).expect("emission succeeds");
     assert_eq!(
         expect_bytes_output(&output_files, "assets/logo.png"),
         [9_u8, 8, 7, 6]

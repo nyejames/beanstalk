@@ -7,7 +7,7 @@ use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::hir::hir_datatypes::{HirType, HirTypeKind, TypeId};
-use crate::compiler_frontend::tokenizer::tokens::TextLocation;
+use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::return_hir_transformation_error;
 
 impl<'a> HirBuilder<'a> {
@@ -17,7 +17,7 @@ impl<'a> HirBuilder<'a> {
     pub(crate) fn lower_data_type(
         &mut self,
         data_type: &DataType,
-        location: &TextLocation,
+        location: &SourceLocation,
     ) -> Result<TypeId, CompilerError> {
         let kind = match data_type {
             DataType::Inferred => {

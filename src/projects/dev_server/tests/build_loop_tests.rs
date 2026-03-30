@@ -1,14 +1,19 @@
 //! Tests for build-loop state transitions and queued rebuild behavior.
 
 use super::{
-    DevBuildExecutor, dev_server_error_messages, run_builds_until_stable, run_single_build_cycle,
+    DevBuildExecutor, ProjectBuildExecutor, dev_server_error_messages, run_builds_until_stable,
+    run_single_build_cycle,
 };
 use crate::build_system::build::{
-    self, BuildResult, CleanupPolicy, FileKind, OutputFile, Project, WriteOptions,
+    self, BackendBuilder, BuildResult, CleanupPolicy, FileKind, OutputFile, Project,
+    ProjectBuilder, WriteOptions,
 };
 use crate::compiler_frontend::compiler_errors::{
-    CompilerError, CompilerMessages, ErrorMetaDataKey, ErrorType,
+    CompilerError, CompilerMessages, ErrorMetaDataKey, ErrorType, SourceLocation,
 };
+use crate::compiler_frontend::compiler_warnings::{CompilerWarning, WarningKind};
+use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::style_directives::StyleDirectiveSpec;
 use crate::projects::dev_server::error_page::format_compiler_messages;
 use crate::projects::dev_server::state::DevServerState;
 use crate::projects::dev_server::watch;
@@ -40,6 +45,7 @@ fn html_build_result() -> BuildResult {
         },
         config: Config::new(PathBuf::from("main.bst")),
         warnings: vec![],
+        string_table: StringTable::new(),
     }
 }
 
@@ -62,6 +68,7 @@ fn multi_page_html_build_result() -> BuildResult {
         },
         config: Config::new(PathBuf::from("project")),
         warnings: vec![],
+        string_table: StringTable::new(),
     }
 }
 
@@ -78,6 +85,7 @@ fn html_build_result_without_entry_page() -> BuildResult {
         },
         config: Config::new(PathBuf::from("main.bst")),
         warnings: vec![],
+        string_table: StringTable::new(),
     }
 }
 
@@ -134,11 +142,50 @@ impl DevBuildExecutor for FakeExecutor {
                         output_root: output_dir.to_path_buf(),
                         project_entry_dir: None,
                     },
+                    &build_result.string_table,
                 )?;
                 Ok(build_result)
             }
             Err(messages) => Err(messages),
         }
+    }
+}
+
+struct InvalidOutputWarningBuilder;
+
+impl BackendBuilder for InvalidOutputWarningBuilder {
+    fn build_backend(
+        &self,
+        _modules: Vec<crate::build_system::build::Module>,
+        config: &Config,
+        _flags: &[crate::compiler_frontend::Flag],
+        string_table: &mut StringTable,
+    ) -> Result<Project, CompilerMessages> {
+        Ok(Project {
+            output_files: vec![OutputFile::new(
+                PathBuf::from("../escape.js"),
+                FileKind::Js(String::from("console.log('broken');")),
+            )],
+            entry_page_rel: None,
+            cleanup_policy: CleanupPolicy::generic([".js"]),
+            warnings: vec![CompilerWarning::new(
+                "builder warning",
+                SourceLocation::from_path(&config.entry_dir, string_table),
+                WarningKind::UnusedVariable,
+            )],
+        })
+    }
+
+    fn validate_project_config(
+        &self,
+        _config: &Config,
+        _string_table: &mut StringTable,
+    ) -> Result<(), CompilerError> {
+        Ok(())
+    }
+
+    fn frontend_style_directives(&self) -> Vec<StyleDirectiveSpec> {
+        Vec::new()
     }
 }
 
@@ -176,7 +223,7 @@ fn failed_build_marks_state_and_stores_error_page() {
     let root = temp_dir("failure");
     fs::create_dir_all(&root).expect("should create temp root");
     let state = Arc::new(DevServerState::new(root.join("dev")));
-    let mut messages = CompilerMessages::new();
+    let mut messages = CompilerMessages::empty(StringTable::new());
     messages
         .errors
         .push(CompilerError::compiler_error("boom").with_error_type(ErrorType::Rule));
@@ -354,7 +401,7 @@ fn dev_server_error_messages_use_dev_server_error_type() {
 
 #[test]
 fn format_error_messages_contains_error_text() {
-    let mut messages = CompilerMessages::new();
+    let mut messages = CompilerMessages::empty(StringTable::new());
     let mut error = CompilerError::compiler_error("expected text");
     error.new_metadata_entry(
         ErrorMetaDataKey::CompilationStage,
@@ -369,4 +416,39 @@ fn format_error_messages_contains_error_text() {
     assert!(text.contains("expected text"));
     assert!(text.contains("stage: AST Construction"));
     assert!(text.contains("help: Declare/import the function before calling it"));
+}
+
+#[test]
+fn project_build_executor_preserves_warnings_when_output_write_fails() {
+    let root = temp_dir("write_failure_preserves_warnings");
+    fs::create_dir_all(&root).expect("should create temp root");
+    let entry_file = root.join("main.bst");
+    let output_dir = root.join("dev");
+    fs::write(&entry_file, "value = 1\n").expect("should write source file");
+
+    let mut executor =
+        ProjectBuildExecutor::new(ProjectBuilder::new(Box::new(InvalidOutputWarningBuilder)));
+    let messages = match executor.build_and_write(&entry_file, &[], &output_dir) {
+        Ok(_) => panic!("invalid output path should fail writing"),
+        Err(messages) => messages,
+    };
+
+    assert_eq!(messages.errors.len(), 1);
+    assert_eq!(messages.warnings.len(), 1);
+    assert_eq!(
+        messages.errors[0]
+            .location
+            .scope
+            .to_path_buf(&messages.string_table),
+        PathBuf::from("../escape.js")
+    );
+    assert_eq!(
+        messages.warnings[0]
+            .location
+            .scope
+            .to_path_buf(&messages.string_table),
+        entry_file
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
 }

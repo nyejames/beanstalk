@@ -4,7 +4,7 @@
 //! WHY: `for` lowering is the densest statement transformation in HIR and benefits from its own module boundary.
 
 use crate::compiler_frontend::ast::ast_nodes::{
-    AstNode, Declaration, ForLoopRange, RangeEndKind, TextLocation,
+    AstNode, Declaration, ForLoopRange, RangeEndKind, SourceLocation,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
@@ -20,7 +20,7 @@ impl<'a> HirBuilder<'a> {
         binding: &Declaration,
         range: &ForLoopRange,
         body: &[AstNode],
-        location: &TextLocation,
+        location: &SourceLocation,
     ) -> Result<(), CompilerError> {
         // Build an explicit CFG pipeline so runtime range semantics are deterministic:
         // zero-step guard -> step normalization -> direction dispatch -> bounds checks.

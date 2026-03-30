@@ -4,16 +4,18 @@
 
 use super::{
     BackendBuilder, CleanupPolicy, FileKind, OutputFile, Project, ProjectBuilder, WriteOptions,
-    build_project, resolve_project_output_root, write_project_outputs,
+    build_project, resolve_project_output_root,
+    write_project_outputs as write_project_outputs_with_table,
 };
 use crate::build_system::output_cleanup::{
     BuilderKind, ManifestLimitedSafeModeReason, ManifestLoadResult,
 };
 use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::compiler_errors::{
-    CompilerError, CompilerMessages, ErrorLocation, ErrorType,
+    CompilerError, CompilerMessages, ErrorType, SourceLocation,
 };
 use crate::compiler_frontend::compiler_warnings::{CompilerWarning, WarningKind};
+use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::style_directives::StyleDirectiveSpec;
 use crate::projects::html_project::html_project_builder::HtmlProjectBuilder;
 use crate::projects::settings::Config;
@@ -68,6 +70,13 @@ fn generic_cleanup_policy() -> CleanupPolicy {
     CleanupPolicy::generic([".html", ".js", ".wasm"])
 }
 
+fn write_project_outputs(
+    project: &Project,
+    options: &WriteOptions,
+) -> Result<(), CompilerMessages> {
+    write_project_outputs_with_table(project, options, &Default::default())
+}
+
 fn html_project(output_files: Vec<OutputFile>, entry_page_rel: Option<PathBuf>) -> Project {
     Project {
         output_files,
@@ -85,6 +94,7 @@ impl BackendBuilder for WarningBuilder {
         _modules: Vec<super::Module>,
         _config: &Config,
         _flags: &[Flag],
+        _string_table: &mut StringTable,
     ) -> Result<Project, CompilerMessages> {
         Ok(Project {
             output_files: vec![OutputFile::new(
@@ -95,14 +105,17 @@ impl BackendBuilder for WarningBuilder {
             cleanup_policy: CleanupPolicy::generic([".js"]),
             warnings: vec![CompilerWarning::new(
                 "builder warning",
-                ErrorLocation::default(),
+                SourceLocation::default(),
                 WarningKind::UnusedVariable,
-                PathBuf::from("builder"),
             )],
         })
     }
 
-    fn validate_project_config(&self, _config: &Config) -> Result<(), CompilerError> {
+    fn validate_project_config(
+        &self,
+        _config: &Config,
+        _string_table: &mut StringTable,
+    ) -> Result<(), CompilerError> {
         Ok(())
     }
 
@@ -122,6 +135,7 @@ impl BackendBuilder for ValidationTrackingBuilder {
         _modules: Vec<super::Module>,
         _config: &Config,
         _flags: &[Flag],
+        _string_table: &mut StringTable,
     ) -> Result<Project, CompilerMessages> {
         self.built.store(true, std::sync::atomic::Ordering::SeqCst);
         Ok(Project {
@@ -132,7 +146,11 @@ impl BackendBuilder for ValidationTrackingBuilder {
         })
     }
 
-    fn validate_project_config(&self, _config: &Config) -> Result<(), CompilerError> {
+    fn validate_project_config(
+        &self,
+        _config: &Config,
+        _string_table: &mut StringTable,
+    ) -> Result<(), CompilerError> {
         self.validated
             .store(true, std::sync::atomic::Ordering::SeqCst);
         Ok(())
@@ -151,14 +169,19 @@ impl BackendBuilder for FailingValidationBuilder {
         _modules: Vec<super::Module>,
         _config: &Config,
         _flags: &[Flag],
+        _string_table: &mut StringTable,
     ) -> Result<Project, CompilerMessages> {
         panic!("should not call build_backend if validation fails");
     }
 
-    fn validate_project_config(&self, _config: &Config) -> Result<(), CompilerError> {
+    fn validate_project_config(
+        &self,
+        _config: &Config,
+        _string_table: &mut StringTable,
+    ) -> Result<(), CompilerError> {
         Err(CompilerError::new(
             "Fake config error",
-            ErrorLocation::default(),
+            SourceLocation::default(),
             ErrorType::Config,
         ))
     }
@@ -176,6 +199,7 @@ impl BackendBuilder for NoDirectiveBuilder {
         _modules: Vec<super::Module>,
         _config: &Config,
         _flags: &[Flag],
+        _string_table: &mut StringTable,
     ) -> Result<Project, CompilerMessages> {
         Ok(Project {
             output_files: vec![OutputFile::new(
@@ -188,7 +212,57 @@ impl BackendBuilder for NoDirectiveBuilder {
         })
     }
 
-    fn validate_project_config(&self, _config: &Config) -> Result<(), CompilerError> {
+    fn validate_project_config(
+        &self,
+        _config: &Config,
+        _string_table: &mut StringTable,
+    ) -> Result<(), CompilerError> {
+        Ok(())
+    }
+
+    fn frontend_style_directives(&self) -> Vec<StyleDirectiveSpec> {
+        Vec::new()
+    }
+}
+
+struct MultiModuleDiagnosticBuilder;
+
+impl BackendBuilder for MultiModuleDiagnosticBuilder {
+    fn build_backend(
+        &self,
+        modules: Vec<super::Module>,
+        _config: &Config,
+        _flags: &[Flag],
+        string_table: &mut StringTable,
+    ) -> Result<Project, CompilerMessages> {
+        let homepage = modules
+            .iter()
+            .find(|module| module.entry_point.ends_with("src/#page.bst"))
+            .expect("directory build should discover homepage module");
+        let docs_page = modules
+            .iter()
+            .find(|module| module.entry_point.ends_with("src/docs/#page.bst"))
+            .expect("directory build should discover docs module");
+
+        Err(CompilerMessages {
+            errors: vec![CompilerError::new_rule_error(
+                "homepage diagnostic",
+                SourceLocation::from_path(&homepage.entry_point, string_table),
+            )],
+            warnings: vec![CompilerWarning::new(
+                "docs warning",
+                SourceLocation::from_path(&docs_page.entry_point, string_table),
+                WarningKind::UnusedVariable,
+            )],
+            string_table: string_table.clone(),
+        })
+    }
+
+    fn validate_project_config(
+        &self,
+        _config: &Config,
+        _string_table: &mut StringTable,
+    ) -> Result<(), CompilerError> {
         Ok(())
     }
 
@@ -539,6 +613,46 @@ fn build_project_calls_validate_project_config() {
             "build_project should call build_backend"
         );
     }
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
+fn build_project_keeps_one_shared_string_table_for_multi_module_diagnostics() {
+    let root = temp_dir("multi_module_diagnostics");
+    let src_dir = root.join("src");
+    let docs_dir = src_dir.join("docs");
+    fs::create_dir_all(&docs_dir).expect("should create docs directory");
+    fs::write(root.join("#config.bst"), "#entry_root = \"src\"\n").expect("should write config");
+    fs::write(src_dir.join("#page.bst"), "value = 1\n").expect("should write homepage");
+    fs::write(docs_dir.join("#page.bst"), "value = 2\n").expect("should write docs page");
+
+    let builder = ProjectBuilder::new(Box::new(MultiModuleDiagnosticBuilder));
+    let messages = match build_project(
+        &builder,
+        root.to_str().expect("temp dir path should be valid UTF-8"),
+        &[],
+    ) {
+        Ok(_) => panic!("builder diagnostics should fail the build"),
+        Err(messages) => messages,
+    };
+
+    assert_eq!(messages.errors.len(), 1);
+    assert_eq!(messages.warnings.len(), 1);
+    assert_eq!(
+        messages.errors[0]
+            .location
+            .scope
+            .to_path_buf(&messages.string_table),
+        fs::canonicalize(src_dir.join("#page.bst")).expect("homepage should canonicalize")
+    );
+    assert_eq!(
+        messages.warnings[0]
+            .location
+            .scope
+            .to_path_buf(&messages.string_table),
+        fs::canonicalize(docs_dir.join("#page.bst")).expect("docs page should canonicalize")
+    );
+
     fs::remove_dir_all(&root).expect("should remove temp dir");
 }
 
@@ -2005,7 +2119,7 @@ fn validate_output_root_rejects_dangerous_paths() {
     ];
 
     for dangerous in dangerous_paths {
-        let result = validate_output_root_is_safe(&dangerous, &project_dir);
+        let result = validate_output_root_is_safe(&dangerous, &project_dir, &StringTable::new());
         assert!(
             result.is_err(),
             "should reject dangerous path: {}",
@@ -2019,7 +2133,7 @@ fn validate_output_root_accepts_project_subdirectory() {
     let root = temp_dir("validate_accept");
     fs::create_dir_all(root.join("dev")).expect("should create output dir");
 
-    let result = validate_output_root_is_safe(&root.join("dev"), &root);
+    let result = validate_output_root_is_safe(&root.join("dev"), &root, &StringTable::new());
     assert!(
         result.is_ok(),
         "should accept output root inside project directory"
@@ -2244,7 +2358,13 @@ fn read_build_manifest_rejects_builder_mismatch_in_v2_manifest() {
     fs::create_dir_all(&root).expect("should create temp root");
 
     let paths: HashSet<PathBuf> = [PathBuf::from("index.html")].into_iter().collect();
-    write_build_manifest(&root, &paths, &generic_cleanup_policy()).expect("should write manifest");
+    write_build_manifest(
+        &root,
+        &paths,
+        &generic_cleanup_policy(),
+        &StringTable::new(),
+    )
+    .expect("should write manifest");
 
     assert_eq!(
         read_build_manifest(&root, &html_cleanup_policy()),
@@ -2272,7 +2392,8 @@ fn write_build_manifest_produces_sorted_v2_output() {
     .into_iter()
     .collect();
 
-    write_build_manifest(&root, &paths, &html_cleanup_policy()).expect("should write manifest");
+    write_build_manifest(&root, &paths, &html_cleanup_policy(), &StringTable::new())
+        .expect("should write manifest");
 
     let content =
         fs::read_to_string(root.join(BUILD_MANIFEST_FILENAME)).expect("should read manifest file");

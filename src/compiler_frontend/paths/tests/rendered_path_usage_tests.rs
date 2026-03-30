@@ -7,7 +7,7 @@ use crate::compiler_frontend::paths::path_resolution::{
 };
 use crate::compiler_frontend::paths::rendered_path_usage::resolve_compile_time_paths_for_rendered_output;
 use crate::compiler_frontend::string_interning::StringTable;
-use crate::compiler_frontend::tokenizer::tokens::{CharPosition, TextLocation};
+use crate::compiler_frontend::tokenizer::tokens::{CharPosition, SourceLocation};
 use std::fs;
 use std::path::PathBuf;
 
@@ -65,8 +65,8 @@ impl TestHarness {
         self.project_root.join("src/#page.bst")
     }
 
-    fn render_location(&mut self) -> TextLocation {
-        TextLocation::new(
+    fn render_location(&mut self) -> SourceLocation {
+        SourceLocation::new(
             self.source_scope(),
             CharPosition {
                 line_number: 2,
@@ -98,7 +98,7 @@ fn root_folder_render_capture_records_semantics_and_origin_aware_text() {
             origin: String::from("/beanstalk"),
             ..PathStringFormatConfig::default()
         },
-        &harness.string_table,
+        &mut harness.string_table,
     )
     .expect("capture should succeed");
 
@@ -134,7 +134,7 @@ fn entry_root_render_capture_records_entry_root_semantics() {
         &source_scope,
         &render_location,
         &PathStringFormatConfig::default(),
-        &harness.string_table,
+        &mut harness.string_table,
     )
     .expect("capture should succeed");
 
@@ -166,7 +166,7 @@ fn relative_render_capture_preserves_relative_text() {
             origin: String::from("/beanstalk"),
             ..PathStringFormatConfig::default()
         },
-        &harness.string_table,
+        &mut harness.string_table,
     )
     .expect("capture should succeed");
 
@@ -198,7 +198,7 @@ fn custom_origin_changes_rendered_text_but_not_semantic_public_path() {
             origin: String::from("/custom"),
             ..PathStringFormatConfig::default()
         },
-        &harness.string_table,
+        &mut harness.string_table,
     )
     .expect("capture should succeed");
 

@@ -4,7 +4,7 @@
 //! WHY: backends rely on stable function-origin metadata when deciding which functions to emit and call.
 
 use crate::compiler_frontend::ast::ast::{Ast, AstStartTemplateItem, ModuleExport};
-use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind, TextLocation};
+use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind, SourceLocation};
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::hir::hir_nodes::{FunctionId, HirFunctionOrigin};
@@ -13,11 +13,11 @@ use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::projects::settings::IMPLICIT_START_FUNC_NAME;
 
-fn location(line: i32) -> TextLocation {
+fn location(line: i32) -> SourceLocation {
     crate::compiler_frontend::hir::tests::hir_expression_lowering_tests::location(line)
 }
 
-fn node(kind: NodeKind, location: TextLocation) -> AstNode {
+fn node(kind: NodeKind, location: SourceLocation) -> AstNode {
     AstNode {
         kind,
         location,
@@ -25,7 +25,7 @@ fn node(kind: NodeKind, location: TextLocation) -> AstNode {
     }
 }
 
-fn function_node(name: InternedPath, location: TextLocation) -> AstNode {
+fn function_node(name: InternedPath, location: SourceLocation) -> AstNode {
     node(
         NodeKind::Function(
             name,

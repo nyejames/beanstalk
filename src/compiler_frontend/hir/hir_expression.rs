@@ -5,7 +5,7 @@
 
 use crate::compiler_frontend::ast::ast_nodes::AstNode;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
-use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorLocation};
+use crate::compiler_frontend::compiler_errors::{CompilerError, SourceLocation};
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::hir::hir_datatypes::{HirTypeKind, TypeId};
@@ -16,7 +16,6 @@ use crate::compiler_frontend::hir::hir_nodes::{
 use crate::compiler_frontend::host_functions::CallTarget;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_format::format_compile_time_paths;
-use crate::compiler_frontend::tokenizer::tokens::TextLocation;
 use crate::hir_log;
 use crate::return_hir_transformation_error;
 
@@ -251,7 +250,7 @@ impl<'a> HirBuilder<'a> {
     pub(crate) fn emit_statement_to_current_block(
         &mut self,
         statement: HirStatement,
-        source_location: &TextLocation,
+        source_location: &SourceLocation,
     ) -> Result<(), CompilerError> {
         let block = self.current_block_mut_or_error(source_location)?;
         block.statements.push(statement);
@@ -264,7 +263,7 @@ impl<'a> HirBuilder<'a> {
     pub(crate) fn allocate_temp_local(
         &mut self,
         ty: TypeId,
-        source_info: Option<TextLocation>,
+        source_info: Option<SourceLocation>,
     ) -> Result<LocalId, CompilerError> {
         let location = source_info.to_owned().unwrap_or_default();
         let region = self.current_region_or_error(&location)?;
@@ -298,7 +297,7 @@ impl<'a> HirBuilder<'a> {
     //      produces clearer diagnostics than assuming block state exists.
     pub(crate) fn current_block_mut_or_error(
         &mut self,
-        location: &TextLocation,
+        location: &SourceLocation,
     ) -> Result<&mut HirBlock, CompilerError> {
         let block_id = self.current_block_id_or_error(location)?;
         self.block_mut_by_id_or_error(block_id, location)
@@ -309,7 +308,7 @@ impl<'a> HirBuilder<'a> {
     //      uniform across every lowering helper.
     pub(crate) fn make_expression(
         &mut self,
-        location: &TextLocation,
+        location: &SourceLocation,
         kind: HirExpressionKind,
         ty: TypeId,
         value_kind: ValueKind,
@@ -331,7 +330,7 @@ impl<'a> HirBuilder<'a> {
     // WHY: unit values should lower through the same tuple machinery every other pass expects.
     pub(crate) fn unit_expression(
         &mut self,
-        location: &TextLocation,
+        location: &SourceLocation,
         region: RegionId,
     ) -> HirExpression {
         let unit_ty = self.intern_type_kind(HirTypeKind::Unit);
@@ -346,8 +345,8 @@ impl<'a> HirBuilder<'a> {
 
     // WHAT: converts a frontend text location into the shared compiler error-location format.
     // WHY: HIR lowering uses one helper so all transformation errors preserve consistent source metadata.
-    pub(crate) fn hir_error_location(&self, location: &TextLocation) -> ErrorLocation {
-        location.to_error_location(self.string_table)
+    pub(crate) fn hir_error_location(&self, location: &SourceLocation) -> SourceLocation {
+        location.clone()
     }
 
     fn log_expression_input(&self, _expr: &Expression) {
@@ -393,7 +392,7 @@ impl<'a> HirBuilder<'a> {
 
     fn log_call_result_binding(
         &self,
-        _location: &TextLocation,
+        _location: &SourceLocation,
         _local: Option<LocalId>,
         _value: &HirExpression,
     ) {

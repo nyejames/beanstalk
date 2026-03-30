@@ -3,7 +3,7 @@
 //! Always-on structural validation for new HIR modules.
 //! This pass enforces core invariants so downstream analysis/backends can
 //! rely on a consistent IR contract.
-use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorLocation, ErrorType};
+use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorType, SourceLocation};
 use crate::compiler_frontend::hir::hir_datatypes::{HirTypeKind, TypeId};
 use crate::compiler_frontend::hir::hir_nodes::{
     BlockId, FieldId, FunctionId, HirConstValue, HirDocFragmentKind, HirExpression,
@@ -13,21 +13,19 @@ use crate::compiler_frontend::hir::hir_nodes::{
 };
 use crate::compiler_frontend::hir::hir_side_table::HirLocation;
 use crate::compiler_frontend::string_interning::StringTable;
-use crate::compiler_frontend::tokenizer::tokens::TextLocation;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::collections::VecDeque;
 
 pub(crate) fn validate_hir_module(
     module: &HirModule,
-    string_table: &StringTable,
+    _string_table: &StringTable,
 ) -> Result<(), CompilerError> {
-    let mut validator = HirValidator::new(module, string_table);
+    let mut validator = HirValidator::new(module);
     validator.validate()
 }
 
 struct HirValidator<'a> {
     module: &'a HirModule,
-    string_table: &'a StringTable,
 
     block_ids: FxHashSet<BlockId>,
     block_index_by_id: FxHashMap<BlockId, usize>,
@@ -43,10 +41,9 @@ struct HirValidator<'a> {
 }
 
 impl<'a> HirValidator<'a> {
-    fn new(module: &'a HirModule, string_table: &'a StringTable) -> Self {
+    fn new(module: &'a HirModule) -> Self {
         Self {
             module,
-            string_table,
             block_ids: FxHashSet::default(),
             block_index_by_id: FxHashMap::default(),
             block_owner_by_id: FxHashMap::default(),
@@ -1104,13 +1101,9 @@ impl<'a> HirValidator<'a> {
     fn error_with_text_location(
         &self,
         message: impl Into<String>,
-        location: &TextLocation,
+        location: &SourceLocation,
     ) -> CompilerError {
-        CompilerError::new(
-            message,
-            location.to_error_location(self.string_table),
-            ErrorType::HirTransformation,
-        )
+        CompilerError::new(message, location.clone(), ErrorType::HirTransformation)
     }
 
     fn error_with_hir(
@@ -1125,12 +1118,12 @@ impl<'a> HirValidator<'a> {
         CompilerError::new(message, location, ErrorType::HirTransformation)
     }
 
-    fn hir_error_location(&self, location: HirLocation) -> Option<ErrorLocation> {
+    fn hir_error_location(&self, location: HirLocation) -> Option<SourceLocation> {
         self.module
             .side_table
             .hir_source_location_for_hir(location)
             .or_else(|| self.module.side_table.ast_location_for_hir(location))
-            .map(|location| location.to_error_location(self.string_table))
+            .cloned()
     }
 }
 

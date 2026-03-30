@@ -67,7 +67,7 @@ fn apply_config_constants_from_headers(
         };
         let key = string_table.resolve(key_id).to_string();
 
-        let location = header.name_location.to_error_location(string_table);
+        let location = header.name_location.clone();
         config.setting_locations.insert(key.clone(), location);
 
         let mut initializer_tokens = metadata.declaration_syntax.initializer_tokens.clone();
@@ -79,7 +79,7 @@ fn apply_config_constants_from_headers(
         if key == "libraries" {
             let mut error = CompilerError::new(
                 "Config key '#libraries' has been replaced. Use '#root_folders' instead.",
-                header.name_location.to_error_location(string_table),
+                header.name_location.clone(),
                 ErrorType::Config,
             );
             error.metadata.insert(
@@ -107,7 +107,7 @@ fn apply_config_constants_from_headers(
         let Some(value_token) = initializer_tokens.get(value_index) else {
             let mut error = CompilerError::new(
                 format!("Missing value for config constant '#{key}'."),
-                header.name_location.to_error_location(string_table),
+                header.name_location.clone(),
                 ErrorType::Config,
             );
             error.metadata.insert(
@@ -121,7 +121,7 @@ fn apply_config_constants_from_headers(
         let Some(value) = parse_config_scalar_value(&value_token.kind, string_table) else {
             let mut error = CompilerError::new(
                 format!("Unsupported value for config constant '#{key}'."),
-                value_token.location.to_error_location(string_table),
+                value_token.location.clone(),
                 ErrorType::Config,
             );
             error.metadata.insert(
@@ -136,7 +136,7 @@ fn apply_config_constants_from_headers(
         if key == "src" {
             let mut error = CompilerError::new(
                 "Config key '#src' is deprecated. Use '#entry_root' instead.",
-                header.name_location.to_error_location(string_table),
+                header.name_location.clone(),
                 ErrorType::Config,
             );
             error.metadata.insert(
@@ -187,7 +187,6 @@ fn parse_root_folders_value(
                         match validate_root_folder_path(
                             PathBuf::from(path.to_string(string_table)),
                             token,
-                            string_table,
                         ) {
                             Ok(validated_path) => root_folders.push(validated_path),
                             Err(error) => errors.push(error),
@@ -198,7 +197,6 @@ fn parse_root_folders_value(
                     match validate_root_folder_path(
                         PathBuf::from(string_table.resolve(*value)),
                         token,
-                        string_table,
                     ) {
                         Ok(validated_path) => root_folders.push(validated_path),
                         Err(error) => errors.push(error),
@@ -208,7 +206,6 @@ fn parse_root_folders_value(
                     match validate_root_folder_path(
                         PathBuf::from(string_table.resolve(*value)),
                         token,
-                        string_table,
                     ) {
                         Ok(validated_path) => root_folders.push(validated_path),
                         Err(error) => errors.push(error),
@@ -218,7 +215,7 @@ fn parse_root_folders_value(
                 TokenKind::Eof => {
                     let mut error = CompilerError::new(
                         "Unterminated '#root_folders' block. Missing closing '}'.",
-                        token.location.to_error_location(string_table),
+                        token.location.clone(),
                         ErrorType::Config,
                     );
                     error.metadata.insert(
@@ -231,7 +228,7 @@ fn parse_root_folders_value(
                 _ => {
                     let mut error = CompilerError::new(
                         "Unsupported value in '#root_folders' block.",
-                        token.location.to_error_location(string_table),
+                        token.location.clone(),
                         ErrorType::Config,
                     );
                     error.metadata.insert(
@@ -257,7 +254,6 @@ fn parse_root_folders_value(
                 match validate_root_folder_path(
                     PathBuf::from(path.to_string(string_table)),
                     start_token,
-                    string_table,
                 ) {
                     Ok(validated_path) => root_folders.push(validated_path),
                     Err(error) => errors.push(error),
@@ -268,7 +264,6 @@ fn parse_root_folders_value(
             match validate_root_folder_path(
                 PathBuf::from(string_table.resolve(*value)),
                 start_token,
-                string_table,
             ) {
                 Ok(validated_path) => root_folders.push(validated_path),
                 Err(error) => errors.push(error),
@@ -278,7 +273,6 @@ fn parse_root_folders_value(
             match validate_root_folder_path(
                 PathBuf::from(string_table.resolve(*value)),
                 start_token,
-                string_table,
             ) {
                 Ok(validated_path) => root_folders.push(validated_path),
                 Err(error) => errors.push(error),
@@ -287,7 +281,7 @@ fn parse_root_folders_value(
         _ => {
             let mut error = CompilerError::new(
                 "Unsupported '#root_folders' value. Use a path, string, or '{ ... }' block.",
-                start_token.location.to_error_location(string_table),
+                start_token.location.clone(),
                 ErrorType::Config,
             );
             error.metadata.insert(
@@ -299,9 +293,11 @@ fn parse_root_folders_value(
     }
 
     if root_folders.is_empty() && errors.is_empty() {
+        let mut error_string_table = string_table.clone();
         errors.push(CompilerError::file_error(
             config_path,
             "Expected at least one root folder in '#root_folders'.",
+            &mut error_string_table,
         ));
     }
 
@@ -322,12 +318,11 @@ fn parse_root_folders_value(
 fn validate_root_folder_path(
     root_folder: PathBuf,
     token: &Token,
-    string_table: &StringTable,
 ) -> Result<PathBuf, CompilerError> {
     if root_folder.as_os_str().is_empty() {
         let mut error = CompilerError::new(
             "Invalid '#root_folders' entry. Root folders cannot be empty.",
-            token.location.to_error_location(string_table),
+            token.location.clone(),
             ErrorType::Config,
         );
         error.metadata.insert(
@@ -343,7 +338,7 @@ fn validate_root_folder_path(
                 "Invalid '#root_folders' entry '{}'. Root folders must be relative to the project root.",
                 root_folder.display()
             ),
-            token.location.to_error_location(string_table),
+            token.location.clone(),
             ErrorType::Config,
         );
         error.metadata.insert(
@@ -357,7 +352,7 @@ fn validate_root_folder_path(
     let Some(first) = components.next() else {
         let mut error = CompilerError::new(
             "Invalid '#root_folders' entry. Root folders cannot be empty.",
-            token.location.to_error_location(string_table),
+            token.location.clone(),
             ErrorType::Config,
         );
         error.metadata.insert(
@@ -373,7 +368,7 @@ fn validate_root_folder_path(
                 "Invalid '#root_folders' entry '{}'. Root folders must be a single top-level folder name such as '@lib'.",
                 root_folder.display()
             ),
-            token.location.to_error_location(string_table),
+            token.location.clone(),
             ErrorType::Config,
         );
         error.metadata.insert(
@@ -452,7 +447,7 @@ fn detect_duplicate_config_keys(
                 msg: format!(
                     "Duplicate config key '#{key}' found. Each config key must be unique."
                 ),
-                location: header.name_location.to_error_location(string_table),
+                location: header.name_location.clone(),
                 error_type: ErrorType::Config,
                 metadata,
             });

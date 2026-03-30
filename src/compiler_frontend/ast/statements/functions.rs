@@ -15,7 +15,7 @@ use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::host_functions::HostFunctionDef;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
-use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TextLocation, TokenKind};
+use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
 use crate::{ast_log, return_syntax_error, return_type_error};
 
 // Arg names and types are required
@@ -100,7 +100,7 @@ impl FunctionSignature {
                         "Expected '->' or ':' after function parameters, but found what looks like a return declaration token '{:?}'.",
                         token_stream.current_token_kind()
                     ),
-                    token_stream.current_location().to_error_location(string_table),
+                    token_stream.current_location(),
                     {
                         CompilationStage => "Function Signature Parsing",
                         PrimarySuggestion => "Add '->' before return declarations, for example '|args| -> Int:'",
@@ -114,7 +114,7 @@ impl FunctionSignature {
             TokenKind::Newline | TokenKind::Eof | TokenKind::End => {
                 return_syntax_error!(
                     "Function signature ended unexpectedly after parameters",
-                    token_stream.current_location().to_error_location(string_table),
+                    token_stream.current_location(),
                     {
                         CompilationStage => "Function Signature Parsing",
                         PrimarySuggestion => "End the signature with ':' for no returns, or use '-> ReturnType:'",
@@ -130,7 +130,7 @@ impl FunctionSignature {
                         "Expected an arrow operator or colon after function arguments. Found {:?} instead.",
                         token_stream.current_token_kind()
                     ),
-                    token_stream.current_location().to_error_location(string_table),
+                    token_stream.current_location(),
                     {
                         CompilationStage => "Function Signature Parsing",
                         PrimarySuggestion => "Use '->' for functions with return values or ':' for functions without return values",
@@ -166,7 +166,7 @@ fn parse_return_list(
     if token_stream.current_token_kind() == &TokenKind::Colon {
         return_syntax_error!(
             "Functions without return values must omit the return signature",
-            token_stream.current_location().to_error_location(string_table),
+            token_stream.current_location(),
             {
                 CompilationStage => "Function Signature Parsing",
                 PrimarySuggestion => "Remove '->' and end the function signature with ':'",
@@ -192,7 +192,7 @@ fn parse_return_list(
             TokenKind::Eof => {
                 return_syntax_error!(
                     "Unexpected end of function signature while parsing return declarations",
-                    token_stream.current_location().to_error_location(string_table),
+                    token_stream.current_location(),
                     {
                         CompilationStage => "Function Signature Parsing",
                         PrimarySuggestion => "Terminate the function signature with ':'",
@@ -202,7 +202,7 @@ fn parse_return_list(
             TokenKind::Newline | TokenKind::End => {
                 return_syntax_error!(
                     "Function return declarations must end with ':'",
-                    token_stream.current_location().to_error_location(string_table),
+                    token_stream.current_location(),
                     {
                         CompilationStage => "Function Signature Parsing",
                         PrimarySuggestion => "Add ':' after the final return declaration",
@@ -213,7 +213,7 @@ fn parse_return_list(
             TokenKind::Arrow => {
                 return_syntax_error!(
                     "Unexpected '->' inside function return declarations",
-                    token_stream.current_location().to_error_location(string_table),
+                    token_stream.current_location(),
                     {
                         CompilationStage => "Function Signature Parsing",
                         PrimarySuggestion => "Use '->' only once after parameters, then separate returns with ',' and end with ':'",
@@ -225,7 +225,7 @@ fn parse_return_list(
                     format!(
                         "Expected ',' or ':' after function return declaration, found '{other:?}'",
                     ),
-                    token_stream.current_location().to_error_location(string_table),
+                    token_stream.current_location(),
                     {
                         CompilationStage => "Function Signature Parsing",
                         PrimarySuggestion => "Separate return declarations with ',' and end the signature with ':'",
@@ -259,7 +259,7 @@ fn parse_single_return_item(
         if symbol_name == "Void" {
             return_syntax_error!(
                 "Void is not a valid function return declaration",
-                current_location.to_error_location(string_table),
+                current_location,
                 {
                     CompilationStage => "Function Signature Parsing",
                     PrimarySuggestion => "Functions without return values should omit '->' entirely",
@@ -272,7 +272,7 @@ fn parse_single_return_item(
                 "Unknown return declaration '{}'. Function returns must use a concrete supported type or a parameter alias.",
                 symbol_name
             ),
-            current_location.to_error_location(string_table),
+            current_location,
             {
                 CompilationStage => "Function Signature Parsing",
                 PrimarySuggestion => "Use a supported return type such as Int or a parameter alias such as 'arg' or 'arg or other_arg'",
@@ -301,7 +301,7 @@ fn parse_alias_return_item(
     token_stream: &mut FileTokens,
     parameters: &[Declaration],
     string_table: &StringTable,
-    current_location: TextLocation,
+    current_location: SourceLocation,
 ) -> Result<FunctionReturn, CompilerError> {
     let mut parameter_indices = Vec::new();
     let mut alias_type: Option<DataType> = None;
@@ -310,7 +310,7 @@ fn parse_alias_return_item(
         let Some(current_symbol) = parameter_alias_symbol(token_stream.current_token_kind()) else {
             return_syntax_error!(
                 "Expected a parameter name in an alias return declaration",
-                token_stream.current_location().to_error_location(string_table),
+                token_stream.current_location(),
                 {
                     CompilationStage => "Function Signature Parsing",
                     PrimarySuggestion => "Write alias returns like 'arg' or 'arg or other_arg'",
@@ -328,7 +328,7 @@ fn parse_alias_return_item(
                     "Unknown return alias '{}'. Alias returns must name a function parameter.",
                     string_table.resolve(current_symbol)
                 ),
-                current_location.to_error_location(string_table),
+                current_location,
                 {
                     CompilationStage => "Function Signature Parsing",
                     PrimarySuggestion => "Use a parameter name in the return list or a concrete return type such as Int",
@@ -341,7 +341,7 @@ fn parse_alias_return_item(
             if existing_type != &param_type {
                 return_type_error!(
                     "All alias candidates in a single return slot must have the same type",
-                    current_location.to_error_location(string_table),
+                    current_location,
                     {
                         CompilationStage => "Function Signature Parsing",
                         PrimarySuggestion => "Only combine parameters of the same type with 'or'",
@@ -355,7 +355,7 @@ fn parse_alias_return_item(
         if parameter_indices.contains(&param_index) {
             return_syntax_error!(
                 "Duplicate parameter used in the same alias return declaration",
-                token_stream.current_location().to_error_location(string_table),
+                token_stream.current_location(),
                 {
                     CompilationStage => "Function Signature Parsing",
                     PrimarySuggestion => "List each parameter at most once in an alias return declaration",
@@ -372,7 +372,7 @@ fn parse_alias_return_item(
                 if parameter_alias_symbol(token_stream.current_token_kind()).is_none() {
                     return_syntax_error!(
                         "Expected a parameter name after 'or' in an alias return declaration",
-                        token_stream.current_location().to_error_location(string_table),
+                        token_stream.current_location(),
                         {
                             CompilationStage => "Function Signature Parsing",
                             PrimarySuggestion => "Write alias returns like 'arg or other_arg'",
@@ -387,7 +387,7 @@ fn parse_alias_return_item(
     let Some(data_type) = alias_type else {
         return_syntax_error!(
             "Alias return declarations must include at least one parameter name",
-            current_location.to_error_location(string_table),
+            current_location,
             {
                 CompilationStage => "Function Signature Parsing",
                 PrimarySuggestion => "Write alias returns like 'arg' or 'arg or other_arg'",
@@ -547,7 +547,7 @@ pub fn create_function_call_arguments(
                 "Expected a parenthesis after function call. Found '{:?}' instead.",
                 token_stream.current_token_kind()
             ),
-            token_stream.current_location().to_error_location(string_table),
+            token_stream.current_location(),
             {
                 CompilationStage => "Function Call Parsing",
                 PrimarySuggestion => "Add '(' after the function name",
@@ -569,7 +569,7 @@ pub fn create_function_call_arguments(
                 format!(
                     "This function requires {missing_required} argument(s) without defaults, but none were provided.",
                 ),
-                token_stream.current_location().to_error_location(string_table),
+                token_stream.current_location(),
                 {
                     CompilationStage => "Function Call Parsing",
                     PrimarySuggestion => "Provide the required arguments or add defaults in the declaration",
@@ -589,7 +589,7 @@ pub fn create_function_call_arguments(
                     "This function does not accept any arguments, found '{:?}' instead",
                     token_stream.current_token_kind()
                 ),
-                token_stream.current_location().to_error_location(string_table),
+                token_stream.current_location(),
                 {
                     CompilationStage => "Function Call Parsing",
                     PrimarySuggestion => "Remove the arguments or check the function signature",
@@ -654,8 +654,8 @@ pub fn parse_host_function_call(
 pub fn validate_host_function_call(
     function: &HostFunctionDef,
     args: &[Expression],
-    location: TextLocation,
-    string_table: &StringTable,
+    location: SourceLocation,
+    _string_table: &StringTable,
 ) -> Result<(), CompilerError> {
     // Check argument count
     if args.len() != function.parameters.len() {
@@ -670,7 +670,7 @@ pub fn validate_host_function_call(
                     got,
                     if got == 1 { "was" } else { "were" }
                 ),
-                location.to_error_location(string_table),
+                location,
                 {
                     CompilationStage => "Function Call Validation",
                     PrimarySuggestion => "Remove the parentheses and arguments",
@@ -684,7 +684,7 @@ pub fn validate_host_function_call(
                     expected,
                     if expected == 1 { "" } else { "s" }
                 ),
-                location.to_error_location(string_table),
+                location,
                 {
                     CompilationStage => "Function Call Validation",
                     PrimarySuggestion => "Add the required arguments to the function call",
@@ -704,7 +704,7 @@ pub fn validate_host_function_call(
                         "Not enough arguments provided"
                     }
                 ),
-                location.to_error_location(string_table),
+                location,
                 {
                     CompilationStage => "Function Call Validation",
                     PrimarySuggestion => if got > expected {
@@ -729,7 +729,7 @@ pub fn validate_host_function_call(
                     format_type_for_error(&expression.data_type),
                     get_type_conversion_hint(&expression.data_type, &param.language_type)
                 ),
-                location.to_error_location(string_table),
+                location,
                 {
                     CompilationStage => "Function Call Validation",
                     PrimarySuggestion => "Convert the argument to the expected type",

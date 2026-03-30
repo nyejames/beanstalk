@@ -1,5 +1,5 @@
 use crate::compiler_frontend::ast::ast::ScopeContext;
-use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorLocation};
+use crate::compiler_frontend::compiler_errors::{CompilerError, SourceLocation};
 use crate::compiler_frontend::compiler_warnings::{CompilerWarning, WarningKind};
 use crate::compiler_frontend::optimizers::constant_folding::constant_fold;
 
@@ -10,7 +10,6 @@ use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::paths::path_resolution::CompileTimePaths;
 use crate::compiler_frontend::paths::rendered_path_usage::record_compile_time_paths_for_rendered_output;
 use crate::compiler_frontend::string_interning::StringTable;
-use crate::compiler_frontend::tokenizer::tokens::TextLocation;
 use crate::return_type_error;
 use crate::{eval_log, return_compiler_error, return_syntax_error};
 
@@ -112,7 +111,7 @@ pub fn evaluate_expression(
                     // Type mismatch
                     return_type_error!(
                         format!("Type mismatch in expression. Expected type '{:?}', but found type '{:?}'", current_type, expr.data_type),
-                        node.location.to_error_location(string_table), {
+                        node.location, {
                             CompilationStage => "Expression Evaluation",
                             PrimarySuggestion => "Ensure all operands in the expression are of compatible types",
                         }
@@ -159,7 +158,7 @@ pub fn evaluate_expression(
                         };
                         return_syntax_error!(
                             format!("You can't use the '{:?}' operator with strings or templates", op),
-                            node.location.to_error_location(string_table),
+                            node.location,
                             {
                                 FoundType => found_type_static,
                                 CompilationStage => "Expression Evaluation",
@@ -180,7 +179,7 @@ pub fn evaluate_expression(
 
                         return_syntax_error!(
                             format!("Unsupported operator '{:?}' in a CoerceToString expression", op),
-                            node.location.to_error_location(string_table),
+                            node.location,
                             {
                                 CompilationStage => "Expression Evaluation",
                                 PrimarySuggestion => "Use '+' to concatenate values for CoerceToString arguments",
@@ -278,7 +277,7 @@ pub fn evaluate_expression(
                 let expected_type_str = format!("{}", current_type);
                 return_syntax_error!(
                     "Invalid expression: no valid operands found during evaluation.",
-                    ErrorLocation::default(),
+                    SourceLocation::default(),
                     {
                         ExpectedType => expected_type_str,
                         CompilationStage => String::from("Expression Evaluation"),
@@ -294,7 +293,7 @@ pub fn evaluate_expression(
             Ok(Expression::runtime(
                 stack,
                 current_type.to_owned(),
-                TextLocation::new(context.scope.to_owned(), first_node_start, last_node_end),
+                SourceLocation::new(context.scope.to_owned(), first_node_start, last_node_end),
                 ownership,
             ))
         }
@@ -328,7 +327,7 @@ fn coerce_expression_to_rendered_string(
 
 fn emit_bst_file_path_output_warnings(
     paths: &CompileTimePaths,
-    render_location: &TextLocation,
+    render_location: &SourceLocation,
     context: &ScopeContext,
     string_table: &StringTable,
 ) {
@@ -338,15 +337,13 @@ fn emit_bst_file_path_output_warnings(
             .extension()
             .is_some_and(|extension| extension == "bst")
         {
-            let file_path = render_location.scope.to_path_buf(string_table);
             context.emit_warning(CompilerWarning::new(
                 &format!(
                     "Path to Beanstalk source file is being inserted into template output: '{}'",
                     path.source_path.to_portable_string(string_table)
                 ),
-                render_location.to_error_location(string_table),
+                render_location.clone(),
                 WarningKind::BstFilePathInTemplateOutput,
-                file_path,
             ));
         }
     }
@@ -412,7 +409,7 @@ pub fn concat_template(
     Ok(Expression::template(template, ownership))
 }
 
-fn extract_location(nodes: &[AstNode]) -> Result<TextLocation, CompilerError> {
+fn extract_location(nodes: &[AstNode]) -> Result<SourceLocation, CompilerError> {
     if nodes.is_empty() {
         return_compiler_error!("No nodes found in expression. This should never happen.");
     }

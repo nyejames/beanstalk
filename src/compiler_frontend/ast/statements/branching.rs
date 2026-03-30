@@ -69,7 +69,7 @@ pub fn create_branch(
                 "Expected ':' after the if condition to open a new scope, found '{:?}' instead",
                 token_stream.current_token_kind()
             ),
-            token_stream.current_location().to_error_location(string_table),
+            token_stream.current_location(),
             {
                 CompilationStage => "If Statement Parsing",
                 PrimarySuggestion => "Add ':' after the if condition to open the if body",
@@ -123,7 +123,7 @@ fn create_match_node(
                 "Expected ':' after the if condition to open a new scope, found '{:?}' instead",
                 token_stream.current_token_kind()
             ),
-            token_stream.current_location().to_error_location(string_table),
+            token_stream.current_location(),
             {
                 CompilationStage => "Match Statement Parsing",
                 PrimarySuggestion => "Add ':' after 'is' to open the match body",
@@ -160,7 +160,7 @@ fn create_match_node(
                 if arms.is_empty() {
                     return_rule_error!(
                         "Should be at least one condition in the match statement before the 'else' arm",
-                        token_stream.current_location().to_error_location(string_table),
+                        token_stream.current_location(),
                         {
                             CompilationStage => "Match Statement Parsing",
                             PrimarySuggestion => "Add at least one match arm before the 'else' arm",
@@ -171,7 +171,7 @@ fn create_match_node(
                 if seen_else {
                     return_rule_error!(
                         "Match statement can only have one 'else' arm",
-                        token_stream.current_location().to_error_location(string_table),
+                        token_stream.current_location(),
                         {
                             CompilationStage => "Match Statement Parsing",
                             PrimarySuggestion => "Remove duplicate else arms",
@@ -185,7 +185,7 @@ fn create_match_node(
                     if token_stream.current_token_kind() == &TokenKind::Arrow {
                         return_syntax_error!(
                             "Unexpected '->' after 'else' in a match statement. Match arms must use ':' to open the arm body.",
-                            token_stream.current_location().to_error_location(string_table),
+                            token_stream.current_location(),
                             {
                                 CompilationStage => "Match Statement Parsing",
                                 PrimarySuggestion => "Replace '->' with ':' after 'else'",
@@ -199,7 +199,7 @@ fn create_match_node(
                             "Expected ':' after the else arm to open a new scope, found '{:?}' instead",
                             token_stream.current_token_kind()
                         ),
-                        token_stream.current_location().to_error_location(string_table),
+                        token_stream.current_location(),
                         {
                             CompilationStage => "Match Statement Parsing",
                             PrimarySuggestion => "Add ':' after 'else' to open the else body",
@@ -220,7 +220,7 @@ fn create_match_node(
             TokenKind::Eof => {
                 return_rule_error!(
                     "Unexpected end of file in match statement",
-                    token_stream.current_location().to_error_location(string_table),
+                    token_stream.current_location(),
                     {
                         CompilationStage => "Match Statement Parsing",
                         PrimarySuggestion => "Terminate this match statement with ';'",
@@ -231,7 +231,7 @@ fn create_match_node(
             TokenKind::Wildcard => {
                 return_syntax_error!(
                     "Wildcard '_' arms are not supported in source match syntax. Use 'else:' for the default arm.",
-                    token_stream.current_location().to_error_location(string_table),
+                    token_stream.current_location(),
                     {
                         CompilationStage => "Match Statement Parsing",
                         PrimarySuggestion => "Replace '_' with 'else:' for the default match arm",
@@ -243,7 +243,7 @@ fn create_match_node(
                 if seen_else {
                     return_rule_error!(
                         "Match arms cannot appear after an 'else' arm",
-                        token_stream.current_location().to_error_location(string_table),
+                        token_stream.current_location(),
                         {
                             CompilationStage => "Match Statement Parsing",
                             PrimarySuggestion => "Move this arm before the else arm",
@@ -264,7 +264,7 @@ fn create_match_node(
                     if token_stream.current_token_kind() == &TokenKind::Arrow {
                         return_syntax_error!(
                             "Unexpected '->' in match arm. Match arms use ':' between the condition and body.",
-                            token_stream.current_location().to_error_location(string_table),
+                            token_stream.current_location(),
                             {
                                 CompilationStage => "Match Statement Parsing",
                                 PrimarySuggestion => "Replace '->' with ':' in this match arm",
@@ -278,7 +278,7 @@ fn create_match_node(
                             "Expected ':' after the match condition to open a new scope, found '{:?}' instead",
                             token_stream.current_token_kind()
                         ),
-                        token_stream.current_location().to_error_location(string_table),
+                        token_stream.current_location(),
                         {
                             CompilationStage => "Match Statement Parsing",
                             PrimarySuggestion => "Add ':' after the match arm condition to open the arm body",

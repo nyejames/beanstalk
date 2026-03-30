@@ -491,7 +491,7 @@ impl<'a> BorrowChecker<'a> {
                             .side_table
                             .ast_location_for_hir(HirLocation::Block(block_id))
                     })
-                    .map(|text| text.to_error_location(self.string_table))
+                    .cloned()
                     .unwrap_or_else(|| self.diagnostics.function_error_location(function_id));
 
                 return_borrow_checker_error!(
@@ -499,7 +499,7 @@ impl<'a> BorrowChecker<'a> {
                         "Borrow checker could not resolve region '{}' while analyzing block '{}'",
                         region.0, block_id
                     ),
-                    location,
+                    location.clone(),
                     {
                         CompilationStage => "Borrow Checking",
                     }

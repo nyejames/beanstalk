@@ -16,12 +16,12 @@ use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
-use crate::compiler_frontend::tokenizer::tokens::{CharPosition, TextLocation};
+use crate::compiler_frontend::tokenizer::tokens::{CharPosition, SourceLocation};
 use crate::projects::settings::{IMPLICIT_START_FUNC_NAME, TOP_LEVEL_TEMPLATE_NAME};
 use rustc_hash::FxHashMap;
 
-fn test_location(line: i32) -> TextLocation {
-    TextLocation {
+fn test_location(line: i32) -> SourceLocation {
+    SourceLocation {
         scope: InternedPath::new(),
         start_pos: CharPosition {
             line_number: line,
@@ -41,7 +41,7 @@ fn declaration(id: InternedPath, value: Expression) -> Declaration {
 fn top_level_template_declaration(
     content: Vec<Expression>,
     template_kind: TemplateType,
-    location: TextLocation,
+    location: SourceLocation,
     string_table: &mut StringTable,
 ) -> Declaration {
     let mut template = Template::create_default(vec![]);
@@ -61,7 +61,7 @@ fn top_level_template_declaration(
 fn start_function_node(
     entry_dir: &InternedPath,
     body: Vec<AstNode>,
-    location: TextLocation,
+    location: SourceLocation,
     string_table: &mut StringTable,
 ) -> AstNode {
     AstNode {
@@ -81,7 +81,7 @@ fn start_function_node(
 fn variable_declaration_node(
     id: InternedPath,
     value: Expression,
-    location: TextLocation,
+    location: SourceLocation,
     scope: InternedPath,
 ) -> AstNode {
     AstNode {
@@ -94,7 +94,7 @@ fn variable_declaration_node(
 fn assignment_node(
     target: AstNode,
     value: Expression,
-    location: TextLocation,
+    location: SourceLocation,
     scope: InternedPath,
 ) -> AstNode {
     AstNode {

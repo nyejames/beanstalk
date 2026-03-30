@@ -7,7 +7,7 @@ use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
-pub(crate) use crate::compiler_frontend::tokenizer::tokens::TextLocation;
+pub(crate) use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::{return_compiler_error, return_type_error};
 
 #[derive(Debug, Clone)]
@@ -19,7 +19,7 @@ pub struct Declaration {
 #[derive(Debug, Clone)]
 pub struct AstNode {
     pub kind: NodeKind,
-    pub location: TextLocation,
+    pub location: SourceLocation,
     pub scope: InternedPath,
 }
 
@@ -88,7 +88,7 @@ pub enum NodeKind {
         name: InternedPath,
         args: Vec<Expression>,
         result_types: Vec<DataType>,
-        location: TextLocation,
+        location: SourceLocation,
         // bool, // Function is pure
     },
 
@@ -97,7 +97,7 @@ pub enum NodeKind {
         name: InternedPath,
         args: Vec<Expression>,
         result_types: Vec<DataType>,
-        location: TextLocation,
+        location: SourceLocation,
     },
 
     // example: new_struct_instance = MyStructDefinition(arg1, arg2)
@@ -189,7 +189,7 @@ impl AstNode {
     }
 
     // If this is a boolean value, flip it to the opposite value
-    pub fn flip(&mut self, string_table: &StringTable) -> Result<bool, CompilerError> {
+    pub fn flip(&mut self, _string_table: &StringTable) -> Result<bool, CompilerError> {
         if let NodeKind::Rvalue(value) = &mut self.kind {
             match value.kind {
                 ExpressionKind::Bool(val) => {
@@ -200,7 +200,7 @@ impl AstNode {
                     if !value.ownership.is_mutable() {
                         return_type_error!(
                             "Tried to use the 'not' operator on a non-mutable value",
-                            self.location.to_owned().to_error_location(string_table), {
+                            self.location.to_owned(), {
                                 ExpectedType => "Boolean",
                                 BorrowKind => "Shared",
                                 LifetimeHint => "This value is borrowed",
@@ -212,7 +212,7 @@ impl AstNode {
                                 "Tried to use the 'not' operator on value of type {:?}",
                                 value.data_type
                             ),
-                            self.location.to_owned().to_error_location(string_table), {
+                            self.location.to_owned(), {
                                 ExpectedType => "Boolean",
                                 BorrowKind => "Shared",
                                 LifetimeHint => "This value is borrowed",
@@ -226,7 +226,7 @@ impl AstNode {
 
         return_type_error!(
             format!("Tried to use the 'not' operator on a non-boolean: {:?}", self.kind),
-            self.location.to_owned().to_error_location(string_table), {
+            self.location.to_owned(), {
                 ExpectedType => "Boolean",
             }
         );

@@ -4,7 +4,7 @@
 //! WHY: validator coverage needs focused tests that isolate invariants from the rest of lowering.
 
 use crate::compiler_frontend::ast::ast::{Ast, AstDocFragment, AstDocFragmentKind, ModuleExport};
-use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind, TextLocation};
+use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind, SourceLocation};
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::statements::functions::{FunctionReturn, FunctionSignature};
 use crate::compiler_frontend::compiler_errors::{CompilerMessages, ErrorType};
@@ -20,11 +20,11 @@ use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::projects::settings::IMPLICIT_START_FUNC_NAME;
 
-fn test_location(line: i32) -> TextLocation {
+fn test_location(line: i32) -> SourceLocation {
     location(line)
 }
 
-fn node(kind: NodeKind, location: TextLocation) -> AstNode {
+fn node(kind: NodeKind, location: SourceLocation) -> AstNode {
     AstNode {
         kind,
         location,
@@ -40,7 +40,7 @@ fn param(
     name: InternedPath,
     data_type: DataType,
     mutable: bool,
-    location: TextLocation,
+    location: SourceLocation,
 ) -> Declaration {
     let ownership = if mutable {
         Ownership::MutableOwned
@@ -58,7 +58,7 @@ fn function_node(
     name: InternedPath,
     signature: FunctionSignature,
     body: Vec<AstNode>,
-    location: TextLocation,
+    location: SourceLocation,
 ) -> AstNode {
     node(NodeKind::Function(name, signature, body), location)
 }

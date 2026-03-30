@@ -9,7 +9,7 @@
 use crate::compiler_frontend::ast::templates::template::{
     Style, TemplateConstValueKind, TemplateContent, TemplateType,
 };
-use crate::compiler_frontend::tokenizer::tokens::TextLocation;
+use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
 /// The central template representation in the AST.
 ///
@@ -29,7 +29,7 @@ pub struct Template {
     pub style: Style,
     pub explicit_style: Style,
     pub id: String,
-    pub location: TextLocation,
+    pub location: SourceLocation,
 }
 
 /// Inheritance state passed from parent to nested child templates.
@@ -64,7 +64,7 @@ impl Template {
             style: Style::default(),
             explicit_style: Style::default(),
             id: String::new(),
-            location: TextLocation::default(),
+            location: SourceLocation::default(),
         }
     }
 

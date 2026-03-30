@@ -20,7 +20,7 @@ use crate::compiler_frontend::ast::templates::template::TemplateType;
 use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorMetaDataKey};
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::string_interning::StringTable;
-use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TextLocation, Token, TokenKind};
+use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
 use crate::compiler_frontend::traits::ContainsReferences;
 use crate::{
     ast_log, return_compiler_error, return_rule_error, return_syntax_error, return_type_error,
@@ -64,7 +64,7 @@ pub fn create_multiple_expressions(
                         context.expected_result_types.len(),
                         expressions.len()
                     ),
-                    token_stream.current_location().to_error_location(string_table),
+                    token_stream.current_location(),
                     {
                         CompilationStage => "Expression Parsing",
                         PrimarySuggestion => "Add missing arguments to match the expected count",
@@ -83,7 +83,7 @@ pub fn create_multiple_expressions(
                     "Expected closing parenthesis after arguments, found '{:?}'",
                     token_stream.current_token_kind()
                 ),
-                token_stream.current_location().to_error_location(string_table),
+                token_stream.current_location(),
                 {
                     CompilationStage => "Expression Parsing",
                     PrimarySuggestion => "Add ')' after the final argument",
@@ -143,9 +143,7 @@ pub fn create_expression(
                         TokenKind::Comma => {
                             let mut error = CompilerError::new_syntax_error(
                                 "Unexpected ',' in expression. Commas separate list items, function arguments, or return declarations.",
-                                token_stream
-                                    .current_location()
-                                    .to_error_location(string_table),
+                                token_stream.current_location(),
                             );
                             error.new_metadata_entry(
                                 ErrorMetaDataKey::CompilationStage,
@@ -161,9 +159,7 @@ pub fn create_expression(
                         TokenKind::Arrow => {
                             let mut error = CompilerError::new_syntax_error(
                                 "Unexpected '->' in expression. Arrow syntax is only valid in function signatures.",
-                                token_stream
-                                    .current_location()
-                                    .to_error_location(string_table),
+                                token_stream.current_location(),
                             );
                             error.new_metadata_entry(
                                 ErrorMetaDataKey::CompilationStage,
@@ -187,7 +183,7 @@ pub fn create_expression(
                 if consume_closing_parenthesis {
                     return_syntax_error!(
                         format!("Unexpected token: '{:?}'. Seems to be missing a closing parenthesis at the end of this expression.", token),
-                        token_stream.current_location().to_error_location(string_table),
+                        token_stream.current_location(),
                         {
                             CompilationStage => "Expression Parsing",
                             PrimarySuggestion => "Add a closing parenthesis ')' at the end of the expression",
@@ -208,7 +204,7 @@ pub fn create_expression(
                 if expression.is_empty() {
                     return_syntax_error!(
                         "Empty expression found. Expected a value, variable, or expression.",
-                        token_stream.current_location().to_error_location(string_table),
+                        token_stream.current_location(),
                         {
                             CompilationStage => "Expression Parsing",
                             PrimarySuggestion => "Add a value, variable reference, or expression inside the parentheses",
@@ -279,7 +275,7 @@ pub fn create_expression(
                     _ => {
                         return_type_error!(
                             format!("Expected a collection, but assigned variable with a literal type of: {:?}", &data_type),
-                            token_stream.current_location().to_error_location(string_table),
+                            token_stream.current_location(),
                             {
                                 ExpectedType => "Collection",
                                 CompilationStage => "Expression Parsing",
@@ -335,7 +331,7 @@ pub fn create_expression(
                     {
                         return_rule_error!(
                             "'$insert(...)' helpers can only be used while filling an immediate parent template that defines matching '$slot' targets.",
-                            token_stream.current_location().to_error_location(string_table),
+                            token_stream.current_location(),
                             {
                                 CompilationStage => "Expression Parsing",
                                 PrimarySuggestion => "Use this '$insert(...)' helper inside a template invocation that has a slot-bearing parent in the head chain",
@@ -374,7 +370,7 @@ pub fn create_expression(
                                 "Constants can only reference other constants. '{}' resolves to a non-constant value.",
                                 string_table.resolve(*id)
                             ),
-                            token_stream.current_location().to_error_location(string_table),
+                            token_stream.current_location(),
                             {
                                 CompilationStage => "Expression Parsing",
                                 PrimarySuggestion => "Only reference constants in constant declarations and const templates",
@@ -495,7 +491,7 @@ pub fn create_expression(
                                     string_table.resolve(*id),
                                     string_table.resolve(*id),
                                 ),
-                                token_stream.current_location().to_error_location(string_table),
+                                token_stream.current_location(),
                                 {
                                     CompilationStage => "Expression Parsing",
                                     PrimarySuggestion => "Import exports directly with '@path/to/file/symbol' or '@path/to/file {a, b}'",
@@ -510,7 +506,7 @@ pub fn create_expression(
                                     string_table.resolve(*id),
                                     string_table.resolve(*id),
                                 ),
-                                token_stream.current_location().to_error_location(string_table),
+                                token_stream.current_location(),
                                 {
                                     CompilationStage => "Expression Parsing",
                                     PrimarySuggestion => "Call the file start function with 'file()' or import specific exports directly",
@@ -533,7 +529,7 @@ pub fn create_expression(
                                 "Constants cannot call host functions. '{}' is a runtime host call.",
                                 string_table.resolve(*id)
                             ),
-                            token_stream.current_location().to_error_location(string_table),
+                            token_stream.current_location(),
                             {
                                 CompilationStage => "Expression Parsing",
                                 PrimarySuggestion => "Use only compile-time constant values inside constants and const templates",
@@ -569,7 +565,7 @@ pub fn create_expression(
 
                         expression.push(AstNode {
                             kind: NodeKind::Rvalue(func_call_expr),
-                            location: TextLocation::default(),
+                            location: SourceLocation::default(),
                             scope: context.scope.clone(),
                         });
 
@@ -580,7 +576,7 @@ pub fn create_expression(
                 let var_name = string_table.resolve(*id).to_string();
                 return_rule_error!(
                     format!("Undefined variable '{}'. Variable must be declared before use.", var_name),
-                    token_stream.current_location().to_error_location(string_table),
+                    token_stream.current_location(),
                     {
                         VariableName => var_name,
                         CompilationStage => "Expression Parsing",
@@ -648,7 +644,7 @@ pub fn create_expression(
                         if context.kind.is_constant_context() {
                             return_rule_error!(
                                 "Constants and const templates require compile-time template folding. This template is runtime.",
-                                token_stream.current_location().to_error_location(string_table),
+                                token_stream.current_location(),
                                 {
                                     CompilationStage => "Expression Parsing",
                                     PrimarySuggestion => "Remove runtime values from this template so it can fold at compile time",
@@ -708,7 +704,7 @@ pub fn create_expression(
                     TemplateType::SlotDefinition(_) => {
                         return_rule_error!(
                             "'$slot' markers are only valid as direct nested templates inside template bodies.",
-                            token_stream.current_location().to_error_location(string_table),
+                            token_stream.current_location(),
                             {
                                 CompilationStage => "Expression Parsing",
                                 PrimarySuggestion => "Use '$slot' inside a template body where it defines a receiving slot",
@@ -744,7 +740,7 @@ pub fn create_expression(
                 if token_stream.peek_next_token() != Some(&TokenKind::TemplateHead) {
                     return_type_error!(
                         "Unexpected '#' in expression. '#' is only valid before a template head.",
-                        token_stream.current_location().to_error_location(string_table),
+                        token_stream.current_location(),
                         {
                             CompilationStage => "Expression Parsing",
                             PrimarySuggestion => "Remove '#' or place it directly before a template expression",
@@ -865,7 +861,7 @@ pub fn create_expression(
                         if expression.len() > 1 {
                             return_type_error!(
                                 format!("Match statements can only have one value to match against. Found: {}", expression.len()),
-                                token_stream.current_location().to_error_location(string_table),
+                                token_stream.current_location(),
                                 {
                                     CompilationStage => "Expression Parsing",
                                     PrimarySuggestion => "Simplify the expression to a single value before the 'is:' match",
@@ -950,9 +946,7 @@ pub fn create_expression(
             TokenKind::Wildcard => {
                 let mut error = CompilerError::new_syntax_error(
                     "Unexpected wildcard '_' in expression. Wildcards are only valid in supported pattern positions.",
-                    token_stream
-                        .current_location()
-                        .to_error_location(string_table),
+                    token_stream.current_location(),
                 );
                 error.new_metadata_entry(
                     ErrorMetaDataKey::CompilationStage,
@@ -968,9 +962,7 @@ pub fn create_expression(
             TokenKind::TypeParameterBracket => {
                 let mut error = CompilerError::new_syntax_error(
                     "Unexpected '|' in expression. This token is only valid in function signatures and struct definitions.",
-                    token_stream
-                        .current_location()
-                        .to_error_location(string_table),
+                    token_stream.current_location(),
                 );
                 error.new_metadata_entry(
                     ErrorMetaDataKey::CompilationStage,
@@ -989,7 +981,7 @@ pub fn create_expression(
             _ => {
                 return_syntax_error!(
                     format!("Invalid token used in expression: '{:?}'", token),
-                    token_stream.current_location().to_error_location(string_table),
+                    token_stream.current_location(),
                     {
                         CompilationStage => "Expression Parsing",
                         PrimarySuggestion => "Remove or replace this token with a valid expression element",
@@ -1020,7 +1012,7 @@ fn parse_copy_place_expression(
             if token_stream.current_token_kind() != &TokenKind::CloseParenthesis {
                 return_syntax_error!(
                     "Expected ')' after copy operand",
-                    token_stream.current_location().to_error_location(string_table),
+                    token_stream.current_location(),
                     {
                         CompilationStage => "Expression Parsing",
                         PrimarySuggestion => "Wrap only a single place expression in parentheses after 'copy'",
@@ -1042,7 +1034,7 @@ fn parse_copy_place_expression(
                         "Undefined variable '{}'. Explicit copies require a declared place.",
                         string_table.resolve(*symbol)
                     ),
-                    token_stream.current_location().to_error_location(string_table),
+                    token_stream.current_location(),
                     {
                         CompilationStage => "Expression Parsing",
                         PrimarySuggestion => "Declare the variable before using 'copy'",
@@ -1054,7 +1046,7 @@ fn parse_copy_place_expression(
                 DataType::Function(_, _) => {
                     return_rule_error!(
                         "The 'copy' keyword only accepts places, not function values or calls",
-                        token_stream.current_location().to_error_location(string_table),
+                        token_stream.current_location(),
                         {
                             CompilationStage => "Expression Parsing",
                             PrimarySuggestion => "Copy a variable or field, not a function symbol",
@@ -1069,7 +1061,7 @@ fn parse_copy_place_expression(
         _ => {
             return_syntax_error!(
                 "The 'copy' keyword only accepts a place expression",
-                token_stream.current_location().to_error_location(string_table),
+                token_stream.current_location(),
                 {
                     CompilationStage => "Expression Parsing",
                     PrimarySuggestion => "Use 'copy' before a variable or field access such as 'copy value' or 'copy user.name'",
@@ -1138,7 +1130,7 @@ pub(crate) fn create_expression_until(
                 "Expected one of [{}] to end this expression, but reached end of file",
                 expected_tokens
             ),
-            token_stream.current_location().to_error_location(string_table),
+            token_stream.current_location(),
             {
                 CompilationStage => "Expression Parsing",
                 PrimarySuggestion => "Complete the expression and add the required delimiter token",
@@ -1150,8 +1142,8 @@ pub(crate) fn create_expression_until(
         return_syntax_error!(
             "Expected an expression before this delimiter",
             token_stream.tokens[end_index]
-                .location
-                .to_error_location(string_table),
+                .location.clone()
+                ,
             {
                 CompilationStage => "Expression Parsing",
                 PrimarySuggestion => "Add a valid expression before this token",
@@ -1175,8 +1167,8 @@ pub(crate) fn create_expression_until(
                 expected_tokens
             ),
             token_stream.tokens[end_index]
-                .location
-                .to_error_location(string_table),
+                .location.clone()
+                ,
             {
                 CompilationStage => "Expression Parsing",
                 PrimarySuggestion => "Add the required delimiter token after this expression",

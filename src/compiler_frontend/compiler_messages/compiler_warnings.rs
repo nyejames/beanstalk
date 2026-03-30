@@ -1,33 +1,19 @@
-use crate::compiler_frontend::compiler_errors::ErrorLocation;
-use saying::say;
-use std::path::PathBuf;
+use crate::compiler_frontend::source_location::SourceLocation;
 
 #[derive(Clone, Debug)]
 pub struct CompilerWarning {
     pub msg: String,
-    pub location: ErrorLocation,
+    pub location: SourceLocation,
     pub warning_kind: WarningKind,
-    pub file_path: PathBuf,
 }
 
 impl CompilerWarning {
-    pub fn new(
-        msg: &str,
-        location: ErrorLocation,
-        warning_kind: WarningKind,
-        file_path: PathBuf,
-    ) -> CompilerWarning {
+    pub fn new(msg: &str, location: SourceLocation, warning_kind: WarningKind) -> CompilerWarning {
         CompilerWarning {
             msg: msg.to_owned(),
             location,
             warning_kind,
-            file_path,
         }
-    }
-
-    /// Get the file path as a string for display purposes
-    pub fn file_path_string(&self) -> String {
-        self.file_path.to_string_lossy().to_string()
     }
 }
 
@@ -47,56 +33,4 @@ pub enum WarningKind {
     MalformedHtmlTemplate,
     BstFilePathInTemplateOutput,
     LargeTrackedAsset,
-}
-
-pub fn print_formatted_warning(w: CompilerWarning) {
-    say!(Yellow Bold "WARNING: ");
-    println!("File: {}", w.file_path_string());
-    match w.warning_kind {
-        WarningKind::UnusedVariable => {
-            println!("Unused variable '{}'", w.msg);
-        }
-        WarningKind::UnusedFunction => {
-            println!("Unused function '{}'", w.msg);
-        }
-        WarningKind::UnusedImport => {
-            println!("Unused import '{}'", w.msg);
-        }
-        WarningKind::UnusedType => {
-            println!("Unused type '{}'", w.msg);
-        }
-        WarningKind::UnusedConstant => {
-            println!("Unused constant '{}'", w.msg);
-        }
-        WarningKind::UnusedFunctionArgument => {
-            println!("Unused function argument '{}'", w.msg);
-        }
-        WarningKind::UnusedFunctionReturnValue => {
-            println!("Unused function return value '{}'", w.msg);
-        }
-        WarningKind::UnusedFunctionParameter => {
-            println!("Unused function parameter '{}'", w.msg);
-        }
-        WarningKind::UnusedFunctionParameterDefaultValue => {
-            println!("Unused function parameter default value '{}'", w.msg);
-        }
-        WarningKind::PointlessExport => {
-            println!("Pointless export '{}'", w.msg);
-        }
-        WarningKind::MalformedCssTemplate => {
-            println!("Malformed CSS template: {}", w.msg);
-        }
-        WarningKind::MalformedHtmlTemplate => {
-            println!("Malformed HTML template: {}", w.msg);
-        }
-        WarningKind::BstFilePathInTemplateOutput => {
-            println!(
-                "Path to Beanstalk source file is being inserted into template output: {}",
-                w.msg
-            );
-        }
-        WarningKind::LargeTrackedAsset => {
-            println!("{msg}", msg = w.msg);
-        }
-    }
 }

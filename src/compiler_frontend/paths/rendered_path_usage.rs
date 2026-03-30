@@ -15,7 +15,7 @@ use crate::compiler_frontend::paths::path_resolution::{
     CompileTimePathBase, CompileTimePathKind, CompileTimePaths, ProjectPathResolver,
 };
 use crate::compiler_frontend::string_interning::StringTable;
-use crate::compiler_frontend::tokenizer::tokens::TextLocation;
+use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use std::path::{Path, PathBuf};
 
 /// Builder-visible semantic fact for one compile-time path rendered into output text.
@@ -40,7 +40,7 @@ pub struct RenderedPathUsage {
     /// Real source file that rendered this path.
     pub source_file_scope: InternedPath,
     /// Render location used for builder diagnostics and warnings.
-    pub render_location: TextLocation,
+    pub render_location: SourceLocation,
 }
 
 /// Small capture result used at rendered output boundaries.
@@ -72,9 +72,9 @@ pub(crate) fn resolve_compile_time_paths_for_rendered_output(
     project_path_resolver: &ProjectPathResolver,
     importer_file: &Path,
     source_file_scope: &InternedPath,
-    render_location: &TextLocation,
+    render_location: &SourceLocation,
     path_format_config: &PathStringFormatConfig,
-    string_table: &StringTable,
+    string_table: &mut StringTable,
 ) -> Result<(CompileTimePaths, RecordedRenderedPaths), CompilerError> {
     let resolved =
         project_path_resolver.resolve_compile_time_paths(paths, importer_file, string_table)?;
@@ -99,7 +99,7 @@ pub(crate) fn resolve_compile_time_paths_for_rendered_output(
 pub(crate) fn record_compile_time_paths_for_rendered_output(
     paths: &CompileTimePaths,
     source_file_scope: &InternedPath,
-    render_location: &TextLocation,
+    render_location: &SourceLocation,
     path_format_config: &PathStringFormatConfig,
     string_table: &StringTable,
 ) -> RecordedRenderedPaths {

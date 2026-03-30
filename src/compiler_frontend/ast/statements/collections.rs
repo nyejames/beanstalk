@@ -40,9 +40,7 @@ pub fn new_collection(
                 if next_item {
                     return_syntax_error!(
                         "Expected a collection item after the comma",
-                        token_stream
-                            .current_location()
-                            .to_error_location(string_table)
+                        token_stream.current_location()
                     )
                 }
 
@@ -54,9 +52,7 @@ pub fn new_collection(
                 if !next_item {
                     return_syntax_error!(
                         "Expected a collection item after the comma",
-                        token_stream
-                            .current_location()
-                            .to_error_location(string_table)
+                        token_stream.current_location()
                     )
                 }
 

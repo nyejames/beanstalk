@@ -8,6 +8,7 @@ mod parsing;
 mod validation;
 
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
+use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::projects::settings::{self, Config};
 use std::path::Path;
@@ -19,6 +20,7 @@ use std::path::Path;
 pub fn load_project_config(
     config: &mut Config,
     style_directives: &StyleDirectiveRegistry,
+    string_table: &mut StringTable,
 ) -> Result<(), CompilerMessages> {
     let config_path = config.entry_dir.join(settings::CONFIG_FILE_NAME);
 
@@ -26,7 +28,7 @@ pub fn load_project_config(
         return Ok(());
     }
 
-    parse_project_config_file(config, &config_path, style_directives)
+    parse_project_config_file(config, &config_path, style_directives, string_table)
 }
 
 /// Parse `#config.bst` and extract top-level constant declarations into the `Config` struct.
@@ -37,14 +39,15 @@ pub(crate) fn parse_project_config_file(
     config: &mut Config,
     config_path: &Path,
     style_directives: &StyleDirectiveRegistry,
+    string_table: &mut StringTable,
 ) -> Result<(), CompilerMessages> {
-    let parsed_config = parsing::parse_config_file(config_path, style_directives)?;
+    let parsed_config = parsing::parse_config_file(config_path, style_directives, string_table)?;
     let mut errors = parsed_config.errors;
 
     if let Err(mut validation_errors) = validation::validate_and_apply_config_headers(
         config,
         &parsed_config.headers,
-        &parsed_config.string_table,
+        string_table,
         config_path,
     ) {
         errors.append(&mut validation_errors);
@@ -56,6 +59,7 @@ pub(crate) fn parse_project_config_file(
         Err(CompilerMessages {
             errors,
             warnings: Vec::new(),
+            string_table: string_table.clone(),
         })
     }
 }

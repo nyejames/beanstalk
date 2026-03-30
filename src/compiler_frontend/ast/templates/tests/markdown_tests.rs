@@ -210,7 +210,7 @@ fn opaque_anchors_preserved_between_formatted_text_pieces() {
         FormatterTextPiece,
     };
     use crate::compiler_frontend::string_interning::StringTable;
-    use crate::compiler_frontend::tokenizer::tokens::TextLocation;
+    use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
     let mut string_table = StringTable::new();
     let list_start = string_table.intern("- item one");
@@ -220,12 +220,12 @@ fn opaque_anchors_preserved_between_formatted_text_pieces() {
         pieces: vec![
             FormatterInputPiece::Text(FormatterTextPiece {
                 text: list_start,
-                location: TextLocation::default(),
+                location: SourceLocation::default(),
             }),
             FormatterInputPiece::Opaque(FormatterAnchorId(7)),
             FormatterInputPiece::Text(FormatterTextPiece {
                 text: list_end,
-                location: TextLocation::default(),
+                location: SourceLocation::default(),
             }),
         ],
     };

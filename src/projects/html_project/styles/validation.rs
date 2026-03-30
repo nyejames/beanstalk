@@ -14,7 +14,7 @@ use crate::compiler_frontend::ast::templates::template_render_plan::{
 };
 use crate::compiler_frontend::compiler_warnings::{CompilerWarning, WarningKind};
 use crate::compiler_frontend::string_interning::StringTable;
-use crate::compiler_frontend::tokenizer::tokens::{CharPosition, TextLocation};
+use crate::compiler_frontend::tokenizer::tokens::{CharPosition, SourceLocation};
 
 #[derive(Clone, Debug)]
 pub(crate) struct SourceWarning {
@@ -28,7 +28,7 @@ struct BodySourceSpan {
     start_offset: usize,
     end_offset: usize, // exclusive
     text: String,
-    location: TextLocation,
+    location: SourceLocation,
 }
 
 pub(crate) struct PassThroughFormatterInput {
@@ -98,7 +98,7 @@ impl PassThroughFormatterInput {
         &self,
         warnings: Vec<SourceWarning>,
         warning_kind: WarningKind,
-        string_table: &StringTable,
+        _string_table: &StringTable,
     ) -> Vec<CompilerWarning> {
         if self.spans.is_empty() || self.flattened_source.trim().is_empty() {
             return Vec::new();
@@ -108,13 +108,7 @@ impl PassThroughFormatterInput {
             .into_iter()
             .filter_map(|warning| {
                 map_warning_span_to_text_location(&self.spans, &warning).map(|location| {
-                    let file_path = location.scope.to_path_buf(string_table);
-                    CompilerWarning::new(
-                        &warning.message,
-                        location.to_error_location(string_table),
-                        warning_kind.clone(),
-                        file_path,
-                    )
+                    CompilerWarning::new(&warning.message, location, warning_kind.clone())
                 })
             })
             .collect()
@@ -124,7 +118,7 @@ impl PassThroughFormatterInput {
 fn map_warning_span_to_text_location(
     spans: &[BodySourceSpan],
     warning: &SourceWarning,
-) -> Option<TextLocation> {
+) -> Option<SourceLocation> {
     let start = warning.start_offset;
     let end_inclusive = warning.end_offset.saturating_sub(1).max(start);
 
@@ -135,14 +129,14 @@ fn map_warning_span_to_text_location(
         return Some(start_point);
     }
 
-    Some(TextLocation {
+    Some(SourceLocation {
         scope: start_point.scope,
         start_pos: start_point.start_pos,
         end_pos: end_point.end_pos,
     })
 }
 
-fn map_offset_to_point_location(spans: &[BodySourceSpan], offset: usize) -> Option<TextLocation> {
+fn map_offset_to_point_location(spans: &[BodySourceSpan], offset: usize) -> Option<SourceLocation> {
     let total_chars = spans.last().map(|span| span.end_offset)?;
     if total_chars == 0 {
         return None;
@@ -156,7 +150,7 @@ fn map_offset_to_point_location(spans: &[BodySourceSpan], offset: usize) -> Opti
     let local_offset = clamped_offset.saturating_sub(span.start_offset);
     let position = position_after_chars(&span.location.start_pos, &span.text, local_offset);
 
-    Some(TextLocation {
+    Some(SourceLocation {
         scope: span.location.scope.to_owned(),
         start_pos: position,
         end_pos: position,

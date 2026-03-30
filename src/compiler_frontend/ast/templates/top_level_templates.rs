@@ -19,7 +19,7 @@ use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
-use crate::compiler_frontend::tokenizer::tokens::TextLocation;
+use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::projects::settings::{IMPLICIT_START_FUNC_NAME, TOP_LEVEL_TEMPLATE_NAME};
 use rustc_hash::{FxHashMap, FxHashSet};
 
@@ -28,11 +28,11 @@ pub enum AstStartTemplateItem {
     ConstString {
         value: StringId,
         #[allow(dead_code)] // Preserved for future source-mapping and error reporting
-        location: TextLocation,
+        location: SourceLocation,
     },
     RuntimeStringFunction {
         function: InternedPath,
-        location: TextLocation,
+        location: SourceLocation,
     },
 }
 
@@ -45,13 +45,13 @@ pub enum AstDocFragmentKind {
 pub struct AstDocFragment {
     pub kind: AstDocFragmentKind,
     pub value: StringId,
-    pub location: TextLocation,
+    pub location: SourceLocation,
 }
 
 #[derive(Clone)]
 struct RuntimeTemplateCandidate {
     declaration: Declaration,
-    location: TextLocation,
+    location: SourceLocation,
     scope: InternedPath,
     preceding_statements: Vec<AstNode>,
 }
@@ -297,7 +297,7 @@ fn fold_template_with_context(
 enum OrderedFragmentSource {
     Const {
         value: StringId,
-        location: TextLocation,
+        location: SourceLocation,
     },
     Runtime(RuntimeTemplateCandidate),
 }
@@ -321,7 +321,7 @@ fn compare_fragment_locations(
         )
 }
 
-fn fragment_source_location(source: &OrderedFragmentSource) -> &TextLocation {
+fn fragment_source_location(source: &OrderedFragmentSource) -> &SourceLocation {
     match source {
         OrderedFragmentSource::Const { location, .. } => location,
         OrderedFragmentSource::Runtime(candidate) => &candidate.location,
@@ -401,7 +401,7 @@ fn as_top_level_template_declaration<'a>(
 
 fn build_runtime_fragment_body(
     candidate: &RuntimeTemplateCandidate,
-    string_table: &StringTable,
+    _string_table: &StringTable,
 ) -> Result<Vec<AstNode>, CompilerError> {
     // 1) Collect all referenced symbols in the template expression.
     // 2) Pull in only the declaration statements needed to evaluate that expression.
@@ -462,7 +462,7 @@ fn build_runtime_fragment_body(
         {
             return Err(CompilerError::new_rule_error(
                 "Runtime start-fragment captures currently do not support mutable reassignments before template evaluation.",
-                statement.location.to_error_location(string_table),
+                statement.location.clone(),
             ));
         }
     }

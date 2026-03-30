@@ -4,7 +4,7 @@
 //! terminators.
 
 use crate::compiler_frontend::ast::ast_nodes::{
-    AstNode, Declaration, ForLoopRange, NodeKind, TextLocation,
+    AstNode, Declaration, ForLoopRange, NodeKind, SourceLocation,
 };
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
@@ -62,7 +62,7 @@ impl<'a> HirBuilder<'a> {
         function_name: &InternedPath,
         signature: &FunctionSignature,
         body: &[AstNode],
-        location: &TextLocation,
+        location: &SourceLocation,
     ) -> Result<(), CompilerError> {
         let function_id = self.resolve_function_id_or_error(function_name, location)?;
 
@@ -182,7 +182,7 @@ impl<'a> HirBuilder<'a> {
         function_id: FunctionId,
         signature: &FunctionSignature,
         body: &[AstNode],
-        location: &TextLocation,
+        location: &SourceLocation,
     ) -> Result<(), CompilerError> {
         let return_type = self
             .function_by_id_or_error(function_id, location)?
@@ -221,7 +221,7 @@ impl<'a> HirBuilder<'a> {
         &mut self,
         target: &AstNode,
         value: &Expression,
-        location: &TextLocation,
+        location: &SourceLocation,
     ) -> Result<(), CompilerError> {
         let (target_prelude, target_place) = self.lower_ast_node_to_place(target)?;
         let lowered_value = self.lower_expression(value)?;
@@ -247,7 +247,7 @@ impl<'a> HirBuilder<'a> {
         &mut self,
         target: CallTarget,
         args: &[Expression],
-        location: &TextLocation,
+        location: &SourceLocation,
     ) -> Result<(), CompilerError> {
         let mut lowered_args = Vec::with_capacity(args.len());
 
@@ -272,7 +272,7 @@ impl<'a> HirBuilder<'a> {
     fn lower_expression_statement(
         &mut self,
         expression: &Expression,
-        location: &TextLocation,
+        location: &SourceLocation,
     ) -> Result<(), CompilerError> {
         let lowered = self.lower_expression(expression)?;
 
@@ -290,7 +290,7 @@ impl<'a> HirBuilder<'a> {
     fn lower_field_access_statement(
         &mut self,
         field_access_node: &AstNode,
-        location: &TextLocation,
+        location: &SourceLocation,
     ) -> Result<(), CompilerError> {
         let lowered = self.lower_ast_node_as_expression(field_access_node)?;
 
@@ -310,7 +310,7 @@ impl<'a> HirBuilder<'a> {
         binding: &Declaration,
         range: &ForLoopRange,
         body: &[AstNode],
-        location: &TextLocation,
+        location: &SourceLocation,
     ) -> Result<(), CompilerError> {
         // For-loop lowering is intentionally split into a dedicated submodule to keep this file
         // focused on statement dispatch and shared lowering helpers.
@@ -320,7 +320,7 @@ impl<'a> HirBuilder<'a> {
     fn emit_statement_kind(
         &mut self,
         kind: HirStatementKind,
-        location: &TextLocation,
+        location: &SourceLocation,
     ) -> Result<(), CompilerError> {
         let statement = HirStatement {
             id: self.allocate_node_id(),
@@ -340,7 +340,7 @@ impl<'a> HirBuilder<'a> {
         hir_log!(format!("[HIR][Stmt] Lowered {:?}", _node.kind));
     }
 
-    fn log_block_created(&self, _block_id: BlockId, _label: &str, _location: &TextLocation) {
+    fn log_block_created(&self, _block_id: BlockId, _label: &str, _location: &SourceLocation) {
         hir_log!(format!(
             "[HIR][CFG] Created block {} ({}) @ {:?}",
             _block_id, _label, _location
@@ -355,7 +355,7 @@ impl<'a> HirBuilder<'a> {
         &self,
         _block_id: BlockId,
         _terminator: &HirTerminator,
-        _location: &TextLocation,
+        _location: &SourceLocation,
     ) {
         hir_log!(format!(
             "[HIR][CFG] Terminator for {} @ {:?}: {}",

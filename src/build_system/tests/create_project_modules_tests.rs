@@ -1,8 +1,10 @@
 use super::*;
-use crate::compiler_frontend::compiler_errors::ErrorType;
+use crate::build_system::project_config::parse_project_config_file;
+use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages, ErrorType};
 use crate::compiler_frontend::paths::path_resolution::{
     ProjectPathResolver, resolve_project_entry_root,
 };
+use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use std::collections::HashSet;
 use std::ffi::OsStr;
@@ -32,6 +34,34 @@ fn test_style_directives() -> StyleDirectiveRegistry {
     StyleDirectiveRegistry::built_ins()
 }
 
+fn parse_project_config_for_test(
+    config: &mut Config,
+    config_path: &std::path::Path,
+    style_directives: &StyleDirectiveRegistry,
+) -> Result<(), CompilerMessages> {
+    let mut string_table = StringTable::new();
+    parse_project_config_file(config, config_path, style_directives, &mut string_table)
+}
+
+fn discover_modules_for_test(
+    config: &Config,
+    resolver: &ProjectPathResolver,
+    style_directives: &StyleDirectiveRegistry,
+) -> Result<Vec<DiscoveredModule>, CompilerError> {
+    let mut string_table = StringTable::new();
+    discover_all_modules_in_project(config, resolver, style_directives, &mut string_table)
+}
+
+fn discover_modules_for_test_messages(
+    config: &Config,
+    resolver: &ProjectPathResolver,
+    style_directives: &StyleDirectiveRegistry,
+) -> Result<Vec<DiscoveredModule>, CompilerMessages> {
+    let mut string_table = StringTable::new();
+    discover_all_modules_in_project(config, resolver, style_directives, &mut string_table)
+        .map_err(|error| CompilerMessages::from_error(error, string_table))
+}
+
 #[test]
 fn parses_config_constant_declarations() {
     let root = temp_dir("config_constants");
@@ -46,7 +76,7 @@ fn parses_config_constant_declarations() {
 
     let mut config = Config::new(root.clone());
     let style_directives = test_style_directives();
-    parse_project_config_file(&mut config, &config_path, &style_directives)
+    parse_project_config_for_test(&mut config, &config_path, &style_directives)
         .expect("config should parse");
 
     assert_eq!(config.entry_root, PathBuf::from("src"));
@@ -85,7 +115,7 @@ fn rejects_legacy_config_assignment_syntax() {
 
     let mut config = Config::new(root.clone());
     let style_directives = test_style_directives();
-    let messages = parse_project_config_file(&mut config, &config_path, &style_directives)
+    let messages = parse_project_config_for_test(&mut config, &config_path, &style_directives)
         .expect_err("config should fail");
 
     assert!(
@@ -114,7 +144,7 @@ fn rejects_deprecated_src_config_key() {
 
     let mut config = Config::new(root.clone());
     let style_directives = test_style_directives();
-    let messages = parse_project_config_file(&mut config, &config_path, &style_directives)
+    let messages = parse_project_config_for_test(&mut config, &config_path, &style_directives)
         .expect_err("config should fail");
 
     assert!(
@@ -141,7 +171,7 @@ fn rejects_legacy_libraries_config_key() {
 
     let mut config = Config::new(root.clone());
     let style_directives = test_style_directives();
-    let messages = parse_project_config_file(&mut config, &config_path, &style_directives)
+    let messages = parse_project_config_for_test(&mut config, &config_path, &style_directives)
         .expect_err("config should fail");
 
     assert!(
@@ -168,7 +198,7 @@ fn rejects_invalid_root_folder_entries() {
 
     let mut config = Config::new(root.clone());
     let style_directives = test_style_directives();
-    let messages = parse_project_config_file(&mut config, &config_path, &style_directives)
+    let messages = parse_project_config_for_test(&mut config, &config_path, &style_directives)
         .expect_err("config should fail");
 
     assert!(
@@ -180,6 +210,81 @@ fn rejects_invalid_root_folder_entries() {
         error.msg.contains("single top-level folder name"),
         "unexpected error message: {}",
         error.msg
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn malformed_import_syntax_keeps_precise_location_during_module_discovery() {
+    let root = temp_dir("malformed_import_location");
+    let src = root.join("src");
+    fs::create_dir_all(&src).expect("should create src dir");
+    fs::write(
+        root.join(settings::CONFIG_FILE_NAME),
+        "#entry_root = \"src\"\n",
+    )
+    .expect("should write config");
+    fs::write(src.join("#page.bst"), "import\n#[:ok]\n").expect("should write malformed entry");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test(
+        &mut config,
+        &root.join(settings::CONFIG_FILE_NAME),
+        &style_directives,
+    )
+    .expect("config should parse");
+    let resolver = configured_resolver(&config);
+    let messages =
+        match discover_modules_for_test_messages(&config, &resolver, &style_directives) {
+            Ok(_) => panic!("malformed import should fail discovery"),
+            Err(messages) => messages,
+        };
+
+    assert_eq!(messages.errors.len(), 1);
+    let error = &messages.errors[0];
+    assert_eq!(
+        error.location.scope.to_path_buf(&messages.string_table),
+        src.join("#page.bst")
+            .canonicalize()
+            .expect("entry file path should canonicalize")
+    );
+    assert_eq!(error.location.start_pos.line_number, 1);
+    assert_eq!(error.location.start_pos.char_column, 1);
+    assert!(
+        error
+            .msg
+            .contains("Expected a path after the 'import' keyword")
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn config_import_parse_failure_keeps_precise_location_in_compiler_messages() {
+    let root = temp_dir("config_import_location");
+    fs::create_dir_all(&root).expect("should create root dir");
+    let config_path = root.join(settings::CONFIG_FILE_NAME);
+    fs::write(&config_path, "import\n").expect("should write malformed config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    let messages = parse_project_config_for_test(&mut config, &config_path, &style_directives)
+        .expect_err("config should fail");
+
+    assert_eq!(messages.errors.len(), 1);
+    let error = &messages.errors[0];
+    assert_eq!(
+        error.location.scope.to_path_buf(&messages.string_table),
+        config_path
+    );
+    assert_eq!(error.location.start_pos.line_number, 1);
+    assert_eq!(error.location.start_pos.char_column, 0);
+    assert!(
+        error
+            .msg
+            .contains("Expected a path after the 'import' keyword")
     );
 
     fs::remove_dir_all(&root).expect("should remove temp root");
@@ -208,7 +313,7 @@ fn discover_modules_uses_reachable_files_only() {
 
     let mut config = Config::new(root.clone());
     let style_directives = test_style_directives();
-    parse_project_config_file(
+    parse_project_config_for_test(
         &mut config,
         &root.join(settings::CONFIG_FILE_NAME),
         &style_directives,
@@ -216,7 +321,7 @@ fn discover_modules_uses_reachable_files_only() {
     .expect("config parse");
     let resolver = configured_resolver(&config);
 
-    let modules = discover_all_modules_in_project(&config, &resolver, &style_directives)
+    let modules = discover_modules_for_test(&config, &resolver, &style_directives)
         .expect("module discovery should pass");
 
     assert_eq!(modules.len(), 2);
@@ -258,7 +363,7 @@ fn parses_root_folders_variants_and_dedupes_entries() {
 
     let mut config = Config::new(root.clone());
     let style_directives = test_style_directives();
-    parse_project_config_file(&mut config, &config_path, &style_directives)
+    parse_project_config_for_test(&mut config, &config_path, &style_directives)
         .expect("config should parse");
 
     assert_eq!(
@@ -296,7 +401,7 @@ fn discover_modules_resolves_relative_imports_with_dot_segments() {
 
     let mut config = Config::new(root.clone());
     let style_directives = test_style_directives();
-    parse_project_config_file(
+    parse_project_config_for_test(
         &mut config,
         &root.join(settings::CONFIG_FILE_NAME),
         &style_directives,
@@ -304,7 +409,7 @@ fn discover_modules_resolves_relative_imports_with_dot_segments() {
     .expect("config parse");
     let resolver = configured_resolver(&config);
 
-    let modules = discover_all_modules_in_project(&config, &resolver, &style_directives)
+    let modules = discover_modules_for_test(&config, &resolver, &style_directives)
         .expect("module discovery should pass");
     assert_eq!(modules.len(), 1, "expected exactly one entry module");
 
@@ -351,7 +456,7 @@ fn entry_root_fallback_wins_for_unmatched_non_relative_imports() {
 
     let mut config = Config::new(root.clone());
     let style_directives = test_style_directives();
-    parse_project_config_file(
+    parse_project_config_for_test(
         &mut config,
         &root.join(settings::CONFIG_FILE_NAME),
         &style_directives,
@@ -359,7 +464,7 @@ fn entry_root_fallback_wins_for_unmatched_non_relative_imports() {
     .expect("config parse");
     let resolver = configured_resolver(&config);
 
-    let modules = discover_all_modules_in_project(&config, &resolver, &style_directives)
+    let modules = discover_modules_for_test(&config, &resolver, &style_directives)
         .expect("module discovery should pass");
     assert_eq!(modules.len(), 1, "expected exactly one entry module");
 
@@ -401,7 +506,7 @@ fn discover_all_modules_finds_multiple_hash_entries_per_root() {
 
     let mut config = Config::new(root.clone());
     let style_directives = test_style_directives();
-    parse_project_config_file(
+    parse_project_config_for_test(
         &mut config,
         &root.join(settings::CONFIG_FILE_NAME),
         &style_directives,
@@ -409,7 +514,7 @@ fn discover_all_modules_finds_multiple_hash_entries_per_root() {
     .expect("config parse");
     let resolver = configured_resolver(&config);
 
-    let modules = discover_all_modules_in_project(&config, &resolver, &style_directives)
+    let modules = discover_modules_for_test(&config, &resolver, &style_directives)
         .expect("module discovery should pass");
     assert_eq!(
         modules.len(),
@@ -462,7 +567,7 @@ fn explicit_root_folder_imports_resolve_from_project_root() {
 
     let mut config = Config::new(root.clone());
     let style_directives = test_style_directives();
-    parse_project_config_file(
+    parse_project_config_for_test(
         &mut config,
         &root.join(settings::CONFIG_FILE_NAME),
         &style_directives,
@@ -470,7 +575,7 @@ fn explicit_root_folder_imports_resolve_from_project_root() {
     .expect("config parse");
     let resolver = configured_resolver(&config);
 
-    let modules = discover_all_modules_in_project(&config, &resolver, &style_directives)
+    let modules = discover_modules_for_test(&config, &resolver, &style_directives)
         .expect("module discovery should pass");
     let discovered_paths = modules[0]
         .input_files
@@ -501,7 +606,7 @@ fn rejects_entry_root_folder_that_conflicts_with_root_folder_name() {
 
     let mut config = Config::new(root.clone());
     let style_directives = test_style_directives();
-    parse_project_config_file(
+    parse_project_config_for_test(
         &mut config,
         &root.join(settings::CONFIG_FILE_NAME),
         &style_directives,
@@ -509,7 +614,7 @@ fn rejects_entry_root_folder_that_conflicts_with_root_folder_name() {
     .expect("config parse");
     let resolver = configured_resolver(&config);
 
-    let error = match discover_all_modules_in_project(&config, &resolver, &style_directives) {
+    let error = match discover_modules_for_test(&config, &resolver, &style_directives) {
         Ok(_) => panic!("conflicting src/lib folder should fail"),
         Err(error) => error,
     };
@@ -546,7 +651,7 @@ fn detects_duplicate_config_keys() {
 
     let mut config = Config::new(root.clone());
     let style_directives = test_style_directives();
-    let messages = parse_project_config_file(&mut config, &config_path, &style_directives)
+    let messages = parse_project_config_for_test(&mut config, &config_path, &style_directives)
         .expect_err("config should fail");
 
     assert!(

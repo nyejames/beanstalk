@@ -12,7 +12,7 @@ use crate::compiler_frontend::datatypes::{DataType, Ownership, PathTypeKind};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_resolution::CompileTimePaths;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
-use crate::compiler_frontend::tokenizer::tokens::TextLocation;
+use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
 // Expressions represent anything that will turn into a value
 // Their kind will represent what their value is.
@@ -24,7 +24,7 @@ pub struct Expression {
     pub kind: ExpressionKind,
     pub data_type: DataType,
     pub ownership: Ownership,
-    pub location: TextLocation,
+    pub location: SourceLocation,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -102,7 +102,7 @@ impl Expression {
 
     pub fn new(
         kind: ExpressionKind,
-        location: TextLocation,
+        location: SourceLocation,
         data_type: DataType,
         ownership: Ownership,
     ) -> Self {
@@ -118,7 +118,7 @@ impl Expression {
     fn scalar_literal(
         kind: ExpressionKind,
         data_type: DataType,
-        location: TextLocation,
+        location: SourceLocation,
         ownership: Ownership,
     ) -> Self {
         Self::new(kind, location, data_type, ownership)
@@ -140,7 +140,7 @@ impl Expression {
     fn call_expression(
         kind: ExpressionKind,
         result_types: Vec<DataType>,
-        location: TextLocation,
+        location: SourceLocation,
     ) -> Self {
         Self::new(
             kind,
@@ -157,7 +157,7 @@ impl Expression {
     pub fn none() -> Self {
         Self::new(
             ExpressionKind::None,
-            TextLocation::default(),
+            SourceLocation::default(),
             DataType::None,
             Ownership::default(),
         )
@@ -165,7 +165,7 @@ impl Expression {
     pub fn runtime(
         expressions: Vec<AstNode>,
         data_type: DataType,
-        location: TextLocation,
+        location: SourceLocation,
         ownership: Ownership,
     ) -> Self {
         Self::new(
@@ -175,7 +175,7 @@ impl Expression {
             ownership,
         )
     }
-    pub fn int(value: i64, location: TextLocation, ownership: Ownership) -> Self {
+    pub fn int(value: i64, location: SourceLocation, ownership: Ownership) -> Self {
         Self::scalar_literal(
             ExpressionKind::Int(value),
             DataType::Int,
@@ -183,7 +183,7 @@ impl Expression {
             ownership,
         )
     }
-    pub fn float(value: f64, location: TextLocation, ownership: Ownership) -> Self {
+    pub fn float(value: f64, location: SourceLocation, ownership: Ownership) -> Self {
         Self::scalar_literal(
             ExpressionKind::Float(value),
             DataType::Float,
@@ -191,7 +191,7 @@ impl Expression {
             ownership,
         )
     }
-    pub fn string_slice(value: StringId, location: TextLocation, ownership: Ownership) -> Self {
+    pub fn string_slice(value: StringId, location: SourceLocation, ownership: Ownership) -> Self {
         Self::scalar_literal(
             ExpressionKind::StringSlice(value),
             DataType::StringSlice,
@@ -199,7 +199,7 @@ impl Expression {
             ownership,
         )
     }
-    pub fn bool(value: bool, location: TextLocation, ownership: Ownership) -> Self {
+    pub fn bool(value: bool, location: SourceLocation, ownership: Ownership) -> Self {
         Self::scalar_literal(
             ExpressionKind::Bool(value),
             DataType::Bool,
@@ -207,7 +207,7 @@ impl Expression {
             ownership,
         )
     }
-    pub fn char(value: char, location: TextLocation, ownership: Ownership) -> Self {
+    pub fn char(value: char, location: SourceLocation, ownership: Ownership) -> Self {
         Self::scalar_literal(
             ExpressionKind::Char(value),
             DataType::Char,
@@ -217,7 +217,7 @@ impl Expression {
     }
 
     #[allow(dead_code)] // TODO - path expressions MAYBE????
-    pub fn path(compile_time_paths: CompileTimePaths, location: TextLocation) -> Self {
+    pub fn path(compile_time_paths: CompileTimePaths, location: SourceLocation) -> Self {
         // Derives the path type kind from the first resolved path.
         let path_type_kind = compile_time_paths
             .paths
@@ -235,7 +235,7 @@ impl Expression {
     pub fn reference(
         id: InternedPath,
         data_type: DataType,
-        location: TextLocation,
+        location: SourceLocation,
         ownership: Ownership,
     ) -> Self {
         Self::new(
@@ -251,7 +251,7 @@ impl Expression {
         receiver: Option<DataType>,
         signature: FunctionSignature,
         body: Vec<AstNode>,
-        location: TextLocation,
+        location: SourceLocation,
     ) -> Self {
         let function_data_type = DataType::Function(Box::new(receiver), signature.clone());
         Self::new(
@@ -267,7 +267,7 @@ impl Expression {
         name: InternedPath,
         args: Vec<Expression>,
         result_types: Vec<DataType>,
-        location: TextLocation,
+        location: SourceLocation,
     ) -> Self {
         Self::call_expression(
             ExpressionKind::FunctionCall(name, args),
@@ -280,7 +280,7 @@ impl Expression {
         name: InternedPath,
         args: Vec<Expression>,
         result_types: Vec<DataType>,
-        location: TextLocation,
+        location: SourceLocation,
     ) -> Self {
         Self::call_expression(
             ExpressionKind::HostFunctionCall(name, args),
@@ -291,7 +291,7 @@ impl Expression {
 
     pub fn collection(
         items: Vec<Expression>,
-        location: TextLocation,
+        location: SourceLocation,
         ownership: Ownership,
     ) -> Self {
         let inner_type = items
@@ -308,7 +308,7 @@ impl Expression {
     }
     pub fn struct_instance(
         args: Vec<Declaration>,
-        location: TextLocation,
+        location: SourceLocation,
         ownership: Ownership,
     ) -> Self {
         let struct_type = DataType::Struct(args.to_owned(), ownership.to_owned());
@@ -321,7 +321,7 @@ impl Expression {
     }
     pub fn struct_definition(
         args: Vec<Declaration>,
-        location: TextLocation,
+        location: SourceLocation,
         ownership: Ownership,
     ) -> Self {
         Self::new(
@@ -345,7 +345,7 @@ impl Expression {
     pub fn range(
         lower: Expression,
         upper: Expression,
-        location: TextLocation,
+        location: SourceLocation,
         ownership: Ownership,
     ) -> Self {
         Self::new(
@@ -360,7 +360,7 @@ impl Expression {
     pub fn parameter(
         name: InternedPath,
         data_type: DataType,
-        location: TextLocation,
+        location: SourceLocation,
         ownership: Ownership,
     ) -> Self {
         Self::new(
@@ -374,7 +374,7 @@ impl Expression {
     pub fn copy(
         place: AstNode,
         data_type: DataType,
-        location: TextLocation,
+        location: SourceLocation,
         ownership: Ownership,
     ) -> Self {
         Self::new(

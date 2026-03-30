@@ -10,7 +10,7 @@ use crate::compiler_frontend::analysis::borrow_checker::state::{
 use crate::compiler_frontend::analysis::borrow_checker::types::{
     LocalMode, StatementBorrowFact, TerminatorBorrowFact, ValueAccessClassification,
 };
-use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorLocation};
+use crate::compiler_frontend::compiler_errors::{CompilerError, SourceLocation};
 use crate::compiler_frontend::hir::hir_nodes::{
     BlockId, HirExpression, HirExpressionKind, HirMatchArm, HirPattern, HirPlace, HirStatement,
     HirStatementKind, HirTerminator, OptionVariant, ValueKind,
@@ -38,7 +38,7 @@ struct SharedReadEnv<'a, 'module> {
     layout: &'a FunctionLayout,
     state: &'a BorrowState,
     tracker: &'a mut StatementAccessTracker,
-    location: ErrorLocation,
+    location: SourceLocation,
     current_order: i32,
     stats: &'a mut BlockTransferStats,
     value_fact_buffer: &'a mut ValueFactBuffer,
@@ -51,7 +51,7 @@ struct AccessCheckContext<'a, 'module> {
     layout: &'a FunctionLayout,
     state: &'a BorrowState,
     tracker: &'a mut StatementAccessTracker,
-    location: ErrorLocation,
+    location: SourceLocation,
     stats: &'a mut BlockTransferStats,
     actor_index_hint: Option<usize>,
     current_order: i32,
@@ -558,7 +558,7 @@ fn transfer_assign_target(
     block_id: BlockId,
     current_order: i32,
     tracker: &mut StatementAccessTracker,
-    location: ErrorLocation,
+    location: SourceLocation,
     stats: &mut BlockTransferStats,
     target: &HirPlace,
     value: &HirExpression,
@@ -786,7 +786,7 @@ fn mutable_argument_roots(
     layout: &FunctionLayout,
     state: &BorrowState,
     expression: &HirExpression,
-    location: ErrorLocation,
+    location: SourceLocation,
 ) -> Result<RootSet, CompilerError> {
     if let HirExpressionKind::Load(place) = &expression.kind {
         return roots_for_place(layout, state, place, location);
@@ -801,7 +801,7 @@ fn direct_place_roots_from_expression(
     layout: &FunctionLayout,
     state: &BorrowState,
     expression: &HirExpression,
-    location: ErrorLocation,
+    location: SourceLocation,
 ) -> Result<Option<RootSet>, CompilerError> {
     let HirExpressionKind::Load(place) = &expression.kind else {
         return Ok(None);
@@ -860,7 +860,7 @@ fn roots_for_place(
     layout: &FunctionLayout,
     state: &BorrowState,
     place: &HirPlace,
-    location: ErrorLocation,
+    location: SourceLocation,
 ) -> Result<RootSet, CompilerError> {
     match place {
         HirPlace::Local(local_id) => {
@@ -904,7 +904,7 @@ fn roots_for_place(
 fn record_shared_reads_in_place_indices(
     env: &mut SharedReadEnv<'_, '_>,
     place: &HirPlace,
-    location: ErrorLocation,
+    location: SourceLocation,
 ) -> Result<(), CompilerError> {
     match place {
         HirPlace::Local(_) => Ok(()),
@@ -921,7 +921,7 @@ fn record_shared_reads_in_place_indices(
 fn record_shared_reads_in_expression(
     env: &mut SharedReadEnv<'_, '_>,
     expression: &HirExpression,
-    location: ErrorLocation,
+    location: SourceLocation,
 ) -> Result<(), CompilerError> {
     match &expression.kind {
         HirExpressionKind::Int(_)
@@ -1047,7 +1047,7 @@ fn collect_expression_roots(
     state: &BorrowState,
     expression: &HirExpression,
     out: &mut RootSet,
-    location: ErrorLocation,
+    location: SourceLocation,
 ) -> Result<(), CompilerError> {
     match &expression.kind {
         HirExpressionKind::Load(place) => {

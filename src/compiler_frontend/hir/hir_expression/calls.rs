@@ -13,7 +13,7 @@ use crate::compiler_frontend::hir::hir_nodes::{
     HirExpressionKind, HirPlace, HirStatement, HirStatementKind, ValueKind,
 };
 use crate::compiler_frontend::host_functions::CallTarget;
-use crate::compiler_frontend::tokenizer::tokens::TextLocation;
+use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
 use super::LoweredExpression;
 
@@ -26,7 +26,7 @@ impl<'a> HirBuilder<'a> {
         target: CallTarget,
         args: &[Expression],
         result_types: &[DataType],
-        location: &TextLocation,
+        location: &SourceLocation,
     ) -> Result<LoweredExpression, CompilerError> {
         let mut prelude = Vec::new();
         let mut lowered_args = Vec::with_capacity(args.len());

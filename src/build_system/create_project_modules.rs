@@ -24,10 +24,6 @@ use crate::compiler_frontend::{CompilerFrontend, Flag, FrontendBuildProfile};
 use crate::projects::settings;
 use crate::projects::settings::{BEANSTALK_FILE_EXTENSION, Config};
 use crate::{borrow_log, return_err_as_messages, return_file_error, timer_log};
-
-// Re-export so existing tests can access `parse_project_config_file` via `super::*`
-#[cfg(test)]
-pub(crate) use crate::build_system::project_config::parse_project_config_file;
 use std::collections::{BTreeSet, VecDeque};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -40,7 +36,189 @@ struct DiscoveredModule {
 
 struct ParsedImportPaths {
     paths: Vec<InternedPath>,
-    string_table: StringTable,
+}
+
+struct FrontendModuleBuildContext<'a> {
+    config: &'a Config,
+    build_profile: FrontendBuildProfile,
+    project_path_resolver: Option<ProjectPathResolver>,
+    style_directives: &'a StyleDirectiveRegistry,
+    string_table: &'a mut StringTable,
+}
+
+impl FrontendModuleBuildContext<'_> {
+    /// Compile one discovered module through the full frontend pipeline.
+    ///
+    /// WHAT: owns the long-lived frontend context shared across tokenization, headers, AST, HIR,
+    /// and borrow checking for a single module.
+    /// WHY: bundling these inputs together keeps call sites short and makes the `StringTable`
+    /// handoff between orchestration and `CompilerFrontend` explicit in one place.
+    fn compile_module(
+        self,
+        module: Vec<InputFile>,
+        entry_file_path: &Path,
+    ) -> Result<Module, CompilerMessages> {
+        let mut compiler = CompilerFrontend::new(
+            self.config,
+            std::mem::take(self.string_table),
+            self.style_directives.to_owned(),
+            self.project_path_resolver,
+            NewlineMode::NormalizeToLf,
+        );
+
+        let canonical_files = module
+            .iter()
+            .map(|input_file| input_file.source_path.to_owned())
+            .collect::<Vec<_>>();
+        let source_files = match SourceFileTable::build(
+            &canonical_files,
+            entry_file_path,
+            compiler.project_path_resolver.as_ref(),
+            &mut compiler.string_table,
+        ) {
+            Ok(source_files) => source_files,
+            Err(error) => {
+                return Err(CompilerMessages::from_error(error, compiler.string_table));
+            }
+        };
+        compiler.set_source_files(source_files);
+
+        let _time = Instant::now();
+
+        let tokenizer_result: Vec<Result<FileTokens, CompilerError>> = module
+            .iter()
+            .map(|module| {
+                compiler.source_to_tokens(
+                    &module.source_code,
+                    &module.source_path,
+                    TokenizeMode::Normal,
+                )
+            })
+            .collect();
+
+        let mut project_tokens = Vec::with_capacity(tokenizer_result.len());
+        let mut errors = Vec::new();
+        let mut warnings = Vec::new();
+        for file in tokenizer_result {
+            match file {
+                Ok(tokens) => project_tokens.push(tokens),
+                Err(error) => errors.push(error),
+            }
+        }
+
+        if !errors.is_empty() {
+            return Err(CompilerMessages {
+                errors,
+                warnings,
+                string_table: compiler.string_table,
+            });
+        }
+
+        timer_log!(_time, "Tokenized in: ");
+
+        let _time = Instant::now();
+        let module_headers =
+            match compiler.tokens_to_headers(project_tokens, &mut warnings, entry_file_path) {
+                Ok(headers) => headers,
+                Err(header_errors) => {
+                    return Err(CompilerMessages {
+                        errors: header_errors,
+                        warnings,
+                        string_table: compiler.string_table,
+                    });
+                }
+            };
+
+        timer_log!(_time, "Headers Parsed in: ");
+
+        let _time = Instant::now();
+        let sorted_modules = match compiler.sort_headers(module_headers.headers) {
+            Ok(modules) => modules,
+            Err(header_errors) => {
+                return Err(CompilerMessages {
+                    errors: header_errors,
+                    warnings,
+                    string_table: compiler.string_table,
+                });
+            }
+        };
+
+        timer_log!(_time, "Dependency graph created in: ");
+
+        let _time = Instant::now();
+        let module_ast = match compiler.headers_to_ast(
+            sorted_modules,
+            module_headers.top_level_template_items,
+            entry_file_path,
+            self.build_profile,
+        ) {
+            Ok(parser_output) => {
+                warnings.extend(parser_output.warnings.clone());
+                parser_output
+            }
+            Err(messages) => {
+                warnings.extend(messages.warnings);
+                return Err(CompilerMessages {
+                    errors: messages.errors,
+                    warnings,
+                    string_table: compiler.string_table,
+                });
+            }
+        };
+
+        timer_log!(_time, "AST created in: ");
+
+        let _time = Instant::now();
+        let hir_module = match compiler.generate_hir(module_ast) {
+            Ok(nodes) => nodes,
+            Err(messages) => {
+                warnings.extend(messages.warnings);
+                return Err(CompilerMessages {
+                    errors: messages.errors,
+                    warnings,
+                    string_table: compiler.string_table,
+                });
+            }
+        };
+
+        timer_log!(_time, "HIR generated in: ");
+
+        let _time = Instant::now();
+        let borrow_analysis = match compiler.check_borrows(&hir_module) {
+            Ok(outcome) => outcome,
+            Err(messages) => {
+                warnings.extend(messages.warnings);
+                return Err(CompilerMessages {
+                    errors: messages.errors,
+                    warnings,
+                    string_table: compiler.string_table,
+                });
+            }
+        };
+
+        timer_log!(_time, "Borrow checking completed in: ");
+
+        borrow_log!("=== BORROW CHECKER OUTPUT ===");
+        borrow_log!(format!(
+            "Borrow checking completed successfully (states={} functions={} blocks={} conflicts_checked={} stmt_facts={} term_facts={} value_facts={})",
+            borrow_analysis.analysis.total_state_snapshots(),
+            borrow_analysis.stats.functions_analyzed,
+            borrow_analysis.stats.blocks_analyzed,
+            borrow_analysis.stats.conflicts_checked,
+            borrow_analysis.analysis.statement_facts.len(),
+            borrow_analysis.analysis.terminator_facts.len(),
+            borrow_analysis.analysis.value_facts.len()
+        ));
+        borrow_log!("=== END BORROW CHECKER OUTPUT ===");
+
+        *self.string_table = compiler.string_table;
+        Ok(Module {
+            entry_point: entry_file_path.to_path_buf(),
+            hir: hir_module,
+            borrow_analysis,
+            warnings,
+        })
+    }
 }
 
 /// Compile all project modules through the frontend pipeline.
@@ -51,6 +229,7 @@ pub fn compile_project_frontend(
     config: &mut Config,
     flags: &[Flag],
     style_directives: &StyleDirectiveRegistry,
+    string_table: &mut StringTable,
 ) -> Result<Vec<Module>, CompilerMessages> {
     let build_profile = if flags.contains(&Flag::Release) {
         FrontendBuildProfile::Release
@@ -60,7 +239,13 @@ pub fn compile_project_frontend(
 
     // Dispatch: single-file entry vs. directory project.
     if let Some(extension) = config.entry_dir.extension() {
-        return compile_single_file_frontend(config, build_profile, style_directives, extension);
+        return compile_single_file_frontend(
+            config,
+            build_profile,
+            style_directives,
+            extension,
+            string_table,
+        );
     }
 
     if !config.entry_dir.is_dir() {
@@ -69,11 +254,12 @@ pub fn compile_project_frontend(
             format!(
                 "Found a file without an extension set. Beanstalk files use .{BEANSTALK_FILE_EXTENSION}"
             ),
+            string_table,
         );
         return_err_as_messages!(err);
     }
 
-    compile_directory_frontend(config, build_profile, style_directives)
+    compile_directory_frontend(config, build_profile, style_directives, string_table)
 }
 
 /// Compile a single `.bst` file as its own module.
@@ -82,6 +268,7 @@ fn compile_single_file_frontend(
     build_profile: FrontendBuildProfile,
     style_directives: &StyleDirectiveRegistry,
     extension: &std::ffi::OsStr,
+    string_table: &mut StringTable,
 ) -> Result<Vec<Module>, CompilerMessages> {
     match extension.to_str().unwrap_or_default() {
         BEANSTALK_FILE_EXTENSION => {}
@@ -91,6 +278,7 @@ fn compile_single_file_frontend(
                 format!(
                     "Unsupported file extension for compilation. Beanstalk files use .{BEANSTALK_FILE_EXTENSION}"
                 ),
+                string_table,
             );
             return_err_as_messages!(err);
         }
@@ -102,6 +290,7 @@ fn compile_single_file_frontend(
             let file_error = CompilerError::file_error(
                 &config.entry_dir,
                 format!("Failed to resolve entry file path: {error}"),
+                string_table,
             );
             return_err_as_messages!(file_error);
         }
@@ -121,16 +310,20 @@ fn compile_single_file_frontend(
         Err(error) => return_err_as_messages!(error),
     };
 
-    let input_files =
-        collect_reachable_input_files(&entry_path, &project_path_resolver, style_directives)?;
-    let module = compile_module(
-        input_files,
-        config,
+    let input_files = collect_reachable_input_files(
         &entry_path,
-        build_profile,
-        Some(project_path_resolver),
+        &project_path_resolver,
         style_directives,
+        string_table,
     )?;
+    let module = FrontendModuleBuildContext {
+        config,
+        build_profile,
+        project_path_resolver: Some(project_path_resolver),
+        style_directives,
+        string_table,
+    }
+    .compile_module(input_files, &entry_path)?;
     Ok(vec![module])
 }
 
@@ -139,25 +332,30 @@ fn compile_directory_frontend(
     config: &Config,
     build_profile: FrontendBuildProfile,
     style_directives: &StyleDirectiveRegistry,
+    string_table: &mut StringTable,
 ) -> Result<Vec<Module>, CompilerMessages> {
-    let project_path_resolver = build_project_path_resolver(config)?;
+    let project_path_resolver = build_project_path_resolver(config, string_table)?;
 
-    let discovered_modules =
-        match discover_all_modules_in_project(config, &project_path_resolver, style_directives) {
-            Ok(modules) => modules,
-            Err(error) => return_err_as_messages!(error),
-        };
+    let discovered_modules = match discover_all_modules_in_project(
+        config,
+        &project_path_resolver,
+        style_directives,
+        string_table,
+    ) {
+        Ok(modules) => modules,
+        Err(error) => return_err_as_messages!(error),
+    };
 
     let mut compiled_modules = Vec::with_capacity(discovered_modules.len());
     for discovered in discovered_modules {
-        let module = compile_module(
-            discovered.input_files,
+        let module = FrontendModuleBuildContext {
             config,
-            &discovered.entry_point,
             build_profile,
-            Some(project_path_resolver.clone()),
+            project_path_resolver: Some(project_path_resolver.clone()),
             style_directives,
-        )?;
+            string_table,
+        }
+        .compile_module(discovered.input_files, &discovered.entry_point)?;
         compiled_modules.push(module);
     }
 
@@ -168,13 +366,17 @@ fn compile_directory_frontend(
 ///
 /// WHY: both project_root and entry_root must be canonicalized before path resolution; doing
 /// this in one helper keeps the canonicalization logic in one place.
-fn build_project_path_resolver(config: &Config) -> Result<ProjectPathResolver, CompilerMessages> {
+fn build_project_path_resolver(
+    config: &Config,
+    string_table: &mut StringTable,
+) -> Result<ProjectPathResolver, CompilerMessages> {
     let project_root = match fs::canonicalize(&config.entry_dir) {
         Ok(path) => path,
         Err(error) => {
             let file_error = CompilerError::file_error(
                 &config.entry_dir,
                 format!("Failed to canonicalize project root: {error}"),
+                string_table,
             );
             return_err_as_messages!(file_error);
         }
@@ -187,6 +389,7 @@ fn build_project_path_resolver(config: &Config) -> Result<ProjectPathResolver, C
                 "Configured entry root '{}' does not exist",
                 entry_root_path.display()
             ),
+            string_table,
         );
         return_err_as_messages!(file_error);
     }
@@ -196,6 +399,7 @@ fn build_project_path_resolver(config: &Config) -> Result<ProjectPathResolver, C
             let file_error = CompilerError::file_error(
                 &entry_root_path,
                 format!("Failed to canonicalize configured entry root: {error}"),
+                string_table,
             );
             return_err_as_messages!(file_error);
         }
@@ -211,16 +415,21 @@ fn collect_reachable_input_files(
     entry_path: &Path,
     project_path_resolver: &ProjectPathResolver,
     style_directives: &StyleDirectiveRegistry,
+    string_table: &mut StringTable,
 ) -> Result<Vec<InputFile>, CompilerMessages> {
-    let reachable_files =
-        match discover_reachable_files(entry_path, project_path_resolver, style_directives) {
-            Ok(files) => files,
-            Err(error) => return_err_as_messages!(error),
-        };
+    let reachable_files = match discover_reachable_files(
+        entry_path,
+        project_path_resolver,
+        style_directives,
+        string_table,
+    ) {
+        Ok(files) => files,
+        Err(error) => return_err_as_messages!(error),
+    };
 
     let mut input_files = Vec::with_capacity(reachable_files.len());
     for source_path in reachable_files {
-        let source_code = match extract_source_code(&source_path) {
+        let source_code = match extract_source_code(&source_path, string_table) {
             Ok(code) => code,
             Err(error) => return_err_as_messages!(error),
         };
@@ -232,204 +441,16 @@ fn collect_reachable_input_files(
     Ok(input_files)
 }
 
-/// Perform the core compilation pipeline shared by all project types
-pub fn compile_module(
-    module: Vec<InputFile>,
-    config: &Config,
-    entry_file_path: &Path,
-    build_profile: FrontendBuildProfile,
-    project_path_resolver: Option<ProjectPathResolver>,
-    style_directives: &StyleDirectiveRegistry,
-) -> Result<Module, CompilerMessages> {
-    // Module capacity heuristic
-    // Just a guess of how many strings we might need to intern per file
-    const FILE_MIN_UNIQUE_SYMBOLS_CAPACITY: usize = 16;
-
-    // Create a new string table for interning strings
-    let string_table = StringTable::with_capacity(module.len() * FILE_MIN_UNIQUE_SYMBOLS_CAPACITY);
-
-    // Create the compiler_frontend instance
-    let mut compiler = CompilerFrontend::new(
-        config,
-        string_table,
-        style_directives.to_owned(),
-        project_path_resolver,
-        NewlineMode::NormalizeToLf,
-    );
-
-    let canonical_files = module
-        .iter()
-        .map(|input_file| input_file.source_path.to_owned())
-        .collect::<Vec<_>>();
-    let source_files = SourceFileTable::build(
-        &canonical_files,
-        entry_file_path,
-        compiler.project_path_resolver.as_ref(),
-        &mut compiler.string_table,
-    )
-    .map_err(CompilerMessages::from_error)?;
-    compiler.set_source_files(source_files);
-
-    let _time = Instant::now();
-
-    // ----------------------------------
-    //         Token generation
-    // ----------------------------------
-    let tokenizer_result: Vec<Result<FileTokens, CompilerError>> = module
-        .iter()
-        .map(|module| {
-            compiler.source_to_tokens(
-                &module.source_code,
-                &module.source_path,
-                TokenizeMode::Normal,
-            )
-        })
-        .collect();
-
-    // Check for any errors first
-    let mut project_tokens = Vec::with_capacity(tokenizer_result.len());
-    let mut compiler_messages = CompilerMessages::new();
-    for file in tokenizer_result {
-        match file {
-            Ok(tokens) => {
-                project_tokens.push(tokens);
-            }
-            Err(e) => {
-                compiler_messages.errors.push(e);
-            }
-        }
-    }
-
-    if !compiler_messages.errors.is_empty() {
-        return Err(compiler_messages);
-    }
-
-    timer_log!(_time, "Tokenized in: ");
-
-    // ----------------------------------
-    //           Parse Headers
-    // ----------------------------------
-    // This will parse all the top level declarations across the token_stream
-    // This is to split up the AST generation into discreet blocks and make all the public declarations known during AST generation.
-    // All imports are figured out at this stage, so each header can be ordered depending on their dependencies.
-    let _time = Instant::now();
-
-    let module_headers = match compiler.tokens_to_headers(
-        project_tokens,
-        &mut compiler_messages.warnings,
-        entry_file_path,
-    ) {
-        Ok(headers) => headers,
-        Err(e) => {
-            compiler_messages.errors.extend(e);
-            return Err(compiler_messages);
-        }
-    };
-
-    timer_log!(_time, "Headers Parsed in: ");
-
-    // ----------------------------------
-    //       Dependency resolution
-    // ----------------------------------
-    let _time = Instant::now();
-    let sorted_modules = match compiler.sort_headers(module_headers.headers) {
-        Ok(modules) => modules,
-        Err(error) => {
-            compiler_messages.errors.extend(error);
-            return Err(compiler_messages);
-        }
-    };
-
-    timer_log!(_time, "Dependency graph created in: ");
-
-    // ----------------------------------
-    //          AST generation
-    // ----------------------------------
-    let _time = Instant::now();
-    // Combine all headers into one AST for this module.
-    let module_ast = match compiler.headers_to_ast(
-        sorted_modules,
-        module_headers.top_level_template_items,
-        entry_file_path,
-        build_profile,
-    ) {
-        Ok(parser_output) => {
-            compiler_messages
-                .warnings
-                .extend(parser_output.warnings.clone());
-            parser_output
-        }
-        Err(e) => {
-            compiler_messages.errors.extend(e.errors);
-            return Err(compiler_messages);
-        }
-    };
-
-    timer_log!(_time, "AST created in: ");
-
-    // ----------------------------------
-    //          HIR generation
-    // ----------------------------------
-    let _time = Instant::now();
-
-    let hir_module = match compiler.generate_hir(module_ast) {
-        Ok(nodes) => nodes,
-        Err(e) => {
-            compiler_messages.errors.extend(e.errors);
-            compiler_messages.warnings.extend(e.warnings);
-            return Err(compiler_messages);
-        }
-    };
-
-    timer_log!(_time, "HIR generated in: ");
-
-    // ----------------------------------
-    //          BORROW CHECKING
-    // ----------------------------------
-    let _time = Instant::now();
-
-    let borrow_analysis = match compiler.check_borrows(&hir_module) {
-        Ok(outcome) => outcome,
-        Err(e) => {
-            compiler_messages.errors.extend(e.errors);
-            compiler_messages.warnings.extend(e.warnings);
-            return Err(compiler_messages);
-        }
-    };
-
-    timer_log!(_time, "Borrow checking completed in: ");
-
-    // Debug output for the borrow checker (macro-gated by `show_borrow_checker`)
-    borrow_log!("=== BORROW CHECKER OUTPUT ===");
-    borrow_log!(format!(
-        "Borrow checking completed successfully (states={} functions={} blocks={} conflicts_checked={} stmt_facts={} term_facts={} value_facts={})",
-        borrow_analysis.analysis.total_state_snapshots(),
-        borrow_analysis.stats.functions_analyzed,
-        borrow_analysis.stats.blocks_analyzed,
-        borrow_analysis.stats.conflicts_checked,
-        borrow_analysis.analysis.statement_facts.len(),
-        borrow_analysis.analysis.terminator_facts.len(),
-        borrow_analysis.analysis.value_facts.len()
-    ));
-    borrow_log!("=== END BORROW CHECKER OUTPUT ===");
-
-    Ok(Module {
-        entry_point: entry_file_path.to_path_buf(),
-        hir: hir_module,
-        borrow_analysis,
-        warnings: compiler_messages.warnings,
-        string_table: compiler.string_table,
-    })
-}
-
 fn discover_all_modules_in_project(
     config: &Config,
     project_path_resolver: &ProjectPathResolver,
     style_directives: &StyleDirectiveRegistry,
+    string_table: &mut StringTable,
 ) -> Result<Vec<DiscoveredModule>, CompilerError> {
     let source_root = resolve_project_entry_root(config);
     if !source_root.exists() {
         return_file_error!(
+            string_table,
             &source_root,
             format!(
                 "Configured entry root '{}' does not exist",
@@ -442,11 +463,12 @@ fn discover_all_modules_in_project(
         );
     }
 
-    project_path_resolver.validate_entry_root_collisions()?;
+    project_path_resolver.validate_entry_root_collisions(string_table)?;
 
-    let entry_points = discover_root_entry_files(project_path_resolver.entry_root())?;
+    let entry_points = discover_root_entry_files(project_path_resolver.entry_root(), string_table)?;
     if entry_points.is_empty() {
         return_file_error!(
+            string_table,
             project_path_resolver.entry_root(),
             "No root module entries were found. Expected at least one '#*.bst' file under the configured entry root.",
             {
@@ -458,13 +480,17 @@ fn discover_all_modules_in_project(
 
     let mut modules = Vec::with_capacity(entry_points.len());
     for entry_point in entry_points {
-        let reachable_files =
-            discover_reachable_files(&entry_point, project_path_resolver, style_directives)?;
+        let reachable_files = discover_reachable_files(
+            &entry_point,
+            project_path_resolver,
+            style_directives,
+            string_table,
+        )?;
 
         let mut input_files = Vec::with_capacity(reachable_files.len());
         for source_path in reachable_files {
             input_files.push(InputFile {
-                source_code: extract_source_code(&source_path)?,
+                source_code: extract_source_code(&source_path, string_table)?,
                 source_path,
             });
         }
@@ -478,7 +504,10 @@ fn discover_all_modules_in_project(
     Ok(modules)
 }
 
-fn discover_root_entry_files(source_root: &Path) -> Result<Vec<PathBuf>, CompilerError> {
+fn discover_root_entry_files(
+    source_root: &Path,
+    string_table: &mut StringTable,
+) -> Result<Vec<PathBuf>, CompilerError> {
     let mut discovered = Vec::new();
     let mut queue = VecDeque::new();
     queue.push_back(source_root.to_path_buf());
@@ -488,6 +517,7 @@ fn discover_root_entry_files(source_root: &Path) -> Result<Vec<PathBuf>, Compile
             CompilerError::file_error(
                 &dir,
                 format!("Failed to read directory while discovering modules: {error}"),
+                string_table,
             )
         })?;
 
@@ -496,6 +526,7 @@ fn discover_root_entry_files(source_root: &Path) -> Result<Vec<PathBuf>, Compile
                 CompilerError::file_error(
                     &dir,
                     format!("Failed to read directory entry while discovering modules: {error}"),
+                    string_table,
                 )
             })?;
             let path = entry.path();
@@ -523,6 +554,7 @@ fn discover_root_entry_files(source_root: &Path) -> Result<Vec<PathBuf>, Compile
                 CompilerError::file_error(
                     &path,
                     format!("Failed to canonicalize module entry path: {error}"),
+                    string_table,
                 )
             })?);
         }
@@ -536,6 +568,7 @@ fn discover_reachable_files(
     entry_point: &Path,
     project_path_resolver: &ProjectPathResolver,
     style_directives: &StyleDirectiveRegistry,
+    string_table: &mut StringTable,
 ) -> Result<Vec<PathBuf>, CompilerError> {
     let mut reachable = BTreeSet::new();
     let mut queue = VecDeque::new();
@@ -546,6 +579,7 @@ fn discover_reachable_files(
             CompilerError::file_error(
                 &next_file,
                 format!("Failed to canonicalize module file path: {error}"),
+                string_table,
             )
         })?;
 
@@ -557,12 +591,13 @@ fn discover_reachable_files(
             &canonical_file,
             style_directives,
             NewlineMode::NormalizeToLf,
+            string_table,
         )?;
         for import_path in &import_paths.paths {
             let resolved = project_path_resolver.resolve_import_to_file(
                 import_path,
                 &canonical_file,
-                &import_paths.string_table,
+                string_table,
             )?;
             if !reachable.contains(&resolved) {
                 queue.push_back(resolved);
@@ -577,31 +612,29 @@ fn extract_import_paths(
     file_path: &Path,
     style_directives: &StyleDirectiveRegistry,
     newline_mode: NewlineMode,
+    string_table: &mut StringTable,
 ) -> Result<ParsedImportPaths, CompilerError> {
-    let source = extract_source_code(file_path)?;
-    let mut string_table = StringTable::new();
-    let interned_path = InternedPath::from_path_buf(file_path, &mut string_table);
+    let source = extract_source_code(file_path, string_table)?;
+    let interned_path = InternedPath::from_path_buf(file_path, string_table);
     let tokens = tokenize(
         &source,
         &interned_path,
         TokenizeMode::Normal,
         newline_mode,
         style_directives,
-        &mut string_table,
-        None,
-    )
-    .map_err(|error| error.with_file_path(file_path.to_path_buf()))?;
-
-    let imports = collect_paths_from_tokens(&tokens.tokens, &string_table)
-        .map_err(|error| error.with_file_path(file_path.to_path_buf()))?;
-
-    Ok(ParsedImportPaths {
-        paths: imports,
         string_table,
-    })
+        None,
+    )?;
+
+    let imports = collect_paths_from_tokens(&tokens.tokens)?;
+
+    Ok(ParsedImportPaths { paths: imports })
 }
 
-pub fn extract_source_code(file_path: &Path) -> Result<String, CompilerError> {
+pub fn extract_source_code(
+    file_path: &Path,
+    string_table: &mut StringTable,
+) -> Result<String, CompilerError> {
     match fs::read_to_string(file_path) {
         Ok(content) => Ok(content),
         Err(e) => {
@@ -614,6 +647,7 @@ pub fn extract_source_code(file_path: &Path) -> Result<String, CompilerError> {
             };
 
             return_file_error!(
+                string_table,
                 &file_path,
                 format!("Error reading file when adding new bst files to parse: {:?}", e), {
                     CompilationStage => String::from("File System"),

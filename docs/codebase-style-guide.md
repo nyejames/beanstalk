@@ -105,17 +105,20 @@ Bad:
 
 The compiler error system is based on:
 - `CompilerError` for structured owned errors
-- `ErrorLocation` for source locations
+- `SourceLocation` for source spans and file-level diagnostic locations
 - `ErrorMetaDataKey` for structured metadata
+- `CompilerMessages` for aggregated warnings/errors plus the shared `StringTable` needed to render interned paths at boundaries
 
 Rules:
 - Be specific. Include exact tokens, types, or names.
 - Be helpful. Suggest corrections when practical.
 - Use stage-appropriate `return_*_error!` macros for user-facing errors.
 - Use `return_compiler_error!` only for internal compiler bugs or broken invariants.
-- Always include an `ErrorLocation` for user errors.
+- Always include a `SourceLocation` for user errors.
+- If a diagnostic does not come from a parsed token span, create a file-level `SourceLocation` by interning the path into the current build's shared `StringTable`.
+- Keep diagnostic paths interned until render time. Do not duplicate them as owned `PathBuf`s on warnings/errors.
 - Use the shared error helpers in `src/compiler_frontend/compiler_messages/compiler_errors.rs` for consistency.
-- Return `CompilerMessages` when producing multiple warnings and/or errors together.
+- Return `CompilerMessages` when producing multiple warnings and/or errors together, and preserve the associated `StringTable` when crossing build/rendering boundaries.
 - Return a single `CompilerError` when only one error without warnings is needed.
 - Emit warnings when warning-level behavior is more appropriate than failure. See `src/compiler_frontend/compiler_messages/compiler_warnings.rs`.
 

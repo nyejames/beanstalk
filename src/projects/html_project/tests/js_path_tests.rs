@@ -1,6 +1,7 @@
 //! Tests for the JS-only HTML rendering path.
 
 use super::*;
+use crate::compiler_frontend::string_interning::StringTable;
 use crate::projects::html_project::document_config::HtmlDocumentConfig;
 use crate::projects::html_project::tests::test_support::{
     add_callable_function, assert_has_basic_shell, create_test_hir_module, create_test_module,
@@ -10,7 +11,8 @@ use std::path::Path;
 
 #[test]
 fn js_lifecycle_order_is_static_then_bundle_then_hydration_then_start() {
-    let mut module = create_test_module(std::path::PathBuf::from("#page.bst"));
+    let mut string_table = StringTable::new();
+    let mut module = create_test_module(std::path::PathBuf::from("#page.bst"), &mut string_table);
     module.hir.start_fragments = vec![
         StartFragment::ConstString(crate::compiler_frontend::hir::hir_nodes::ConstStringId(0)),
         StartFragment::RuntimeStringFn(FunctionId(0)),
@@ -20,7 +22,7 @@ fn js_lifecycle_order_is_static_then_bundle_then_hydration_then_start() {
 
     let html = render_html_document(
         &module.hir,
-        &module.string_table,
+        &string_table,
         &HtmlDocumentConfig::default(),
         Path::new("index.html"),
         "",
@@ -66,8 +68,9 @@ fn js_lifecycle_order_is_static_then_bundle_then_hydration_then_start() {
 
 #[test]
 fn render_entry_fragments_preserves_runtime_slot_order() {
-    let mut module = create_test_module(std::path::PathBuf::from("#page.bst"));
-    add_callable_function(&mut module, FunctionId(1), "frag_b");
+    let mut string_table = StringTable::new();
+    let mut module = create_test_module(std::path::PathBuf::from("#page.bst"), &mut string_table);
+    add_callable_function(&mut module, FunctionId(1), "frag_b", &mut string_table);
     module.hir.start_fragments = vec![
         StartFragment::RuntimeStringFn(FunctionId(0)),
         StartFragment::RuntimeStringFn(FunctionId(1)),
@@ -93,12 +96,13 @@ fn render_entry_fragments_preserves_runtime_slot_order() {
 
 #[test]
 fn no_runtime_fragments_still_emits_start_call() {
-    let module = create_test_module(std::path::PathBuf::from("#page.bst"));
+    let mut string_table = StringTable::new();
+    let module = create_test_module(std::path::PathBuf::from("#page.bst"), &mut string_table);
     let function_names = HashMap::from([(FunctionId(0), String::from("start_entry"))]);
 
     let html = render_html_document(
         &module.hir,
-        &module.string_table,
+        &string_table,
         &HtmlDocumentConfig::default(),
         Path::new("index.html"),
         "",

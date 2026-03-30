@@ -41,9 +41,7 @@ pub(super) fn maybe_parse_slot_or_insert_helper_directive(
         if saw_meaningful_head_item {
             return_syntax_error!(
                 "Slot helper template heads can only contain '$slot' before the optional body.",
-                token_stream
-                    .current_location()
-                    .to_error_location(string_table)
+                token_stream.current_location()
             );
         }
 
@@ -59,9 +57,7 @@ pub(super) fn maybe_parse_slot_or_insert_helper_directive(
         if saw_meaningful_head_item {
             return_syntax_error!(
                 "Slot helper template heads can only contain '$insert(\"name\")' before the optional body.",
-                token_stream
-                    .current_location()
-                    .to_error_location(string_table)
+                token_stream.current_location()
             );
         }
 
@@ -77,7 +73,7 @@ pub(super) fn reject_mixed_comment_directive(
     spec_kind: &StyleDirectiveKind,
     saw_meaningful_head_item: bool,
     token_stream: &FileTokens,
-    string_table: &StringTable,
+    _string_table: &StringTable,
 ) -> Result<(), CompilerError> {
     if saw_meaningful_head_item
         && matches!(
@@ -91,9 +87,7 @@ pub(super) fn reject_mixed_comment_directive(
     {
         return_syntax_error!(
             "Comment template heads cannot mix '$note', '$todo', or '$doc' with other head expressions/directives.",
-            token_stream
-                .current_location()
-                .to_error_location(string_table)
+            token_stream.current_location()
         );
     }
 
@@ -172,16 +166,14 @@ fn apply_markdown_style(template: &mut Template) {
 fn reject_directive_arguments(
     token_stream: &FileTokens,
     directive_name: &str,
-    string_table: &StringTable,
+    _string_table: &StringTable,
 ) -> Result<(), CompilerError> {
     if token_stream.peek_next_token()
         == Some(&crate::compiler_frontend::tokenizer::tokens::TokenKind::OpenParenthesis)
     {
         return_syntax_error!(
             format!("'${directive_name}' does not accept arguments."),
-            token_stream
-                .current_location()
-                .to_error_location(string_table)
+            token_stream.current_location()
         );
     }
 

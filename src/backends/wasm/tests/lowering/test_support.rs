@@ -9,7 +9,7 @@ use crate::compiler_frontend::hir::hir_nodes::{
 };
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
-use crate::compiler_frontend::tokenizer::tokens::{CharPosition, TextLocation};
+use crate::compiler_frontend::tokenizer::tokens::{CharPosition, SourceLocation};
 
 #[derive(Clone, Copy)]
 pub(crate) struct TypeIds {
@@ -19,8 +19,8 @@ pub(crate) struct TypeIds {
     pub string: TypeId,
 }
 
-pub(crate) fn loc(line: i32) -> TextLocation {
-    TextLocation {
+pub(crate) fn loc(line: i32) -> SourceLocation {
+    SourceLocation {
         scope: InternedPath::new(),
         start_pos: CharPosition {
             line_number: line,

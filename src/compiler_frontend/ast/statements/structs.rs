@@ -59,7 +59,7 @@ pub fn parse_parameters(
             TokenKind::End => {
                 return_syntax_error!(
                     "Unexpected end to this scope while parsing function parameters",
-                    token_stream.current_location().to_error_location(string_table),
+                    token_stream.current_location(),
                     {
                         CompilationStage => "Struct/Parameter Parsing",
                         PrimarySuggestion => "Add closing bracket '|' for function parameters",
@@ -71,7 +71,7 @@ pub fn parse_parameters(
             TokenKind::Arrow | TokenKind::Colon => {
                 return_syntax_error!(
                     "Function/struct parameters are missing a closing '|'.",
-                    token_stream.current_location().to_error_location(string_table),
+                    token_stream.current_location(),
                     {
                         CompilationStage => "Struct/Parameter Parsing",
                         PrimarySuggestion => "Close the parameter list with '|' before writing '->' or ':'",
@@ -84,7 +84,7 @@ pub fn parse_parameters(
                 if !next_in_list {
                     return_syntax_error!(
                         "Should have a comma to separate arguments",
-                        token_stream.current_location().to_error_location(string_table),
+                        token_stream.current_location(),
                         {
                             CompilationStage => "Struct/Parameter Parsing",
                             PrimarySuggestion => "Add ',' between struct fields or function parameters",
@@ -123,7 +123,7 @@ pub fn parse_parameters(
             TokenKind::Eof => {
                 return_syntax_error!(
                     "Unexpected end of file. Type definition is missing a closing bracket. Expected: '|'",
-                    token_stream.current_location().to_error_location(string_table),
+                    token_stream.current_location(),
                     {
                         CompilationStage => "Struct/Parameter Parsing",
                         PrimarySuggestion => "Add closing bracket '|' to complete the type definition",
@@ -138,7 +138,7 @@ pub fn parse_parameters(
                         "Unexpected token used in function arguments: {:?}",
                         token_stream.current_token_kind()
                     ),
-                    token_stream.current_location().to_error_location(string_table),
+                    token_stream.current_location(),
                     {
                         CompilationStage => "Struct/Parameter Parsing",
                         PrimarySuggestion => "Use valid parameter syntax: name Type or name ~Type for mutable",
@@ -190,7 +190,7 @@ pub fn parse_explicit_signature_type(
 
             return_syntax_error!(
                 message,
-                token_stream.current_location().to_error_location(string_table),
+                token_stream.current_location(),
                 {
                     CompilationStage => stage,
                     PrimarySuggestion => suggestion,
@@ -222,7 +222,7 @@ pub fn parse_explicit_signature_type(
 
             return_syntax_error!(
                 message,
-                token_stream.current_location().to_error_location(string_table),
+                token_stream.current_location(),
                 {
                     CompilationStage => stage,
                     PrimarySuggestion => suggestion,
@@ -254,7 +254,7 @@ fn parse_collection_signature_type(
 
         return_syntax_error!(
             "Missing closing curly brace for collection type declaration",
-            token_stream.current_location().to_error_location(string_table),
+            token_stream.current_location(),
             {
                 CompilationStage => stage,
                 PrimarySuggestion => "Add '}' to close the collection type declaration",
@@ -273,7 +273,7 @@ fn parse_collection_signature_type(
 
 fn parse_collection_inner_signature_type(
     token_stream: &mut FileTokens,
-    string_table: &StringTable,
+    _string_table: &StringTable,
     context: SignatureTypeContext,
 ) -> Result<DataType, CompilerError> {
     match token_stream.current_token_kind() {
@@ -309,7 +309,7 @@ fn parse_collection_inner_signature_type(
 
             return_syntax_error!(
                 message,
-                token_stream.current_location().to_error_location(string_table),
+                token_stream.current_location(),
                 {
                     CompilationStage => stage,
                     PrimarySuggestion => suggestion,
@@ -332,7 +332,7 @@ fn parse_collection_inner_signature_type(
 
             return_syntax_error!(
                 message,
-                token_stream.current_location().to_error_location(string_table),
+                token_stream.current_location(),
                 {
                     CompilationStage => stage,
                     PrimarySuggestion => suggestion,
@@ -409,7 +409,7 @@ pub fn new_parameter(
                     "Unexpected Token: {:?}. Are you trying to reference a variable that doesn't exist yet?",
                     token_stream.current_token_kind()
                 ),
-                token_stream.current_location().to_error_location(string_table),
+                token_stream.current_location(),
                 {
                     CompilationStage => "Parameter Parsing",
                     PrimarySuggestion => "Check that all referenced variables are declared before use",
@@ -462,7 +462,7 @@ fn validate_struct_default_values(
                     "Struct field '{}' default value must fold to a single compile-time value.",
                     field_name
                 ),
-                field.value.location.to_error_location(string_table), {
+                field.value.location.clone(), {
                     CompilationStage => "Struct/Parameter Parsing",
                     PrimarySuggestion => "Use only compile-time constants and constant expressions in struct default values",
                 }

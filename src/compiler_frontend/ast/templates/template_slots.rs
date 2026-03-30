@@ -5,10 +5,10 @@ use crate::compiler_frontend::ast::templates::template::{
     TemplateSegmentOrigin, TemplateType,
 };
 use crate::compiler_frontend::ast::templates::template_composition::apply_inherited_child_templates_to_content;
-use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorLocation};
+use crate::compiler_frontend::compiler_errors::{CompilerError, SourceLocation};
 use crate::compiler_frontend::datatypes::Ownership;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
-use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TextLocation, TokenKind};
+use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::{return_rule_error, return_syntax_error};
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::collections::BTreeSet;
@@ -84,10 +84,10 @@ impl SlotContributions {
 pub(crate) fn compose_template_with_slots(
     wrapper: &Template,
     fill_content: &TemplateContent,
-    location: &TextLocation,
+    location: &SourceLocation,
     string_table: &StringTable,
 ) -> Result<TemplateContent, CompilerError> {
-    let slot_schema = collect_slot_schema(wrapper, &location.to_error_location(string_table))?;
+    let slot_schema = collect_slot_schema(wrapper, &location)?;
     if !slot_schema.has_any_slots() {
         return Err(CompilerError::compiler_error(
             "Internal template wrapper state error: expected at least one '$slot' while composing.",
@@ -105,10 +105,7 @@ pub(crate) fn compose_template_with_slots(
 
         for (target, inserted_atoms) in slot_inserts {
             if !slot_schema.accepts_target(&target) {
-                return unknown_slot_target_error(
-                    &target,
-                    &location.to_error_location(string_table),
-                );
+                return unknown_slot_target_error(&target, &location);
             }
 
             match target {
@@ -146,12 +143,10 @@ pub(crate) fn compose_template_with_slots(
         }
 
         if !slot_schema.positional_slots.is_empty() {
-            return extra_loose_content_without_default_slot_error(
-                &location.to_error_location(string_table),
-            );
+            return extra_loose_content_without_default_slot_error(&location);
         }
 
-        return loose_content_without_default_slot_error(&location.to_error_location(string_table));
+        return loose_content_without_default_slot_error(&location);
     }
 
     let atoms =
@@ -218,13 +213,13 @@ fn is_top_level_template_contribution(atom: &TemplateAtom) -> bool {
 
 pub(crate) fn ensure_no_slot_insertions_remain(
     content: &TemplateContent,
-    location: &TextLocation,
-    string_table: &StringTable,
+    location: &SourceLocation,
+    _string_table: &StringTable,
 ) -> Result<(), CompilerError> {
     if content.contains_slot_insertions() {
         return_rule_error!(
             "'$insert(...)' can only be used while filling an immediate parent template that defines matching '$slot' targets.",
-            location.to_error_location(string_table)
+            location.clone()
         );
     }
 
@@ -233,7 +228,7 @@ pub(crate) fn ensure_no_slot_insertions_remain(
 
 fn collect_slot_schema(
     wrapper: &Template,
-    error_location: &ErrorLocation,
+    error_location: &SourceLocation,
 ) -> Result<SlotSchema, CompilerError> {
     let mut schema = SlotSchema::default();
     collect_slot_schema_atoms(&wrapper.content.atoms, &mut schema, error_location)?;
@@ -243,7 +238,7 @@ fn collect_slot_schema(
 fn collect_slot_schema_atoms(
     atoms: &[TemplateAtom],
     schema: &mut SlotSchema,
-    error_location: &ErrorLocation,
+    error_location: &SourceLocation,
 ) -> Result<(), CompilerError> {
     // This recursive walk intentionally traverses nested template expressions so a
     // wrapper template can declare slots at any depth while still being resolved in
@@ -280,7 +275,7 @@ fn collect_slot_schema_atoms(
 
 pub fn parse_slot_definition_target_argument(
     token_stream: &mut FileTokens,
-    string_table: &StringTable,
+    _string_table: &StringTable,
 ) -> Result<SlotKey, CompilerError> {
     if token_stream.peek_next_token() != Some(&TokenKind::OpenParenthesis) {
         return Ok(SlotKey::Default);
@@ -300,9 +295,7 @@ pub fn parse_slot_definition_target_argument(
                         "'$slot({})' is invalid. Positional slots start at 1.",
                         index
                     ),
-                    token_stream
-                        .current_location()
-                        .to_error_location(string_table)
+                    token_stream.current_location()
                 );
             }
             SlotKey::Positional(*index as usize)
@@ -310,17 +303,13 @@ pub fn parse_slot_definition_target_argument(
         TokenKind::CloseParenthesis => {
             return_syntax_error!(
                 "'$slot()' cannot use empty parentheses. Use '$slot' for default, a quoted name like '$slot(\"style\")', or a positive integer like '$slot(1)'.",
-                token_stream
-                    .current_location()
-                    .to_error_location(string_table)
+                token_stream.current_location()
             );
         }
         _ => {
             return_syntax_error!(
                 "'$slot(...)' only accepts a quoted string literal name or a positive integer.",
-                token_stream
-                    .current_location()
-                    .to_error_location(string_table)
+                token_stream.current_location()
             );
         }
     };
@@ -329,7 +318,7 @@ pub fn parse_slot_definition_target_argument(
     if token_stream.current_token_kind() != &TokenKind::CloseParenthesis {
         return_syntax_error!(
             "Expected ')' after template slot directive argument.",
-            token_stream.current_location().to_error_location(string_table),
+            token_stream.current_location(),
             {
                 SuggestedInsertion => ")",
             }
@@ -341,14 +330,12 @@ pub fn parse_slot_definition_target_argument(
 
 pub fn parse_required_named_slot_insert_argument(
     token_stream: &mut FileTokens,
-    string_table: &StringTable,
+    _string_table: &StringTable,
 ) -> Result<StringId, CompilerError> {
     if token_stream.peek_next_token() != Some(&TokenKind::OpenParenthesis) {
         return_syntax_error!(
             "'$insert' requires a quoted named target like '$insert(\"style\")'.",
-            token_stream
-                .current_location()
-                .to_error_location(string_table)
+            token_stream.current_location()
         );
     }
 
@@ -360,25 +347,19 @@ pub fn parse_required_named_slot_insert_argument(
         TokenKind::IntLiteral(_) => {
             return_syntax_error!(
                 "'$insert(...)' only accepts quoted string literal names.",
-                token_stream
-                    .current_location()
-                    .to_error_location(string_table)
+                token_stream.current_location()
             );
         }
         TokenKind::CloseParenthesis => {
             return_syntax_error!(
                 "'$insert()' cannot use empty parentheses. Use quoted names like '$insert(\"style\")'.",
-                token_stream
-                    .current_location()
-                    .to_error_location(string_table)
+                token_stream.current_location()
             );
         }
         _ => {
             return_syntax_error!(
                 "'$insert(...)' only accepts quoted string literal names.",
-                token_stream
-                    .current_location()
-                    .to_error_location(string_table)
+                token_stream.current_location()
             );
         }
     };
@@ -387,7 +368,7 @@ pub fn parse_required_named_slot_insert_argument(
     if token_stream.current_token_kind() != &TokenKind::CloseParenthesis {
         return_syntax_error!(
             "Expected ')' after template insert directive argument.",
-            token_stream.current_location().to_error_location(string_table),
+            token_stream.current_location(),
             {
                 SuggestedInsertion => ")",
             }
@@ -637,10 +618,10 @@ fn contribution_origin(atom: &TemplateAtom) -> TemplateSegmentOrigin {
     }
 }
 
-fn contribution_location(atom: &TemplateAtom) -> TextLocation {
+fn contribution_location(atom: &TemplateAtom) -> SourceLocation {
     match atom {
         TemplateAtom::Content(segment) => segment.expression.location.to_owned(),
-        TemplateAtom::Slot(_) => TextLocation::default(),
+        TemplateAtom::Slot(_) => SourceLocation::default(),
     }
 }
 
@@ -723,7 +704,7 @@ fn collect_direct_slot_insert_contributions(
 }
 
 fn extra_loose_content_without_default_slot_error(
-    location: &ErrorLocation,
+    location: &SourceLocation,
 ) -> Result<TemplateContent, CompilerError> {
     return_rule_error!(
         "This template defines positional '$slot(n)' targets but no default '$slot'. There is more loose content than positional slots available.",
@@ -732,7 +713,7 @@ fn extra_loose_content_without_default_slot_error(
 }
 
 fn loose_content_without_default_slot_error(
-    location: &ErrorLocation,
+    location: &SourceLocation,
 ) -> Result<TemplateContent, CompilerError> {
     return_rule_error!(
         "This template defines named '$slot(...)' targets without a default '$slot'. Loose content is not allowed here; use '$insert(\"name\")'.",
@@ -742,7 +723,7 @@ fn loose_content_without_default_slot_error(
 
 fn unknown_slot_target_error(
     target: &SlotKey,
-    location: &ErrorLocation,
+    location: &SourceLocation,
 ) -> Result<TemplateContent, CompilerError> {
     match target {
         SlotKey::Default => {

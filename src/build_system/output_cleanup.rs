@@ -5,7 +5,8 @@
 //! WHY: build orchestration should stay focused on compilation and file emission while cleanup
 //! policy remains isolated behind one safety-first module.
 
-use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
+use crate::compiler_frontend::compiler_errors::CompilerMessages;
+use crate::compiler_frontend::string_interning::StringTable;
 use crate::projects::html_project::output_plan::derive_legacy_route_alias;
 use saying::say;
 use std::collections::{BTreeSet, HashSet};
@@ -167,9 +168,10 @@ pub(crate) fn prepare_output_cleanup(
     output_root: &Path,
     project_entry_dir: Option<&Path>,
     cleanup_policy: &CleanupPolicy,
+    string_table: &StringTable,
 ) -> Result<PreparedOutputCleanup, CompilerMessages> {
     let manifest_load_result = if let Some(project_entry_dir) = project_entry_dir {
-        validate_output_root_is_safe(output_root, project_entry_dir)?;
+        validate_output_root_is_safe(output_root, project_entry_dir, string_table)?;
         Some(read_build_manifest(output_root, cleanup_policy))
     } else {
         None
@@ -191,6 +193,7 @@ pub(crate) fn finalize_output_cleanup(
     current_output_paths: &HashSet<PathBuf>,
     current_managed_artifact_paths: &HashSet<PathBuf>,
     cleanup_policy: &CleanupPolicy,
+    string_table: &StringTable,
 ) -> Result<(), CompilerMessages> {
     let Some(manifest_load_result) = cleanup_state.manifest_load_result.as_ref() else {
         return Ok(());
@@ -226,41 +229,51 @@ pub(crate) fn finalize_output_cleanup(
         emit_limited_safe_mode_alias_warning(&route_alias_cleanup_report);
     }
 
-    write_build_manifest(output_root, current_managed_artifact_paths, cleanup_policy)
+    write_build_manifest(
+        output_root,
+        current_managed_artifact_paths,
+        cleanup_policy,
+        string_table,
+    )
 }
 
 /// Validate an output path before writing or deleting under the output root.
 pub(crate) fn validate_relative_output_path(
     relative_output_path: &Path,
+    string_table: &StringTable,
 ) -> Result<(), CompilerMessages> {
     if relative_output_path.as_os_str().is_empty() {
-        return Err(CompilerMessages::from_error(CompilerError::file_error(
+        return Err(file_error_messages(
             relative_output_path,
             "Output path cannot be empty for built artifacts.",
-        )));
+            string_table,
+        ));
     }
 
     if relative_output_path.is_absolute() {
-        return Err(CompilerMessages::from_error(CompilerError::file_error(
+        return Err(file_error_messages(
             relative_output_path,
             "Output path must be relative, not absolute.",
-        )));
+            string_table,
+        ));
     }
 
     for component in relative_output_path.components() {
         match component {
             Component::Normal(_) => {}
             Component::ParentDir => {
-                return Err(CompilerMessages::from_error(CompilerError::file_error(
+                return Err(file_error_messages(
                     relative_output_path,
                     "Output path cannot contain '..' traversal components.",
-                )));
+                    string_table,
+                ));
             }
             Component::CurDir | Component::RootDir | Component::Prefix(_) => {
-                return Err(CompilerMessages::from_error(CompilerError::file_error(
+                return Err(file_error_messages(
                     relative_output_path,
                     "Output path must only contain normal path components.",
-                )));
+                    string_table,
+                ));
             }
         }
     }
@@ -275,20 +288,22 @@ pub(crate) fn validate_relative_output_path(
 pub(crate) fn validate_output_root_is_safe(
     output_root: &Path,
     project_entry_dir: &Path,
+    string_table: &StringTable,
 ) -> Result<(), CompilerMessages> {
     // WHAT: Canonicalize the output root, falling back to the nearest existing ancestor.
     // WHY: Symlinks or relative segments could disguise a dangerous target path.
     let canonical_root = canonicalize_or_nearest_ancestor(output_root);
 
     if is_dangerous_system_path(&canonical_root) {
-        return Err(CompilerMessages::from_error(CompilerError::file_error(
+        return Err(file_error_messages(
             output_root,
             format!(
                 "Refusing to use '{}' as the build output root because it is a protected system path. \
                  Configure a project-relative output folder in #config.bst.",
                 output_root.display()
             ),
-        )));
+            string_table,
+        ));
     }
 
     // WHAT: Verify the output root is near the project directory.
@@ -300,7 +315,7 @@ pub(crate) fn validate_output_root_is_safe(
     let is_sibling_of_project = canonical_root.starts_with(project_parent);
 
     if !is_inside_project && !is_sibling_of_project {
-        return Err(CompilerMessages::from_error(CompilerError::file_error(
+        return Err(file_error_messages(
             output_root,
             format!(
                 "Build output root '{}' is not inside or adjacent to the project directory '{}'. \
@@ -309,7 +324,8 @@ pub(crate) fn validate_output_root_is_safe(
                 output_root.display(),
                 project_entry_dir.display()
             ),
-        )));
+            string_table,
+        ));
     }
 
     Ok(())
@@ -372,6 +388,7 @@ pub(crate) fn write_build_manifest(
     output_root: &Path,
     current_paths: &HashSet<PathBuf>,
     cleanup_policy: &CleanupPolicy,
+    string_table: &StringTable,
 ) -> Result<(), CompilerMessages> {
     let manifest_path = output_root.join(BUILD_MANIFEST_FILENAME);
 
@@ -396,13 +413,14 @@ pub(crate) fn write_build_manifest(
 
     let content = manifest_lines.join("\n");
     fs::write(&manifest_path, content).map_err(|error| {
-        CompilerMessages::from_error(CompilerError::file_error(
+        file_error_messages(
             &manifest_path,
             format!(
                 "Failed to write build manifest '{}': {error}",
                 manifest_path.display()
             ),
-        ))
+            string_table,
+        )
     })
 }
 
@@ -432,7 +450,7 @@ pub(crate) fn remove_manifest_tracked_stale_artifacts(
         }
 
         // Re-validate each manifest entry before deletion as defense against corrupted manifests.
-        if validate_relative_output_path(stale_relative).is_err() {
+        if !is_safe_relative_output_path(stale_relative) {
             continue;
         }
 
@@ -492,7 +510,7 @@ pub(crate) fn remove_deterministic_route_aliases(
             continue;
         }
 
-        if validate_relative_output_path(&alias_relative).is_err() {
+        if !is_safe_relative_output_path(&alias_relative) {
             continue;
         }
 
@@ -528,7 +546,7 @@ where
     let mut paths = Vec::new();
     for line in lines {
         let path = PathBuf::from(line);
-        if validate_relative_output_path(&path).is_ok() {
+        if is_safe_relative_output_path(&path) {
             paths.push(path);
         }
     }
@@ -635,6 +653,24 @@ fn emit_limited_safe_mode_warning(reason: &ManifestLimitedSafeModeReason) {
         "Warning: full manifest-based stale cleanup was unavailable because {}. Cleanup ran in limited safe mode; only deterministic managed route aliases may be removed, and unknown or non-managed files were preserved intentionally.",
         reason.describe()
     ));
+}
+
+fn file_error_messages(
+    path: &Path,
+    msg: impl Into<String>,
+    string_table: &StringTable,
+) -> CompilerMessages {
+    CompilerMessages::file_error(path, msg, string_table)
+}
+
+fn is_safe_relative_output_path(relative_output_path: &Path) -> bool {
+    if relative_output_path.as_os_str().is_empty() || relative_output_path.is_absolute() {
+        return false;
+    }
+
+    relative_output_path
+        .components()
+        .all(|component| matches!(component, Component::Normal(_)))
 }
 
 fn emit_limited_safe_mode_alias_warning(route_alias_cleanup_report: &RouteAliasCleanupReport) {

@@ -11,7 +11,7 @@ mod render_plan_tests {
     use crate::compiler_frontend::ast::templates::template_types::Template;
     use crate::compiler_frontend::datatypes::Ownership;
     use crate::compiler_frontend::string_interning::StringTable;
-    use crate::compiler_frontend::tokenizer::tokens::TextLocation;
+    use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
     fn create_text_segment(
         text: &str,
@@ -20,7 +20,11 @@ mod render_plan_tests {
     ) -> TemplateSegment {
         let interned = string_table.intern(text);
         TemplateSegment::new(
-            Expression::string_slice(interned, TextLocation::default(), Ownership::ImmutableOwned),
+            Expression::string_slice(
+                interned,
+                SourceLocation::default(),
+                Ownership::ImmutableOwned,
+            ),
             origin,
         )
     }
@@ -136,7 +140,7 @@ mod render_plan_tests {
         let mut content = TemplateContent::default();
         let expression = Expression::int(
             42,
-            crate::compiler_frontend::tokenizer::tokens::TextLocation::default(),
+            crate::compiler_frontend::tokenizer::tokens::SourceLocation::default(),
             Ownership::ImmutableOwned,
         );
 
@@ -172,12 +176,12 @@ mod render_plan_tests {
             pieces: vec![
                 FormatterInputPiece::Text(FormatterTextPiece {
                     text: hello,
-                    location: TextLocation::default(),
+                    location: SourceLocation::default(),
                 }),
                 FormatterInputPiece::Opaque(FormatterAnchorId(42)),
                 FormatterInputPiece::Text(FormatterTextPiece {
                     text: world,
-                    location: TextLocation::default(),
+                    location: SourceLocation::default(),
                 }),
             ],
         };

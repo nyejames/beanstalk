@@ -5,8 +5,10 @@ use super::{
 };
 use crate::compiler_frontend::basic_utility_functions::file_url_from_path;
 use crate::compiler_frontend::compiler_errors::{
-    CompilerError, CompilerMessages, ErrorLocation, ErrorMetaDataKey,
+    CompilerError, CompilerMessages, ErrorMetaDataKey, SourceLocation,
 };
+use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::CharPosition;
 use std::fs;
 use std::path::PathBuf;
@@ -40,8 +42,8 @@ fn rendered_runtime_page_includes_version_error_text_and_dark_mode() {
 
 #[test]
 fn formatted_compiler_messages_include_suggestion_metadata() {
-    let mut messages = CompilerMessages::new();
-    let mut error = CompilerError::new_syntax_error("bad syntax", ErrorLocation::default());
+    let mut messages = CompilerMessages::empty(StringTable::new());
+    let mut error = CompilerError::new_syntax_error("bad syntax", SourceLocation::default());
     error.new_metadata_entry(
         ErrorMetaDataKey::CompilationStage,
         String::from("Function Signature Parsing"),
@@ -71,11 +73,12 @@ fn compiler_error_page_links_to_project_relative_resolved_source_path() {
     fs::write(&source_file, "broken()\n").expect("should write source file");
 
     let header_scope = source_file.join("start.header");
-    let mut messages = CompilerMessages::new();
+    let mut string_table = StringTable::new();
+    let mut messages = CompilerMessages::empty(StringTable::new());
     let mut error = CompilerError::new_syntax_error(
         "bad syntax",
-        ErrorLocation::new(
-            header_scope,
+        SourceLocation::new(
+            InternedPath::from_path_buf(&header_scope, &mut string_table),
             CharPosition {
                 line_number: 1,
                 char_column: 4,
@@ -95,6 +98,7 @@ fn compiler_error_page_links_to_project_relative_resolved_source_path() {
         String::from("Add ':' after return declarations"),
     );
     messages.errors.push(error);
+    messages.string_table = string_table;
 
     let page = render_compiler_error_page(&messages, &root, 7);
     let resolved_source_file = fs::canonicalize(&source_file).expect("source file should resolve");

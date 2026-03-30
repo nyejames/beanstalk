@@ -49,7 +49,7 @@ use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::hir::hir_datatypes::{TypeContext, TypeId};
 use crate::compiler_frontend::host_functions::CallTarget;
 use crate::compiler_frontend::paths::rendered_path_usage::RenderedPathUsage;
-use crate::compiler_frontend::tokenizer::tokens::TextLocation;
+use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
 // ============================================================
 // Stable IDs
@@ -100,7 +100,7 @@ pub struct HirDocFragment {
     pub kind: HirDocFragmentKind,
     #[allow(dead_code)] // Used only in tests
     pub rendered_text: String,
-    pub location: TextLocation,
+    pub location: SourceLocation,
 }
 
 #[derive(Debug, Clone)]
@@ -291,7 +291,7 @@ pub struct HirLocal {
     pub ty: TypeId,
     pub mutable: bool,
     pub region: RegionId,
-    pub source_info: Option<TextLocation>,
+    pub source_info: Option<SourceLocation>,
 }
 
 // ============================================================
@@ -320,7 +320,7 @@ pub enum HirPlace {
 pub struct HirStatement {
     pub id: HirNodeId,
     pub kind: HirStatementKind,
-    pub location: TextLocation,
+    pub location: SourceLocation,
 }
 
 #[derive(Debug, Clone)]

@@ -99,6 +99,7 @@ impl Ast {
                     "AST construction requires a project path resolver for template folding and path coercion.",
                 )],
                 warnings,
+                string_table: Default::default(),
             });
         };
 
@@ -214,6 +215,7 @@ impl Ast {
                 return Err(CompilerMessages {
                     errors: vec![error],
                     warnings,
+                    string_table: Default::default(),
                 });
             }
         };
@@ -256,6 +258,7 @@ impl Ast {
                             return Err(CompilerMessages {
                                 errors: vec![error],
                                 warnings,
+                                string_table: Default::default(),
                             });
                         }
                     };
@@ -291,6 +294,7 @@ impl Ast {
                             return Err(CompilerMessages {
                                 errors: vec![error],
                                 warnings,
+                                string_table: Default::default(),
                             });
                         }
                     };
@@ -366,6 +370,7 @@ impl Ast {
                             return Err(CompilerMessages {
                                 errors: vec![e],
                                 warnings,
+                                string_table: Default::default(),
                             });
                         }
                     };
@@ -417,6 +422,7 @@ impl Ast {
                             return Err(CompilerMessages {
                                 errors: vec![e],
                                 warnings,
+                                string_table: Default::default(),
                             });
                         }
                     };
@@ -462,6 +468,7 @@ impl Ast {
                                     "Struct fields were not resolved before AST emission.",
                                 )],
                                 warnings,
+                                string_table: Default::default(),
                             });
                         }
                     };
@@ -483,6 +490,7 @@ impl Ast {
                             "Choice headers should be rejected during header parsing before AST construction.",
                         )],
                         warnings,
+                        string_table: Default::default(),
                     });
                 }
 
@@ -513,6 +521,7 @@ impl Ast {
                             return Err(CompilerMessages {
                                 errors: vec![error],
                                 warnings,
+                                string_table: Default::default(),
                             });
                         }
                     };
@@ -527,18 +536,20 @@ impl Ast {
                             return Err(CompilerMessages {
                                 errors: vec![CompilerError::new_rule_error(
                                     "Top-level const templates cannot evaluate to '$insert(...)' helpers. Apply this insert while filling an immediate parent '$slot' template.",
-                                    template.location.to_error_location(string_table),
+                                    template.location,
                                 )],
                                 warnings,
+                                string_table: Default::default(),
                             });
                         }
                         crate::compiler_frontend::ast::templates::template::TemplateConstValueKind::NonConst => {
                             return Err(CompilerMessages {
                                 errors: vec![CompilerError::new_rule_error(
                                     "Top-level const templates must be fully foldable at compile time.",
-                                    template.location.to_error_location(string_table),
+                                    template.location,
                                 )],
                                 warnings,
+                                string_table: Default::default(),
                             });
                         }
                     }
@@ -551,6 +562,7 @@ impl Ast {
                             return Err(CompilerMessages {
                                 errors: vec![error],
                                 warnings,
+                                string_table: Default::default(),
                             });
                         }
                     };
@@ -561,6 +573,7 @@ impl Ast {
                             return Err(CompilerMessages {
                                 errors: vec![error],
                                 warnings,
+                                string_table: Default::default(),
                             });
                         }
                     };
@@ -582,6 +595,7 @@ impl Ast {
         .map_err(|error| CompilerMessages {
             errors: vec![error],
             warnings: warnings.clone(),
+            string_table: Default::default(),
         })?;
 
         let start_template_items = synthesize_start_template_items(
@@ -596,6 +610,7 @@ impl Ast {
         .map_err(|error| CompilerMessages {
             errors: vec![error],
             warnings: warnings.clone(),
+            string_table: Default::default(),
         })?;
 
         Ok(Ast {

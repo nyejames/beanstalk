@@ -49,7 +49,7 @@ impl SourceFileTable {
         let mut rows = Vec::with_capacity(canonical_files.len());
         for canonical in canonical_files {
             let logical = if let Some(resolver) = project_path_resolver {
-                resolver.logical_path_for_canonical_file(canonical)?
+                resolver.logical_path_for_canonical_file(canonical, string_table)?
             } else {
                 logical_path_for_single_file_mode(canonical, &fallback_root)
             };

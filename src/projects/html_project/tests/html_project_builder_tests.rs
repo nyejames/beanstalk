@@ -2,11 +2,12 @@
 
 use super::*;
 use crate::backends::js::test_symbol_helpers::expected_dev_function_name;
-use crate::build_system::build::FileKind;
+use crate::build_system::build::{FileKind, Project};
 use crate::compiler_frontend::Flag;
-use crate::compiler_frontend::compiler_errors::ErrorType;
+use crate::compiler_frontend::compiler_errors::{CompilerMessages, ErrorType};
 use crate::compiler_frontend::hir::hir_nodes::{ConstStringId, FunctionId, StartFragment};
 use crate::compiler_frontend::paths::path_resolution::{CompileTimePathBase, CompileTimePathKind};
+use crate::compiler_frontend::string_interning::StringTable;
 use crate::projects::html_project::tests::test_support::{
     assert_fragment_before_body_close, assert_has_basic_shell, collect_output_paths,
     create_test_module, expect_bytes_output, expect_html_output, expect_js_output,
@@ -16,14 +17,27 @@ use crate::projects::settings::Config;
 use std::fs;
 use std::path::PathBuf;
 
+fn build_with_test_modules(
+    builder: &HtmlProjectBuilder,
+    entry_points: Vec<PathBuf>,
+    config: &Config,
+    flags: &[Flag],
+) -> Result<Project, CompilerMessages> {
+    let mut string_table = StringTable::new();
+    let modules = entry_points
+        .into_iter()
+        .map(|entry_point| create_test_module(entry_point, &mut string_table))
+        .collect();
+    builder.build_backend(modules, config, flags, &mut string_table)
+}
+
 #[test]
 fn build_backend_emits_single_html_output_file() {
     let builder = HtmlProjectBuilder::new();
     let entry_path = PathBuf::from("#page.bst");
     let config = Config::new(entry_path.clone());
 
-    let project = builder
-        .build_backend(vec![create_test_module(entry_path)], &config, &[])
+    let project = build_with_test_modules(&builder, vec![entry_path], &config, &[])
         .expect("build_backend should succeed");
 
     assert_eq!(project.output_files.len(), 1);
@@ -43,20 +57,20 @@ fn build_backend_respects_release_pretty_toggle() {
     let builder = HtmlProjectBuilder::new();
     let entry_path = PathBuf::from("#page.bst");
 
-    let dev_project = builder
-        .build_backend(
-            vec![create_test_module(entry_path.clone())],
-            &Config::new(entry_path.clone()),
-            &[],
-        )
-        .expect("dev build should succeed");
-    let release_project = builder
-        .build_backend(
-            vec![create_test_module(entry_path.clone())],
-            &Config::new(entry_path),
-            &[Flag::Release],
-        )
-        .expect("release build should succeed");
+    let dev_project = build_with_test_modules(
+        &builder,
+        vec![entry_path.clone()],
+        &Config::new(entry_path.clone()),
+        &[],
+    )
+    .expect("dev build should succeed");
+    let release_project = build_with_test_modules(
+        &builder,
+        vec![entry_path.clone()],
+        &Config::new(entry_path),
+        &[Flag::Release],
+    )
+    .expect("release build should succeed");
 
     let dev_html = expect_html_output(&dev_project.output_files, "index.html");
     let release_html = expect_html_output(&release_project.output_files, "index.html");
@@ -81,8 +95,7 @@ fn hash_prefixed_route_name_strips_hash_from_output() {
     let entry_path = PathBuf::from("#404.bst");
     let config = Config::new(entry_path.clone());
 
-    let project = builder
-        .build_backend(vec![create_test_module(entry_path)], &config, &[])
+    let project = build_with_test_modules(&builder, vec![entry_path], &config, &[])
         .expect("build_backend should succeed");
 
     assert_eq!(
@@ -96,16 +109,13 @@ fn build_backend_emits_html_for_multiple_modules() {
     let builder = HtmlProjectBuilder::new();
     let config = Config::new(PathBuf::from("docs.bst"));
 
-    let project = builder
-        .build_backend(
-            vec![
-                create_test_module(PathBuf::from("#page.bst")),
-                create_test_module(PathBuf::from("#404.bst")),
-            ],
-            &config,
-            &[],
-        )
-        .expect("build_backend should succeed");
+    let project = build_with_test_modules(
+        &builder,
+        vec![PathBuf::from("#page.bst"), PathBuf::from("#404.bst")],
+        &config,
+        &[],
+    )
+    .expect("build_backend should succeed");
 
     let output_paths = collect_output_paths(&project.output_files);
     assert_eq!(project.output_files.len(), 2);
@@ -119,11 +129,9 @@ fn duplicate_output_paths_are_rejected() {
     let builder = HtmlProjectBuilder::new();
     let config = Config::new(PathBuf::from("docs.bst"));
 
-    let result = builder.build_backend(
-        vec![
-            create_test_module(PathBuf::from("#page.bst")),
-            create_test_module(PathBuf::from("index.bst")),
-        ],
+    let result = build_with_test_modules(
+        &builder,
+        vec![PathBuf::from("#page.bst"), PathBuf::from("index.bst")],
         &config,
         &[],
     );
@@ -150,7 +158,8 @@ fn duplicate_output_paths_are_rejected() {
 fn emits_runtime_slots_and_bootstrap_calls_start() {
     let builder = HtmlProjectBuilder::new();
     let entry_path = PathBuf::from("#page.bst");
-    let mut module = create_test_module(entry_path.clone());
+    let mut string_table = StringTable::new();
+    let mut module = create_test_module(entry_path.clone(), &mut string_table);
     module.hir.start_fragments = vec![
         StartFragment::ConstString(ConstStringId(0)),
         StartFragment::RuntimeStringFn(FunctionId(0)),
@@ -158,7 +167,12 @@ fn emits_runtime_slots_and_bootstrap_calls_start() {
     module.hir.const_string_pool = vec![String::from("<meta charset=\"utf-8\">")];
 
     let project = builder
-        .build_backend(vec![module], &Config::new(entry_path), &[])
+        .build_backend(
+            vec![module],
+            &Config::new(entry_path),
+            &[],
+            &mut string_table,
+        )
         .expect("build_backend should succeed");
 
     let html = expect_html_output(&project.output_files, "index.html");
@@ -186,18 +200,18 @@ fn directory_build_maps_routes_relative_to_entry_root() {
     let mut config = Config::new(root.clone());
     config.entry_root = PathBuf::from("src");
 
-    let project = builder
-        .build_backend(
-            vec![
-                create_test_module(entry_root.join("#page.bst")),
-                create_test_module(entry_root.join("about").join("#page.bst")),
-                create_test_module(entry_root.join("docs").join("basics").join("#page.bst")),
-                create_test_module(entry_root.join("blog").join("#404.bst")),
-            ],
-            &config,
-            &[],
-        )
-        .expect("directory build should succeed");
+    let project = build_with_test_modules(
+        &builder,
+        vec![
+            entry_root.join("#page.bst"),
+            entry_root.join("about").join("#page.bst"),
+            entry_root.join("docs").join("basics").join("#page.bst"),
+            entry_root.join("blog").join("#404.bst"),
+        ],
+        &config,
+        &[],
+    )
+    .expect("directory build should succeed");
 
     let output_paths = collect_output_paths(&project.output_files);
     assert!(output_paths.contains(&PathBuf::from("index.html")));
@@ -219,16 +233,16 @@ fn directory_build_supports_custom_entry_root_names() {
     let mut config = Config::new(root.clone());
     config.entry_root = PathBuf::from("pages");
 
-    let project = builder
-        .build_backend(
-            vec![
-                create_test_module(entry_root.join("#page.bst")),
-                create_test_module(entry_root.join("docs").join("#page.bst")),
-            ],
-            &config,
-            &[],
-        )
-        .expect("directory build should succeed");
+    let project = build_with_test_modules(
+        &builder,
+        vec![
+            entry_root.join("#page.bst"),
+            entry_root.join("docs").join("#page.bst"),
+        ],
+        &config,
+        &[],
+    )
+    .expect("directory build should succeed");
 
     let output_paths = collect_output_paths(&project.output_files);
     assert!(output_paths.contains(&PathBuf::from("index.html")));
@@ -248,10 +262,9 @@ fn directory_build_requires_homepage_at_entry_root() {
     let mut config = Config::new(root.clone());
     config.entry_root = PathBuf::from("src");
 
-    let result = builder.build_backend(
-        vec![create_test_module(
-            entry_root.join("about").join("#page.bst"),
-        )],
+    let result = build_with_test_modules(
+        &builder,
+        vec![entry_root.join("about").join("#page.bst")],
         &config,
         &[],
     );
@@ -281,13 +294,13 @@ fn wasm_flag_emits_html_js_and_wasm_artifacts() {
     let builder = HtmlProjectBuilder::new();
     let entry_path = PathBuf::from("#page.bst");
 
-    let project = builder
-        .build_backend(
-            vec![create_test_module(entry_path.clone())],
-            &Config::new(entry_path),
-            &[Flag::HtmlWasm],
-        )
-        .expect("wasm mode build should succeed");
+    let project = build_with_test_modules(
+        &builder,
+        vec![entry_path.clone()],
+        &Config::new(entry_path),
+        &[Flag::HtmlWasm],
+    )
+    .expect("wasm mode build should succeed");
 
     let output_paths = collect_output_paths(&project.output_files);
     assert!(output_paths.contains(&PathBuf::from("index.html")));
@@ -317,16 +330,13 @@ fn wasm_mode_uses_per_page_folder_layout() {
     let builder = HtmlProjectBuilder::new();
     let config = Config::new(PathBuf::from("docs.bst"));
 
-    let project = builder
-        .build_backend(
-            vec![
-                create_test_module(PathBuf::from("#page.bst")),
-                create_test_module(PathBuf::from("#404.bst")),
-            ],
-            &config,
-            &[Flag::HtmlWasm],
-        )
-        .expect("wasm mode build should succeed");
+    let project = build_with_test_modules(
+        &builder,
+        vec![PathBuf::from("#page.bst"), PathBuf::from("#404.bst")],
+        &config,
+        &[Flag::HtmlWasm],
+    )
+    .expect("wasm mode build should succeed");
 
     let output_paths = collect_output_paths(&project.output_files);
     assert!(output_paths.contains(&PathBuf::from("index.html")));
@@ -345,11 +355,7 @@ fn builder_rejects_invalid_origin_config() {
         .settings
         .insert(String::from("origin"), String::from("not-a-slash"));
 
-    let result = builder.build_backend(
-        vec![create_test_module(PathBuf::from("#page.bst"))],
-        &config,
-        &[],
-    );
+    let result = build_with_test_modules(&builder, vec![PathBuf::from("#page.bst")], &config, &[]);
     let messages = match result {
         Err(messages) => messages,
         Ok(_) => panic!("invalid origin should fail"),
@@ -371,10 +377,11 @@ fn build_backend_emits_tracked_assets_and_dedupes_same_source_output() {
 
     let builder = HtmlProjectBuilder::new();
     let config = Config::new(root.clone());
+    let mut string_table = StringTable::new();
 
-    let mut homepage = create_test_module(canonical_root.join("#page.bst"));
+    let mut homepage = create_test_module(canonical_root.join("#page.bst"), &mut string_table);
     homepage.hir.rendered_path_usages.push(rendered_path_usage(
-        &mut homepage.string_table,
+        &mut string_table,
         &["assets", "logo.png"],
         &["assets", "logo.png"],
         canonical_root.join("assets/logo.png"),
@@ -384,9 +391,10 @@ fn build_backend_emits_tracked_assets_and_dedupes_same_source_output() {
         1,
     ));
 
-    let mut docs_page = create_test_module(canonical_root.join("docs/#page.bst"));
+    let mut docs_page =
+        create_test_module(canonical_root.join("docs/#page.bst"), &mut string_table);
     docs_page.hir.rendered_path_usages.push(rendered_path_usage(
-        &mut docs_page.string_table,
+        &mut string_table,
         &["assets", "logo.png"],
         &["assets", "logo.png"],
         canonical_root.join("assets/logo.png"),
@@ -397,7 +405,7 @@ fn build_backend_emits_tracked_assets_and_dedupes_same_source_output() {
     ));
 
     let project = builder
-        .build_backend(vec![homepage, docs_page], &config, &[])
+        .build_backend(vec![homepage, docs_page], &config, &[], &mut string_table)
         .expect("tracked-asset build should succeed");
 
     let output_paths = collect_output_paths(&project.output_files);
@@ -429,10 +437,11 @@ fn build_backend_allows_same_source_file_to_emit_multiple_relative_outputs() {
 
     let builder = HtmlProjectBuilder::new();
     let config = Config::new(root.clone());
+    let mut string_table = StringTable::new();
 
-    let mut homepage = create_test_module(canonical_root.join("#page.bst"));
+    let mut homepage = create_test_module(canonical_root.join("#page.bst"), &mut string_table);
     homepage.hir.rendered_path_usages.push(rendered_path_usage(
-        &mut homepage.string_table,
+        &mut string_table,
         &[".", "logo.png"],
         &[".", "logo.png"],
         canonical_root.join("shared/logo.png"),
@@ -442,9 +451,12 @@ fn build_backend_allows_same_source_file_to_emit_multiple_relative_outputs() {
         1,
     ));
 
-    let mut blog_page = create_test_module(canonical_root.join("blog/post/#page.bst"));
+    let mut blog_page = create_test_module(
+        canonical_root.join("blog/post/#page.bst"),
+        &mut string_table,
+    );
     blog_page.hir.rendered_path_usages.push(rendered_path_usage(
-        &mut blog_page.string_table,
+        &mut string_table,
         &["..", "shared", "logo.png"],
         &["..", "shared", "logo.png"],
         canonical_root.join("shared/logo.png"),
@@ -455,7 +467,7 @@ fn build_backend_allows_same_source_file_to_emit_multiple_relative_outputs() {
     ));
 
     let project = builder
-        .build_backend(vec![homepage, blog_page], &config, &[])
+        .build_backend(vec![homepage, blog_page], &config, &[], &mut string_table)
         .expect("tracked-asset build should succeed");
 
     assert_eq!(
@@ -481,10 +493,11 @@ fn build_backend_rejects_conflicting_tracked_asset_output_paths() {
 
     let builder = HtmlProjectBuilder::new();
     let config = Config::new(root.clone());
+    let mut string_table = StringTable::new();
 
-    let mut homepage = create_test_module(canonical_root.join("#page.bst"));
+    let mut homepage = create_test_module(canonical_root.join("#page.bst"), &mut string_table);
     homepage.hir.rendered_path_usages.push(rendered_path_usage(
-        &mut homepage.string_table,
+        &mut string_table,
         &["assets", "logo.png"],
         &["assets", "logo.png"],
         canonical_root.join("assets/logo-a.png"),
@@ -494,9 +507,10 @@ fn build_backend_rejects_conflicting_tracked_asset_output_paths() {
         1,
     ));
 
-    let mut docs_page = create_test_module(canonical_root.join("docs/#page.bst"));
+    let mut docs_page =
+        create_test_module(canonical_root.join("docs/#page.bst"), &mut string_table);
     docs_page.hir.rendered_path_usages.push(rendered_path_usage(
-        &mut docs_page.string_table,
+        &mut string_table,
         &["assets", "logo.png"],
         &["assets", "logo.png"],
         canonical_root.join("assets/logo-b.png"),
@@ -506,10 +520,11 @@ fn build_backend_rejects_conflicting_tracked_asset_output_paths() {
         1,
     ));
 
-    let error = match builder.build_backend(vec![homepage, docs_page], &config, &[]) {
-        Err(messages) => messages,
-        Ok(_) => panic!("conflicting tracked assets should fail"),
-    };
+    let error =
+        match builder.build_backend(vec![homepage, docs_page], &config, &[], &mut string_table) {
+            Err(messages) => messages,
+            Ok(_) => panic!("conflicting tracked assets should fail"),
+        };
 
     assert!(
         error.errors[0].msg.contains("already claimed"),

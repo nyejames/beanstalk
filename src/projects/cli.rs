@@ -102,6 +102,7 @@ pub fn start_cli() {
                                         "Could not resolve current directory for build outputs: {error}"
                                     ))],
                                     warnings: build_result.warnings,
+                                    string_table: build_result.string_table,
                                 });
                                 return;
                             }
@@ -114,6 +115,7 @@ pub fn start_cli() {
                             output_root,
                             project_entry_dir: Some(build_result.config.entry_dir.clone()),
                         },
+                        &build_result.string_table,
                     );
 
                     match write_result {
@@ -121,6 +123,7 @@ pub fn start_cli() {
                             print_compiler_messages(CompilerMessages {
                                 errors: Vec::new(),
                                 warnings: build_result.warnings,
+                                string_table: build_result.string_table,
                             });
                         }
                         Err(mut messages) => {

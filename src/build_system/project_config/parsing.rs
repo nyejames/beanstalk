@@ -21,7 +21,6 @@ use std::path::Path;
 
 pub(super) struct ParsedConfigFile {
     pub(super) headers: Vec<Header>,
-    pub(super) string_table: StringTable,
     pub(super) errors: Vec<CompilerError>,
 }
 
@@ -32,12 +31,13 @@ pub(super) struct ParsedConfigFile {
 pub(super) fn parse_config_file(
     config_path: &Path,
     style_directives: &StyleDirectiveRegistry,
+    string_table: &mut StringTable,
 ) -> Result<ParsedConfigFile, CompilerMessages> {
     let mut errors = Vec::new();
 
-    let source = extract_source_code(config_path).map_err(CompilerMessages::from_error)?;
-    let mut string_table = StringTable::new();
-    let interned_path = InternedPath::from_path_buf(config_path, &mut string_table);
+    let source = extract_source_code(config_path, string_table)
+        .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;
+    let interned_path = InternedPath::from_path_buf(config_path, string_table);
 
     // Tokenization errors are fatal because later parsing stages require a valid token stream.
     let token_stream = match tokenize(
@@ -46,15 +46,16 @@ pub(super) fn parse_config_file(
         TokenizeMode::Normal,
         NewlineMode::default(),
         style_directives,
-        &mut string_table,
+        string_table,
         None,
     ) {
         Ok(tokens) => tokens,
         Err(error) => {
-            errors.push(error.with_file_path(config_path.to_path_buf()));
+            errors.push(error);
             return Err(CompilerMessages {
                 errors,
                 warnings: Vec::new(),
+                string_table: string_table.clone(),
             });
         }
     };
@@ -62,7 +63,7 @@ pub(super) fn parse_config_file(
     // Collect legacy shorthand config syntax up front so users can fix all declarations together.
     errors.extend(validate_config_hash_assignments(
         &token_stream.tokens,
-        &string_table,
+        string_table,
     ));
 
     let host_registry = HostRegistry::new();
@@ -74,7 +75,7 @@ pub(super) fn parse_config_file(
         &host_registry,
         &mut warnings,
         config_path,
-        &mut string_table,
+        string_table,
     ) {
         Ok(headers) => headers,
         Err(header_errors) => {
@@ -92,13 +93,13 @@ pub(super) fn parse_config_file(
             return Err(CompilerMessages {
                 errors,
                 warnings: Vec::new(),
+                string_table: string_table.clone(),
             });
         }
     };
 
     Ok(ParsedConfigFile {
         headers: parsed_headers.headers,
-        string_table,
         errors,
     })
 }
@@ -162,7 +163,7 @@ fn validate_config_hash_assignments(
                 format!(
                     "Invalid config declaration '#{name} ...'. Use standard constant syntax: '#{name} = value'."
                 ),
-                next_token.location.to_error_location(string_table),
+                next_token.location.clone(),
                 ErrorType::Config,
             );
             error.metadata.insert(

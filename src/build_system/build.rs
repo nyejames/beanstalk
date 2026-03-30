@@ -26,11 +26,10 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 pub struct Module {
-    pub(crate) entry_point: PathBuf, // The name of the main start function
+    pub(crate) entry_point: PathBuf, // Canonical entry file for the compiled module
     pub(crate) hir: HirModule,
     pub(crate) borrow_analysis: BorrowCheckReport,
     pub(crate) warnings: Vec<CompilerWarning>,
-    pub(crate) string_table: StringTable,
 }
 
 /// Unified build interface for all project types
@@ -41,10 +40,15 @@ pub trait BackendBuilder {
         modules: Vec<Module>, // Each collection of files the frontend has compiled into modules
         config: &Config,      // Persistent settings across the whole project
         flags: &[Flag],       // Settings only relevant to this build
+        string_table: &mut StringTable,
     ) -> Result<Project, CompilerMessages>;
 
     /// Validate the project configuration
-    fn validate_project_config(&self, config: &Config) -> Result<(), CompilerError>;
+    fn validate_project_config(
+        &self,
+        config: &Config,
+        string_table: &mut StringTable,
+    ) -> Result<(), CompilerError>;
 
     /// Project-specific frontend style directives provided by this backend.
     ///
@@ -62,6 +66,12 @@ impl ProjectBuilder {
     pub fn new(backend: Box<dyn BackendBuilder + Send>) -> Self {
         Self { backend }
     }
+}
+
+pub(crate) struct BuildBootstrap {
+    pub(crate) config: Config,
+    pub(crate) style_directives: StyleDirectiveRegistry,
+    pub(crate) string_table: StringTable,
 }
 
 pub struct InputFile {
@@ -118,6 +128,7 @@ pub struct BuildResult {
     pub project: Project,
     pub config: Config,
     pub warnings: Vec<CompilerWarning>,
+    pub string_table: StringTable,
 }
 
 /// Options for writing a compiled project to disk.
@@ -161,7 +172,9 @@ pub fn build_project(
     entry_path: &str,
     flags: &[Flag],
 ) -> Result<BuildResult, CompilerMessages> {
-    let valid_path = check_if_valid_path(entry_path).map_err(CompilerMessages::from_error)?;
+    let mut path_string_table = StringTable::new();
+    let valid_path = check_if_valid_path(entry_path, &mut path_string_table)
+        .map_err(|error| CompilerMessages::from_error(error, path_string_table))?;
 
     say!("\nCompiling Project");
 
@@ -170,45 +183,44 @@ pub fn build_project(
     // --------------------------------------------
     // This discovers all the modules, parses the config,
     // and compiles each module to HIR for backend lowering.
-    let mut config = Config::new(valid_path);
-    let frontend_style_directives = project_builder.backend.frontend_style_directives();
-    let style_directives = StyleDirectiveRegistry::merged(&frontend_style_directives)
-        .map_err(CompilerMessages::from_error)?;
+    let BuildBootstrap {
+        mut config,
+        style_directives,
+        mut string_table,
+    } = bootstrap_project_build(project_builder, valid_path)?;
 
-    // WHAT: Load and validate project config before compilation begins (Stage 0)
-    // WHY: Config must be validated early so backends can reject invalid settings before any work
-    load_project_config(&mut config, &style_directives)?;
-
-    // WHAT: Validate backend-specific config requirements before compilation
-    // WHY: Backend validation must occur after Stage 0 loading but before any compilation work
-    project_builder
-        .backend
-        .validate_project_config(&config)
-        .map_err(CompilerMessages::from_error)?;
-
-    let modules = compile_project_frontend(&mut config, flags, &style_directives)?;
+    let modules =
+        compile_project_frontend(&mut config, flags, &style_directives, &mut string_table)
+            .map_err(|mut messages| {
+                messages.string_table = string_table.clone();
+                messages
+            })?;
     let mut warnings = collect_frontend_warnings(&modules);
 
     // --------------------------------------------
     // BUILD PROJECT USING THE APPROPRIATE BUILDER
     // --------------------------------------------
     let start = Instant::now();
-    let project = match project_builder
-        .backend
-        .build_backend(modules, &config, flags)
-    {
-        Ok(project) => {
-            let duration = start.elapsed();
-            say!(
-                "\nBuilt ",
-                Blue project.output_files.len(),
-                Reset " files successfully in: ",
-                Green Bold #duration
-            );
-            project
-        }
-        Err(compiler_messages) => return Err(compiler_messages),
-    };
+    let project =
+        match project_builder
+            .backend
+            .build_backend(modules, &config, flags, &mut string_table)
+        {
+            Ok(project) => {
+                let duration = start.elapsed();
+                say!(
+                    "\nBuilt ",
+                    Blue project.output_files.len(),
+                    Reset " files successfully in: ",
+                    Green Bold #duration
+                );
+                project
+            }
+            Err(mut compiler_messages) => {
+                compiler_messages.string_table = string_table;
+                return Err(compiler_messages);
+            }
+        };
 
     warnings.extend(project.warnings.iter().cloned());
 
@@ -216,6 +228,45 @@ pub fn build_project(
         project,
         config,
         warnings,
+        string_table,
+    })
+}
+
+/// Build the shared Stage 0/bootstrap state used by both CLI builds and the dev server.
+///
+/// WHAT: merges frontend/project directives, loads `#config.bst`, and runs backend-specific
+/// config validation into one reusable setup step.
+/// WHY: directory builds and the dev server must share one bootstrap path so config/output
+/// behavior does not drift between "build" and "serve" flows.
+pub(crate) fn bootstrap_project_build(
+    project_builder: &ProjectBuilder,
+    entry_path: PathBuf,
+) -> Result<BuildBootstrap, CompilerMessages> {
+    let mut config = Config::new(entry_path);
+
+    // Create a new string table for interning strings
+    const FILE_MIN_UNIQUE_SYMBOLS_CAPACITY: usize = 32;
+    let mut string_table = StringTable::with_capacity(FILE_MIN_UNIQUE_SYMBOLS_CAPACITY);
+
+    let frontend_style_directives = project_builder.backend.frontend_style_directives();
+    let style_directives = StyleDirectiveRegistry::merged(&frontend_style_directives)
+        .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;
+
+    // WHAT: Load and validate project config before compilation begins (Stage 0).
+    // WHY: Backends and serving code both depend on the same validated config surface.
+    load_project_config(&mut config, &style_directives, &mut string_table)?;
+
+    // WHAT: Validate backend-specific config requirements before compilation.
+    // WHY: Backends should reject unsupported settings before frontend compilation does work.
+    project_builder
+        .backend
+        .validate_project_config(&config, &mut string_table)
+        .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;
+
+    Ok(BuildBootstrap {
+        config,
+        style_directives,
+        string_table,
     })
 }
 
@@ -227,21 +278,24 @@ pub fn build_project(
 pub fn write_project_outputs(
     project: &Project,
     options: &WriteOptions,
+    string_table: &StringTable,
 ) -> Result<(), CompilerMessages> {
     let cleanup_state = prepare_output_cleanup(
         &options.output_root,
         options.project_entry_dir.as_deref(),
         &project.cleanup_policy,
+        string_table,
     )?;
 
     fs::create_dir_all(&options.output_root).map_err(|error| {
-        CompilerMessages::from_error(CompilerError::file_error(
+        file_error_messages(
             &options.output_root,
             format!(
                 "Failed to create output root '{}': {error}",
                 options.output_root.display()
             ),
-        ))
+            string_table,
+        )
     })?;
 
     let mut current_output_paths: HashSet<PathBuf> = HashSet::new();
@@ -253,7 +307,7 @@ pub fn write_project_outputs(
         }
 
         let relative_output_path = output_file.relative_output_path();
-        validate_relative_output_path(relative_output_path)?;
+        validate_relative_output_path(relative_output_path, string_table)?;
         current_output_paths.insert(relative_output_path.to_path_buf());
 
         if !matches!(output_file.file_kind(), FileKind::Directory)
@@ -269,37 +323,40 @@ pub fn write_project_outputs(
             FileKind::NotBuilt => {}
             FileKind::Directory => {
                 fs::create_dir_all(&destination).map_err(|error| {
-                    CompilerMessages::from_error(CompilerError::file_error(
+                    file_error_messages(
                         &destination,
                         format!(
                             "Failed to create output directory '{}': {error}",
                             destination.display()
                         ),
-                    ))
+                        string_table,
+                    )
                 })?;
             }
             FileKind::Js(content) | FileKind::Html(content) => {
-                create_parent_dir_if_needed(&destination)?;
+                create_parent_dir_if_needed(&destination, string_table)?;
                 fs::write(&destination, content).map_err(|error| {
-                    CompilerMessages::from_error(CompilerError::file_error(
+                    file_error_messages(
                         &destination,
                         format!(
                             "Failed to write output file '{}': {error}",
                             destination.display()
                         ),
-                    ))
+                        string_table,
+                    )
                 })?;
             }
             FileKind::Wasm(bytes) | FileKind::Bytes(bytes) => {
-                create_parent_dir_if_needed(&destination)?;
+                create_parent_dir_if_needed(&destination, string_table)?;
                 fs::write(&destination, bytes).map_err(|error| {
-                    CompilerMessages::from_error(CompilerError::file_error(
+                    file_error_messages(
                         &destination,
                         format!(
                             "Failed to write output file '{}': {error}",
                             destination.display()
                         ),
-                    ))
+                        string_table,
+                    )
                 })?;
             }
         }
@@ -313,6 +370,7 @@ pub fn write_project_outputs(
         &current_output_paths,
         &current_managed_artifact_paths,
         &project.cleanup_policy,
+        string_table,
     )?;
 
     Ok(())
@@ -326,20 +384,32 @@ fn collect_frontend_warnings(modules: &[Module]) -> Vec<CompilerWarning> {
     warnings
 }
 
-fn create_parent_dir_if_needed(path: &Path) -> Result<(), CompilerMessages> {
+fn create_parent_dir_if_needed(
+    path: &Path,
+    string_table: &StringTable,
+) -> Result<(), CompilerMessages> {
     let Some(parent) = path.parent() else {
         return Ok(());
     };
 
     fs::create_dir_all(parent).map_err(|error| {
-        CompilerMessages::from_error(CompilerError::file_error(
+        file_error_messages(
             parent,
             format!(
                 "Failed to create parent directory '{}': {error}",
                 parent.display()
             ),
-        ))
+            string_table,
+        )
     })
+}
+
+fn file_error_messages(
+    path: &Path,
+    msg: impl Into<String>,
+    string_table: &StringTable,
+) -> CompilerMessages {
+    CompilerMessages::file_error(path, msg, string_table)
 }
 
 #[cfg(test)]

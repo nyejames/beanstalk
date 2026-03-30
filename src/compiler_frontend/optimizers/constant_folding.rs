@@ -83,7 +83,7 @@ pub fn constant_fold(
                             output_stack,
                             stack
                         ),
-                        node.location.to_owned().to_error_location(string_table)
+                        node.location.to_owned()
                     )
                 }
 
@@ -182,7 +182,7 @@ impl Expression {
                     // Other operations are not applicable to floats
                     _ => return_rule_error!(
                         format!("Can't perform operation {} on floats", op.to_str()),
-                        self.location.to_owned().to_error_location(string_table)
+                        self.location.to_owned()
                     ),
                 }
             }
@@ -196,20 +196,14 @@ impl Expression {
                     Operator::Divide => {
                         // Handle division by zero and integer division
                         if *rhs_val == 0 {
-                            return_rule_error!(
-                                "Can't divide by zero",
-                                self.location.to_owned().to_error_location(string_table)
-                            )
+                            return_rule_error!("Can't divide by zero", self.location.to_owned())
                         }
 
                         ExpressionKind::Int(lhs_val / rhs_val)
                     }
                     Operator::Modulus => {
                         if *rhs_val == 0 {
-                            return_rule_error!(
-                                "Can't modulus by zero",
-                                self.location.to_owned().to_error_location(string_table)
-                            )
+                            return_rule_error!("Can't modulus by zero", self.location.to_owned())
                         }
 
                         ExpressionKind::Int(lhs_val % rhs_val)
@@ -250,7 +244,7 @@ impl Expression {
 
                     _ => return_rule_error!(
                         format!("Can't perform operation {} on integers", op.to_str()),
-                        self.location.to_owned().to_error_location(string_table)
+                        self.location.to_owned()
                     ),
                 }
             }
@@ -264,7 +258,7 @@ impl Expression {
 
                 _ => return_rule_error!(
                     format!("Can't perform operation {} on booleans", op.to_str()),
-                    self.location.to_owned().to_error_location(string_table)
+                    self.location.to_owned()
                 ),
             },
 
@@ -283,7 +277,7 @@ impl Expression {
                     Operator::NotEqual => ExpressionKind::Bool(lhs_val != rhs_val),
                     _ => return_rule_error!(
                         format!("Can't perform operation {} on strings", op.to_str()),
-                        self.location.to_owned().to_error_location(string_table)
+                        self.location.to_owned()
                     ),
                 }
             }

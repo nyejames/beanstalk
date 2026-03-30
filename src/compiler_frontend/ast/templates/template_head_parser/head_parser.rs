@@ -81,9 +81,7 @@ pub fn parse_template_head(
             if matches!(template.kind, TemplateType::SlotDefinition(_)) {
                 return_syntax_error!(
                     "'$slot' markers cannot declare a body. Use '[$slot]' or '[$slot(\"name\")]'.",
-                    token_stream
-                        .current_location()
-                        .to_error_location(string_table)
+                    token_stream.current_location()
                 );
             }
 
@@ -120,12 +118,7 @@ pub fn parse_template_head(
                             "Template helper heads can only contain one helper directive."
                         }
                     };
-                    return_syntax_error!(
-                        restriction_message,
-                        token_stream
-                            .current_location()
-                            .to_error_location(string_table)
-                    )
+                    return_syntax_error!(restriction_message, token_stream.current_location())
                 }
             }
         }
@@ -138,9 +131,7 @@ pub fn parse_template_head(
                         "Expected a comma before the next token in the template head. Token: {:?}",
                         token
                     ),
-                    token_stream
-                        .current_location()
-                        .to_error_location(string_table)
+                    token_stream.current_location()
                 )
             }
 
@@ -202,9 +193,7 @@ pub fn parse_template_head(
                             "Cannot declare new variables inside of a template head. Variable '{}' is not declared.",
                             string_table.resolve(name)
                         ),
-                        token_stream
-                            .current_location()
-                            .to_error_location(string_table)
+                        token_stream.current_location()
                     )
                 }
             }
@@ -283,7 +272,7 @@ pub fn parse_template_head(
                         ),
                         token_stream
                             .current_location()
-                            .to_error_location(string_table),
+                            ,
                         {
                             PrimarySuggestion => "Register this directive in the active project builder style directive list or use a supported core directive",
                         }
@@ -324,9 +313,7 @@ pub fn parse_template_head(
                 // Multiple commas in succession.
                 return_syntax_error!(
                     "Multiple commas used back to back in the template head. You must have a valid expression between each comma",
-                    token_stream
-                        .current_location()
-                        .to_error_location(string_table)
+                    token_stream.current_location()
                 )
             }
 
@@ -342,9 +329,7 @@ pub fn parse_template_head(
                         "Invalid Token Used Inside template head when creating template node. Token: {:?}",
                         token
                     ),
-                    token_stream
-                        .current_location()
-                        .to_error_location(string_table)
+                    token_stream.current_location()
                 )
             }
         }

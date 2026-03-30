@@ -12,7 +12,7 @@ use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::paths::paths::parse_import_clause_tokens;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
-use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TextLocation, Token, TokenKind};
+use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
 use crate::projects::settings::{
     MINIMUM_LIKELY_DECLARATIONS, TOKEN_TO_DECLARATION_RATIO, TOKEN_TO_HEADER_RATIO,
     TOP_LEVEL_CONST_TEMPLATE_NAME,
@@ -53,7 +53,7 @@ struct HeaderBuildContext<'a> {
 #[derive(Clone, Debug)]
 pub struct TopLevelTemplateItem {
     pub file_order: usize,
-    pub location: TextLocation,
+    pub location: SourceLocation,
     pub kind: TopLevelTemplateKind,
 }
 
@@ -106,7 +106,7 @@ pub struct Header {
     // Which headers should be parsed before this one?
     // And what does this header name this import? (last part of the path)
     pub dependencies: HashSet<InternedPath>,
-    pub name_location: TextLocation,
+    pub name_location: SourceLocation,
 
     // The actual content of the header to be parsed at the AST stage.
     // And the full name / path
@@ -127,7 +127,7 @@ impl Display for Header {
 #[derive(Clone, Debug)]
 pub struct FileImport {
     pub header_path: InternedPath,
-    pub location: TextLocation,
+    pub location: SourceLocation,
 }
 
 // This takes all the files in the module
@@ -252,7 +252,7 @@ fn parse_headers_in_file(
                         if next_statement_exported {
                             return_rule_error!(
                                 "There is already a constant, function or struct using this name. You can't shadow these. Choose a unique name",
-                                token_stream.current_location().to_error_location(context.string_table), {
+                                token_stream.current_location(), {
                                     PrimarySuggestion => "Rename the constant to something unique"
                                 }
                             )
@@ -321,11 +321,8 @@ fn parse_headers_in_file(
                         next_statement_exported = false;
                         context.warnings.push(CompilerWarning::new(
                             "You can't export a reference to a host function, only new declarations.",
-                            token_stream
-                                .current_location()
-                                .to_error_location(context.string_table),
+                            token_stream.current_location(),
                             WarningKind::PointlessExport,
-                            token_stream.src_path.to_path_buf(context.string_table),
                         ))
                     }
                 }
@@ -333,11 +330,8 @@ fn parse_headers_in_file(
 
             TokenKind::Import => {
                 let import_index = token_stream.index.saturating_sub(1);
-                let (paths, next_index) = parse_import_clause_tokens(
-                    &token_stream.tokens,
-                    import_index,
-                    context.string_table,
-                )?;
+                let (paths, next_index) =
+                    parse_import_clause_tokens(&token_stream.tokens, import_index)?;
 
                 for path in paths {
                     let normalized_path = normalize_import_dependency_path(
@@ -375,7 +369,7 @@ fn parse_headers_in_file(
                     if !context.is_entry_file {
                         return_rule_error!(
                             "Top-level const templates are currently only supported in the module entry file.",
-                            current_location.to_error_location(context.string_table), {
+                            current_location, {
                                 CompilationStage => "Header Parsing",
                                 PrimarySuggestion => "Move this '#[...]' template to the entry file or remove the export marker",
                             }
@@ -464,7 +458,7 @@ fn parse_headers_in_file(
         kind: HeaderKind::StartFunction,
         exported: next_statement_exported,
         dependencies: main_function_dependencies,
-        name_location: TextLocation::default(),
+        name_location: SourceLocation::default(),
         tokens: start_tokens,
         source_file: token_stream.src_path.to_owned(),
         file_imports,
@@ -509,7 +503,7 @@ fn create_header(
     full_name: InternedPath,
     exported: bool,
     token_stream: &mut FileTokens,
-    name_location: TextLocation,
+    name_location: SourceLocation,
     context: &mut HeaderBuildContext<'_>,
 ) -> Result<Header, CompilerError> {
     // We only need to know what imports this header is actually using.
@@ -576,7 +570,7 @@ fn create_header(
                     TokenKind::Eof => {
                         return_rule_error!(
                             "Unexpected end of file while parsing function body. Missing ';' to close this scope.",
-                            token_stream.current_location().to_error_location(context.string_table),
+                            token_stream.current_location(),
                             {
                                 PrimarySuggestion => "Close the function body with ';'",
                                 SuggestedInsertion => ";",
@@ -628,7 +622,7 @@ fn create_header(
                         TokenKind::Eof => {
                             return_rule_error!(
                                 "Unexpected end of file while parsing struct definition. Missing closing '|'.",
-                                token_stream.current_location().to_error_location(context.string_table),
+                                token_stream.current_location(),
                                 {
                                     PrimarySuggestion => "Close the struct fields with a final '|'",
                                     SuggestedInsertion => "|",
@@ -707,7 +701,7 @@ fn create_header(
         TokenKind::DoubleColon => {
             return_rule_error!(
                 "Choice declarations are not yet implemented in the language.",
-                token_stream.current_location().to_error_location(context.string_table),
+                token_stream.current_location(),
                 {
                     CompilationStage => "Header Parsing",
                     PrimarySuggestion => "Remove the '::' declaration for now or rewrite this as supported syntax",
@@ -955,7 +949,7 @@ fn create_top_level_const_template(
             TokenKind::Eof => {
                 return_rule_error!(
                     "Unexpected end of file while parsing top-level const template. Missing ']' to close the template.",
-                    token_stream.current_location().to_error_location(context.string_table),
+                    token_stream.current_location(),
                     {
                         PrimarySuggestion => "Close the template with ']'",
                         SuggestedInsertion => "]",
@@ -990,7 +984,7 @@ fn create_top_level_const_template(
     });
 
     let full_name = scope.append(const_template_name);
-    let name_location = TextLocation {
+    let name_location = SourceLocation {
         scope,
         start_pos: start_location.start_pos,
         end_pos: token_stream.current_location().end_pos,
@@ -1018,7 +1012,7 @@ fn push_runtime_template_tokens_to_start_function(
     file_imports: &HashSet<InternedPath>,
     main_function_dependencies: &mut HashSet<InternedPath>,
     main_function_body: &mut Vec<Token>,
-    string_table: &StringTable,
+    _string_table: &StringTable,
 ) -> Result<(), CompilerError> {
     main_function_body.push(opening_template_token);
 
@@ -1040,7 +1034,7 @@ fn push_runtime_template_tokens_to_start_function(
             TokenKind::Eof => {
                 return_rule_error!(
                     "Unexpected end of file while parsing top-level runtime template. Missing ']' to close the template.",
-                    token_stream.current_location().to_error_location(string_table),
+                    token_stream.current_location(),
                     {
                         PrimarySuggestion => "Close the template with ']'",
                         SuggestedInsertion => "]",

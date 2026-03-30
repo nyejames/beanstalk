@@ -4,7 +4,7 @@
 //! locations without forcing the transfer code to duplicate lookup logic.
 
 use crate::compiler_frontend::analysis::borrow_checker::state::{BorrowState, FunctionLayout};
-use crate::compiler_frontend::compiler_errors::ErrorLocation;
+use crate::compiler_frontend::compiler_errors::SourceLocation;
 use crate::compiler_frontend::hir::hir_nodes::{
     BlockId, FunctionId, HirModule, HirStatement, HirTerminator, HirValueId, LocalId,
 };
@@ -47,15 +47,15 @@ impl<'a> BorrowDiagnostics<'a> {
             .unwrap_or_else(|| path.to_string(self.string_table))
     }
 
-    pub(super) fn statement_error_location(&self, statement: &HirStatement) -> ErrorLocation {
-        statement.location.to_error_location(self.string_table)
+    pub(super) fn statement_error_location(&self, statement: &HirStatement) -> SourceLocation {
+        statement.location.clone()
     }
 
     pub(super) fn terminator_error_location(
         &self,
         block_id: BlockId,
         _terminator: &HirTerminator,
-    ) -> ErrorLocation {
+    ) -> SourceLocation {
         self.module
             .side_table
             .hir_source_location_for_hir(HirLocation::Terminator(block_id))
@@ -74,11 +74,11 @@ impl<'a> BorrowDiagnostics<'a> {
                     .side_table
                     .ast_location_for_hir(HirLocation::Block(block_id))
             })
-            .map(|location| location.to_error_location(self.string_table))
+            .cloned()
             .unwrap_or_default()
     }
 
-    pub(super) fn function_error_location(&self, function_id: FunctionId) -> ErrorLocation {
+    pub(super) fn function_error_location(&self, function_id: FunctionId) -> SourceLocation {
         self.module
             .side_table
             .hir_source_location_for_hir(HirLocation::Function(function_id))
@@ -87,20 +87,20 @@ impl<'a> BorrowDiagnostics<'a> {
                     .side_table
                     .ast_location_for_hir(HirLocation::Function(function_id))
             })
-            .map(|location| location.to_error_location(self.string_table))
+            .cloned()
             .unwrap_or_default()
     }
 
     pub(super) fn value_error_location(
         &self,
         value_id: HirValueId,
-        fallback: ErrorLocation,
-    ) -> ErrorLocation {
+        fallback: SourceLocation,
+    ) -> SourceLocation {
         self.module
             .side_table
             .value_source_location(value_id)
             .or_else(|| self.module.side_table.value_ast_location(value_id))
-            .map(|location| location.to_error_location(self.string_table))
+            .cloned()
             .unwrap_or(fallback)
     }
 

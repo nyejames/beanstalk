@@ -14,7 +14,7 @@ use crate::compiler_frontend::tokenizer::newline_handling::{
     NewlineMode, consume_carriage_return_newline,
 };
 use crate::compiler_frontend::tokenizer::tokens::{
-    FileTokens, TemplateBodyMode, TextLocation, Token, TokenKind, TokenStream, TokenizeMode,
+    FileTokens, SourceLocation, TemplateBodyMode, Token, TokenKind, TokenStream, TokenizeMode,
 };
 use crate::projects::settings;
 use crate::{return_syntax_error, token_log};
@@ -47,7 +47,7 @@ pub fn tokenize(
     let mut tokens: Vec<Token> = Vec::with_capacity(initial_capacity);
     let mut stream = TokenStream::new(source_code, src_path, mode, newline_mode);
 
-    let mut token: Token = Token::new(TokenKind::ModuleStart, TextLocation::default());
+    let mut token: Token = Token::new(TokenKind::ModuleStart, SourceLocation::default());
 
     loop {
         token_log!(#token);
@@ -116,7 +116,7 @@ pub fn get_token_kind(
         // If we reach here, the raw string was not terminated
         return_syntax_error!(
             "Unterminated raw string literal - missing closing backtick",
-            stream.new_location().to_error_location(string_table),
+            stream.new_location(),
             {
                 CompilationStage => "Tokenization",
                 PrimarySuggestion => "Add closing backtick at the end of the raw string",
@@ -189,7 +189,7 @@ pub fn get_token_kind(
         if stream.mode != TokenizeMode::TemplateHead {
             return_syntax_error!(
                 "The '$' style directive syntax is only valid inside template heads.",
-                stream.new_location().to_error_location(string_table),
+                stream.new_location(),
                 {
                     CompilationStage => "Tokenization",
                     PrimarySuggestion => "Move this '$' directive into a template head or remove it",
@@ -200,7 +200,7 @@ pub fn get_token_kind(
         let Some(&first_char) = stream.peek() else {
             return_syntax_error!(
                 "Expected a style directive name after '$'.",
-                stream.new_location().to_error_location(string_table),
+                stream.new_location(),
                 {
                     CompilationStage => "Tokenization",
                     PrimarySuggestion => "Use one of the registered style directives in the template head",
@@ -211,7 +211,7 @@ pub fn get_token_kind(
         if !first_char.is_alphabetic() && first_char != '_' {
             return_syntax_error!(
                 "Expected a style directive name immediately after '$'.",
-                stream.new_location().to_error_location(string_table),
+                stream.new_location(),
                 {
                     CompilationStage => "Tokenization",
                     PrimarySuggestion => "Write the directive without whitespace, for example '$markdown'",
@@ -245,7 +245,7 @@ pub fn get_token_kind(
                     token_value,
                     style_directives.supported_directives_for_diagnostic(),
                 ),
-                stream.new_location().to_error_location(string_table),
+                stream.new_location(),
                 {
                     CompilationStage => "Tokenization",
                     PrimarySuggestion => "Register this directive in the project builder frontend_style_directives list or use a supported built-in directive",
@@ -279,7 +279,7 @@ pub fn get_token_kind(
         // If not correct declaration of char
         return_syntax_error!(
             format!("Expected a character after the single quote in a char literal. Found {current_char}"),
-            stream.new_location().to_error_location(string_table),
+            stream.new_location(),
             {
                 CompilationStage => "Tokenization",
                 PrimarySuggestion => "Character literals must be exactly one character between single quotes",
@@ -533,7 +533,7 @@ pub fn get_token_kind(
                 if !last_segment_was_digit {
                     return_syntax_error!(
                         "Numeric separators must appear between digits",
-                        stream.new_location().to_error_location(string_table),
+                        stream.new_location(),
                         {
                             CompilationStage => "Tokenization",
                             PrimarySuggestion => "Place underscores only between digits in numeric literals",
@@ -553,7 +553,7 @@ pub fn get_token_kind(
                 if has_decimal_point {
                     return_syntax_error!(
                         "Can't have more than one decimal point in a number",
-                        stream.new_location().to_error_location(string_table),
+                        stream.new_location(),
                         {
                             CompilationStage => "Tokenization",
                             PrimarySuggestion => "Remove extra decimal points from the number",
@@ -564,7 +564,7 @@ pub fn get_token_kind(
                 if !last_segment_was_digit {
                     return_syntax_error!(
                         "A decimal point must follow a digit",
-                        stream.new_location().to_error_location(string_table),
+                        stream.new_location(),
                         {
                             CompilationStage => "Tokenization",
                             PrimarySuggestion => "Remove the separator before the decimal point",
@@ -603,7 +603,7 @@ pub fn get_token_kind(
         if !last_segment_was_digit {
             return_syntax_error!(
                 "Number literals must end with a digit",
-                stream.new_location().to_error_location(string_table),
+                stream.new_location(),
                 {
                     CompilationStage => "Tokenization",
                     PrimarySuggestion => "Remove the trailing separator or add a digit after the decimal point",
@@ -614,7 +614,7 @@ pub fn get_token_kind(
         if has_decimal_point && !saw_digit_after_decimal {
             return_syntax_error!(
                 "Float literals must include digits after the decimal point",
-                stream.new_location().to_error_location(string_table),
+                stream.new_location(),
                 {
                     CompilationStage => "Tokenization",
                     PrimarySuggestion => "Add at least one digit after the decimal point",
@@ -626,7 +626,7 @@ pub fn get_token_kind(
             let parsed_value = token_value.parse::<i64>().map_err(|error| {
                 CompilerError::new_syntax_error(
                     format!("Invalid integer literal '{token_value}': {error}"),
-                    stream.new_location().to_error_location(string_table),
+                    stream.new_location(),
                 )
             })?;
             return_token!(TokenKind::IntLiteral(parsed_value), stream);
@@ -635,7 +635,7 @@ pub fn get_token_kind(
         let parsed_value = token_value.parse::<f64>().map_err(|error| {
             CompilerError::new_syntax_error(
                 format!("Invalid float literal '{token_value}': {error}"),
-                stream.new_location().to_error_location(string_table),
+                stream.new_location(),
             )
         })?;
         return_token!(TokenKind::FloatLiteral(parsed_value), stream);
@@ -648,7 +648,7 @@ pub fn get_token_kind(
 
     return_syntax_error!(
         format!("Invalid Token Used: '{}' this is not recognised or supported by the compiler_frontend", current_char),
-        stream.new_location().to_error_location(string_table),
+        stream.new_location(),
         {
             CompilationStage => "Tokenization",
             PrimarySuggestion => "Check for typos or unsupported characters",
@@ -736,7 +736,7 @@ pub(crate) fn keyword_or_variable(
             // Failing all of that, this is an invalid variable name
             return_syntax_error!(
                 format!("Invalid variable name or keyword: '{}'", token_value),
-                stream.new_location().to_error_location(string_table),
+                stream.new_location(),
                 {
                     CompilationStage => "Tokenization",
                     PrimarySuggestion => "Variable names must start with a letter or underscore and contain only alphanumeric characters or underscores",
@@ -786,7 +786,7 @@ fn tokenize_string(
     // If we reach here, the string was not terminated
     return_syntax_error!(
         "Unterminated string literal - missing closing quote",
-        stream.new_location().to_error_location(string_table),
+        stream.new_location(),
         {
             CompilationStage => "Tokenization",
             PrimarySuggestion => "Add closing double quote at the end of the string",

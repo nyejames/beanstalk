@@ -258,7 +258,7 @@ fn parse_code_language_argument(
         TokenKind::CloseParenthesis => {
             return_syntax_error!(
                 "The '$code()' directive cannot use empty parentheses. Omit the argument entirely for generic highlighting.",
-                token_stream.current_location().to_error_location(string_table),
+                token_stream.current_location(),
                 {
                     PrimarySuggestion => "Use '$code' for generic highlighting or '$code(\"bst\")' to select a built-in language",
                 }
@@ -273,7 +273,7 @@ fn parse_code_language_argument(
                         "Unsupported '$code(...)' language \"{language_text}\". Supported aliases are {}.",
                         CodeLanguage::supported_aliases()
                     ),
-                    token_stream.current_location().to_error_location(string_table),
+                    token_stream.current_location(),
                     {
                         PrimarySuggestion => "Use one of the supported built-in aliases or omit the argument for generic highlighting",
                     }
@@ -287,7 +287,7 @@ fn parse_code_language_argument(
                 TokenKind::Comma => {
                     return_syntax_error!(
                         "The '$code(...)' directive supports only one language argument.",
-                        token_stream.current_location().to_error_location(string_table),
+                        token_stream.current_location(),
                         {
                             PrimarySuggestion => "Pass a single quoted string literal such as '$code(\"bst\")'",
                         }
@@ -296,7 +296,7 @@ fn parse_code_language_argument(
                 TokenKind::Eof => {
                     return_syntax_error!(
                         "Unexpected end of template head while parsing '$code(...)'. Missing ')' to close the directive.",
-                        token_stream.current_location().to_error_location(string_table),
+                        token_stream.current_location(),
                         {
                             PrimarySuggestion => "Close the '$code(...)' directive with ')'",
                             SuggestedInsertion => ")",
@@ -306,7 +306,7 @@ fn parse_code_language_argument(
                 _ => {
                     return_syntax_error!(
                         "Expected ')' after the '$code(...)' language argument.",
-                        token_stream.current_location().to_error_location(string_table),
+                        token_stream.current_location(),
                         {
                             PrimarySuggestion => "Close the '$code(...)' directive immediately after the quoted string literal",
                             SuggestedInsertion => ")",
@@ -319,7 +319,7 @@ fn parse_code_language_argument(
         TokenKind::Eof => {
             return_syntax_error!(
                 "Unexpected end of template head while parsing '$code(...)'. Missing a quoted string argument and closing ')'.",
-                token_stream.current_location().to_error_location(string_table),
+                token_stream.current_location(),
                 {
                     PrimarySuggestion => "Use '$code' or complete the directive as '$code(\"bst\")'",
                 }
@@ -329,7 +329,7 @@ fn parse_code_language_argument(
         _ => {
             return_syntax_error!(
                 "The '$code(...)' directive requires a single quoted string literal argument like '$code(\"bst\")'.",
-                token_stream.current_location().to_error_location(string_table),
+                token_stream.current_location(),
                 {
                     PrimarySuggestion => "Use a quoted string literal or omit the argument entirely for generic highlighting",
                 }

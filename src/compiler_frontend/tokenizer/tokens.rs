@@ -6,7 +6,7 @@
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::identity::FileId;
 use crate::compiler_frontend::interned_path::InternedPath;
-pub use crate::compiler_frontend::source_location::{CharPosition, TextLocation};
+pub use crate::compiler_frontend::source_location::{CharPosition, SourceLocation};
 use crate::compiler_frontend::string_interning::StringId;
 use crate::compiler_frontend::tokenizer::newline_handling::NewlineMode;
 use crate::token_log;
@@ -41,11 +41,11 @@ impl TemplateBodyMode {
 #[derive(Debug, Clone)]
 pub struct Token {
     pub kind: TokenKind,
-    pub location: TextLocation,
+    pub location: SourceLocation,
 }
 
 impl Token {
-    pub fn new(kind: TokenKind, location: TextLocation) -> Self {
+    pub fn new(kind: TokenKind, location: SourceLocation) -> Self {
         Self { kind, location }
     }
 }
@@ -111,7 +111,7 @@ impl FileTokens {
         self.tokens.get(self.index + 1).map(|token| &token.kind)
     }
 
-    pub fn current_location(&self) -> TextLocation {
+    pub fn current_location(&self) -> SourceLocation {
         self.tokens[self.index].location.clone()
     }
 
@@ -228,10 +228,10 @@ impl<'a> TokenStream<'a> {
         self.chars.peek()
     }
 
-    pub fn new_location(&mut self) -> TextLocation {
+    pub fn new_location(&mut self) -> SourceLocation {
         let start_pos = self.start_position;
         self.update_start_position();
-        TextLocation::new(self.file_path.to_owned(), start_pos, self.position)
+        SourceLocation::new(self.file_path.to_owned(), start_pos, self.position)
     }
 
     pub fn update_start_position(&mut self) {

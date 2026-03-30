@@ -11,12 +11,12 @@ use crate::compiler_frontend::paths::path_resolution::{
     CompileTimePath, CompileTimePathBase, CompileTimePathKind, CompileTimePaths,
 };
 use crate::compiler_frontend::string_interning::StringTable;
-use crate::compiler_frontend::tokenizer::tokens::TextLocation;
+use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
 fn template_ast_node(template: Template) -> AstNode {
     AstNode {
         kind: NodeKind::Rvalue(Expression::template(template, Ownership::ImmutableOwned)),
-        location: TextLocation::default(),
+        location: SourceLocation::default(),
         scope: InternedPath::new(),
     }
 }
@@ -98,23 +98,23 @@ fn coerce_to_string_records_rendered_path_usages_for_path_values() {
         AstNode {
             kind: NodeKind::Rvalue(Expression::path(
                 compile_time_paths,
-                TextLocation::default(),
+                SourceLocation::default(),
             )),
-            location: TextLocation::default(),
+            location: SourceLocation::default(),
             scope: source_scope.clone(),
         },
         AstNode {
             kind: NodeKind::Operator(Operator::Add),
-            location: TextLocation::default(),
+            location: SourceLocation::default(),
             scope: source_scope.clone(),
         },
         AstNode {
             kind: NodeKind::Rvalue(Expression::string_slice(
                 string_table.get_or_intern(String::from("?v=1")),
-                TextLocation::default(),
+                SourceLocation::default(),
                 Ownership::ImmutableOwned,
             )),
-            location: TextLocation::default(),
+            location: SourceLocation::default(),
             scope: source_scope,
         },
     ];
