@@ -525,6 +525,134 @@ fn lowers_function_call_to_call_statement_and_temp_load() {
 }
 
 #[test]
+fn lowers_receiver_method_call_with_receiver_as_first_argument() {
+    let mut string_table = StringTable::new();
+    let method_path = symbol("Vector2/reset", &mut string_table);
+    let method_name = string_table.intern("reset");
+    let receiver_name = symbol("vec", &mut string_table);
+    let receiver_struct = symbol("Vector2", &mut string_table);
+    let location = location(6);
+    let mut builder = setup_builder(&mut string_table);
+
+    builder.test_register_struct_with_fields(StructId(21), receiver_struct.clone(), vec![]);
+    builder.test_register_function_name(method_path.clone(), FunctionId(22));
+
+    let receiver_type =
+        DataType::runtime_struct(receiver_struct.clone(), vec![], Ownership::MutableOwned);
+    register_local(
+        &mut builder,
+        receiver_name.clone(),
+        LocalId(23),
+        receiver_type.clone(),
+        location.clone(),
+    );
+
+    let receiver = AstNode {
+        kind: NodeKind::Rvalue(Expression::reference(
+            receiver_name,
+            receiver_type,
+            location.clone(),
+            Ownership::MutableReference,
+        )),
+        location: location.clone(),
+        scope: InternedPath::new(),
+    };
+
+    let lowered = builder
+        .lower_ast_node_as_expression(&AstNode {
+            kind: NodeKind::MethodCall {
+                receiver: Box::new(receiver),
+                method_path: method_path.clone(),
+                method: method_name,
+                args: vec![Expression::int(
+                    7,
+                    location.clone(),
+                    Ownership::ImmutableOwned,
+                )],
+                result_types: vec![DataType::Int],
+                location: location.clone(),
+            },
+            location: location.clone(),
+            scope: InternedPath::new(),
+        })
+        .expect("receiver method call lowering should succeed");
+
+    assert_eq!(lowered.prelude.len(), 1);
+
+    match &lowered.prelude[0].kind {
+        HirStatementKind::Call { target, args, .. } => {
+            assert_eq!(target, &CallTarget::UserFunction(FunctionId(22)));
+            assert_eq!(args.len(), 2);
+            assert!(matches!(
+                args[0].kind,
+                HirExpressionKind::Load(HirPlace::Local(LocalId(23)))
+            ));
+            assert!(matches!(args[1].kind, HirExpressionKind::Int(7)));
+        }
+        other => panic!("expected lowered receiver call statement, got {other:?}"),
+    }
+}
+
+#[test]
+fn lowers_builtin_scalar_receiver_method_call_with_receiver_as_first_argument() {
+    let mut string_table = StringTable::new();
+    let method_path = symbol("Int/double", &mut string_table);
+    let method_name = string_table.intern("double");
+    let receiver_name = symbol("value", &mut string_table);
+    let location = location(12);
+    let mut builder = setup_builder(&mut string_table);
+
+    builder.test_register_function_name(method_path.clone(), FunctionId(41));
+
+    register_local(
+        &mut builder,
+        receiver_name.clone(),
+        LocalId(42),
+        DataType::Int,
+        location.clone(),
+    );
+
+    let receiver = AstNode {
+        kind: NodeKind::Rvalue(Expression::reference(
+            receiver_name,
+            DataType::Int,
+            location.clone(),
+            Ownership::ImmutableReference,
+        )),
+        location: location.clone(),
+        scope: InternedPath::new(),
+    };
+
+    let lowered = builder
+        .lower_ast_node_as_expression(&AstNode {
+            kind: NodeKind::MethodCall {
+                receiver: Box::new(receiver),
+                method_path: method_path.clone(),
+                method: method_name,
+                args: vec![],
+                result_types: vec![DataType::Int],
+                location: location.clone(),
+            },
+            location: location.clone(),
+            scope: InternedPath::new(),
+        })
+        .expect("builtin scalar receiver method call lowering should succeed");
+
+    assert_eq!(lowered.prelude.len(), 1);
+    match &lowered.prelude[0].kind {
+        HirStatementKind::Call { target, args, .. } => {
+            assert_eq!(target, &CallTarget::UserFunction(FunctionId(41)));
+            assert_eq!(args.len(), 1);
+            assert!(matches!(
+                args[0].kind,
+                HirExpressionKind::Load(HirPlace::Local(LocalId(42)))
+            ));
+        }
+        other => panic!("expected lowered builtin scalar receiver call statement, got {other:?}"),
+    }
+}
+
+#[test]
 fn lowers_host_call_expression_with_host_target() {
     let mut string_table = StringTable::new();
     let literal_x = string_table.intern("x");
@@ -873,7 +1001,7 @@ fn nominal_struct_identity_uses_field_parent_path() {
     let expression = Expression::new(
         ExpressionKind::StructInstance(expr_fields.clone()),
         location.clone(),
-        DataType::Struct(expr_fields, Ownership::MutableOwned),
+        DataType::runtime_struct(struct_path.clone(), expr_fields, Ownership::MutableOwned),
         Ownership::MutableOwned,
     );
 
@@ -957,7 +1085,8 @@ fn field_access_uses_base_struct_identity_not_global_leaf_lookup() {
         vec![(FieldId(101), field_b.clone(), int_type)],
     );
 
-    let local_struct_type = DataType::Struct(
+    let local_struct_type = DataType::runtime_struct(
+        struct_a.clone(),
         vec![Declaration {
             id: field_a.clone(),
             value: Expression::new(
@@ -1052,16 +1181,19 @@ fn field_access_from_module_constant_base_materializes_temp_place() {
     builder.test_register_module_constant(
         format_name.clone(),
         Expression::struct_instance(
+            format_struct.clone(),
             vec![Declaration {
                 id: center_field.clone(),
                 value: Expression::template(wrapper_template, Ownership::ImmutableOwned),
             }],
             location.clone(),
             Ownership::ImmutableOwned,
+            false,
         ),
     );
 
-    let format_struct_type = DataType::Struct(
+    let format_struct_type = DataType::runtime_struct(
+        format_struct.clone(),
         vec![Declaration {
             id: center_field,
             value: Expression::new(

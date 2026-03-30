@@ -10,7 +10,13 @@
 # The Struct
 A struct is a collection of named fields, similar to a struct in other languages.
 
-They can implement methods by defining a function that takes an instance of the Struct as its first argument with the name 'this'.
+Runtime structs are nominal types. Two structs with the same field shape are still different runtime types.
+
+They can implement statically resolved receiver methods by defining a top-level function whose first argument is literally named `this`.
+`this Type` is immutable, `this ~Type` is mutable, and receiver methods can only be called with `value.method(...)`.
+User-defined struct methods must be declared in the same file as the struct definition.
+
+Receiver methods are also supported on built-in scalar types (`Int`, `Float`, `Bool`, `String`) and use the same `this` rules. The same-file restriction applies to user-defined struct methods.
 
 Structs can be assigned with default arguments, these can be any constant expression.
 ```beanstalk
@@ -26,7 +32,7 @@ Structs can be assigned with default arguments, these can be any constant expres
     io(person.name) -- "Alice"
     io(person.age)  -- 30
 
-    -- Defining a plex, then defining a method for it
+    -- Defining a struct, then defining a method for it
     Vector2 = |
         x Float = 0,
         y Float = 0,
@@ -42,20 +48,19 @@ Structs can be assigned with default arguments, these can be any constant expres
 ```
 
 ## Methods
-Methods in Beanstalk are created using the special 'this' keyword.
+Methods in Beanstalk are created using the special `this` receiver parameter.
 
-You define a receiver (The type this method will belong to)
-by defining a parameter with the special name 'this'.
+You define a receiver by making the first parameter literally named `this`.
 
 ```beanstalk
-    -- Define a plex
+    -- Define a struct
     Rectangle = |
         width Float,
         height Float,
     |
 
-    -- Define a method for the Rectangle plex
-    area |this ~Rectangle|:
+    -- Define an immutable method for the Rectangle struct
+    area |this Rectangle|:
         return this.width * this.height
     ;
 
@@ -63,8 +68,9 @@ by defining a parameter with the special name 'this'.
     io(rect.area()) -- 50
 ```
 
-'this' is a reserved keyword so you can't use it as a variable or field name outside of function parameters and inside the method that uses it.
-You are also limited to one 'this' parameter per method.
+`this` is reserved for method receivers. You are limited to one `this` parameter per method, and `method(value, ...)` is not valid syntax for calling receiver methods.
+
+Const-coerced struct values are data-only records. They can be read, but they do not expose runtime methods.
 
 ]
 

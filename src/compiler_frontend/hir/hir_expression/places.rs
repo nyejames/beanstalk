@@ -82,6 +82,21 @@ impl<'a> HirBuilder<'a> {
                 })
             }
 
+            NodeKind::MethodCall {
+                receiver,
+                method_path,
+                args,
+                result_types,
+                location,
+                ..
+            } => self.lower_receiver_method_call_expression(
+                method_path,
+                receiver,
+                args,
+                result_types,
+                location,
+            ),
+
             _ => {
                 return_hir_transformation_error!(
                     format!("AST node is not an expression: {:?}", node.kind),
@@ -165,6 +180,25 @@ impl<'a> HirBuilder<'a> {
             } => {
                 let lowered = self.lower_call_expression(
                     CallTarget::HostFunction(host_function_id.to_owned()),
+                    args,
+                    result_types,
+                    location,
+                )?;
+                let place = self.place_from_expression(&lowered.value, &node.location)?;
+                Ok((lowered.prelude, place))
+            }
+
+            NodeKind::MethodCall {
+                receiver,
+                method_path,
+                args,
+                result_types,
+                location,
+                ..
+            } => {
+                let lowered = self.lower_receiver_method_call_expression(
+                    method_path,
+                    receiver,
                     args,
                     result_types,
                     location,
@@ -442,6 +476,24 @@ impl<'a> HirBuilder<'a> {
                 );
             }
         }
+
+        Ok(struct_id)
+    }
+
+    pub(super) fn resolve_struct_id_from_nominal_path(
+        &self,
+        nominal_path: &InternedPath,
+        location: &SourceLocation,
+    ) -> Result<StructId, CompilerError> {
+        let Some(struct_id) = self.structs_by_name.get(nominal_path).copied() else {
+            return_hir_transformation_error!(
+                format!(
+                    "Unresolved struct '{}' during HIR lowering",
+                    self.symbol_name_for_diagnostics(nominal_path)
+                ),
+                self.hir_error_location(location)
+            );
+        };
 
         Ok(struct_id)
     }

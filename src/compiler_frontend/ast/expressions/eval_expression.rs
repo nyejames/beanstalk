@@ -149,6 +149,10 @@ pub fn evaluate_expression(
                 simplified_expression.push(node.to_owned());
             }
 
+            NodeKind::MethodCall { .. } => {
+                simplified_expression.push(node.to_owned());
+            }
+
             NodeKind::Operator(op) => {
                 match current_type {
                     DataType::Template => {

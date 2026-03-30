@@ -80,7 +80,7 @@ pub(super) fn parse_config_file(
         Ok(headers) => headers,
         Err(header_errors) => {
             for error in header_errors {
-                if error.msg.contains("already a constant") || error.msg.contains("shadow") {
+                if is_duplicate_config_header_error(&error) {
                     let mut config_error = error.clone();
                     config_error.error_type = ErrorType::Config;
                     config_error.msg =
@@ -102,6 +102,18 @@ pub(super) fn parse_config_file(
         headers: parsed_headers.headers,
         errors,
     })
+}
+
+fn is_duplicate_config_header_error(error: &CompilerError) -> bool {
+    matches!(error.error_type, ErrorType::Rule)
+        && matches!(
+            error.metadata.get(&ErrorMetaDataKey::CompilationStage),
+            Some(stage) if stage == "Header Parsing"
+        )
+        && matches!(
+            error.metadata.get(&ErrorMetaDataKey::ConflictType),
+            Some(kind) if kind == "DuplicateTopLevelDeclaration"
+        )
 }
 
 /// Validate that all config declarations use standard constant syntax (`#key = value`).

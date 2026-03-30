@@ -1,5 +1,6 @@
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
+use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_resolution::CompileTimePathKind;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use std::fmt::Display;
@@ -54,6 +55,20 @@ impl Ownership {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum BuiltinScalarReceiver {
+    Int,
+    Float,
+    Bool,
+    String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum ReceiverKey {
+    Struct(InternedPath),
+    BuiltinScalar(BuiltinScalarReceiver),
+}
+
 #[derive(Debug, Clone)]
 pub enum DataType {
     // Meta-types used during earlier frontend stages.
@@ -71,11 +86,16 @@ pub enum DataType {
 
     // Container and composite runtime types.
     Collection(Box<DataType>, Ownership),
-    Struct(Vec<Declaration>, Ownership),
+    Struct {
+        nominal_path: InternedPath,
+        fields: Vec<Declaration>,
+        ownership: Ownership,
+        const_record: bool,
+    },
     Reference(Box<DataType>),
     Range, // Iterable that must always be owned.
     Returns(Vec<DataType>),
-    Function(Box<Option<DataType>>, FunctionSignature), // Receiver, signature
+    Function(Box<Option<ReceiverKey>>, FunctionSignature), // Receiver, signature
 
     // Compile-time/frontend-specific composite values.
     // Compile-time path value (file or directory).
@@ -110,6 +130,73 @@ pub enum DataType {
 }
 
 impl DataType {
+    pub fn runtime_struct(
+        nominal_path: InternedPath,
+        fields: Vec<Declaration>,
+        ownership: Ownership,
+    ) -> Self {
+        Self::Struct {
+            nominal_path,
+            fields,
+            ownership,
+            const_record: false,
+        }
+    }
+
+    pub fn const_struct_record(nominal_path: InternedPath, fields: Vec<Declaration>) -> Self {
+        Self::Struct {
+            nominal_path,
+            fields,
+            ownership: Ownership::ImmutableOwned,
+            const_record: true,
+        }
+    }
+
+    pub fn receiver_key_from_type(&self) -> Option<ReceiverKey> {
+        match self {
+            DataType::Struct {
+                nominal_path,
+                const_record,
+                ..
+            } if !const_record => Some(ReceiverKey::Struct(nominal_path.to_owned())),
+            DataType::Int => Some(ReceiverKey::BuiltinScalar(BuiltinScalarReceiver::Int)),
+            DataType::Float => Some(ReceiverKey::BuiltinScalar(BuiltinScalarReceiver::Float)),
+            DataType::Bool => Some(ReceiverKey::BuiltinScalar(BuiltinScalarReceiver::Bool)),
+            DataType::StringSlice => {
+                Some(ReceiverKey::BuiltinScalar(BuiltinScalarReceiver::String))
+            }
+            _ => None,
+        }
+    }
+
+    pub fn struct_nominal_path(&self) -> Option<&InternedPath> {
+        match self {
+            DataType::Struct { nominal_path, .. } => Some(nominal_path),
+            _ => None,
+        }
+    }
+
+    pub fn struct_fields(&self) -> Option<&[Declaration]> {
+        match self {
+            DataType::Struct { fields, .. } => Some(fields.as_slice()),
+            _ => None,
+        }
+    }
+
+    pub fn struct_ownership(&self) -> Option<&Ownership> {
+        match self {
+            DataType::Struct { ownership, .. } => Some(ownership),
+            _ => None,
+        }
+    }
+
+    pub fn is_const_record_struct(&self) -> bool {
+        match self {
+            DataType::Struct { const_record, .. } => *const_record,
+            _ => false,
+        }
+    }
+
     // IGNORES MUTABILITY
     pub fn is_valid_type_in_expression(&self, expression_type: &DataType) -> bool {
         // Has to make sure if either type is a union, that the other type is also a member of the union
@@ -192,7 +279,12 @@ impl DataType {
                 }
                 format!("Parameters({})", arg_str)
             }
-            DataType::Struct(args, ..) => {
+            DataType::Struct {
+                nominal_path,
+                fields: args,
+                const_record,
+                ..
+            } => {
                 let mut arg_str = String::new();
                 for arg in args {
                     let name = arg.id.to_string(string_table);
@@ -202,7 +294,13 @@ impl DataType {
                         arg.value.data_type.display_with_table(string_table)
                     ));
                 }
-                format!("Struct({})", arg_str)
+                let const_prefix = if *const_record { "#" } else { "" };
+                format!(
+                    "{}Struct({}: {})",
+                    const_prefix,
+                    nominal_path.to_string(string_table),
+                    arg_str
+                )
             }
             DataType::Returns(returns) => {
                 let mut returns_string = String::new();
@@ -287,13 +385,20 @@ impl PartialEq for DataType {
                         .zip(b.iter())
                         .all(|(arg_a, arg_b)| arg_a.id == arg_b.id)
             }
-            (DataType::Struct(a, oa), DataType::Struct(b, ob)) => {
-                oa == ob
-                    && a.len() == b.len()
-                    && a.iter()
-                        .zip(b.iter())
-                        .all(|(arg_a, arg_b)| arg_a.id == arg_b.id)
-            }
+            (
+                DataType::Struct {
+                    nominal_path: path_a,
+                    ownership: ownership_a,
+                    const_record: const_a,
+                    ..
+                },
+                DataType::Struct {
+                    nominal_path: path_b,
+                    ownership: ownership_b,
+                    const_record: const_b,
+                    ..
+                },
+            ) => path_a == path_b && ownership_a == ownership_b && const_a == const_b,
             (DataType::Function(_, signature1), DataType::Function(_, signature2)) => {
                 // If both functions have the same signature.returns types,
                 // then they are equal
@@ -359,12 +464,20 @@ impl Display for DataType {
                 }
                 write!(f, "{self:?} Arguments({arg_str})")
             }
-            DataType::Struct(args, ..) => {
+            DataType::Struct {
+                nominal_path,
+                fields: args,
+                const_record,
+                ..
+            } => {
                 let mut arg_str = String::new();
                 for arg in args {
                     arg_str.push_str(&format!("{:?}: {}, ", arg.id, arg.value.data_type));
                 }
-                write!(f, "{self:?} Arguments({arg_str})")
+                if *const_record {
+                    write!(f, "#")?;
+                }
+                write!(f, "Struct({nominal_path:?}: {arg_str})")
             }
 
             DataType::Returns(returns) => {

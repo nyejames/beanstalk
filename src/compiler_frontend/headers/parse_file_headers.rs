@@ -248,11 +248,27 @@ fn parse_headers_in_file(
                 {
                     // Reference to an existing symbol
                     if encountered_symbols.contains(&name_id) {
+                        if starts_duplicate_top_level_header_declaration(
+                            token_stream,
+                            next_statement_exported,
+                        ) {
+                            return_rule_error!(
+                                "There is already a top-level declaration using this name. Functions, structs, and exported constants must use unique names within a file.",
+                                token_stream.current_location(), {
+                                    CompilationStage => "Header Parsing",
+                                    ConflictType => "DuplicateTopLevelDeclaration",
+                                    PrimarySuggestion => "Rename the later declaration so it does not collide with the existing top-level symbol",
+                                }
+                            )
+                        }
+
                         // If there was a hash before this, then error out as this is shadowing a constant
                         if next_statement_exported {
                             return_rule_error!(
                                 "There is already a constant, function or struct using this name. You can't shadow these. Choose a unique name",
                                 token_stream.current_location(), {
+                                    CompilationStage => "Header Parsing",
+                                    ConflictType => "DuplicateTopLevelDeclaration",
                                     PrimarySuggestion => "Rename the constant to something unique"
                                 }
                             )
@@ -465,6 +481,35 @@ fn parse_headers_in_file(
     });
 
     Ok(headers)
+}
+
+/// Detect whether a repeated top-level symbol is starting another header declaration.
+///
+/// WHAT: peeks at the token sequence immediately after an already-seen symbol name.
+/// WHY: duplicate header declarations must fail during header parsing instead of being
+///      misclassified as references inside the implicit start function.
+fn starts_duplicate_top_level_header_declaration(
+    token_stream: &FileTokens,
+    next_statement_exported: bool,
+) -> bool {
+    if next_statement_exported {
+        return matches!(
+            token_stream.current_token_kind(),
+            // Exported functions still parse like normal `name |...|` declarations.
+            TokenKind::TypeParameterBracket
+        );
+    }
+
+    match token_stream.current_token_kind() {
+        // `name |...|` starts a function signature.
+        TokenKind::TypeParameterBracket => true,
+        // `name = |...|` starts a struct declaration.
+        TokenKind::Assign => matches!(
+            token_stream.peek_next_token(),
+            Some(TokenKind::TypeParameterBracket)
+        ),
+        _ => false,
+    }
 }
 
 fn normalize_import_dependency_path(

@@ -42,7 +42,11 @@ fn resolves_named_type_annotations_against_prior_structs() {
     };
     assert!(matches!(
         origin_decl.value.data_type,
-        DataType::Struct(_, Ownership::MutableOwned)
+        DataType::Struct {
+            ownership: Ownership::MutableOwned,
+            const_record: false,
+            ..
+        }
     ));
     assert!(matches!(
         origin_decl.value.kind,

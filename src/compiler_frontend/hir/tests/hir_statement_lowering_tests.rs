@@ -377,12 +377,14 @@ fn omits_nested_struct_constants_with_unresolved_template_helpers_from_hir_const
     ast.module_constants.push(make_test_variable(
         page_const_name,
         Expression::struct_instance(
+            symbol("Page", &mut string_table),
             vec![make_test_variable(
                 body_field,
                 Expression::template(wrapper_template, Ownership::ImmutableOwned),
             )],
             test_location(2),
             Ownership::ImmutableOwned,
+            true,
         ),
     ));
     ast.module_constants.push(make_test_variable(
@@ -457,6 +459,7 @@ fn lowers_struct_module_constant_into_record_with_ordered_fields() {
     ast.module_constants.push(make_test_variable(
         const_name,
         Expression::struct_instance(
+            symbol("Point", &mut string_table),
             vec![
                 make_test_variable(
                     x_field,
@@ -469,6 +472,7 @@ fn lowers_struct_module_constant_into_record_with_ordered_fields() {
             ],
             test_location(2),
             Ownership::ImmutableOwned,
+            true,
         ),
     ));
 

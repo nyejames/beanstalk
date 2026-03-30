@@ -1,8 +1,14 @@
 use super::ast_nodes::{Declaration, NodeKind};
 use crate::compiler_frontend::ast::ast_nodes::AstNode;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
-use crate::compiler_frontend::ast::expressions::mutation::handle_mutation;
-use crate::compiler_frontend::ast::expressions::parse_expression::create_multiple_expressions;
+use crate::compiler_frontend::ast::expressions::mutation::{
+    handle_mutation, handle_mutation_target,
+};
+use crate::compiler_frontend::ast::expressions::parse_expression::{
+    create_expression, create_multiple_expressions,
+};
+use crate::compiler_frontend::ast::field_access::parse_field_access;
+use crate::compiler_frontend::ast::receiver_methods::free_function_receiver_method_call_error;
 use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorMetaDataKey};
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
@@ -16,7 +22,7 @@ use crate::compiler_frontend::ast::statements::functions::{
 use crate::compiler_frontend::ast::statements::loops::create_loop;
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::compiler_frontend::traits::ContainsReferences;
 use crate::projects::settings;
@@ -27,6 +33,34 @@ fn is_return_terminator(token: &TokenKind) -> bool {
     matches!(token, TokenKind::Newline | TokenKind::End | TokenKind::Eof)
 }
 
+fn is_assignment_operator(token: &TokenKind) -> bool {
+    matches!(
+        token,
+        TokenKind::Assign
+            | TokenKind::AddAssign
+            | TokenKind::SubtractAssign
+            | TokenKind::MultiplyAssign
+            | TokenKind::DivideAssign
+            | TokenKind::ExponentAssign
+            | TokenKind::RootAssign
+    )
+}
+
+fn is_expression_statement(expr: &Expression) -> bool {
+    match &expr.kind {
+        ExpressionKind::FunctionCall(..) | ExpressionKind::HostFunctionCall(..) => true,
+        ExpressionKind::Runtime(nodes) => nodes.iter().any(|node| {
+            matches!(
+                node.kind,
+                NodeKind::MethodCall { .. }
+                    | NodeKind::FunctionCall { .. }
+                    | NodeKind::HostFunctionCall { .. }
+            )
+        }),
+        _ => false,
+    }
+}
+
 fn normalize_return_expression_type(data_type: &DataType) -> DataType {
     // Runtime templates lower into string-producing functions.
     // Treat them as string returns during signature validation.
@@ -34,6 +68,321 @@ fn normalize_return_expression_type(data_type: &DataType) -> DataType {
         DataType::Template | DataType::TemplateWrapper => DataType::StringSlice,
         _ => data_type.to_owned(),
     }
+}
+
+fn parse_expression_statement_candidate(
+    token_stream: &mut FileTokens,
+    context: &ScopeContext,
+    string_table: &mut StringTable,
+) -> Result<Expression, CompilerError> {
+    let mut inferred = DataType::Inferred;
+    let expr = create_expression(
+        token_stream,
+        context,
+        &mut inferred,
+        &Ownership::ImmutableOwned,
+        false,
+        string_table,
+    )?;
+
+    if !is_expression_statement(&expr) {
+        return_syntax_error!(
+            "Standalone expression is not a valid statement in this position.",
+            token_stream.current_location(),
+            {
+                CompilationStage => "AST Construction",
+                PrimarySuggestion => "Use an assignment, call, control-flow statement, or declaration here",
+            }
+        );
+    }
+
+    Ok(expr)
+}
+
+fn parse_symbol_expression_statement_candidate(
+    token_stream: &mut FileTokens,
+    context: &ScopeContext,
+    symbol_id: StringId,
+    string_table: &mut StringTable,
+) -> Result<Expression, CompilerError> {
+    let mut inferred = DataType::Inferred;
+    let expr = create_expression(
+        token_stream,
+        context,
+        &mut inferred,
+        &Ownership::ImmutableOwned,
+        false,
+        string_table,
+    )?;
+
+    if !is_expression_statement(&expr) {
+        return_syntax_error!(
+            format!(
+                "Unexpected token '{:?}' after variable reference '{}'. Expected an assignment or callable expression.",
+                token_stream.current_token_kind(),
+                string_table.resolve(symbol_id)
+            ),
+            token_stream.current_location(),
+            {
+                CompilationStage => "AST Construction",
+                PrimarySuggestion => "Use an assignment operator, a function call, or a receiver method call in statement position",
+            }
+        );
+    }
+
+    Ok(expr)
+}
+
+fn push_accessed_symbol_statement(
+    accessed: AstNode,
+    ast: &mut Vec<AstNode>,
+    context: &ScopeContext,
+    token_stream: &FileTokens,
+    symbol_id: StringId,
+    string_table: &StringTable,
+) -> Result<(), CompilerError> {
+    match accessed.kind {
+        NodeKind::MethodCall { .. } => {
+            ast.push(AstNode {
+                kind: NodeKind::Rvalue(accessed.get_expr()?),
+                location: accessed.location,
+                scope: context.scope.clone(),
+            });
+            Ok(())
+        }
+        NodeKind::FieldAccess { .. } => {
+            return_syntax_error!(
+                format!(
+                    "Unexpected token '{:?}' after field access '{}'. Field reads are not valid standalone statements.",
+                    token_stream.current_token_kind(),
+                    string_table.resolve(symbol_id)
+                ),
+                token_stream.current_location(),
+                {
+                    CompilationStage => "AST Construction",
+                    PrimarySuggestion => "Assign the field to a variable, mutate it, or call a method instead of leaving it as a standalone statement",
+                }
+            );
+        }
+        _ => {
+            return_syntax_error!(
+                "Standalone expression is not a valid statement in this position.",
+                token_stream.current_location(),
+                {
+                    CompilationStage => "AST Construction",
+                    PrimarySuggestion => "Use an assignment, call, control-flow statement, or declaration here",
+                }
+            );
+        }
+    }
+}
+
+fn parse_symbol_statement(
+    token_stream: &mut FileTokens,
+    ast: &mut Vec<AstNode>,
+    context: &mut ScopeContext,
+    warnings: &mut Vec<CompilerWarning>,
+    string_table: &mut StringTable,
+) -> Result<(), CompilerError> {
+    let TokenKind::Symbol(id) = token_stream.current_token_kind().to_owned() else {
+        return_syntax_error!(
+            "Expected a symbol-led statement.",
+            token_stream.current_location(),
+            {
+                CompilationStage => "AST Construction",
+            }
+        );
+    };
+    let full_path = context.scope.append(id);
+
+    if let Some(start_target) = context.resolve_start_import(&id) {
+        token_stream.advance();
+
+        match token_stream.current_token_kind() {
+            TokenKind::OpenParenthesis => {
+                ast.push(parse_function_call(
+                    token_stream,
+                    start_target,
+                    context,
+                    &FunctionSignature {
+                        parameters: vec![],
+                        returns: vec![FunctionReturn::Value(DataType::StringSlice)],
+                    },
+                    string_table,
+                )?);
+                return Ok(());
+            }
+
+            TokenKind::Dot => {
+                return_rule_error!(
+                    format!(
+                        "Imported file '{}' is callable only as '{}()'. File-struct member access is no longer supported.",
+                        string_table.resolve(id),
+                        string_table.resolve(id),
+                    ),
+                    token_stream.current_location(), {
+                        CompilationStage => "AST Construction",
+                        PrimarySuggestion => "Import exports directly with '@path/to/file/symbol' or '@path/to/file {a, b}'",
+                    }
+                );
+            }
+
+            _ => {
+                return_rule_error!(
+                    format!(
+                        "Imported file '{}' can only be used as a callable start import ('{}()').",
+                        string_table.resolve(id),
+                        string_table.resolve(id),
+                    ),
+                    token_stream.current_location(), {
+                        CompilationStage => "AST Construction",
+                        PrimarySuggestion => "Call the file start function with 'file()' or import specific exports directly",
+                    }
+                );
+            }
+        }
+    }
+
+    if let Some(arg) = context.get_reference(&id) {
+        match token_stream.peek_next_token() {
+            Some(TokenKind::Assign)
+            | Some(TokenKind::AddAssign)
+            | Some(TokenKind::SubtractAssign)
+            | Some(TokenKind::MultiplyAssign)
+            | Some(TokenKind::DivideAssign)
+            | Some(TokenKind::ExponentAssign)
+            | Some(TokenKind::RootAssign) => {
+                token_stream.advance();
+                ast.push(handle_mutation(token_stream, arg, context, string_table)?);
+                return Ok(());
+            }
+
+            Some(TokenKind::Dot) => {
+                token_stream.advance();
+                let accessed = parse_field_access(token_stream, arg, context, string_table)?;
+
+                if is_assignment_operator(token_stream.current_token_kind()) {
+                    ast.push(handle_mutation_target(
+                        token_stream,
+                        arg,
+                        accessed,
+                        context,
+                        string_table,
+                    )?);
+                    return Ok(());
+                }
+
+                push_accessed_symbol_statement(
+                    accessed,
+                    ast,
+                    context,
+                    token_stream,
+                    id,
+                    string_table,
+                )?;
+                return Ok(());
+            }
+
+            Some(TokenKind::DatatypeInt)
+            | Some(TokenKind::DatatypeFloat)
+            | Some(TokenKind::DatatypeBool)
+            | Some(TokenKind::DatatypeString)
+            | Some(TokenKind::Mutable) => {
+                return_rule_error!(
+                    format!("Variable '{}' is already declared. Shadowing is not supported in Beanstalk. Use '=' to mutate its value or choose a different variable name", string_table.resolve(id)),
+                    token_stream.current_location(), {
+                        CompilationStage => "AST Construction",
+                        PrimarySuggestion => "Use '=' to mutate the existing variable or choose a different name",
+                    }
+                );
+            }
+
+            _ => {
+                let expr = parse_symbol_expression_statement_candidate(
+                    token_stream,
+                    context,
+                    id,
+                    string_table,
+                )?;
+
+                ast.push(AstNode {
+                    kind: NodeKind::Rvalue(expr),
+                    location: token_stream.current_location(),
+                    scope: context.scope.clone(),
+                });
+                return Ok(());
+            }
+        }
+    }
+
+    if let Some(host_func_call) = context.host_registry.get_function(string_table.resolve(id)) {
+        token_stream.advance();
+        let signature = host_func_call.params_to_signature(string_table);
+
+        ast.push(parse_function_call(
+            token_stream,
+            &full_path,
+            context,
+            &signature,
+            string_table,
+        )?);
+        return Ok(());
+    }
+
+    if token_stream.peek_next_token() == Some(&TokenKind::OpenParenthesis) {
+        if let Some(method_entry) = context.lookup_visible_receiver_method_by_name(id) {
+            return Err(free_function_receiver_method_call_error(
+                id,
+                method_entry,
+                token_stream.current_location(),
+                "AST Construction",
+                string_table,
+            ));
+        }
+
+        return_rule_error!(
+            format!(
+                "Call target '{}' is not declared in this scope and is not a registered host function.",
+                string_table.resolve(id)
+            ),
+            token_stream.current_location(), {
+                CompilationStage => "AST Construction",
+                PrimarySuggestion => "Declare/import this function before calling it, or check the function name spelling",
+                AlternativeSuggestion => "If this should be a host function, register it in the host registry for this backend",
+            }
+        );
+    }
+
+    let arg = new_declaration(token_stream, id, context, warnings, string_table)?;
+
+    match arg.value.kind {
+        ExpressionKind::StructDefinition(ref params) => {
+            ast.push(AstNode {
+                kind: NodeKind::StructDefinition(arg.id.to_owned(), params.to_owned()),
+                location: token_stream.current_location(),
+                scope: context.scope.clone(),
+            });
+        }
+
+        ExpressionKind::Function(ref signature, ref body) => {
+            ast.push(AstNode {
+                kind: NodeKind::Function(arg.id.to_owned(), signature.to_owned(), body.to_owned()),
+                location: token_stream.current_location(),
+                scope: context.scope.clone(),
+            });
+        }
+
+        _ => {
+            ast.push(AstNode {
+                kind: NodeKind::VariableDeclaration(arg.to_owned()),
+                location: token_stream.current_location(),
+                scope: context.scope.clone(),
+            });
+        }
+    }
+
+    context.add_var(arg);
+    Ok(())
 }
 
 fn unexpected_function_body_token_error(
@@ -180,243 +529,13 @@ pub fn function_body_to_ast(
                 token_stream.advance();
             }
 
-            TokenKind::Symbol(id) => {
-                let full_path = context.scope.append(id);
-
-                if let Some(start_target) = context.resolve_start_import(&id) {
-                    token_stream.advance();
-
-                    match token_stream.current_token_kind() {
-                        TokenKind::OpenParenthesis => {
-                            ast.push(parse_function_call(
-                                token_stream,
-                                start_target,
-                                &context,
-                                &FunctionSignature {
-                                    parameters: vec![],
-                                    returns: vec![FunctionReturn::Value(DataType::StringSlice)],
-                                },
-                                string_table,
-                            )?);
-                            continue;
-                        }
-
-                        TokenKind::Dot => {
-                            return_rule_error!(
-                                format!(
-                                    "Imported file '{}' is callable only as '{}()'. File-struct member access is no longer supported.",
-                                    string_table.resolve(id),
-                                    string_table.resolve(id),
-                                ),
-                                token_stream.current_location(), {
-                                    CompilationStage => "AST Construction",
-                                    PrimarySuggestion => "Import exports directly with '@path/to/file/symbol' or '@path/to/file {a, b}'",
-                                }
-                            );
-                        }
-
-                        _ => {
-                            return_rule_error!(
-                                format!(
-                                    "Imported file '{}' can only be used as a callable start import ('{}()').",
-                                    string_table.resolve(id),
-                                    string_table.resolve(id),
-                                ),
-                                token_stream.current_location(), {
-                                    CompilationStage => "AST Construction",
-                                    PrimarySuggestion => "Call the file start function with 'file()' or import specific exports directly",
-                                }
-                            );
-                        }
-                    }
-                }
-
-                // Check if this has already been declared (is a reference)
-                if let Some(arg) = context.get_reference(&id) {
-                    // Then the associated mutation afterward.
-                    // Or error if trying to mutate an immutable reference
-
-                    // Move past the name
-                    token_stream.advance();
-
-                    // Check what comes after the variable reference
-                    match token_stream.current_token_kind() {
-
-                        // ---------------------------
-                        //          MUTATION
-                        // ---------------------------
-                        // Assignment operators
-                        TokenKind::Assign
-                        | TokenKind::AddAssign
-                        | TokenKind::SubtractAssign
-                        | TokenKind::MultiplyAssign
-                        | TokenKind::DivideAssign
-                        | TokenKind::ExponentAssign
-                        | TokenKind::RootAssign
-                        | TokenKind::Dot => {
-                            // So this seems to be the only case where we have a reference as an L-value.
-                            // I think this means field access ONLY happens here if it happens at this stage,
-                            // expression parsing will need to do its own thing separately
-
-                            ast.push(handle_mutation(token_stream, arg, &context, string_table)?);
-                        }
-
-                        // Type declarations after variable reference - error (shadowing not supported)
-                        TokenKind::DatatypeInt
-                        | TokenKind::DatatypeFloat
-                        | TokenKind::DatatypeBool
-                        | TokenKind::DatatypeString
-
-                        // Mutable token after variable reference - this is an error for reassignment
-                        | TokenKind::Mutable => {
-                            // Look ahead to see if this is ~= (mutable assignment)
-                            if let Some(TokenKind::Assign) = token_stream.peek_next_token() {
-                                // This is invalid: var ~= value where var already exists
-                                // ~= should only be used for initial declarations, not reassignments
-                                return_syntax_error!(
-                                    format!("Invalid use of '~=' for reassignment. Variable '{}' is already declared. Use '=' to mutate it or create a new variable with a different name.", string_table.resolve(id)),
-                                    token_stream.current_location(), {
-                                        CompilationStage => "AST Construction",
-                                        PrimarySuggestion => "Use '=' to mutate the existing variable instead of '~='",
-                                    }
-                                );
-                            } else {
-                                return_rule_error!(
-                                    format!("Variable '{}' is already declared. Shadowing is not supported in Beanstalk. Use '=' to mutate its value or choose a different variable name", string_table.resolve(id)),
-                                    token_stream.current_location(), {
-                                        CompilationStage => "AST Construction",
-                                        PrimarySuggestion => "Use '=' to mutate the existing variable or choose a different name",
-                                    }
-                                );
-                            }
-                        }
-
-                        // ----------------------------
-                        //       FUNCTION CALLS
-                        // ----------------------------
-                        TokenKind::OpenParenthesis => {
-                            if let DataType::Function(receiver, signature) =
-                                &arg.value.data_type
-                            {
-                                // If this is a method, this should be an error
-                                // As methods can only be called from their receivers
-                                if receiver.is_some() {
-                                    return_rule_error!(
-                                        "This only exists as a method, not a standalone function. Method calls can only be made on the reciever of a function",
-                                        token_stream.current_location(), {
-                                            CompilationStage => "AST Construction",
-                                            PrimarySuggestion => "Call this method from an instance of its reciever, or define this as its own function",
-                                        }
-                                    )
-                                }
-
-                                ast.push(parse_function_call(
-                                    token_stream,
-                                    &arg.id,
-                                    &context,
-                                    signature,
-                                    string_table,
-                                )?)
-                            }
-                        }
-
-                        // At top level, a bare variable reference without assignment is a syntax error
-                        _ => {
-                            return_syntax_error!(
-                                format!("Unexpected token '{:?}' after variable reference '{}'. Expected assignment operator (=, +=, -=, etc.) for mutation", token_stream.current_token_kind(), string_table.resolve(id)),
-                                token_stream.current_location(), {
-                                    CompilationStage => "AST Construction",
-                                    PrimarySuggestion => "Add an assignment operator like '=' or '+=' after the variable",
-                                }
-                            );
-                        }
-                    }
-
-                // ----------------------------
-                //     HOST FUNCTION CALLS
-                // ----------------------------
-                } else if let Some(host_func_call) =
-                    context.host_registry.get_function(string_table.resolve(id))
-                {
-                    // Move past the name
-                    token_stream.advance();
-
-                    // Convert return types to Arg format
-                    let signature = host_func_call.params_to_signature(string_table);
-
-                    ast.push(parse_function_call(
-                        token_stream,
-                        &full_path,
-                        &context,
-                        &signature,
-                        string_table,
-                    )?)
-
-                // -----------------------------------------
-                //   New Function or Variable declaration
-                // -----------------------------------------
-                } else {
-                    if token_stream.peek_next_token() == Some(&TokenKind::OpenParenthesis) {
-                        return_rule_error!(
-                            format!(
-                                "Call target '{}' is not declared in this scope and is not a registered host function.",
-                                string_table.resolve(id)
-                            ),
-                            token_stream.current_location(), {
-                                CompilationStage => "AST Construction",
-                                PrimarySuggestion => "Declare/import this function before calling it, or check the function name spelling",
-                                AlternativeSuggestion => "If this should be a host function, register it in the host registry for this backend",
-                            }
-                        );
-                    }
-
-                    let arg = new_declaration(token_stream, id, &context, warnings, string_table)?;
-
-                    // -----------------------------
-                    //    NEW STRUCT DECLARATIONS
-                    // -----------------------------
-                    match arg.value.kind {
-                        ExpressionKind::StructDefinition(ref params) => {
-                            ast.push(AstNode {
-                                kind: NodeKind::StructDefinition(
-                                    arg.id.to_owned(),
-                                    params.to_owned(),
-                                ),
-                                location: token_stream.current_location(),
-                                scope: context.scope.clone(),
-                            });
-                        }
-
-                        // -----------------------------
-                        //   NEW FUNCTION DECLARATION
-                        // -----------------------------
-                        ExpressionKind::Function(ref signature, ref body) => {
-                            ast.push(AstNode {
-                                kind: NodeKind::Function(
-                                    arg.id.to_owned(),
-                                    signature.to_owned(),
-                                    body.to_owned(),
-                                ),
-                                location: token_stream.current_location(),
-                                scope: context.scope.clone(),
-                            });
-                        }
-
-                        // -----------------------------
-                        //   NEW VARIABLE DECLARATIONS
-                        // -----------------------------
-                        _ => {
-                            ast.push(AstNode {
-                                kind: NodeKind::VariableDeclaration(arg.to_owned()),
-                                location: token_stream.current_location(),
-                                scope: context.scope.clone(),
-                            });
-                        }
-                    }
-
-                    context.add_var(arg);
-                }
-            }
+            TokenKind::Symbol(_) => parse_symbol_statement(
+                token_stream,
+                &mut ast,
+                &mut context,
+                warnings,
+                string_table,
+            )?,
 
             // Control Flow
             TokenKind::Loop => {
@@ -671,6 +790,23 @@ pub fn function_body_to_ast(
 
             TokenKind::Eof => {
                 break;
+            }
+
+            TokenKind::OpenParenthesis
+            | TokenKind::FloatLiteral(_)
+            | TokenKind::IntLiteral(_)
+            | TokenKind::StringSliceLiteral(_)
+            | TokenKind::BoolLiteral(_)
+            | TokenKind::CharLiteral(_)
+            | TokenKind::Copy => {
+                let expr =
+                    parse_expression_statement_candidate(token_stream, &context, string_table)?;
+
+                ast.push(AstNode {
+                    kind: NodeKind::Rvalue(expr),
+                    location: token_stream.current_location(),
+                    scope: context.scope.clone(),
+                });
             }
 
             // Or stuff that hasn't been implemented yet

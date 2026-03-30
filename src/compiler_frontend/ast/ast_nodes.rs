@@ -76,12 +76,13 @@ pub enum NodeKind {
     },
 
     // For method calls: obj.method(args)
-    #[allow(dead_code)] // todo
     MethodCall {
-        base: Box<AstNode>,
+        receiver: Box<AstNode>,
+        method_path: InternedPath,
         method: StringId,
-        args: Vec<AstNode>,
-        signature: FunctionSignature,
+        args: Vec<Expression>,
+        result_types: Vec<DataType>,
+        location: SourceLocation,
     },
 
     FunctionCall {
@@ -177,6 +178,16 @@ impl AstNode {
                 data_type.to_owned(),
                 self.location.to_owned(),
                 ownership.to_owned(),
+            )),
+            NodeKind::MethodCall {
+                result_types,
+                location,
+                ..
+            } => Ok(Expression::runtime(
+                vec![self.to_owned()],
+                Expression::call_result_type(result_types.to_owned()),
+                location.to_owned(),
+                Ownership::MutableOwned,
             )),
             // Compiler tried to get the expression of a node that cannot contain expressions
             _ => {

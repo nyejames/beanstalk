@@ -8,7 +8,7 @@ use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration};
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::ast::templates::template::TemplateConstValueKind;
 use crate::compiler_frontend::ast::templates::template_types::Template;
-use crate::compiler_frontend::datatypes::{DataType, Ownership, PathTypeKind};
+use crate::compiler_frontend::datatypes::{DataType, Ownership, PathTypeKind, ReceiverKey};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_resolution::CompileTimePaths;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
@@ -128,7 +128,7 @@ impl Expression {
     ///
     /// WHY: single-return calls should stay ergonomic while multi-return calls preserve the full
     /// tuple-like `Returns` wrapper expected by later lowering stages.
-    fn call_result_type(mut result_types: Vec<DataType>) -> DataType {
+    pub(crate) fn call_result_type(mut result_types: Vec<DataType>) -> DataType {
         if result_types.len() == 1 {
             result_types.pop().unwrap_or(DataType::None)
         } else {
@@ -248,7 +248,7 @@ impl Expression {
 
     // Creating Functions
     pub fn function(
-        receiver: Option<DataType>,
+        receiver: Option<ReceiverKey>,
         signature: FunctionSignature,
         body: Vec<AstNode>,
         location: SourceLocation,
@@ -307,11 +307,17 @@ impl Expression {
         )
     }
     pub fn struct_instance(
+        nominal_path: InternedPath,
         args: Vec<Declaration>,
         location: SourceLocation,
         ownership: Ownership,
+        const_record: bool,
     ) -> Self {
-        let struct_type = DataType::Struct(args.to_owned(), ownership.to_owned());
+        let struct_type = if const_record {
+            DataType::const_struct_record(nominal_path, args.to_owned())
+        } else {
+            DataType::runtime_struct(nominal_path, args.to_owned(), ownership.to_owned())
+        };
         Self::new(
             ExpressionKind::StructInstance(args),
             location,

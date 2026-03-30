@@ -91,7 +91,11 @@ fn resolves_named_struct_type_in_function_parameters() {
     let signature = function_signature_by_name(&ast, &string_table, "show");
     assert!(matches!(
         signature.parameters[0].value.data_type,
-        DataType::Struct(_, Ownership::MutableOwned)
+        DataType::Struct {
+            ownership: Ownership::MutableOwned,
+            const_record: false,
+            ..
+        }
     ));
 }
 
@@ -104,23 +108,24 @@ fn resolves_named_struct_type_in_function_returns() {
     let signature = function_signature_by_name(&ast, &string_table, "clone");
     assert!(matches!(
         signature.returns[0],
-        FunctionReturn::Value(DataType::Struct(_, Ownership::MutableOwned))
+        FunctionReturn::Value(DataType::Struct {
+            ownership: Ownership::MutableOwned,
+            const_record: false,
+            ..
+        })
     ));
 }
 
 #[test]
 fn rejects_unknown_named_type_in_function_signatures() {
-    let error = parse_single_file_ast_error(
-        "use_missing |value Missing|:\n    return value\n;\n",
-    );
+    let error = parse_single_file_ast_error("use_missing |value Missing|:\n    return value\n;\n");
 
     assert!(error.msg.contains("Unknown type 'Missing'"));
 }
 
 #[test]
 fn rejects_unknown_named_return_type_in_function_signatures() {
-    let error =
-        parse_single_file_ast_error("clone |value Int| -> Missing:\n    return value\n;\n");
+    let error = parse_single_file_ast_error("clone |value Int| -> Missing:\n    return value\n;\n");
 
     assert!(error.msg.contains("Unknown type 'Missing'"));
 }
@@ -135,8 +140,79 @@ fn rejects_receiver_parameter_when_not_first() {
 }
 
 #[test]
-fn rejects_non_struct_receiver_parameter() {
-    let error = parse_single_file_ast_error("reset |this Int|:\n    return this\n;\n");
+fn allows_builtin_scalar_receiver_parameter() {
+    let (ast, string_table) =
+        parse_single_file_ast("reset |this Int| -> Int:\n    return this\n;\n");
 
-    assert!(error.msg.contains("Receiver methods must target a struct type"));
+    let signature = function_signature_by_name(&ast, &string_table, "reset");
+    assert_eq!(signature.parameters[0].value.data_type, DataType::Int);
+}
+
+#[test]
+fn rejects_multiple_this_parameters_in_one_signature() {
+    let error = parse_single_file_ast_error(
+        "Point = |\n    x Int = 0,\n|\n\nlength |this Point, this Point| -> Int:\n    return this.x\n;\n",
+    );
+
+    assert!(
+        error.msg.contains("declares 'this' more than once"),
+        "{}",
+        error.msg
+    );
+}
+
+#[test]
+fn rejects_field_method_name_collisions() {
+    let error = parse_single_file_ast_error(
+        "Point = |\n    reset Int = 0,\n|\n\nreset |this Point| -> Int:\n    return this.reset\n;\n",
+    );
+
+    assert!(error.msg.contains("declares both a field and method named"));
+}
+
+#[test]
+fn rejects_free_function_call_syntax_for_receiver_methods() {
+    let error = parse_single_file_ast_error(
+        "Point = |\n    x Int = 0,\n|\n\nreset |this Point|:\n    return\n;\n\npoint ~= Point()\nreset(point)\n",
+    );
+
+    assert!(error.msg.contains("cannot be called as a free function"));
+}
+
+#[test]
+fn rejects_free_function_call_syntax_for_builtin_receiver_methods() {
+    let error = parse_single_file_ast_error(
+        "double |this Int| -> Int:\n    return this + this\n;\n\ndouble(21)\n",
+    );
+
+    assert!(error.msg.contains("cannot be called as a free function"));
+    assert!(error.msg.contains("for 'Int'"), "{}", error.msg);
+}
+
+#[test]
+fn rejects_const_record_method_calls() {
+    let error = parse_single_file_ast_error(
+        "Point = |\n    x Int = 0,\n|\n\nlength |this Point| -> Int:\n    return this.x\n;\n\n#origin = Point()\norigin.length()\n",
+    );
+
+    assert!(
+        error
+            .msg
+            .contains("data-only and do not support runtime method calls"),
+        "{}",
+        error.msg
+    );
+}
+
+#[test]
+fn rejects_mutable_receiver_methods_on_temporaries() {
+    let error = parse_single_file_ast_error(
+        "Point = |\n    x Int = 0,\n|\n\nreset |this ~Point|:\n    this.x = 0\n;\n\nmake || -> Point:\n    return Point()\n;\n\nmake().reset()\n",
+    );
+
+    assert!(
+        error.msg.contains("requires a mutable place receiver"),
+        "{}",
+        error.msg
+    );
 }

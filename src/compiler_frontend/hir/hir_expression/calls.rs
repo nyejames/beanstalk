@@ -4,6 +4,7 @@
 //! WHY: call lowering is reused across AST expression forms and needs one place to manage
 //! prelude sequencing, tuple return shaping, and temporary bindings.
 
+use crate::compiler_frontend::ast::ast_nodes::AstNode;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
@@ -13,11 +14,33 @@ use crate::compiler_frontend::hir::hir_nodes::{
     HirExpressionKind, HirPlace, HirStatement, HirStatementKind, ValueKind,
 };
 use crate::compiler_frontend::host_functions::CallTarget;
+use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
 use super::LoweredExpression;
 
 impl<'a> HirBuilder<'a> {
+    pub(crate) fn lower_receiver_method_call_expression(
+        &mut self,
+        method_path: &InternedPath,
+        receiver: &AstNode,
+        args: &[Expression],
+        result_types: &[DataType],
+        location: &SourceLocation,
+    ) -> Result<LoweredExpression, CompilerError> {
+        let function_id = self.resolve_function_id_or_error(method_path, location)?;
+        let mut full_args = Vec::with_capacity(args.len() + 1);
+        full_args.push(receiver.get_expr()?);
+        full_args.extend(args.iter().cloned());
+
+        self.lower_call_expression(
+            CallTarget::UserFunction(function_id),
+            &full_args,
+            result_types,
+            location,
+        )
+    }
+
     // WHAT: lowers a resolved call target plus arguments into HIR call statements and values.
     // WHY: calls may emit preludes, temporary bindings, and tuple shaping, so the lowering needs
     //      one dedicated path instead of being duplicated across expression forms.

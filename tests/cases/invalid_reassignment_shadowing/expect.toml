@@ -1,5 +1,5 @@
 [backends.html]
 mode = "failure"
 warnings = "forbid"
-error_type = "Syntax"
-message_contains = ["Invalid use of '~=' for reassignment", "Use '=' to mutate"]
+error_type = "Rule"
+message_contains = ["already declared", "Use '=' to mutate"]

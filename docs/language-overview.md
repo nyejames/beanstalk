@@ -57,10 +57,7 @@ This comes before the type if there is an explicit type declaration.
         another_value String,
     |
     
-    instance ~= Struct(
-        value = 1.2, 
-        another_value = "hey"
-    )
+    instance ~= Struct(1.2, "hey")
 
     -- Notice the double colon
     Choice ::
@@ -379,20 +376,45 @@ loop t in 0.0 to 1.0 by 0.1:
     io(person.name) -- "Alice"
     io(person.age)  -- 30
 
-    -- Defining a struct, then defining a method for it
-    -- This will be dynamically dispatched
+    -- Defining a struct, then defining a receiver method for it
     Vector2 = |
         x Float,
         y Float,
     |
 
-    reset |vec ~Vector2|:
-        vec.x = 0
-        vec.y = 0
+    reset |this ~Vector2|:
+        this.x = 0
+        this.y = 0
     ;
 
     vec = Vector2(12, 87)
     vec.reset()
+```
+
+Runtime structs are nominal types. Matching field shapes do not make two structs interchangeable.
+
+Receiver methods in v1 are statically resolved:
+- A method is a top-level function whose first parameter is literally named `this`
+- There may be exactly one `this` parameter
+- Supported receiver types are user-defined structs and built-in scalars (`Int`, `Float`, `Bool`, `String`)
+- `this Type` declares an immutable receiver
+- `this ~Type` declares a mutable receiver
+- Methods are called with receiver syntax only: `value.method(...)`
+- `method(value, ...)` is not valid for receiver methods
+- Mutable receiver methods require a mutable place receiver, so temporaries and rvalues cannot be mutated through method syntax
+- Field writes follow the same mutable-place rule as mutable methods
+
+User-defined struct methods must be declared in the same file as the struct definition. This same-file restriction does not apply to built-in scalar receivers.
+
+Exported receiver methods become available through the receiver type, not as free-function imports.
+
+```beanstalk
+double |this Int| -> Int:
+    return this + this
+;
+
+value = 21
+io(value.double()) -- 42
 ```
 
 ## Module System and Imports
@@ -511,7 +533,7 @@ Basic = | defaults String |
 # values = Basic("Only allowed const values here")
 ```
 
-`values` has type `#Basic` and is data-only.
+`values` has type `#Basic` and is data-only. Const records do not have a runtime method surface, so `values.some_method()` is not valid.
 
 ### Start fragments and the builder interface
 

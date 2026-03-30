@@ -4,6 +4,7 @@ use crate::compiler_frontend::ast::expressions::expression::{Expression, Express
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::Ownership;
+use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::{return_compiler_error, return_rule_error, return_syntax_error, return_type_error};
@@ -23,6 +24,7 @@ use crate::{return_compiler_error, return_rule_error, return_syntax_error, retur
 ///   enforced for top-level `#` constants.
 pub(crate) fn parse_struct_constructor_expression(
     token_stream: &mut FileTokens,
+    struct_path: &InternedPath,
     struct_name: StringId,
     fields: &[Declaration],
     struct_ownership: &Ownership,
@@ -178,8 +180,10 @@ pub(crate) fn parse_struct_constructor_expression(
     };
 
     Ok(Expression::struct_instance(
+        struct_path.to_owned(),
         struct_fields,
         constructor_location,
         instance_ownership,
+        enforce_const_record,
     ))
 }

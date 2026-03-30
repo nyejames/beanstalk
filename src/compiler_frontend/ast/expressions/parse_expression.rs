@@ -10,6 +10,8 @@ use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, Operator,
 };
 use crate::compiler_frontend::ast::expressions::struct_instance::parse_struct_constructor_expression;
+use crate::compiler_frontend::ast::field_access::{ast_node_is_place, parse_postfix_chain};
+use crate::compiler_frontend::ast::receiver_methods::free_function_receiver_method_call_error;
 use crate::compiler_frontend::ast::statements::collections::new_collection;
 use crate::compiler_frontend::ast::statements::declarations::create_reference;
 use crate::compiler_frontend::ast::statements::functions::{
@@ -25,6 +27,25 @@ use crate::compiler_frontend::traits::ContainsReferences;
 use crate::{
     ast_log, return_compiler_error, return_rule_error, return_syntax_error, return_type_error,
 };
+
+fn push_expression_node(
+    token_stream: &mut FileTokens,
+    context: &ScopeContext,
+    string_table: &mut StringTable,
+    expression: &mut Vec<AstNode>,
+    node: AstNode,
+) -> Result<(), CompilerError> {
+    let node = if token_stream.index < token_stream.length
+        && token_stream.current_token_kind() == &TokenKind::Dot
+    {
+        parse_postfix_chain(token_stream, node, context, string_table)?
+    } else {
+        node
+    };
+
+    expression.push(node);
+    Ok(())
+}
 
 // WHAT: parses a comma-separated expression list against already-known expected result types.
 // WHY: function calls and multi-return contexts must preserve arity and per-slot type
@@ -229,11 +250,17 @@ pub fn create_expression(
                     string_table,
                 )?;
 
-                expression.push(AstNode {
-                    kind: NodeKind::Rvalue(value),
-                    location: token_stream.current_location(),
-                    scope: context.scope.clone(),
-                });
+                push_expression_node(
+                    token_stream,
+                    context,
+                    string_table,
+                    &mut expression,
+                    AstNode {
+                        kind: NodeKind::Rvalue(value),
+                        location: token_stream.current_location(),
+                        scope: context.scope.clone(),
+                    },
+                )?;
 
                 // create_expression(..., consume_closing_parenthesis = true) already advanced
                 // past the closing parenthesis, so do not advance again in this loop iteration.
@@ -339,7 +366,12 @@ pub fn create_expression(
                         );
                     }
 
-                    if let DataType::Struct(fields, struct_ownership) = &arg.value.data_type
+                    if let DataType::Struct {
+                        nominal_path,
+                        fields,
+                        ownership: struct_ownership,
+                        ..
+                    } = &arg.value.data_type
                         && token_stream.peek_next_token() == Some(&TokenKind::OpenParenthesis)
                     {
                         // Struct constructors are parsed before constant-reference checks.
@@ -348,6 +380,7 @@ pub fn create_expression(
                         // struct symbol itself as a non-constant reference.
                         let struct_instance = parse_struct_constructor_expression(
                             token_stream,
+                            nominal_path,
                             *id,
                             fields,
                             struct_ownership,
@@ -355,11 +388,17 @@ pub fn create_expression(
                             string_table,
                         )?;
 
-                        expression.push(AstNode {
-                            kind: NodeKind::Rvalue(struct_instance),
-                            location: token_stream.current_location(),
-                            scope: context.scope.clone(),
-                        });
+                        push_expression_node(
+                            token_stream,
+                            context,
+                            string_table,
+                            &mut expression,
+                            AstNode {
+                                kind: NodeKind::Rvalue(struct_instance),
+                                location: token_stream.current_location(),
+                                scope: context.scope.clone(),
+                            },
+                        )?;
 
                         continue;
                     }
@@ -405,17 +444,23 @@ pub fn create_expression(
                                 let func_call_expr =
                                     Expression::function_call(name, args, result_types, location);
 
-                                expression.push(AstNode {
-                                    kind: NodeKind::Rvalue(func_call_expr),
-                                    location: function_call_node.location,
-                                    scope: context.scope.clone(),
-                                });
+                                push_expression_node(
+                                    token_stream,
+                                    context,
+                                    string_table,
+                                    &mut expression,
+                                    AstNode {
+                                        kind: NodeKind::Rvalue(func_call_expr),
+                                        location: function_call_node.location,
+                                        scope: context.scope.clone(),
+                                    },
+                                )?;
 
                                 continue;
                             }
                         }
 
-                        DataType::Struct(..) => {
+                        DataType::Struct { .. } => {
                             // Fall through to normal reference behaviour for non-constructor uses.
                             expression.push(create_reference(
                                 token_stream,
@@ -466,16 +511,22 @@ pub fn create_expression(
                                 location,
                             } = function_call_node.kind
                             {
-                                expression.push(AstNode {
-                                    kind: NodeKind::Rvalue(Expression::function_call(
-                                        name,
-                                        args,
-                                        result_types,
-                                        location,
-                                    )),
-                                    location: function_call_node.location,
-                                    scope: context.scope.clone(),
-                                });
+                                push_expression_node(
+                                    token_stream,
+                                    context,
+                                    string_table,
+                                    &mut expression,
+                                    AstNode {
+                                        kind: NodeKind::Rvalue(Expression::function_call(
+                                            name,
+                                            args,
+                                            result_types,
+                                            location,
+                                        )),
+                                        location: function_call_node.location,
+                                        scope: context.scope.clone(),
+                                    },
+                                )?;
                                 continue;
                             }
 
@@ -563,14 +614,32 @@ pub fn create_expression(
                             location,
                         );
 
-                        expression.push(AstNode {
-                            kind: NodeKind::Rvalue(func_call_expr),
-                            location: SourceLocation::default(),
-                            scope: context.scope.clone(),
-                        });
+                        push_expression_node(
+                            token_stream,
+                            context,
+                            string_table,
+                            &mut expression,
+                            AstNode {
+                                kind: NodeKind::Rvalue(func_call_expr),
+                                location: SourceLocation::default(),
+                                scope: context.scope.clone(),
+                            },
+                        )?;
 
                         continue;
                     }
+                }
+
+                if token_stream.peek_next_token() == Some(&TokenKind::OpenParenthesis)
+                    && let Some(method_entry) = context.lookup_visible_receiver_method_by_name(*id)
+                {
+                    return Err(free_function_receiver_method_call_error(
+                        *id,
+                        method_entry,
+                        token_stream.current_location(),
+                        "Expression Parsing",
+                        string_table,
+                    ));
                 }
 
                 let var_name = string_table.resolve(*id).to_string();
@@ -597,11 +666,19 @@ pub fn create_expression(
                 let float_expr =
                     Expression::float(float, location.to_owned(), ownership.to_owned());
 
-                expression.push(AstNode {
-                    kind: NodeKind::Rvalue(float_expr),
-                    location,
-                    scope: context.scope.clone(),
-                });
+                token_stream.advance();
+                push_expression_node(
+                    token_stream,
+                    context,
+                    string_table,
+                    &mut expression,
+                    AstNode {
+                        kind: NodeKind::Rvalue(float_expr),
+                        location,
+                        scope: context.scope.clone(),
+                    },
+                )?;
+                continue;
             }
 
             TokenKind::IntLiteral(mut int) => {
@@ -614,11 +691,19 @@ pub fn create_expression(
 
                 let int_expr = Expression::int(int, location.to_owned(), ownership.to_owned());
 
-                expression.push(AstNode {
-                    kind: NodeKind::Rvalue(int_expr),
-                    scope: context.scope.clone(),
-                    location,
-                });
+                token_stream.advance();
+                push_expression_node(
+                    token_stream,
+                    context,
+                    string_table,
+                    &mut expression,
+                    AstNode {
+                        kind: NodeKind::Rvalue(int_expr),
+                        scope: context.scope.clone(),
+                        location,
+                    },
+                )?;
+                continue;
             }
 
             TokenKind::StringSliceLiteral(ref string) => {
@@ -627,11 +712,19 @@ pub fn create_expression(
                 let string_expr =
                     Expression::string_slice(*string, location.to_owned(), ownership.to_owned());
 
-                expression.push(AstNode {
-                    kind: NodeKind::Rvalue(string_expr),
-                    scope: context.scope.clone(),
-                    location,
-                });
+                token_stream.advance();
+                push_expression_node(
+                    token_stream,
+                    context,
+                    string_table,
+                    &mut expression,
+                    AstNode {
+                        kind: NodeKind::Rvalue(string_expr),
+                        scope: context.scope.clone(),
+                        location,
+                    },
+                )?;
+                continue;
             }
 
             TokenKind::TemplateHead => {
@@ -754,11 +847,19 @@ pub fn create_expression(
 
                 let bool_expr = Expression::bool(value, location.to_owned(), ownership.to_owned());
 
-                expression.push(AstNode {
-                    kind: NodeKind::Rvalue(bool_expr),
-                    location,
-                    scope: context.scope.clone(),
-                });
+                token_stream.advance();
+                push_expression_node(
+                    token_stream,
+                    context,
+                    string_table,
+                    &mut expression,
+                    AstNode {
+                        kind: NodeKind::Rvalue(bool_expr),
+                        location,
+                        scope: context.scope.clone(),
+                    },
+                )?;
+                continue;
             }
 
             TokenKind::CharLiteral(value) => {
@@ -766,11 +867,19 @@ pub fn create_expression(
 
                 let char_expr = Expression::char(value, location.to_owned(), ownership.to_owned());
 
-                expression.push(AstNode {
-                    kind: NodeKind::Rvalue(char_expr),
-                    location,
-                    scope: context.scope.clone(),
-                });
+                token_stream.advance();
+                push_expression_node(
+                    token_stream,
+                    context,
+                    string_table,
+                    &mut expression,
+                    AstNode {
+                        kind: NodeKind::Rvalue(char_expr),
+                        location,
+                        scope: context.scope.clone(),
+                    },
+                )?;
+                continue;
             }
 
             // OPERATORS
@@ -1054,7 +1163,22 @@ fn parse_copy_place_expression(
                     );
                 }
 
-                _ => create_reference(token_stream, reference_arg, context, string_table),
+                _ => {
+                    let place =
+                        create_reference(token_stream, reference_arg, context, string_table)?;
+                    if !ast_node_is_place(&place) {
+                        return_rule_error!(
+                            "The 'copy' keyword only accepts a place expression",
+                            token_stream.current_location(),
+                            {
+                                CompilationStage => "Expression Parsing",
+                                PrimarySuggestion => "Use 'copy' before a variable or field access such as 'copy value' or 'copy user.name'",
+                            }
+                        );
+                    }
+
+                    Ok(place)
+                }
             }
         }
 

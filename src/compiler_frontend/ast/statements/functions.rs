@@ -427,7 +427,7 @@ fn format_type_for_error(data_type: &DataType) -> String {
         DataType::CoerceToString => "String".to_string(),
         DataType::Decimal => "Decimal".to_string(),
         DataType::Collection(inner, _) => format!("Collection<{}>", format_type_for_error(inner)),
-        DataType::Struct(..) => "Struct".to_string(),
+        DataType::Struct { .. } => "Struct".to_string(),
         DataType::NamedType(_) => "NamedType".to_string(),
         DataType::Option(inner) => format!("Option<{}>", format_type_for_error(inner)),
         DataType::Reference(data_type) => {

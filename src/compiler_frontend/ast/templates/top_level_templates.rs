@@ -600,10 +600,10 @@ fn collect_references_from_ast_node(node: &AstNode, references: &mut FxHashSet<I
             collect_references_from_ast_node(base, references);
         }
 
-        NodeKind::MethodCall { base, args, .. } => {
-            collect_references_from_ast_node(base, references);
+        NodeKind::MethodCall { receiver, args, .. } => {
+            collect_references_from_ast_node(receiver, references);
             for argument in args {
-                collect_references_from_ast_node(argument, references);
+                collect_references_from_expression(argument, references);
             }
         }
 

@@ -83,6 +83,26 @@ impl<'a> HirBuilder<'a> {
                     self.log_rpn_step("push-field", node, &stack);
                 }
 
+                NodeKind::MethodCall {
+                    receiver,
+                    method_path,
+                    args,
+                    result_types,
+                    location,
+                    ..
+                } => {
+                    let lowered = self.lower_receiver_method_call_expression(
+                        method_path,
+                        receiver,
+                        args,
+                        result_types,
+                        location,
+                    )?;
+                    prelude.extend(lowered.prelude);
+                    stack.push(lowered.value);
+                    self.log_rpn_step("push-method-call", node, &stack);
+                }
+
                 NodeKind::Operator(op) => {
                     let region = self.current_region_or_error(location)?;
                     match op.required_values() {

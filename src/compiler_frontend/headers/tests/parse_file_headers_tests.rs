@@ -465,3 +465,31 @@ fn function_signature_reports_missing_colon_after_return_list() {
             .contains("Function return declarations must end with ':'")
     }));
 }
+
+#[test]
+fn duplicate_top_level_function_names_error_during_header_parsing() {
+    let result = parse_single_file_headers_with_entry(
+        "simple_function |number Int| -> Int:\n\
+             return number + 1\n\
+         ;\n\
+         \n\
+         simple_function |value Int| -> Int:\n\
+             return value + 2\n\
+         ;\n",
+        "src/#page.bst",
+        "src/#page.bst",
+    );
+
+    assert!(
+        result.is_err(),
+        "duplicate top-level function names should fail during header parsing"
+    );
+    let errors = result.err().expect("expected parse errors");
+
+    assert!(errors.iter().any(|error| {
+        error.error_type == crate::compiler_frontend::compiler_errors::ErrorType::Rule
+            && error
+                .msg
+                .contains("There is already a top-level declaration using this name")
+    }));
+}

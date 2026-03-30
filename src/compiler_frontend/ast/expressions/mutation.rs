@@ -2,39 +2,42 @@ use crate::compiler_frontend::ast::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::{Expression, Operator};
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
-use crate::compiler_frontend::ast::field_access::parse_field_access;
+use crate::compiler_frontend::ast::field_access::{
+    ast_node_is_mutable_place, ast_node_is_place, parse_field_access,
+};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::{ast_log, return_rule_error, return_syntax_error};
 
-/// Handle mutation of existing mutable variables
-/// Called when we encounter a variable reference followed by an assignment operator
-pub fn handle_mutation(
+fn build_mutation_from_target(
     token_stream: &mut FileTokens,
     variable_arg: &Declaration,
+    target: AstNode,
     context: &ScopeContext,
     string_table: &mut StringTable,
 ) -> Result<AstNode, CompilerError> {
     let location = token_stream.current_location();
-
-    // Check for field access on this arg,
-    // Or just provide the reference AST node
-    let node = parse_field_access(token_stream, variable_arg, context, string_table)?;
-
-    // Check if the variable is mutable
-    let ownership = &variable_arg.value.ownership;
-    let target_type = match &node.kind {
-        NodeKind::FieldAccess { data_type, .. } => data_type.to_owned(),
-        _ => variable_arg.value.data_type.to_owned(),
-    };
+    let target_type = target.get_expr()?.data_type;
     ast_log!(
         "Handling mutation for ",
-        #ownership, " ",
+        #variable_arg.value.ownership, " ",
         Blue variable_arg.id.to_string(string_table)
     );
 
-    if !ownership.is_mutable() {
+    if !ast_node_is_place(&target) {
+        return_rule_error!(
+            "Field assignment requires a mutable place receiver. Writing through temporaries or other rvalues is not allowed.",
+            location,
+            {
+                BorrowKind => "Mutable",
+                CompilationStage => "Expression Parsing",
+                PrimarySuggestion => "Assign through a mutable variable or field path instead of a temporary expression",
+            }
+        );
+    }
+
+    if !ast_node_is_mutable_place(&target) {
         return_rule_error!(
             format!("Cannot mutate immutable variable '{}'. Use '~' to declare a mutable variable", variable_arg.id.to_string(string_table)),
             location,
@@ -58,7 +61,7 @@ pub fn handle_mutation(
                 token_stream,
                 context,
                 &mut expected_type,
-                ownership,
+                &variable_arg.value.ownership,
                 false,
                 string_table,
             )?
@@ -73,17 +76,13 @@ pub fn handle_mutation(
                 token_stream,
                 context,
                 &mut expected_type,
-                ownership,
+                &variable_arg.value.ownership,
                 false,
                 string_table,
             )?;
 
             // Create an addition expression in RPN order: variable, add_value, +
-            let variable_ref = AstNode {
-                kind: NodeKind::Rvalue(variable_arg.value.clone()),
-                location: location.clone(),
-                scope: context.scope.clone(),
-            };
+            let variable_ref = target.clone();
             let add_value_node = AstNode {
                 kind: NodeKind::Rvalue(add_value),
                 location: location.clone(),
@@ -112,17 +111,13 @@ pub fn handle_mutation(
                 token_stream,
                 context,
                 &mut expected_type,
-                ownership,
+                &variable_arg.value.ownership,
                 false,
                 string_table,
             )?;
 
             // Create a subtraction expression in RPN order: variable, subtract_value, -
-            let variable_ref = AstNode {
-                kind: NodeKind::Rvalue(variable_arg.value.clone()),
-                location: location.clone(),
-                scope: context.scope.clone(),
-            };
+            let variable_ref = target.clone();
             let subtract_value_node = AstNode {
                 kind: NodeKind::Rvalue(subtract_value),
                 location: location.to_owned(),
@@ -151,17 +146,13 @@ pub fn handle_mutation(
                 token_stream,
                 context,
                 &mut expected_type,
-                ownership,
+                &variable_arg.value.ownership,
                 false,
                 string_table,
             )?;
 
             // Create a multiplication expression in RPN order: variable, multiply_value, *
-            let variable_ref = AstNode {
-                kind: NodeKind::Rvalue(variable_arg.value.clone()),
-                location: location.clone(),
-                scope: context.scope.clone(),
-            };
+            let variable_ref = target.clone();
             let multiply_value_node = AstNode {
                 kind: NodeKind::Rvalue(multiply_value),
                 location: location.clone(),
@@ -190,17 +181,13 @@ pub fn handle_mutation(
                 token_stream,
                 context,
                 &mut expected_type,
-                ownership,
+                &variable_arg.value.ownership,
                 false,
                 string_table,
             )?;
 
             // Create a division expression in RPN order: variable, divide_value, /
-            let variable_ref = AstNode {
-                kind: NodeKind::Rvalue(variable_arg.value.clone()),
-                location: location.clone(),
-                scope: context.scope.clone(),
-            };
+            let variable_ref = target.clone();
             let divide_value_node = AstNode {
                 kind: NodeKind::Rvalue(divide_value),
                 location: location.clone(),
@@ -234,10 +221,32 @@ pub fn handle_mutation(
 
     Ok(AstNode {
         kind: NodeKind::Assignment {
-            target: Box::new(node),
+            target: Box::new(target),
             value,
         },
         location: location.clone(),
         scope: context.scope.clone(),
     })
+}
+
+pub(crate) fn handle_mutation_target(
+    token_stream: &mut FileTokens,
+    variable_arg: &Declaration,
+    target: AstNode,
+    context: &ScopeContext,
+    string_table: &mut StringTable,
+) -> Result<AstNode, CompilerError> {
+    build_mutation_from_target(token_stream, variable_arg, target, context, string_table)
+}
+
+/// Handle mutation of existing mutable variables
+/// Called when we encounter a variable reference followed by an assignment operator
+pub fn handle_mutation(
+    token_stream: &mut FileTokens,
+    variable_arg: &Declaration,
+    context: &ScopeContext,
+    string_table: &mut StringTable,
+) -> Result<AstNode, CompilerError> {
+    let target = parse_field_access(token_stream, variable_arg, context, string_table)?;
+    build_mutation_from_target(token_stream, variable_arg, target, context, string_table)
 }

@@ -1,5 +1,5 @@
 [backends.html]
 mode = "failure"
 warnings = "forbid"
-error_type = "Syntax"
-message_contains = ["Unexpected token 'TypeParameterBracket'", "Expected assignment operator"]
+error_type = "Rule"
+message_contains = ["already a top-level declaration using this name", "must use unique names within a file"]

@@ -4,7 +4,7 @@
 //! WHY: HIR and later analyses compare stable type IDs rather than re-traversing frontend types.
 
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::datatypes::DataType;
+use crate::compiler_frontend::datatypes::{BuiltinScalarReceiver, DataType, ReceiverKey};
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::hir::hir_datatypes::{HirType, HirTypeKind, TypeId};
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
@@ -70,7 +70,33 @@ impl<'a> HirBuilder<'a> {
                 let receiver = receiver
                     .as_ref()
                     .as_ref()
-                    .map(|ty| self.lower_data_type(ty, location))
+                    .map(|receiver| match receiver {
+                        ReceiverKey::Struct(path) => {
+                            let Some(struct_id) = self.structs_by_name.get(path).copied() else {
+                                return_hir_transformation_error!(
+                                    format!(
+                                        "Unresolved receiver struct '{}' during HIR type lowering",
+                                        self.symbol_name_for_diagnostics(path)
+                                    ),
+                                    self.hir_error_location(location)
+                                );
+                            };
+
+                            Ok(self.intern_type_kind(HirTypeKind::Struct { struct_id }))
+                        }
+                        ReceiverKey::BuiltinScalar(BuiltinScalarReceiver::Int) => {
+                            Ok(self.intern_type_kind(HirTypeKind::Int))
+                        }
+                        ReceiverKey::BuiltinScalar(BuiltinScalarReceiver::Float) => {
+                            Ok(self.intern_type_kind(HirTypeKind::Float))
+                        }
+                        ReceiverKey::BuiltinScalar(BuiltinScalarReceiver::Bool) => {
+                            Ok(self.intern_type_kind(HirTypeKind::Bool))
+                        }
+                        ReceiverKey::BuiltinScalar(BuiltinScalarReceiver::String) => {
+                            Ok(self.intern_type_kind(HirTypeKind::String))
+                        }
+                    })
                     .transpose()?;
 
                 let params = signature
@@ -106,10 +132,14 @@ impl<'a> HirBuilder<'a> {
                 }
             }
 
-            DataType::Parameters(fields) | DataType::Struct(fields, _) => {
+            DataType::Parameters(fields) => {
                 let struct_id = self.resolve_struct_id_from_nominal_fields(fields, location)?;
                 HirTypeKind::Struct { struct_id }
             }
+
+            DataType::Struct { nominal_path, .. } => HirTypeKind::Struct {
+                struct_id: self.resolve_struct_id_from_nominal_path(nominal_path, location)?,
+            },
         };
 
         Ok(self.intern_type_kind(kind))

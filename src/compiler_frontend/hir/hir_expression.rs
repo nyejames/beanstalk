@@ -186,7 +186,14 @@ impl<'a> HirBuilder<'a> {
             }
 
             ExpressionKind::StructInstance(args) => {
-                let struct_id = self.resolve_struct_id_from_nominal_fields(args, &expr.location)?;
+                let Some(nominal_path) = expr.data_type.struct_nominal_path() else {
+                    return_hir_transformation_error!(
+                        "Struct instance reached HIR lowering without a nominal struct identity",
+                        self.hir_error_location(&expr.location)
+                    );
+                };
+                let struct_id =
+                    self.resolve_struct_id_from_nominal_path(nominal_path, &expr.location)?;
                 let mut prelude = Vec::new();
                 let mut fields = Vec::with_capacity(args.len());
 
