@@ -6,9 +6,10 @@
 use super::*;
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
 use crate::compiler_frontend::ast::test_support::{
-    function_body_by_name, function_signature_by_name, parse_single_file_ast, start_function_body,
+    function_body_by_name, function_signature_by_name, parse_single_file_ast,
+    parse_single_file_ast_error, start_function_body,
 };
-use crate::compiler_frontend::datatypes::DataType;
+use crate::compiler_frontend::datatypes::{DataType, Ownership};
 
 #[test]
 fn parses_function_parameters_and_return_types() {
@@ -79,4 +80,63 @@ fn start_function_distinguishes_user_and_host_calls() {
             .any(|node| matches!(node.kind, NodeKind::Return(..))),
         "explicit function body should preserve return statements"
     );
+}
+
+#[test]
+fn resolves_named_struct_type_in_function_parameters() {
+    let (ast, string_table) = parse_single_file_ast(
+        "Point = |\n    x Int,\n|\n\nshow |value Point|:\n    io(value.x)\n;\n",
+    );
+
+    let signature = function_signature_by_name(&ast, &string_table, "show");
+    assert!(matches!(
+        signature.parameters[0].value.data_type,
+        DataType::Struct(_, Ownership::MutableOwned)
+    ));
+}
+
+#[test]
+fn resolves_named_struct_type_in_function_returns() {
+    let (ast, string_table) = parse_single_file_ast(
+        "Point = |\n    x Int,\n|\n\nclone |value Point| -> Point:\n    return value\n;\n",
+    );
+
+    let signature = function_signature_by_name(&ast, &string_table, "clone");
+    assert!(matches!(
+        signature.returns[0],
+        FunctionReturn::Value(DataType::Struct(_, Ownership::MutableOwned))
+    ));
+}
+
+#[test]
+fn rejects_unknown_named_type_in_function_signatures() {
+    let error = parse_single_file_ast_error(
+        "use_missing |value Missing|:\n    return value\n;\n",
+    );
+
+    assert!(error.msg.contains("Unknown type 'Missing'"));
+}
+
+#[test]
+fn rejects_unknown_named_return_type_in_function_signatures() {
+    let error =
+        parse_single_file_ast_error("clone |value Int| -> Missing:\n    return value\n;\n");
+
+    assert!(error.msg.contains("Unknown type 'Missing'"));
+}
+
+#[test]
+fn rejects_receiver_parameter_when_not_first() {
+    let error = parse_single_file_ast_error(
+        "Point = |\n    x Int,\n|\n\nreset |value Int, this Point|:\n    return value\n;\n",
+    );
+
+    assert!(error.msg.contains("not the first parameter"));
+}
+
+#[test]
+fn rejects_non_struct_receiver_parameter() {
+    let error = parse_single_file_ast_error("reset |this Int|:\n    return this\n;\n");
+
+    assert!(error.msg.contains("Receiver methods must target a struct type"));
 }

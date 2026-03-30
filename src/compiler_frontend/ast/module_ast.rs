@@ -42,7 +42,7 @@ pub use crate::compiler_frontend::ast::templates::top_level_templates::{
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::paths::rendered_path_usage::RenderedPathUsage;
-use crate::return_compiler_error;
+use crate::{return_compiler_error, return_rule_error};
 
 static CONTROL_FLOW_SCOPE_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
@@ -78,6 +78,186 @@ fn ast_error_messages(
     CompilerMessages::from_error_with_warnings(error, warnings.to_vec(), string_table)
 }
 
+#[derive(Clone)]
+struct ResolvedFunctionSignature {
+    receiver: Option<DataType>,
+    signature: FunctionSignature,
+}
+
+fn visible_declaration_by_name<'a>(
+    declarations: &'a [Declaration],
+    visible_declaration_ids: Option<&FxHashSet<InternedPath>>,
+    name: StringId,
+) -> Option<&'a Declaration> {
+    declarations.iter().rfind(|declaration| {
+        declaration.id.name() == Some(name)
+            && match visible_declaration_ids {
+                Some(visible) => visible.contains(&declaration.id),
+                None => true,
+            }
+    })
+}
+
+fn resolve_named_signature_type(
+    data_type: &DataType,
+    location: &crate::compiler_frontend::tokenizer::tokens::SourceLocation,
+    declarations: &[Declaration],
+    visible_declaration_ids: Option<&FxHashSet<InternedPath>>,
+    string_table: &StringTable,
+) -> Result<DataType, CompilerError> {
+    match data_type {
+        DataType::NamedType(type_name) => {
+            let declared_type = visible_declaration_by_name(
+                declarations,
+                visible_declaration_ids,
+                *type_name,
+            )
+            .ok_or_else(|| {
+                CompilerError::new_rule_error(
+                    format!(
+                        "Unknown type '{}'. Type names must be declared before use.",
+                        string_table.resolve(*type_name)
+                    ),
+                    location.clone(),
+                )
+            })?;
+
+            Ok(declared_type.value.data_type.to_owned())
+        }
+        DataType::Collection(inner, ownership) => Ok(DataType::Collection(
+            Box::new(resolve_named_signature_type(
+                inner,
+                location,
+                declarations,
+                visible_declaration_ids,
+                string_table,
+            )?),
+            ownership.to_owned(),
+        )),
+        _ => Ok(data_type.to_owned()),
+    }
+}
+
+fn resolve_function_signature(
+    function_path: &InternedPath,
+    signature: &FunctionSignature,
+    declarations: &[Declaration],
+    visible_declaration_ids: Option<&FxHashSet<InternedPath>>,
+    string_table: &mut StringTable,
+) -> Result<ResolvedFunctionSignature, CompilerError> {
+    let this_name = string_table.intern("this");
+    let function_name = function_path.name_str(string_table).unwrap_or("<function>");
+    let function_location = declarations
+        .iter()
+        .find(|declaration| declaration.id == *function_path)
+        .map(|declaration| declaration.value.location.clone())
+        .unwrap_or_default();
+
+    let mut resolved_parameters = Vec::with_capacity(signature.parameters.len());
+    let mut receiver = None;
+
+    for (index, parameter) in signature.parameters.iter().enumerate() {
+        let mut resolved_parameter = parameter.to_owned();
+        resolved_parameter.value.data_type = resolve_named_signature_type(
+            &parameter.value.data_type,
+            &parameter.value.location,
+            declarations,
+            visible_declaration_ids,
+            string_table,
+        )?;
+
+        if resolved_parameter.id.name() == Some(this_name) {
+            if receiver.is_some() {
+                return_rule_error!(
+                    format!(
+                        "Function '{}' declares 'this' more than once. Receiver parameters can only appear once.",
+                        function_name
+                    ),
+                    parameter.value.location.clone(),
+                    {
+                        CompilationStage => "AST Construction",
+                        PrimarySuggestion => "Keep exactly one 'this' parameter at the start of the signature",
+                    }
+                );
+            }
+
+            if index != 0 {
+                return_rule_error!(
+                    format!(
+                        "Function '{}' uses 'this' as a receiver parameter, but it is not the first parameter.",
+                        function_name
+                    ),
+                    parameter.value.location.clone(),
+                    {
+                        CompilationStage => "AST Construction",
+                        PrimarySuggestion => "Move 'this' to the first parameter position to declare a receiver method",
+                    }
+                );
+            }
+
+            match &resolved_parameter.value.data_type {
+                DataType::Struct(..) => {
+                    receiver = Some(resolved_parameter.value.data_type.to_owned());
+                }
+                other => {
+                    return_rule_error!(
+                        format!(
+                            "Function '{}' uses 'this' with non-struct type '{}'. Receiver methods must target a struct type.",
+                            function_name,
+                            other.display_with_table(string_table)
+                        ),
+                        parameter.value.location.clone(),
+                        {
+                            CompilationStage => "AST Construction",
+                            PrimarySuggestion => "Change 'this' to a struct type such as 'this Point' or use a regular parameter name",
+                        }
+                    );
+                }
+            }
+        }
+
+        resolved_parameters.push(resolved_parameter);
+    }
+
+    let mut resolved_returns = Vec::with_capacity(signature.returns.len());
+    for return_value in &signature.returns {
+        match return_value {
+            FunctionReturn::Value(data_type) => {
+                resolved_returns.push(FunctionReturn::Value(resolve_named_signature_type(
+                    data_type,
+                    &function_location,
+                    declarations,
+                    visible_declaration_ids,
+                    string_table,
+                )?));
+            }
+            FunctionReturn::AliasCandidates {
+                parameter_indices,
+                data_type,
+            } => {
+                resolved_returns.push(FunctionReturn::AliasCandidates {
+                    parameter_indices: parameter_indices.to_owned(),
+                    data_type: resolve_named_signature_type(
+                        data_type,
+                        &function_location,
+                        declarations,
+                        visible_declaration_ids,
+                        string_table,
+                    )?,
+                });
+            }
+        }
+    }
+
+    Ok(ResolvedFunctionSignature {
+        receiver,
+        signature: FunctionSignature {
+            parameters: resolved_parameters,
+            returns: resolved_returns,
+        },
+    })
+}
+
 impl Ast {
     pub fn new(
         sorted_headers: Vec<Header>,
@@ -107,6 +287,10 @@ impl Ast {
         let mut module_file_paths: FxHashSet<InternedPath> = FxHashSet::default();
         let mut resolved_struct_fields_by_path: FxHashMap<InternedPath, Vec<Declaration>> =
             FxHashMap::default();
+        let mut resolved_function_signatures_by_path: FxHashMap<
+            InternedPath,
+            ResolvedFunctionSignature,
+        > = FxHashMap::default();
         let rendered_path_usages = Rc::new(RefCell::new(Vec::new()));
         let Some(project_path_resolver_for_folding) = project_path_resolver.as_ref() else {
             return Err(ast_error_messages(
@@ -317,6 +501,50 @@ impl Ast {
             }
         }
 
+        // Resolve function signatures only after struct declarations are available in the shared
+        // declaration table. This late resolution lets signatures use named struct types and
+        // receiver syntax without adding a second nominal-type system just for headers.
+        for header in &sorted_headers {
+            let HeaderKind::Function { signature } = &header.kind else {
+                continue;
+            };
+
+            let bindings = file_import_bindings
+                .get(&header.source_file)
+                .cloned()
+                .unwrap_or_default();
+            let resolved_signature = match resolve_function_signature(
+                &header.tokens.src_path,
+                signature,
+                &declarations,
+                Some(&bindings.visible_symbol_paths),
+                string_table,
+            ) {
+                Ok(signature) => signature,
+                Err(error) => return Err(ast_error_messages(error, &warnings, string_table)),
+            };
+
+            let Some(function_declaration) = declarations
+                .iter_mut()
+                .find(|declaration| declaration.id == header.tokens.src_path)
+            else {
+                return Err(ast_error_messages(
+                    CompilerError::compiler_error(
+                        "Function declaration was not registered before AST signature resolution.",
+                    ),
+                    &warnings,
+                    string_table,
+                ));
+            };
+
+            function_declaration.value.data_type = DataType::Function(
+                Box::new(resolved_signature.receiver.to_owned()),
+                resolved_signature.signature.to_owned(),
+            );
+            resolved_function_signatures_by_path
+                .insert(header.tokens.src_path.to_owned(), resolved_signature);
+        }
+
         for header in sorted_headers {
             let bindings = file_import_bindings
                 .get(&header.source_file)
@@ -330,11 +558,24 @@ impl Ast {
                 .unwrap_or_else(|| header.source_file.to_owned());
 
             match header.kind {
-                HeaderKind::Function { signature } => {
+                HeaderKind::Function { signature: _ } => {
+                    let Some(resolved_signature) = resolved_function_signatures_by_path
+                        .get(&header.tokens.src_path)
+                        .cloned()
+                    else {
+                        return Err(ast_error_messages(
+                            CompilerError::compiler_error(
+                                "Function signature was not resolved before AST emission.",
+                            ),
+                            &warnings,
+                            string_table,
+                        ));
+                    };
+
                     let mut function_declarations = declarations.to_owned();
-                    function_declarations.extend(signature.parameters.to_owned());
+                    function_declarations.extend(resolved_signature.signature.parameters.to_owned());
                     let mut visible_declarations = bindings.visible_symbol_paths.to_owned();
-                    for parameter in &signature.parameters {
+                    for parameter in &resolved_signature.signature.parameters {
                         visible_declarations.insert(parameter.id.to_owned());
                     }
 
@@ -344,7 +585,7 @@ impl Ast {
                         header.tokens.src_path.to_owned(),
                         &function_declarations,
                         host_registry.clone(),
-                        signature.return_data_types(),
+                        resolved_signature.signature.return_data_types(),
                     )
                     .with_style_directives(style_directives)
                     .with_build_profile(build_profile)
@@ -378,7 +619,7 @@ impl Ast {
                     ast.push(AstNode {
                         kind: NodeKind::Function(
                             token_stream.src_path,
-                            signature.to_owned(),
+                            resolved_signature.signature,
                             body.to_owned(),
                         ),
                         location: header.name_location,

@@ -121,6 +121,35 @@ pub fn parse_field_access(
         let member = match members.iter().find(|m| m.id.name() == Some(field_id)) {
             Some(member) => member.clone(),
             None => {
+                let receiver_method = context.declarations.iter().rfind(|declaration| {
+                    declaration.id.name() == Some(field_id)
+                        && match context.visible_declaration_ids.as_ref() {
+                            Some(visible) => visible.contains(&declaration.id),
+                            None => true,
+                        }
+                        && match &declaration.value.data_type {
+                            DataType::Function(receiver, _) => {
+                                receiver.as_ref().as_ref() == Some(&current_type)
+                            }
+                            _ => false,
+                        }
+                });
+
+                if receiver_method.is_some() {
+                    return_rule_error!(
+                        format!(
+                            "Receiver method call '{}.{}' is not lowered yet.",
+                            base_arg.id.name_str(string_table).unwrap_or("<value>"),
+                            string_table.resolve(field_id)
+                        ),
+                        token_stream.current_location(),
+                        {
+                            CompilationStage => "AST Construction",
+                            PrimarySuggestion => "Receiver methods can be declared, but calling them with 'value.method(...)' is not implemented yet",
+                        }
+                    )
+                }
+
                 return_rule_error!(
                     format!(
                         "Property or method '{}' not found",

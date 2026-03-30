@@ -26,6 +26,12 @@ impl<'a> HirBuilder<'a> {
                     self.hir_error_location(location)
                 )
             }
+            DataType::NamedType(_) => {
+                return_hir_transformation_error!(
+                    "Unresolved DataType::NamedType reached HIR lowering",
+                    self.hir_error_location(location)
+                )
+            }
 
             DataType::Reference(inner) => return self.lower_data_type(inner, location),
 

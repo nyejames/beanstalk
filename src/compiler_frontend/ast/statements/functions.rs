@@ -266,18 +266,6 @@ fn parse_single_return_item(
                 }
             );
         }
-
-        return_syntax_error!(
-            format!(
-                "Unknown return declaration '{}'. Function returns must use a concrete supported type or a parameter alias.",
-                symbol_name
-            ),
-            current_location,
-            {
-                CompilationStage => "Function Signature Parsing",
-                PrimarySuggestion => "Use a supported return type such as Int or a parameter alias such as 'arg' or 'arg or other_arg'",
-            }
-        );
     }
 
     parse_value_return_type(token_stream, string_table)
@@ -440,6 +428,7 @@ fn format_type_for_error(data_type: &DataType) -> String {
         DataType::Decimal => "Decimal".to_string(),
         DataType::Collection(inner, _) => format!("Collection<{}>", format_type_for_error(inner)),
         DataType::Struct(..) => "Struct".to_string(),
+        DataType::NamedType(_) => "NamedType".to_string(),
         DataType::Option(inner) => format!("Option<{}>", format_type_for_error(inner)),
         DataType::Reference(data_type) => {
             format!("{} Reference", format_type_for_error(data_type),)

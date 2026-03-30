@@ -71,58 +71,64 @@ impl FrontendModuleBuildContext<'_> {
             NewlineMode::NormalizeToLf,
         );
 
-        let mut warnings = Vec::new();
-        Self::attach_source_files(&mut compiler, module, entry_file_path)?;
+        // Always move the frontend's active string table back to the caller, even on errors.
+        // Frontend diagnostics carry interned source paths from later stages, so dropping the
+        // evolved table here would leave those path IDs unresolvable at the CLI boundary.
+        let compile_result = (|| {
+            let mut warnings = Vec::new();
+            Self::attach_source_files(&mut compiler, module, entry_file_path)?;
 
-        let project_tokens = timed_frontend_stage("Tokenized in: ", || {
-            Self::tokenize_module(&mut compiler, module)
-        })?;
-        let module_headers = timed_frontend_stage("Headers Parsed in: ", || {
-            Self::parse_headers(
-                &mut compiler,
-                project_tokens,
-                &mut warnings,
-                entry_file_path,
-            )
-        })?;
-        let sorted_modules = timed_frontend_stage("Dependency graph created in: ", || {
-            Self::sort_headers(&mut compiler, module_headers, &warnings)
-        })?;
-        let module_ast = timed_frontend_stage("AST created in: ", || {
-            self.build_ast(
-                &mut compiler,
-                sorted_modules,
-                entry_file_path,
-                &mut warnings,
-            )
-        })?;
-        let hir_module = timed_frontend_stage("HIR generated in: ", || {
-            Self::lower_hir(&mut compiler, module_ast, &mut warnings)
-        })?;
-        let borrow_analysis = timed_frontend_stage("Borrow checking completed in: ", || {
-            Self::check_borrows(&compiler, &hir_module, &mut warnings)
-        })?;
+            let project_tokens = timed_frontend_stage("Tokenized in: ", || {
+                Self::tokenize_module(&mut compiler, module)
+            })?;
+            let module_headers = timed_frontend_stage("Headers Parsed in: ", || {
+                Self::parse_headers(
+                    &mut compiler,
+                    project_tokens,
+                    &mut warnings,
+                    entry_file_path,
+                )
+            })?;
+            let sorted_modules = timed_frontend_stage("Dependency graph created in: ", || {
+                Self::sort_headers(&mut compiler, module_headers, &warnings)
+            })?;
+            let module_ast = timed_frontend_stage("AST created in: ", || {
+                self.build_ast(
+                    &mut compiler,
+                    sorted_modules,
+                    entry_file_path,
+                    &mut warnings,
+                )
+            })?;
+            let hir_module = timed_frontend_stage("HIR generated in: ", || {
+                Self::lower_hir(&mut compiler, module_ast, &mut warnings)
+            })?;
+            let borrow_analysis = timed_frontend_stage("Borrow checking completed in: ", || {
+                Self::check_borrows(&compiler, &hir_module, &mut warnings)
+            })?;
 
-        borrow_log!("=== BORROW CHECKER OUTPUT ===");
-        borrow_log!(format!(
-            "Borrow checking completed successfully (states={} functions={} blocks={} conflicts_checked={} stmt_facts={} term_facts={} value_facts={})",
-            borrow_analysis.analysis.total_state_snapshots(),
-            borrow_analysis.stats.functions_analyzed,
-            borrow_analysis.stats.blocks_analyzed,
-            borrow_analysis.stats.conflicts_checked,
-            borrow_analysis.analysis.statement_facts.len(),
-            borrow_analysis.analysis.terminator_facts.len(),
-            borrow_analysis.analysis.value_facts.len()
-        ));
-        borrow_log!("=== END BORROW CHECKER OUTPUT ===");
+            borrow_log!("=== BORROW CHECKER OUTPUT ===");
+            borrow_log!(format!(
+                "Borrow checking completed successfully (states={} functions={} blocks={} conflicts_checked={} stmt_facts={} term_facts={} value_facts={})",
+                borrow_analysis.analysis.total_state_snapshots(),
+                borrow_analysis.stats.functions_analyzed,
+                borrow_analysis.stats.blocks_analyzed,
+                borrow_analysis.stats.conflicts_checked,
+                borrow_analysis.analysis.statement_facts.len(),
+                borrow_analysis.analysis.terminator_facts.len(),
+                borrow_analysis.analysis.value_facts.len()
+            ));
+            borrow_log!("=== END BORROW CHECKER OUTPUT ===");
 
+            Ok(Module {
+                entry_point: entry_file_path.to_path_buf(),
+                hir: hir_module,
+                borrow_analysis,
+                warnings,
+            })
+        })();
         *self.string_table = compiler.string_table;
-        Ok(Module {
-            entry_point: entry_file_path.to_path_buf(),
-            hir: hir_module,
-            borrow_analysis,
-            warnings,
-        })
+        compile_result
     }
 
     fn attach_source_files(

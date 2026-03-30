@@ -1,7 +1,7 @@
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::paths::path_resolution::CompileTimePathKind;
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use std::fmt::Display;
 
 /// Type-level distinction for compile-time path values.
@@ -61,6 +61,8 @@ pub enum DataType {
     // All 'inferred' variables must be evaluated to other types after the AST stage for the program to compile.
     // At the header parsing stage, 'inferred' is used where a symbol type is not yet known (as the type might be another header).
     Inferred,
+    // AST-only placeholder for nominal types that are resolved once the module declaration set is known.
+    NamedType(StringId),
 
     // Any type can be used in the expression and will be coerced to a string (for scenes only).
     // Mathematical operations will still work and take priority, but strings can be used in these expressions.
@@ -166,6 +168,7 @@ impl DataType {
                 format!("{} Reference", inner_type.display_with_table(string_table),)
             }
             DataType::Inferred => "Inferred".to_string(),
+            DataType::NamedType(name) => string_table.resolve(*name).to_string(),
             DataType::CoerceToString => "CoerceToString".to_string(),
             DataType::Bool => "Bool".to_string(),
             DataType::StringSlice => "String".to_string(),
@@ -260,6 +263,7 @@ impl PartialEq for DataType {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (DataType::Inferred, DataType::Inferred) => true,
+            (DataType::NamedType(a), DataType::NamedType(b)) => a == b,
             (DataType::Reference(a), DataType::Reference(b)) => a == b,
             (DataType::Bool, DataType::Bool) => true,
             (DataType::Range, DataType::Range) => true,
@@ -321,6 +325,9 @@ impl Display for DataType {
             }
             DataType::Inferred => {
                 write!(f, "Inferred")
+            }
+            DataType::NamedType(_) => {
+                write!(f, "NamedType")
             }
             DataType::CoerceToString => {
                 write!(f, "CoerceToString")

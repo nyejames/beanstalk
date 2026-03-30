@@ -192,11 +192,7 @@ pub fn build_project(
     } = bootstrap_project_build(project_builder, valid_path)?;
 
     let modules =
-        compile_project_frontend(&mut config, flags, &style_directives, &mut string_table)
-            .map_err(|mut messages| {
-                messages.string_table = string_table.clone();
-                messages
-            })?;
+        compile_project_frontend(&mut config, flags, &style_directives, &mut string_table)?;
     let mut warnings = collect_frontend_warnings(&modules);
 
     // --------------------------------------------

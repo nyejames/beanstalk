@@ -11,6 +11,7 @@ use crate::build_system::output_cleanup::{
     BuilderKind, ManifestLimitedSafeModeReason, ManifestLoadResult,
 };
 use crate::compiler_frontend::Flag;
+use crate::compiler_frontend::compiler_messages::display_messages::resolve_source_file_path;
 use crate::compiler_frontend::compiler_errors::{
     CompilerError, CompilerMessages, ErrorType, SourceLocation,
 };
@@ -655,6 +656,39 @@ fn build_project_keeps_one_shared_string_table_for_multi_module_diagnostics() {
 }
 
 #[test]
+fn build_project_preserves_string_table_for_frontend_signature_diagnostics() {
+    let root = temp_dir("frontend_signature_diagnostics");
+    fs::create_dir_all(&root).expect("should create temp root");
+    fs::write(
+        root.join("main.bst"),
+        "use_missing |value Missing|:\n    return value\n;\n",
+    )
+    .expect("should write source file");
+
+    {
+        let _cwd_guard = CurrentDirGuard::set_to(&root);
+        let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
+        let Err(messages) = build_project(&builder, "main.bst", &[]) else {
+            panic!("build should fail with a frontend signature diagnostic");
+        };
+
+        assert!(
+            messages
+                .errors
+                .iter()
+                .any(|error| error.msg.contains("Unknown type 'Missing'")),
+            "expected the named-type diagnostic to be preserved"
+        );
+        assert_eq!(
+            resolve_source_file_path(&messages.errors[0].location.scope, &messages.string_table),
+            fs::canonicalize(root.join("main.bst")).expect("main file should canonicalize")
+        );
+    }
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
 fn config_validation_failure_returns_config_error_before_compilation() {
     let root = temp_dir("failing_validation");
     fs::create_dir_all(&root).expect("should create temp root");
@@ -708,6 +742,35 @@ fn build_project_emits_runtime_fragment_with_captured_start_local() {
         assert!(
             html.contains("Beanstalk"),
             "captured start-local value should be preserved in generated fragment code"
+        );
+    }
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
+fn build_project_reports_receiver_method_calls_as_not_lowered_yet() {
+    let root = temp_dir("receiver_method_not_lowered");
+    fs::create_dir_all(&root).expect("should create temp root");
+    fs::write(
+        root.join("main.bst"),
+        "Vector2 = |\n    x Float = 0,\n    y Float = 0,\n|\n\nreset |this ~Vector2|:\n    this.x = 0\n    this.y = 0\n;\n\nvec = Vector2(12, 87)\nvec.reset()\n",
+    )
+    .expect("should write source file");
+
+    {
+        let _cwd_guard = CurrentDirGuard::set_to(&root);
+        let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
+        let Err(messages) = build_project(&builder, "main.bst", &[]) else {
+            panic!("receiver method calls should fail until lowering is implemented");
+        };
+
+        assert!(
+            messages.errors.iter().any(|error| {
+                error.msg.contains("Receiver method call")
+                    && error.msg.contains("not lowered yet")
+            }),
+            "expected a targeted receiver-method diagnostic instead of a panic or missing-property error"
         );
     }
 

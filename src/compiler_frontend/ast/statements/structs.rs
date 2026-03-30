@@ -206,17 +206,22 @@ pub fn parse_explicit_signature_type(
             )?;
             Ok(data_type)
         }
+        TokenKind::Symbol(type_name) => {
+            let type_name = *type_name;
+            token_stream.advance();
+            Ok(DataType::NamedType(type_name))
+        }
         _ => {
             let (message, stage, suggestion) = match context {
                 SignatureTypeContext::Parameter => (
                     "Expected a parameter type declaration",
                     "Parameter Type Parsing",
-                    "Add a type declaration (Int, String, Float, Bool, or a collection type) after the parameter name",
+                    "Add a type declaration (Int, String, Float, Bool, a struct name, or a collection type) after the parameter name",
                 ),
                 SignatureTypeContext::Return => (
                     "Expected a concrete return type",
                     "Function Signature Parsing",
-                    "Use a supported return type such as Int, String, Float, Bool, or a collection type",
+                    "Use a supported return type such as Int, String, Float, Bool, a struct name, or a collection type",
                 ),
             };
 
@@ -316,17 +321,22 @@ fn parse_collection_inner_signature_type(
                 }
             )
         }
+        TokenKind::Symbol(type_name) => {
+            let type_name = *type_name;
+            token_stream.advance();
+            Ok(DataType::NamedType(type_name))
+        }
         _ => {
             let (message, stage, suggestion) = match context {
                 SignatureTypeContext::Parameter => (
                     "Expected a collection item type declaration",
                     "Parameter Type Parsing",
-                    "Use a concrete item type such as Int, String, Float, or Bool inside the collection type",
+                    "Use a concrete item type such as Int, String, Float, Bool, or a struct name inside the collection type",
                 ),
                 SignatureTypeContext::Return => (
                     "Expected a collection item type in the function return",
                     "Function Signature Parsing",
-                    "Use a concrete item type such as Int, String, Float, or Bool inside the collection return type",
+                    "Use a concrete item type such as Int, String, Float, Bool, or a struct name inside the collection return type",
                 ),
             };
 

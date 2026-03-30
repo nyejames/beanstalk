@@ -365,6 +365,17 @@ fn function_value_return_is_parsed_into_canonical_return_slots() {
 }
 
 #[test]
+fn function_named_return_is_preserved_for_ast_resolution() {
+    let headers = parse_single_file_headers("#f|| -> Point:\n;\n");
+    let signature = first_function_signature(&headers);
+
+    assert!(matches!(
+        signature.returns.as_slice(),
+        [FunctionReturn::Value(DataType::NamedType(_))]
+    ));
+}
+
+#[test]
 fn function_alias_return_is_parsed_into_canonical_return_slots() {
     let headers = parse_single_file_headers("#f|x Int| -> x:\n;\n");
     let signature = first_function_signature(&headers);
@@ -408,23 +419,14 @@ fn function_signature_rejects_none_return_syntax() {
 }
 
 #[test]
-fn function_signature_rejects_unknown_symbolic_return_syntax() {
-    let result = parse_single_file_headers_with_entry(
-        "#f|| -> MissingType:\n;\n",
-        "src/#page.bst",
-        "src/#page.bst",
-    );
-    assert!(
-        result.is_err(),
-        "unknown symbolic return declarations must be rejected"
-    );
-    let errors = result.err().expect("expected parse errors");
+fn function_signature_preserves_unknown_symbolic_return_for_ast_resolution() {
+    let headers = parse_single_file_headers("#f|| -> MissingType:\n;\n");
+    let signature = first_function_signature(&headers);
 
-    assert!(errors.iter().any(|error| {
-        error
-            .msg
-            .contains("Unknown return declaration 'MissingType'")
-    }));
+    assert!(matches!(
+        signature.returns.as_slice(),
+        [FunctionReturn::Value(DataType::NamedType(_))]
+    ));
 }
 
 #[test]
