@@ -14,7 +14,7 @@ use crate::compiler_frontend::ast::statements::functions::{
     FunctionReturn, FunctionSignature, parse_function_call,
 };
 use crate::compiler_frontend::ast::statements::loops::create_loop;
-use crate::compiler_frontend::ast::templates::create_template_node::Template;
+use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};

@@ -229,7 +229,7 @@ pub(crate) fn collect_and_strip_comment_templates(
 fn as_top_level_template_comment_declaration<'a>(
     node: &'a AstNode,
     string_table: &StringTable,
-) -> Option<&'a crate::compiler_frontend::ast::templates::create_template_node::Template> {
+) -> Option<&'a crate::compiler_frontend::ast::templates::template_types::Template> {
     let declaration = as_top_level_template_declaration(node, string_table)?;
     let ExpressionKind::Template(template) = &declaration.value.kind else {
         return None;
@@ -239,7 +239,7 @@ fn as_top_level_template_comment_declaration<'a>(
 }
 
 fn collect_doc_fragments(
-    template: &crate::compiler_frontend::ast::templates::create_template_node::Template,
+    template: &crate::compiler_frontend::ast::templates::template_types::Template,
     fragments: &mut Vec<AstDocFragment>,
     project_path_resolver: &ProjectPathResolver,
     path_format_config: &PathStringFormatConfig,
@@ -277,7 +277,7 @@ fn collect_doc_fragments(
 }
 
 fn fold_template_with_context(
-    template: &crate::compiler_frontend::ast::templates::create_template_node::Template,
+    template: &crate::compiler_frontend::ast::templates::template_types::Template,
     source_file_scope: &InternedPath,
     project_path_resolver: &ProjectPathResolver,
     path_format_config: &PathStringFormatConfig,

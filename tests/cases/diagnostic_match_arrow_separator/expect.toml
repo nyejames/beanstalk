@@ -1,4 +1,5 @@
+[backends.html]
 mode = "failure"
+warnings = "forbid"
 error_type = "Syntax"
 message_contains = ["Unexpected '->' in match arm", "use ':' between the condition and body"]
-warnings = "forbid"

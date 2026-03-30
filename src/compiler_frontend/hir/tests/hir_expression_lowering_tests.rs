@@ -7,8 +7,8 @@ use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, Operator,
 };
-use crate::compiler_frontend::ast::templates::create_template_node::Template;
 use crate::compiler_frontend::ast::templates::template::{SlotKey, SlotPlaceholder, TemplateAtom};
+use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::compiler_errors::ErrorType;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;

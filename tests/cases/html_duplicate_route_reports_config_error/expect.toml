@@ -1,5 +1,13 @@
-mode = "failure"
 entry = "."
+
+[backends.html]
+mode = "failure"
+warnings = "forbid"
 error_type = "Config"
 message_contains = ["duplicate output path"]
+
+[backends.html_wasm]
+mode = "failure"
 warnings = "forbid"
+error_type = "Config"
+message_contains = ["duplicate output path"]

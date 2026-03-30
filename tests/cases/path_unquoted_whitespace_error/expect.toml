@@ -1,5 +1,7 @@
-mode = "failure"
 entry = "."
-error_type = "Syntax"
+
+[backends.html]
+mode = "failure"
 warnings = "forbid"
+error_type = "Syntax"
 message_contains = ["Path components with whitespace must be quoted"]

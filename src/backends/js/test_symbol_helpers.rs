@@ -1,7 +1,7 @@
-/// Shared test helpers for verifying deterministic symbol names in JS output.
-///
-/// WHAT: mirrors the dev-mode naming logic in `JsEmitter::build_symbol_raw`.
-/// WHY: multiple test modules need to predict emitted symbol names without duplicating logic.
+//! Shared test helpers for verifying deterministic symbol names in JS output.
+//!
+//! WHAT: mirrors the dev-mode naming logic in `JsEmitter::build_symbol_raw`.
+//! WHY: multiple test modules need to predict emitted symbol names without duplicating logic.
 
 pub(crate) fn sanitize_hint(raw: &str) -> String {
     let mut result = String::new();

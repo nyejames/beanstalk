@@ -173,6 +173,48 @@ impl CompilerMessages {
         }
     }
 
+    /// Wrap one error while cloning the caller's active `StringTable`.
+    ///
+    /// WHAT: snapshots the current table state into the returned message container.
+    /// WHY: frontend/build boundaries often only borrow the shared table, but diagnostics still
+    /// need the full interned-path context accumulated so far.
+    pub fn from_error_ref(error: CompilerError, string_table: &StringTable) -> Self {
+        Self::from_error(error, string_table.clone())
+    }
+
+    /// Wrap one error plus already-collected warnings while preserving table context.
+    ///
+    /// WHAT: carries forward the caller's warning set and a clone of the current `StringTable`.
+    /// WHY: multi-stage frontend orchestration must not lose warnings or interned paths when a
+    /// later stage fails.
+    pub fn from_error_with_warnings(
+        error: CompilerError,
+        warnings: Vec<CompilerWarning>,
+        string_table: &StringTable,
+    ) -> Self {
+        Self {
+            errors: vec![error],
+            warnings,
+            string_table: string_table.clone(),
+        }
+    }
+
+    /// Wrap many errors plus warnings while preserving the caller's table context.
+    ///
+    /// WHAT: snapshots the current shared table into an owned `CompilerMessages` result.
+    /// WHY: tokenizer/header stages can accumulate multiple diagnostics before returning.
+    pub fn from_errors_with_warnings(
+        errors: Vec<CompilerError>,
+        warnings: Vec<CompilerWarning>,
+        string_table: &StringTable,
+    ) -> Self {
+        Self {
+            errors,
+            warnings,
+            string_table: string_table.clone(),
+        }
+    }
+
     /// Build a single file-scoped message set while preserving the caller's existing table state.
     ///
     /// WHAT: clones the current table, interns the failing path into that clone, and returns a
@@ -1232,18 +1274,5 @@ macro_rules! return_messages_with_err {
     ($messages:expr, $new_err:expr) => {
         $messages.errors.push($new_err);
         return $messages;
-    };
-}
-
-#[macro_export]
-macro_rules! return_err_as_messages {
-    ($new_err:expr) => {
-        return Err(
-            $crate::compiler_frontend::compiler_messages::compiler_errors::CompilerMessages {
-                errors: vec![$new_err],
-                warnings: Vec::new(),
-                string_table: Default::default(),
-            },
-        )
     };
 }

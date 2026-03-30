@@ -1,5 +1,13 @@
-mode = "failure"
 entry = "."
+
+[backends.html]
+mode = "failure"
+warnings = "forbid"
+error_type = "config"
+message_contains = ["#html_inject_core_css", "true or false"]
+
+[backends.html_wasm]
+mode = "failure"
 warnings = "forbid"
 error_type = "config"
 message_contains = ["#html_inject_core_css", "true or false"]

@@ -74,7 +74,7 @@ fn write_project_outputs(
     project: &Project,
     options: &WriteOptions,
 ) -> Result<(), CompilerMessages> {
-    write_project_outputs_with_table(project, options, &Default::default())
+    write_project_outputs_with_table(project, options, &StringTable::default())
 }
 
 fn html_project(output_files: Vec<OutputFile>, entry_page_rel: Option<PathBuf>) -> Project {
@@ -319,9 +319,8 @@ fn html_project_directives_fail_when_builder_does_not_register_them() {
             &[],
         );
 
-        let messages = match result {
-            Ok(_) => panic!("project-owned directives should fail when not registered"),
-            Err(messages) => messages,
+        let Err(messages) = result else {
+            panic!("project-owned directives should fail when not registered");
         };
         assert!(
             messages.errors.iter().any(|error| error
@@ -627,13 +626,12 @@ fn build_project_keeps_one_shared_string_table_for_multi_module_diagnostics() {
     fs::write(docs_dir.join("#page.bst"), "value = 2\n").expect("should write docs page");
 
     let builder = ProjectBuilder::new(Box::new(MultiModuleDiagnosticBuilder));
-    let messages = match build_project(
+    let Err(messages) = build_project(
         &builder,
         root.to_str().expect("temp dir path should be valid UTF-8"),
         &[],
-    ) {
-        Ok(_) => panic!("builder diagnostics should fail the build"),
-        Err(messages) => messages,
+    ) else {
+        panic!("builder diagnostics should fail the build");
     };
 
     assert_eq!(messages.errors.len(), 1);
@@ -668,9 +666,8 @@ fn config_validation_failure_returns_config_error_before_compilation() {
         let builder = ProjectBuilder::new(Box::new(FailingValidationBuilder));
         let result = build_project(&builder, "main.bst", &[]);
 
-        let messages = match result {
-            Err(messages) => messages,
-            Ok(_) => panic!("build_project should fail when config validation fails"),
+        let Err(messages) = result else {
+            panic!("build_project should fail when config validation fails");
         };
         assert_eq!(messages.errors[0].msg, "Fake config error");
         assert_eq!(messages.errors[0].error_type, ErrorType::Config);
@@ -1344,9 +1341,8 @@ fn build_project_rejects_slot_insertion_constant_without_active_wrapper() {
             result.is_err(),
             "slot insertion constants should fail when used outside wrapper composition",
         );
-        let messages = match result {
-            Err(messages) => messages,
-            Ok(_) => unreachable!("assert above guarantees this is an error"),
+        let Err(messages) = result else {
+            unreachable!("assert above guarantees this is an error");
         };
 
         assert!(
@@ -1605,9 +1601,8 @@ fn build_project_rejects_const_record_with_non_constant_argument() {
             result.is_err(),
             "non-constant struct constructor argument in '#'-constant should fail"
         );
-        let messages = match result {
-            Err(messages) => messages,
-            Ok(_) => unreachable!("assert above guarantees this is an error"),
+        let Err(messages) = result else {
+            unreachable!("assert above guarantees this is an error");
         };
 
         assert!(
@@ -1639,9 +1634,8 @@ fn build_project_rejects_const_record_when_required_fields_are_missing() {
             result.is_err(),
             "missing required fields in const record constructor should fail"
         );
-        let messages = match result {
-            Err(messages) => messages,
-            Ok(_) => unreachable!("assert above guarantees this is an error"),
+        let Err(messages) = result else {
+            unreachable!("assert above guarantees this is an error");
         };
 
         assert!(
@@ -1674,9 +1668,8 @@ fn build_project_rejects_struct_constructor_with_too_many_arguments() {
             result.is_err(),
             "too many struct constructor arguments should fail"
         );
-        let messages = match result {
-            Err(messages) => messages,
-            Ok(_) => unreachable!("assert above guarantees this is an error"),
+        let Err(messages) = result else {
+            unreachable!("assert above guarantees this is an error");
         };
 
         assert!(
@@ -1695,8 +1688,8 @@ fn build_project_rejects_struct_constructor_with_too_many_arguments() {
 // ---------------------------------------------------------------------------
 
 use crate::build_system::output_cleanup::{
-    BUILD_MANIFEST_FILENAME, read_build_manifest, remove_manifest_tracked_stale_artifacts,
-    validate_output_root_is_safe, write_build_manifest,
+    BUILD_MANIFEST_FILENAME, read_build_manifest, validate_output_root_is_safe,
+    write_build_manifest,
 };
 use std::collections::HashSet;
 
@@ -1841,7 +1834,7 @@ fn cleanup_manifest_diff_removes_stale_tracked_byte_assets_from_v2_manifest() {
 }
 
 #[test]
-fn cleanup_missing_manifest_removes_stale_html_route_alias() {
+fn cleanup_missing_manifest_preserves_stale_html_route_alias() {
     let root = temp_dir("cleanup_missing_manifest_alias");
     fs::create_dir_all(&root).expect("should create temp root");
     let project_dir = root.join("project");
@@ -1879,8 +1872,8 @@ fn cleanup_missing_manifest_removes_stale_html_route_alias() {
     .expect("build should succeed");
 
     assert!(
-        !output_root.join("docs/basics.html").exists(),
-        "stale flat alias should have been removed in limited safe mode"
+        output_root.join("docs/basics.html").exists(),
+        "missing manifests must preserve stale aliases until a valid v2 manifest is available"
     );
     assert!(output_root.join("docs/basics/index.html").exists());
 
@@ -1957,8 +1950,8 @@ fn cleanup_missing_manifest_preserves_non_managed_files() {
     .expect("build should succeed");
 
     assert!(
-        !output_root.join("docs/basics.html").exists(),
-        "deterministic stale alias should be removed"
+        output_root.join("docs/basics.html").exists(),
+        "missing manifests must preserve stale aliases instead of inferring cleanup from route shape"
     );
     assert!(
         output_root.join("docs/notes.txt").exists(),
@@ -2075,11 +2068,16 @@ fn cleanup_preserves_parent_directories_when_non_managed_files_remain() {
     .expect("should write stale html file");
     fs::write(output_root.join("docs/basics/notes.txt"), "keep me")
         .expect("should write preserved notes file");
-    fs::write(
-        output_root.join(BUILD_MANIFEST_FILENAME),
-        "docs/basics/index.html\n",
+    let manifest_paths: HashSet<PathBuf> = [PathBuf::from("docs/basics/index.html")]
+        .into_iter()
+        .collect();
+    write_build_manifest(
+        &output_root,
+        &manifest_paths,
+        &html_cleanup_policy(),
+        &StringTable::new(),
     )
-    .expect("should write legacy manifest");
+    .expect("should write v2 manifest");
 
     let project = html_project(
         vec![OutputFile::new(
@@ -2143,7 +2141,7 @@ fn validate_output_root_accepts_project_subdirectory() {
 }
 
 #[test]
-fn cleanup_ignores_traversal_paths_in_legacy_manifest() {
+fn cleanup_unsupported_manifest_preserves_existing_files() {
     let root = temp_dir("cleanup_corrupt_manifest");
     fs::create_dir_all(&root).expect("should create temp root");
     let project_dir = root.join("project");
@@ -2155,41 +2153,50 @@ fn cleanup_ignores_traversal_paths_in_legacy_manifest() {
         output_root.join(BUILD_MANIFEST_FILENAME),
         "../escape.js\n/absolute/path.js\nvalid.html\n",
     )
-    .expect("should write legacy manifest");
+    .expect("should write unsupported manifest");
     fs::write(project_dir.join("escape.js"), "should not be deleted")
         .expect("should write escape target");
+    fs::write(output_root.join("valid.html"), "<html>keep me</html>")
+        .expect("should write stale managed-looking file");
 
-    let current_paths: HashSet<PathBuf> = HashSet::new();
     let previous_manifest = read_build_manifest(&output_root, &html_cleanup_policy());
     assert_eq!(
         previous_manifest,
-        ManifestLoadResult::ValidLegacy {
-            paths: vec![PathBuf::from("valid.html")],
-        }
+        ManifestLoadResult::LimitedSafeMode {
+            reason: ManifestLimitedSafeModeReason::UnsupportedVersion,
+        },
     );
 
-    if let ManifestLoadResult::ValidLegacy { paths } = previous_manifest {
-        remove_manifest_tracked_stale_artifacts(
-            &output_root,
-            &current_paths,
-            &paths,
-            &html_cleanup_policy(),
-            true,
-        );
-    } else {
-        panic!("expected legacy manifest result");
-    }
+    let project = html_project(
+        vec![OutputFile::new(
+            PathBuf::from("index.html"),
+            FileKind::Html(String::from("<html>Home</html>")),
+        )],
+        Some(PathBuf::from("index.html")),
+    );
+    write_project_outputs(
+        &project,
+        &WriteOptions {
+            output_root: output_root.clone(),
+            project_entry_dir: Some(project_dir.clone()),
+        },
+    )
+    .expect("build should succeed");
 
     assert!(
         project_dir.join("escape.js").exists(),
         "file outside output root should not be affected by cleanup"
+    );
+    assert!(
+        output_root.join("valid.html").exists(),
+        "unsupported manifests must preserve existing managed-looking files"
     );
 
     fs::remove_dir_all(&root).expect("should remove temp dir");
 }
 
 #[test]
-fn cleanup_unreadable_manifest_enters_limited_safe_mode_and_preserves_unknown_files() {
+fn cleanup_unreadable_manifest_enters_limited_safe_mode_and_preserves_existing_files() {
     let root = temp_dir("cleanup_garbage_manifest");
     fs::create_dir_all(&root).expect("should create temp root");
     let project_dir = root.join("project");
@@ -2238,8 +2245,8 @@ fn cleanup_unreadable_manifest_enters_limited_safe_mode_and_preserves_unknown_fi
     .expect("build should succeed despite unreadable manifest");
 
     assert!(
-        !output_root.join("docs/basics.html").exists(),
-        "deterministic alias should be removed in limited safe mode"
+        output_root.join("docs/basics.html").exists(),
+        "unreadable manifests must preserve stale aliases until a valid v2 manifest is available"
     );
     assert!(
         output_root.join("custom/landing.html").exists(),
@@ -2250,7 +2257,7 @@ fn cleanup_unreadable_manifest_enters_limited_safe_mode_and_preserves_unknown_fi
 }
 
 #[test]
-fn cleanup_disabled_skips_manifest_and_alias_cleanup() {
+fn cleanup_disabled_skips_manifest_cleanup() {
     let root = temp_dir("cleanup_disabled");
     fs::create_dir_all(root.join("docs")).expect("should create temp root");
     fs::write(root.join("docs/basics.html"), "<html>stale alias</html>")
@@ -2275,7 +2282,7 @@ fn cleanup_disabled_skips_manifest_and_alias_cleanup() {
     assert!(root.join("docs/basics/index.html").exists());
     assert!(
         root.join("docs/basics.html").exists(),
-        "cleanup-disabled builds should not remove stale aliases"
+        "cleanup-disabled builds should not remove stale files"
     );
     assert!(
         !root.join(BUILD_MANIFEST_FILENAME).exists(),
@@ -2286,7 +2293,7 @@ fn cleanup_disabled_skips_manifest_and_alias_cleanup() {
 }
 
 #[test]
-fn legacy_manifest_cleanup_uses_current_policy_and_preserves_non_managed_paths() {
+fn unsupported_manifest_preserves_existing_files_until_next_v2_cleanup() {
     let root = temp_dir("cleanup_legacy_manifest");
     fs::create_dir_all(&root).expect("should create temp root");
     let project_dir = root.join("project");
@@ -2307,17 +2314,13 @@ fn legacy_manifest_cleanup_uses_current_policy_and_preserves_non_managed_paths()
         output_root.join(BUILD_MANIFEST_FILENAME),
         "about/index.html\nscripts/page.js\nnotes.txt\n",
     )
-    .expect("should write legacy manifest");
+    .expect("should write unsupported manifest");
 
     assert_eq!(
         read_build_manifest(&output_root, &html_cleanup_policy()),
-        ManifestLoadResult::ValidLegacy {
-            paths: vec![
-                PathBuf::from("about/index.html"),
-                PathBuf::from("scripts/page.js"),
-                PathBuf::from("notes.txt"),
-            ],
-        }
+        ManifestLoadResult::LimitedSafeMode {
+            reason: ManifestLimitedSafeModeReason::UnsupportedVersion,
+        },
     );
 
     let project = html_project(
@@ -2337,16 +2340,16 @@ fn legacy_manifest_cleanup_uses_current_policy_and_preserves_non_managed_paths()
     .expect("build should succeed");
 
     assert!(
-        !output_root.join("about/index.html").exists(),
-        "legacy manifests should still drive stale html cleanup"
+        output_root.join("about/index.html").exists(),
+        "unsupported manifests must not drive stale html cleanup"
     );
     assert!(
-        !output_root.join("scripts/page.js").exists(),
-        "legacy manifests should still drive stale js cleanup"
+        output_root.join("scripts/page.js").exists(),
+        "unsupported manifests must not drive stale js cleanup"
     );
     assert!(
         output_root.join("notes.txt").exists(),
-        "manifest cleanup must not delete non-managed file types"
+        "limited safe mode must preserve non-managed file types"
     );
 
     fs::remove_dir_all(&root).expect("should remove temp dir");

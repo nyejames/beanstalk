@@ -84,7 +84,7 @@ pub(super) fn resolve_call_semantics(
                         indices,
                         arg_len,
                         location.clone(),
-                        format!(
+                        &format!(
                             "user function '{}'",
                             context.diagnostics.function_name(function_id)
                         ),
@@ -147,7 +147,7 @@ pub(super) fn resolve_call_semantics(
                         indices,
                         arg_len,
                         location.clone(),
-                        format!("host function '{}'", host_def.name),
+                        &format!("host function '{}'", host_def.name),
                     )?;
                     CallResultAlias::AliasArgs(indices.clone())
                 }
@@ -166,16 +166,11 @@ fn resolve_host_definition<'a>(
     path: &InternedPath,
     location: SourceLocation,
 ) -> Result<&'a HostFunctionDef, CompilerError> {
-    // Full path lookup is authoritative. Leaf lookup is a compatibility fallback
-    // for host registrations that only expose the leaf symbol.
+    // Host metadata is keyed by the canonical host call name emitted into HIR.
+    // Borrow checking should not silently reinterpret a missing symbol through a
+    // second fallback path because that can hide registry drift.
     let full = path.to_string(context.string_table);
     if let Some(definition) = context.host_registry.get_function(&full) {
-        return Ok(definition);
-    }
-
-    if let Some(name) = path.name_str(context.string_table)
-        && let Some(definition) = context.host_registry.get_function(name)
-    {
         return Ok(definition);
     }
 
@@ -196,7 +191,7 @@ fn validate_alias_indices(
     indices: &[usize],
     arg_len: usize,
     location: SourceLocation,
-    callee_name: String,
+    callee_name: &str,
 ) -> Result<(), CompilerError> {
     for index in indices {
         if *index < arg_len {

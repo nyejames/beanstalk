@@ -236,11 +236,10 @@ fn malformed_import_syntax_keeps_precise_location_during_module_discovery() {
     )
     .expect("config should parse");
     let resolver = configured_resolver(&config);
-    let messages =
-        match discover_modules_for_test_messages(&config, &resolver, &style_directives) {
-            Ok(_) => panic!("malformed import should fail discovery"),
-            Err(messages) => messages,
-        };
+    let messages = match discover_modules_for_test_messages(&config, &resolver, &style_directives) {
+        Ok(_) => panic!("malformed import should fail discovery"),
+        Err(messages) => messages,
+    };
 
     assert_eq!(messages.errors.len(), 1);
     let error = &messages.errors[0];

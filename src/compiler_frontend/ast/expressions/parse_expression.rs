@@ -15,8 +15,8 @@ use crate::compiler_frontend::ast::statements::declarations::create_reference;
 use crate::compiler_frontend::ast::statements::functions::{
     FunctionReturn, FunctionSignature, parse_function_call,
 };
-use crate::compiler_frontend::ast::templates::create_template_node::Template;
 use crate::compiler_frontend::ast::templates::template::TemplateType;
+use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorMetaDataKey};
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::string_interning::StringTable;

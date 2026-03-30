@@ -1,13 +1,15 @@
-mode = "success"
 entry = "."
+
+[backends.html]
+mode = "success"
 warnings = "forbid"
 
-[[artifact_assertions]]
+[[backends.html.artifact_assertions]]
 path = "index.html"
 kind = "html"
 must_contain = ["<body style=\"margin: 0;\">", "<main>Root</main>"]
 
-[[artifact_assertions]]
+[[backends.html.artifact_assertions]]
 path = "about/index.html"
 kind = "html"
 must_contain = ["<body style=\"padding: 1rem;\">", "<main>About</main>"]

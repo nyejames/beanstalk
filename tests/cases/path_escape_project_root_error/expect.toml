@@ -1,5 +1,7 @@
-mode = "failure"
 entry = "."
+
+[backends.html]
+mode = "failure"
+warnings = "ignore"
 error_type = "File"
 message_contains = ["escapes the project root"]
-warnings = "ignore"

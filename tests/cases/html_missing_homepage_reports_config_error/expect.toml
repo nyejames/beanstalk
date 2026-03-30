@@ -1,5 +1,13 @@
-mode = "failure"
 entry = "."
+
+[backends.html]
+mode = "failure"
+warnings = "forbid"
 error_type = "Config"
 message_contains = ["require a '#page.bst' homepage"]
+
+[backends.html_wasm]
+mode = "failure"
 warnings = "forbid"
+error_type = "Config"
+message_contains = ["require a '#page.bst' homepage"]

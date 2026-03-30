@@ -6,8 +6,8 @@
 
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration};
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
-use crate::compiler_frontend::ast::templates::create_template_node::Template;
 use crate::compiler_frontend::ast::templates::template::TemplateConstValueKind;
+use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::datatypes::{DataType, Ownership, PathTypeKind};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_resolution::CompileTimePaths;

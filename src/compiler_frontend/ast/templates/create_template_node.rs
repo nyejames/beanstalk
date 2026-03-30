@@ -18,15 +18,12 @@ use crate::compiler_frontend::ast::templates::template_head_parser::{
 };
 use crate::compiler_frontend::ast::templates::template_render_plan::TemplateRenderPlan;
 use crate::compiler_frontend::ast::templates::template_slots::ensure_no_slot_insertions_remain;
+use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::FileTokens;
 use crate::return_syntax_error;
 
-// Re-export `Template` from its canonical module for backward compatibility.
-// All existing `use crate::...::create_template_node::Template` imports
-// continue to resolve without changes.
-pub use crate::compiler_frontend::ast::templates::template_types::Template;
 pub(crate) use crate::compiler_frontend::ast::templates::template_types::TemplateInheritance;
 
 // Re-export composition functions used by slots.rs and other consumers.

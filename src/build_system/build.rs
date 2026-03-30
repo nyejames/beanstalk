@@ -25,6 +25,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
+const FILE_MIN_UNIQUE_SYMBOLS_CAPACITY: usize = 32;
+
 pub struct Module {
     pub(crate) entry_point: PathBuf, // Canonical entry file for the compiled module
     pub(crate) hir: HirModule,
@@ -245,7 +247,6 @@ pub(crate) fn bootstrap_project_build(
     let mut config = Config::new(entry_path);
 
     // Create a new string table for interning strings
-    const FILE_MIN_UNIQUE_SYMBOLS_CAPACITY: usize = 32;
     let mut string_table = StringTable::with_capacity(FILE_MIN_UNIQUE_SYMBOLS_CAPACITY);
 
     let frontend_style_directives = project_builder.backend.frontend_style_directives();
@@ -298,7 +299,6 @@ pub fn write_project_outputs(
         )
     })?;
 
-    let mut current_output_paths: HashSet<PathBuf> = HashSet::new();
     let mut current_managed_artifact_paths: HashSet<PathBuf> = HashSet::new();
 
     for output_file in &project.output_files {
@@ -308,8 +308,6 @@ pub fn write_project_outputs(
 
         let relative_output_path = output_file.relative_output_path();
         validate_relative_output_path(relative_output_path, string_table)?;
-        current_output_paths.insert(relative_output_path.to_path_buf());
-
         if !matches!(output_file.file_kind(), FileKind::Directory)
             && (project.cleanup_policy.manages_path(relative_output_path)
                 || matches!(output_file.file_kind(), FileKind::Bytes(_)))
@@ -367,7 +365,6 @@ pub fn write_project_outputs(
     finalize_output_cleanup(
         &cleanup_state,
         &options.output_root,
-        &current_output_paths,
         &current_managed_artifact_paths,
         &project.cleanup_policy,
         string_table,

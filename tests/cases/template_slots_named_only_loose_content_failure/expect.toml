@@ -1,4 +1,5 @@
+[backends.html]
 mode = "failure"
-message_contains = ["named '$slot(...)' targets", "Loose content is not allowed"]
 warnings = "forbid"
 error_type = "Rule"
+message_contains = ["named '$slot(...)' targets", "Loose content is not allowed"]

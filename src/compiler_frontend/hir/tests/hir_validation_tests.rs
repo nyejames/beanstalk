@@ -439,3 +439,46 @@ fn validator_rejects_cross_function_cfg_edges() {
         error.msg.contains("multiple functions") || error.msg.contains("crosses function boundary")
     );
 }
+
+#[test]
+fn lowering_errors_preserve_string_table_context() {
+    let mut string_table = StringTable::new();
+    let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
+    let missing_function = symbol("missing_fn", &mut string_table);
+
+    let mut call_location = test_location(2);
+    call_location.scope = entry_path.clone();
+
+    let start_fn = function_node(
+        start_name,
+        FunctionSignature {
+            parameters: vec![],
+            returns: vec![],
+        },
+        vec![
+            node(
+                NodeKind::Rvalue(Expression::function_call(
+                    missing_function,
+                    Vec::new(),
+                    Vec::new(),
+                    call_location.clone(),
+                )),
+                call_location.clone(),
+            ),
+            node(NodeKind::Return(vec![]), test_location(3)),
+        ],
+        test_location(1),
+    );
+
+    let messages = lower_ast(build_ast(vec![start_fn], entry_path), &mut string_table)
+        .expect_err("unknown function call should fail HIR lowering");
+
+    let resolved_scope = messages.errors[0]
+        .location
+        .scope
+        .to_portable_string(&messages.string_table);
+    assert!(
+        resolved_scope.ends_with("main.bst"),
+        "HIR lowering errors should preserve the source path in the returned StringTable, got '{resolved_scope}'",
+    );
+}

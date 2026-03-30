@@ -1,4 +1,5 @@
+[backends.html]
 mode = "failure"
-message_contains = ["only define one default '$slot'"]
 warnings = "forbid"
 error_type = "Rule"
+message_contains = ["only define one default '$slot'"]

@@ -1,5 +1,7 @@
-mode = "failure"
 entry = "."
+
+[backends.html]
+mode = "failure"
+warnings = "forbid"
 error_type = "Config"
 message_contains = ["Duplicate config key"]
-warnings = "forbid"

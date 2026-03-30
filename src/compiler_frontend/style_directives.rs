@@ -19,9 +19,9 @@
 //! - The frontend always executes directive handlers during parsing/folding, regardless of
 //!   whether the directive itself is frontend-owned or project-owned.
 
-use crate::compiler_frontend::ast::templates::create_template_node::Template;
 use crate::compiler_frontend::ast::templates::styles::markdown::markdown_formatter_factory;
 use crate::compiler_frontend::ast::templates::template::{BodyWhitespacePolicy, Formatter};
+use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::tokenizer::tokens::TemplateBodyMode;
 use std::fmt::Write as _;

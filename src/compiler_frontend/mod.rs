@@ -60,9 +60,9 @@ use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenizeMode};
 use crate::projects::settings::Config;
 use std::path::{Path, PathBuf};
 
-/// Flags change the behavior of the core compiler_frontend pipeline.
-/// These are a future-proof way of extending the behavior of a build system or the core pipeline
-/// For the built-in CLI these are added as cli flags, but builders can decide how to choose flags
+/// Flags change the behavior of the core `compiler_frontend` pipeline.
+/// These are a future-proof way of extending the behavior of a build system or the core pipeline.
+/// For the built-in CLI these are added as CLI flags, but builders can decide how to choose flags.
 #[derive(PartialEq, Debug, Clone)]
 pub enum Flag {
     Release, // Dev mode is default
@@ -142,7 +142,7 @@ impl CompilerFrontend {
             .get_by_canonical_path(module_path.as_path())
         {
             Some(identity) => (
-                identity.logical_path.to_owned(),
+                identity.logical_path.clone(),
                 Some(identity.file_id),
                 Some(identity.canonical_os_path.clone()),
             ),
@@ -153,7 +153,7 @@ impl CompilerFrontend {
             ),
         };
 
-        match tokenize(
+        let mut tokens = tokenize(
             source_code,
             &logical_path,
             tokenizer_mode,
@@ -161,13 +161,9 @@ impl CompilerFrontend {
             &self.style_directives,
             &mut self.string_table,
             file_id,
-        ) {
-            Ok(mut tokens) => {
-                tokens.canonical_os_path = canonical_os_path;
-                Ok(tokens)
-            }
-            Err(error) => Err(error),
-        }
+        )?;
+        tokens.canonical_os_path = canonical_os_path;
+        Ok(tokens)
     }
 
     /// ---------------------------
@@ -222,7 +218,7 @@ impl CompilerFrontend {
     /// -----------------------------
     /// AST CREATION
     /// -----------------------------
-    /// This assumes that the vec of FileTokens contains all dependencies for each file.
+    /// This assumes that the `Vec<FileTokens>` contains all dependencies for each file.
     /// The headers of each file will be parsed first, then each file will be combined into one module.
     /// The AST also provides a list of exports from the module.
     pub fn headers_to_ast(
@@ -235,10 +231,10 @@ impl CompilerFrontend {
         let interned_entry_dir = self
             .source_files
             .get_by_canonical_path(entry_file_path)
-            .map(|identity| identity.logical_path.to_owned())
-            .unwrap_or_else(|| {
-                InternedPath::from_path_buf(entry_file_path, &mut self.string_table)
-            });
+            .map_or_else(
+                || InternedPath::from_path_buf(entry_file_path, &mut self.string_table),
+                |identity| identity.logical_path.clone(),
+            );
 
         Ast::new(
             headers,
@@ -260,13 +256,12 @@ impl CompilerFrontend {
     /// a place-based representation suitable for borrow checking analysis.
     pub fn generate_hir(&mut self, ast: Ast) -> Result<HirModule, CompilerMessages> {
         let Some(project_path_resolver) = self.project_path_resolver.clone() else {
-            return Err(CompilerMessages {
-                errors: vec![CompilerError::compiler_error(
+            return Err(CompilerMessages::from_error_ref(
+                CompilerError::compiler_error(
                     "HIR generation requires a project path resolver for template folding.",
-                )],
-                warnings: vec![],
-                string_table: Default::default(),
-            });
+                ),
+                &self.string_table,
+            ));
         };
         let hir_module = lower_module(
             ast,
@@ -288,11 +283,7 @@ impl CompilerFrontend {
     ) -> Result<BorrowCheckReport, CompilerMessages> {
         match run_borrow_checker(hir_module, &self.host_function_registry, &self.string_table) {
             Ok(report) => Ok(report),
-            Err(error) => Err(CompilerMessages {
-                errors: vec![error],
-                warnings: Vec::new(),
-                string_table: Default::default(),
-            }),
+            Err(error) => Err(CompilerMessages::from_error_ref(error, &self.string_table)),
         }
     }
 

@@ -1,5 +1,7 @@
-mode = "failure"
 entry = "."
+
+[backends.html]
+mode = "failure"
 warnings = "forbid"
 error_type = "rule"
 message_contains = ["page_title", "must fold to a string"]

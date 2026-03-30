@@ -11,6 +11,7 @@ use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::hir::hir_nodes::FunctionId;
 use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::source_location::SourceLocation;
 use crate::compiler_frontend::string_interning::StringTable;
 #[cfg(test)]
 use crate::return_compiler_error;
@@ -79,7 +80,7 @@ impl HostFunctionDef {
                     id: InternedPath::from_path_buf(&name, string_table),
                     value: Expression {
                         kind: ExpressionKind::None,
-                        location: Default::default(),
+                        location: SourceLocation::default(),
                         data_type: parameter.language_type.clone(),
                         ownership: Ownership::ImmutableReference,
                     },
@@ -161,51 +162,5 @@ impl HostRegistry {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::compiler_frontend::ast::statements::functions::FunctionReturn;
-
-    #[test]
-    fn params_to_signature_preserves_alias_metadata() {
-        let mut string_table = StringTable::new();
-        let host_function = HostFunctionDef {
-            name: "concat_like",
-            parameters: vec![
-                HostParameter {
-                    language_type: DataType::StringSlice,
-                    access_kind: HostAccessKind::Shared,
-                },
-                HostParameter {
-                    language_type: DataType::StringSlice,
-                    access_kind: HostAccessKind::Shared,
-                },
-            ],
-            return_type: HostAbiType::Utf8Str,
-            return_alias: HostReturnAlias::AliasArgs(vec![1]),
-        };
-
-        let signature = host_function.params_to_signature(&mut string_table);
-        assert_eq!(signature.parameters.len(), 2);
-        assert_eq!(signature.returns.len(), 1);
-        assert!(matches!(
-            &signature.returns[0],
-            FunctionReturn::AliasCandidates {
-                parameter_indices,
-                data_type
-            } if parameter_indices == &vec![1] && data_type == &DataType::StringSlice
-        ));
-    }
-
-    #[test]
-    fn register_function_rejects_duplicates() {
-        let mut registry = HostRegistry::new();
-        let result = registry.register_function(HostFunctionDef {
-            name: IO_FUNC_NAME,
-            parameters: Vec::new(),
-            return_type: HostAbiType::Void,
-            return_alias: HostReturnAlias::Fresh,
-        });
-
-        assert!(result.is_err());
-    }
-}
+#[path = "tests/host_functions_tests.rs"]
+mod host_functions_tests;

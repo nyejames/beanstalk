@@ -1,3 +1,10 @@
+//! AST module construction and scope-context helpers.
+//!
+//! WHAT: combines per-file headers into one typed AST, resolves file-scoped imports, lowers
+//! function/struct/const bodies, and synthesizes top-level template fragments.
+//! WHY: this stage is where module-wide symbol identity and per-file visibility are enforced
+//! together, so diagnostics must preserve the full shared `StringTable` context.
+
 use crate::compiler_frontend::FrontendBuildProfile;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
@@ -7,8 +14,8 @@ use crate::compiler_frontend::ast::import_bindings::{
 };
 use crate::compiler_frontend::ast::statements::functions::{FunctionReturn, FunctionSignature};
 use crate::compiler_frontend::ast::statements::structs::create_struct_definition;
-use crate::compiler_frontend::ast::templates::create_template_node::Template;
 use crate::compiler_frontend::ast::templates::template_folding::TemplateFoldContext;
+use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::ast::templates::top_level_templates::{
     collect_and_strip_comment_templates, synthesize_start_template_items,
 };
@@ -63,6 +70,14 @@ pub struct Ast {
     pub warnings: Vec<CompilerWarning>,
 }
 
+fn ast_error_messages(
+    error: CompilerError,
+    warnings: &[CompilerWarning],
+    string_table: &StringTable,
+) -> CompilerMessages {
+    CompilerMessages::from_error_with_warnings(error, warnings.to_vec(), string_table)
+}
+
 impl Ast {
     pub fn new(
         sorted_headers: Vec<Header>,
@@ -94,13 +109,13 @@ impl Ast {
             FxHashMap::default();
         let rendered_path_usages = Rc::new(RefCell::new(Vec::new()));
         let Some(project_path_resolver_for_folding) = project_path_resolver.as_ref() else {
-            return Err(CompilerMessages {
-                errors: vec![CompilerError::compiler_error(
+            return Err(ast_error_messages(
+                CompilerError::compiler_error(
                     "AST construction requires a project path resolver for template folding and path coercion.",
-                )],
-                warnings,
-                string_table: Default::default(),
-            });
+                ),
+                &warnings,
+                string_table,
+            ));
         };
 
         // Collect every module declaration once.
@@ -211,13 +226,7 @@ impl Ast {
             string_table,
         ) {
             Ok(bindings) => bindings,
-            Err(error) => {
-                return Err(CompilerMessages {
-                    errors: vec![error],
-                    warnings,
-                    string_table: Default::default(),
-                });
-            }
+            Err(error) => return Err(ast_error_messages(error, &warnings, string_table)),
         };
 
         // Resolve constants and structs in dependency order with file-scoped visibility.
@@ -255,11 +264,7 @@ impl Ast {
                     ) {
                         Ok(declaration) => declaration,
                         Err(error) => {
-                            return Err(CompilerMessages {
-                                errors: vec![error],
-                                warnings,
-                                string_table: Default::default(),
-                            });
+                            return Err(ast_error_messages(error, &warnings, string_table));
                         }
                     };
 
@@ -291,11 +296,7 @@ impl Ast {
                     let fields = match fields_result {
                         Ok(fields) => fields,
                         Err(error) => {
-                            return Err(CompilerMessages {
-                                errors: vec![error],
-                                warnings,
-                                string_table: Default::default(),
-                            });
+                            return Err(ast_error_messages(error, &warnings, string_table));
                         }
                     };
 
@@ -366,12 +367,8 @@ impl Ast {
 
                     let body = match body_result {
                         Ok(b) => b,
-                        Err(e) => {
-                            return Err(CompilerMessages {
-                                errors: vec![e],
-                                warnings,
-                                string_table: Default::default(),
-                            });
+                        Err(error) => {
+                            return Err(ast_error_messages(error, &warnings, string_table));
                         }
                     };
 
@@ -418,12 +415,8 @@ impl Ast {
 
                     let mut body = match body_result {
                         Ok(b) => b,
-                        Err(e) => {
-                            return Err(CompilerMessages {
-                                errors: vec![e],
-                                warnings,
-                                string_table: Default::default(),
-                            });
+                        Err(error) => {
+                            return Err(ast_error_messages(error, &warnings, string_table));
                         }
                     };
 
@@ -463,13 +456,13 @@ impl Ast {
                     {
                         Some(fields) => fields,
                         None => {
-                            return Err(CompilerMessages {
-                                errors: vec![CompilerError::compiler_error(
+                            return Err(ast_error_messages(
+                                CompilerError::compiler_error(
                                     "Struct fields were not resolved before AST emission.",
-                                )],
-                                warnings,
-                                string_table: Default::default(),
-                            });
+                                ),
+                                &warnings,
+                                string_table,
+                            ));
                         }
                     };
 
@@ -485,13 +478,13 @@ impl Ast {
                 }
 
                 HeaderKind::Choice => {
-                    return Err(CompilerMessages {
-                        errors: vec![CompilerError::compiler_error(
+                    return Err(ast_error_messages(
+                        CompilerError::compiler_error(
                             "Choice headers should be rejected during header parsing before AST construction.",
-                        )],
-                        warnings,
-                        string_table: Default::default(),
-                    });
+                        ),
+                        &warnings,
+                        string_table,
+                    ));
                 }
 
                 HeaderKind::ConstTemplate { .. } => {
@@ -518,11 +511,7 @@ impl Ast {
                     let template = match template_result {
                         Ok(template) => template,
                         Err(error) => {
-                            return Err(CompilerMessages {
-                                errors: vec![error],
-                                warnings,
-                                string_table: Default::default(),
-                            });
+                            return Err(ast_error_messages(error, &warnings, string_table));
                         }
                     };
 
@@ -533,24 +522,24 @@ impl Ast {
                         crate::compiler_frontend::ast::templates::template::TemplateConstValueKind::RenderableString
                         | crate::compiler_frontend::ast::templates::template::TemplateConstValueKind::WrapperTemplate => {}
                         crate::compiler_frontend::ast::templates::template::TemplateConstValueKind::SlotInsertHelper => {
-                            return Err(CompilerMessages {
-                                errors: vec![CompilerError::new_rule_error(
+                            return Err(ast_error_messages(
+                                CompilerError::new_rule_error(
                                     "Top-level const templates cannot evaluate to '$insert(...)' helpers. Apply this insert while filling an immediate parent '$slot' template.",
                                     template.location,
-                                )],
-                                warnings,
-                                string_table: Default::default(),
-                            });
+                                ),
+                                &warnings,
+                                string_table,
+                            ));
                         }
                         crate::compiler_frontend::ast::templates::template::TemplateConstValueKind::NonConst => {
-                            return Err(CompilerMessages {
-                                errors: vec![CompilerError::new_rule_error(
+                            return Err(ast_error_messages(
+                                CompilerError::new_rule_error(
                                     "Top-level const templates must be fully foldable at compile time.",
                                     template.location,
-                                )],
-                                warnings,
-                                string_table: Default::default(),
-                            });
+                                ),
+                                &warnings,
+                                string_table,
+                            ));
                         }
                     }
 
@@ -559,22 +548,14 @@ impl Ast {
                     {
                         Ok(context) => context,
                         Err(error) => {
-                            return Err(CompilerMessages {
-                                errors: vec![error],
-                                warnings,
-                                string_table: Default::default(),
-                            });
+                            return Err(ast_error_messages(error, &warnings, string_table));
                         }
                     };
 
                     let html = match template.fold_into_stringid(&mut fold_context) {
                         Ok(value) => value,
                         Err(error) => {
-                            return Err(CompilerMessages {
-                                errors: vec![error],
-                                warnings,
-                                string_table: Default::default(),
-                            });
+                            return Err(ast_error_messages(error, &warnings, string_table));
                         }
                     };
 
@@ -592,11 +573,7 @@ impl Ast {
             &path_format_config,
             string_table,
         )
-        .map_err(|error| CompilerMessages {
-            errors: vec![error],
-            warnings: warnings.clone(),
-            string_table: Default::default(),
-        })?;
+        .map_err(|error| ast_error_messages(error, &warnings, string_table))?;
 
         let start_template_items = synthesize_start_template_items(
             &mut ast,
@@ -607,11 +584,7 @@ impl Ast {
             &path_format_config,
             string_table,
         )
-        .map_err(|error| CompilerMessages {
-            errors: vec![error],
-            warnings: warnings.clone(),
-            string_table: Default::default(),
-        })?;
+        .map_err(|error| ast_error_messages(error, &warnings, string_table))?;
 
         Ok(Ast {
             nodes: ast,

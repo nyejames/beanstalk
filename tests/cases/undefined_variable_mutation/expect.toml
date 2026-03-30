@@ -1,4 +1,5 @@
+[backends.html]
 mode = "failure"
-error_type = "Rule"
 warnings = "forbid"
+error_type = "Rule"
 message_contains = ["Undefined variable", "must be declared before use"]

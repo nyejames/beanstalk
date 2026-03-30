@@ -1,13 +1,15 @@
-mode = "success"
 entry = "."
+
+[backends.html]
+mode = "success"
 warnings = "exact"
 warning_count = 1
 
-[[artifact_assertions]]
+[[backends.html.artifact_assertions]]
 path = "index.html"
 kind = "html"
 must_contain = ["/assets/video.mp4"]
 
-[[artifact_assertions]]
+[[backends.html.artifact_assertions]]
 path = "assets/video.mp4"
 kind = "binary"

@@ -1,4 +1,5 @@
+[backends.html]
 mode = "failure"
-error_type = "Type"
 warnings = "forbid"
+error_type = "Type"
 message_contains = ["no return signature", "return' must be bare"]

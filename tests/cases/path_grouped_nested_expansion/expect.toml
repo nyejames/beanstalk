@@ -1,13 +1,10 @@
-mode = "success"
 entry = "."
+
+[backends.html]
+mode = "success"
 warnings = "forbid"
 
-[[artifact_assertions]]
+[[backends.html.artifact_assertions]]
 path = "index.html"
 kind = "html"
-must_contain = [
-    "/docs/intro.md",
-    "/docs/my folder/a file.md",
-    "/docs/my folder/b.md",
-    "/docs/my folder/another folder/c.md",
-]
+must_contain = ["/docs/intro.md", "/docs/my folder/a file.md", "/docs/my folder/b.md", "/docs/my folder/another folder/c.md"]

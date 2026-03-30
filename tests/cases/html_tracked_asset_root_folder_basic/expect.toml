@@ -1,12 +1,14 @@
-mode = "success"
 entry = "."
+
+[backends.html]
+mode = "success"
 warnings = "forbid"
 
-[[artifact_assertions]]
+[[backends.html.artifact_assertions]]
 path = "index.html"
 kind = "html"
 must_contain = ["/assets/logo.png"]
 
-[[artifact_assertions]]
+[[backends.html.artifact_assertions]]
 path = "assets/logo.png"
 kind = "binary"

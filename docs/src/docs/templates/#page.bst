@@ -22,7 +22,7 @@ import @styles/docs {navbar, title, section, palette, table, codeblock, theme_he
     Templates are either folded to strings at compile time, or become functions that return strings at runtime. 
 
     ## Structure
-    - Head and body separated by `:`
+    - Head and body separated by "[$code::]"
     - Variable capture from the surrounding scope
 
     Templates unlock the full power of Beanstalk's HTML / CSS generation capabilities.

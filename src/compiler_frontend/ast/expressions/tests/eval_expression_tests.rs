@@ -2,7 +2,7 @@ use super::*;
 use crate::compiler_frontend::ast::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::Operator;
-use crate::compiler_frontend::ast::templates::create_template_node::Template;
+use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;

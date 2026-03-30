@@ -1,4 +1,5 @@
-mode = "success"
 entry = "."
-flags = ["html_wasm"]
+
+[backends.html_wasm]
+mode = "success"
 warnings = "forbid"

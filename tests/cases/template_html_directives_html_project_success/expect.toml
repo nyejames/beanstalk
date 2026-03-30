@@ -1,12 +1,10 @@
-mode = "success"
 entry = "."
+
+[backends.html]
+mode = "success"
 warnings = "forbid"
 
-[[artifact_assertions]]
+[[backends.html.artifact_assertions]]
 path = "index.html"
 kind = "html"
-must_contain = [
-  "<div id=\"raw\"><span>raw</span></div>",
-  ".button { color: red; }",
-  "&lt;div id=&quot;escaped&quot;&gt;x &amp; y&lt;/div&gt;"
-]
+must_contain = ["<div id=\"raw\"><span>raw</span></div>", ".button { color: red; }", "&lt;div id=&quot;escaped&quot;&gt;x &amp; y&lt;/div&gt;"]

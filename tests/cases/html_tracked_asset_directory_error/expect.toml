@@ -1,5 +1,13 @@
-mode = "failure"
 entry = "."
+
+[backends.html]
+mode = "failure"
+warnings = "forbid"
+error_type = "rule"
+message_contains = ["tracked asset", "file-only"]
+
+[backends.html_wasm]
+mode = "failure"
 warnings = "forbid"
 error_type = "rule"
 message_contains = ["tracked asset", "file-only"]

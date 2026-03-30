@@ -191,6 +191,14 @@ impl<'a> HirBuilder<'a> {
         }
     }
 
+    fn lower_error_messages(&self, error: CompilerError) -> CompilerMessages {
+        CompilerMessages::from_error_with_warnings(
+            error,
+            self.module.warnings.to_owned(),
+            self.string_table,
+        )
+    }
+
     // ========================================================================
     // Main Build Method
     // ========================================================================
@@ -201,64 +209,42 @@ impl<'a> HirBuilder<'a> {
         self.module.rendered_path_usages = ast.rendered_path_usages.to_owned();
 
         if let Err(error) = self.prepare_hir_declarations(&ast) {
-            return Err(CompilerMessages {
-                errors: vec![error],
-                warnings: self.module.warnings.to_owned(),
-                string_table: Default::default(),
-            });
+            return Err(self.lower_error_messages(error));
         }
 
         if let Err(error) = self.lower_module_constants(&ast) {
-            return Err(CompilerMessages {
-                errors: vec![error],
-                warnings: self.module.warnings.to_owned(),
-                string_table: Default::default(),
-            });
+            return Err(self.lower_error_messages(error));
         }
 
         if let Err(error) = self.resolve_start_fragments(&ast) {
-            return Err(CompilerMessages {
-                errors: vec![error],
-                warnings: self.module.warnings.to_owned(),
-                string_table: Default::default(),
-            });
+            return Err(self.lower_error_messages(error));
         }
 
         if let Err(error) = self.resolve_doc_fragments(&ast) {
-            return Err(CompilerMessages {
-                errors: vec![error],
-                warnings: self.module.warnings.to_owned(),
-                string_table: Default::default(),
-            });
+            return Err(self.lower_error_messages(error));
         }
 
         for node in &ast.nodes {
             if let Err(error) = self.process_ast_node(node) {
-                return Err(CompilerMessages {
-                    errors: vec![error],
-                    warnings: self.module.warnings.to_owned(),
-                    string_table: Default::default(),
-                });
+                return Err(self.lower_error_messages(error));
             }
         }
 
         if let Err(error) = self.assign_function_origins() {
-            return Err(CompilerMessages {
-                errors: vec![error],
-                warnings: self.module.warnings.to_owned(),
-                string_table: Default::default(),
-            });
+            return Err(self.lower_error_messages(error));
         }
 
+        let warnings = self.module.warnings.to_owned();
+        let string_table = &*self.string_table;
         self.module.type_context = self.type_context;
         self.module.side_table = self.side_table;
 
         if let Err(error) = validate_hir_module(&self.module, self.string_table) {
-            return Err(CompilerMessages {
-                errors: vec![error],
-                warnings: self.module.warnings.to_owned(),
-                string_table: Default::default(),
-            });
+            return Err(CompilerMessages::from_error_with_warnings(
+                error,
+                warnings,
+                string_table,
+            ));
         }
 
         Ok(self.module)

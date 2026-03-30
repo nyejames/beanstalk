@@ -12,8 +12,8 @@ use crate::compiler_frontend::ast::ast_nodes::{
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::statements::branching::MatchArm;
 use crate::compiler_frontend::ast::statements::functions::{FunctionReturn, FunctionSignature};
-use crate::compiler_frontend::ast::templates::create_template_node::Template;
 use crate::compiler_frontend::ast::templates::template::{SlotKey, SlotPlaceholder, TemplateAtom};
+use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::compiler_errors::{CompilerMessages, ErrorType};
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;

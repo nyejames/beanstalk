@@ -1,6 +1,6 @@
 use crate::compiler_frontend::ast::expressions::expression::Expression;
-use crate::compiler_frontend::ast::templates::create_template_node::Template;
 use crate::compiler_frontend::ast::templates::styles::whitespace::TemplateWhitespacePassProfile;
+use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::string_interning::StringId;

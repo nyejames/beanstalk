@@ -428,10 +428,10 @@ pub fn run_all_test_cases_with_backend_filter(show_warnings: bool, backend_filte
         say!("\nAll tests behaved as expected.");
     } else if total_summary.total_tests > 0 {
         let percentage =
-            (total_summary.correct_results() as f64 / total_summary.total_tests as f64) * 100.0;
+            format_pass_percentage(total_summary.correct_results(), total_summary.total_tests);
         say!(
             Yellow "\n",
-            Bright Yellow format!("{percentage:.1}"),
+            Bright Yellow percentage,
             " %",
             Reset " of tests behaved as expected"
         );
@@ -457,6 +457,15 @@ fn render_backend_summary(backend_summaries: &BTreeMap<BackendId, SummaryCounts>
             summary.unexpected_successes
         ));
     }
+}
+
+fn format_pass_percentage(correct_results: usize, total_tests: usize) -> String {
+    let correct_results =
+        u128::try_from(correct_results).expect("usize values always fit into u128");
+    let total_tests = u128::try_from(total_tests).expect("usize values always fit into u128");
+    let scaled_tenths = (correct_results * 1_000) / total_tests;
+
+    format!("{}.{}", scaled_tenths / 10, scaled_tenths % 10)
 }
 
 fn load_test_suite(backend_filter: Option<BackendId>) -> Result<TestSuiteSpec, String> {
@@ -685,54 +694,14 @@ fn parse_expectation_file(path: &Path) -> Result<ParsedExpectationFile, String> 
         ));
     }
 
-    let matrix_mode = !parsed.backends.is_empty();
-    if matrix_mode {
-        return parse_matrix_expectation_file(path, parsed);
+    if parsed.backends.is_empty() {
+        return Err(format!(
+            "Expectation file '{}' must declare at least one '[backends.<id>]' section. Legacy top-level mode/flags/error fields are no longer supported.",
+            path.display()
+        ));
     }
 
-    parse_legacy_expectation_file(path, parsed)
-}
-
-fn parse_legacy_expectation_file(
-    path: &Path,
-    parsed: ExpectationToml,
-) -> Result<ParsedExpectationFile, String> {
-    let mode = parsed.mode.ok_or_else(|| {
-        format!(
-            "Expectation file '{}' is missing required key 'mode'.",
-            path.display()
-        )
-    })?;
-
-    let warnings =
-        parse_warning_expectation(parsed.warnings.as_deref(), parsed.warning_count, path, "")?;
-    let flags = parse_case_flags(&parsed.flags, path, "")?;
-    let backend_id = if flags.contains(&Flag::HtmlWasm) {
-        BackendId::HtmlWasm
-    } else {
-        BackendId::Html
-    };
-    let error_type = parsed
-        .error_type
-        .as_deref()
-        .map(parse_error_type)
-        .transpose()?;
-
-    let artifact_assertions = parse_artifact_assertions(path, "", &parsed.artifact_assertions)?;
-
-    Ok(ParsedExpectationFile {
-        entry: parsed.entry,
-        backend_expectations: vec![ParsedBackendExpectation {
-            backend_id,
-            flags,
-            mode,
-            allow_panic: parsed.allow_panic,
-            warnings,
-            error_type,
-            message_contains: parsed.message_contains,
-            artifact_assertions,
-        }],
-    })
+    parse_matrix_expectation_file(path, parsed)
 }
 
 fn parse_matrix_expectation_file(
@@ -808,11 +777,7 @@ fn parse_artifact_assertions(
     let mut parsed_assertions = Vec::with_capacity(assertions.len());
 
     for (index, assertion) in assertions.iter().enumerate() {
-        let assertion_label = if context.is_empty() {
-            format!("artifact_assertions[{index}]")
-        } else {
-            format!("{context}.artifact_assertions[{index}]")
-        };
+        let assertion_label = artifact_assertion_label(context, index);
 
         if assertion.path.trim().is_empty() {
             return Err(format!(
@@ -823,85 +788,8 @@ fn parse_artifact_assertions(
         }
 
         let kind = parse_artifact_kind(path, &assertion.kind, &assertion_label)?;
-        validate_artifact_strings(
-            path,
-            &assertion_label,
-            "must_contain",
-            &assertion.must_contain,
-        )?;
-        validate_artifact_strings(
-            path,
-            &assertion_label,
-            "must_not_contain",
-            &assertion.must_not_contain,
-        )?;
-        validate_artifact_strings(
-            path,
-            &assertion_label,
-            "must_export",
-            &assertion.must_export,
-        )?;
-        validate_artifact_strings(
-            path,
-            &assertion_label,
-            "must_import",
-            &assertion.must_import,
-        )?;
-
-        match kind {
-            ArtifactKind::Html | ArtifactKind::Js => {
-                if assertion.validate_wasm
-                    || !assertion.must_export.is_empty()
-                    || !assertion.must_import.is_empty()
-                {
-                    return Err(format!(
-                        "Expectation file '{}' {} uses wasm-only fields on a text artifact assertion.",
-                        path.display(),
-                        assertion_label
-                    ));
-                }
-                if assertion.must_contain.is_empty() && assertion.must_not_contain.is_empty() {
-                    return Err(format!(
-                        "Expectation file '{}' {} must define 'must_contain' and/or 'must_not_contain' for text artifacts.",
-                        path.display(),
-                        assertion_label
-                    ));
-                }
-            }
-            ArtifactKind::Wasm => {
-                if !assertion.must_contain.is_empty() || !assertion.must_not_contain.is_empty() {
-                    return Err(format!(
-                        "Expectation file '{}' {} uses text-only fields on a wasm artifact assertion.",
-                        path.display(),
-                        assertion_label
-                    ));
-                }
-                if !assertion.validate_wasm
-                    && assertion.must_export.is_empty()
-                    && assertion.must_import.is_empty()
-                {
-                    return Err(format!(
-                        "Expectation file '{}' {} must enable 'validate_wasm' or require imports/exports for wasm assertions.",
-                        path.display(),
-                        assertion_label
-                    ));
-                }
-            }
-            ArtifactKind::Binary => {
-                if !assertion.must_contain.is_empty()
-                    || !assertion.must_not_contain.is_empty()
-                    || assertion.validate_wasm
-                    || !assertion.must_export.is_empty()
-                    || !assertion.must_import.is_empty()
-                {
-                    return Err(format!(
-                        "Expectation file '{}' {} uses text-only or wasm-only fields on a binary artifact assertion.",
-                        path.display(),
-                        assertion_label
-                    ));
-                }
-            }
-        }
+        validate_artifact_assertion_fields(path, &assertion_label, assertion)?;
+        validate_artifact_assertion_shape(path, &assertion_label, kind, assertion)?;
 
         parsed_assertions.push(ArtifactAssertion {
             path: normalize_relative_path_text(&assertion.path),
@@ -915,6 +803,95 @@ fn parse_artifact_assertions(
     }
 
     Ok(parsed_assertions)
+}
+
+fn artifact_assertion_label(context: &str, index: usize) -> String {
+    if context.is_empty() {
+        format!("artifact_assertions[{index}]")
+    } else {
+        format!("{context}.artifact_assertions[{index}]")
+    }
+}
+
+fn validate_artifact_assertion_fields(
+    path: &Path,
+    assertion_label: &str,
+    assertion: &ArtifactAssertionToml,
+) -> Result<(), String> {
+    for (field_name, values) in [
+        ("must_contain", &assertion.must_contain),
+        ("must_not_contain", &assertion.must_not_contain),
+        ("must_export", &assertion.must_export),
+        ("must_import", &assertion.must_import),
+    ] {
+        validate_artifact_strings(path, assertion_label, field_name, values)?;
+    }
+
+    Ok(())
+}
+
+fn validate_artifact_assertion_shape(
+    path: &Path,
+    assertion_label: &str,
+    kind: ArtifactKind,
+    assertion: &ArtifactAssertionToml,
+) -> Result<(), String> {
+    match kind {
+        ArtifactKind::Html | ArtifactKind::Js => {
+            if assertion.validate_wasm
+                || !assertion.must_export.is_empty()
+                || !assertion.must_import.is_empty()
+            {
+                return Err(format!(
+                    "Expectation file '{}' {} uses wasm-only fields on a text artifact assertion.",
+                    path.display(),
+                    assertion_label
+                ));
+            }
+            if assertion.must_contain.is_empty() && assertion.must_not_contain.is_empty() {
+                return Err(format!(
+                    "Expectation file '{}' {} must define 'must_contain' and/or 'must_not_contain' for text artifacts.",
+                    path.display(),
+                    assertion_label
+                ));
+            }
+        }
+        ArtifactKind::Wasm => {
+            if !assertion.must_contain.is_empty() || !assertion.must_not_contain.is_empty() {
+                return Err(format!(
+                    "Expectation file '{}' {} uses text-only fields on a wasm artifact assertion.",
+                    path.display(),
+                    assertion_label
+                ));
+            }
+            if !assertion.validate_wasm
+                && assertion.must_export.is_empty()
+                && assertion.must_import.is_empty()
+            {
+                return Err(format!(
+                    "Expectation file '{}' {} must enable 'validate_wasm' or require imports/exports for wasm assertions.",
+                    path.display(),
+                    assertion_label
+                ));
+            }
+        }
+        ArtifactKind::Binary => {
+            if !assertion.must_contain.is_empty()
+                || !assertion.must_not_contain.is_empty()
+                || assertion.validate_wasm
+                || !assertion.must_export.is_empty()
+                || !assertion.must_import.is_empty()
+            {
+                return Err(format!(
+                    "Expectation file '{}' {} uses text-only or wasm-only fields on a binary artifact assertion.",
+                    path.display(),
+                    assertion_label
+                ));
+            }
+        }
+    }
+
+    Ok(())
 }
 
 fn validate_artifact_strings(
@@ -1357,14 +1334,11 @@ fn validate_warning_expectation(
 ) -> Option<String> {
     match expectation {
         WarningExpectation::Ignore => None,
-        WarningExpectation::Forbid if actual_count > 0 => {
-            Some(format!("Expected no warnings, but found {actual_count}."))
+        WarningExpectation::Forbid => {
+            (actual_count > 0).then(|| format!("Expected no warnings, but found {actual_count}."))
         }
-        WarningExpectation::Forbid => None,
-        WarningExpectation::Exact(expected) if actual_count != expected => Some(format!(
-            "Expected exactly {expected} warnings, but found {actual_count}."
-        )),
-        WarningExpectation::Exact(_) => None,
+        WarningExpectation::Exact(expected) => (actual_count != expected)
+            .then(|| format!("Expected exactly {expected} warnings, but found {actual_count}.")),
     }
 }
 
@@ -1382,8 +1356,7 @@ fn validate_expected_artifact_paths(
 
     if actual_paths != expected {
         return Some(format!(
-            "Expected output paths {:?}, but produced {:?}.",
-            expected, actual_paths
+            "Expected output paths {expected:?}, but produced {actual_paths:?}."
         ));
     }
 
@@ -1541,14 +1514,10 @@ fn artifact_kind_name(kind: ArtifactKind) -> &'static str {
 /// WHAT: requires a built `index.html` HTML artifact for every html backend success case.
 /// WHY: replacing legacy path assertions still needs a deterministic minimum output guarantee.
 fn validate_html_baseline_contract(build_result: &BuildResult) -> Option<String> {
-    let index_html = match find_output_file(build_result, "index.html") {
-        Some(output) => output,
-        None => {
-            return Some(
-                "html baseline contract expected 'index.html', but it was not produced."
-                    .to_string(),
-            );
-        }
+    let Some(index_html) = find_output_file(build_result, "index.html") else {
+        return Some(
+            "html baseline contract expected 'index.html', but it was not produced.".to_string(),
+        );
     };
 
     let Some(html) = output_text_content(index_html, ArtifactKind::Html) else {
@@ -1567,8 +1536,7 @@ fn validate_html_baseline_contract(build_result: &BuildResult) -> Option<String>
     ] {
         if !html.contains(required_fragment) {
             return Some(format!(
-                "html baseline contract expected 'index.html' to contain '{}'.",
-                required_fragment
+                "html baseline contract expected 'index.html' to contain '{required_fragment}'."
             ));
         }
     }
@@ -1577,14 +1545,11 @@ fn validate_html_baseline_contract(build_result: &BuildResult) -> Option<String>
 }
 
 fn validate_html_wasm_baseline_contract(build_result: &BuildResult) -> Option<String> {
-    let index_html = match find_output_file(build_result, "index.html") {
-        Some(output) => output,
-        None => {
-            return Some(
-                "html_wasm baseline contract expected 'index.html', but it was not produced."
-                    .to_string(),
-            );
-        }
+    let Some(index_html) = find_output_file(build_result, "index.html") else {
+        return Some(
+            "html_wasm baseline contract expected 'index.html', but it was not produced."
+                .to_string(),
+        );
     };
 
     let Some(html) = output_text_content(index_html, ArtifactKind::Html) else {
@@ -1602,8 +1567,7 @@ fn validate_html_wasm_baseline_contract(build_result: &BuildResult) -> Option<St
     ] {
         if !html.contains(required_fragment) {
             return Some(format!(
-                "html_wasm baseline contract expected 'index.html' to contain '{}'.",
-                required_fragment
+                "html_wasm baseline contract expected 'index.html' to contain '{required_fragment}'."
             ));
         }
     }
@@ -1629,14 +1593,10 @@ fn validate_html_wasm_baseline_contract(build_result: &BuildResult) -> Option<St
         );
     }
 
-    let page_js = match find_output_file(build_result, "page.js") {
-        Some(output) => output,
-        None => {
-            return Some(
-                "html_wasm baseline contract expected 'page.js', but it was not produced."
-                    .to_string(),
-            );
-        }
+    let Some(page_js) = find_output_file(build_result, "page.js") else {
+        return Some(
+            "html_wasm baseline contract expected 'page.js', but it was not produced.".to_string(),
+        );
     };
 
     let Some(js) = output_text_content(page_js, ArtifactKind::Js) else {
@@ -1652,20 +1612,16 @@ fn validate_html_wasm_baseline_contract(build_result: &BuildResult) -> Option<St
     ] {
         if !js.contains(required_fragment) {
             return Some(format!(
-                "html_wasm baseline contract expected 'page.js' to contain '{}'.",
-                required_fragment
+                "html_wasm baseline contract expected 'page.js' to contain '{required_fragment}'."
             ));
         }
     }
 
-    let page_wasm = match find_output_file(build_result, "page.wasm") {
-        Some(output) => output,
-        None => {
-            return Some(
-                "html_wasm baseline contract expected 'page.wasm', but it was not produced."
-                    .to_string(),
-            );
-        }
+    let Some(page_wasm) = find_output_file(build_result, "page.wasm") else {
+        return Some(
+            "html_wasm baseline contract expected 'page.wasm', but it was not produced."
+                .to_string(),
+        );
     };
 
     let Some(wasm_bytes) = output_wasm_bytes(page_wasm) else {
@@ -1692,8 +1648,7 @@ fn validate_html_wasm_baseline_contract(build_result: &BuildResult) -> Option<St
     for required_export in ["memory", "bst_str_ptr", "bst_str_len", "bst_release"] {
         if !exports.contains(&required_export.to_string()) {
             return Some(format!(
-                "html_wasm baseline contract missing required export '{}'. Available exports: {:?}.",
-                required_export, exports
+                "html_wasm baseline contract missing required export '{required_export}'. Available exports: {exports:?}."
             ));
         }
     }
@@ -1753,11 +1708,19 @@ fn find_output_file<'a>(
 }
 
 fn output_text_content(output: &OutputFile, expected_kind: ArtifactKind) -> Option<&str> {
-    match (expected_kind, output.file_kind()) {
-        (ArtifactKind::Html, FileKind::Html(content)) => Some(content.as_str()),
-        (ArtifactKind::Js, FileKind::Js(content)) => Some(content.as_str()),
-        _ => None,
+    if matches!(expected_kind, ArtifactKind::Html)
+        && let FileKind::Html(content) = output.file_kind()
+    {
+        return Some(content.as_str());
     }
+
+    if matches!(expected_kind, ArtifactKind::Js)
+        && let FileKind::Js(content) = output.file_kind()
+    {
+        return Some(content.as_str());
+    }
+
+    None
 }
 
 fn output_wasm_bytes(output: &OutputFile) -> Option<&[u8]> {
@@ -1827,10 +1790,8 @@ fn validate_golden_outputs(build_result: &BuildResult, golden_dir: &Path) -> Opt
 
         let actual_bytes = match output.file_kind() {
             FileKind::Html(content) | FileKind::Js(content) => content.as_bytes().to_vec(),
-            FileKind::Wasm(bytes) => bytes.clone(),
-            FileKind::Bytes(bytes) => bytes.clone(),
-            FileKind::Directory => Vec::new(),
-            FileKind::NotBuilt => Vec::new(),
+            FileKind::Wasm(bytes) | FileKind::Bytes(bytes) => bytes.clone(),
+            FileKind::Directory | FileKind::NotBuilt => Vec::new(),
         };
 
         if actual_bytes != expected_bytes {
@@ -1981,7 +1942,7 @@ mod tests {
         fs::write(input_root.join("#page.bst"), "#[:ok]\n").expect("should write fixture source");
         fs::write(
             case_root.join(EXPECT_FILE_NAME),
-            "mode = \"success\"\nwarnings = \"forbid\"\n",
+            "[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\n",
         )
         .expect("should write expect file");
     }
@@ -1995,13 +1956,12 @@ mod tests {
         fs::write(input_root.join("#page.bst"), "x = 1\n").expect("should write fixture source");
         fs::write(
             case_root.join(EXPECT_FILE_NAME),
-            "mode = \"failure\"\nwarnings = \"forbid\"\nerror_type = \"rule\"\n",
+            "[backends.html]\nmode = \"failure\"\nwarnings = \"forbid\"\nerror_type = \"rule\"\n",
         )
         .expect("should write expect file");
 
-        let error = match load_canonical_case_specs(&case_root, None, None) {
-            Ok(_) => panic!("fixture should be rejected"),
-            Err(error) => error,
+        let Err(error) = load_canonical_case_specs(&case_root, None, None) else {
+            panic!("fixture should be rejected");
         };
         assert!(
             error.contains("message_contains"),
@@ -2012,7 +1972,7 @@ mod tests {
     }
 
     #[test]
-    fn accepts_success_fixture_without_explicit_artifact_assertions() {
+    fn rejects_legacy_top_level_expectation_contract() {
         let root = temp_dir("success_contract_backend_baseline");
         let case_root = root.join("case");
         let input_root = case_root.join(INPUT_DIR_NAME);
@@ -2024,28 +1984,27 @@ mod tests {
         )
         .expect("should write expect file");
 
-        let cases =
-            load_canonical_case_specs(&case_root, None, None).expect("fixture should be accepted");
-        assert_eq!(cases.len(), 1);
-        assert_eq!(cases[0].display_name, "case [html]");
+        let Err(error) = load_canonical_case_specs(&case_root, None, None) else {
+            panic!("legacy fixture should be rejected");
+        };
+        assert!(
+            error.contains("[backends.<id>]"),
+            "unexpected error: {error}"
+        );
 
         fs::remove_dir_all(&root).expect("should clean up temp fixture root");
     }
 
     #[test]
-    fn accepts_success_fixture_with_golden_only_assertion() {
+    fn accepts_success_fixture_without_explicit_artifact_assertions() {
         let root = temp_dir("success_contract_golden_assertion");
         let case_root = root.join("case");
         let input_root = case_root.join(INPUT_DIR_NAME);
-        let golden_root = case_root.join(GOLDEN_DIR_NAME).join("html");
         fs::create_dir_all(&input_root).expect("should create fixture input directory");
-        fs::create_dir_all(&golden_root).expect("should create fixture golden directory");
         fs::write(input_root.join("#page.bst"), "#[:ok]\n").expect("should write fixture source");
-        fs::write(golden_root.join("index.html"), "<h1>ok</h1>\n")
-            .expect("should write golden file");
         fs::write(
             case_root.join(EXPECT_FILE_NAME),
-            "mode = \"success\"\nwarnings = \"forbid\"\n",
+            "[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\n",
         )
         .expect("should write expect file");
 
@@ -2123,9 +2082,8 @@ mod tests {
         )
         .expect("should write matrix expect file");
 
-        let error = match load_canonical_case_specs(&case_root, None, None) {
-            Ok(_) => panic!("fixture should be rejected"),
-            Err(error) => error,
+        let Err(error) = load_canonical_case_specs(&case_root, None, None) else {
+            panic!("fixture should be rejected");
         };
         assert!(
             error.contains("Unsupported backend 'wasm'"),
@@ -2198,6 +2156,31 @@ mod tests {
 
         assert_eq!(html_case.golden_dir, golden_html_root);
         assert_eq!(wasm_case.golden_dir, golden_wasm_root);
+
+        fs::remove_dir_all(&root).expect("should clean up temp fixture root");
+    }
+
+    #[test]
+    fn accepts_success_fixture_with_golden_only_assertion() {
+        let root = temp_dir("success_contract_golden_assertion");
+        let case_root = root.join("case");
+        let input_root = case_root.join(INPUT_DIR_NAME);
+        let golden_root = case_root.join(GOLDEN_DIR_NAME).join("html");
+        fs::create_dir_all(&input_root).expect("should create fixture input directory");
+        fs::create_dir_all(&golden_root).expect("should create fixture golden directory");
+        fs::write(input_root.join("#page.bst"), "#[:ok]\n").expect("should write fixture source");
+        fs::write(golden_root.join("index.html"), "<h1>ok</h1>\n")
+            .expect("should write golden file");
+        fs::write(
+            case_root.join(EXPECT_FILE_NAME),
+            "[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\n",
+        )
+        .expect("should write expect file");
+
+        let cases =
+            load_canonical_case_specs(&case_root, None, None).expect("fixture should be accepted");
+        assert_eq!(cases.len(), 1);
+        assert_eq!(cases[0].display_name, "case [html]");
 
         fs::remove_dir_all(&root).expect("should clean up temp fixture root");
     }

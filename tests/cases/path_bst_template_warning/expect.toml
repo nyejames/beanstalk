@@ -1,4 +1,6 @@
-mode = "success"
 entry = "."
+
+[backends.html]
+mode = "success"
 warnings = "exact"
 warning_count = 1

@@ -5,7 +5,7 @@ use crate::compiler_frontend::optimizers::constant_folding::constant_fold;
 
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
-use crate::compiler_frontend::ast::templates::create_template_node::Template;
+use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::paths::path_resolution::CompileTimePaths;
 use crate::compiler_frontend::paths::rendered_path_usage::record_compile_time_paths_for_rendered_output;

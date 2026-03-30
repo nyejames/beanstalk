@@ -7,7 +7,6 @@
 
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::string_interning::StringTable;
-use crate::projects::html_project::output_plan::derive_legacy_route_alias;
 use saying::say;
 use std::collections::{BTreeSet, HashSet};
 use std::fs;
@@ -48,9 +47,9 @@ impl BuilderKind {
 /// Builder-owned cleanup contract describing which file types may be deleted automatically.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CleanupPolicy {
-    /// Distinguishes generic manifest cleanup from builder-specific safe fallbacks.
+    /// Distinguishes generic manifest cleanup from builder-specific ownership policies.
     pub builder_kind: BuilderKind,
-    /// Extensions this builder is allowed to delete through manifest or alias cleanup.
+    /// Extensions this builder is allowed to delete through manifest-backed cleanup.
     pub managed_extensions: BTreeSet<String>,
 }
 
@@ -111,9 +110,6 @@ pub(crate) enum ManifestLoadResult {
         paths: Vec<PathBuf>,
         builder_kind: BuilderKind,
     },
-    ValidLegacy {
-        paths: Vec<PathBuf>,
-    },
     LimitedSafeMode {
         reason: ManifestLimitedSafeModeReason,
     },
@@ -155,11 +151,6 @@ pub(crate) struct ManifestCleanupReport {
     removed_paths: Vec<PathBuf>,
 }
 
-#[derive(Debug, Default, PartialEq, Eq)]
-pub(crate) struct RouteAliasCleanupReport {
-    removed_aliases: Vec<PathBuf>,
-}
-
 /// Prepare cleanup state before outputs are written.
 ///
 /// WHAT: validates the output root and loads the previous manifest when cleanup is enabled.
@@ -184,13 +175,12 @@ pub(crate) fn prepare_output_cleanup(
 
 /// Finalize cleanup after outputs are written.
 ///
-/// WHAT: removes stale managed artifacts, applies deterministic alias cleanup, and writes the new
-/// manifest.
-/// WHY: cleanup must compare the previous manifest against the outputs that were actually emitted.
+/// WHAT: removes stale managed artifacts tracked by a valid manifest and writes the new manifest.
+/// WHY: cleanup must compare the previous manifest against the outputs that were actually emitted
+/// without inferring ownership from legacy route shapes or unsupported manifest formats.
 pub(crate) fn finalize_output_cleanup(
     cleanup_state: &PreparedOutputCleanup,
     output_root: &Path,
-    current_output_paths: &HashSet<PathBuf>,
     current_managed_artifact_paths: &HashSet<PathBuf>,
     cleanup_policy: &CleanupPolicy,
     string_table: &StringTable,
@@ -205,28 +195,9 @@ pub(crate) fn finalize_output_cleanup(
                 output_root,
                 current_managed_artifact_paths,
                 paths,
-                cleanup_policy,
-                false,
             );
         }
-        ManifestLoadResult::ValidLegacy { paths } => {
-            remove_manifest_tracked_stale_artifacts(
-                output_root,
-                current_managed_artifact_paths,
-                paths,
-                cleanup_policy,
-                true,
-            );
-        }
-        ManifestLoadResult::LimitedSafeMode { .. } => {}
-    }
-
-    let route_alias_cleanup_report =
-        remove_deterministic_route_aliases(output_root, current_output_paths, cleanup_policy);
-
-    if let ManifestLoadResult::LimitedSafeMode { reason } = manifest_load_result {
-        emit_limited_safe_mode_warning(reason);
-        emit_limited_safe_mode_alias_warning(&route_alias_cleanup_report);
+        ManifestLoadResult::LimitedSafeMode { reason } => emit_limited_safe_mode_warning(reason),
     }
 
     write_build_manifest(
@@ -359,12 +330,12 @@ pub(crate) fn read_build_manifest(
         .map(str::trim)
         .filter(|line| !line.is_empty());
     let Some(first_line) = non_empty_lines.next() else {
-        return ManifestLoadResult::ValidLegacy { paths: Vec::new() };
+        return invalid_manifest_metadata();
     };
 
     if !first_line.starts_with('#') {
-        return ManifestLoadResult::ValidLegacy {
-            paths: parse_manifest_paths(std::iter::once(first_line).chain(non_empty_lines)),
+        return ManifestLoadResult::LimitedSafeMode {
+            reason: ManifestLimitedSafeModeReason::UnsupportedVersion,
         };
     }
 
@@ -426,26 +397,19 @@ pub(crate) fn write_build_manifest(
 
 /// Remove stale managed files tracked by the previous manifest.
 ///
-/// WHAT: deletes stale manifest-tracked files, optionally filtering legacy manifests through the
-/// active cleanup policy.
-/// WHY: v2 manifests are explicit emitted-path ownership, while legacy manifests still need
-/// extension-based conservatism to avoid broadening deletion behavior retroactively.
+/// WHAT: deletes stale manifest-tracked files after revalidating each relative path for safety.
+/// WHY: v2 manifests are the supported ownership contract, so stale removal trusts the manifest's
+/// emitted-path list instead of trying to infer ownership from extensions or route shapes.
 pub(crate) fn remove_manifest_tracked_stale_artifacts(
     output_root: &Path,
     current_managed_artifact_paths: &HashSet<PathBuf>,
     previous_manifest_paths: &[PathBuf],
-    cleanup_policy: &CleanupPolicy,
-    require_managed_path_match: bool,
 ) -> ManifestCleanupReport {
     let canonical_output_root = canonicalize_or_nearest_ancestor(output_root);
     let mut report = ManifestCleanupReport::default();
 
     for stale_relative in previous_manifest_paths {
         if current_managed_artifact_paths.contains(stale_relative) {
-            continue;
-        }
-
-        if require_managed_path_match && !cleanup_policy.manages_path(stale_relative) {
             continue;
         }
 
@@ -480,65 +444,6 @@ pub(crate) fn remove_manifest_tracked_stale_artifacts(
 
     report
 }
-
-/// Remove deterministic legacy route aliases for current HTML canonical routes.
-///
-/// WHAT: deletes stale flat `.html` aliases like `docs/basics.html` for current canonical routes
-/// like `docs/basics/index.html`.
-/// WHY: manifest cleanup cannot handle route-shape migrations when the previous manifest is
-/// missing, but the alias relationship is deterministic and safe to derive from current outputs.
-pub(crate) fn remove_deterministic_route_aliases(
-    output_root: &Path,
-    current_output_paths: &HashSet<PathBuf>,
-    cleanup_policy: &CleanupPolicy,
-) -> RouteAliasCleanupReport {
-    if cleanup_policy.builder_kind != BuilderKind::Html {
-        return RouteAliasCleanupReport::default();
-    }
-
-    let canonical_output_root = canonicalize_or_nearest_ancestor(output_root);
-    let mut report = RouteAliasCleanupReport::default();
-
-    for current_output_path in current_output_paths {
-        let Some(alias_relative) = derive_legacy_route_alias(current_output_path) else {
-            continue;
-        };
-
-        if current_output_paths.contains(&alias_relative)
-            || !cleanup_policy.manages_path(&alias_relative)
-        {
-            continue;
-        }
-
-        if !is_safe_relative_output_path(&alias_relative) {
-            continue;
-        }
-
-        let absolute_path = output_root.join(&alias_relative);
-        let canonical_target = canonicalize_or_nearest_ancestor(&absolute_path);
-        if !canonical_target.starts_with(&canonical_output_root) {
-            continue;
-        }
-
-        if absolute_path.is_file() {
-            if let Err(error) = fs::remove_file(&absolute_path) {
-                say!(
-                    Yellow "Warning: failed to remove stale route alias '",
-                    Yellow absolute_path.display(),
-                    Yellow "': ",
-                    Yellow error.to_string()
-                );
-                continue;
-            }
-
-            remove_empty_parent_dirs(output_root, &absolute_path);
-            report.removed_aliases.push(alias_relative);
-        }
-    }
-
-    report
-}
-
 fn parse_manifest_paths<'a, I>(lines: I) -> Vec<PathBuf>
 where
     I: IntoIterator<Item = &'a str>,
@@ -650,7 +555,7 @@ fn relative_path_extension(path: &Path) -> Option<String> {
 
 fn emit_limited_safe_mode_warning(reason: &ManifestLimitedSafeModeReason) {
     say!(Yellow format!(
-        "Warning: full manifest-based stale cleanup was unavailable because {}. Cleanup ran in limited safe mode; only deterministic managed route aliases may be removed, and unknown or non-managed files were preserved intentionally.",
+        "Warning: full manifest-based stale cleanup was unavailable because {}. Cleanup ran in limited safe mode; stale artifacts were preserved intentionally until a valid v2 manifest is available.",
         reason.describe()
     ));
 }
@@ -671,22 +576,6 @@ fn is_safe_relative_output_path(relative_output_path: &Path) -> bool {
     relative_output_path
         .components()
         .all(|component| matches!(component, Component::Normal(_)))
-}
-
-fn emit_limited_safe_mode_alias_warning(route_alias_cleanup_report: &RouteAliasCleanupReport) {
-    if route_alias_cleanup_report.removed_aliases.is_empty() {
-        return;
-    }
-
-    let removed_aliases = route_alias_cleanup_report
-        .removed_aliases
-        .iter()
-        .map(|path| path.display().to_string())
-        .collect::<Vec<_>>()
-        .join(", ");
-    say!(Yellow format!(
-        "Warning: limited safe mode removed deterministic legacy route aliases: {removed_aliases}"
-    ));
 }
 
 /// Walk from a removed file's parent directory upward toward the output root, removing each

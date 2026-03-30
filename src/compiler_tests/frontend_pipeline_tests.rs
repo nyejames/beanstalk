@@ -135,25 +135,42 @@ impl FrontendProject {
             .expect("header parsing should succeed")
     }
 
-    fn borrow_checked_hir(&mut self) -> BorrowCheckReport {
+    fn sorted_headers(
+        &mut self,
+    ) -> (
+        Vec<crate::compiler_frontend::headers::parse_file_headers::Header>,
+        Vec<crate::compiler_frontend::headers::parse_file_headers::TopLevelTemplateItem>,
+    ) {
         let headers = self.headers();
         let sorted_headers = self
             .frontend
             .sort_headers(headers.headers)
             .expect("header sorting should succeed");
-        let ast = self
-            .frontend
+
+        (sorted_headers, headers.top_level_template_items)
+    }
+
+    fn ast(&mut self) -> crate::compiler_frontend::ast::ast::Ast {
+        let (sorted_headers, top_level_template_items) = self.sorted_headers();
+        self.frontend
             .headers_to_ast(
                 sorted_headers,
-                headers.top_level_template_items,
+                top_level_template_items,
                 &self.entry_file,
                 FrontendBuildProfile::Dev,
             )
-            .expect("AST construction should succeed");
-        let hir = self
-            .frontend
+            .expect("AST construction should succeed")
+    }
+
+    fn hir(&mut self) -> crate::compiler_frontend::hir::hir_nodes::HirModule {
+        let ast = self.ast();
+        self.frontend
             .generate_hir(ast)
-            .expect("HIR lowering should succeed");
+            .expect("HIR lowering should succeed")
+    }
+
+    fn borrow_checked_hir(&mut self) -> BorrowCheckReport {
+        let hir = self.hir();
 
         assert!(
             !hir.functions.is_empty(),
@@ -279,7 +296,7 @@ fn compiles_single_file_program_through_borrow_check() {
     let report = project.borrow_checked_hir();
 
     assert!(report.stats.functions_analyzed >= 1);
-    assert!(report.analysis.statement_facts.len() >= 1);
+    assert!(!report.analysis.statement_facts.is_empty());
 }
 
 #[test]
@@ -301,5 +318,64 @@ fn compiles_multi_file_import_program_through_borrow_check() {
     let report = project.borrow_checked_hir();
 
     assert!(report.stats.functions_analyzed >= 2);
-    assert!(report.analysis.value_facts.len() >= 1);
+    assert!(!report.analysis.value_facts.is_empty());
+}
+
+#[test]
+fn ast_stage_errors_preserve_string_table_context() {
+    let mut project = FrontendProject::new(
+        &[("src/#page.bst", "#bad = io(\"runtime host call\")\n")],
+        "src/#page.bst",
+    );
+
+    let (sorted_headers, top_level_template_items) = project.sorted_headers();
+    let Err(messages) = project.frontend.headers_to_ast(
+        sorted_headers,
+        top_level_template_items,
+        &project.entry_file,
+        FrontendBuildProfile::Dev,
+    ) else {
+        panic!("const host calls should fail during AST construction");
+    };
+
+    let resolved_scope = messages.errors[0]
+        .location
+        .scope
+        .to_portable_string(&messages.string_table);
+    let expected_scope = project
+        .logical_path("src/#page.bst")
+        .to_portable_string(&messages.string_table);
+    assert!(
+        resolved_scope == expected_scope,
+        "AST errors should preserve the logical source path in the returned StringTable, expected '{expected_scope}', got '{resolved_scope}'",
+    );
+}
+
+#[test]
+fn borrow_checker_errors_preserve_string_table_context() {
+    let mut project = FrontendProject::new(
+        &[(
+            "src/#page.bst",
+            "data ~= [\"shared data\"]\nref1 ~= data\nref2 ~= data\nresult = [ref1, ref2]\n",
+        )],
+        "src/#page.bst",
+    );
+
+    let hir = project.hir();
+    let messages = project
+        .frontend
+        .check_borrows(&hir)
+        .expect_err("multiple mutable borrows should fail borrow checking");
+
+    let resolved_scope = messages.errors[0]
+        .location
+        .scope
+        .to_portable_string(&messages.string_table);
+    let expected_scope = project
+        .logical_path("src/#page.bst")
+        .to_portable_string(&messages.string_table);
+    assert!(
+        resolved_scope == expected_scope,
+        "borrow checker errors should preserve the logical source path in the returned StringTable, expected '{expected_scope}', got '{resolved_scope}'",
+    );
 }
