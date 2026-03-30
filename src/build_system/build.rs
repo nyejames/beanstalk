@@ -369,7 +369,7 @@ pub fn write_project_outputs(
     Ok(())
 }
 
-fn collect_frontend_warnings(modules: &[Module]) -> Vec<CompilerWarning> {
+pub fn collect_frontend_warnings(modules: &[Module]) -> Vec<CompilerWarning> {
     let mut warnings = Vec::new();
     for module in modules {
         warnings.extend(module.warnings.iter().cloned());

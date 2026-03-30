@@ -139,3 +139,55 @@ fn tests_command_rejects_unknown_flags() {
         get_command(&args(&["tests", "--wat"])).expect_err("unknown tests flag should fail");
     assert!(error.contains("Unknown tests flag"));
 }
+
+#[test]
+fn check_command_uses_default_options() {
+    let command = get_command(&args(&["check"])).expect("check command should parse");
+    assert_eq!(
+        command,
+        Command::Check {
+            path: String::new(),
+            terse: false,
+        }
+    );
+}
+
+#[test]
+fn check_command_parses_path_and_terse_flag() {
+    let command = get_command(&args(&["check", "main.bst", "--terse"]))
+        .expect("check command should parse path and terse flag");
+    assert_eq!(
+        command,
+        Command::Check {
+            path: String::from("main.bst"),
+            terse: true,
+        }
+    );
+}
+
+#[test]
+fn check_command_supports_mixed_argument_ordering() {
+    let command = get_command(&args(&["check", "--terse", "main.bst"]))
+        .expect("check command should parse mixed argument ordering");
+    assert_eq!(
+        command,
+        Command::Check {
+            path: String::from("main.bst"),
+            terse: true,
+        }
+    );
+}
+
+#[test]
+fn check_command_rejects_unknown_flags() {
+    let error =
+        get_command(&args(&["check", "--release"])).expect_err("unknown check flag should fail");
+    assert!(error.contains("Unknown check flag"));
+}
+
+#[test]
+fn check_command_rejects_multiple_paths() {
+    let error = get_command(&args(&["check", "a.bst", "b.bst"]))
+        .expect_err("multiple check paths should fail");
+    assert!(error.contains("at most one path"));
+}

@@ -10,6 +10,7 @@ use crate::compiler_frontend::display_messages::print_compiler_messages;
 use crate::compiler_tests::integration_test_runner::{
     run_all_test_cases, run_all_test_cases_with_backend_filter,
 };
+use crate::projects::check::{self, CheckOptions};
 use crate::projects::dev_server::{self, DevServerOptions};
 use crate::projects::html_project::html_project_builder::HtmlProjectBuilder;
 use crate::projects::html_project::new_html_project;
@@ -24,6 +25,11 @@ enum Command {
     NewHTMLProject(String), // Creates a new HTML project template
 
     Build(String), // Builds a file or project
+
+    Check {
+        path: String,
+        terse: bool,
+    }, // Runs frontend-only compilation without writing artefacts
 
     // Runs a hot reloading dev server that can be accessed in the browser
     // Will only support HTML projects for now
@@ -136,6 +142,10 @@ pub fn start_cli() {
             }
         }
 
+        Command::Check { path, terse } => {
+            check::run_check(&path, CheckOptions { terse });
+        }
+
         Command::Dev { path, options } => {
             say!("\nStarting dev server...");
             let project_builder = build::ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
@@ -192,6 +202,8 @@ fn get_command(args: &[String]) -> Result<Command, String> {
                 _ => Ok(Command::Build(String::new())),
             }
         }
+
+        Some("check") => parse_check_command(args),
 
         Some("dev") => parse_dev_command(args),
 
@@ -259,6 +271,38 @@ fn parse_tests_command(args: &[String]) -> Result<Command, String> {
     }
 
     Ok(Command::CompilerTests { backend_filter })
+}
+
+fn parse_check_command(args: &[String]) -> Result<Command, String> {
+    let mut path = String::new();
+    let mut terse = false;
+    let mut index = 1usize;
+
+    while let Some(arg) = args.get(index) {
+        match arg.as_str() {
+            "--terse" => {
+                terse = true;
+                index += 1;
+            }
+            _ if arg.starts_with("--") => {
+                return Err(format!(
+                    "Unknown check flag: '{arg}'. Supported check flag is --terse."
+                ));
+            }
+            _ => {
+                if path.is_empty() {
+                    path = arg.to_owned();
+                    index += 1;
+                } else {
+                    return Err(String::from(
+                        "Check command accepts at most one path argument.",
+                    ));
+                }
+            }
+        }
+    }
+
+    Ok(Command::Check { path, terse })
 }
 
 fn parse_dev_command(args: &[String]) -> Result<Command, String> {
@@ -364,6 +408,7 @@ fn print_help(commands_only: bool) {
     }
     say!(Green Bold "\nCommands:");
     say!("  build <path>      - Builds a project");
+    say!("  check [path]      - Runs frontend-only diagnostics (no artifacts)");
     say!("  dev <path>        - Runs the hot reloading dev server");
     say!("  tests [--backend <id>] - Runs the integration test suite");
 
@@ -375,6 +420,8 @@ fn print_help(commands_only: bool) {
     say!("  --html-wasm");
     say!("\nTests command options:");
     say!("  --backend <id>         (supported: html, html_wasm)");
+    say!("\nCheck command options:");
+    say!("  --terse                (compact one-line diagnostics)");
     say!("\nDev command options:");
     say!("  --host <host>            (default: 127.0.0.1)");
     say!("  --port <port>            (default: 6342)");

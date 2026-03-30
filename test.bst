@@ -1,4 +1,3 @@
-
 Person = |
     name String,
     age Int,
@@ -23,7 +22,6 @@ reset |this ~Vector2|:
 ;
 
 vec = Vector2(12, 87)
-vec.reset()
 
 io(vec.x) -- 0
 

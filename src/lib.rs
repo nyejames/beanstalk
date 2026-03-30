@@ -16,6 +16,7 @@ mod backends {
 }
 
 pub mod projects {
+    pub mod check;
     pub mod cli;
     pub mod dev_server;
     pub(crate) mod html_project;

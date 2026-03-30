@@ -1,12 +1,15 @@
 use super::{
-    format_error_guidance_lines, relative_display_path_from_root, resolve_source_file_path,
-    resolved_display_path,
+    format_error_guidance_lines, format_terse_compiler_messages, relative_display_path_from_root,
+    resolve_source_file_path, resolved_display_path,
 };
 use crate::compiler_frontend::basic_utility_functions::normalize_path;
 use crate::compiler_frontend::compiler_errors::{
     CompilerError, CompilerMessages, ErrorMetaDataKey, ErrorType, SourceLocation,
 };
+use crate::compiler_frontend::compiler_warnings::{CompilerWarning, WarningKind};
+use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::tokenizer::tokens::CharPosition;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -217,6 +220,79 @@ fn formatted_warning_uses_resolved_source_file_path_for_header_scopes() {
     let displayed = resolved_display_path(&header_scope, &string_table);
     assert!(displayed.ends_with("main.bst"));
     assert!(!displayed.contains(".header"));
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
+fn terse_messages_emit_single_line_records_without_ascii_formatting() {
+    let root: PathBuf = temp_dir("terse_messages");
+    let source_file = root.join("main.bst");
+    fs::write(&source_file, "value = 1\n").expect("should write source file");
+
+    let mut string_table = StringTable::new();
+    let source_scope = InternedPath::from_path_buf(&source_file, &mut string_table);
+    let error_location = SourceLocation::new(
+        source_scope.clone(),
+        CharPosition {
+            line_number: 2,
+            char_column: 3,
+        },
+        CharPosition {
+            line_number: 2,
+            char_column: 8,
+        },
+    );
+    let warning_location = SourceLocation::new(
+        source_scope,
+        CharPosition {
+            line_number: 4,
+            char_column: 1,
+        },
+        CharPosition {
+            line_number: 4,
+            char_column: 4,
+        },
+    );
+
+    let mut error = CompilerError::new("Bad\nsyntax | token", error_location, ErrorType::Syntax);
+    error.new_metadata_entry(
+        ErrorMetaDataKey::CompilationStage,
+        String::from("Header\nParsing"),
+    );
+    error.new_metadata_entry(
+        ErrorMetaDataKey::PrimarySuggestion,
+        String::from("Remove | newline"),
+    );
+    let warning = CompilerWarning::new(
+        "Unused\nvalue | x",
+        warning_location,
+        WarningKind::UnusedVariable,
+    );
+    let messages = CompilerMessages {
+        errors: vec![error],
+        warnings: vec![warning],
+        string_table,
+    };
+
+    let lines = format_terse_compiler_messages(&messages);
+    assert_eq!(lines.len(), 2);
+
+    let error_line = &lines[0];
+    assert!(error_line.starts_with("E|syntax|"));
+    assert!(error_line.contains("main.bst"));
+    assert!(error_line.contains("|3:4|Bad syntax / token|"));
+    assert!(error_line.contains("|help=Remove / newline"));
+    assert!(error_line.contains("|stage=Header Parsing"));
+    assert!(!error_line.contains('\n'));
+    assert!(!error_line.contains("🔥"));
+    assert!(!error_line.contains("^"));
+
+    let warning_line = &lines[1];
+    assert!(warning_line.starts_with("W|unused_variable|"));
+    assert!(warning_line.contains("main.bst"));
+    assert!(warning_line.contains("|5:2|Unused value / x"));
+    assert!(!warning_line.contains('\n'));
 
     fs::remove_dir_all(&root).expect("should remove temp dir");
 }

@@ -111,6 +111,26 @@ pub fn print_compiler_messages(messages: CompilerMessages) {
     }
 }
 
+pub fn print_terse_compiler_messages(messages: &CompilerMessages) {
+    for line in format_terse_compiler_messages(messages) {
+        println!("{line}");
+    }
+}
+
+pub fn format_terse_compiler_messages(messages: &CompilerMessages) -> Vec<String> {
+    let mut lines = Vec::with_capacity(messages.errors.len() + messages.warnings.len());
+
+    for error in &messages.errors {
+        lines.push(format_terse_error_line(error, &messages.string_table));
+    }
+
+    for warning in &messages.warnings {
+        lines.push(format_terse_warning_line(warning, &messages.string_table));
+    }
+
+    lines
+}
+
 pub fn print_formatted_warning(warning: CompilerWarning, string_table: &StringTable) {
     say!(Yellow Bold "WARNING: ");
     println!(
@@ -281,6 +301,134 @@ pub fn print_formatted_error(e: CompilerError, string_table: &StringTable) {
     let length_of_underline =
         (e.location.end_pos.char_column - e.location.start_pos.char_column + 1).max(1) as usize;
     say!(Red { "^".repeat(length_of_underline) });
+}
+
+fn format_terse_error_line(error: &CompilerError, string_table: &StringTable) -> String {
+    let mut line = format!(
+        "E|{}|{}|{}:{}|{}",
+        terse_error_type_name(&error.error_type),
+        terse_scope_path(&error.location.scope, string_table),
+        display_line_number(error.location.start_pos.line_number),
+        display_column_number(error.location.start_pos.char_column),
+        sanitize_terse_field(&error.msg)
+    );
+
+    let mut metadata_fields = error
+        .metadata
+        .iter()
+        .map(|(key, value)| {
+            format!(
+                "{}={}",
+                terse_metadata_key_name(key),
+                sanitize_terse_field(value)
+            )
+        })
+        .collect::<Vec<_>>();
+    metadata_fields.sort();
+
+    for field in metadata_fields {
+        line.push('|');
+        line.push_str(&field);
+    }
+
+    line
+}
+
+fn format_terse_warning_line(warning: &CompilerWarning, string_table: &StringTable) -> String {
+    format!(
+        "W|{}|{}|{}:{}|{}",
+        terse_warning_kind_name(&warning.warning_kind),
+        terse_scope_path(&warning.location.scope, string_table),
+        display_line_number(warning.location.start_pos.line_number),
+        display_column_number(warning.location.start_pos.char_column),
+        sanitize_terse_field(&warning.msg)
+    )
+}
+
+fn terse_scope_path(scope: &InternedPath, string_table: &StringTable) -> String {
+    let display_path = resolved_display_path(scope, string_table);
+    let sanitized = sanitize_terse_field(&display_path);
+    if sanitized.is_empty() {
+        String::from("<unknown>")
+    } else {
+        sanitized
+    }
+}
+
+fn display_line_number(raw_line: i32) -> i32 {
+    raw_line.saturating_add(1).max(1)
+}
+
+fn display_column_number(raw_column: i32) -> i32 {
+    raw_column.saturating_add(1).max(1)
+}
+
+fn sanitize_terse_field(value: &str) -> String {
+    value
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .replace('|', "/")
+}
+
+fn terse_error_type_name(error_type: &ErrorType) -> &'static str {
+    match error_type {
+        ErrorType::Syntax => "syntax",
+        ErrorType::Type => "type",
+        ErrorType::Rule => "rule",
+        ErrorType::File => "file",
+        ErrorType::Config => "config",
+        ErrorType::Compiler => "compiler",
+        ErrorType::DevServer => "dev_server",
+        ErrorType::BorrowChecker => "borrow_checker",
+        ErrorType::HirTransformation => "hir_transformation",
+        ErrorType::LirTransformation => "lir_transformation",
+        ErrorType::WasmGeneration => "wasm_generation",
+    }
+}
+
+fn terse_warning_kind_name(warning_kind: &WarningKind) -> &'static str {
+    match warning_kind {
+        WarningKind::UnusedVariable => "unused_variable",
+        WarningKind::UnusedFunction => "unused_function",
+        WarningKind::UnusedImport => "unused_import",
+        WarningKind::UnusedType => "unused_type",
+        WarningKind::UnusedConstant => "unused_constant",
+        WarningKind::UnusedFunctionArgument => "unused_function_argument",
+        WarningKind::UnusedFunctionReturnValue => "unused_function_return_value",
+        WarningKind::UnusedFunctionParameter => "unused_function_parameter",
+        WarningKind::UnusedFunctionParameterDefaultValue => {
+            "unused_function_parameter_default_value"
+        }
+        WarningKind::PointlessExport => "pointless_export",
+        WarningKind::MalformedCssTemplate => "malformed_css_template",
+        WarningKind::MalformedHtmlTemplate => "malformed_html_template",
+        WarningKind::BstFilePathInTemplateOutput => "bst_file_path_in_template_output",
+        WarningKind::LargeTrackedAsset => "large_tracked_asset",
+    }
+}
+
+fn terse_metadata_key_name(key: &ErrorMetaDataKey) -> &'static str {
+    match key {
+        ErrorMetaDataKey::VariableName => "variable",
+        ErrorMetaDataKey::CompilationStage => "stage",
+        ErrorMetaDataKey::PrimarySuggestion => "help",
+        ErrorMetaDataKey::AlternativeSuggestion => "alternative",
+        ErrorMetaDataKey::SuggestedReplacement => "suggested_replacement",
+        ErrorMetaDataKey::SuggestedInsertion => "suggested_insertion",
+        ErrorMetaDataKey::SuggestedLocation => "suggested_location",
+        ErrorMetaDataKey::ExpectedType => "expected_type",
+        ErrorMetaDataKey::FoundType => "found_type",
+        ErrorMetaDataKey::InferredType => "inferred_type",
+        ErrorMetaDataKey::BorrowKind => "borrow_kind",
+        ErrorMetaDataKey::LifetimeHint => "lifetime_hint",
+        ErrorMetaDataKey::MovedVariable => "moved_variable",
+        ErrorMetaDataKey::BorrowedVariable => "borrowed_variable",
+        ErrorMetaDataKey::ConflictingVariable => "conflicting_variable",
+        ErrorMetaDataKey::ConflictingPlace => "conflicting_place",
+        ErrorMetaDataKey::ExistingBorrowPlace => "existing_borrow_place",
+        ErrorMetaDataKey::ConflictType => "conflict_type",
+    }
 }
 
 #[cfg(test)]
