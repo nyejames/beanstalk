@@ -403,7 +403,7 @@ fn prompt_user_for_input(msg: &str) -> Result<Vec<String>, String> {
 fn print_help(commands_only: bool) {
     if !commands_only {
         say!(Bright Black "------------------------------------");
-        say!(Green Bold "The Beanstalk compiler_frontend and build system");
+        say!(Green Bold "The Beanstalk compiler and build system");
         say!("Usage: ", Bold "<command>",  Italic "<args>");
     }
     say!(Green Bold "\nCommands:");
