@@ -108,7 +108,7 @@ fn format_terse_summary_line(
     warning_count: usize,
 ) -> String {
     if error_count == 0 && warning_count == 0 {
-        return success_message(duration);
+        return format!("{}. No errors or warnings.", success_message(duration));
     }
 
     format!("errors={}, warnings={warning_count}.", error_count)
@@ -119,7 +119,7 @@ fn format_duration(duration: Duration) -> String {
 }
 
 fn success_message(duration: Duration) -> String {
-    format!("Done in {} ", format_duration(duration))
+    format!("Done in {}", format_duration(duration))
 }
 
 #[cfg(test)]

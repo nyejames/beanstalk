@@ -278,7 +278,7 @@ pub fn evaluate_expression(
             }
 
             if stack.is_empty() {
-                let expected_type_str = format!("{}", current_type);
+                let expected_type_str = current_type.display_with_table(string_table);
                 return_syntax_error!(
                     "Invalid expression: no valid operands found during evaluation.",
                     SourceLocation::default(),
@@ -380,8 +380,8 @@ fn pop_higher_precedence(
     }
 }
 
-// TODO - needs to check what can be concatenated at compile time
-// Everything else should be left for runtime
+// Planned: allow mixed const/runtime concatenation by splitting foldable template segments
+// from runtime segments instead of rejecting non-template values wholesale.
 pub fn concat_template(
     simplified_expression: &mut Vec<AstNode>,
     ownership: Ownership,

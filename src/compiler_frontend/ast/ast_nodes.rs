@@ -42,11 +42,11 @@ pub struct ForLoopRange {
 pub enum NodeKind {
     // Warning Message
     // This could be stuff like unused variables, possible race conditions, etc
-    #[allow(dead_code)] // todo
+    #[allow(dead_code)] // Planned: surfaced warning nodes for editor/diagnostic pipelines.
     Warning(String), // Message, Start pos, End pos
 
     // Config settings
-    #[allow(dead_code)] // todo
+    #[allow(dead_code)] // Planned: config AST nodes for unified config parsing.
     Config(Vec<Declaration>), // Settings,
 
     // Control Flow
@@ -120,22 +120,22 @@ pub enum NodeKind {
     // Currently used for function calls and struct accesses
     Rvalue(Expression),
 
-    #[allow(dead_code)] // todo
+    #[allow(dead_code)] // Planned: explicit template statement nodes in later AST cleanup.
     Template(Expression),
-    #[allow(dead_code)] // todo
+    #[allow(dead_code)] // Planned: dedicated top-level template nodes.
     TopLevelTemplate(Expression),
-    #[allow(dead_code)] // todo
+    #[allow(dead_code)] // Planned: explicit slot marker nodes during template lowering.
     Slot,
-    #[allow(dead_code)] // todo
+    #[allow(dead_code)] // Planned: placeholder nodes used during parser normalization.
     Empty, //
 
     // Operators
     // Operator, Precedence
     Operator(Operator), // Operator,
 
-    #[allow(dead_code)] // todo
+    #[allow(dead_code)] // Planned: newline sentinel nodes for formatting-aware passes.
     Newline,
-    #[allow(dead_code)] // todo
+    #[allow(dead_code)] // Planned: whitespace sentinel nodes for formatting-aware passes.
     Spaces(u32),
 }
 

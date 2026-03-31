@@ -6,42 +6,6 @@ use rustc_hash::FxHashMap;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct StringId(u32);
 
-impl StringId {
-    /// Convert the StringId to its underlying u32 value for serialization
-    #[inline]
-    #[allow(dead_code)] // todo
-    pub fn as_u32(self) -> u32 {
-        self.0
-    }
-
-    /// Create a StringId from a u32 value for deserialization
-    #[inline]
-    #[allow(dead_code)] // todo
-    pub fn from_u32(id: u32) -> Self {
-        Self(id)
-    }
-
-    /// Compare this interned string with a string slice efficiently without allocation.
-    /// Requires access to the StringTable that created this ID.
-    ///
-    /// Time complexity: O(1) for ID resolution + O(n) for string comparison
-    #[inline]
-    #[allow(dead_code)] // todo
-    pub fn eq_str(self, table: &StringTable, other: &str) -> bool {
-        table.strings[self.0 as usize].as_ref() == other
-    }
-
-    /// Resolve this interned string using the provided StringTable.
-    /// This is a convenience method that delegates to StringTable::resolve.
-    ///
-    /// Time complexity: O(1)
-    #[inline]
-    #[allow(dead_code)] // todo
-    pub fn resolve(self, table: &StringTable) -> &str {
-        table.resolve(self)
-    }
-}
-
 /// Custom Debug implementation that shows the underlying ID value.
 impl std::fmt::Display for StringId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -187,105 +151,9 @@ impl StringTable {
         new_id
     }
 
-    /// Try to resolve an interned string ID, returning None if the ID is invalid.
-    ///
-    /// Time complexity: O(1)
-    #[inline]
-    #[allow(dead_code)] // todo
-    pub fn try_resolve(&self, id: StringId) -> Option<&str> {
-        self.strings.get(id.0 as usize).map(|s| s.as_ref())
-    }
-
-    /// Check if a string is already interned without interning it.
-    /// Returns the StringId if found, None otherwise.
-    ///
-    /// Time complexity: O(1) average case
-    #[inline]
-    #[allow(dead_code)] // todo
-    pub fn get_existing(&self, s: &str) -> Option<StringId> {
-        self.string_to_id.get(s).copied()
-    }
-
     /// Get the number of unique strings stored in the table
     #[inline]
     pub fn len(&self) -> usize {
         self.strings.len()
-    }
-
-    /// Check if the string table is empty
-    #[inline]
-    #[allow(dead_code)] // todo
-    pub fn is_empty(&self) -> bool {
-        self.strings.is_empty()
-    }
-
-    /// Calculate detailed memory usage statistics
-    #[allow(dead_code)] // todo
-    pub fn memory_usage(&self) -> MemoryStats {
-        let string_content_bytes: usize = self.strings.iter().map(|s| s.len()).sum();
-
-        // Box<str> overhead: ptr + len (no capacity like String)
-        let vec_overhead = self.strings.capacity() * size_of::<Box<str>>();
-
-        // FxHashMap overhead is minimal
-        let hashmap_overhead =
-            self.string_to_id.capacity() * (size_of::<&str>() + size_of::<StringId>());
-
-        let total_bytes =
-            string_content_bytes + vec_overhead + hashmap_overhead + size_of::<StringTable>();
-
-        MemoryStats {
-            total_bytes,
-            string_content_bytes,
-            overhead_bytes: total_bytes - string_content_bytes,
-            unique_strings: self.len(),
-        }
-    }
-
-    /// Dump all strings in the table for debugging purposes
-    #[cfg(debug_assertions)]
-    #[allow(dead_code)] // todo
-    pub fn dump_strings(&self) -> Vec<(StringId, &str)> {
-        self.strings
-            .iter()
-            .enumerate()
-            .map(|(idx, s)| (StringId(idx as u32), s.as_ref()))
-            .collect()
-    }
-}
-
-/// Detailed memory usage statistics for the string table
-#[derive(Debug, Clone)]
-pub struct MemoryStats {
-    /// Total memory used by the string table in bytes
-    pub total_bytes: usize,
-    /// Memory used by actual string content in bytes
-    pub string_content_bytes: usize,
-    /// Memory used by data structure overhead in bytes
-    pub overhead_bytes: usize,
-    /// Number of unique strings stored
-    #[allow(dead_code)] // todo
-    pub unique_strings: usize,
-}
-
-impl MemoryStats {
-    /// Calculate the overhead percentage
-    #[allow(dead_code)] // todo
-    pub fn overhead_percentage(&self) -> f64 {
-        if self.total_bytes == 0 {
-            0.0
-        } else {
-            (self.overhead_bytes as f64 / self.total_bytes as f64) * 100.0
-        }
-    }
-
-    /// Calculate the efficiency ratio (content vs total)
-    #[allow(dead_code)] // todo
-    pub fn efficiency_ratio(&self) -> f64 {
-        if self.total_bytes == 0 {
-            0.0
-        } else {
-            self.string_content_bytes as f64 / self.total_bytes as f64
-        }
     }
 }

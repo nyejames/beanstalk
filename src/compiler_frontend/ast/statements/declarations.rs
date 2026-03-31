@@ -163,7 +163,12 @@ pub fn resolve_declaration_syntax(
         parsed_expr.ownership = ownership.to_owned();
     }
 
-    ast_log!("Created new ", Cyan #ownership, " ", data_type);
+    ast_log!(
+        "Created new ",
+        Cyan #ownership,
+        " ",
+        data_type.display_with_table(string_table)
+    );
 
     Ok(Declaration {
         id: full_name,

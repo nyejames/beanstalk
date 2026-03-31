@@ -29,7 +29,6 @@ pub enum CallTarget {
 /// Backend-agnostic ABI values that currently cross the host boundary.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum HostAbiType {
-    #[cfg(test)]
     I32,
     Utf8Str,
     Void,
@@ -47,14 +46,12 @@ pub struct HostParameter {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum HostAccessKind {
     Shared,
-    #[cfg(test)]
     Mutable,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum HostReturnAlias {
     Fresh,
-    #[cfg(test)]
     AliasArgs(Vec<usize>),
 }
 
@@ -94,14 +91,12 @@ impl HostFunctionDef {
             .collect::<Vec<_>>();
         let returns = match self.return_alias {
             HostReturnAlias::Fresh => returns.iter().cloned().map(FunctionReturn::Value).collect(),
-            #[cfg(test)]
             HostReturnAlias::AliasArgs(ref parameter_indices) if !returns.is_empty() => {
                 vec![FunctionReturn::AliasCandidates {
                     parameter_indices: parameter_indices.clone(),
                     data_type: returns[0].clone(),
                 }]
             }
-            #[cfg(test)]
             HostReturnAlias::AliasArgs(_) => Vec::new(),
         };
 
@@ -113,7 +108,6 @@ impl HostFunctionDef {
 
     pub(crate) fn return_type_to_datatype(&self) -> Option<DataType> {
         match self.return_type {
-            #[cfg(test)]
             HostAbiType::I32 => Some(DataType::Int),
             HostAbiType::Utf8Str => Some(DataType::StringSlice),
             HostAbiType::Void => None,
@@ -158,6 +152,84 @@ impl HostRegistry {
 
     pub fn get_function(&self, name: &str) -> Option<&HostFunctionDef> {
         self.functions.get(name)
+    }
+}
+
+#[cfg(test)]
+pub(crate) mod test_support {
+    use super::{
+        HostAbiType, HostAccessKind, HostFunctionDef, HostParameter, HostRegistry, HostReturnAlias,
+    };
+    use crate::compiler_frontend::compiler_errors::CompilerError;
+    use crate::compiler_frontend::datatypes::DataType;
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    pub enum TestHostAbiType {
+        I32,
+        Utf8Str,
+        Void,
+    }
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    pub enum TestHostAccessKind {
+        Shared,
+        Mutable,
+    }
+
+    #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+    pub enum TestHostReturnAlias {
+        Fresh,
+        AliasArgs(Vec<usize>),
+    }
+
+    impl From<TestHostAbiType> for HostAbiType {
+        fn from(value: TestHostAbiType) -> Self {
+            match value {
+                TestHostAbiType::I32 => HostAbiType::I32,
+                TestHostAbiType::Utf8Str => HostAbiType::Utf8Str,
+                TestHostAbiType::Void => HostAbiType::Void,
+            }
+        }
+    }
+
+    impl From<TestHostAccessKind> for HostAccessKind {
+        fn from(value: TestHostAccessKind) -> Self {
+            match value {
+                TestHostAccessKind::Shared => HostAccessKind::Shared,
+                TestHostAccessKind::Mutable => HostAccessKind::Mutable,
+            }
+        }
+    }
+
+    impl From<TestHostReturnAlias> for HostReturnAlias {
+        fn from(value: TestHostReturnAlias) -> Self {
+            match value {
+                TestHostReturnAlias::Fresh => HostReturnAlias::Fresh,
+                TestHostReturnAlias::AliasArgs(indices) => HostReturnAlias::AliasArgs(indices),
+            }
+        }
+    }
+
+    /// Registers a synthetic host function using test-local metadata wrappers.
+    pub fn register_test_host_function(
+        registry: &mut HostRegistry,
+        name: &'static str,
+        parameters: Vec<(DataType, TestHostAccessKind)>,
+        return_alias: TestHostReturnAlias,
+        return_type: TestHostAbiType,
+    ) -> Result<(), CompilerError> {
+        registry.register_function(HostFunctionDef {
+            name,
+            parameters: parameters
+                .into_iter()
+                .map(|(language_type, access_kind)| HostParameter {
+                    language_type,
+                    access_kind: access_kind.into(),
+                })
+                .collect(),
+            return_type: return_type.into(),
+            return_alias: return_alias.into(),
+        })
     }
 }
 

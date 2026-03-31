@@ -5,7 +5,7 @@ pub(crate) enum HeapBaseStrategy {
     /// Heap starts after aligned static-data end.
     StaticDataEndAligned,
     /// Reserved for explicit mutable-global heap base in later phases.
-    #[allow(dead_code)] // todo
+    #[allow(dead_code)] // Planned: mutable-global heap base strategy.
     ExplicitGlobal,
 }
 

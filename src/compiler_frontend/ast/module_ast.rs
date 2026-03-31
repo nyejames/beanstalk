@@ -12,12 +12,17 @@ use crate::compiler_frontend::ast::function_body_to_ast::function_body_to_ast;
 use crate::compiler_frontend::ast::import_bindings::{
     ConstantHeaderParseContext, parse_constant_header_declaration, resolve_file_import_bindings,
 };
+use crate::compiler_frontend::ast::receiver_methods::build_receiver_method_catalog;
 use crate::compiler_frontend::ast::statements::functions::{FunctionReturn, FunctionSignature};
 use crate::compiler_frontend::ast::statements::structs::create_struct_definition;
 use crate::compiler_frontend::ast::templates::template_folding::TemplateFoldContext;
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::ast::templates::top_level_templates::{
     collect_and_strip_comment_templates, synthesize_start_template_items,
+};
+use crate::compiler_frontend::ast::type_resolution::{
+    ResolvedFunctionSignature, resolve_function_signature, resolve_struct_field_types,
+    validate_no_recursive_runtime_structs,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
@@ -42,16 +47,22 @@ pub use crate::compiler_frontend::ast::templates::top_level_templates::{
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::paths::rendered_path_usage::RenderedPathUsage;
-use crate::{return_compiler_error, return_rule_error};
+use crate::return_compiler_error;
+
+pub(crate) use crate::compiler_frontend::ast::receiver_methods::{
+    ReceiverMethodCatalog, ReceiverMethodEntry,
+};
 
 static CONTROL_FLOW_SCOPE_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
 #[allow(dead_code)] // Used only in tests
+/// Exported symbol metadata captured at AST construction time.
 pub struct ModuleExport {
     pub id: StringId,
     pub signature: FunctionSignature,
 }
 
+/// Unified AST output for all source files in one compilation unit.
 pub struct Ast {
     pub nodes: Vec<AstNode>,
     pub module_constants: Vec<Declaration>,
@@ -78,28 +89,6 @@ fn ast_error_messages(
     CompilerMessages::from_error_with_warnings(error, warnings.to_vec(), string_table)
 }
 
-#[derive(Clone)]
-struct ResolvedFunctionSignature {
-    receiver: Option<ReceiverKey>,
-    signature: FunctionSignature,
-}
-
-#[derive(Clone)]
-pub(crate) struct ReceiverMethodEntry {
-    pub(crate) function_path: InternedPath,
-    pub(crate) receiver: ReceiverKey,
-    pub(crate) source_file: InternedPath,
-    pub(crate) exported: bool,
-    pub(crate) receiver_mutable: bool,
-    pub(crate) signature: FunctionSignature,
-}
-
-#[derive(Clone, Default)]
-pub(crate) struct ReceiverMethodCatalog {
-    pub(crate) by_receiver_and_name: FxHashMap<(ReceiverKey, StringId), ReceiverMethodEntry>,
-    pub(crate) by_method_name: FxHashMap<StringId, Vec<ReceiverMethodEntry>>,
-}
-
 fn canonical_source_file_for_header(
     header: &Header,
     string_table: &mut StringTable,
@@ -110,495 +99,6 @@ fn canonical_source_file_for_header(
         .as_ref()
         .map(|canonical_path| InternedPath::from_path_buf(canonical_path, string_table))
         .unwrap_or_else(|| header.source_file.to_owned())
-}
-
-fn visible_declaration_by_name<'a>(
-    declarations: &'a [Declaration],
-    visible_declaration_ids: Option<&FxHashSet<InternedPath>>,
-    name: StringId,
-) -> Option<&'a Declaration> {
-    declarations.iter().rfind(|declaration| {
-        declaration.id.name() == Some(name)
-            && match visible_declaration_ids {
-                Some(visible) => visible.contains(&declaration.id),
-                None => true,
-            }
-    })
-}
-
-fn resolve_named_signature_type(
-    data_type: &DataType,
-    location: &crate::compiler_frontend::tokenizer::tokens::SourceLocation,
-    declarations: &[Declaration],
-    visible_declaration_ids: Option<&FxHashSet<InternedPath>>,
-    string_table: &StringTable,
-) -> Result<DataType, CompilerError> {
-    match data_type {
-        DataType::NamedType(type_name) => {
-            let declared_type =
-                visible_declaration_by_name(declarations, visible_declaration_ids, *type_name)
-                    .ok_or_else(|| {
-                        CompilerError::new_rule_error(
-                            format!(
-                                "Unknown type '{}'. Type names must be declared before use.",
-                                string_table.resolve(*type_name)
-                            ),
-                            location.clone(),
-                        )
-                    })?;
-
-            Ok(declared_type.value.data_type.to_owned())
-        }
-        DataType::Collection(inner, ownership) => Ok(DataType::Collection(
-            Box::new(resolve_named_signature_type(
-                inner,
-                location,
-                declarations,
-                visible_declaration_ids,
-                string_table,
-            )?),
-            ownership.to_owned(),
-        )),
-        _ => Ok(data_type.to_owned()),
-    }
-}
-
-fn resolve_function_signature(
-    function_path: &InternedPath,
-    signature: &FunctionSignature,
-    declarations: &[Declaration],
-    visible_declaration_ids: Option<&FxHashSet<InternedPath>>,
-    string_table: &mut StringTable,
-) -> Result<ResolvedFunctionSignature, CompilerError> {
-    let this_name = string_table.intern("this");
-    let function_name = function_path.name_str(string_table).unwrap_or("<function>");
-    let function_location = declarations
-        .iter()
-        .find(|declaration| declaration.id == *function_path)
-        .map(|declaration| declaration.value.location.clone())
-        .unwrap_or_default();
-
-    let mut resolved_parameters = Vec::with_capacity(signature.parameters.len());
-    let mut receiver = None;
-
-    for (index, parameter) in signature.parameters.iter().enumerate() {
-        let mut resolved_parameter = parameter.to_owned();
-        resolved_parameter.value.data_type = resolve_named_signature_type(
-            &parameter.value.data_type,
-            &parameter.value.location,
-            declarations,
-            visible_declaration_ids,
-            string_table,
-        )?;
-
-        if resolved_parameter.id.name() == Some(this_name) {
-            if receiver.is_some() {
-                return_rule_error!(
-                    format!(
-                        "Function '{}' declares 'this' more than once. Receiver parameters can only appear once.",
-                        function_name
-                    ),
-                    parameter.value.location.clone(),
-                    {
-                        CompilationStage => "AST Construction",
-                        PrimarySuggestion => "Keep exactly one 'this' parameter at the start of the signature",
-                    }
-                );
-            }
-
-            if index != 0 {
-                return_rule_error!(
-                    format!(
-                        "Function '{}' uses 'this' as a receiver parameter, but it is not the first parameter.",
-                        function_name
-                    ),
-                    parameter.value.location.clone(),
-                    {
-                        CompilationStage => "AST Construction",
-                        PrimarySuggestion => "Move 'this' to the first parameter position to declare a receiver method",
-                    }
-                );
-            }
-
-            let Some(receiver_key) = resolved_parameter.value.data_type.receiver_key_from_type()
-            else {
-                return_rule_error!(
-                    format!(
-                        "Function '{}' uses unsupported receiver type '{}'. Receiver methods must target a user-defined struct or built-in scalar type.",
-                        function_name,
-                        resolved_parameter
-                            .value
-                            .data_type
-                            .display_with_table(string_table)
-                    ),
-                    parameter.value.location.clone(),
-                    {
-                        CompilationStage => "AST Construction",
-                        PrimarySuggestion => "Use a user-defined struct type or one of the supported scalar receivers: Int, Float, Bool, or String",
-                    }
-                );
-            };
-
-            receiver = Some(receiver_key);
-        }
-
-        resolved_parameters.push(resolved_parameter);
-    }
-
-    let mut resolved_returns = Vec::with_capacity(signature.returns.len());
-    for return_value in &signature.returns {
-        match return_value {
-            FunctionReturn::Value(data_type) => {
-                resolved_returns.push(FunctionReturn::Value(resolve_named_signature_type(
-                    data_type,
-                    &function_location,
-                    declarations,
-                    visible_declaration_ids,
-                    string_table,
-                )?));
-            }
-            FunctionReturn::AliasCandidates {
-                parameter_indices,
-                data_type,
-            } => {
-                resolved_returns.push(FunctionReturn::AliasCandidates {
-                    parameter_indices: parameter_indices.to_owned(),
-                    data_type: resolve_named_signature_type(
-                        data_type,
-                        &function_location,
-                        declarations,
-                        visible_declaration_ids,
-                        string_table,
-                    )?,
-                });
-            }
-        }
-    }
-
-    Ok(ResolvedFunctionSignature {
-        receiver,
-        signature: FunctionSignature {
-            parameters: resolved_parameters,
-            returns: resolved_returns,
-        },
-    })
-}
-
-fn resolve_struct_field_types(
-    struct_path: &InternedPath,
-    fields: &[Declaration],
-    declarations: &[Declaration],
-    visible_declaration_ids: Option<&FxHashSet<InternedPath>>,
-    string_table: &StringTable,
-) -> Result<Vec<Declaration>, CompilerError> {
-    // WHAT: resolves field types against the declaration table visible to this struct header.
-    // WHY: struct fields must enter AST/HIR in fully resolved nominal form so later phases do not
-    //      carry unresolved `NamedType` placeholders.
-    let mut resolved_fields = Vec::with_capacity(fields.len());
-
-    for field in fields {
-        let mut resolved_field = field.to_owned();
-        resolved_field.value.data_type = resolve_named_signature_type(
-            &field.value.data_type,
-            &field.value.location,
-            declarations,
-            visible_declaration_ids,
-            string_table,
-        )?;
-        resolved_fields.push(resolved_field);
-    }
-
-    if resolved_fields.is_empty() {
-        return Ok(resolved_fields);
-    }
-
-    for field in &resolved_fields {
-        let Some(parent) = field.id.parent() else {
-            return_rule_error!(
-                "Resolved struct field is missing its parent struct path.",
-                field.value.location.clone(),
-                {
-                    CompilationStage => "AST Construction",
-                }
-            );
-        };
-
-        if parent != *struct_path {
-            return_rule_error!(
-                "Resolved struct field parent does not match the enclosing struct declaration.",
-                field.value.location.clone(),
-                {
-                    CompilationStage => "AST Construction",
-                }
-            );
-        }
-    }
-
-    Ok(resolved_fields)
-}
-
-fn collect_runtime_struct_dependencies(
-    data_type: &DataType,
-    dependencies: &mut FxHashSet<InternedPath>,
-) {
-    // WHAT: extracts nominal struct dependencies from a field type recursively.
-    // WHY: cycle validation only cares about runtime struct-to-struct edges, not scalar/const data.
-    match data_type {
-        DataType::Struct {
-            nominal_path,
-            const_record,
-            ..
-        } => {
-            if !const_record {
-                dependencies.insert(nominal_path.to_owned());
-            }
-        }
-        DataType::Collection(inner, _) | DataType::Reference(inner) | DataType::Option(inner) => {
-            collect_runtime_struct_dependencies(inner, dependencies)
-        }
-        DataType::Returns(values) => {
-            for value in values {
-                collect_runtime_struct_dependencies(value, dependencies);
-            }
-        }
-        _ => {}
-    }
-}
-
-fn validate_no_recursive_runtime_structs(
-    struct_fields_by_path: &FxHashMap<InternedPath, Vec<Declaration>>,
-    string_table: &StringTable,
-) -> Result<(), CompilerError> {
-    // WHAT: rejects recursive runtime struct cycles.
-    // WHY: v1 runtime structs do not support recursive layout semantics yet, so these cycles must
-    //      fail in AST construction with a targeted rule error.
-    fn visit(
-        current: &InternedPath,
-        struct_fields_by_path: &FxHashMap<InternedPath, Vec<Declaration>>,
-        string_table: &StringTable,
-        visiting: &mut Vec<InternedPath>,
-        visited: &mut FxHashSet<InternedPath>,
-    ) -> Result<(), CompilerError> {
-        if visited.contains(current) {
-            return Ok(());
-        }
-
-        if let Some(index) = visiting.iter().position(|path| path == current) {
-            let cycle = visiting[index..]
-                .iter()
-                .map(|path| path.to_string(string_table))
-                .collect::<Vec<_>>()
-                .join(" -> ");
-            return_rule_error!(
-                format!(
-                    "Recursive runtime struct definitions are not supported in v1. Cycle: {cycle}"
-                ),
-                struct_fields_by_path
-                    .get(current)
-                    .and_then(|fields| fields.first())
-                    .map(|field| field.value.location.clone())
-                    .unwrap_or_default(),
-                {
-                    CompilationStage => "AST Construction",
-                    PrimarySuggestion => "Remove the recursive runtime struct field cycle or replace it with an indirect runtime representation",
-                }
-            );
-        }
-
-        visiting.push(current.to_owned());
-
-        if let Some(fields) = struct_fields_by_path.get(current) {
-            for field in fields {
-                let mut dependencies = FxHashSet::default();
-                collect_runtime_struct_dependencies(&field.value.data_type, &mut dependencies);
-                for dependency in dependencies {
-                    if struct_fields_by_path.contains_key(&dependency) {
-                        visit(
-                            &dependency,
-                            struct_fields_by_path,
-                            string_table,
-                            visiting,
-                            visited,
-                        )?;
-                    }
-                }
-            }
-        }
-
-        visiting.pop();
-        visited.insert(current.to_owned());
-        Ok(())
-    }
-
-    let mut visited = FxHashSet::default();
-    let mut visiting = Vec::new();
-    for struct_path in struct_fields_by_path.keys() {
-        visit(
-            struct_path,
-            struct_fields_by_path,
-            string_table,
-            &mut visiting,
-            &mut visited,
-        )?;
-    }
-
-    Ok(())
-}
-
-fn build_receiver_method_catalog(
-    sorted_headers: &[Header],
-    resolved_function_signatures_by_path: &FxHashMap<InternedPath, ResolvedFunctionSignature>,
-    struct_fields_by_path: &FxHashMap<InternedPath, Vec<Declaration>>,
-    struct_source_by_path: &FxHashMap<InternedPath, InternedPath>,
-    source_file_by_symbol_path: &FxHashMap<InternedPath, InternedPath>,
-    string_table: &StringTable,
-) -> Result<ReceiverMethodCatalog, CompilerError> {
-    // WHAT: materializes receiver methods into lookup tables keyed by receiver/name and by name.
-    // WHY: parser diagnostics and dot-call lowering both need stable, deterministic method lookup
-    //      without scanning declaration vectors at call sites.
-    let mut catalog = ReceiverMethodCatalog::default();
-
-    for header in sorted_headers {
-        let HeaderKind::Function { .. } = &header.kind else {
-            continue;
-        };
-
-        let Some(resolved_signature) =
-            resolved_function_signatures_by_path.get(&header.tokens.src_path)
-        else {
-            continue;
-        };
-        let Some(receiver) = resolved_signature.receiver.as_ref() else {
-            continue;
-        };
-
-        let Some(method_name) = header.tokens.src_path.name() else {
-            continue;
-        };
-        let Some(method_source_file) = source_file_by_symbol_path
-            .get(&header.tokens.src_path)
-            .cloned()
-        else {
-            return_rule_error!(
-                format!(
-                    "Receiver method '{}' is missing canonical source-file metadata.",
-                    header.tokens.src_path.to_string(string_table)
-                ),
-                header.name_location.clone(),
-                {
-                    CompilationStage => "AST Construction",
-                }
-            );
-        };
-
-        if let ReceiverKey::Struct(struct_path) = receiver {
-            let Some(struct_source_file) = struct_source_by_path.get(struct_path) else {
-                return_rule_error!(
-                    format!(
-                        "Receiver method '{}' targets unknown struct '{}'.",
-                        header.tokens.src_path.to_string(string_table),
-                        struct_path.to_string(string_table)
-                    ),
-                    header.name_location.clone(),
-                    {
-                        CompilationStage => "AST Construction",
-                    }
-                );
-            };
-
-            if *struct_source_file != method_source_file {
-                return_rule_error!(
-                    format!(
-                        "Method '{}' for struct '{}' must be declared in the same file as the struct definition.",
-                        string_table.resolve(method_name),
-                        struct_path.to_string(string_table)
-                    ),
-                    header.name_location.clone(),
-                    {
-                        CompilationStage => "AST Construction",
-                        PrimarySuggestion => "Move the method into the struct's defining file",
-                    }
-                );
-            }
-
-            if struct_fields_by_path
-                .get(struct_path)
-                .is_some_and(|fields| {
-                    fields
-                        .iter()
-                        .any(|field| field.id.name() == Some(method_name))
-                })
-            {
-                return_rule_error!(
-                    format!(
-                        "Struct '{}' declares both a field and method named '{}'.",
-                        struct_path.to_string(string_table),
-                        string_table.resolve(method_name)
-                    ),
-                    header.name_location.clone(),
-                    {
-                        CompilationStage => "AST Construction",
-                        PrimarySuggestion => "Rename the field or method so receiver members stay unambiguous",
-                    }
-                );
-            }
-        }
-
-        let key = (receiver.to_owned(), method_name);
-        if catalog.by_receiver_and_name.contains_key(&key) {
-            return_rule_error!(
-                format!(
-                    "Duplicate receiver method '{}' for receiver '{}'.",
-                    string_table.resolve(method_name),
-                    match receiver {
-                        ReceiverKey::Struct(path) => path.to_string(string_table),
-                        ReceiverKey::BuiltinScalar(_) => resolved_signature
-                            .signature
-                            .parameters
-                            .first()
-                            .map(|parameter| parameter.value.data_type.display_with_table(string_table))
-                            .unwrap_or_else(|| String::from("<receiver>")),
-                    }
-                ),
-                header.name_location.clone(),
-                {
-                    CompilationStage => "AST Construction",
-                    PrimarySuggestion => "Keep exactly one method with a given receiver and name in the module",
-                }
-            );
-        }
-
-        let entry = ReceiverMethodEntry {
-            function_path: header.tokens.src_path.to_owned(),
-            receiver: receiver.to_owned(),
-            source_file: method_source_file,
-            exported: header.exported,
-            receiver_mutable: resolved_signature
-                .signature
-                .parameters
-                .first()
-                .is_some_and(|parameter| parameter.value.ownership.is_mutable()),
-            signature: resolved_signature.signature.to_owned(),
-        };
-
-        catalog.by_receiver_and_name.insert(key, entry.to_owned());
-        catalog
-            .by_method_name
-            .entry(method_name)
-            .or_default()
-            .push(entry);
-    }
-
-    for entries in catalog.by_method_name.values_mut() {
-        entries.sort_by(|left, right| {
-            left.function_path
-                .to_string(string_table)
-                .cmp(&right.function_path.to_string(string_table))
-                .then_with(|| left.exported.cmp(&right.exported))
-        });
-    }
-
-    Ok(catalog)
 }
 
 impl Ast {
@@ -1185,9 +685,6 @@ impl Ast {
                     const_templates_by_path.insert(template_tokens.src_path, html);
                 }
             }
-
-            // TODO: create a function definition for these exported headers
-            if header.exported {}
         }
 
         let doc_fragments = collect_and_strip_comment_templates(
@@ -1223,6 +720,7 @@ impl Ast {
 }
 
 #[derive(Clone)]
+/// Shared parser/lowering context for one active AST scope.
 pub struct ScopeContext {
     pub kind: ContextKind,
     pub scope: InternedPath,
@@ -1255,6 +753,7 @@ pub struct ScopeContext {
     pub(crate) receiver_methods: Rc<ReceiverMethodCatalog>,
 }
 #[derive(PartialEq, Clone)]
+/// High-level scope categories used by parser/lowering rules.
 pub enum ContextKind {
     Module, // The top-level scope of each file in the module
     Expression,

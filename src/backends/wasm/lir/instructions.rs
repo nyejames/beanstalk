@@ -19,7 +19,7 @@ pub(crate) enum WasmLirStmt {
         dst: WasmLirLocalId,
         value: i64,
     },
-    #[allow(dead_code)] // todo
+    #[allow(dead_code)] // Planned: f32 literal lowering support.
     ConstF32 {
         dst: WasmLirLocalId,
         value: f32,
@@ -28,12 +28,12 @@ pub(crate) enum WasmLirStmt {
         dst: WasmLirLocalId,
         value: f64,
     },
-    #[allow(dead_code)] // todo
+    #[allow(dead_code)] // Planned: static-data pointer materialization.
     ConstStaticPtr {
         dst: WasmLirLocalId,
         data: WasmStaticDataId,
     },
-    #[allow(dead_code)] // todo
+    #[allow(dead_code)] // Planned: static-data byte-length materialization.
     ConstLength {
         dst: WasmLirLocalId,
         value: u32,
@@ -73,7 +73,7 @@ pub(crate) enum WasmLirStmt {
         value: WasmLirLocalId,
     },
     /// Reserved for future ownership tuning.
-    #[allow(dead_code)] // todo
+    #[allow(dead_code)] // Planned: explicit handle-retain operations for ownership tuning.
     RetainHandle {
         value: WasmLirLocalId,
     },

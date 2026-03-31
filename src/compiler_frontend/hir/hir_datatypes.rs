@@ -60,7 +60,7 @@ impl TypeContext {
         (id.0 as usize) < self.types.len()
     }
 
-    #[allow(dead_code)] // todo
+    #[allow(dead_code)] // Planned: diagnostics/debug type-table sizing helpers.
     pub fn len(&self) -> usize {
         self.types.len()
     }
@@ -123,7 +123,7 @@ pub enum HirTypeKind {
 
     /// Result wraps any type (including Tuple)
     /// fn || -> Int, String!  becomes  Result { ok: Tuple { ... }, err: ErrorType }
-    #[allow(dead_code)] // todo
+    #[allow(dead_code)] // Planned: typed Result<T, E> lowering in later HIR passes.
     Result {
         ok: TypeId,
         err: TypeId,

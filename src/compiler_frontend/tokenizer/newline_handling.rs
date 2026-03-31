@@ -1,3 +1,7 @@
+//! Newline normalization policy for tokenizer string/template bodies.
+//!
+//! WHAT: controls how `\r` and `\r\n` are represented in emitted token text payloads.
+
 use crate::compiler_frontend::tokenizer::tokens::TokenStream;
 
 /// Controls how raw source line endings are emitted into string/template bodies

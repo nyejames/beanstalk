@@ -1,3 +1,8 @@
+//! Compiler frontend pipeline orchestration.
+//!
+//! WHAT: wires tokenization, header parsing, dependency sorting, AST/HIR construction, and borrow
+//! validation into the stage flow described in the compiler design overview.
+
 pub(crate) mod ast;
 pub(crate) mod headers;
 pub(crate) mod source_location;
@@ -287,7 +292,7 @@ impl CompilerFrontend {
         }
     }
 
-    // TODO: Last use analysis (skippable)
+    // Planned: dedicated last-use analysis pass (memory-management design "Last-Use Analysis").
     // Provides a list of places that possible_drops can be inserted for heap managed values
     // pub fn last_use_analysis()
 

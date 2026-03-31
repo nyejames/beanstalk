@@ -3,7 +3,6 @@ use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_resolution::CompileTimePathKind;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
-use std::fmt::Display;
 
 /// Type-level distinction for compile-time path values.
 ///
@@ -107,25 +106,25 @@ pub enum DataType {
     Bool,
     Int,
     Float,
-    #[allow(dead_code)] // todo
+    #[allow(dead_code)] // Planned: decimal numeric type support in parser/lowering.
     Decimal,
     StringSlice, // UTF-8 read-only string slice
     Char,
 
     // Reserved or not-yet-wired variants kept for planned language work.
-    #[allow(dead_code)] // todo
+    #[allow(dead_code)] // Planned: explicit parameter/record type surfaces.
     Parameters(Vec<Declaration>), // Struct definitions and parameters
-    #[allow(dead_code)] // todo
+    #[allow(dead_code)] // Planned: tagged choice/union surface types.
     Choices(Vec<Declaration>), // Union of types
-    #[allow(dead_code)] // todo
+    #[allow(dead_code)] // Planned: Option<T> language-level type support.
     Option(Box<DataType>), // Shorthand for a choice of a type or None
-    #[allow(dead_code)] // todo
+    #[allow(dead_code)] // Planned: template wrapper values for slot-aware folding.
     TemplateWrapper, // Foldable template with a slot (becomes two string slices)
-    #[allow(dead_code)] // todo
+    #[allow(dead_code)] // Planned: explicit None literal/type flows.
     None, // The None result of an option, or empty argument
-    #[allow(dead_code)] // todo
+    #[allow(dead_code)] // Planned: boolean literal singleton typing extensions.
     True,
-    #[allow(dead_code)] // todo
+    #[allow(dead_code)] // Planned: boolean literal singleton typing extensions.
     False,
 }
 
@@ -212,15 +211,6 @@ impl DataType {
                     DataType::Bool | DataType::Int | DataType::Float
                 )
             }
-            //
-            // DataType::Choices(types) => {
-            //     for t in types {
-            //         if !t.value.data_type.is_valid_type(accepted_type) {
-            //             return false;
-            //         }
-            //     }
-            //     true
-            // }
             DataType::Range => {
                 matches!(
                     expression_type,
@@ -416,108 +406,6 @@ impl PartialEq for DataType {
                         .all(|(arg_a, arg_b)| arg_a.id == arg_b.id)
             }
             _ => false,
-        }
-    }
-}
-
-impl Display for DataType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // Note: This Display implementation cannot resolve interned strings without a StringTable.
-        // For debugging with actual string content, use DataType::display_with_table() instead.
-        match self {
-            DataType::Reference(inner_type) => {
-                write!(f, "{inner_type} Reference")
-            }
-            DataType::Inferred => {
-                write!(f, "Inferred")
-            }
-            DataType::NamedType(_) => {
-                write!(f, "NamedType")
-            }
-            DataType::CoerceToString => {
-                write!(f, "CoerceToString")
-            }
-            DataType::Bool => write!(f, "Bool"),
-            DataType::StringSlice => {
-                write!(f, "String")
-            }
-            DataType::TemplateWrapper => {
-                write!(f, "String")
-            }
-            DataType::Char => {
-                write!(f, "Char")
-            }
-            DataType::Float => {
-                write!(f, "Float")
-            }
-            DataType::Int => write!(f, "Int"),
-            DataType::Decimal => {
-                write!(f, "Decimal")
-            }
-            DataType::Collection(inner_type, _mutable) => {
-                write!(f, "{inner_type} Collection")
-            }
-            DataType::Parameters(args) => {
-                let mut arg_str = String::new();
-                for arg in args {
-                    arg_str.push_str(&format!("{:?}, {}", arg.id, arg.value.data_type));
-                }
-                write!(f, "{self:?} Arguments({arg_str})")
-            }
-            DataType::Struct {
-                nominal_path,
-                fields: args,
-                const_record,
-                ..
-            } => {
-                let mut arg_str = String::new();
-                for arg in args {
-                    arg_str.push_str(&format!("{:?}: {}, ", arg.id, arg.value.data_type));
-                }
-                if *const_record {
-                    write!(f, "#")?;
-                }
-                write!(f, "Struct({nominal_path:?}: {arg_str})")
-            }
-
-            DataType::Returns(returns) => {
-                let mut returns_string = String::new();
-                for return_type in returns {
-                    returns_string.push_str(&format!("{return_type}, "));
-                }
-                write!(f, "{self:?} Returns({returns_string})")
-            }
-
-            DataType::Function(_, signature) => {
-                let mut arg_str = String::new();
-                let mut returns_string = String::new();
-                for arg in &signature.parameters {
-                    arg_str.push_str(&format!("{:?}: {}, ", arg.id, arg.value.data_type));
-                }
-                for return_type in &signature.returns {
-                    returns_string.push_str(&format!("{}, ", return_type.data_type()));
-                }
-
-                write!(f, "Function({arg_str} -> {returns_string})")
-            }
-            DataType::Path(PathTypeKind::File) => write!(f, "Path(File)"),
-            DataType::Path(PathTypeKind::Directory) => write!(f, "Path(Directory)"),
-            DataType::Template => {
-                write!(f, "Template")
-            }
-            DataType::None => write!(f, "None"),
-            DataType::True => write!(f, "True"),
-            DataType::False => write!(f, "False"),
-            DataType::Range => write!(f, "Range"),
-            DataType::Option(inner_type) => write!(f, "Option({inner_type})"),
-            DataType::Choices(inner_types) => {
-                let mut inner_types_str = String::new();
-                for inner_type in inner_types {
-                    let inner_type = inner_type.value.data_type.to_owned();
-                    inner_types_str.push_str(&format!("{inner_type}"));
-                }
-                write!(f, "Choices({inner_types_str})")
-            }
         }
     }
 }

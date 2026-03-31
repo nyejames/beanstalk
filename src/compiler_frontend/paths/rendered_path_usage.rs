@@ -51,9 +51,9 @@ pub struct RenderedPathUsage {
 /// WHY: v1 still renders path strings eagerly in the frontend, but captured semantics let builders
 /// plan tracked assets without reconstructing intent from flat strings.
 ///
-/// TODO(html-assets): If tracked-asset URL rewriting moves later in the pipeline, replace or wrap
-/// this eager string result with a deferred rendered-path representation instead of adding builder
-/// heuristics around already-rendered text.
+/// Planned(html-assets): if tracked-asset URL rewriting moves later in the pipeline, replace or
+/// wrap this eager string result with a deferred rendered-path representation instead of adding
+/// builder heuristics around already-rendered text.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RecordedRenderedPaths {
     pub rendered_text: String,

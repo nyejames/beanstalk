@@ -37,7 +37,7 @@ pub(crate) struct BorrowAnalysis {
 }
 
 impl BorrowAnalysis {
-    #[allow(dead_code)] // Todo
+    #[allow(dead_code)] // Planned: diagnostics/debug aggregate for analysis snapshots.
     pub(crate) fn total_state_snapshots(&self) -> usize {
         self.block_entry_states.len()
             + self.block_exit_states.len()
@@ -77,15 +77,15 @@ pub(crate) struct BorrowCheckStats {
 
 #[derive(Debug, Clone)]
 pub(crate) struct FunctionBorrowSummary {
-    #[allow(dead_code)] // todo
+    #[allow(dead_code)] // Planned: explicit function entry block reporting for diagnostics.
     pub entry_block: Option<BlockId>,
     pub reachable_blocks: usize,
     pub mutable_call_sites: usize,
     pub alias_heavy_blocks: Vec<BlockId>,
     pub worklist_iterations: usize,
-    #[allow(dead_code)] // todo
+    #[allow(dead_code)] // Planned: parameter mutability summaries for future diagnostics.
     pub param_mutability: Vec<bool>,
-    #[allow(dead_code)] // todo
+    #[allow(dead_code)] // Planned: return alias summaries for backend/lint reporting.
     pub return_alias: FunctionReturnAliasSummary,
 }
 
@@ -171,7 +171,7 @@ impl LocalMode {
     pub(crate) const SLOT: Self = Self(0b010);
     pub(crate) const ALIAS: Self = Self(0b100);
 
-    #[allow(dead_code)] // todo
+    #[allow(dead_code)] // Planned: compact bitset export for diagnostics/debug tooling.
     pub(crate) const fn bits(self) -> u8 {
         self.0
     }

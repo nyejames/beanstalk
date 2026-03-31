@@ -146,20 +146,11 @@ impl Expression {
             kind,
             location,
             Self::call_result_type(result_types),
-            // TODO: Need to set the ownership based on the return signature.
+            // Planned: derive ownership from alias-aware return signatures once
+            // signature alias metadata is threaded through expression construction.
             // If the return signature is a reference (the name of a parameter passed in),
             // then this is a reference to that parameter.
             Ownership::MutableOwned,
-        )
-    }
-
-    #[allow(dead_code)] // todo
-    pub fn none() -> Self {
-        Self::new(
-            ExpressionKind::None,
-            SourceLocation::default(),
-            DataType::None,
-            Ownership::default(),
         )
     }
     pub fn runtime(
@@ -216,7 +207,7 @@ impl Expression {
         )
     }
 
-    #[allow(dead_code)] // TODO - path expressions MAYBE????
+    #[allow(dead_code)] // Planned: compile-time path literals in expressions.
     pub fn path(compile_time_paths: CompileTimePaths, location: SourceLocation) -> Self {
         // Derives the path type kind from the first resolved path.
         let path_type_kind = compile_time_paths
@@ -347,7 +338,7 @@ impl Expression {
         )
     }
 
-    #[allow(dead_code)] // todo
+    #[allow(dead_code)] // Planned: explicit range expression construction helpers.
     pub fn range(
         lower: Expression,
         upper: Expression,
@@ -358,21 +349,6 @@ impl Expression {
             ExpressionKind::Range(Box::new(lower), Box::new(upper)),
             location,
             DataType::Inferred,
-            ownership,
-        )
-    }
-
-    #[allow(dead_code)] // todo
-    pub fn parameter(
-        name: InternedPath,
-        data_type: DataType,
-        location: SourceLocation,
-        ownership: Ownership,
-    ) -> Self {
-        Self::new(
-            ExpressionKind::Reference(name),
-            location,
-            data_type,
             ownership,
         )
     }
@@ -389,11 +365,6 @@ impl Expression {
             data_type,
             ownership.get_owned(),
         )
-    }
-
-    #[allow(dead_code)] // todo
-    pub fn is_none(&self) -> bool {
-        matches!(self.kind, ExpressionKind::None)
     }
 
     pub fn is_compile_time_constant(&self) -> bool {
@@ -512,7 +483,7 @@ impl ExpressionKind {
         )
     }
 
-    #[allow(dead_code)] // todo
+    #[allow(dead_code)] // Planned: generic iterable checks for collection/range expansion.
     pub fn is_iterable(&self) -> bool {
         matches!(
             self,
@@ -532,7 +503,7 @@ pub enum Operator {
     Divide,
     Modulus,
     // Remainder,
-    #[allow(dead_code)] // todo
+    #[allow(dead_code)] // Planned: root operator for numeric extensions.
     Root,
     Exponent,
 

@@ -1,4 +1,7 @@
-// CURRENT REFACTOR
+//! High-level IR modules and lowering support.
+//!
+//! WHAT: defines HIR nodes/types plus AST-to-HIR lowering and validation helpers.
+
 pub(crate) mod hir_builder;
 pub(crate) mod hir_datatypes;
 pub(crate) mod hir_nodes;

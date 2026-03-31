@@ -27,6 +27,10 @@ use std::time::Instant;
 
 const FILE_MIN_UNIQUE_SYMBOLS_CAPACITY: usize = 32;
 
+/// Frontend output for one module root ready for backend lowering.
+///
+/// WHAT: bundles typed HIR plus borrow-analysis facts and warnings for a module entry file.
+/// WHY: backends consume one stable module payload shape regardless of project type.
 pub struct Module {
     pub(crate) entry_point: PathBuf, // Canonical entry file for the compiled module
     pub(crate) hir: HirModule,
@@ -60,6 +64,10 @@ pub trait BackendBuilder {
     fn frontend_style_directives(&self) -> Vec<StyleDirectiveSpec>;
 }
 
+/// Build-system entrypoint that owns the selected backend implementation.
+///
+/// WHAT: stores the backend strategy object used by `build_project`.
+/// WHY: callers can swap backends while keeping one orchestration surface.
 pub struct ProjectBuilder {
     pub backend: Box<dyn BackendBuilder + Send>,
 }
@@ -76,6 +84,7 @@ pub(crate) struct BuildBootstrap {
     pub(crate) string_table: StringTable,
 }
 
+/// Raw input source payload used by builders that compile from in-memory files.
 pub struct InputFile {
     pub source_code: String,
     pub source_path: PathBuf,

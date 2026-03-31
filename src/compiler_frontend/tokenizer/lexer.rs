@@ -547,8 +547,8 @@ pub fn get_token_kind(
             }
 
             if next_char == '.' {
-                // TODO: need to handle range operator without backtracking through token stream
-                // Or consuming too many dots.
+                // Planned: handle range tokenization here without look-behind/backtracking
+                // and without consuming extra dots.
 
                 if has_decimal_point {
                     return_syntax_error!(

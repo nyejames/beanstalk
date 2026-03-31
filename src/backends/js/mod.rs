@@ -23,6 +23,9 @@ use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use std::collections::{HashMap, HashSet, VecDeque};
 
 /// Configuration for JS lowering.
+///
+/// WHAT: selects formatting/debug emission behavior for generated JS modules.
+/// WHY: build targets need one explicit knob set for dev vs release codegen output.
 #[derive(Debug, Clone)]
 pub struct JsLoweringConfig {
     /// Emit human-readable formatting.
@@ -50,6 +53,9 @@ impl JsLoweringConfig {
 }
 
 /// Result of lowering a HIR module to JavaScript.
+///
+/// WHAT: emitted source plus the stable HIR-function-id -> JS-name mapping.
+/// WHY: builders and tests need the name map for start calls and artifact assertions.
 #[derive(Debug, Clone)]
 pub struct JsModule {
     /// Complete JS source code.
@@ -57,6 +63,10 @@ pub struct JsModule {
     pub function_name_by_id: HashMap<FunctionId, String>,
 }
 
+/// Lower one validated HIR module into JavaScript source.
+///
+/// WHAT: converts HIR control flow/expressions into executable JS and symbol maps.
+/// WHY: JS is the stable near-term backend and needs deterministic lowering output.
 pub fn lower_hir_to_js(
     hir: &HirModule,
     borrow_analysis: &BorrowCheckReport,

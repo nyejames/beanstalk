@@ -13,7 +13,10 @@ use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::statements::functions::{FunctionReturn, FunctionSignature};
 use crate::compiler_frontend::compiler_errors::ErrorType;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
-use crate::compiler_frontend::host_functions::{HostAbiType, HostAccessKind, HostReturnAlias};
+use crate::compiler_frontend::host_functions::test_support::{
+    TestHostAbiType as HostAbiType, TestHostAccessKind as HostAccessKind,
+    TestHostReturnAlias as HostReturnAlias,
+};
 use crate::compiler_frontend::string_interning::StringTable;
 
 fn fresh_returns(result_types: Vec<DataType>) -> Vec<FunctionReturn> {

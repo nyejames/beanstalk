@@ -47,6 +47,1063 @@ fn push_expression_node(
     Ok(())
 }
 
+fn parse_collection_expression(
+    token_stream: &mut FileTokens,
+    context: &ScopeContext,
+    data_type: &DataType,
+    ownership: &Ownership,
+    expression: &mut Vec<AstNode>,
+    string_table: &mut StringTable,
+) -> Result<(), CompilerError> {
+    match data_type {
+        DataType::Collection(inner_type, _) => {
+            expression.push(AstNode {
+                kind: NodeKind::Rvalue(new_collection(
+                    token_stream,
+                    inner_type,
+                    context,
+                    ownership,
+                    string_table,
+                )?),
+                location: token_stream.current_location(),
+                scope: context.scope.clone(),
+            });
+            Ok(())
+        }
+
+        DataType::Inferred => {
+            expression.push(AstNode {
+                kind: NodeKind::Rvalue(new_collection(
+                    token_stream,
+                    &DataType::Inferred,
+                    context,
+                    ownership,
+                    string_table,
+                )?),
+                location: token_stream.current_location(),
+                scope: context.scope.clone(),
+            });
+            Ok(())
+        }
+
+        _ => {
+            return_type_error!(
+                format!(
+                    "Expected a collection, but assigned variable with a literal type of: {:?}",
+                    data_type
+                ),
+                token_stream.current_location(),
+                {
+                    ExpectedType => "Collection",
+                    CompilationStage => "Expression Parsing",
+                    PrimarySuggestion => "Change the variable type to a collection or use a different literal",
+                }
+            )
+        }
+    }
+}
+
+fn parse_identifier_or_call(
+    token_stream: &mut FileTokens,
+    context: &ScopeContext,
+    expression: &mut Vec<AstNode>,
+    string_table: &mut StringTable,
+) -> Result<(), CompilerError> {
+    let TokenKind::Symbol(id, ..) = token_stream.current_token_kind().to_owned() else {
+        return Ok(());
+    };
+
+    let full_name = context.scope.to_owned().append(id);
+
+    if let Some(arg) = context.get_reference(&id) {
+        if let ExpressionKind::Template(template_value) = &arg.value.kind
+            && matches!(template_value.kind, TemplateType::SlotInsert(_))
+            && !matches!(
+                context.kind,
+                ContextKind::Template | ContextKind::Constant | ContextKind::ConstantHeader
+            )
+        {
+            return_rule_error!(
+                "'$insert(...)' helpers can only be used while filling an immediate parent template that defines matching '$slot' targets.",
+                token_stream.current_location(),
+                {
+                    CompilationStage => "Expression Parsing",
+                    PrimarySuggestion => "Use this '$insert(...)' helper inside a template invocation that has a slot-bearing parent in the head chain",
+                }
+            );
+        }
+
+        if let DataType::Struct {
+            nominal_path,
+            fields,
+            ownership: struct_ownership,
+            ..
+        } = &arg.value.data_type
+            && token_stream.peek_next_token() == Some(&TokenKind::OpenParenthesis)
+        {
+            // Struct constructors are parsed before constant-reference checks.
+            // This keeps `#x = MyStruct(...)` on the constructor path so const
+            // record coercion can validate field values instead of rejecting the
+            // struct symbol itself as a non-constant reference.
+            let struct_instance = parse_struct_constructor_expression(
+                token_stream,
+                nominal_path,
+                id,
+                fields,
+                struct_ownership,
+                context,
+                string_table,
+            )?;
+
+            push_expression_node(
+                token_stream,
+                context,
+                string_table,
+                expression,
+                AstNode {
+                    kind: NodeKind::Rvalue(struct_instance),
+                    location: token_stream.current_location(),
+                    scope: context.scope.clone(),
+                },
+            )?;
+
+            return Ok(());
+        }
+
+        if context.kind.is_constant_context() && !arg.value.is_compile_time_constant() {
+            return_rule_error!(
+                format!(
+                    "Constants can only reference other constants. '{}' resolves to a non-constant value.",
+                    string_table.resolve(id)
+                ),
+                token_stream.current_location(),
+                {
+                    CompilationStage => "Expression Parsing",
+                    PrimarySuggestion => "Only reference constants in constant declarations and const templates",
+                }
+            );
+        }
+
+        match &arg.value.data_type {
+            DataType::Function(_, signature) => {
+                // Advance past the function name to position at the opening parenthesis
+                token_stream.advance();
+
+                // This is a function call - parse it using the function call parser
+                let function_call_node =
+                    parse_function_call(token_stream, &arg.id, context, signature, string_table)?;
+
+                // -------------------------------
+                // FUNCTION CALL INSIDE EXPRESSION
+                // -------------------------------
+                if let NodeKind::FunctionCall {
+                    name,
+                    args,
+                    result_types,
+                    location,
+                } = function_call_node.kind
+                {
+                    let func_call_expr =
+                        Expression::function_call(name, args, result_types, location);
+
+                    push_expression_node(
+                        token_stream,
+                        context,
+                        string_table,
+                        expression,
+                        AstNode {
+                            kind: NodeKind::Rvalue(func_call_expr),
+                            location: function_call_node.location,
+                            scope: context.scope.clone(),
+                        },
+                    )?;
+
+                    return Ok(());
+                }
+            }
+
+            DataType::Struct { .. } => {
+                // Fall through to normal reference behaviour for non-constructor uses.
+                expression.push(create_reference(token_stream, arg, context, string_table)?);
+                return Ok(());
+            }
+
+            // --------------------------
+            // VARIABLE INSIDE EXPRESSION
+            // --------------------------
+            _ => {
+                expression.push(create_reference(token_stream, arg, context, string_table)?);
+                return Ok(()); // Will have moved onto the next token already
+            }
+        }
+    }
+
+    if let Some(start_target) = context.resolve_start_import(&id) {
+        token_stream.advance();
+
+        match token_stream.current_token_kind() {
+            TokenKind::OpenParenthesis => {
+                let function_call_node = parse_function_call(
+                    token_stream,
+                    start_target,
+                    context,
+                    &FunctionSignature {
+                        parameters: vec![],
+                        returns: vec![FunctionReturn::Value(DataType::StringSlice)],
+                    },
+                    string_table,
+                )?;
+
+                if let NodeKind::FunctionCall {
+                    name,
+                    args,
+                    result_types,
+                    location,
+                } = function_call_node.kind
+                {
+                    push_expression_node(
+                        token_stream,
+                        context,
+                        string_table,
+                        expression,
+                        AstNode {
+                            kind: NodeKind::Rvalue(Expression::function_call(
+                                name,
+                                args,
+                                result_types,
+                                location,
+                            )),
+                            location: function_call_node.location,
+                            scope: context.scope.clone(),
+                        },
+                    )?;
+                    return Ok(());
+                }
+
+                return_compiler_error!(
+                    "Expected a function call node for imported file start alias"
+                );
+            }
+
+            TokenKind::Dot => {
+                return_rule_error!(
+                    format!(
+                        "Imported file '{}' is callable only as '{}()'. File-struct member access is no longer supported.",
+                        string_table.resolve(id),
+                        string_table.resolve(id),
+                    ),
+                    token_stream.current_location(),
+                    {
+                        CompilationStage => "Expression Parsing",
+                        PrimarySuggestion => "Import exports directly with '@path/to/file/symbol' or '@path/to/file {a, b}'",
+                    }
+                );
+            }
+
+            _ => {
+                return_rule_error!(
+                    format!(
+                        "Imported file '{}' can only be used as a callable start import ('{}()').",
+                        string_table.resolve(id),
+                        string_table.resolve(id),
+                    ),
+                    token_stream.current_location(),
+                    {
+                        CompilationStage => "Expression Parsing",
+                        PrimarySuggestion => "Call the file start function with 'file()' or import specific exports directly",
+                    }
+                );
+            }
+        }
+    }
+
+    // ------------------------------------
+    // HOST FUNCTION CALL INSIDE EXPRESSION
+    // ------------------------------------
+    if let Some(host_func_def) = context.host_registry.get_function(string_table.resolve(id)) {
+        if context.kind.is_constant_context() {
+            return_rule_error!(
+                format!(
+                    "Constants cannot call host functions. '{}' is a runtime host call.",
+                    string_table.resolve(id)
+                ),
+                token_stream.current_location(),
+                {
+                    CompilationStage => "Expression Parsing",
+                    PrimarySuggestion => "Use only compile-time constant values inside constants and const templates",
+                }
+            );
+        }
+
+        // Convert return types to Arg format
+        let signature = host_func_def.params_to_signature(string_table);
+
+        // This is a function call - parse it using the function call parser
+        let function_call_node =
+            parse_function_call(token_stream, &full_name, context, &signature, string_table)?;
+
+        if let NodeKind::HostFunctionCall {
+            name: host_function_id,
+            args,
+            result_types,
+            location,
+        } = function_call_node.kind
+        {
+            let func_call_expr = Expression::host_function_call(
+                host_function_id,
+                args.to_owned(),
+                result_types,
+                location,
+            );
+
+            push_expression_node(
+                token_stream,
+                context,
+                string_table,
+                expression,
+                AstNode {
+                    kind: NodeKind::Rvalue(func_call_expr),
+                    location: SourceLocation::default(),
+                    scope: context.scope.clone(),
+                },
+            )?;
+
+            return Ok(());
+        }
+    }
+
+    if token_stream.peek_next_token() == Some(&TokenKind::OpenParenthesis)
+        && let Some(method_entry) = context.lookup_visible_receiver_method_by_name(id)
+    {
+        return Err(free_function_receiver_method_call_error(
+            id,
+            method_entry,
+            token_stream.current_location(),
+            "Expression Parsing",
+            string_table,
+        ));
+    }
+
+    let var_name = string_table.resolve(id).to_string();
+    return_rule_error!(
+        format!(
+            "Undefined variable '{}'. Variable must be declared before use.",
+            var_name
+        ),
+        token_stream.current_location(),
+        {
+            VariableName => var_name,
+            CompilationStage => "Expression Parsing",
+            PrimarySuggestion => "Declare the variable before using it in this expression",
+        }
+    )
+}
+
+fn parse_literal_expression(
+    token_stream: &mut FileTokens,
+    context: &ScopeContext,
+    ownership: &Ownership,
+    expression: &mut Vec<AstNode>,
+    next_number_negative: &mut bool,
+    string_table: &mut StringTable,
+) -> Result<(), CompilerError> {
+    match token_stream.current_token_kind().to_owned() {
+        TokenKind::FloatLiteral(mut float) => {
+            if *next_number_negative {
+                float = -float;
+                *next_number_negative = false;
+            }
+
+            let location = token_stream.current_location();
+            let float_expr = Expression::float(float, location.to_owned(), ownership.to_owned());
+            token_stream.advance();
+            push_expression_node(
+                token_stream,
+                context,
+                string_table,
+                expression,
+                AstNode {
+                    kind: NodeKind::Rvalue(float_expr),
+                    location,
+                    scope: context.scope.clone(),
+                },
+            )?;
+            Ok(())
+        }
+
+        TokenKind::IntLiteral(mut int) => {
+            if *next_number_negative {
+                *next_number_negative = false;
+                int = -int;
+            };
+
+            let location = token_stream.current_location();
+            let int_expr = Expression::int(int, location.to_owned(), ownership.to_owned());
+            token_stream.advance();
+            push_expression_node(
+                token_stream,
+                context,
+                string_table,
+                expression,
+                AstNode {
+                    kind: NodeKind::Rvalue(int_expr),
+                    scope: context.scope.clone(),
+                    location,
+                },
+            )?;
+            Ok(())
+        }
+
+        TokenKind::StringSliceLiteral(string) => {
+            let location = token_stream.current_location();
+            let string_expr =
+                Expression::string_slice(string, location.to_owned(), ownership.to_owned());
+            token_stream.advance();
+            push_expression_node(
+                token_stream,
+                context,
+                string_table,
+                expression,
+                AstNode {
+                    kind: NodeKind::Rvalue(string_expr),
+                    scope: context.scope.clone(),
+                    location,
+                },
+            )?;
+            Ok(())
+        }
+
+        TokenKind::BoolLiteral(value) => {
+            let location = token_stream.current_location();
+            let bool_expr = Expression::bool(value, location.to_owned(), ownership.to_owned());
+            token_stream.advance();
+            push_expression_node(
+                token_stream,
+                context,
+                string_table,
+                expression,
+                AstNode {
+                    kind: NodeKind::Rvalue(bool_expr),
+                    location,
+                    scope: context.scope.clone(),
+                },
+            )?;
+            Ok(())
+        }
+
+        TokenKind::CharLiteral(value) => {
+            let location = token_stream.current_location();
+            let char_expr = Expression::char(value, location.to_owned(), ownership.to_owned());
+            token_stream.advance();
+            push_expression_node(
+                token_stream,
+                context,
+                string_table,
+                expression,
+                AstNode {
+                    kind: NodeKind::Rvalue(char_expr),
+                    location,
+                    scope: context.scope.clone(),
+                },
+            )?;
+            Ok(())
+        }
+
+        _ => Ok(()),
+    }
+}
+
+fn parse_template_expression(
+    token_stream: &mut FileTokens,
+    context: &ScopeContext,
+    consume_closing_parenthesis: bool,
+    ownership: &Ownership,
+    string_table: &mut StringTable,
+) -> Result<Option<Expression>, CompilerError> {
+    let template_context = context.new_template_parsing_context();
+    let template = Template::new(token_stream, &template_context, vec![], string_table)?;
+
+    match template.kind {
+        TemplateType::StringFunction => {
+            if context.kind.is_constant_context() {
+                return_rule_error!(
+                    "Constants and const templates require compile-time template folding. This template is runtime.",
+                    token_stream.current_location(),
+                    {
+                        CompilationStage => "Expression Parsing",
+                        PrimarySuggestion => "Remove runtime values from this template so it can fold at compile time",
+                    }
+                );
+            }
+
+            if consume_closing_parenthesis
+                && token_stream.current_token_kind() == &TokenKind::CloseParenthesis
+            {
+                token_stream.advance();
+            }
+            Ok(Some(Expression::template(template, ownership.to_owned())))
+        }
+
+        TemplateType::String => {
+            if consume_closing_parenthesis
+                && token_stream.current_token_kind() == &TokenKind::CloseParenthesis
+            {
+                token_stream.advance();
+            }
+
+            if !template.is_const_renderable_string() || template.has_unresolved_slots() {
+                return Ok(Some(Expression::template(template, ownership.to_owned())));
+            }
+
+            ast_log!("Template is foldable now. Folding...");
+
+            let mut fold_context = template_context
+                .new_template_fold_context(string_table, "expression parsing template fold")?;
+            let folded_string = template.fold_into_stringid(&mut fold_context)?;
+
+            Ok(Some(Expression::string_slice(
+                folded_string,
+                token_stream.current_location(),
+                ownership.get_owned(),
+            )))
+        }
+
+        // Ignore comments
+        TemplateType::Comment(_) => Ok(None),
+
+        TemplateType::SlotInsert(_) => {
+            if consume_closing_parenthesis
+                && token_stream.current_token_kind() == &TokenKind::CloseParenthesis
+            {
+                token_stream.advance();
+            }
+
+            Ok(Some(Expression::template(template, ownership.to_owned())))
+        }
+
+        TemplateType::SlotDefinition(_) => {
+            return_rule_error!(
+                "'$slot' markers are only valid as direct nested templates inside template bodies.",
+                token_stream.current_location(),
+                {
+                    CompilationStage => "Expression Parsing",
+                    PrimarySuggestion => "Use '$slot' inside a template body where it defines a receiving slot",
+                }
+            )
+        }
+    }
+}
+
+fn parse_unary_operator(
+    token_stream: &FileTokens,
+    context: &ScopeContext,
+    expression: &mut Vec<AstNode>,
+    next_number_negative: &mut bool,
+) -> bool {
+    match token_stream.current_token_kind() {
+        TokenKind::Negative => {
+            *next_number_negative = true;
+            true
+        }
+        TokenKind::Not => {
+            expression.push(AstNode {
+                kind: NodeKind::Operator(Operator::Not),
+                location: token_stream.current_location(),
+                scope: context.scope.clone(),
+            });
+            true
+        }
+        _ => false,
+    }
+}
+
+enum ExpressionTokenStep {
+    Continue,
+    Advance,
+    Break,
+    Return(Expression),
+}
+
+struct ExpressionDispatchState<'a> {
+    data_type: &'a mut DataType,
+    ownership: &'a Ownership,
+    consume_closing_parenthesis: bool,
+    expression: &'a mut Vec<AstNode>,
+    next_number_negative: &'a mut bool,
+}
+
+fn push_operator_node(
+    expression: &mut Vec<AstNode>,
+    context: &ScopeContext,
+    location: SourceLocation,
+    operator: Operator,
+) {
+    expression.push(AstNode {
+        kind: NodeKind::Operator(operator),
+        location,
+        scope: context.scope.clone(),
+    });
+}
+
+fn dispatch_expression_token(
+    token: TokenKind,
+    token_stream: &mut FileTokens,
+    context: &ScopeContext,
+    state: &mut ExpressionDispatchState<'_>,
+    string_table: &mut StringTable,
+) -> Result<ExpressionTokenStep, CompilerError> {
+    match token {
+        TokenKind::CloseCurly
+        | TokenKind::Comma
+        | TokenKind::Eof
+        | TokenKind::TemplateClose
+        | TokenKind::Arrow
+        | TokenKind::StartTemplateBody
+        | TokenKind::Colon
+        | TokenKind::End => {
+            if state.expression.is_empty() {
+                match token {
+                    TokenKind::Comma => {
+                        let mut error = CompilerError::new_syntax_error(
+                            "Unexpected ',' in expression. Commas separate list items, function arguments, or return declarations.",
+                            token_stream.current_location(),
+                        );
+                        error.new_metadata_entry(
+                            ErrorMetaDataKey::CompilationStage,
+                            String::from("Expression Parsing"),
+                        );
+                        error.new_metadata_entry(
+                            ErrorMetaDataKey::PrimarySuggestion,
+                            String::from("Add a value before ',' or remove the comma"),
+                        );
+                        return Err(error);
+                    }
+
+                    TokenKind::Arrow => {
+                        let mut error = CompilerError::new_syntax_error(
+                            "Unexpected '->' in expression. Arrow syntax is only valid in function signatures.",
+                            token_stream.current_location(),
+                        );
+                        error.new_metadata_entry(
+                            ErrorMetaDataKey::CompilationStage,
+                            String::from("Expression Parsing"),
+                        );
+                        error.new_metadata_entry(
+                            ErrorMetaDataKey::PrimarySuggestion,
+                            String::from(
+                                "Use '->' only in function signatures like '|args| -> Type:'",
+                            ),
+                        );
+                        return Err(error);
+                    }
+
+                    _ => {}
+                }
+            }
+
+            if state.consume_closing_parenthesis {
+                return_syntax_error!(
+                    format!("Unexpected token: '{:?}'. Seems to be missing a closing parenthesis at the end of this expression.", token),
+                    token_stream.current_location(),
+                    {
+                        CompilationStage => "Expression Parsing",
+                        PrimarySuggestion => "Add a closing parenthesis ')' at the end of the expression",
+                        SuggestedInsertion => ")",
+                    }
+                )
+            }
+
+            Ok(ExpressionTokenStep::Break)
+        }
+
+        TokenKind::CloseParenthesis => {
+            if state.consume_closing_parenthesis {
+                token_stream.advance();
+            }
+
+            if state.expression.is_empty() {
+                return_syntax_error!(
+                    "Empty expression found. Expected a value, variable, or expression.",
+                    token_stream.current_location(),
+                    {
+                        CompilationStage => "Expression Parsing",
+                        PrimarySuggestion => "Add a value, variable reference, or expression inside the parentheses",
+                    }
+                );
+            }
+
+            Ok(ExpressionTokenStep::Break)
+        }
+
+        TokenKind::OpenParenthesis => {
+            token_stream.advance();
+            let value = create_expression(
+                token_stream,
+                context,
+                state.data_type,
+                state.ownership,
+                true,
+                string_table,
+            )?;
+
+            push_expression_node(
+                token_stream,
+                context,
+                string_table,
+                state.expression,
+                AstNode {
+                    kind: NodeKind::Rvalue(value),
+                    location: token_stream.current_location(),
+                    scope: context.scope.clone(),
+                },
+            )?;
+
+            Ok(ExpressionTokenStep::Continue)
+        }
+
+        TokenKind::OpenCurly => {
+            parse_collection_expression(
+                token_stream,
+                context,
+                state.data_type,
+                state.ownership,
+                state.expression,
+                string_table,
+            )?;
+            Ok(ExpressionTokenStep::Advance)
+        }
+
+        TokenKind::Newline => {
+            if state.consume_closing_parenthesis
+                || token_stream.previous_token().continues_expression()
+            {
+                token_stream.skip_newlines();
+                return Ok(ExpressionTokenStep::Continue);
+            }
+
+            while let Some(next) = token_stream.peek_next_token() {
+                if next.continues_expression() {
+                    token_stream.skip_newlines();
+                    continue;
+                }
+                break;
+            }
+
+            ast_log!("Breaking out of expression with newline");
+            Ok(ExpressionTokenStep::Break)
+        }
+
+        TokenKind::Symbol(..) => {
+            parse_identifier_or_call(token_stream, context, state.expression, string_table)?;
+            Ok(ExpressionTokenStep::Continue)
+        }
+
+        TokenKind::FloatLiteral(_)
+        | TokenKind::IntLiteral(_)
+        | TokenKind::StringSliceLiteral(_)
+        | TokenKind::BoolLiteral(_)
+        | TokenKind::CharLiteral(_) => {
+            parse_literal_expression(
+                token_stream,
+                context,
+                state.ownership,
+                state.expression,
+                state.next_number_negative,
+                string_table,
+            )?;
+            Ok(ExpressionTokenStep::Continue)
+        }
+
+        TokenKind::TemplateHead => {
+            if let Some(template_expression) = parse_template_expression(
+                token_stream,
+                context,
+                state.consume_closing_parenthesis,
+                state.ownership,
+                string_table,
+            )? {
+                return Ok(ExpressionTokenStep::Return(template_expression));
+            }
+
+            Ok(ExpressionTokenStep::Advance)
+        }
+
+        TokenKind::Copy => {
+            let copy_location = token_stream.current_location();
+            token_stream.advance();
+
+            let copied_place = parse_copy_place_expression(token_stream, context, string_table)?;
+            let copied_type = copied_place.get_expr()?.data_type;
+
+            state.expression.push(AstNode {
+                kind: NodeKind::Rvalue(Expression::copy(
+                    copied_place,
+                    copied_type,
+                    copy_location.clone(),
+                    state.ownership.to_owned(),
+                )),
+                location: copy_location,
+                scope: context.scope.clone(),
+            });
+
+            Ok(ExpressionTokenStep::Continue)
+        }
+
+        TokenKind::Hash => {
+            if token_stream.peek_next_token() != Some(&TokenKind::TemplateHead) {
+                return_type_error!(
+                    "Unexpected '#' in expression. '#' is only valid before a template head.",
+                    token_stream.current_location(),
+                    {
+                        CompilationStage => "Expression Parsing",
+                        PrimarySuggestion => "Remove '#' or place it directly before a template expression",
+                    }
+                );
+            }
+
+            Ok(ExpressionTokenStep::Advance)
+        }
+
+        TokenKind::Negative | TokenKind::Not => {
+            let _ = parse_unary_operator(
+                token_stream,
+                context,
+                state.expression,
+                state.next_number_negative,
+            );
+            Ok(ExpressionTokenStep::Advance)
+        }
+
+        TokenKind::In => {
+            token_stream.advance();
+            let mut range_type = DataType::Range;
+            let reference_ownership = state.ownership.get_reference();
+            let value = evaluate_expression(
+                context,
+                std::mem::take(state.expression),
+                &mut range_type,
+                &reference_ownership,
+                string_table,
+            )?;
+            Ok(ExpressionTokenStep::Return(value))
+        }
+
+        TokenKind::Add => {
+            push_operator_node(
+                state.expression,
+                context,
+                token_stream.current_location(),
+                Operator::Add,
+            );
+            Ok(ExpressionTokenStep::Advance)
+        }
+        TokenKind::Subtract => {
+            push_operator_node(
+                state.expression,
+                context,
+                token_stream.current_location(),
+                Operator::Subtract,
+            );
+            Ok(ExpressionTokenStep::Advance)
+        }
+        TokenKind::Multiply => {
+            push_operator_node(
+                state.expression,
+                context,
+                token_stream.current_location(),
+                Operator::Multiply,
+            );
+            Ok(ExpressionTokenStep::Advance)
+        }
+        TokenKind::Divide => {
+            push_operator_node(
+                state.expression,
+                context,
+                token_stream.current_location(),
+                Operator::Divide,
+            );
+            Ok(ExpressionTokenStep::Advance)
+        }
+        TokenKind::Exponent => {
+            push_operator_node(
+                state.expression,
+                context,
+                token_stream.current_location(),
+                Operator::Exponent,
+            );
+            Ok(ExpressionTokenStep::Advance)
+        }
+        TokenKind::Modulus => {
+            push_operator_node(
+                state.expression,
+                context,
+                token_stream.current_location(),
+                Operator::Modulus,
+            );
+            Ok(ExpressionTokenStep::Advance)
+        }
+
+        TokenKind::Is => match token_stream.peek_next_token() {
+            Some(TokenKind::Not) => {
+                token_stream.advance();
+                push_operator_node(
+                    state.expression,
+                    context,
+                    token_stream.current_location(),
+                    Operator::NotEqual,
+                );
+                Ok(ExpressionTokenStep::Advance)
+            }
+
+            Some(TokenKind::Colon) => {
+                if state.expression.len() > 1 {
+                    return_type_error!(
+                        format!(
+                            "Match statements can only have one value to match against. Found: {}",
+                            state.expression.len()
+                        ),
+                        token_stream.current_location(),
+                        {
+                            CompilationStage => "Expression Parsing",
+                            PrimarySuggestion => "Simplify the expression to a single value before the 'is:' match",
+                        }
+                    )
+                }
+
+                let value = evaluate_expression(
+                    context,
+                    std::mem::take(state.expression),
+                    state.data_type,
+                    state.ownership,
+                    string_table,
+                )?;
+                Ok(ExpressionTokenStep::Return(value))
+            }
+
+            _ => {
+                push_operator_node(
+                    state.expression,
+                    context,
+                    token_stream.current_location(),
+                    Operator::Equality,
+                );
+                Ok(ExpressionTokenStep::Advance)
+            }
+        },
+
+        TokenKind::LessThan => {
+            push_operator_node(
+                state.expression,
+                context,
+                token_stream.current_location(),
+                Operator::LessThan,
+            );
+            Ok(ExpressionTokenStep::Advance)
+        }
+        TokenKind::LessThanOrEqual => {
+            push_operator_node(
+                state.expression,
+                context,
+                token_stream.current_location(),
+                Operator::LessThanOrEqual,
+            );
+            Ok(ExpressionTokenStep::Advance)
+        }
+        TokenKind::GreaterThan => {
+            push_operator_node(
+                state.expression,
+                context,
+                token_stream.current_location(),
+                Operator::GreaterThan,
+            );
+            Ok(ExpressionTokenStep::Advance)
+        }
+        TokenKind::GreaterThanOrEqual => {
+            push_operator_node(
+                state.expression,
+                context,
+                token_stream.current_location(),
+                Operator::GreaterThanOrEqual,
+            );
+            Ok(ExpressionTokenStep::Advance)
+        }
+        TokenKind::And => {
+            push_operator_node(
+                state.expression,
+                context,
+                token_stream.current_location(),
+                Operator::And,
+            );
+            Ok(ExpressionTokenStep::Advance)
+        }
+        TokenKind::Or => {
+            push_operator_node(
+                state.expression,
+                context,
+                token_stream.current_location(),
+                Operator::Or,
+            );
+            Ok(ExpressionTokenStep::Advance)
+        }
+        TokenKind::ExclusiveRange => {
+            push_operator_node(
+                state.expression,
+                context,
+                token_stream.current_location(),
+                Operator::Range,
+            );
+            Ok(ExpressionTokenStep::Advance)
+        }
+
+        TokenKind::Wildcard => {
+            let mut error = CompilerError::new_syntax_error(
+                "Unexpected wildcard '_' in expression. Wildcards are only valid in supported pattern positions.",
+                token_stream.current_location(),
+            );
+            error.new_metadata_entry(
+                ErrorMetaDataKey::CompilationStage,
+                String::from("Expression Parsing"),
+            );
+            error.new_metadata_entry(
+                ErrorMetaDataKey::PrimarySuggestion,
+                String::from(
+                    "Use a concrete value/expression here, or use 'else:' for default match arms",
+                ),
+            );
+            Err(error)
+        }
+
+        TokenKind::TypeParameterBracket => {
+            let mut error = CompilerError::new_syntax_error(
+                "Unexpected '|' in expression. This token is only valid in function signatures and struct definitions.",
+                token_stream.current_location(),
+            );
+            error.new_metadata_entry(
+                ErrorMetaDataKey::CompilationStage,
+                String::from("Expression Parsing"),
+            );
+            error.new_metadata_entry(
+                ErrorMetaDataKey::PrimarySuggestion,
+                String::from("Remove the stray '|' or move it into a declaration signature"),
+            );
+            Err(error)
+        }
+
+        TokenKind::AddAssign => Ok(ExpressionTokenStep::Advance),
+
+        _ => {
+            return_syntax_error!(
+                format!("Invalid token used in expression: '{:?}'", token),
+                token_stream.current_location(),
+                {
+                    CompilationStage => "Expression Parsing",
+                    PrimarySuggestion => "Remove or replace this token with a valid expression element",
+                }
+            )
+        }
+    }
+}
+
 // WHAT: parses a comma-separated expression list against already-known expected result types.
 // WHY: function calls and multi-return contexts must preserve arity and per-slot type
 //      expectations while still sharing the normal expression parser.
@@ -135,7 +1192,7 @@ pub fn create_expression(
     ast_log!(
         "Parsing ",
         #ownership,
-        data_type.to_string(),
+        data_type.display_with_table(string_table),
         " Expression"
     );
 
@@ -146,960 +1203,25 @@ pub fn create_expression(
     while token_stream.index < token_stream.length {
         let token = token_stream.current_token_kind().to_owned();
         ast_log!("Parsing expression: ", #token);
-
-        match token {
-            // ------------------------
-            // SOME CLOSING CONDITIONS
-            // ------------------------
-            TokenKind::CloseCurly
-            | TokenKind::Comma
-            | TokenKind::Eof
-            | TokenKind::TemplateClose
-            | TokenKind::Arrow
-            | TokenKind::StartTemplateBody
-            | TokenKind::Colon
-            | TokenKind::End => {
-                if expression.is_empty() {
-                    match token {
-                        TokenKind::Comma => {
-                            let mut error = CompilerError::new_syntax_error(
-                                "Unexpected ',' in expression. Commas separate list items, function arguments, or return declarations.",
-                                token_stream.current_location(),
-                            );
-                            error.new_metadata_entry(
-                                ErrorMetaDataKey::CompilationStage,
-                                String::from("Expression Parsing"),
-                            );
-                            error.new_metadata_entry(
-                                ErrorMetaDataKey::PrimarySuggestion,
-                                String::from("Add a value before ',' or remove the comma"),
-                            );
-                            return Err(error);
-                        }
-
-                        TokenKind::Arrow => {
-                            let mut error = CompilerError::new_syntax_error(
-                                "Unexpected '->' in expression. Arrow syntax is only valid in function signatures.",
-                                token_stream.current_location(),
-                            );
-                            error.new_metadata_entry(
-                                ErrorMetaDataKey::CompilationStage,
-                                String::from("Expression Parsing"),
-                            );
-                            error.new_metadata_entry(
-                                ErrorMetaDataKey::PrimarySuggestion,
-                                String::from(
-                                    "Use '->' only in function signatures like '|args| -> Type:'",
-                                ),
-                            );
-                            return Err(error);
-                        }
-
-                        _ => {}
-                    }
-                }
-
-                ast_log!("Breaking out of expression");
-
-                if consume_closing_parenthesis {
-                    return_syntax_error!(
-                        format!("Unexpected token: '{:?}'. Seems to be missing a closing parenthesis at the end of this expression.", token),
-                        token_stream.current_location(),
-                        {
-                            CompilationStage => "Expression Parsing",
-                            PrimarySuggestion => "Add a closing parenthesis ')' at the end of the expression",
-                            SuggestedInsertion => ")",
-                        }
-                    )
-                }
-
-                // This token needs to be preserved and not skipped for the parser above it
-                break;
-            }
-
-            TokenKind::CloseParenthesis => {
-                if consume_closing_parenthesis {
-                    token_stream.advance();
-                }
-
-                if expression.is_empty() {
-                    return_syntax_error!(
-                        "Empty expression found. Expected a value, variable, or expression.",
-                        token_stream.current_location(),
-                        {
-                            CompilationStage => "Expression Parsing",
-                            PrimarySuggestion => "Add a value, variable reference, or expression inside the parentheses",
-                        }
-                    );
-                }
-
-                break;
-            }
-
-            TokenKind::OpenParenthesis => {
-                // Move past the open parenthesis before calling this function again
-                // Removed this at one point for a test caused a wonderful infinite loop
-                token_stream.advance();
-
-                let value = create_expression(
-                    token_stream,
-                    context,
-                    data_type,
-                    ownership,
-                    true,
-                    string_table,
-                )?;
-
-                push_expression_node(
-                    token_stream,
-                    context,
-                    string_table,
-                    &mut expression,
-                    AstNode {
-                        kind: NodeKind::Rvalue(value),
-                        location: token_stream.current_location(),
-                        scope: context.scope.clone(),
-                    },
-                )?;
-
-                // create_expression(..., consume_closing_parenthesis = true) already advanced
-                // past the closing parenthesis, so do not advance again in this loop iteration.
-                continue;
-            }
-
-            // COLLECTION
-            TokenKind::OpenCurly => {
-                match &data_type {
-                    DataType::Collection(inner_type, _) => {
-                        expression.push(AstNode {
-                            kind: NodeKind::Rvalue(new_collection(
-                                token_stream,
-                                inner_type,
-                                context,
-                                ownership,
-                                string_table,
-                            )?),
-                            location: token_stream.current_location(),
-                            scope: context.scope.clone(),
-                        });
-                    }
-
-                    DataType::Inferred => {
-                        expression.push(AstNode {
-                            kind: NodeKind::Rvalue(new_collection(
-                                token_stream,
-                                &DataType::Inferred,
-                                context,
-                                ownership,
-                                string_table,
-                            )?),
-                            location: token_stream.current_location(),
-                            scope: context.scope.clone(),
-                        });
-                    }
-
-                    // Need to error here as a collection literal is being made with the wrong type declaration
-                    _ => {
-                        return_type_error!(
-                            format!("Expected a collection, but assigned variable with a literal type of: {:?}", &data_type),
-                            token_stream.current_location(),
-                            {
-                                ExpectedType => "Collection",
-                                CompilationStage => "Expression Parsing",
-                                PrimarySuggestion => "Change the variable type to a collection or use a different literal",
-                            }
-                        )
-                    }
-                };
-            }
-
-            TokenKind::Newline => {
-                // Fine if inside parenthesis (not closed yet)
-                // Or the previous token continues the expression
-                // Otherwise break out of the expression
-                if consume_closing_parenthesis
-                    || token_stream.previous_token().continues_expression()
-                {
-                    token_stream.skip_newlines();
-                    continue;
-                }
-
-                // No need to skip additional newlines, as the tokenizer removed duplicates?
-                // If the next token also continues this expression after newlines
-                // then don't break out of the expression yet
-                while let Some(token) = token_stream.peek_next_token() {
-                    if token.continues_expression() {
-                        // Skip this newline
-                        token_stream.skip_newlines();
-                        continue;
-                    }
-                    break;
-                }
-
-                ast_log!("Breaking out of expression with newline");
-                break;
-            }
-
-            // --------------------------------------------
-            // REFERENCE OR FUNCTION CALL INSIDE EXPRESSION
-            // --------------------------------------------
-            TokenKind::Symbol(ref id, ..) => {
-                let full_name = context.scope.to_owned().append(*id);
-
-                if let Some(arg) = context.get_reference(id) {
-                    if let ExpressionKind::Template(template_value) = &arg.value.kind
-                        && matches!(template_value.kind, TemplateType::SlotInsert(_))
-                        && !matches!(
-                            context.kind,
-                            ContextKind::Template
-                                | ContextKind::Constant
-                                | ContextKind::ConstantHeader
-                        )
-                    {
-                        return_rule_error!(
-                            "'$insert(...)' helpers can only be used while filling an immediate parent template that defines matching '$slot' targets.",
-                            token_stream.current_location(),
-                            {
-                                CompilationStage => "Expression Parsing",
-                                PrimarySuggestion => "Use this '$insert(...)' helper inside a template invocation that has a slot-bearing parent in the head chain",
-                            }
-                        );
-                    }
-
-                    if let DataType::Struct {
-                        nominal_path,
-                        fields,
-                        ownership: struct_ownership,
-                        ..
-                    } = &arg.value.data_type
-                        && token_stream.peek_next_token() == Some(&TokenKind::OpenParenthesis)
-                    {
-                        // Struct constructors are parsed before constant-reference checks.
-                        // This keeps `#x = MyStruct(...)` on the constructor path so const
-                        // record coercion can validate field values instead of rejecting the
-                        // struct symbol itself as a non-constant reference.
-                        let struct_instance = parse_struct_constructor_expression(
-                            token_stream,
-                            nominal_path,
-                            *id,
-                            fields,
-                            struct_ownership,
-                            context,
-                            string_table,
-                        )?;
-
-                        push_expression_node(
-                            token_stream,
-                            context,
-                            string_table,
-                            &mut expression,
-                            AstNode {
-                                kind: NodeKind::Rvalue(struct_instance),
-                                location: token_stream.current_location(),
-                                scope: context.scope.clone(),
-                            },
-                        )?;
-
-                        continue;
-                    }
-
-                    if context.kind.is_constant_context() && !arg.value.is_compile_time_constant() {
-                        return_rule_error!(
-                            format!(
-                                "Constants can only reference other constants. '{}' resolves to a non-constant value.",
-                                string_table.resolve(*id)
-                            ),
-                            token_stream.current_location(),
-                            {
-                                CompilationStage => "Expression Parsing",
-                                PrimarySuggestion => "Only reference constants in constant declarations and const templates",
-                            }
-                        );
-                    }
-
-                    match &arg.value.data_type {
-                        DataType::Function(_, signature) => {
-                            // Advance past the function name to position at the opening parenthesis
-                            token_stream.advance();
-
-                            // This is a function call - parse it using the function call parser
-                            let function_call_node = parse_function_call(
-                                token_stream,
-                                &arg.id,
-                                context,
-                                signature,
-                                string_table,
-                            )?;
-
-                            // -------------------------------
-                            // FUNCTION CALL INSIDE EXPRESSION
-                            // -------------------------------
-                            if let NodeKind::FunctionCall {
-                                name,
-                                args,
-                                result_types,
-                                location,
-                            } = function_call_node.kind
-                            {
-                                let func_call_expr =
-                                    Expression::function_call(name, args, result_types, location);
-
-                                push_expression_node(
-                                    token_stream,
-                                    context,
-                                    string_table,
-                                    &mut expression,
-                                    AstNode {
-                                        kind: NodeKind::Rvalue(func_call_expr),
-                                        location: function_call_node.location,
-                                        scope: context.scope.clone(),
-                                    },
-                                )?;
-
-                                continue;
-                            }
-                        }
-
-                        DataType::Struct { .. } => {
-                            // Fall through to normal reference behaviour for non-constructor uses.
-                            expression.push(create_reference(
-                                token_stream,
-                                arg,
-                                context,
-                                string_table,
-                            )?);
-
-                            continue;
-                        }
-
-                        // --------------------------
-                        // VARIABLE INSIDE EXPRESSION
-                        // --------------------------
-                        _ => {
-                            expression.push(create_reference(
-                                token_stream,
-                                arg,
-                                context,
-                                string_table,
-                            )?);
-
-                            continue; // Will have moved onto the next token already
-                        }
-                    }
-                }
-
-                if let Some(start_target) = context.resolve_start_import(id) {
-                    token_stream.advance();
-
-                    match token_stream.current_token_kind() {
-                        TokenKind::OpenParenthesis => {
-                            let function_call_node = parse_function_call(
-                                token_stream,
-                                start_target,
-                                context,
-                                &FunctionSignature {
-                                    parameters: vec![],
-                                    returns: vec![FunctionReturn::Value(DataType::StringSlice)],
-                                },
-                                string_table,
-                            )?;
-
-                            if let NodeKind::FunctionCall {
-                                name,
-                                args,
-                                result_types,
-                                location,
-                            } = function_call_node.kind
-                            {
-                                push_expression_node(
-                                    token_stream,
-                                    context,
-                                    string_table,
-                                    &mut expression,
-                                    AstNode {
-                                        kind: NodeKind::Rvalue(Expression::function_call(
-                                            name,
-                                            args,
-                                            result_types,
-                                            location,
-                                        )),
-                                        location: function_call_node.location,
-                                        scope: context.scope.clone(),
-                                    },
-                                )?;
-                                continue;
-                            }
-
-                            return_compiler_error!(
-                                "Expected a function call node for imported file start alias"
-                            );
-                        }
-
-                        TokenKind::Dot => {
-                            return_rule_error!(
-                                format!(
-                                    "Imported file '{}' is callable only as '{}()'. File-struct member access is no longer supported.",
-                                    string_table.resolve(*id),
-                                    string_table.resolve(*id),
-                                ),
-                                token_stream.current_location(),
-                                {
-                                    CompilationStage => "Expression Parsing",
-                                    PrimarySuggestion => "Import exports directly with '@path/to/file/symbol' or '@path/to/file {a, b}'",
-                                }
-                            );
-                        }
-
-                        _ => {
-                            return_rule_error!(
-                                format!(
-                                    "Imported file '{}' can only be used as a callable start import ('{}()').",
-                                    string_table.resolve(*id),
-                                    string_table.resolve(*id),
-                                ),
-                                token_stream.current_location(),
-                                {
-                                    CompilationStage => "Expression Parsing",
-                                    PrimarySuggestion => "Call the file start function with 'file()' or import specific exports directly",
-                                }
-                            );
-                        }
-                    }
-                }
-
-                // ------------------------------------
-                // HOST FUNCTION CALL INSIDE EXPRESSION
-                // ------------------------------------
-                if let Some(host_func_def) = context
-                    .host_registry
-                    .get_function(string_table.resolve(*id))
-                {
-                    if context.kind.is_constant_context() {
-                        return_rule_error!(
-                            format!(
-                                "Constants cannot call host functions. '{}' is a runtime host call.",
-                                string_table.resolve(*id)
-                            ),
-                            token_stream.current_location(),
-                            {
-                                CompilationStage => "Expression Parsing",
-                                PrimarySuggestion => "Use only compile-time constant values inside constants and const templates",
-                            }
-                        );
-                    }
-
-                    // Convert return types to Arg format
-                    let signature = host_func_def.params_to_signature(string_table);
-
-                    // This is a function call - parse it using the function call parser
-                    let function_call_node = parse_function_call(
-                        token_stream,
-                        &full_name,
-                        context,
-                        &signature,
-                        string_table,
-                    )?;
-
-                    if let NodeKind::HostFunctionCall {
-                        name: host_function_id,
-                        args,
-                        result_types,
-                        location,
-                    } = function_call_node.kind
-                    {
-                        let func_call_expr = Expression::host_function_call(
-                            host_function_id,
-                            args.to_owned(),
-                            result_types,
-                            location,
-                        );
-
-                        push_expression_node(
-                            token_stream,
-                            context,
-                            string_table,
-                            &mut expression,
-                            AstNode {
-                                kind: NodeKind::Rvalue(func_call_expr),
-                                location: SourceLocation::default(),
-                                scope: context.scope.clone(),
-                            },
-                        )?;
-
-                        continue;
-                    }
-                }
-
-                if token_stream.peek_next_token() == Some(&TokenKind::OpenParenthesis)
-                    && let Some(method_entry) = context.lookup_visible_receiver_method_by_name(*id)
-                {
-                    return Err(free_function_receiver_method_call_error(
-                        *id,
-                        method_entry,
-                        token_stream.current_location(),
-                        "Expression Parsing",
-                        string_table,
-                    ));
-                }
-
-                let var_name = string_table.resolve(*id).to_string();
-                return_rule_error!(
-                    format!("Undefined variable '{}'. Variable must be declared before use.", var_name),
-                    token_stream.current_location(),
-                    {
-                        VariableName => var_name,
-                        CompilationStage => "Expression Parsing",
-                        PrimarySuggestion => "Declare the variable before using it in this expression",
-                    }
-                )
-            }
-
-            // Check if is a literal
-            TokenKind::FloatLiteral(mut float) => {
-                if next_number_negative {
-                    float = -float;
-                    next_number_negative = false;
-                }
-
-                let location = token_stream.current_location();
-
-                let float_expr =
-                    Expression::float(float, location.to_owned(), ownership.to_owned());
-
-                token_stream.advance();
-                push_expression_node(
-                    token_stream,
-                    context,
-                    string_table,
-                    &mut expression,
-                    AstNode {
-                        kind: NodeKind::Rvalue(float_expr),
-                        location,
-                        scope: context.scope.clone(),
-                    },
-                )?;
-                continue;
-            }
-
-            TokenKind::IntLiteral(mut int) => {
-                if next_number_negative {
-                    next_number_negative = false;
-                    int = -int;
-                };
-
-                let location = token_stream.current_location();
-
-                let int_expr = Expression::int(int, location.to_owned(), ownership.to_owned());
-
-                token_stream.advance();
-                push_expression_node(
-                    token_stream,
-                    context,
-                    string_table,
-                    &mut expression,
-                    AstNode {
-                        kind: NodeKind::Rvalue(int_expr),
-                        scope: context.scope.clone(),
-                        location,
-                    },
-                )?;
-                continue;
-            }
-
-            TokenKind::StringSliceLiteral(ref string) => {
-                let location = token_stream.current_location();
-
-                let string_expr =
-                    Expression::string_slice(*string, location.to_owned(), ownership.to_owned());
-
-                token_stream.advance();
-                push_expression_node(
-                    token_stream,
-                    context,
-                    string_table,
-                    &mut expression,
-                    AstNode {
-                        kind: NodeKind::Rvalue(string_expr),
-                        scope: context.scope.clone(),
-                        location,
-                    },
-                )?;
-                continue;
-            }
-
-            TokenKind::TemplateHead => {
-                let template_context = context.new_template_parsing_context();
-                let template =
-                    Template::new(token_stream, &template_context, vec![], string_table)?;
-
-                match template.kind {
-                    TemplateType::StringFunction => {
-                        if context.kind.is_constant_context() {
-                            return_rule_error!(
-                                "Constants and const templates require compile-time template folding. This template is runtime.",
-                                token_stream.current_location(),
-                                {
-                                    CompilationStage => "Expression Parsing",
-                                    PrimarySuggestion => "Remove runtime values from this template so it can fold at compile time",
-                                }
-                            );
-                        }
-
-                        // Check if we need to consume a closing parenthesis after the template
-                        if consume_closing_parenthesis
-                            && token_stream.current_token_kind() == &TokenKind::CloseParenthesis
-                        {
-                            token_stream.advance();
-                        }
-                        return Ok(Expression::template(template, ownership.to_owned()));
-                    }
-
-                    TemplateType::String => {
-                        if consume_closing_parenthesis
-                            && token_stream.current_token_kind() == &TokenKind::CloseParenthesis
-                        {
-                            token_stream.advance();
-                        }
-
-                        if !template.is_const_renderable_string() || template.has_unresolved_slots()
-                        {
-                            return Ok(Expression::template(template, ownership.to_owned()));
-                        }
-
-                        ast_log!("Template is foldable now. Folding...");
-
-                        let mut fold_context = template_context.new_template_fold_context(
-                            string_table,
-                            "expression parsing template fold",
-                        )?;
-                        let folded_string = template.fold_into_stringid(&mut fold_context)?;
-
-                        return Ok(Expression::string_slice(
-                            folded_string,
-                            token_stream.current_location(),
-                            ownership.get_owned(),
-                        ));
-                    }
-
-                    // Ignore comments
-                    TemplateType::Comment(_) => {}
-
-                    TemplateType::SlotInsert(_) => {
-                        if consume_closing_parenthesis
-                            && token_stream.current_token_kind() == &TokenKind::CloseParenthesis
-                        {
-                            token_stream.advance();
-                        }
-
-                        return Ok(Expression::template(template, ownership.to_owned()));
-                    }
-
-                    TemplateType::SlotDefinition(_) => {
-                        return_rule_error!(
-                            "'$slot' markers are only valid as direct nested templates inside template bodies.",
-                            token_stream.current_location(),
-                            {
-                                CompilationStage => "Expression Parsing",
-                                PrimarySuggestion => "Use '$slot' inside a template body where it defines a receiving slot",
-                            }
-                        );
-                    }
-                }
-            }
-
-            TokenKind::Copy => {
-                let copy_location = token_stream.current_location();
-                token_stream.advance();
-
-                let copied_place =
-                    parse_copy_place_expression(token_stream, context, string_table)?;
-                let copied_type = copied_place.get_expr()?.data_type;
-
-                expression.push(AstNode {
-                    kind: NodeKind::Rvalue(Expression::copy(
-                        copied_place,
-                        copied_type,
-                        copy_location.clone(),
-                        ownership.to_owned(),
-                    )),
-                    location: copy_location,
-                    scope: context.scope.clone(),
-                });
-
-                continue;
-            }
-
-            TokenKind::Hash => {
-                if token_stream.peek_next_token() != Some(&TokenKind::TemplateHead) {
-                    return_type_error!(
-                        "Unexpected '#' in expression. '#' is only valid before a template head.",
-                        token_stream.current_location(),
-                        {
-                            CompilationStage => "Expression Parsing",
-                            PrimarySuggestion => "Remove '#' or place it directly before a template expression",
-                        }
-                    );
-                }
-            }
-
-            TokenKind::BoolLiteral(value) => {
-                let location = token_stream.current_location();
-
-                let bool_expr = Expression::bool(value, location.to_owned(), ownership.to_owned());
-
-                token_stream.advance();
-                push_expression_node(
-                    token_stream,
-                    context,
-                    string_table,
-                    &mut expression,
-                    AstNode {
-                        kind: NodeKind::Rvalue(bool_expr),
-                        location,
-                        scope: context.scope.clone(),
-                    },
-                )?;
-                continue;
-            }
-
-            TokenKind::CharLiteral(value) => {
-                let location = token_stream.current_location();
-
-                let char_expr = Expression::char(value, location.to_owned(), ownership.to_owned());
-
-                token_stream.advance();
-                push_expression_node(
-                    token_stream,
-                    context,
-                    string_table,
-                    &mut expression,
-                    AstNode {
-                        kind: NodeKind::Rvalue(char_expr),
-                        location,
-                        scope: context.scope.clone(),
-                    },
-                )?;
-                continue;
-            }
-
-            // OPERATORS
-            // Will push as a string, so shunting yard can handle it later just as a string
-            TokenKind::Negative => {
-                next_number_negative = true;
-            }
-
-            // Ranges and Loops
-            TokenKind::In => {
-                // Breaks out of the current expression and changes the type to Range
-                token_stream.advance();
-                return evaluate_expression(
-                    context,
-                    expression,
-                    &mut DataType::Range,
-                    &ownership.get_reference(),
-                    string_table,
-                );
-            }
-
-            // BINARY OPERATORS
-            TokenKind::Add => {
-                expression.push(AstNode {
-                    kind: NodeKind::Operator(Operator::Add),
-                    location: token_stream.current_location(),
-                    scope: context.scope.clone(),
-                });
-            }
-
-            TokenKind::Subtract => {
-                expression.push(AstNode {
-                    kind: NodeKind::Operator(Operator::Subtract),
-                    location: token_stream.current_location(),
-                    scope: context.scope.clone(),
-                });
-            }
-
-            TokenKind::Multiply => expression.push(AstNode {
-                kind: NodeKind::Operator(Operator::Multiply),
-                location: token_stream.current_location(),
-                scope: context.scope.clone(),
-            }),
-
-            TokenKind::Divide => {
-                expression.push(AstNode {
-                    kind: NodeKind::Operator(Operator::Divide),
-                    location: token_stream.current_location(),
-                    scope: context.scope.clone(),
-                });
-            }
-
-            TokenKind::Exponent => {
-                expression.push(AstNode {
-                    kind: NodeKind::Operator(Operator::Exponent),
-                    location: token_stream.current_location(),
-                    scope: context.scope.clone(),
-                });
-            }
-
-            TokenKind::Modulus => {
-                expression.push(AstNode {
-                    kind: NodeKind::Operator(Operator::Modulus),
-                    location: token_stream.current_location(),
-                    scope: context.scope.clone(),
-                });
-            }
-
-            // LOGICAL OPERATORS
-            TokenKind::Is => {
-                // Check if the next token is a "not" or the start of a match statement
-                match token_stream.peek_next_token() {
-                    // IS NOT
-                    Some(TokenKind::Not) => {
-                        token_stream.advance();
-                        expression.push(AstNode {
-                            kind: NodeKind::Operator(Operator::NotEqual),
-                            location: token_stream.current_location(),
-                            scope: context.scope.clone(),
-                        });
-                    }
-
-                    // MATCH STATEMENTS
-                    Some(TokenKind::Colon) => {
-                        // Match statements have a colon right after the "is".
-                        // Currently, this should only match on one value
-                        // So, we should make sure if there is a colon now, there is just one valid expression being matched
-                        if expression.len() > 1 {
-                            return_type_error!(
-                                format!("Match statements can only have one value to match against. Found: {}", expression.len()),
-                                token_stream.current_location(),
-                                {
-                                    CompilationStage => "Expression Parsing",
-                                    PrimarySuggestion => "Simplify the expression to a single value before the 'is:' match",
-                                }
-                            )
-                        }
-
-                        return evaluate_expression(
-                            context,
-                            expression,
-                            data_type,
-                            ownership,
-                            string_table,
-                        );
-                    }
-
-                    // IS
-                    _ => expression.push(AstNode {
-                        kind: NodeKind::Operator(Operator::Equality),
-                        location: token_stream.current_location(),
-                        scope: context.scope.clone(),
-                    }),
-                }
-            }
-
-            TokenKind::LessThan => {
-                expression.push(AstNode {
-                    kind: NodeKind::Operator(Operator::LessThan),
-                    location: token_stream.current_location(),
-                    scope: context.scope.clone(),
-                });
-            }
-            TokenKind::LessThanOrEqual => {
-                expression.push(AstNode {
-                    kind: NodeKind::Operator(Operator::LessThanOrEqual),
-                    location: token_stream.current_location(),
-                    scope: context.scope.clone(),
-                });
-            }
-            TokenKind::GreaterThan => {
-                expression.push(AstNode {
-                    kind: NodeKind::Operator(Operator::GreaterThan),
-                    location: token_stream.current_location(),
-                    scope: context.scope.clone(),
-                });
-            }
-            TokenKind::GreaterThanOrEqual => {
-                expression.push(AstNode {
-                    kind: NodeKind::Operator(Operator::GreaterThanOrEqual),
-                    location: token_stream.current_location(),
-                    scope: context.scope.clone(),
-                });
-            }
-            TokenKind::And => {
-                expression.push(AstNode {
-                    kind: NodeKind::Operator(Operator::And),
-                    location: token_stream.current_location(),
-                    scope: context.scope.clone(),
-                });
-            }
-            TokenKind::Or => {
-                expression.push(AstNode {
-                    kind: NodeKind::Operator(Operator::Or),
-                    location: token_stream.current_location(),
-                    scope: context.scope.clone(),
-                });
-            }
-            TokenKind::Not => {
-                expression.push(AstNode {
-                    kind: NodeKind::Operator(Operator::Not),
-                    location: token_stream.current_location(),
-                    scope: context.scope.clone(),
-                });
-            }
-
-            TokenKind::ExclusiveRange => expression.push(AstNode {
-                kind: NodeKind::Operator(Operator::Range),
-                location: token_stream.current_location(),
-                scope: context.scope.clone(),
-            }),
-
-            TokenKind::Wildcard => {
-                let mut error = CompilerError::new_syntax_error(
-                    "Unexpected wildcard '_' in expression. Wildcards are only valid in supported pattern positions.",
-                    token_stream.current_location(),
-                );
-                error.new_metadata_entry(
-                    ErrorMetaDataKey::CompilationStage,
-                    String::from("Expression Parsing"),
-                );
-                error.new_metadata_entry(
-                    ErrorMetaDataKey::PrimarySuggestion,
-                    String::from("Use a concrete value/expression here, or use 'else:' for default match arms"),
-                );
-                return Err(error);
-            }
-
-            TokenKind::TypeParameterBracket => {
-                let mut error = CompilerError::new_syntax_error(
-                    "Unexpected '|' in expression. This token is only valid in function signatures and struct definitions.",
-                    token_stream.current_location(),
-                );
-                error.new_metadata_entry(
-                    ErrorMetaDataKey::CompilationStage,
-                    String::from("Expression Parsing"),
-                );
-                error.new_metadata_entry(
-                    ErrorMetaDataKey::PrimarySuggestion,
-                    String::from("Remove the stray '|' or move it into a declaration signature"),
-                );
-                return Err(error);
-            }
-
-            // For mutating references
-            TokenKind::AddAssign => {}
-
-            _ => {
-                return_syntax_error!(
-                    format!("Invalid token used in expression: '{:?}'", token),
-                    token_stream.current_location(),
-                    {
-                        CompilationStage => "Expression Parsing",
-                        PrimarySuggestion => "Remove or replace this token with a valid expression element",
-                    }
-                )
-            }
+        let mut dispatch_state = ExpressionDispatchState {
+            data_type,
+            ownership,
+            consume_closing_parenthesis,
+            expression: &mut expression,
+            next_number_negative: &mut next_number_negative,
+        };
+        match dispatch_expression_token(
+            token,
+            token_stream,
+            context,
+            &mut dispatch_state,
+            string_table,
+        )? {
+            ExpressionTokenStep::Continue => continue,
+            ExpressionTokenStep::Advance => token_stream.advance(),
+            ExpressionTokenStep::Break => break,
+            ExpressionTokenStep::Return(value) => return Ok(value),
         }
-
-        token_stream.advance();
     }
 
     token_stream.skip_newlines();

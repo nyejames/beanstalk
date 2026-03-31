@@ -37,9 +37,9 @@ pub(crate) enum AssetPipelinePlan {
     /// WHAT: emit the source bytes unchanged at the chosen output path.
     /// WHY: v1 proves tracked-asset graph ownership before adding transforms, hashing, or plugins.
     Passthrough,
-    // TODO(html-assets): Add image transforms such as automatic WebP conversion.
-    // TODO(html-assets): Add hashed output names and URL rewrite support.
-    // TODO(html-assets): Add pluggable asset processors after the graph contract is stable.
+    // Planned(html-assets): image transforms (for example WebP conversion).
+    // Planned(html-assets): hashed output names and URL rewrite support.
+    // Planned(html-assets): pluggable asset processors after graph contract stabilization.
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

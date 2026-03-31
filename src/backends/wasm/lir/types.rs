@@ -31,7 +31,7 @@ pub(crate) struct WasmLirSignature {
 pub(crate) enum WasmAbiType {
     I32,
     I64,
-    #[allow(dead_code)] // todo
+    #[allow(dead_code)] // Planned: f32 ABI lanes for future lowering coverage.
     F32,
     F64,
     Handle,
@@ -63,9 +63,9 @@ pub(crate) enum WasmLocalRole {
     /// Runtime value/string handle.
     ValueHandle,
     /// Reserved for phase-2 static pointer materialization.
-    #[allow(dead_code)] // todo
+    #[allow(dead_code)] // Planned: locals that hold static-data pointers.
     StaticPtr,
     /// Reserved for phase-2 static length materialization.
-    #[allow(dead_code)] // todo
+    #[allow(dead_code)] // Planned: locals that hold static-data lengths.
     Length,
 }

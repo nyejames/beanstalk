@@ -1,3 +1,8 @@
+//! Collection literal parsing helpers.
+//!
+//! WHAT: parses `{...}` literals into `ExpressionKind::Collection` during AST construction.
+//! WHY: collection parsing must share the normal expression parser for item type-checking.
+
 use crate::compiler_frontend::ast::ast::ScopeContext;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
@@ -8,9 +13,7 @@ use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::return_syntax_error;
 
-// This is a dynamic array of one data type
-// TODO - look through and update / test this code as a lot has changed
-// TODO: string keys to make it a map
+/// Parse a collection literal with homogeneous item expressions.
 pub fn new_collection(
     token_stream: &mut FileTokens,
     collection_type: &DataType,
@@ -19,6 +22,7 @@ pub fn new_collection(
     string_table: &mut StringTable,
 ) -> Result<Expression, CompilerError> {
     let mut items: Vec<Expression> = Vec::new();
+    let mut consumed_close_curly = false;
 
     // Should always start with the current token being an open curly brace,
     // So skip to the first value
@@ -29,6 +33,7 @@ pub fn new_collection(
     while token_stream.index < token_stream.length {
         match token_stream.current_token_kind() {
             TokenKind::CloseCurly => {
+                consumed_close_curly = true;
                 break;
             }
 
@@ -73,9 +78,20 @@ pub fn new_collection(
         }
     }
 
+    if !consumed_close_curly {
+        return_syntax_error!(
+            "Unterminated collection literal. Expected '}' before end of expression.",
+            token_stream.current_location()
+        )
+    }
+
     Ok(Expression::collection(
         items,
         token_stream.current_location(),
         ownership.to_owned(),
     ))
 }
+
+#[cfg(test)]
+#[path = "tests/collections_tests.rs"]
+mod collections_tests;

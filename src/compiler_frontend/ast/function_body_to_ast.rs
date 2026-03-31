@@ -771,8 +771,9 @@ pub fn function_body_to_ast(
                     )
                 }
 
-                // TODO: check for existing top level template declaration,
-                // If it already exists in this context, then concat it rather than creating a new one
+                // Each top-level template statement is emitted as a standalone declaration.
+                // `top_level_templates` later lifts and orders these declarations when synthesizing
+                // start fragments, so this stage intentionally preserves one declaration per template.
                 let template = Template::new(token_stream, &context, vec![], string_table)?;
                 let expr = Expression::template(template, Ownership::MutableOwned);
 

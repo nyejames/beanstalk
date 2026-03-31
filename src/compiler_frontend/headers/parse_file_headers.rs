@@ -63,7 +63,7 @@ pub enum TopLevelTemplateKind {
     RuntimeTemplate,
 }
 
-#[allow(dead_code)] // todo
+#[allow(dead_code)] // Planned: `Choice` headers are reserved for tagged-union syntax.
 #[derive(Clone, Debug)]
 pub enum HeaderKind {
     Function { signature: FunctionSignature },
@@ -84,7 +84,7 @@ pub enum HeaderKind {
     StartFunction,
 }
 
-#[allow(dead_code)] // todo
+#[allow(dead_code)] // Planned: richer constant-header dependency diagnostics.
 #[derive(Clone, Debug)]
 pub struct ConstantHeaderMetadata {
     pub declaration_syntax: DeclarationSyntax,
@@ -93,7 +93,7 @@ pub struct ConstantHeaderMetadata {
     pub symbol_dependencies: HashSet<InternedPath>,
 }
 
-#[allow(dead_code)] // todo
+#[allow(dead_code)] // Planned: struct default-value dependency diagnostics.
 #[derive(Clone, Debug)]
 pub struct StructHeaderMetadata {
     pub default_value_dependencies: HashSet<InternedPath>,

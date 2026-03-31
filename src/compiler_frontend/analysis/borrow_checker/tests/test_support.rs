@@ -13,7 +13,11 @@ use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::host_functions::{
-    HostAbiType, HostAccessKind, HostFunctionDef, HostParameter, HostRegistry, HostReturnAlias,
+    HostRegistry,
+    test_support::{
+        TestHostAbiType as HostAbiType, TestHostAccessKind as HostAccessKind,
+        TestHostReturnAlias as HostReturnAlias, register_test_host_function,
+    },
 };
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
@@ -148,19 +152,9 @@ pub(crate) fn register_host_function(
 ) {
     let parameters = param_access
         .into_iter()
-        .map(|access_kind| HostParameter {
-            language_type: DataType::Int,
-            access_kind,
-        })
+        .map(|access_kind| (DataType::Int, access_kind))
         .collect::<Vec<_>>();
-
-    registry
-        .register_function(HostFunctionDef {
-            name,
-            parameters,
-            return_type,
-            return_alias,
-        })
+    register_test_host_function(registry, name, parameters, return_alias, return_type)
         .expect("host function registration should succeed");
 }
 

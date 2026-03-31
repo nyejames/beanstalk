@@ -401,7 +401,10 @@ pub fn new_parameter(
         | TokenKind::Eof
         | TokenKind::Newline
         | TokenKind::TypeParameterBracket => {
-            ast_log!("Created new parameter of type: ", data_type);
+            ast_log!(
+                "Created new parameter of type: ",
+                data_type.display_with_table(string_table)
+            );
             return Ok(Declaration {
                 id: full_name,
                 value: Expression::new(
@@ -447,7 +450,7 @@ pub fn new_parameter(
         "Created new ",
         #ownership,
         " variable of type: ",
-        data_type
+        data_type.display_with_table(string_table)
     );
 
     Ok(Declaration {

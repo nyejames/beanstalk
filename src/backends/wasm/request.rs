@@ -58,7 +58,7 @@ pub(crate) enum WasmCfgLoweringStrategy {
     #[default]
     DispatcherLoop,
     /// Reserved for future direct structured lowering (if/else/loop region construction).
-    #[allow(dead_code)] // todo
+    #[allow(dead_code)] // Planned: direct structured CFG lowering.
     Structured,
 }
 
