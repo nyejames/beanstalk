@@ -5,8 +5,8 @@ use std::path::{Path, PathBuf};
 
 #[test]
 fn wasm_root_page_colocates_artifacts_at_root() {
-    let plan = plan_wasm_output_from_logical_html_path(Path::new("index.html"))
-        .expect("should plan");
+    let plan =
+        plan_wasm_output_from_logical_html_path(Path::new("index.html")).expect("should plan");
     assert_eq!(plan.logical_html_path, PathBuf::from("index.html"));
     assert_eq!(plan.html_path, PathBuf::from("index.html"));
     assert_eq!(plan.js_path, Some(PathBuf::from("page.js")));

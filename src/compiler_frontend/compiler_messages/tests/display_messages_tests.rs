@@ -225,6 +225,27 @@ fn formatted_warning_uses_resolved_source_file_path_for_header_scopes() {
 }
 
 #[test]
+fn resolve_source_file_path_normalizes_canonical_windows_paths() {
+    let root: PathBuf = temp_dir("resolve_normalize");
+    let source_file = root.join("main.bst");
+    fs::write(&source_file, "#page = []").expect("should write source file");
+
+    let mut string_table = StringTable::new();
+    let interned = InternedPath::from_path_buf(&source_file, &mut string_table);
+
+    let resolved = resolve_source_file_path(&interned, &string_table);
+    let expected = normalize_path(&fs::canonicalize(&source_file).expect("should canonicalize"));
+
+    assert_eq!(
+        resolved, expected,
+        "resolve_source_file_path should return a normalized canonical path \
+         (no Windows verbatim prefix)"
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
 fn terse_messages_emit_single_line_records_without_ascii_formatting() {
     let root: PathBuf = temp_dir("terse_messages");
     let source_file = root.join("main.bst");

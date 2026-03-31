@@ -11,6 +11,7 @@ use crate::build_system::output_cleanup::{
     BuilderKind, ManifestLimitedSafeModeReason, ManifestLoadResult,
 };
 use crate::compiler_frontend::Flag;
+use crate::compiler_frontend::basic_utility_functions::normalize_path;
 use crate::compiler_frontend::compiler_errors::{
     CompilerError, CompilerMessages, ErrorType, SourceLocation,
 };
@@ -40,9 +41,12 @@ struct CurrentDirGuard {
 
 impl CurrentDirGuard {
     fn set_to(path: &PathBuf) -> Self {
+        // Intentionally recover from a poisoned mutex. This lock only serializes cwd-mutating
+        // tests — it does not protect shared semantic state. Recovering here prevents one
+        // panicking test from cascading PoisonError into every subsequent cwd-mutating test.
         let lock = current_dir_test_lock()
             .lock()
-            .expect("current-dir test lock should not be poisoned");
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let previous = std::env::current_dir().expect("current dir should resolve");
         std::env::set_current_dir(path).expect("should change current directory for test");
         Self {
@@ -642,14 +646,18 @@ fn build_project_keeps_one_shared_string_table_for_multi_module_diagnostics() {
             .location
             .scope
             .to_path_buf(&messages.string_table),
-        fs::canonicalize(src_dir.join("#page.bst")).expect("homepage should canonicalize")
+        normalize_path(
+            &fs::canonicalize(src_dir.join("#page.bst")).expect("homepage should canonicalize")
+        )
     );
     assert_eq!(
         messages.warnings[0]
             .location
             .scope
             .to_path_buf(&messages.string_table),
-        fs::canonicalize(docs_dir.join("#page.bst")).expect("docs page should canonicalize")
+        normalize_path(
+            &fs::canonicalize(docs_dir.join("#page.bst")).expect("docs page should canonicalize")
+        )
     );
 
     fs::remove_dir_all(&root).expect("should remove temp dir");
@@ -681,7 +689,9 @@ fn build_project_preserves_string_table_for_frontend_signature_diagnostics() {
         );
         assert_eq!(
             resolve_source_file_path(&messages.errors[0].location.scope, &messages.string_table),
-            fs::canonicalize(root.join("main.bst")).expect("main file should canonicalize")
+            normalize_path(
+                &fs::canonicalize(root.join("main.bst")).expect("main file should canonicalize")
+            )
         );
     }
 
@@ -2592,6 +2602,32 @@ fn write_build_manifest_produces_sorted_v2_output() {
             "z/page.js",
         ]
     );
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
+fn current_dir_guard_recovers_after_mutex_poisoning() {
+    let root = temp_dir("poison_recovery");
+    fs::create_dir_all(&root).expect("should create temp root");
+
+    // Intentionally poison the cwd mutex by panicking while holding the guard.
+    let panic_result = std::panic::catch_unwind(|| {
+        let _guard = CurrentDirGuard::set_to(&root);
+        panic!("deliberate panic to poison the cwd mutex");
+    });
+    assert!(
+        panic_result.is_err(),
+        "catch_unwind should capture the panic"
+    );
+
+    // A subsequent guard acquisition must succeed despite the poisoned mutex.
+    let guard = CurrentDirGuard::set_to(&root);
+    let current = fs::canonicalize(std::env::current_dir().expect("current dir should resolve"))
+        .expect("current dir should canonicalize");
+    let expected = fs::canonicalize(&root).expect("temp root should canonicalize");
+    assert_eq!(current, expected);
+    drop(guard);
 
     fs::remove_dir_all(&root).expect("should remove temp dir");
 }
