@@ -31,16 +31,15 @@ pub(crate) struct HtmlRouteOutputPlan {
     pub wasm_path: Option<PathBuf>,
 }
 
-/// Build an output plan for one entry file in HTML+Wasm mode.
+/// Build an output plan for one route in HTML+Wasm mode from an already-derived logical HTML path.
 ///
-/// WHY: Wasm builds colocate JS and Wasm alongside `index.html` under a per-route folder.
-pub(crate) fn plan_wasm_output(
-    entry_point: &Path,
-    entry_root: Option<&Path>,
-    string_table: &mut StringTable,
+/// WHAT: colocates JS bootstrap and Wasm binary alongside `index.html` under the route folder.
+/// WHY: the HTML project builder derives the canonical page route once via `derive_logical_html_path`.
+///      This function must not re-derive routes — it only plans colocated artifact placement.
+pub(crate) fn plan_wasm_output_from_logical_html_path(
+    logical_html_path: &Path,
 ) -> Result<HtmlRouteOutputPlan, CompilerError> {
-    let logical_html_path = derive_logical_html_path(entry_point, entry_root, string_table)?;
-    let route_base = derive_wasm_route_base(&logical_html_path)?;
+    let route_base = derive_wasm_route_base(logical_html_path)?;
 
     let (html_path, js_path, wasm_path) = if route_base.as_os_str().is_empty() {
         (
@@ -57,7 +56,7 @@ pub(crate) fn plan_wasm_output(
     };
 
     Ok(HtmlRouteOutputPlan {
-        logical_html_path,
+        logical_html_path: logical_html_path.to_path_buf(),
         html_path,
         js_path: Some(js_path),
         wasm_path: Some(wasm_path),

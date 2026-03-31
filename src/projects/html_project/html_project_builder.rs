@@ -69,6 +69,8 @@ impl BackendBuilder for HtmlProjectBuilder {
         let mut warnings = Vec::new();
 
         for (module_index, module) in modules.iter().enumerate() {
+            // Derive the canonical page route once. Both JS-only and HTML+Wasm output modes
+            // consume this same path — downstream code must not re-derive route semantics.
             let logical_html_output_path = html_output_path(
                 &module.entry_point,
                 entry_paths.resolved_entry_root.as_deref(),

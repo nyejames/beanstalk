@@ -348,6 +348,44 @@ fn wasm_mode_uses_per_page_folder_layout() {
 }
 
 #[test]
+fn wasm_directory_build_preserves_nested_routes() {
+    let root = temp_dir("wasm_directory_routes");
+    fs::create_dir_all(root.join("src/docs")).expect("should create docs dir");
+    fs::create_dir_all(root.join("src/blog")).expect("should create blog dir");
+    let entry_root = fs::canonicalize(root.join("src")).expect("entry root should resolve");
+
+    let builder = HtmlProjectBuilder::new();
+    let mut config = Config::new(root.clone());
+    config.entry_root = PathBuf::from("src");
+
+    let project = build_with_test_modules(
+        &builder,
+        vec![
+            entry_root.join("#page.bst"),
+            entry_root.join("docs").join("#page.bst"),
+            entry_root.join("blog").join("#404.bst"),
+        ],
+        &config,
+        &[Flag::HtmlWasm],
+    )
+    .expect("wasm directory build should succeed without duplicate output paths");
+
+    let output_paths = collect_output_paths(&project.output_files);
+    assert!(output_paths.contains(&PathBuf::from("index.html")));
+    assert!(output_paths.contains(&PathBuf::from("page.js")));
+    assert!(output_paths.contains(&PathBuf::from("page.wasm")));
+    assert!(output_paths.contains(&PathBuf::from("docs/index.html")));
+    assert!(output_paths.contains(&PathBuf::from("docs/page.js")));
+    assert!(output_paths.contains(&PathBuf::from("docs/page.wasm")));
+    assert!(output_paths.contains(&PathBuf::from("blog/404/index.html")));
+    assert!(output_paths.contains(&PathBuf::from("blog/404/page.js")));
+    assert!(output_paths.contains(&PathBuf::from("blog/404/page.wasm")));
+    assert_eq!(project.entry_page_rel, Some(PathBuf::from("index.html")));
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
 fn builder_rejects_invalid_origin_config() {
     let builder = HtmlProjectBuilder::new();
     let mut config = Config::new(PathBuf::from("."));

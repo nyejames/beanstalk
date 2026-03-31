@@ -15,7 +15,7 @@ use crate::compiler_frontend::string_interning::StringTable;
 use crate::projects::html_project::document_config::HtmlDocumentConfig;
 use crate::projects::html_project::document_shell::render_html_document_shell;
 use crate::projects::html_project::js_path::{RuntimeSlotMount, render_entry_fragments};
-use crate::projects::html_project::output_plan::plan_wasm_output;
+use crate::projects::html_project::output_plan::plan_wasm_output_from_logical_html_path;
 use crate::projects::html_project::page_metadata::extract_html_page_metadata;
 use crate::projects::html_project::wasm::export_plan::{
     HtmlWasmExportPlan, build_html_wasm_export_plan,
@@ -85,9 +85,10 @@ pub(crate) fn compile_html_module_wasm(
     document_config: &HtmlDocumentConfig,
     release_build: bool,
 ) -> Result<CompiledHtmlWasmModule, CompilerMessages> {
-    // Derive per-route artifact paths from the logical HTML path using the canonical planner.
-    // WHY: plan_wasm_output owns the filesystem layout policy for all Wasm routes.
-    let output_plan = plan_wasm_output(logical_html_output_path, None, string_table)
+    // Derive per-route artifact paths from the already-derived logical HTML path.
+    // WHY: the builder has already computed the canonical route via derive_logical_html_path.
+    //      This planner only colocates JS/Wasm artifacts beside the HTML output — no re-derivation.
+    let output_plan = plan_wasm_output_from_logical_html_path(logical_html_output_path)
         .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;
 
     let js_lowering_config = JsLoweringConfig::standard_html(release_build);

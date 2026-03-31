@@ -100,3 +100,39 @@ fn wasm_export_plan_wires_required_helper_exports() {
     assert!(helper.export_str_len);
     assert!(helper.export_release);
 }
+
+#[test]
+fn compile_html_module_wasm_preserves_nested_logical_html_route() {
+    let mut string_table = StringTable::new();
+    let module = create_test_module(PathBuf::from("docs/#page.bst"), &mut string_table);
+
+    let compiled = compile_html_module_wasm(
+        &module.hir,
+        &module.borrow_analysis,
+        &mut string_table,
+        Path::new("docs/index.html"),
+        "",
+        &HtmlDocumentConfig::default(),
+        false,
+    )
+    .expect("wasm mode compilation should succeed for nested route");
+
+    let output_paths: Vec<PathBuf> = compiled
+        .output_files
+        .iter()
+        .map(|file| file.relative_output_path().to_path_buf())
+        .collect();
+    assert!(
+        output_paths.contains(&PathBuf::from("docs/index.html")),
+        "nested HTML route should be preserved, got: {output_paths:?}"
+    );
+    assert!(
+        output_paths.contains(&PathBuf::from("docs/page.js")),
+        "nested JS artifact should be colocated, got: {output_paths:?}"
+    );
+    assert!(
+        output_paths.contains(&PathBuf::from("docs/page.wasm")),
+        "nested Wasm artifact should be colocated, got: {output_paths:?}"
+    );
+    assert_eq!(compiled.html_output_path, PathBuf::from("docs/index.html"));
+}
