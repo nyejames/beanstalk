@@ -10,7 +10,8 @@ use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::function_body_to_ast::function_body_to_ast;
 use crate::compiler_frontend::ast::import_bindings::{
-    ConstantHeaderParseContext, parse_constant_header_declaration, resolve_file_import_bindings,
+    ConstantHeaderParseContext, FileImportBindings, parse_constant_header_declaration,
+    resolve_file_import_bindings,
 };
 use crate::compiler_frontend::ast::receiver_methods::build_receiver_method_catalog;
 use crate::compiler_frontend::ast::statements::functions::{FunctionReturn, FunctionSignature};
@@ -81,14 +82,6 @@ pub struct Ast {
     pub warnings: Vec<CompilerWarning>,
 }
 
-fn ast_error_messages(
-    error: CompilerError,
-    warnings: &[CompilerWarning],
-    string_table: &StringTable,
-) -> CompilerMessages {
-    CompilerMessages::from_error_with_warnings(error, warnings.to_vec(), string_table)
-}
-
 fn canonical_source_file_for_header(
     header: &Header,
     string_table: &mut StringTable,
@@ -101,70 +94,134 @@ fn canonical_source_file_for_header(
         .unwrap_or_else(|| header.source_file.to_owned())
 }
 
-impl Ast {
-    pub fn new(
-        sorted_headers: Vec<Header>,
-        top_level_template_items: Vec<TopLevelTemplateItem>,
-        host_registry: &HostRegistry,
-        style_directives: &StyleDirectiveRegistry,
-        string_table: &mut StringTable,
-        entry_dir: InternedPath,
-        build_profile: FrontendBuildProfile,
-        project_path_resolver: Option<ProjectPathResolver>,
-        path_format_config: PathStringFormatConfig,
-    ) -> Result<Ast, CompilerMessages> {
-        // Each file will be combined into a single AST.
-        let mut ast: Vec<AstNode> =
-            Vec::with_capacity(sorted_headers.len() * settings::TOKEN_TO_NODE_RATIO);
-        let external_exports: Vec<ModuleExport> = Vec::new();
-        let mut warnings: Vec<CompilerWarning> = Vec::new();
-        let mut const_templates_by_path: FxHashMap<InternedPath, StringId> = FxHashMap::default();
-        let mut module_constants: Vec<Declaration> = Vec::new();
-        let mut importable_symbol_exported: FxHashMap<InternedPath, bool> = FxHashMap::default();
-        let mut file_imports_by_source: FxHashMap<InternedPath, Vec<FileImport>> =
-            FxHashMap::default();
-        let mut declared_paths_by_file: FxHashMap<InternedPath, FxHashSet<InternedPath>> =
-            FxHashMap::default();
-        let mut declared_names_by_file: FxHashMap<InternedPath, FxHashSet<StringId>> =
-            FxHashMap::default();
-        let mut module_file_paths: FxHashSet<InternedPath> = FxHashSet::default();
-        let mut canonical_source_by_symbol_path: FxHashMap<InternedPath, InternedPath> =
-            FxHashMap::default();
-        let mut resolved_struct_fields_by_path: FxHashMap<InternedPath, Vec<Declaration>> =
-            FxHashMap::default();
-        let mut struct_source_by_path: FxHashMap<InternedPath, InternedPath> = FxHashMap::default();
-        let mut resolved_function_signatures_by_path: FxHashMap<
-            InternedPath,
-            ResolvedFunctionSignature,
-        > = FxHashMap::default();
-        let rendered_path_usages = Rc::new(RefCell::new(Vec::new()));
-        let Some(project_path_resolver_for_folding) = project_path_resolver.as_ref() else {
-            return Err(ast_error_messages(
-                CompilerError::compiler_error(
-                    "AST construction requires a project path resolver for template folding and path coercion.",
-                ),
-                &warnings,
-                string_table,
-            ));
-        };
+// ---------------------------------------------------------------------------
+// AstBuildState: mutable accumulation state for AST construction
+// ---------------------------------------------------------------------------
 
-        // Collect every module declaration once.
-        // WHY: Resolution stores fully qualified symbol paths.
-        // Each file context later applies its own visibility filter instead of rebuilding declaration tables.
-        let mut declarations: Vec<Declaration> = Vec::new();
-        for header in &sorted_headers {
-            module_file_paths.insert(header.source_file.to_owned());
-            canonical_source_by_symbol_path.insert(
+/// Mutable accumulation state for AST construction across all passes.
+/// WHY: bundles the local maps that `Ast::new()` manages so each pass can be extracted into
+/// a focused method without repeating large parameter lists.
+struct AstBuildState<'a> {
+    // Immutable configuration shared across passes.
+    host_registry: &'a HostRegistry,
+    style_directives: &'a StyleDirectiveRegistry,
+    build_profile: FrontendBuildProfile,
+    project_path_resolver: &'a Option<ProjectPathResolver>,
+    path_format_config: &'a PathStringFormatConfig,
+
+    // Mutable output state.
+    ast: Vec<AstNode>,
+    warnings: Vec<CompilerWarning>,
+    declarations: Vec<Declaration>,
+    module_constants: Vec<Declaration>,
+    const_templates_by_path: FxHashMap<InternedPath, StringId>,
+    rendered_path_usages: Rc<RefCell<Vec<RenderedPathUsage>>>,
+
+    // Symbol registration tables (populated in pass 1).
+    importable_symbol_exported: FxHashMap<InternedPath, bool>,
+    file_imports_by_source: FxHashMap<InternedPath, Vec<FileImport>>,
+    declared_paths_by_file: FxHashMap<InternedPath, FxHashSet<InternedPath>>,
+    declared_names_by_file: FxHashMap<InternedPath, FxHashSet<StringId>>,
+    module_file_paths: FxHashSet<InternedPath>,
+    canonical_source_by_symbol_path: FxHashMap<InternedPath, InternedPath>,
+
+    // Type resolution tables (populated in pass 2).
+    resolved_struct_fields_by_path: FxHashMap<InternedPath, Vec<Declaration>>,
+    struct_source_by_path: FxHashMap<InternedPath, InternedPath>,
+    resolved_function_signatures_by_path: FxHashMap<InternedPath, ResolvedFunctionSignature>,
+}
+
+impl<'a> AstBuildState<'a> {
+    fn new(
+        host_registry: &'a HostRegistry,
+        style_directives: &'a StyleDirectiveRegistry,
+        build_profile: FrontendBuildProfile,
+        project_path_resolver: &'a Option<ProjectPathResolver>,
+        path_format_config: &'a PathStringFormatConfig,
+        header_count: usize,
+    ) -> Self {
+        Self {
+            host_registry,
+            style_directives,
+            build_profile,
+            project_path_resolver,
+            path_format_config,
+            ast: Vec::with_capacity(header_count * settings::TOKEN_TO_NODE_RATIO),
+            warnings: Vec::new(),
+            declarations: Vec::new(),
+            module_constants: Vec::new(),
+            const_templates_by_path: FxHashMap::default(),
+            rendered_path_usages: Rc::new(RefCell::new(Vec::new())),
+            importable_symbol_exported: FxHashMap::default(),
+            file_imports_by_source: FxHashMap::default(),
+            declared_paths_by_file: FxHashMap::default(),
+            declared_names_by_file: FxHashMap::default(),
+            module_file_paths: FxHashSet::default(),
+            canonical_source_by_symbol_path: FxHashMap::default(),
+            resolved_struct_fields_by_path: FxHashMap::default(),
+            struct_source_by_path: FxHashMap::default(),
+            resolved_function_signatures_by_path: FxHashMap::default(),
+        }
+    }
+
+    fn error_messages(
+        &self,
+        error: CompilerError,
+        string_table: &StringTable,
+    ) -> CompilerMessages {
+        CompilerMessages::from_error_with_warnings(error, self.warnings.clone(), string_table)
+    }
+
+    /// Registers a symbol into the module-wide declared-path and declared-name tables.
+    /// When `exported` is `Some`, also records the symbol's export visibility for import gates.
+    /// WHY: this pattern was repeated for every importable header variant (Function, Struct,
+    /// Constant, StartFunction). Centralising it prevents a missed insert from silently
+    /// breaking visibility.
+    fn register_declared_symbol(
+        &mut self,
+        symbol_path: &InternedPath,
+        source_file: &InternedPath,
+        exported: Option<bool>,
+    ) {
+        if let Some(is_exported) = exported {
+            self.importable_symbol_exported
+                .insert(symbol_path.to_owned(), is_exported);
+        }
+        self.declared_paths_by_file
+            .entry(source_file.to_owned())
+            .or_default()
+            .insert(symbol_path.to_owned());
+        if let Some(name) = symbol_path.name() {
+            self.declared_names_by_file
+                .entry(source_file.to_owned())
+                .or_default()
+                .insert(name);
+        }
+    }
+
+    /// Pass 1: Collect every module declaration once.
+    /// WHY: resolution stores fully qualified symbol paths.
+    /// Each file context later applies its own visibility filter instead of rebuilding
+    /// declaration tables.
+    fn collect_declarations(
+        &mut self,
+        sorted_headers: &[Header],
+        string_table: &mut StringTable,
+    ) {
+        for header in sorted_headers {
+            self.module_file_paths
+                .insert(header.source_file.to_owned());
+            self.canonical_source_by_symbol_path.insert(
                 header.tokens.src_path.to_owned(),
                 canonical_source_file_for_header(header, string_table),
             );
-            file_imports_by_source
+            self.file_imports_by_source
                 .entry(header.source_file.to_owned())
                 .or_insert_with(|| header.file_imports.to_owned());
 
             match &header.kind {
                 HeaderKind::Function { signature } => {
-                    declarations.push(Declaration {
+                    self.declarations.push(Declaration {
                         id: header.tokens.src_path.to_owned(),
                         value: Expression::new(
                             ExpressionKind::None,
@@ -173,38 +230,24 @@ impl Ast {
                             Ownership::ImmutableReference,
                         ),
                     });
-                    importable_symbol_exported
-                        .insert(header.tokens.src_path.to_owned(), header.exported);
-                    declared_paths_by_file
-                        .entry(header.source_file.to_owned())
-                        .or_default()
-                        .insert(header.tokens.src_path.to_owned());
-                    if let Some(name) = header.tokens.src_path.name() {
-                        declared_names_by_file
-                            .entry(header.source_file.to_owned())
-                            .or_default()
-                            .insert(name);
-                    }
+                    self.register_declared_symbol(
+                        &header.tokens.src_path,
+                        &header.source_file,
+                        Some(header.exported),
+                    );
                 }
                 HeaderKind::Struct { .. } => {
-                    importable_symbol_exported
-                        .insert(header.tokens.src_path.to_owned(), header.exported);
-                    declared_paths_by_file
-                        .entry(header.source_file.to_owned())
-                        .or_default()
-                        .insert(header.tokens.src_path.to_owned());
-                    if let Some(name) = header.tokens.src_path.name() {
-                        declared_names_by_file
-                            .entry(header.source_file.to_owned())
-                            .or_default()
-                            .insert(name);
-                    }
+                    self.register_declared_symbol(
+                        &header.tokens.src_path,
+                        &header.source_file,
+                        Some(header.exported),
+                    );
                 }
                 HeaderKind::StartFunction => {
                     let start_name = header
                         .source_file
                         .join_str(IMPLICIT_START_FUNC_NAME, string_table);
-                    declarations.push(Declaration {
+                    self.declarations.push(Declaration {
                         id: start_name.to_owned(),
                         value: Expression::new(
                             ExpressionKind::None,
@@ -219,54 +262,48 @@ impl Ast {
                             Ownership::ImmutableReference,
                         ),
                     });
-                    declared_paths_by_file
-                        .entry(header.source_file.to_owned())
-                        .or_default()
-                        .insert(start_name.to_owned());
-                    if let Some(name) = start_name.name() {
-                        declared_names_by_file
-                            .entry(header.source_file.to_owned())
-                            .or_default()
-                            .insert(name);
-                    }
+                    self.register_declared_symbol(&start_name, &header.source_file, None);
                 }
                 HeaderKind::Constant { .. } => {
-                    importable_symbol_exported
-                        .insert(header.tokens.src_path.to_owned(), header.exported);
-                    declared_paths_by_file
-                        .entry(header.source_file.to_owned())
-                        .or_default()
-                        .insert(header.tokens.src_path.to_owned());
-                    if let Some(name) = header.tokens.src_path.name() {
-                        declared_names_by_file
-                            .entry(header.source_file.to_owned())
-                            .or_default()
-                            .insert(name);
-                    }
+                    self.register_declared_symbol(
+                        &header.tokens.src_path,
+                        &header.source_file,
+                        Some(header.exported),
+                    );
                 }
                 _ => {}
             }
         }
+    }
 
-        // Build per-source-file import visibility and start-function aliases.
-        // WHY: imports are file-scoped rules, but declarations are module-scoped identities.
-        let file_import_bindings = match resolve_file_import_bindings(
-            &file_imports_by_source,
-            &module_file_paths,
-            &importable_symbol_exported,
-            &declared_paths_by_file,
-            &declared_names_by_file,
-            host_registry,
+    /// Build per-source-file import visibility and start-function aliases.
+    /// WHY: imports are file-scoped rules, but declarations are module-scoped identities.
+    fn resolve_import_bindings(
+        &self,
+        string_table: &mut StringTable,
+    ) -> Result<FxHashMap<InternedPath, FileImportBindings>, CompilerMessages> {
+        resolve_file_import_bindings(
+            &self.file_imports_by_source,
+            &self.module_file_paths,
+            &self.importable_symbol_exported,
+            &self.declared_paths_by_file,
+            &self.declared_names_by_file,
+            self.host_registry,
             string_table,
-        ) {
-            Ok(bindings) => bindings,
-            Err(error) => return Err(ast_error_messages(error, &warnings, string_table)),
-        };
+        )
+        .map_err(|error| self.error_messages(error, string_table))
+    }
 
-        // Resolve constants and structs in dependency order with file-scoped visibility.
-        // Struct defaults require constant-context parsing and import gates, so defaults can
-        // consume constants deterministically.
-        for header in &sorted_headers {
+    /// Pass 2: Resolve constants and struct field types in dependency order.
+    /// WHY: struct defaults require constant-context parsing and import gates, so defaults
+    /// can consume constants deterministically.
+    fn resolve_types(
+        &mut self,
+        sorted_headers: &[Header],
+        file_import_bindings: &FxHashMap<InternedPath, FileImportBindings>,
+        string_table: &mut StringTable,
+    ) -> Result<(), CompilerMessages> {
+        for header in sorted_headers {
             let bindings = file_import_bindings
                 .get(&header.source_file)
                 .cloned()
@@ -275,81 +312,69 @@ impl Ast {
 
             match &header.kind {
                 HeaderKind::Constant { .. } => {
-                    let declaration = match parse_constant_header_declaration(
+                    let declaration = parse_constant_header_declaration(
                         header,
                         ConstantHeaderParseContext {
-                            declarations: &declarations,
+                            declarations: &self.declarations,
                             visible_declaration_ids: &bindings.visible_symbol_paths,
                             start_import_aliases: &bindings.start_aliases,
-                            host_registry,
-                            style_directives,
-                            project_path_resolver: project_path_resolver.clone(),
-                            path_format_config: path_format_config.clone(),
-                            build_profile,
-                            warnings: &mut warnings,
-                            rendered_path_usages: rendered_path_usages.clone(),
+                            host_registry: self.host_registry,
+                            style_directives: self.style_directives,
+                            project_path_resolver: self.project_path_resolver.clone(),
+                            path_format_config: self.path_format_config.clone(),
+                            build_profile: self.build_profile,
+                            warnings: &mut self.warnings,
+                            rendered_path_usages: self.rendered_path_usages.clone(),
                             string_table,
                         },
-                    ) {
-                        Ok(declaration) => declaration,
-                        Err(error) => {
-                            return Err(ast_error_messages(error, &warnings, string_table));
-                        }
-                    };
+                    )
+                    .map_err(|error| self.error_messages(error, string_table))?;
 
-                    declarations.push(declaration.clone());
-                    module_constants.push(declaration);
+                    self.declarations.push(declaration.clone());
+                    self.module_constants.push(declaration);
                 }
                 HeaderKind::Struct { .. } => {
                     let context = ScopeContext::new(
                         ContextKind::Constant,
                         header.tokens.src_path.to_owned(),
-                        &declarations,
-                        host_registry.clone(),
+                        &self.declarations,
+                        self.host_registry.clone(),
                         vec![],
                     )
-                    .with_style_directives(style_directives)
-                    .with_build_profile(build_profile)
+                    .with_style_directives(self.style_directives)
+                    .with_build_profile(self.build_profile)
                     .with_visible_declarations(bindings.visible_symbol_paths.to_owned())
                     .with_start_import_aliases(bindings.start_aliases.to_owned())
-                    .with_project_path_resolver(project_path_resolver.clone())
-                    .with_path_format_config(path_format_config.clone())
-                    .with_rendered_path_usage_sink(rendered_path_usages.clone())
+                    .with_project_path_resolver(self.project_path_resolver.clone())
+                    .with_path_format_config(self.path_format_config.clone())
+                    .with_rendered_path_usage_sink(self.rendered_path_usages.clone())
                     .with_source_file_scope(source_file_scope.to_owned());
 
                     let mut struct_tokens = header.tokens.to_owned();
                     let fields_result =
                         create_struct_definition(&mut struct_tokens, &context, string_table);
-                    warnings.extend(context.take_emitted_warnings());
+                    self.warnings.extend(context.take_emitted_warnings());
 
-                    let parsed_fields = match fields_result {
-                        Ok(fields) => fields,
-                        Err(error) => {
-                            return Err(ast_error_messages(error, &warnings, string_table));
-                        }
-                    };
+                    let parsed_fields = fields_result
+                        .map_err(|error| self.error_messages(error, string_table))?;
 
-                    let fields = match resolve_struct_field_types(
+                    let fields = resolve_struct_field_types(
                         &header.tokens.src_path,
                         &parsed_fields,
-                        &declarations,
+                        &self.declarations,
                         Some(&bindings.visible_symbol_paths),
                         string_table,
-                    ) {
-                        Ok(fields) => fields,
-                        Err(error) => {
-                            return Err(ast_error_messages(error, &warnings, string_table));
-                        }
-                    };
+                    )
+                    .map_err(|error| self.error_messages(error, string_table))?;
 
-                    resolved_struct_fields_by_path
+                    self.resolved_struct_fields_by_path
                         .insert(header.tokens.src_path.to_owned(), fields.to_owned());
-                    struct_source_by_path.insert(
+                    self.struct_source_by_path.insert(
                         header.tokens.src_path.to_owned(),
                         source_file_scope.to_owned(),
                     );
 
-                    declarations.push(Declaration {
+                    self.declarations.push(Declaration {
                         id: header.tokens.src_path.to_owned(),
                         value: Expression::new(
                             ExpressionKind::None,
@@ -367,16 +392,20 @@ impl Ast {
             }
         }
 
-        if let Err(error) =
-            validate_no_recursive_runtime_structs(&resolved_struct_fields_by_path, string_table)
-        {
-            return Err(ast_error_messages(error, &warnings, string_table));
-        }
+        validate_no_recursive_runtime_structs(&self.resolved_struct_fields_by_path, string_table)
+            .map_err(|error| self.error_messages(error, string_table))
+    }
 
-        // Resolve function signatures only after struct declarations are available in the shared
-        // declaration table. This late resolution lets signatures use named struct types and
-        // receiver syntax without adding a second nominal-type system just for headers.
-        for header in &sorted_headers {
+    /// Resolve function signatures after struct declarations are available.
+    /// WHY: late resolution lets signatures use named struct types and receiver syntax
+    /// without adding a second nominal-type system just for headers.
+    fn resolve_function_signatures(
+        &mut self,
+        sorted_headers: &[Header],
+        file_import_bindings: &FxHashMap<InternedPath, FileImportBindings>,
+        string_table: &mut StringTable,
+    ) -> Result<(), CompilerMessages> {
+        for header in sorted_headers {
             let HeaderKind::Function { signature } = &header.kind else {
                 continue;
             };
@@ -385,26 +414,24 @@ impl Ast {
                 .get(&header.source_file)
                 .cloned()
                 .unwrap_or_default();
-            let resolved_signature = match resolve_function_signature(
+            let resolved_signature = resolve_function_signature(
                 &header.tokens.src_path,
                 signature,
-                &declarations,
+                &self.declarations,
                 Some(&bindings.visible_symbol_paths),
                 string_table,
-            ) {
-                Ok(signature) => signature,
-                Err(error) => return Err(ast_error_messages(error, &warnings, string_table)),
-            };
+            )
+            .map_err(|error| self.error_messages(error, string_table))?;
 
-            let Some(function_declaration) = declarations
+            let Some(function_declaration) = self
+                .declarations
                 .iter_mut()
                 .find(|declaration| declaration.id == header.tokens.src_path)
             else {
-                return Err(ast_error_messages(
+                return Err(self.error_messages(
                     CompilerError::compiler_error(
                         "Function declaration was not registered before AST signature resolution.",
                     ),
-                    &warnings,
                     string_table,
                 ));
             };
@@ -413,22 +440,38 @@ impl Ast {
                 Box::new(resolved_signature.receiver.to_owned()),
                 resolved_signature.signature.to_owned(),
             );
-            resolved_function_signatures_by_path
+            self.resolved_function_signatures_by_path
                 .insert(header.tokens.src_path.to_owned(), resolved_signature);
         }
+        Ok(())
+    }
 
-        let receiver_methods = match build_receiver_method_catalog(
-            &sorted_headers,
-            &resolved_function_signatures_by_path,
-            &resolved_struct_fields_by_path,
-            &struct_source_by_path,
-            &canonical_source_by_symbol_path,
+    /// Build the receiver method catalog from resolved function signatures.
+    fn build_receiver_catalog(
+        &self,
+        sorted_headers: &[Header],
+        string_table: &mut StringTable,
+    ) -> Result<Rc<ReceiverMethodCatalog>, CompilerMessages> {
+        build_receiver_method_catalog(
+            sorted_headers,
+            &self.resolved_function_signatures_by_path,
+            &self.resolved_struct_fields_by_path,
+            &self.struct_source_by_path,
+            &self.canonical_source_by_symbol_path,
             string_table,
-        ) {
-            Ok(catalog) => Rc::new(catalog),
-            Err(error) => return Err(ast_error_messages(error, &warnings, string_table)),
-        };
+        )
+        .map(Rc::new)
+        .map_err(|error| self.error_messages(error, string_table))
+    }
 
+    /// Pass 3: Emit AST nodes for each header kind (functions, structs, templates).
+    fn emit_ast_nodes(
+        &mut self,
+        sorted_headers: Vec<Header>,
+        file_import_bindings: &FxHashMap<InternedPath, FileImportBindings>,
+        receiver_methods: &Rc<ReceiverMethodCatalog>,
+        string_table: &mut StringTable,
+    ) -> Result<(), CompilerMessages> {
         for header in sorted_headers {
             let bindings = file_import_bindings
                 .get(&header.source_file)
@@ -438,20 +481,20 @@ impl Ast {
 
             match header.kind {
                 HeaderKind::Function { signature: _ } => {
-                    let Some(resolved_signature) = resolved_function_signatures_by_path
+                    let Some(resolved_signature) = self
+                        .resolved_function_signatures_by_path
                         .get(&header.tokens.src_path)
                         .cloned()
                     else {
-                        return Err(ast_error_messages(
+                        return Err(self.error_messages(
                             CompilerError::compiler_error(
                                 "Function signature was not resolved before AST emission.",
                             ),
-                            &warnings,
                             string_table,
                         ));
                     };
 
-                    let mut function_declarations = declarations.to_owned();
+                    let mut function_declarations = self.declarations.to_owned();
                     function_declarations
                         .extend(resolved_signature.signature.parameters.to_owned());
                     let mut visible_declarations = bindings.visible_symbol_paths.to_owned();
@@ -464,16 +507,16 @@ impl Ast {
                         ContextKind::Function,
                         header.tokens.src_path.to_owned(),
                         &function_declarations,
-                        host_registry.clone(),
+                        self.host_registry.clone(),
                         resolved_signature.signature.return_data_types(),
                     )
-                    .with_style_directives(style_directives)
-                    .with_build_profile(build_profile)
+                    .with_style_directives(self.style_directives)
+                    .with_build_profile(self.build_profile)
                     .with_visible_declarations(visible_declarations)
                     .with_start_import_aliases(bindings.start_aliases.to_owned())
-                    .with_project_path_resolver(project_path_resolver.clone())
-                    .with_path_format_config(path_format_config.clone())
-                    .with_rendered_path_usage_sink(rendered_path_usages.clone())
+                    .with_project_path_resolver(self.project_path_resolver.clone())
+                    .with_path_format_config(self.path_format_config.clone())
+                    .with_rendered_path_usage_sink(self.rendered_path_usages.clone())
                     .with_receiver_methods(receiver_methods.clone())
                     .with_source_file_scope(source_file_scope.to_owned());
 
@@ -482,29 +525,24 @@ impl Ast {
                     let body_result = function_body_to_ast(
                         &mut token_stream,
                         context.to_owned(),
-                        &mut warnings,
+                        &mut self.warnings,
                         string_table,
                     );
-                    warnings.extend(context.take_emitted_warnings());
+                    self.warnings.extend(context.take_emitted_warnings());
 
-                    let body = match body_result {
-                        Ok(b) => b,
-                        Err(error) => {
-                            return Err(ast_error_messages(error, &warnings, string_table));
-                        }
-                    };
+                    let body = body_result
+                        .map_err(|error| self.error_messages(error, string_table))?;
 
-                    // Make the name from the header path.
                     // AST symbol IDs are stored as full InternedPath values and are unique
                     // module-wide, not only within a local scope.
-                    ast.push(AstNode {
+                    self.ast.push(AstNode {
                         kind: NodeKind::Function(
                             token_stream.src_path,
                             resolved_signature.signature,
                             body.to_owned(),
                         ),
                         location: header.name_location,
-                        scope: context.scope.clone(), // Preserve the full path in the scope field
+                        scope: context.scope.clone(),
                     });
                 }
 
@@ -512,17 +550,17 @@ impl Ast {
                     let context = ScopeContext::new(
                         ContextKind::Module,
                         header.tokens.src_path.to_owned(),
-                        &declarations,
-                        host_registry.clone(),
+                        &self.declarations,
+                        self.host_registry.clone(),
                         vec![],
                     )
-                    .with_style_directives(style_directives)
-                    .with_build_profile(build_profile)
+                    .with_style_directives(self.style_directives)
+                    .with_build_profile(self.build_profile)
                     .with_visible_declarations(bindings.visible_symbol_paths.to_owned())
                     .with_start_import_aliases(bindings.start_aliases.to_owned())
-                    .with_project_path_resolver(project_path_resolver.clone())
-                    .with_path_format_config(path_format_config.clone())
-                    .with_rendered_path_usage_sink(rendered_path_usages.clone())
+                    .with_project_path_resolver(self.project_path_resolver.clone())
+                    .with_path_format_config(self.path_format_config.clone())
+                    .with_rendered_path_usage_sink(self.rendered_path_usages.clone())
                     .with_receiver_methods(receiver_methods.clone())
                     .with_source_file_scope(source_file_scope.to_owned());
 
@@ -531,17 +569,13 @@ impl Ast {
                     let body_result = function_body_to_ast(
                         &mut token_stream,
                         context.to_owned(),
-                        &mut warnings,
+                        &mut self.warnings,
                         string_table,
                     );
-                    warnings.extend(context.take_emitted_warnings());
+                    self.warnings.extend(context.take_emitted_warnings());
 
-                    let mut body = match body_result {
-                        Ok(b) => b,
-                        Err(error) => {
-                            return Err(ast_error_messages(error, &warnings, string_table));
-                        }
-                    };
+                    let mut body = body_result
+                        .map_err(|error| self.error_messages(error, string_table))?;
 
                     // Add the automatic return statement for the start function
                     let empty_string = string_table.get_or_intern(String::new());
@@ -565,7 +599,7 @@ impl Ast {
                         returns: vec![FunctionReturn::Value(DataType::StringSlice)],
                     };
 
-                    ast.push(AstNode {
+                    self.ast.push(AstNode {
                         kind: NodeKind::Function(full_name, main_signature, body),
                         location: header.name_location,
                         scope: context.scope.clone(),
@@ -573,26 +607,23 @@ impl Ast {
                 }
 
                 HeaderKind::Struct { .. } => {
-                    let fields = match resolved_struct_fields_by_path
+                    let fields = self
+                        .resolved_struct_fields_by_path
                         .get(&header.tokens.src_path)
                         .cloned()
-                    {
-                        Some(fields) => fields,
-                        None => {
-                            return Err(ast_error_messages(
+                        .ok_or_else(|| {
+                            self.error_messages(
                                 CompilerError::compiler_error(
                                     "Struct fields were not resolved before AST emission.",
                                 ),
-                                &warnings,
                                 string_table,
-                            ));
-                        }
-                    };
+                            )
+                        })?;
 
-                    ast.push(AstNode {
-                        kind: NodeKind::StructDefinition(header.tokens.src_path.to_owned(), fields), // Use the simple name for identifier
+                    self.ast.push(AstNode {
+                        kind: NodeKind::StructDefinition(header.tokens.src_path.to_owned(), fields),
                         location: header.name_location,
-                        scope: header.tokens.src_path, // Preserve the full path in the scope field
+                        scope: header.tokens.src_path,
                     });
                 }
 
@@ -601,11 +632,10 @@ impl Ast {
                 }
 
                 HeaderKind::Choice => {
-                    return Err(ast_error_messages(
+                    return Err(self.error_messages(
                         CompilerError::compiler_error(
                             "Choice headers should be rejected during header parsing before AST construction.",
                         ),
-                        &warnings,
                         string_table,
                     ));
                 }
@@ -615,28 +645,24 @@ impl Ast {
                     let context = ScopeContext::new(
                         ContextKind::Constant,
                         template_tokens.src_path.to_owned(),
-                        &declarations,
-                        host_registry.clone(),
+                        &self.declarations,
+                        self.host_registry.clone(),
                         vec![],
                     )
-                    .with_style_directives(style_directives)
-                    .with_build_profile(build_profile)
+                    .with_style_directives(self.style_directives)
+                    .with_build_profile(self.build_profile)
                     .with_visible_declarations(bindings.visible_symbol_paths.to_owned())
                     .with_start_import_aliases(bindings.start_aliases.to_owned())
-                    .with_project_path_resolver(project_path_resolver.clone())
-                    .with_path_format_config(path_format_config.clone())
-                    .with_rendered_path_usage_sink(rendered_path_usages.clone())
+                    .with_project_path_resolver(self.project_path_resolver.clone())
+                    .with_path_format_config(self.path_format_config.clone())
+                    .with_rendered_path_usage_sink(self.rendered_path_usages.clone())
                     .with_source_file_scope(source_file_scope);
 
                     let template_result =
                         Template::new(&mut template_tokens, &context, vec![], string_table);
-                    warnings.extend(context.take_emitted_warnings());
-                    let template = match template_result {
-                        Ok(template) => template,
-                        Err(error) => {
-                            return Err(ast_error_messages(error, &warnings, string_table));
-                        }
-                    };
+                    self.warnings.extend(context.take_emitted_warnings());
+                    let template = template_result
+                        .map_err(|error| self.error_messages(error, string_table))?;
 
                     match template.const_value_kind() {
                         // WHAT: top-level const templates can be direct strings or wrapper
@@ -645,22 +671,20 @@ impl Ast {
                         crate::compiler_frontend::ast::templates::template::TemplateConstValueKind::RenderableString
                         | crate::compiler_frontend::ast::templates::template::TemplateConstValueKind::WrapperTemplate => {}
                         crate::compiler_frontend::ast::templates::template::TemplateConstValueKind::SlotInsertHelper => {
-                            return Err(ast_error_messages(
+                            return Err(self.error_messages(
                                 CompilerError::new_rule_error(
                                     "Top-level const templates cannot evaluate to '$insert(...)' helpers. Apply this insert while filling an immediate parent '$slot' template.",
                                     template.location,
                                 ),
-                                &warnings,
                                 string_table,
                             ));
                         }
                         crate::compiler_frontend::ast::templates::template::TemplateConstValueKind::NonConst => {
-                            return Err(ast_error_messages(
+                            return Err(self.error_messages(
                                 CompilerError::new_rule_error(
                                     "Top-level const templates must be fully foldable at compile time.",
                                     template.location,
                                 ),
-                                &warnings,
                                 string_table,
                             ));
                         }
@@ -669,55 +693,124 @@ impl Ast {
                     let mut fold_context = match context
                         .new_template_fold_context(string_table, "top-level const template folding")
                     {
-                        Ok(context) => context,
+                        Ok(ctx) => ctx,
                         Err(error) => {
-                            return Err(ast_error_messages(error, &warnings, string_table));
+                            return Err(self.error_messages(error, string_table));
                         }
                     };
 
                     let html = match template.fold_into_stringid(&mut fold_context) {
                         Ok(value) => value,
                         Err(error) => {
-                            return Err(ast_error_messages(error, &warnings, string_table));
+                            return Err(self.error_messages(error, string_table));
                         }
                     };
 
-                    const_templates_by_path.insert(template_tokens.src_path, html);
+                    self.const_templates_by_path
+                        .insert(template_tokens.src_path, html);
                 }
             }
         }
+        Ok(())
+    }
+
+    /// Assemble the final `Ast` from accumulated build state.
+    fn finalize(
+        mut self,
+        entry_dir: InternedPath,
+        top_level_template_items: &[TopLevelTemplateItem],
+        string_table: &mut StringTable,
+    ) -> Result<Ast, CompilerMessages> {
+        let project_path_resolver = self.project_path_resolver.as_ref().ok_or_else(|| {
+            self.error_messages(
+                CompilerError::compiler_error(
+                    "AST construction requires a project path resolver for template folding and path coercion.",
+                ),
+                string_table,
+            )
+        })?;
 
         let doc_fragments = collect_and_strip_comment_templates(
-            &mut ast,
-            project_path_resolver_for_folding,
-            &path_format_config,
+            &mut self.ast,
+            project_path_resolver,
+            self.path_format_config,
             string_table,
         )
-        .map_err(|error| ast_error_messages(error, &warnings, string_table))?;
+        .map_err(|error| self.error_messages(error, string_table))?;
 
         let start_template_items = synthesize_start_template_items(
-            &mut ast,
+            &mut self.ast,
             &entry_dir,
-            &top_level_template_items,
-            &const_templates_by_path,
-            project_path_resolver_for_folding,
-            &path_format_config,
+            top_level_template_items,
+            &self.const_templates_by_path,
+            project_path_resolver,
+            self.path_format_config,
             string_table,
         )
-        .map_err(|error| ast_error_messages(error, &warnings, string_table))?;
+        .map_err(|error| self.error_messages(error, string_table))?;
 
         Ok(Ast {
-            nodes: ast,
-            module_constants,
+            nodes: self.ast,
+            module_constants: self.module_constants,
             doc_fragments,
             entry_path: entry_dir,
-            external_exports,
+            external_exports: Vec::new(),
             start_template_items,
-            rendered_path_usages: std::mem::take(&mut *rendered_path_usages.borrow_mut()),
-            warnings,
+            rendered_path_usages: std::mem::take(&mut *self.rendered_path_usages.borrow_mut()),
+            warnings: self.warnings,
         })
     }
 }
+
+// ---------------------------------------------------------------------------
+// Ast::new – thin orchestrator over AstBuildState
+// ---------------------------------------------------------------------------
+
+impl Ast {
+    pub fn new(
+        sorted_headers: Vec<Header>,
+        top_level_template_items: Vec<TopLevelTemplateItem>,
+        host_registry: &HostRegistry,
+        style_directives: &StyleDirectiveRegistry,
+        string_table: &mut StringTable,
+        entry_dir: InternedPath,
+        build_profile: FrontendBuildProfile,
+        project_path_resolver: Option<ProjectPathResolver>,
+        path_format_config: PathStringFormatConfig,
+    ) -> Result<Ast, CompilerMessages> {
+        let mut state = AstBuildState::new(
+            host_registry,
+            style_directives,
+            build_profile,
+            &project_path_resolver,
+            &path_format_config,
+            sorted_headers.len(),
+        );
+
+        state.collect_declarations(&sorted_headers, string_table);
+
+        let file_import_bindings = state.resolve_import_bindings(string_table)?;
+
+        state.resolve_types(&sorted_headers, &file_import_bindings, string_table)?;
+
+        state.resolve_function_signatures(&sorted_headers, &file_import_bindings, string_table)?;
+
+        let receiver_methods = state.build_receiver_catalog(&sorted_headers, string_table)?;
+
+        state.emit_ast_nodes(
+            sorted_headers,
+            &file_import_bindings,
+            &receiver_methods,
+            string_table,
+        )?;
+
+        state.finalize(entry_dir, &top_level_template_items, string_table)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// ScopeContext – shared parser/lowering context for one active AST scope
+// ---------------------------------------------------------------------------
 
 #[derive(Clone)]
 /// Shared parser/lowering context for one active AST scope.
@@ -936,11 +1029,11 @@ impl ScopeContext {
         Ok(source_scope)
     }
 
-    pub fn new_template_fold_context<'a>(
-        &'a self,
-        string_table: &'a mut StringTable,
+    pub fn new_template_fold_context<'b>(
+        &'b self,
+        string_table: &'b mut StringTable,
         operation: &str,
-    ) -> Result<TemplateFoldContext<'a>, CompilerError> {
+    ) -> Result<TemplateFoldContext<'b>, CompilerError> {
         let resolver = self.required_project_path_resolver(operation)?;
         let source_file_scope = self.required_source_file_scope(operation)?;
         Ok(TemplateFoldContext {
