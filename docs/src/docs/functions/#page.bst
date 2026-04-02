@@ -53,32 +53,33 @@ import @styles/docs {navbar, title, section, palette, table, codeblock, theme_he
         -- Functions use the '!' to show that they can return an error instead of any other values
         -- This error must always be handled at the call site,
         -- The '!' symbol provides convenient syntax sugar for this
-        canError |x String| -> String, ~Error!:
+        canError |x String| -> String, Float, Error!:
         
             if x.is_empty():
-            return Error(msg = "WHoops", context = {})
+                return! Error("Whoops", {})
             ;
 
-            return x + " is cool"
+            return [x, " is cool"], 3.14
         ;
 
-        defaultIfError || -> String:
-            return canError("Sam") ! ""
+        defaultIfError || -> String, Float:
+            string, number = canError("") ! "", 0.0
+            return string, number
         ;
 
-        bubble_up_error_with_context |name String| -> ~Error!:
-            canError(name) ~err!:
+        bubble_up_error_with_context |name String| -> Error!:
+            value, number = canError(name) err!:
                 err.context.push("bubbled up from this function")
-                return err
+                return! err
             ;
 
-            io([: Did not error!])
+            io([value, number])
         ;
 
         panics ||:
             canError("") e!:
                 io("Error: ", e)
-                #panic "Panicking due to error"
+                panic("Panicking due to error")
             ;
         ;
     ]
