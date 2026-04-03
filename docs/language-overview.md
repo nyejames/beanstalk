@@ -104,11 +104,12 @@ A normal value of type `T` can be used where `T?` is expected.
 
 Error-returning functions mark one return slot with `!`:
 
-```beanstalk
-Error = |
-    msg String,
-|
+`Error` is currently a temporary compiler-injected built-in struct with one field:
+`message String`.
 
+During this scaffold phase, `Error` is reserved and cannot be re-declared by user code.
+
+```beanstalk
 parse_number |text String| -> Int, Error!:
     if text.is_empty():
         return! Error("Missing number")
@@ -147,7 +148,7 @@ when the success path still needs values:
 
 ```beanstalk
 name, score = load_user(id) err! "guest", 0.0:
-    io(err.msg)
+    io(err.message)
 ;
 ```
 
@@ -158,16 +159,26 @@ The special `!` return is only for the error path.
 
 When a new collection uses the mutable symbol, its internal values can be mutated by default.
 
-Instead of accessing elements directly, 
-all collections have built-in methods for accessing, mutating, pushing or removing elements. Collections are ordered groups of values that are zero-indexed. 
+Instead of direct index syntax, ordered collections use compiler-owned built-ins:
+`get`, `set`, `push`, `remove`, and `length`.
 
-Elements inside collections are accessed using the .get() method.
+Collections are ordered groups of values that are zero-indexed.
 
-array.get(0) is the equivalent of array[0] in most C like languages. 
-There is no square or curly brackets notation.
+`collection.get(index)` returns `Result<Elem, Error>`, so value-position reads must be
+handled with `!` syntax.
 
-There may not be a function call under the hood when using collection methods, 
-as the compiler abstracts these to be direct accesses in many cases.
+Both indexed write forms are supported:
+
+```beanstalk
+items.set(0, value)
+items.get(0) = value
+```
+
+`set` and `get(index) = value` require mutable element semantics.
+`push` and `remove` are allowed on immutable collections.
+
+There may not be a runtime call under the hood when using collection methods, because the
+compiler can lower these operations directly.
 
 **Output and printing:**
 ```beanstalk
@@ -470,6 +481,7 @@ Receiver methods in v1 are statically resolved:
 - A method is a top-level function whose first parameter is literally named `this`
 - There may be exactly one `this` parameter
 - Supported receiver types are user-defined structs and built-in scalars (`Int`, `Float`, `Bool`, `String`)
+- Collection built-ins (`get`, `set`, `push`, `remove`, `length`) are compiler-owned operations and are not declared via `this`
 - `this Type` declares an immutable receiver
 - `this ~Type` declares a mutable receiver
 - Methods are called with receiver syntax only: `value.method(...)`

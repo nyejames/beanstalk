@@ -53,17 +53,13 @@ The bang symbol ! is used for creating Result types and handling errors.
         return parent_func()
     ;
 
-    -- By default, accessing items in a collection by their index using .get() returns an error if the index is out of bounds
-    -- Unlike other languages where this can cause a panic or exception by default
+    -- By default, collection .get(index) returns a Result<Elem, Error>.
+    -- If the index is out of bounds, the error value is an Error with a message field.
+    my_list ~= {1, 2, 3}
 
-    my_list ~= [1, 2, 3]
-
-    -- If you wanted to both open a scope for handling the error and provide a default value, you could do it like this:
-    -- Default to the last index, and also print an error message
-    value ~= my_list.get(5) !(
-        my_list.length() - 1
-    ) !msg:
-        io("Index out of bounds error: ", msg)
+    -- Handle the out-of-bounds case with a fallback and named error scope.
+    value = my_list.get(5) err! (my_list.length() - 1):
+        io("Index out of bounds error: ", err.message)
     ;
 ```
 
