@@ -285,6 +285,26 @@ body {
         return value;
     }
 
+    function __bs_result_propagate(result) {
+        if (result && result.tag === "ok") {
+            return result.value;
+        }
+        if (result && result.tag === "err") {
+            throw { __bs_result_propagate: true, value: result.value };
+        }
+        throw new Error("Expected internal Result carrier during propagation");
+    }
+
+    function __bs_result_fallback(result, fallback) {
+        if (result && result.tag === "ok") {
+            return result.value;
+        }
+        if (result && result.tag === "err") {
+            return fallback();
+        }
+        throw new Error("Expected internal Result carrier during fallback handling");
+    }
+
     function bst_start_fn0() {
         let bst_i_l0 = __bs_binding(undefined);
         let bst_sum_l1 = __bs_binding(undefined);

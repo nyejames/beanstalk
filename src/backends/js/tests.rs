@@ -1190,7 +1190,9 @@ fn lowers_result_fallback_expression() {
     .expect("ResultFallback lowering should succeed");
 
     assert!(
-        output.source.contains("function __bs_result_fallback(result, fallback)"),
+        output
+            .source
+            .contains("function __bs_result_fallback(result, fallback)"),
         "JS runtime prelude should emit the result fallback helper"
     );
     assert!(

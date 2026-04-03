@@ -108,7 +108,8 @@ impl<'a> HirBuilder<'a> {
         let function_return_type = self
             .function_by_id_or_error(function_id, location)?
             .return_type;
-        let HirTypeKind::Result { err, .. } = self.type_context.get(function_return_type).kind else {
+        let HirTypeKind::Result { err, .. } = self.type_context.get(function_return_type).kind
+        else {
             return_hir_transformation_error!(
                 "return! reached HIR lowering in a function without a Result return type",
                 self.hir_error_location(location)

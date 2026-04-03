@@ -228,10 +228,14 @@ fn parse_explicit_type_annotation(
             token_stream.advance();
 
             let collection_type = DataType::Collection(
-                    Box::new(inner.unwrap_or(DataType::Inferred)),
-                    Ownership::ImmutableOwned,
-                );
-            Ok((parse_optional_suffix(token_stream, collection_type)?, None, false))
+                Box::new(inner.unwrap_or(DataType::Inferred)),
+                Ownership::ImmutableOwned,
+            );
+            Ok((
+                parse_optional_suffix(token_stream, collection_type)?,
+                None,
+                false,
+            ))
         }
         TokenKind::Symbol(name) => {
             let type_name = *name;

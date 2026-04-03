@@ -63,7 +63,8 @@ impl<'a> HirBuilder<'a> {
                     .get(function_id)
                     .copied()
                     .and_then(|function_index| {
-                        let function_return_type = self.module.functions[function_index].return_type;
+                        let function_return_type =
+                            self.module.functions[function_index].return_type;
                         match self.type_context.get(function_return_type).kind {
                             HirTypeKind::Result { ok, .. } => Some((function_return_type, ok)),
                             _ => None,
@@ -165,10 +166,7 @@ impl<'a> HirBuilder<'a> {
                 let Some(function_index) = self.function_index_by_id.get(function_id).copied()
                 else {
                     return_hir_transformation_error!(
-                        format!(
-                            "Function {:?} is not registered in HIR module",
-                            function_id
-                        ),
+                        format!("Function {:?} is not registered in HIR module", function_id),
                         self.hir_error_location(location)
                     );
                 };

@@ -166,11 +166,7 @@ impl<'a> AstBuildState<'a> {
         }
     }
 
-    fn error_messages(
-        &self,
-        error: CompilerError,
-        string_table: &StringTable,
-    ) -> CompilerMessages {
+    fn error_messages(&self, error: CompilerError, string_table: &StringTable) -> CompilerMessages {
         CompilerMessages::from_error_with_warnings(error, self.warnings.clone(), string_table)
     }
 
@@ -205,14 +201,9 @@ impl<'a> AstBuildState<'a> {
     /// WHY: resolution stores fully qualified symbol paths.
     /// Each file context later applies its own visibility filter instead of rebuilding
     /// declaration tables.
-    fn collect_declarations(
-        &mut self,
-        sorted_headers: &[Header],
-        string_table: &mut StringTable,
-    ) {
+    fn collect_declarations(&mut self, sorted_headers: &[Header], string_table: &mut StringTable) {
         for header in sorted_headers {
-            self.module_file_paths
-                .insert(header.source_file.to_owned());
+            self.module_file_paths.insert(header.source_file.to_owned());
             self.canonical_source_by_symbol_path.insert(
                 header.tokens.src_path.to_owned(),
                 canonical_source_file_for_header(header, string_table),
@@ -359,8 +350,8 @@ impl<'a> AstBuildState<'a> {
                         create_struct_definition(&mut struct_tokens, &context, string_table);
                     self.warnings.extend(context.take_emitted_warnings());
 
-                    let parsed_fields = fields_result
-                        .map_err(|error| self.error_messages(error, string_table))?;
+                    let parsed_fields =
+                        fields_result.map_err(|error| self.error_messages(error, string_table))?;
 
                     let fields = resolve_struct_field_types(
                         &header.tokens.src_path,
@@ -538,8 +529,8 @@ impl<'a> AstBuildState<'a> {
                     );
                     self.warnings.extend(context.take_emitted_warnings());
 
-                    let body = body_result
-                        .map_err(|error| self.error_messages(error, string_table))?;
+                    let body =
+                        body_result.map_err(|error| self.error_messages(error, string_table))?;
 
                     // AST symbol IDs are stored as full InternedPath values and are unique
                     // module-wide, not only within a local scope.
@@ -582,8 +573,8 @@ impl<'a> AstBuildState<'a> {
                     );
                     self.warnings.extend(context.take_emitted_warnings());
 
-                    let mut body = body_result
-                        .map_err(|error| self.error_messages(error, string_table))?;
+                    let mut body =
+                        body_result.map_err(|error| self.error_messages(error, string_table))?;
 
                     // Add the automatic return statement for the start function
                     let empty_string = string_table.get_or_intern(String::new());
@@ -937,7 +928,9 @@ impl ScopeContext {
         let mut new_context = self.to_owned();
         new_context.kind = ContextKind::Function;
         new_context.expected_result_types = signature.return_data_types();
-        new_context.expected_error_type = signature.error_return().map(|ret| ret.data_type().to_owned());
+        new_context.expected_error_type = signature
+            .error_return()
+            .map(|ret| ret.data_type().to_owned());
 
         // Create a new scope path by joining the current scope with the function name
         new_context.scope = self.scope.append(id);

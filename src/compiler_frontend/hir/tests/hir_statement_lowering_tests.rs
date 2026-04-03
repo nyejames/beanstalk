@@ -215,16 +215,13 @@ fn statement_result_propagation_with_unit_success_emits_runtime_propagate_expres
         .expect("start entry block should exist");
 
     assert!(
-        start_entry
-            .statements
-            .iter()
-            .any(|statement| matches!(
-                statement.kind,
-                HirStatementKind::Expr(crate::compiler_frontend::hir::hir_nodes::HirExpression {
-                    kind: HirExpressionKind::ResultPropagate { .. },
-                    ..
-                })
-            )),
+        start_entry.statements.iter().any(|statement| matches!(
+            statement.kind,
+            HirStatementKind::Expr(crate::compiler_frontend::hir::hir_nodes::HirExpression {
+                kind: HirExpressionKind::ResultPropagate { .. },
+                ..
+            })
+        )),
         "unit-success statement propagation should still emit a ResultPropagate expression statement"
     );
 }

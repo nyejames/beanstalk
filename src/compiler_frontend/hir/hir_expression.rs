@@ -10,8 +10,8 @@ use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::hir::hir_datatypes::{HirTypeKind, TypeId};
 use crate::compiler_frontend::hir::hir_nodes::{
-    HirBlock, HirExpression, HirExpressionKind, HirLocal, HirStatement, LocalId, RegionId,
-    OptionVariant, ValueKind,
+    HirBlock, HirExpression, HirExpressionKind, HirLocal, HirStatement, LocalId, OptionVariant,
+    RegionId, ValueKind,
 };
 use crate::compiler_frontend::host_functions::CallTarget;
 use crate::compiler_frontend::interned_path::InternedPath;

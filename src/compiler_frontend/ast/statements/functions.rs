@@ -707,12 +707,8 @@ pub fn parse_function_call(
             }
 
             let fallback_context = context.new_child_expression(success_result_types.to_owned());
-            let fallback_values = create_multiple_expressions(
-                token_stream,
-                &fallback_context,
-                false,
-                string_table,
-            )?;
+            let fallback_values =
+                create_multiple_expressions(token_stream, &fallback_context, false, string_table)?;
 
             if token_stream.current_token_kind() == &TokenKind::Comma {
                 return_type_error!(

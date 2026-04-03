@@ -4,14 +4,12 @@
 //! WHY: statement parsing should preserve signature metadata and host/user call dispatch.
 
 use super::*;
-use crate::compiler_frontend::ast::expressions::expression::{
-    ExpressionKind, ResultCallHandling,
-};
+use crate::compiler_frontend::ast::expressions::expression::{ExpressionKind, ResultCallHandling};
+use crate::compiler_frontend::ast::statements::functions::ReturnSlot;
 use crate::compiler_frontend::ast::test_support::{
     function_body_by_name, function_signature_by_name, parse_single_file_ast,
     parse_single_file_ast_error, start_function_body,
 };
-use crate::compiler_frontend::ast::statements::functions::ReturnSlot;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 
 #[test]
@@ -273,7 +271,11 @@ fn rejects_bare_named_error_handler_without_scope() {
         "Error = |\n    msg String,\n|\n\ncan_error |value String| -> String, Error!:\n    return value\n;\n\nrecover |value String| -> String:\n    return can_error(value) err!\n;\n",
     );
 
-    assert!(error.msg.contains("Bare 'err!' is invalid"), "{}", error.msg);
+    assert!(
+        error.msg.contains("Bare 'err!' is invalid"),
+        "{}",
+        error.msg
+    );
 }
 
 #[test]

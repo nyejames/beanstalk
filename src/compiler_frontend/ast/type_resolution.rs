@@ -172,18 +172,16 @@ pub(crate) fn resolve_function_signature(
             FunctionReturn::AliasCandidates {
                 parameter_indices,
                 data_type,
-            } => {
-                FunctionReturn::AliasCandidates {
-                    parameter_indices: parameter_indices.to_owned(),
-                    data_type: resolve_named_signature_type(
-                        data_type,
-                        &function_location,
-                        declarations,
-                        visible_declaration_ids,
-                        string_table,
-                    )?,
-                }
-            }
+            } => FunctionReturn::AliasCandidates {
+                parameter_indices: parameter_indices.to_owned(),
+                data_type: resolve_named_signature_type(
+                    data_type,
+                    &function_location,
+                    declarations,
+                    visible_declaration_ids,
+                    string_table,
+                )?,
+            },
         };
 
         resolved_returns.push(ReturnSlot {

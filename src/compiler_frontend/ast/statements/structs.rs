@@ -197,14 +197,12 @@ pub fn parse_explicit_signature_type(
                 }
             )
         }
-        TokenKind::OpenCurly => {
-            parse_collection_signature_type(
-                token_stream,
-                string_table,
-                collection_ownership,
-                context,
-            )?
-        }
+        TokenKind::OpenCurly => parse_collection_signature_type(
+            token_stream,
+            string_table,
+            collection_ownership,
+            context,
+        )?,
         TokenKind::Symbol(type_name) => {
             let type_name = *type_name;
             token_stream.advance();

@@ -1,3 +1,9 @@
 [backends.html]
 mode = "success"
 warnings = "forbid"
+
+[[backends.html.artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain = ["__bs_binding"]
+must_not_contain = ["while (true)"]

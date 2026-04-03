@@ -1,0 +1,6 @@
+-- Test that copy() keyword emits __bs_clone_value in the JS backend.
+-- Validates deep-copy semantics for collections.
+
+original ~= {1, 2, 3}
+cloned = copy(original)
+io(cloned)

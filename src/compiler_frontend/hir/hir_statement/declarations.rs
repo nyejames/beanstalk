@@ -314,7 +314,11 @@ impl<'a> HirBuilder<'a> {
             return_aliases: signature
                 .success_returns()
                 .iter()
-                .map(|return_value| return_value.alias_candidates().map(|indices| indices.to_vec()))
+                .map(|return_value| {
+                    return_value
+                        .alias_candidates()
+                        .map(|indices| indices.to_vec())
+                })
                 .collect(),
         };
 
