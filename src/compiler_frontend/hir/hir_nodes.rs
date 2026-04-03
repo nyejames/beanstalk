@@ -456,6 +456,12 @@ pub enum HirExpressionKind {
         elements: Vec<HirExpression>,
     },
 
+    /// Project a tuple slot by flat index.
+    TupleGet {
+        tuple: Box<HirExpression>,
+        index: usize,
+    },
+
     ///Construct an Option value
     /// - Some variant: value must be Some(expr)
     /// - None variant: value must be None
@@ -480,12 +486,19 @@ pub enum HirExpressionKind {
         result: Box<HirExpression>,
     },
 
-    /// Handles an internal Result value by returning fallback values on Err.
-    /// - Ok(v)  => evaluates to v
-    /// - Err(_) => evaluates to fallback
-    ResultFallback {
+    /// Checks whether an internal Result carrier currently holds an Ok value.
+    ResultIsOk {
         result: Box<HirExpression>,
-        fallback: Box<HirExpression>,
+    },
+
+    /// Extracts the Ok payload from an internal Result carrier.
+    ResultUnwrapOk {
+        result: Box<HirExpression>,
+    },
+
+    /// Extracts the Err payload from an internal Result carrier.
+    ResultUnwrapErr {
+        result: Box<HirExpression>,
     },
 }
 

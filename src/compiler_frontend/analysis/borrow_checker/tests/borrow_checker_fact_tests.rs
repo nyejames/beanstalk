@@ -435,6 +435,9 @@ fn collect_expression_values(expression: &HirExpression, out: &mut FxHashSet<Hir
                 collect_expression_values(element, out);
             }
         }
+        HirExpressionKind::TupleGet { tuple, .. } => {
+            collect_expression_values(tuple, out);
+        }
         HirExpressionKind::Range { start, end } => {
             collect_expression_values(start, out);
             collect_expression_values(end, out);
@@ -446,9 +449,10 @@ fn collect_expression_values(expression: &HirExpression, out: &mut FxHashSet<Hir
         }
         HirExpressionKind::ResultConstruct { value, .. } => collect_expression_values(value, out),
         HirExpressionKind::ResultPropagate { result } => collect_expression_values(result, out),
-        HirExpressionKind::ResultFallback { result, fallback } => {
+        HirExpressionKind::ResultIsOk { result }
+        | HirExpressionKind::ResultUnwrapOk { result }
+        | HirExpressionKind::ResultUnwrapErr { result } => {
             collect_expression_values(result, out);
-            collect_expression_values(fallback, out);
         }
         HirExpressionKind::Int(_)
         | HirExpressionKind::Float(_)

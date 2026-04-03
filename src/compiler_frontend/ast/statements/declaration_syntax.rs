@@ -22,6 +22,25 @@ pub struct DeclarationSyntax {
     pub location: SourceLocation,
 }
 
+#[derive(Clone, Debug)]
+pub struct BindingTargetSyntax {
+    pub name: StringId,
+    pub mutable_marker: bool,
+    // Concrete parsed type syntax (including collection syntax), if provided.
+    pub explicit_type: DataType,
+    // Named type annotations are resolved later after symbol tables are available.
+    pub explicit_named_type: Option<StringId>,
+    // Whether a trailing `?` was present after a named type annotation.
+    pub explicit_named_optional: bool,
+    pub location: SourceLocation,
+}
+
+impl BindingTargetSyntax {
+    pub fn has_explicit_type(&self) -> bool {
+        self.explicit_named_type.is_some() || !matches!(self.explicit_type, DataType::Inferred)
+    }
+}
+
 impl DeclarationSyntax {
     pub fn to_tokens(&self) -> Vec<Token> {
         let mut tokens = Vec::with_capacity(4 + self.initializer_tokens.len());
@@ -74,16 +93,7 @@ pub fn parse_declaration_syntax(
     name: StringId,
     string_table: &mut StringTable,
 ) -> Result<DeclarationSyntax, CompilerError> {
-    let declaration_location = token_stream.current_location();
-
-    let mut mutable_marker = false;
-    if token_stream.current_token_kind() == &TokenKind::Mutable {
-        mutable_marker = true;
-        token_stream.advance();
-    }
-
-    let (explicit_type, explicit_named_type, explicit_named_optional) =
-        parse_explicit_type_annotation(token_stream, string_table)?;
+    let target_syntax = parse_binding_target_syntax(token_stream, name, string_table)?;
 
     // Require assignment for declarations.
     match token_stream.current_token_kind() {
@@ -120,7 +130,7 @@ pub fn parse_declaration_syntax(
         let var_name = string_table.resolve(name);
         return_rule_error!(
             format!("Variable '{}' must be initialized with a value", var_name),
-            declaration_location, {
+            target_syntax.location.clone(), {
                 CompilationStage => "Variable Declaration",
                 PrimarySuggestion => "Add an initializer expression after '='",
             }
@@ -128,13 +138,39 @@ pub fn parse_declaration_syntax(
     }
 
     Ok(DeclarationSyntax {
+        name: target_syntax.name,
+        mutable_marker: target_syntax.mutable_marker,
+        explicit_type: target_syntax.explicit_type,
+        explicit_named_type: target_syntax.explicit_named_type,
+        explicit_named_optional: target_syntax.explicit_named_optional,
+        initializer_tokens,
+        location: target_syntax.location,
+    })
+}
+
+pub fn parse_binding_target_syntax(
+    token_stream: &mut FileTokens,
+    name: StringId,
+    string_table: &mut StringTable,
+) -> Result<BindingTargetSyntax, CompilerError> {
+    let target_location = token_stream.current_location();
+
+    let mut mutable_marker = false;
+    if token_stream.current_token_kind() == &TokenKind::Mutable {
+        mutable_marker = true;
+        token_stream.advance();
+    }
+
+    let (explicit_type, explicit_named_type, explicit_named_optional) =
+        parse_explicit_type_annotation(token_stream, string_table)?;
+
+    Ok(BindingTargetSyntax {
         name,
         mutable_marker,
         explicit_type,
         explicit_named_type,
         explicit_named_optional,
-        initializer_tokens,
-        location: declaration_location,
+        location: target_location,
     })
 }
 
@@ -165,7 +201,9 @@ fn parse_explicit_type_annotation(
     }
 
     match token_stream.current_token_kind() {
-        TokenKind::Assign | TokenKind::Newline => Ok((DataType::Inferred, None, false)),
+        TokenKind::Assign | TokenKind::Newline | TokenKind::Comma => {
+            Ok((DataType::Inferred, None, false))
+        }
         TokenKind::DatatypeInt => {
             token_stream.advance();
             Ok((

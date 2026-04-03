@@ -132,7 +132,24 @@ Or provide fallback values:
 value = parse_number(text) ! 0
 ```
 
-Named handler scopes (`err!:` forms) are reserved for explicit error-handling blocks.
+Multiple success values use the normal return list and a shared assignment on the caller side:
+
+```beanstalk
+pair || -> String, Int:
+    return "Ana", 2
+;
+
+name, count = pair()
+```
+
+Named handler scopes are supported for explicit error-handling blocks, including fallback values
+when the success path still needs values:
+
+```beanstalk
+name, score = load_user(id) err! "guest", 0.0:
+    io(err.msg)
+;
+```
 
 Beanstalk still uses multiple returns, so the success path keeps normal return values.  
 The special `!` return is only for the error path.

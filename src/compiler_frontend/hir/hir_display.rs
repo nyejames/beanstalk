@@ -440,6 +440,9 @@ impl<'a> HirDisplayContext<'a> {
                     format!("({})", joined)
                 }
             }
+            HirExpressionKind::TupleGet { tuple, index } => {
+                format!("tuple_get({}, {})", self.render_expression(tuple), index)
+            }
             HirExpressionKind::OptionConstruct { variant, value } => match (variant, value) {
                 (OptionVariant::Some, Some(expr)) => {
                     format!("Some({})", self.render_expression(expr))
@@ -454,11 +457,15 @@ impl<'a> HirDisplayContext<'a> {
             HirExpressionKind::ResultPropagate { result } => {
                 format!("propagate!({})", self.render_expression(result))
             }
-            HirExpressionKind::ResultFallback { result, fallback } => format!(
-                "fallback!({}, {})",
-                self.render_expression(result),
-                self.render_expression(fallback)
-            ),
+            HirExpressionKind::ResultIsOk { result } => {
+                format!("result_is_ok({})", self.render_expression(result))
+            }
+            HirExpressionKind::ResultUnwrapOk { result } => {
+                format!("result_unwrap_ok({})", self.render_expression(result))
+            }
+            HirExpressionKind::ResultUnwrapErr { result } => {
+                format!("result_unwrap_err({})", self.render_expression(result))
+            }
         }
     }
 

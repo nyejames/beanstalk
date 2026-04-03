@@ -317,7 +317,7 @@ body {
 
      <h1 style="font-size: 2em;text-align: center;"> LANGUAGE BASICS</h1>
 
-        <section class="container"><p>Every project has a #config.bst file that defines the entry points and dependencies of the project. </p><p>If instead, you build or run a specific Beanstalk file, it will create a single module from that entry point and pull in all the file&#39;s dependencies. </p>
+        <section class="container"><p>Every project has a #config.bst file that defines the entry points and dependencies of the project.</p><p>If instead, you build or run a specific Beanstalk file, it will create a single module from that entry point and pull in all the file&#39;s dependencies.</p>
         <pre style="background-color: hsla(0, 0%, 42%, 0.12); padding-left: 1em; border-radius: 5px; max-width: 100%; white-space: pre; overflow-x: auto;">
             <code class='codeblock'>
     <span class='bst-code-operator'>#</span> page_title <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;Welcome&quot;</span>
@@ -329,7 +329,7 @@ body {
     <span class='bst-code-parenthesis'>[</span>say_hello<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-parenthesis'>]</span>
     </code>
         </pre>
-    <h1>Quick Syntax Summary</h1><p>For developers coming from most other languages,  here are some key idiosyncrasies from other C-like languages to note: </p><ul><li>Colon opens a scope, semicolon closes it. Semicolon does not end statements</li></ul><ul><li>Square brackets are NOT used for arrays, curly braces are used instead Square brackets are only used for string templates. Items in collections are accessed via methods</li></ul><ul><li>Equality and other logical operators use keywords like &quot;is&quot; and &quot;not&quot; (you can&#39;t use == or ! for example)</li></ul><ul><li>~ tilde symbol to indicate mutability (mutability must be explicit). This comes before the type if there is an explicit type declaration.</li></ul><ul><li>Double dashes for single line comments (--)</li></ul><ul><li>Immutable Reference semantics are the default for all stack and heap allocated types.</li></ul><ul><li>All copies have to be explicit unless they are used in part of a new expression. Even for primitive types such as integers.</li></ul><h2>Formatting</h2><ul><li>4 spaces are recommended for indentation.</li><li>Types use UpperCamelCase</li><li>Everything else uses regular_snake_case</li></ul><h1>Comments</h1><p>Comments use a double minus sign.  Documentation comments will eventually be created via special templates. </p>
+    <h1>Quick Syntax Summary</h1><p>For developers coming from most other languages,  here are some key idiosyncrasies from other C-like languages to note:</p><ul><li>Colon opens a scope, semicolon closes it. Semicolon does not end statements</li></ul><ul><li>Square brackets are NOT used for arrays, curly braces are used instead Square brackets are only used for string templates. Items in collections are accessed via methods</li></ul><ul><li>Equality and other logical operators use keywords like &quot;is&quot; and &quot;not&quot; (you can&#39;t use == or ! for example)</li></ul><ul><li>~ tilde symbol to indicate mutability (mutability must be explicit). This comes before the type if there is an explicit type declaration.</li></ul><ul><li>Double dashes for single line comments (--)</li></ul><ul><li>Immutable Reference semantics are the default for all stack and heap allocated types.</li></ul><ul><li>All copies have to be explicit unless they are used in part of a new expression. Even for primitive types such as integers.</li></ul><h2>Formatting</h2><ul><li>4 spaces are recommended for indentation.</li><li>Types use UpperCamelCase</li><li>Everything else uses regular_snake_case</li></ul><h1>Comments</h1><p>Comments use a double minus sign.  Documentation comments will eventually be created via special templates.</p>
         <pre style="background-color: hsla(0, 0%, 42%, 0.12); padding-left: 1em; border-radius: 5px; max-width: 100%; white-space: pre; overflow-x: auto;">
             <code class='codeblock'>
     <span class='bst-code-comment'>-- normal comment</span>
@@ -338,7 +338,7 @@ body {
     </section>
 
 
-        <section class="container"><h1>Variables</h1><p>Equals means assign. Tilde ~ means this is a mutable and can change. </p><p>All variables must be assigned a value when they are declared. </p>
+        <section class="container"><h1>Variables</h1><p>Equals means assign. Tilde ~ means this is a mutable and can change.</p><p>All variables must be assigned a value when they are declared.</p>
         <pre style="background-color: hsla(0, 0%, 42%, 0.12); padding-left: 1em; border-radius: 5px; max-width: 100%; white-space: pre; overflow-x: auto;">
             <code class='codeblock'>
     int <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-number'>0</span>
@@ -368,7 +368,7 @@ body {
     <span class='bst-code-parenthesis'>)</span>
     </code>
         </pre>
-    <p>By default, Beanstalk code will create immutable references to values. <strong>This is true for all types.</strong> </p><p>The compiler might decide to make an immutable copy of a primative value, but the assignment will <strong>always</strong> behave the same way no matter what the type is. </p><br>
+    <p>By default, Beanstalk code will create immutable references to values. <strong>This is true for all types.</strong></p><p>The compiler might decide to make an immutable copy of a primative value, but the assignment will <strong>always</strong> behave the same way no matter what the type is.</p>
         <pre style="background-color: hsla(0, 0%, 42%, 0.12); padding-left: 1em; border-radius: 5px; max-width: 100%; white-space: pre; overflow-x: auto;">
             <code class='codeblock'>
     <span class='bst-code-comment'>-- 64 bit immutable float</span>
@@ -401,7 +401,7 @@ body {
     concatenated_strings <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span>string_slice, a_mutable_string<span class='bst-code-parenthesis'>]</span>
     </code>
         </pre>
-    <p>All copies are explicit and must use the &#39;copy&#39; keyword in place of a type. </p>
+    <p>All copies are explicit and must use the &#39;copy&#39; keyword in place of a type.</p>
         <pre style="background-color: hsla(0, 0%, 42%, 0.12); padding-left: 1em; border-radius: 5px; max-width: 100%; white-space: pre; overflow-x: auto;">
             <code class='codeblock'>
     <span class='bst-code-comment'>-- Create a new collection of integers</span>
@@ -424,7 +424,7 @@ body {
     io<span class='bst-code-parenthesis'>(</span>a_collection<span class='bst-code-parenthesis'>)</span> <span class='bst-code-comment'>-- {23.0}</span>
     </code>
         </pre>
-    <p>Expressions can span over multiple lines. </p><p>But new statements must start after a newline. </p>
+    <p>Expressions can span over multiple lines.</p><p>But new statements must start after a newline.</p>
         <pre style="background-color: hsla(0, 0%, 42%, 0.12); padding-left: 1em; border-radius: 5px; max-width: 100%; white-space: pre; overflow-x: auto;">
             <code class='codeblock'>
     <span class='bst-code-comment'>-- Valid</span>
@@ -441,68 +441,64 @@ body {
     </section>
 
 
-        <section class="container"><h1>Data Types</h1><p>Beanstalk data type keywords use UpperCamelCase. Mutibility can change the underlaying data type but is not actually part of the type. </p>
+        <section class="container"><h1>Data Types</h1><p>Beanstalk data type keywords use UpperCamelCase. Mutibility can change the underlaying data type but is not actually part of the type.</p>
           <table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
             
-
+        
         <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
-             
-                <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Type</th>
-             
-                <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Description</th>
-             
+            
         </tr>
-     
+        
+             <tr style="border-bottom: 1px dotted grey;"> Type</tr> <tr style="border-bottom: 1px dotted grey;"> Description</tr>  
 
+    <tr style="border-bottom: 1px dotted grey;">
+        <td style="padding: 0.2em 0.5em;">  Float   64-bit floating point number </td>
+    </tr>
 
-        <tr style="border-bottom: 1px dotted grey;"> <td style="padding: 0.2em 0.5em;"> Float </td> <td style="padding: 0.2em 0.5em;"> 64-bit floating point number</td> </tr>
+    <tr style="border-bottom: 1px dotted grey;">
+        <td style="padding: 0.2em 0.5em;">  Int    64-bit signed integer  </td>
+    </tr>
 
-
-
-        <tr style="border-bottom: 1px dotted grey;"> <td style="padding: 0.2em 0.5em;"> Int </td> <td style="padding: 0.2em 0.5em;">  64-bit signed integer </td> </tr>
-
-
-
-        <tr style="border-bottom: 1px dotted grey;"> <td style="padding: 0.2em 0.5em;"> String </td> <td style="padding: 0.2em 0.5em;"> UTF-8 string slice or string template</td> </tr>
+    <tr style="border-bottom: 1px dotted grey;">
+        <td style="padding: 0.2em 0.5em;">  String   UTF-8 string slice or string template </td>
+    </tr>
+        
 
           </table>
-        <h2>Numerical Types</h2><p>These will be extended to smaller sized and unsigned variants in the future. By default, &quot;Float&quot; and &quot;Int&quot; will become 64 bit signed types. </p><p>The language currently supports a small set of core types but may be extended in the future. </p><h1>Strings and String slices</h1><p>String is the keyword for string types in Beanstalk.  Double quotes are automatically string slices.  </p><p>`&quot;Double quotes for a UTF-8 string slice&quot;` </p><p>Backticks are used for RAW strings. To escape a backtick it must be preceded with a backslash . </p><p>Scenes are used instead of format strings. </p><h1>Operators</h1><h2>Logical and Comparison Operators</h2><p>The &#39;is&#39; keyword is used to check equality.  The &quot;and / or&quot; keywords are used for logical and / or and &#39;not&#39; is used to invert a truthy value to falsy or vice versa. </p><h2>Mathematical Operators</h2>
+        <h2>Numerical Types</h2><p>These will be extended to smaller sized and unsigned variants in the future. By default, &quot;Float&quot; and &quot;Int&quot; will become 64 bit signed types.</p><p>The language currently supports a small set of core types but may be extended in the future.</p><h1>Strings and String slices</h1><p>String is the keyword for string types in Beanstalk.  Double quotes are automatically string slices. </p><p>`&quot;Double quotes for a UTF-8 string slice&quot;`</p><p>Backticks are used for RAW strings. To escape a backtick it must be preceded with a backslash .</p><p>Scenes are used instead of format strings.</p><h1>Operators</h1><h2>Logical and Comparison Operators</h2><p>The &#39;is&#39; keyword is used to check equality.  The &quot;and / or&quot; keywords are used for logical and / or and &#39;not&#39; is used to invert a truthy value to falsy or vice versa.</p><h2>Mathematical Operators</h2>
           <table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
             
-
+        
         <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
-             
-                <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Operator</th>
-             
-                <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Description</th>
-                      
-                <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Precedence</th>
-             
+            
         </tr>
-
-
-        <tr style="border-bottom: 1px dotted grey;"> <td style="padding: 0.2em 0.5em;"> ^</td>        <td style="padding: 0.2em 0.5em;"> Exponent</td>            <td style="padding: 0.2em 0.5em;"> 4</td> </tr>
-
-
-        <tr style="border-bottom: 1px dotted grey;"> <td style="padding: 0.2em 0.5em;"> //</td>       <td style="padding: 0.2em 0.5em;"> Root</td>                <td style="padding: 0.2em 0.5em;"> 4</td> </tr>
-
-
-        <tr style="border-bottom: 1px dotted grey;"> <td style="padding: 0.2em 0.5em;"> *</td>        <td style="padding: 0.2em 0.5em;"> Multiplication</td>       <td style="padding: 0.2em 0.5em;"> 3</td> </tr>
-
-
-        <tr style="border-bottom: 1px dotted grey;"> <td style="padding: 0.2em 0.5em;"> /</td>        <td style="padding: 0.2em 0.5em;"> Division</td>             <td style="padding: 0.2em 0.5em;"> 3</td> </tr>
-
-
-        <tr style="border-bottom: 1px dotted grey;"> <td style="padding: 0.2em 0.5em;"> %</td>          <td style="padding: 0.2em 0.5em;"> Modulo (truncated)</td>   <td style="padding: 0.2em 0.5em;"> 3</td> </tr>
-
-
-        <tr style="border-bottom: 1px dotted grey;"> <td style="padding: 0.2em 0.5em;"> %%</td>         <td style="padding: 0.2em 0.5em;"> Remainder (floored)</td>  <td style="padding: 0.2em 0.5em;"> 3</td> </tr>
-
-
-        <tr style="border-bottom: 1px dotted grey;"> <td style="padding: 0.2em 0.5em;"> +</td>          <td style="padding: 0.2em 0.5em;"> Sum</td>                  <td style="padding: 0.2em 0.5em;"> 2</td> </tr>
-
-
-        <tr style="border-bottom: 1px dotted grey;"> <td style="padding: 0.2em 0.5em;"> -</td>        <td style="padding: 0.2em 0.5em;"> Subtraction</td>          <td style="padding: 0.2em 0.5em;"> 2</td> </tr>
+        
+             <tr style="border-bottom: 1px dotted grey;"> Operator</tr> <tr style="border-bottom: 1px dotted grey;"> Description</tr>          <tr style="border-bottom: 1px dotted grey;"> Precedence</tr> 
+    <tr style="border-bottom: 1px dotted grey;">
+        <td style="padding: 0.2em 0.5em;">  ^         Exponent             4 </td>
+    </tr>
+    <tr style="border-bottom: 1px dotted grey;">
+        <td style="padding: 0.2em 0.5em;">  //        Root                 4 </td>
+    </tr>
+    <tr style="border-bottom: 1px dotted grey;">
+        <td style="padding: 0.2em 0.5em;">  *         Multiplication        3 </td>
+    </tr>
+    <tr style="border-bottom: 1px dotted grey;">
+        <td style="padding: 0.2em 0.5em;">  /         Division              3 </td>
+    </tr>
+    <tr style="border-bottom: 1px dotted grey;">
+        <td style="padding: 0.2em 0.5em;">  %           Modulo (truncated)    3 </td>
+    </tr>
+    <tr style="border-bottom: 1px dotted grey;">
+        <td style="padding: 0.2em 0.5em;">  %%          Remainder (floored)   3 </td>
+    </tr>
+    <tr style="border-bottom: 1px dotted grey;">
+        <td style="padding: 0.2em 0.5em;">  +           Sum                   2 </td>
+    </tr>
+    <tr style="border-bottom: 1px dotted grey;">
+        <td style="padding: 0.2em 0.5em;">  -         Subtraction           2 </td>
+    </tr>
+        
 
           </table>
         </section>
@@ -608,6 +604,26 @@ body {
     return result;
     }
     return value;
+    }
+
+    function __bs_result_propagate(result) {
+    if (result && result.tag === "ok") {
+    return result.value;
+    }
+    if (result && result.tag === "err") {
+    throw { __bs_result_propagate: true, value: result.value };
+    }
+    throw new Error("Expected internal Result carrier during propagation");
+    }
+
+    function __bs_result_fallback(result, fallback) {
+    if (result && result.tag === "ok") {
+    return result.value;
+    }
+    if (result && result.tag === "err") {
+    return fallback();
+    }
+    throw new Error("Expected internal Result carrier during fallback handling");
     }
 
     function b_fn0() {

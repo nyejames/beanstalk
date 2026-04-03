@@ -786,6 +786,9 @@ fn collect_expression_loaded_locals(expression: &HirExpression, visitor: &mut im
                 collect_expression_loaded_locals(element, visitor);
             }
         }
+        HirExpressionKind::TupleGet { tuple, .. } => {
+            collect_expression_loaded_locals(tuple, visitor);
+        }
         HirExpressionKind::Range { start, end } => {
             collect_expression_loaded_locals(start, visitor);
             collect_expression_loaded_locals(end, visitor);
@@ -801,9 +804,10 @@ fn collect_expression_loaded_locals(expression: &HirExpression, visitor: &mut im
         HirExpressionKind::ResultPropagate { result } => {
             collect_expression_loaded_locals(result, visitor);
         }
-        HirExpressionKind::ResultFallback { result, fallback } => {
+        HirExpressionKind::ResultIsOk { result }
+        | HirExpressionKind::ResultUnwrapOk { result }
+        | HirExpressionKind::ResultUnwrapErr { result } => {
             collect_expression_loaded_locals(result, visitor);
-            collect_expression_loaded_locals(fallback, visitor);
         }
         HirExpressionKind::Int(_)
         | HirExpressionKind::Float(_)

@@ -190,8 +190,15 @@ fn parse_identifier_or_call(
                 token_stream.advance();
 
                 // This is a function call - parse it using the function call parser
-                let function_call_node =
-                    parse_function_call(token_stream, &arg.id, context, signature, string_table)?;
+                let function_call_node = parse_function_call(
+                    token_stream,
+                    &arg.id,
+                    context,
+                    signature,
+                    true,
+                    None,
+                    string_table,
+                )?;
                 let function_call_location = function_call_node.location.to_owned();
 
                 // -------------------------------
@@ -285,6 +292,8 @@ fn parse_identifier_or_call(
                             DataType::StringSlice,
                         ))],
                     },
+                    true,
+                    None,
                     string_table,
                 )?;
                 let function_call_location = function_call_node.location.to_owned();
@@ -402,8 +411,15 @@ fn parse_identifier_or_call(
         let signature = host_func_def.params_to_signature(string_table);
 
         // This is a function call - parse it using the function call parser
-        let function_call_node =
-            parse_function_call(token_stream, &full_name, context, &signature, string_table)?;
+        let function_call_node = parse_function_call(
+            token_stream,
+            &full_name,
+            context,
+            &signature,
+            true,
+            None,
+            string_table,
+        )?;
 
         if let NodeKind::HostFunctionCall {
             name: host_function_id,
@@ -876,8 +892,10 @@ fn dispatch_expression_token(
         }
 
         TokenKind::Newline => {
+            let previous_token = token_stream.previous_token();
             if state.consume_closing_parenthesis
-                || token_stream.previous_token().continues_expression()
+                || (previous_token.continues_expression()
+                    && !matches!(previous_token, TokenKind::End))
             {
                 token_stream.skip_newlines();
                 return Ok(ExpressionTokenStep::Continue);
@@ -1220,21 +1238,22 @@ pub fn create_multiple_expressions(
     let mut expressions: Vec<Expression> = Vec::new();
     for (type_index, expected_type) in context.expected_result_types.iter().enumerate() {
         let mut expected_arg = expected_type.to_owned();
-        let expression = create_expression(
+        let expression = create_expression_with_trailing_newline_policy(
             token_stream,
             context,
             &mut expected_arg,
             &Ownership::ImmutableOwned,
             false,
+            consume_closing_parenthesis,
             string_table,
         )?;
 
         expressions.push(expression);
 
-        // Newlines are expression terminators almost everywhere else, but inside an
-        // already-open argument/return list they are just layout. Normalize them here
-        // so multiline calls like `io(\n value\n)` leave us positioned on the comma or `)`.
-        if token_stream.current_token_kind() == &TokenKind::Newline {
+        // Newlines are expression terminators almost everywhere else. Only normalize
+        // them here when we're inside a parenthesized list so multiline calls like
+        // `io(\n value\n)` leave us positioned on the comma or `)`.
+        if consume_closing_parenthesis && token_stream.current_token_kind() == &TokenKind::Newline {
             token_stream.skip_newlines();
         }
 
@@ -1291,6 +1310,29 @@ pub fn create_expression(
     consume_closing_parenthesis: bool,
     string_table: &mut StringTable,
 ) -> Result<Expression, CompilerError> {
+    create_expression_with_trailing_newline_policy(
+        token_stream,
+        context,
+        data_type,
+        ownership,
+        consume_closing_parenthesis,
+        true,
+        string_table,
+    )
+}
+
+// WHAT: shared expression parser entry with configurable trailing-newline behavior.
+// WHY: callers parsing comma-separated lists outside parentheses (for example
+//      fallback/return lists) must preserve line boundaries between statements.
+fn create_expression_with_trailing_newline_policy(
+    token_stream: &mut FileTokens,
+    context: &ScopeContext,
+    data_type: &mut DataType,
+    ownership: &Ownership,
+    consume_closing_parenthesis: bool,
+    skip_trailing_newlines: bool,
+    string_table: &mut StringTable,
+) -> Result<Expression, CompilerError> {
     let mut expression: Vec<AstNode> = Vec::new();
 
     ast_log!(
@@ -1328,7 +1370,9 @@ pub fn create_expression(
         }
     }
 
-    token_stream.skip_newlines();
+    if skip_trailing_newlines {
+        token_stream.skip_newlines();
+    }
 
     evaluate_expression(context, expression, data_type, ownership, string_table)
 }

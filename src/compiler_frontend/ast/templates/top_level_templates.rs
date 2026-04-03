@@ -563,10 +563,24 @@ fn collect_references_from_expression(
                 collect_references_from_expression(argument, references);
             }
 
-            if let ResultCallHandling::Fallback(fallback_values) = handling {
-                for fallback in fallback_values {
-                    collect_references_from_expression(fallback, references);
+            match handling {
+                ResultCallHandling::Fallback(fallback_values) => {
+                    for fallback in fallback_values {
+                        collect_references_from_expression(fallback, references);
+                    }
                 }
+                ResultCallHandling::Handler { fallback, body, .. } => {
+                    if let Some(fallback_values) = fallback {
+                        for fallback in fallback_values {
+                            collect_references_from_expression(fallback, references);
+                        }
+                    }
+
+                    for node in body {
+                        collect_references_from_ast_node(node, references);
+                    }
+                }
+                ResultCallHandling::Propagate => {}
             }
         }
 
@@ -637,11 +651,29 @@ fn collect_references_from_ast_node(node: &AstNode, references: &mut FxHashSet<I
                 collect_references_from_expression(argument, references);
             }
 
-            if let ResultCallHandling::Fallback(fallback_values) = handling {
-                for fallback in fallback_values {
-                    collect_references_from_expression(fallback, references);
+            match handling {
+                ResultCallHandling::Fallback(fallback_values) => {
+                    for fallback in fallback_values {
+                        collect_references_from_expression(fallback, references);
+                    }
                 }
+                ResultCallHandling::Handler { fallback, body, .. } => {
+                    if let Some(fallback_values) = fallback {
+                        for fallback in fallback_values {
+                            collect_references_from_expression(fallback, references);
+                        }
+                    }
+
+                    for node in body {
+                        collect_references_from_ast_node(node, references);
+                    }
+                }
+                ResultCallHandling::Propagate => {}
             }
+        }
+
+        NodeKind::MultiBind { targets: _, value } => {
+            collect_references_from_expression(value, references);
         }
 
         NodeKind::StructDefinition(_, fields) => {

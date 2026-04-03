@@ -328,7 +328,7 @@ body {
     ;
     </code>
         </pre>
-    <h2>The function signature</h2><p>Functions in Beanstalk pass arguments by reference. </p><p>The arrow symbol is used to define the return signature of a function.  Functions can return multiple values.  If the function returns values,  it must use a type signature or the name of one of the arguments if it&#39;s returning that reference back to the caller. </p>
+    <h2>The function signature</h2><p>Functions in Beanstalk pass arguments by reference.</p><p>The arrow symbol is used to define the return signature of a function.  Functions can return multiple values.  If the function returns values,  it must use a type signature or the name of one of the arguments if it&#39;s returning that reference back to the caller.</p>
         <pre style="background-color: hsla(0, 0%, 42%, 0.12); padding-left: 1em; border-radius: 5px; max-width: 100%; white-space: pre; overflow-x: auto;">
             <code class='codeblock'>
 
@@ -357,37 +357,38 @@ body {
     <span class='bst-code-comment'>-- Functions use the &#39;!&#39; to show that they can return an error instead of any other values</span>
     <span class='bst-code-comment'>-- This error must always be handled at the call site,</span>
     <span class='bst-code-comment'>-- The &#39;!&#39; symbol provides convenient syntax sugar for this</span>
-    canError <span class='bst-code-operator'>|</span>x <span class='bst-code-type'>String</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>String,</span> <span class='bst-code-operator'>~</span><span class='bst-code-struct'>Error</span><span class='bst-code-operator'>!</span><span class='bst-code-operator'>:</span>
+    canError <span class='bst-code-operator'>|</span>x <span class='bst-code-type'>String</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>String,</span> <span class='bst-code-struct'>Float,</span> <span class='bst-code-struct'>Error</span><span class='bst-code-operator'>!</span><span class='bst-code-operator'>:</span>
 
         <span class='bst-code-keyword'>if</span> x.is_empty<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>:</span>
-        <span class='bst-code-keyword'>return</span> <span class='bst-code-struct'>Error</span><span class='bst-code-parenthesis'>(</span>msg <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;WHoops&quot;</span>, context <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-parenthesis'>}</span><span class='bst-code-parenthesis'>)</span>
+            <span class='bst-code-keyword'>return</span><span class='bst-code-operator'>!</span> <span class='bst-code-struct'>Error</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Whoops&quot;</span>, <span class='bst-code-parenthesis'>{</span><span class='bst-code-parenthesis'>}</span><span class='bst-code-parenthesis'>)</span>
         ;
 
-        <span class='bst-code-keyword'>return</span> x <span class='bst-code-operator'>+</span> <span class='bst-code-string'>&quot; is cool&quot;</span>
+        <span class='bst-code-keyword'>return</span> <span class='bst-code-parenthesis'>[</span>x, <span class='bst-code-string'>&quot; is cool&quot;</span><span class='bst-code-parenthesis'>]</span>, <span class='bst-code-number'>3.14</span>
     ;
 
-    defaultIfError <span class='bst-code-operator'>|</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
-        <span class='bst-code-keyword'>return</span> canError<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Sam&quot;</span><span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>!</span> <span class='bst-code-string'>&quot;&quot;</span>
+    defaultIfError <span class='bst-code-operator'>|</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>String,</span> <span class='bst-code-type'>Float</span><span class='bst-code-operator'>:</span>
+        string, number <span class='bst-code-operator'>=</span> canError<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;&quot;</span><span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>!</span> <span class='bst-code-string'>&quot;&quot;</span>, <span class='bst-code-number'>0.0</span>
+        <span class='bst-code-keyword'>return</span> string, number
     ;
 
-    bubble_up_error_with_context <span class='bst-code-operator'>|</span>name <span class='bst-code-type'>String</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-operator'>~</span><span class='bst-code-struct'>Error</span><span class='bst-code-operator'>!</span><span class='bst-code-operator'>:</span>
-        canError<span class='bst-code-parenthesis'>(</span>name<span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>~</span>err<span class='bst-code-operator'>!</span><span class='bst-code-operator'>:</span>
+    bubble_up_error_with_context <span class='bst-code-operator'>|</span>name <span class='bst-code-type'>String</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>Error</span><span class='bst-code-operator'>!</span><span class='bst-code-operator'>:</span>
+        value, number <span class='bst-code-operator'>=</span> canError<span class='bst-code-parenthesis'>(</span>name<span class='bst-code-parenthesis'>)</span> err<span class='bst-code-operator'>!</span><span class='bst-code-operator'>:</span>
             err.context.push<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;bubbled up from this function&quot;</span><span class='bst-code-parenthesis'>)</span>
-            <span class='bst-code-keyword'>return</span> err
+            <span class='bst-code-keyword'>return</span><span class='bst-code-operator'>!</span> err
         ;
 
-        io<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>Did</span> not error<span class='bst-code-operator'>!</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>)</span>
+        io<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>[</span>value, number<span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>)</span>
     ;
 
     panics <span class='bst-code-operator'>|</span><span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
         canError<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;&quot;</span><span class='bst-code-parenthesis'>)</span> e<span class='bst-code-operator'>!</span><span class='bst-code-operator'>:</span>
             io<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Error: &quot;</span>, e<span class='bst-code-parenthesis'>)</span>
-            <span class='bst-code-operator'>#</span>panic <span class='bst-code-string'>&quot;Panicking due to error&quot;</span>
+            panic<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Panicking due to error&quot;</span><span class='bst-code-parenthesis'>)</span>
         ;
     ;
     </code>
         </pre>
-    <h2>Closures</h2><p>Closures in Beanstalk are nameless functions used as values. They use the same syntax as functions, but do not have a name and therefore cannot be declared at the top level. </p><p>Closures may only appear inside a function or method body and are always expressions (rvalues). </p>
+    <h2>Closures</h2><p>Closures in Beanstalk are nameless functions used as values. They use the same syntax as functions, but do not have a name and therefore cannot be declared at the top level.</p><p>Closures may only appear inside a function or method body and are always expressions (rvalues).</p>
         <pre style="background-color: hsla(0, 0%, 42%, 0.12); padding-left: 1em; border-radius: 5px; max-width: 100%; white-space: pre; overflow-x: auto;">
             <code class='codeblock'>
     update_total <span class='bst-code-operator'>|</span>values <span class='bst-code-parenthesis'>{</span><span class='bst-code-type'>Int</span><span class='bst-code-parenthesis'>}</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>Int</span><span class='bst-code-operator'>:</span>
@@ -405,7 +406,7 @@ body {
     ;
     </code>
         </pre>
-    <h3>Capturing Variables</h3><p>A closure may reference values from its surrounding scope. This is called capture. </p><p>Captures are implicit, references by default and subject to the same mutability and exclusivity rules as normal variables. </p><h3>Returnning closures from functions</h3><p>Functions may return closures as values. </p><p>To represent a closure type, Beanstalk uses the `Fn` keyword followed by the parameter and return type signatures inside of brackets. </p>
+    <h3>Capturing Variables</h3><p>A closure may reference values from its surrounding scope. This is called capture.</p><p>Captures are implicit, references by default and subject to the same mutability and exclusivity rules as normal variables.</p><h3>Returnning closures from functions</h3><p>Functions may return closures as values.</p><p>To represent a closure type, Beanstalk uses the `Fn` keyword followed by the parameter and return type signatures inside of brackets.</p>
         <pre style="background-color: hsla(0, 0%, 42%, 0.12); padding-left: 1em; border-radius: 5px; max-width: 100%; white-space: pre; overflow-x: auto;">
             <code class='codeblock'>
     <span class='bst-code-comment'>-- Defining the type of a closure that takes an Int and returns a String</span>
@@ -533,6 +534,26 @@ body {
     return result;
     }
     return value;
+    }
+
+    function __bs_result_propagate(result) {
+    if (result && result.tag === "ok") {
+    return result.value;
+    }
+    if (result && result.tag === "err") {
+    throw { __bs_result_propagate: true, value: result.value };
+    }
+    throw new Error("Expected internal Result carrier during propagation");
+    }
+
+    function __bs_result_fallback(result, fallback) {
+    if (result && result.tag === "ok") {
+    return result.value;
+    }
+    if (result && result.tag === "err") {
+    return fallback();
+    }
+    throw new Error("Expected internal Result carrier during fallback handling");
     }
 
     function b_fn0() {

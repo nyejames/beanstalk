@@ -143,10 +143,13 @@ pub(crate) fn lower_expression(
         | HirExpressionKind::Collection(_)
         | HirExpressionKind::Range { .. }
         | HirExpressionKind::TupleConstruct { .. }
+        | HirExpressionKind::TupleGet { .. }
         | HirExpressionKind::OptionConstruct { .. }
         | HirExpressionKind::ResultConstruct { .. }
         | HirExpressionKind::ResultPropagate { .. }
-        | HirExpressionKind::ResultFallback { .. } => Err(CompilerError::lir_transformation(
+        | HirExpressionKind::ResultIsOk { .. }
+        | HirExpressionKind::ResultUnwrapOk { .. }
+        | HirExpressionKind::ResultUnwrapErr { .. } => Err(CompilerError::lir_transformation(
             "Wasm lowering does not yet support this expression construct",
         )),
     }

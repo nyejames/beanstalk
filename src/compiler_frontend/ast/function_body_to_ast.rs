@@ -20,6 +20,7 @@ use crate::compiler_frontend::ast::statements::functions::{
     FunctionReturn, FunctionSignature, ReturnSlot, parse_function_call,
 };
 use crate::compiler_frontend::ast::statements::loops::create_loop;
+use crate::compiler_frontend::ast::statements::multi_bind::parse_multi_bind_statement;
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
@@ -197,6 +198,11 @@ fn parse_symbol_statement(
     };
     let full_path = context.scope.append(id);
 
+    if let Some(multi_bind) = parse_multi_bind_statement(token_stream, context, string_table)? {
+        ast.push(multi_bind);
+        return Ok(());
+    }
+
     if let Some(start_target) = context.resolve_start_import(&id) {
         token_stream.advance();
 
@@ -212,6 +218,8 @@ fn parse_symbol_statement(
                             DataType::StringSlice,
                         ))],
                     },
+                    false,
+                    Some(warnings),
                     string_table,
                 )?);
                 return Ok(());
@@ -328,6 +336,8 @@ fn parse_symbol_statement(
             &full_path,
             context,
             &signature,
+            false,
+            Some(warnings),
             string_table,
         )?);
         return Ok(());

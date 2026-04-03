@@ -72,6 +72,7 @@ impl<'a> HirBuilder<'a> {
                         args,
                         result_types,
                         handling,
+                        true,
                         location,
                     )?;
                     prelude.extend(lowered.prelude);

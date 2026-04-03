@@ -1002,6 +1002,9 @@ fn record_shared_reads_in_expression(
                 record_shared_reads_in_expression(env, element, location.clone())?;
             }
         }
+        HirExpressionKind::TupleGet { tuple, .. } => {
+            record_shared_reads_in_expression(env, tuple, location.clone())?;
+        }
 
         HirExpressionKind::Range { start, end } => {
             record_shared_reads_in_expression(env, start, location.clone())?;
@@ -1024,9 +1027,10 @@ fn record_shared_reads_in_expression(
             record_shared_reads_in_expression(env, result, location.clone())?;
         }
 
-        HirExpressionKind::ResultFallback { result, fallback } => {
+        HirExpressionKind::ResultIsOk { result }
+        | HirExpressionKind::ResultUnwrapOk { result }
+        | HirExpressionKind::ResultUnwrapErr { result } => {
             record_shared_reads_in_expression(env, result, location.clone())?;
-            record_shared_reads_in_expression(env, fallback, location.clone())?;
         }
     }
 
@@ -1095,6 +1099,9 @@ fn collect_expression_roots(
                 collect_expression_roots(layout, state, element, out, location.clone())?;
             }
         }
+        HirExpressionKind::TupleGet { tuple, .. } => {
+            collect_expression_roots(layout, state, tuple, out, location.clone())?;
+        }
 
         HirExpressionKind::Range { start, end } => {
             collect_expression_roots(layout, state, start, out, location.clone())?;
@@ -1115,9 +1122,10 @@ fn collect_expression_roots(
             collect_expression_roots(layout, state, result, out, location)?;
         }
 
-        HirExpressionKind::ResultFallback { result, fallback } => {
-            collect_expression_roots(layout, state, result, out, location.clone())?;
-            collect_expression_roots(layout, state, fallback, out, location)?;
+        HirExpressionKind::ResultIsOk { result }
+        | HirExpressionKind::ResultUnwrapOk { result }
+        | HirExpressionKind::ResultUnwrapErr { result } => {
+            collect_expression_roots(layout, state, result, out, location)?;
         }
 
         HirExpressionKind::Int(_)

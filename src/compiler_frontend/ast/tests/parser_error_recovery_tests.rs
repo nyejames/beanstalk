@@ -46,3 +46,26 @@ fn reports_unterminated_match_scope_at_end_of_file() {
             .contains("Unexpected end of file in match statement")
     );
 }
+
+#[test]
+fn reports_multi_bind_malformed_comma_sequence() {
+    let error = parse_single_file_ast_error(
+        "pair || -> Int, Int:\n    return 1, 2\n;\n\na, , b = pair()\n",
+    );
+
+    assert_eq!(error.error_type, ErrorType::Syntax);
+    assert!(error.msg.contains("Malformed multi-bind target list"));
+}
+
+#[test]
+fn reports_multi_bind_mutable_target_without_explicit_type() {
+    let error =
+        parse_single_file_ast_error("pair || -> Int, Int:\n    return 1, 2\n;\n\na, b ~= pair()\n");
+
+    assert_eq!(error.error_type, ErrorType::Rule);
+    assert!(
+        error.msg.contains("requires an explicit type annotation"),
+        "{}",
+        error.msg
+    );
+}

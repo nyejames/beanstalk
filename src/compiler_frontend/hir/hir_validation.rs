@@ -884,6 +884,10 @@ impl<'a> HirValidator<'a> {
                 }
             }
 
+            HirExpressionKind::TupleGet { tuple, .. } => {
+                self.validate_expression(tuple, anchor)?;
+            }
+
             HirExpressionKind::Range { start, end } => {
                 self.validate_expression(start, anchor)?;
                 self.validate_expression(end, anchor)?;
@@ -913,9 +917,10 @@ impl<'a> HirValidator<'a> {
                 self.validate_expression(result, anchor)?;
             }
 
-            HirExpressionKind::ResultFallback { result, fallback } => {
+            HirExpressionKind::ResultIsOk { result }
+            | HirExpressionKind::ResultUnwrapOk { result }
+            | HirExpressionKind::ResultUnwrapErr { result } => {
                 self.validate_expression(result, anchor)?;
-                self.validate_expression(fallback, anchor)?;
             }
         }
 

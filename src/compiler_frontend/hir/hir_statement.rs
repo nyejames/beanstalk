@@ -4,15 +4,20 @@
 //! terminators.
 
 use crate::compiler_frontend::ast::ast_nodes::{
-    AstNode, Declaration, ForLoopRange, NodeKind, SourceLocation,
+    AstNode, Declaration, ForLoopRange, MultiBindTarget, MultiBindTargetKind, NodeKind,
+    SourceLocation,
 };
-use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
+use crate::compiler_frontend::ast::expressions::expression::{
+    Expression, ExpressionKind, ResultCallHandling,
+};
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::compiler_errors::CompilerError;
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
+use crate::compiler_frontend::hir::hir_datatypes::HirTypeKind;
 use crate::compiler_frontend::hir::hir_nodes::{
-    BlockId, FunctionId, HirExpressionKind, HirStatement, HirStatementKind, HirTerminator,
-    ResultVariant,
+    BlockId, FunctionId, HirExpressionKind, HirPlace, HirStatement, HirStatementKind,
+    HirTerminator, ResultVariant, ValueKind,
 };
 use crate::compiler_frontend::host_functions::CallTarget;
 use crate::compiler_frontend::interned_path::InternedPath;
@@ -109,6 +114,10 @@ impl<'a> HirBuilder<'a> {
                 self.lower_assignment_statement(target, value, &node.location)
             }
 
+            NodeKind::MultiBind { targets, value } => {
+                self.lower_multi_bind_statement(targets, value, &node.location)
+            }
+
             NodeKind::FunctionCall {
                 name,
                 args,
@@ -125,15 +134,12 @@ impl<'a> HirBuilder<'a> {
                 result_types,
                 handling,
                 location,
-            } => self.lower_expression_statement(
-                &Expression::result_handled_function_call(
-                    name.to_owned(),
-                    args.to_owned(),
-                    result_types.to_owned(),
-                    handling.to_owned(),
-                    location.to_owned(),
-                ),
-                &node.location,
+            } => self.lower_result_handled_call_statement(
+                name,
+                args,
+                result_types,
+                handling,
+                location,
             ),
 
             NodeKind::HostFunctionCall {
@@ -290,6 +296,180 @@ impl<'a> HirBuilder<'a> {
             },
             location,
         )
+    }
+
+    fn lower_result_handled_call_statement(
+        &mut self,
+        name: &InternedPath,
+        args: &[Expression],
+        result_types: &[DataType],
+        handling: &ResultCallHandling,
+        location: &SourceLocation,
+    ) -> Result<(), CompilerError> {
+        let function_id = self.resolve_function_id_or_error(name, location)?;
+        let lowered = self.lower_result_handled_call_expression(
+            CallTarget::UserFunction(function_id),
+            args,
+            result_types,
+            handling,
+            false,
+            location,
+        )?;
+
+        for prelude in lowered.prelude {
+            self.emit_statement_to_current_block(prelude, location)?;
+        }
+
+        if self.is_unit_type(lowered.value.ty) {
+            if matches!(handling, ResultCallHandling::Propagate) {
+                self.emit_statement_kind(HirStatementKind::Expr(lowered.value), location)?;
+            }
+            return Ok(());
+        }
+
+        self.emit_statement_kind(HirStatementKind::Expr(lowered.value), location)
+    }
+
+    fn lower_multi_bind_statement(
+        &mut self,
+        targets: &[MultiBindTarget],
+        value: &Expression,
+        location: &SourceLocation,
+    ) -> Result<(), CompilerError> {
+        if targets.len() < 2 {
+            return_hir_transformation_error!(
+                "Single-target bind unexpectedly reached multi-bind lowering",
+                self.hir_error_location(location)
+            );
+        }
+
+        let lowered_rhs = self.lower_expression(value)?;
+        for prelude in lowered_rhs.prelude {
+            self.emit_statement_to_current_block(prelude, location)?;
+        }
+
+        let rhs_type = lowered_rhs.value.ty;
+        let rhs_local = self.allocate_temp_local(rhs_type, Some(location.to_owned()))?;
+        self.emit_statement_kind(
+            HirStatementKind::Assign {
+                target: HirPlace::Local(rhs_local),
+                value: lowered_rhs.value,
+            },
+            location,
+        )?;
+
+        let tuple_fields = match &self.type_context.get(rhs_type).kind {
+            HirTypeKind::Tuple { fields } => fields.to_owned(),
+            _ => {
+                return_hir_transformation_error!(
+                    "Multi-bind right-hand value lowered to a non-tuple shape",
+                    self.hir_error_location(location)
+                );
+            }
+        };
+
+        if tuple_fields.len() != targets.len() {
+            return_hir_transformation_error!(
+                "Multi-bind slot arity does not match lowered tuple shape",
+                self.hir_error_location(location)
+            );
+        }
+
+        for (slot_index, target) in targets.iter().enumerate() {
+            let slot_type = tuple_fields[slot_index];
+            let target_type = self.lower_data_type(&target.data_type, &target.location)?;
+
+            if slot_type != target_type {
+                return_hir_transformation_error!(
+                    format!(
+                        "Lowered multi-bind slot type mismatch at index {}",
+                        slot_index
+                    ),
+                    self.hir_error_location(&target.location)
+                );
+            }
+
+            let target_local = match target.kind {
+                MultiBindTargetKind::Declaration => self.allocate_named_local(
+                    target.id.to_owned(),
+                    target_type,
+                    target.ownership.is_mutable(),
+                    Some(target.location.to_owned()),
+                )?,
+                MultiBindTargetKind::Assignment => {
+                    let Some(local_id) = self.locals_by_name.get(&target.id).copied() else {
+                        return_hir_transformation_error!(
+                            format!(
+                                "Multi-bind assignment target '{}' is missing from local bindings",
+                                self.symbol_name_for_diagnostics(&target.id)
+                            ),
+                            self.hir_error_location(&target.location)
+                        );
+                    };
+
+                    let Some((block_index, local_index)) =
+                        self.local_index_by_id.get(&local_id).copied()
+                    else {
+                        return_hir_transformation_error!(
+                            "Multi-bind assignment target local is not registered in HIR blocks",
+                            self.hir_error_location(&target.location)
+                        );
+                    };
+
+                    let local = &self.module.blocks[block_index].locals[local_index];
+                    if !local.mutable {
+                        return_hir_transformation_error!(
+                            format!(
+                                "Multi-bind assignment target '{}' lowered as immutable local",
+                                self.symbol_name_for_diagnostics(&target.id)
+                            ),
+                            self.hir_error_location(&target.location)
+                        );
+                    }
+
+                    if local.ty != target_type {
+                        return_hir_transformation_error!(
+                            format!(
+                                "Multi-bind assignment target '{}' lowered with mismatched local type",
+                                self.symbol_name_for_diagnostics(&target.id)
+                            ),
+                            self.hir_error_location(&target.location)
+                        );
+                    }
+
+                    local_id
+                }
+            };
+
+            let slot_region = self.current_region_or_error(&target.location)?;
+            let tuple_value = self.make_expression(
+                &target.location,
+                HirExpressionKind::Load(HirPlace::Local(rhs_local)),
+                rhs_type,
+                ValueKind::RValue,
+                slot_region,
+            );
+            let slot_value = self.make_expression(
+                &target.location,
+                HirExpressionKind::TupleGet {
+                    tuple: Box::new(tuple_value),
+                    index: slot_index,
+                },
+                slot_type,
+                ValueKind::RValue,
+                slot_region,
+            );
+
+            self.emit_statement_kind(
+                HirStatementKind::Assign {
+                    target: HirPlace::Local(target_local),
+                    value: slot_value,
+                },
+                &target.location,
+            )?;
+        }
+
+        Ok(())
     }
 
     fn lower_call_statement(

@@ -487,7 +487,7 @@ impl<'a> HirBuilder<'a> {
         Ok(created)
     }
 
-    pub(super) fn create_child_region(
+    pub(crate) fn create_child_region(
         &mut self,
         parent: crate::compiler_frontend::hir::hir_nodes::RegionId,
     ) -> crate::compiler_frontend::hir::hir_nodes::RegionId {
@@ -496,7 +496,7 @@ impl<'a> HirBuilder<'a> {
         region_id
     }
 
-    pub(super) fn create_block(
+    pub(crate) fn create_block(
         &mut self,
         region: crate::compiler_frontend::hir::hir_nodes::RegionId,
         source_location: &SourceLocation,
@@ -547,7 +547,7 @@ impl<'a> HirBuilder<'a> {
         }
     }
 
-    pub(super) fn emit_jump_to(
+    pub(crate) fn emit_jump_to(
         &mut self,
         from_block: BlockId,
         target: BlockId,
@@ -567,7 +567,7 @@ impl<'a> HirBuilder<'a> {
         Ok(())
     }
 
-    pub(super) fn emit_terminator(
+    pub(crate) fn emit_terminator(
         &mut self,
         block_id: BlockId,
         terminator: HirTerminator,
@@ -606,7 +606,7 @@ impl<'a> HirBuilder<'a> {
         Ok(targets)
     }
 
-    pub(super) fn is_unit_type(&self, ty: TypeId) -> bool {
+    pub(crate) fn is_unit_type(&self, ty: TypeId) -> bool {
         matches!(self.type_context.get(ty).kind, HirTypeKind::Unit)
     }
 }

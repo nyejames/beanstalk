@@ -17,6 +17,21 @@ pub struct Declaration {
 }
 
 #[derive(Debug, Clone)]
+pub enum MultiBindTargetKind {
+    Declaration,
+    Assignment,
+}
+
+#[derive(Debug, Clone)]
+pub struct MultiBindTarget {
+    pub id: InternedPath,
+    pub data_type: DataType,
+    pub ownership: Ownership,
+    pub kind: MultiBindTargetKind,
+    pub location: SourceLocation,
+}
+
+#[derive(Debug, Clone)]
 pub struct AstNode {
     pub kind: NodeKind,
     pub location: SourceLocation,
@@ -122,6 +137,11 @@ pub enum NodeKind {
     // Mutation of existing mutable variables
     Assignment {
         target: Box<AstNode>, // Variable, FieldAccess, Deref, etc.
+        value: Expression,
+    },
+
+    MultiBind {
+        targets: Vec<MultiBindTarget>,
         value: Expression,
     },
 

@@ -9,10 +9,15 @@ use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, ResultCallHandling,
 };
 use crate::compiler_frontend::ast::expressions::parse_expression::create_multiple_expressions;
+use crate::compiler_frontend::ast::statements::result_handling::{
+    ResultHandledCall, is_result_propagation_boundary, parse_named_result_handler_call,
+    parse_result_fallback_values,
+};
 use crate::compiler_frontend::ast::statements::structs::{
     SignatureTypeContext, parse_explicit_signature_type, parse_parameters,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
+use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::host_functions::HostFunctionDef;
 use crate::compiler_frontend::interned_path::InternedPath;
@@ -634,6 +639,8 @@ pub fn parse_function_call(
     id: &InternedPath,
     context: &ScopeContext,
     signature: &FunctionSignature,
+    value_required: bool,
+    warnings: Option<&mut Vec<CompilerWarning>>,
     string_table: &mut StringTable,
 ) -> Result<AstNode, CompilerError> {
     // Assumes we're starting at the first token after the name of the function call
@@ -648,8 +655,12 @@ pub fn parse_function_call(
     // Create expressions until hitting a closed parenthesis
     let args =
         create_function_call_arguments(token_stream, &signature.parameters, context, string_table)?;
-    let success_result_types = signature.return_data_types();
-    let call_location = token_stream.current_location();
+    let call = ResultHandledCall {
+        name: id.to_owned(),
+        args,
+        result_types: signature.return_data_types(),
+        call_location: token_stream.current_location(),
+    };
 
     if let Some(error_return) = signature.error_return() {
         if token_stream.current_token_kind() == &TokenKind::Bang {
@@ -684,18 +695,18 @@ pub fn parse_function_call(
 
                 return Ok(AstNode {
                     kind: NodeKind::ResultHandledFunctionCall {
-                        name: id.to_owned(),
-                        args,
-                        result_types: success_result_types,
+                        name: call.name,
+                        args: call.args,
+                        result_types: call.result_types,
                         handling: ResultCallHandling::Propagate,
-                        location: call_location.to_owned(),
+                        location: call.call_location,
                     },
                     location: token_stream.current_location(),
                     scope: context.scope.clone(),
                 });
             }
 
-            if success_result_types.is_empty() {
+            if call.result_types.is_empty() {
                 return_rule_error!(
                     "This function has no success return values, so fallback values cannot be provided here",
                     token_stream.current_location(),
@@ -706,72 +717,32 @@ pub fn parse_function_call(
                 );
             }
 
-            let fallback_context = context.new_child_expression(success_result_types.to_owned());
-            let fallback_values =
-                create_multiple_expressions(token_stream, &fallback_context, false, string_table)?;
+            let fallback_values = parse_result_fallback_values(
+                token_stream,
+                context,
+                &call.result_types,
+                "Fallback values",
+                string_table,
+            )?;
 
-            if token_stream.current_token_kind() == &TokenKind::Comma {
-                return_type_error!(
-                    format!(
-                        "Fallback values provide more entries than the success return arity (expected {}).",
-                        success_result_types.len()
-                    ),
-                    token_stream.current_location(),
-                    {
-                        CompilationStage => "Function Call Parsing",
-                        PrimarySuggestion => "Provide exactly one fallback value for each success return slot",
-                    }
-                );
-            }
-
-            return Ok(AstNode {
-                kind: NodeKind::ResultHandledFunctionCall {
-                    name: id.to_owned(),
-                    args,
-                    result_types: success_result_types,
-                    handling: ResultCallHandling::Fallback(fallback_values),
-                    location: call_location.to_owned(),
-                },
-                location: token_stream.current_location(),
-                scope: context.scope.clone(),
-            });
+            return Ok(call.into_ast_node(
+                ResultCallHandling::Fallback(fallback_values),
+                token_stream.current_location(),
+                &context.scope,
+            ));
         }
 
         if matches!(token_stream.current_token_kind(), TokenKind::Symbol(_))
             && token_stream.peek_next_token() == Some(&TokenKind::Bang)
         {
-            let TokenKind::Symbol(handler_name) = token_stream.current_token_kind().to_owned()
-            else {
-                unreachable!();
-            };
-
-            token_stream.advance();
-            token_stream.advance();
-
-            if token_stream.current_token_kind() != &TokenKind::Colon {
-                return_rule_error!(
-                    format!(
-                        "Bare '{}!' is invalid for result handling. Add a handler scope with ': ... ;' after the bang.",
-                        string_table.resolve(handler_name)
-                    ),
-                    token_stream.current_location(),
-                    {
-                        CompilationStage => "Function Call Parsing",
-                        PrimarySuggestion => "Use 'call(...)!' for propagation, 'call(...) ! fallback' for fallback values, or 'call(...) err!: ... ;' for a scoped handler",
-                    }
-                );
-            }
-
-            return_rule_error!(
-                format!(
-                    "Named error handlers ('{}!:' scopes) are not implemented in this compiler pass",
-                    string_table.resolve(handler_name)
-                ),
-                token_stream.current_location(),
-                {
-                    CompilationStage => "Function Call Parsing",
-                    PrimarySuggestion => "Use propagation ('call(...)!') or fallback ('call(...) ! value') syntax for now",
-                }
+            return parse_named_result_handler_call(
+                token_stream,
+                context,
+                call,
+                error_return.data_type(),
+                value_required,
+                warnings,
+                string_table,
             );
         }
 
@@ -796,29 +767,14 @@ pub fn parse_function_call(
 
     Ok(AstNode {
         kind: NodeKind::FunctionCall {
-            name: id.to_owned(),
-            args,
-            result_types: success_result_types,
-            location: call_location,
+            name: call.name,
+            args: call.args,
+            result_types: call.result_types,
+            location: call.call_location,
         },
         location: token_stream.current_location(),
         scope: context.scope.clone(),
     })
-}
-
-fn is_result_propagation_boundary(token: &TokenKind) -> bool {
-    matches!(
-        token,
-        TokenKind::CloseParenthesis
-            | TokenKind::Comma
-            | TokenKind::Newline
-            | TokenKind::End
-            | TokenKind::Eof
-            | TokenKind::Colon
-            | TokenKind::TemplateClose
-            | TokenKind::CloseCurly
-            | TokenKind::Dot
-    )
 }
 
 pub fn create_function_call_arguments(

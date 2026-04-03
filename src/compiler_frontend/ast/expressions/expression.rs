@@ -47,6 +47,12 @@ impl ConstValueKind {
 pub enum ResultCallHandling {
     Propagate,
     Fallback(Vec<Expression>),
+    Handler {
+        error_name: StringId,
+        error_binding: InternedPath,
+        fallback: Option<Vec<Expression>>,
+        body: Vec<AstNode>,
+    },
 }
 
 impl Expression {

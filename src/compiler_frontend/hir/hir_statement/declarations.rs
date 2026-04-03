@@ -418,7 +418,7 @@ impl<'a> HirBuilder<'a> {
         )
     }
 
-    pub(super) fn allocate_named_local(
+    pub(crate) fn allocate_named_local(
         &mut self,
         name: InternedPath,
         ty: crate::compiler_frontend::hir::hir_datatypes::TypeId,

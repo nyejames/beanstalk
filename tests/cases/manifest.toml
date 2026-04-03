@@ -142,3 +142,73 @@ tags = ["diagnostics", "html", "paths", "assets"]
 id = "html_tracked_asset_unreferenced_not_emitted"
 path = "html_tracked_asset_unreferenced_not_emitted"
 tags = ["success", "html", "paths", "assets"]
+
+[[case]]
+id = "result_named_handler_scope_bubbles_error"
+path = "result_named_handler_scope_bubbles_error"
+tags = ["success", "ast", "hir", "results", "options"]
+
+[[case]]
+id = "result_named_handler_scope_with_fallback"
+path = "result_named_handler_scope_with_fallback"
+tags = ["success", "ast", "hir", "results", "options"]
+
+[[case]]
+id = "result_multi_bind_propagate"
+path = "result_multi_bind_propagate"
+tags = ["success", "ast", "hir", "results", "options"]
+
+[[case]]
+id = "result_multi_bind_fallback"
+path = "result_multi_bind_fallback"
+tags = ["success", "ast", "hir", "results", "options"]
+
+[[case]]
+id = "multi_bind_plain_multi_return"
+path = "multi_bind_plain_multi_return"
+tags = ["success", "ast", "hir", "results", "options"]
+
+[[case]]
+id = "multi_bind_mixed_existing_and_new_targets"
+path = "multi_bind_mixed_existing_and_new_targets"
+tags = ["success", "ast", "hir", "results", "options"]
+
+[[case]]
+id = "multi_bind_explicit_types_and_mutability"
+path = "multi_bind_explicit_types_and_mutability"
+tags = ["success", "ast", "hir", "results", "options"]
+
+[[case]]
+id = "multi_bind_optional_slots"
+path = "multi_bind_optional_slots"
+tags = ["success", "ast", "hir", "results", "options"]
+
+[[case]]
+id = "result_named_handler_bare_err_rejected"
+path = "result_named_handler_bare_err_rejected"
+tags = ["diagnostics", "ast", "results", "options"]
+
+[[case]]
+id = "multi_bind_wrong_arity_rejected"
+path = "multi_bind_wrong_arity_rejected"
+tags = ["diagnostics", "ast", "results", "options"]
+
+[[case]]
+id = "multi_bind_immutable_existing_target_rejected"
+path = "multi_bind_immutable_existing_target_rejected"
+tags = ["diagnostics", "ast", "results", "options"]
+
+[[case]]
+id = "multi_bind_mutable_without_type_rejected"
+path = "multi_bind_mutable_without_type_rejected"
+tags = ["diagnostics", "ast", "results", "options"]
+
+[[case]]
+id = "multi_bind_type_mismatch_rejected"
+path = "multi_bind_type_mismatch_rejected"
+tags = ["diagnostics", "ast", "results", "options"]
+
+[[case]]
+id = "result_handler_without_fallback_fallthrough_rejected"
+path = "result_handler_without_fallback_fallthrough_rejected"
+tags = ["diagnostics", "ast", "results", "options"]

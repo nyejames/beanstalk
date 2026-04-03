@@ -139,6 +139,7 @@ impl<'a> HirBuilder<'a> {
                     args,
                     &self.extract_return_types_from_datatype(&expr.data_type),
                     handling,
+                    true,
                     &expr.location,
                 )
             }

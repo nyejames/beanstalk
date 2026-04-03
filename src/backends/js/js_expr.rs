@@ -88,6 +88,11 @@ impl<'hir> JsEmitter<'hir> {
                 }
             }
 
+            HirExpressionKind::TupleGet { tuple, index } => {
+                let tuple = self.lower_expr(tuple)?;
+                Ok(format!("({})[{}]", tuple, index))
+            }
+
             HirExpressionKind::OptionConstruct { variant, value } => match (variant, value) {
                 (OptionVariant::None, None) => Ok("{ tag: \"none\" }".to_owned()),
                 (OptionVariant::Some, Some(value)) => Ok(format!(
@@ -116,13 +121,19 @@ impl<'hir> JsEmitter<'hir> {
                 Ok(format!("__bs_result_propagate({})", lowered_result))
             }
 
-            HirExpressionKind::ResultFallback { result, fallback } => {
+            HirExpressionKind::ResultIsOk { result } => {
                 let lowered_result = self.lower_expr(result)?;
-                let lowered_fallback = self.lower_expr(fallback)?;
-                Ok(format!(
-                    "__bs_result_fallback({}, () => ({}))",
-                    lowered_result, lowered_fallback
-                ))
+                Ok(format!("(({}).tag === \"ok\")", lowered_result))
+            }
+
+            HirExpressionKind::ResultUnwrapOk { result } => {
+                let lowered_result = self.lower_expr(result)?;
+                Ok(format!("(({}).value)", lowered_result))
+            }
+
+            HirExpressionKind::ResultUnwrapErr { result } => {
+                let lowered_result = self.lower_expr(result)?;
+                Ok(format!("(({}).value)", lowered_result))
             }
         }
     }

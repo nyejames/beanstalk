@@ -279,6 +279,53 @@ fn rejects_bare_named_error_handler_without_scope() {
 }
 
 #[test]
+fn parses_named_handler_with_fallback_scope_in_declaration_rhs() {
+    let (ast, string_table) = parse_single_file_ast(
+        "Error = |\n    msg String,\n|\n\ncan_error |value String| -> String, Error!:\n    return value\n;\n\nrecover |value String| -> String:\n    output = can_error(value) err! \"fallback\":\n        io(err.msg)\n    ;\n    return output\n;\n",
+    );
+
+    let body = function_body_by_name(&ast, &string_table, "recover");
+    let NodeKind::VariableDeclaration(output_decl) = &body[0].kind else {
+        panic!("expected declaration statement in recover()");
+    };
+
+    let ExpressionKind::ResultHandledFunctionCall { handling, .. } = &output_decl.value.kind else {
+        panic!("expected handled call expression in recover declaration");
+    };
+
+    let ResultCallHandling::Handler {
+        error_name: _,
+        error_binding: _,
+        fallback,
+        body,
+    } = handling
+    else {
+        panic!("expected named-handler call handling");
+    };
+
+    let Some(fallback_values) = fallback else {
+        panic!("expected handler fallback values");
+    };
+    assert_eq!(fallback_values.len(), 1);
+    assert_eq!(body.len(), 1);
+}
+
+#[test]
+fn rejects_fallthrough_named_handler_without_fallback_when_values_are_required() {
+    let error = parse_single_file_ast_error(
+        "Error = |\n    msg String,\n|\n\ncan_error |value String| -> String, Error!:\n    return value\n;\n\nrecover |value String| -> String:\n    return can_error(value) err!:\n        io(err.msg)\n    ;\n;\n",
+    );
+
+    assert!(
+        error
+            .msg
+            .contains("Named handler without fallback can fall through"),
+        "{}",
+        error.msg
+    );
+}
+
+#[test]
 fn parses_standalone_result_propagation_statement() {
     let (ast, string_table) = parse_single_file_ast(
         "Error = |\n    msg String,\n|\n\ncan_error || -> Error!:\n    return\n;\n\nrun || -> Error!:\n    can_error()!\n;\n",

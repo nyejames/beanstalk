@@ -38,6 +38,8 @@ pub fn create_reference(
             &reference_arg.id,
             context,
             signature,
+            true,
+            None,
             string_table,
         ),
 

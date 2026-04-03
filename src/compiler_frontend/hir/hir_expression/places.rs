@@ -61,6 +61,7 @@ impl<'a> HirBuilder<'a> {
                     args,
                     result_types,
                     handling,
+                    true,
                     location,
                 )
             }
@@ -202,6 +203,7 @@ impl<'a> HirBuilder<'a> {
                     args,
                     result_types,
                     handling,
+                    true,
                     location,
                 )?;
                 let place = self.place_from_expression(&lowered.value, &node.location)?;

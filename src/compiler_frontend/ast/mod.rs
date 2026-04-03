@@ -23,6 +23,8 @@ pub(crate) mod statements {
     pub(crate) mod declarations;
     pub(crate) mod functions;
     pub(crate) mod loops;
+    pub(crate) mod multi_bind;
+    pub(crate) mod result_handling;
     pub(crate) mod structs;
 }
 pub(crate) mod field_access;
