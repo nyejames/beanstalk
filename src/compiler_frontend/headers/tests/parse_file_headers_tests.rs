@@ -1,5 +1,7 @@
 use super::*;
-use crate::compiler_frontend::ast::statements::functions::{FunctionReturn, FunctionSignature};
+use crate::compiler_frontend::ast::statements::functions::{
+    FunctionReturn, FunctionSignature, ReturnChannel, ReturnSlot,
+};
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
@@ -360,7 +362,7 @@ fn function_value_return_is_parsed_into_canonical_return_slots() {
 
     assert_eq!(
         &signature.returns,
-        &vec![FunctionReturn::Value(DataType::Int)]
+        &vec![ReturnSlot::success(FunctionReturn::Value(DataType::Int))]
     );
 }
 
@@ -371,7 +373,10 @@ fn function_named_return_is_preserved_for_ast_resolution() {
 
     assert!(matches!(
         signature.returns.as_slice(),
-        [FunctionReturn::Value(DataType::NamedType(_))]
+        [ReturnSlot {
+            value: FunctionReturn::Value(DataType::NamedType(_)),
+            channel: ReturnChannel::Success
+        }]
     ));
 }
 
@@ -382,10 +387,10 @@ fn function_alias_return_is_parsed_into_canonical_return_slots() {
 
     assert_eq!(
         &signature.returns,
-        &vec![FunctionReturn::AliasCandidates {
+        &vec![ReturnSlot::success(FunctionReturn::AliasCandidates {
             parameter_indices: vec![0],
             data_type: DataType::Int,
-        }]
+        })]
     );
 }
 
@@ -425,7 +430,10 @@ fn function_signature_preserves_unknown_symbolic_return_for_ast_resolution() {
 
     assert!(matches!(
         signature.returns.as_slice(),
-        [FunctionReturn::Value(DataType::NamedType(_))]
+        [ReturnSlot {
+            value: FunctionReturn::Value(DataType::NamedType(_)),
+            channel: ReturnChannel::Success
+        }]
     ));
 }
 

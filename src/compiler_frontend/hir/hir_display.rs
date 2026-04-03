@@ -451,6 +451,14 @@ impl<'a> HirDisplayContext<'a> {
             HirExpressionKind::ResultConstruct { variant, value } => {
                 format!("{}({})", variant, self.render_expression(value))
             }
+            HirExpressionKind::ResultPropagate { result } => {
+                format!("propagate!({})", self.render_expression(result))
+            }
+            HirExpressionKind::ResultFallback { result, fallback } => format!(
+                "fallback!({}, {})",
+                self.render_expression(result),
+                self.render_expression(fallback)
+            ),
         }
     }
 

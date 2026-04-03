@@ -17,7 +17,7 @@ use crate::compiler_frontend::ast::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::ast::statements::branching::create_branch;
 use crate::compiler_frontend::ast::statements::declarations::new_declaration;
 use crate::compiler_frontend::ast::statements::functions::{
-    FunctionReturn, FunctionSignature, parse_function_call,
+    FunctionReturn, FunctionSignature, ReturnSlot, parse_function_call,
 };
 use crate::compiler_frontend::ast::statements::loops::create_loop;
 use crate::compiler_frontend::ast::templates::template_types::Template;
@@ -48,7 +48,9 @@ fn is_assignment_operator(token: &TokenKind) -> bool {
 
 fn is_expression_statement(expr: &Expression) -> bool {
     match &expr.kind {
-        ExpressionKind::FunctionCall(..) | ExpressionKind::HostFunctionCall(..) => true,
+        ExpressionKind::FunctionCall(..)
+        | ExpressionKind::ResultHandledFunctionCall { .. }
+        | ExpressionKind::HostFunctionCall(..) => true,
         ExpressionKind::Runtime(nodes) => nodes.iter().any(|node| {
             matches!(
                 node.kind,
@@ -206,7 +208,9 @@ fn parse_symbol_statement(
                     context,
                     &FunctionSignature {
                         parameters: vec![],
-                        returns: vec![FunctionReturn::Value(DataType::StringSlice)],
+                        returns: vec![ReturnSlot::success(FunctionReturn::Value(
+                            DataType::StringSlice,
+                        ))],
                     },
                     string_table,
                 )?);
@@ -593,6 +597,66 @@ pub fn function_body_to_ast(
                 }
 
                 token_stream.advance();
+
+                if token_stream.current_token_kind() == &TokenKind::Bang {
+                    let Some(expected_error_type) = context.expected_error_type.as_ref() else {
+                        return_rule_error!(
+                            "return! can only be used inside functions that declare an error return slot",
+                            token_stream.current_location(),
+                            {
+                                CompilationStage => "AST Construction",
+                                PrimarySuggestion => "Use plain 'return' or add an error slot like 'Error!' to the function signature",
+                            }
+                        );
+                    };
+
+                    token_stream.advance();
+                    if is_return_terminator(token_stream.current_token_kind()) {
+                        return_type_error!(
+                            "return! requires an error value",
+                            token_stream.current_location(),
+                            {
+                                CompilationStage => "AST Construction",
+                                PrimarySuggestion => "Provide one value that matches the function error return type",
+                            }
+                        );
+                    }
+
+                    let mut expected_error = expected_error_type.to_owned();
+                    let returned_error = create_expression(
+                        token_stream,
+                        &context,
+                        &mut expected_error,
+                        &Ownership::ImmutableOwned,
+                        false,
+                        string_table,
+                    )?;
+
+                    let normalized_actual =
+                        normalize_return_expression_type(&returned_error.data_type);
+                    if &normalized_actual != expected_error_type {
+                        return_type_error!(
+                            format!(
+                                "return! value has incorrect type. Expected '{}', got '{}'.",
+                                expected_error_type.display_with_table(string_table),
+                                normalized_actual.display_with_table(string_table)
+                            ),
+                            returned_error.location.clone(),
+                            {
+                                CompilationStage => "AST Construction",
+                                PrimarySuggestion => "Return an error value that exactly matches the function error slot type",
+                            }
+                        );
+                    }
+
+                    ast.push(AstNode {
+                        kind: NodeKind::ReturnError(returned_error),
+                        location: token_stream.current_location(),
+                        scope: context.scope.clone(),
+                    });
+
+                    continue;
+                }
 
                 let return_values = if context.expected_result_types.is_empty() {
                     if is_return_terminator(token_stream.current_token_kind()) {

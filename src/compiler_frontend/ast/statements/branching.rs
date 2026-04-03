@@ -39,10 +39,11 @@ pub fn create_branch(
     warnings: &mut Vec<CompilerWarning>,
     string_table: &mut StringTable,
 ) -> Result<Vec<AstNode>, CompilerError> {
+    let mut condition_type = DataType::Inferred;
     let then_condition = create_expression(
         token_stream,
         &context.new_child_control_flow(ContextKind::Condition, string_table),
-        &mut DataType::Bool,
+        &mut condition_type,
         &Ownership::ImmutableOwned,
         false,
         string_table,
@@ -60,6 +61,20 @@ pub fn create_branch(
             string_table,
         )?;
         return Ok(vec![match_statement]);
+    }
+
+    if !is_boolean_expression(&then_condition) {
+        let found_type = then_condition.data_type.display_with_table(string_table);
+        return_rule_error!(
+            format!("If condition must be a boolean expression. Found '{}'", found_type),
+            token_stream.current_location(),
+            {
+                CompilationStage => "If Statement Parsing",
+                PrimarySuggestion => "Use a boolean expression in the if condition (for example 'value is 0' or 'flag')",
+                FoundType => found_type,
+                ExpectedType => "Bool",
+            }
+        )
     }
 
     ast_log!("Creating If Statement");
@@ -106,6 +121,14 @@ pub fn create_branch(
         location: token_stream.current_location(),
         scope: then_context.scope,
     }])
+}
+
+fn is_boolean_expression(expression: &Expression) -> bool {
+    match &expression.data_type {
+        DataType::Bool => true,
+        DataType::Reference(inner) => matches!(inner.as_ref(), DataType::Bool),
+        _ => false,
+    }
 }
 
 fn create_match_node(

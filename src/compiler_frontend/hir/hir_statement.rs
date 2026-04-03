@@ -6,12 +6,13 @@
 use crate::compiler_frontend::ast::ast_nodes::{
     AstNode, Declaration, ForLoopRange, NodeKind, SourceLocation,
 };
-use crate::compiler_frontend::ast::expressions::expression::Expression;
+use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::hir::hir_nodes::{
-    BlockId, FunctionId, HirStatement, HirStatementKind, HirTerminator,
+    BlockId, FunctionId, HirExpressionKind, HirStatement, HirStatementKind, HirTerminator,
+    ResultVariant,
 };
 use crate::compiler_frontend::host_functions::CallTarget;
 use crate::compiler_frontend::interned_path::InternedPath;
@@ -39,7 +40,7 @@ impl<'a> HirBuilder<'a> {
                 Ok(())
             }
 
-            NodeKind::Return(_) => return_hir_transformation_error!(
+            NodeKind::Return(_) | NodeKind::ReturnError(_) => return_hir_transformation_error!(
                 "Top-level return is not valid during HIR lowering",
                 self.hir_error_location(&node.location)
             ),
@@ -118,6 +119,23 @@ impl<'a> HirBuilder<'a> {
                 self.lower_call_statement(CallTarget::UserFunction(function_id), args, location)
             }
 
+            NodeKind::ResultHandledFunctionCall {
+                name,
+                args,
+                result_types,
+                handling,
+                location,
+            } => self.lower_expression_statement(
+                &Expression::result_handled_function_call(
+                    name.to_owned(),
+                    args.to_owned(),
+                    result_types.to_owned(),
+                    handling.to_owned(),
+                    location.to_owned(),
+                ),
+                &node.location,
+            ),
+
             NodeKind::HostFunctionCall {
                 name: host_function_id,
                 args,
@@ -134,6 +152,10 @@ impl<'a> HirBuilder<'a> {
             NodeKind::FieldAccess { .. } => self.lower_field_access_statement(node, &node.location),
 
             NodeKind::Return(values) => self.lower_return_statement(values, &node.location),
+
+            NodeKind::ReturnError(value) => {
+                self.lower_error_return_statement(value, &node.location)
+            }
 
             NodeKind::If(condition, then_body, else_body) => {
                 self.lower_if_statement(condition, then_body, else_body.as_deref(), &node.location)
@@ -200,6 +222,33 @@ impl<'a> HirBuilder<'a> {
             let region = self.current_region_or_error(location)?;
             let unit = self.unit_expression(location, region);
             self.emit_terminator(current_block, HirTerminator::Return(unit), location)?;
+            return Ok(());
+        }
+
+        if let crate::compiler_frontend::hir::hir_datatypes::HirTypeKind::Result { ok, .. } =
+            self.type_context.get(return_type).kind
+            && signature.return_data_types().is_empty()
+        {
+            let region = self.current_region_or_error(location)?;
+            let unit = self.unit_expression(location, region);
+            if unit.ty != ok {
+                return_hir_transformation_error!(
+                    "Result function with empty success returns has non-unit ok type",
+                    self.hir_error_location(location)
+                );
+            }
+
+            let ok_result = self.make_expression(
+                location,
+                HirExpressionKind::ResultConstruct {
+                    variant: ResultVariant::Ok,
+                    value: Box::new(unit),
+                },
+                return_type,
+                crate::compiler_frontend::hir::hir_nodes::ValueKind::RValue,
+                region,
+            );
+            self.emit_terminator(current_block, HirTerminator::Return(ok_result), location)?;
             return Ok(());
         }
 
@@ -281,6 +330,12 @@ impl<'a> HirBuilder<'a> {
         }
 
         if self.is_unit_type(lowered.value.ty) {
+            if matches!(
+                expression.kind,
+                ExpressionKind::ResultHandledFunctionCall { .. }
+            ) {
+                self.emit_statement_kind(HirStatementKind::Expr(lowered.value), location)?;
+            }
             return Ok(());
         }
 

@@ -1019,6 +1019,15 @@ fn record_shared_reads_in_expression(
         HirExpressionKind::ResultConstruct { value, .. } => {
             record_shared_reads_in_expression(env, value, location.clone())?;
         }
+
+        HirExpressionKind::ResultPropagate { result } => {
+            record_shared_reads_in_expression(env, result, location.clone())?;
+        }
+
+        HirExpressionKind::ResultFallback { result, fallback } => {
+            record_shared_reads_in_expression(env, result, location.clone())?;
+            record_shared_reads_in_expression(env, fallback, location.clone())?;
+        }
     }
 
     let mut expression_roots = RootSet::empty(env.layout.local_count());
@@ -1100,6 +1109,15 @@ fn collect_expression_roots(
 
         HirExpressionKind::ResultConstruct { value, .. } => {
             collect_expression_roots(layout, state, value, out, location)?;
+        }
+
+        HirExpressionKind::ResultPropagate { result } => {
+            collect_expression_roots(layout, state, result, out, location)?;
+        }
+
+        HirExpressionKind::ResultFallback { result, fallback } => {
+            collect_expression_roots(layout, state, result, out, location.clone())?;
+            collect_expression_roots(layout, state, fallback, out, location)?;
         }
 
         HirExpressionKind::Int(_)

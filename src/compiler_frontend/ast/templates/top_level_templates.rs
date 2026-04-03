@@ -6,8 +6,12 @@
 //! - runtime templates become generated `__bst_frag_N` functions
 
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
-use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
-use crate::compiler_frontend::ast::statements::functions::{FunctionReturn, FunctionSignature};
+use crate::compiler_frontend::ast::expressions::expression::{
+    Expression, ExpressionKind, ResultCallHandling,
+};
+use crate::compiler_frontend::ast::statements::functions::{
+    FunctionReturn, FunctionSignature, ReturnSlot,
+};
 use crate::compiler_frontend::ast::templates::template::{CommentDirectiveKind, TemplateType};
 use crate::compiler_frontend::ast::templates::template_folding::TemplateFoldContext;
 use crate::compiler_frontend::compiler_errors::CompilerError;
@@ -162,7 +166,9 @@ pub(crate) fn synthesize_start_template_items(
                         fragment_name.to_owned(),
                         FunctionSignature {
                             parameters: vec![],
-                            returns: vec![FunctionReturn::Value(DataType::StringSlice)],
+                            returns: vec![ReturnSlot::success(FunctionReturn::Value(
+                                DataType::StringSlice,
+                            ))],
                         },
                         fragment_body,
                     ),
@@ -552,6 +558,18 @@ fn collect_references_from_expression(
             }
         }
 
+        ExpressionKind::ResultHandledFunctionCall { args, handling, .. } => {
+            for argument in args {
+                collect_references_from_expression(argument, references);
+            }
+
+            if let ResultCallHandling::Fallback(fallback_values) = handling {
+                for fallback in fallback_values {
+                    collect_references_from_expression(fallback, references);
+                }
+            }
+        }
+
         ExpressionKind::Template(template) => {
             for value in template.content.flatten_expressions() {
                 collect_references_from_expression(&value, references);
@@ -575,7 +593,8 @@ fn collect_references_from_expression(
             }
         }
 
-        ExpressionKind::None
+        ExpressionKind::NoValue
+        | ExpressionKind::OptionNone
         | ExpressionKind::Int(_)
         | ExpressionKind::Float(_)
         | ExpressionKind::StringSlice(_)
@@ -613,6 +632,18 @@ fn collect_references_from_ast_node(node: &AstNode, references: &mut FxHashSet<I
             }
         }
 
+        NodeKind::ResultHandledFunctionCall { args, handling, .. } => {
+            for argument in args {
+                collect_references_from_expression(argument, references);
+            }
+
+            if let ResultCallHandling::Fallback(fallback_values) = handling {
+                for fallback in fallback_values {
+                    collect_references_from_expression(fallback, references);
+                }
+            }
+        }
+
         NodeKind::StructDefinition(_, fields) => {
             for field in fields {
                 collect_references_from_expression(&field.value, references);
@@ -635,6 +666,10 @@ fn collect_references_from_ast_node(node: &AstNode, references: &mut FxHashSet<I
             for value in values {
                 collect_references_from_expression(value, references);
             }
+        }
+
+        NodeKind::ReturnError(value) => {
+            collect_references_from_expression(value, references);
         }
 
         NodeKind::If(condition, then_body, else_body) => {

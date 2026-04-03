@@ -273,7 +273,7 @@ fn create_iteration_loop(
     let loop_binding = Declaration {
         id: context.scope.append(binder_name),
         value: Expression::new(
-            ExpressionKind::None,
+            ExpressionKind::NoValue,
             location.clone(),
             binding_type,
             Ownership::ImmutableOwned,

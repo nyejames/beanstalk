@@ -1090,7 +1090,7 @@ fn field_access_uses_base_struct_identity_not_global_leaf_lookup() {
         vec![Declaration {
             id: field_a.clone(),
             value: Expression::new(
-                ExpressionKind::None,
+                ExpressionKind::NoValue,
                 location.clone(),
                 DataType::Int,
                 Ownership::ImmutableOwned,
@@ -1197,7 +1197,7 @@ fn field_access_from_module_constant_base_materializes_temp_place() {
         vec![Declaration {
             id: center_field,
             value: Expression::new(
-                ExpressionKind::None,
+                ExpressionKind::NoValue,
                 location.clone(),
                 DataType::Template,
                 Ownership::ImmutableOwned,

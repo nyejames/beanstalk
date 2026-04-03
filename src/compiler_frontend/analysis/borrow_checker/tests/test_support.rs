@@ -70,7 +70,7 @@ pub(crate) fn param(
 
     Declaration {
         id,
-        value: Expression::new(ExpressionKind::None, location, data_type, ownership),
+        value: Expression::new(ExpressionKind::NoValue, location, data_type, ownership),
     }
 }
 

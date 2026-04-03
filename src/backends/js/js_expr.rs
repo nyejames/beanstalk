@@ -7,7 +7,7 @@ use crate::backends::js::JsEmitter;
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
 use crate::compiler_frontend::hir::hir_datatypes::HirTypeKind;
 use crate::compiler_frontend::hir::hir_nodes::{
-    HirBinOp, HirExpression, HirExpressionKind, HirPlace, HirUnaryOp,
+    HirBinOp, HirExpression, HirExpressionKind, HirPlace, HirUnaryOp, OptionVariant, ResultVariant,
 };
 
 impl<'hir> JsEmitter<'hir> {
@@ -88,13 +88,42 @@ impl<'hir> JsEmitter<'hir> {
                 }
             }
 
-            HirExpressionKind::OptionConstruct { .. } => Err(CompilerError::compiler_error(
-                "JavaScript backend: OptionConstruct lowering is not implemented yet",
-            )),
+            HirExpressionKind::OptionConstruct { variant, value } => match (variant, value) {
+                (OptionVariant::None, None) => Ok("{ tag: \"none\" }".to_owned()),
+                (OptionVariant::Some, Some(value)) => Ok(format!(
+                    "{{ tag: \"some\", value: {} }}",
+                    self.lower_expr(value)?
+                )),
+                (OptionVariant::Some, None) => Err(CompilerError::compiler_error(
+                    "JavaScript backend: OptionConstruct(Some) missing value",
+                )),
+                (OptionVariant::None, Some(_)) => Err(CompilerError::compiler_error(
+                    "JavaScript backend: OptionConstruct(None) should not carry a value",
+                )),
+            },
 
-            HirExpressionKind::ResultConstruct { .. } => Err(CompilerError::compiler_error(
-                "JavaScript backend: ResultConstruct lowering is not implemented yet",
-            )),
+            HirExpressionKind::ResultConstruct { variant, value } => {
+                let lowered_value = self.lower_expr(value)?;
+                let tag = match variant {
+                    ResultVariant::Ok => "ok",
+                    ResultVariant::Err => "err",
+                };
+                Ok(format!("{{ tag: \"{}\", value: {} }}", tag, lowered_value))
+            }
+
+            HirExpressionKind::ResultPropagate { result } => {
+                let lowered_result = self.lower_expr(result)?;
+                Ok(format!("__bs_result_propagate({})", lowered_result))
+            }
+
+            HirExpressionKind::ResultFallback { result, fallback } => {
+                let lowered_result = self.lower_expr(result)?;
+                let lowered_fallback = self.lower_expr(fallback)?;
+                Ok(format!(
+                    "__bs_result_fallback({}, () => ({}))",
+                    lowered_result, lowered_fallback
+                ))
+            }
         }
     }
 

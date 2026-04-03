@@ -724,6 +724,7 @@ pub(crate) fn keyword_or_variable(
             "Bool" => return_token!(TokenKind::DatatypeBool, stream),
 
             "None" => return_token!(TokenKind::DatatypeNone, stream),
+            "none" => return_token!(TokenKind::NoneLiteral, stream),
 
             _ => {}
         }

@@ -5,7 +5,9 @@
 
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
-use crate::compiler_frontend::ast::statements::functions::{FunctionReturn, FunctionSignature};
+use crate::compiler_frontend::ast::statements::functions::{
+    FunctionReturn, FunctionSignature, ReturnSlot,
+};
 #[cfg(test)]
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
@@ -76,7 +78,7 @@ impl HostFunctionDef {
                 Declaration {
                     id: InternedPath::from_path_buf(&name, string_table),
                     value: Expression {
-                        kind: ExpressionKind::None,
+                        kind: ExpressionKind::NoValue,
                         location: SourceLocation::default(),
                         data_type: parameter.language_type.clone(),
                         ownership: Ownership::ImmutableReference,
@@ -90,12 +92,17 @@ impl HostFunctionDef {
             .into_iter()
             .collect::<Vec<_>>();
         let returns = match self.return_alias {
-            HostReturnAlias::Fresh => returns.iter().cloned().map(FunctionReturn::Value).collect(),
+            HostReturnAlias::Fresh => returns
+                .iter()
+                .cloned()
+                .map(FunctionReturn::Value)
+                .map(ReturnSlot::success)
+                .collect(),
             HostReturnAlias::AliasArgs(ref parameter_indices) if !returns.is_empty() => {
-                vec![FunctionReturn::AliasCandidates {
+                vec![ReturnSlot::success(FunctionReturn::AliasCandidates {
                     parameter_indices: parameter_indices.clone(),
                     data_type: returns[0].clone(),
-                }]
+                })]
             }
             HostReturnAlias::AliasArgs(_) => Vec::new(),
         };

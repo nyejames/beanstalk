@@ -1,7 +1,9 @@
 use super::*;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::Expression;
-use crate::compiler_frontend::ast::statements::functions::{FunctionReturn, FunctionSignature};
+use crate::compiler_frontend::ast::statements::functions::{
+    FunctionReturn, FunctionSignature, ReturnSlot,
+};
 use crate::compiler_frontend::ast::templates::template::{CommentDirectiveKind, TemplateType};
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::ast::templates::top_level_templates::{
@@ -69,7 +71,9 @@ fn start_function_node(
             entry_dir.join_str(IMPLICIT_START_FUNC_NAME, string_table),
             FunctionSignature {
                 parameters: vec![],
-                returns: vec![FunctionReturn::Value(DataType::StringSlice)],
+                returns: vec![ReturnSlot::success(FunctionReturn::Value(
+                    DataType::StringSlice,
+                ))],
             },
             body,
         ),

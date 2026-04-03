@@ -180,6 +180,7 @@ impl<'hir> JsEmitter<'hir> {
         self.emit_runtime_alias_helpers();
         self.emit_runtime_computed_place_helpers();
         self.emit_runtime_clone_helpers();
+        self.emit_runtime_result_helpers();
     }
 
     /// Emits the core binding and slot read/write helpers.
@@ -372,6 +373,46 @@ impl<'hir> JsEmitter<'hir> {
             });
             emitter.emit_line("}");
             emitter.emit_line("return value;");
+        });
+        self.emit_line("}");
+        self.emit_line("");
+    }
+
+    /// Emits helpers for internal Result propagation lowering.
+    ///
+    /// WHAT: `__bs_result_propagate` unwraps `{ tag: "ok", value }` and throws a structured
+    /// sentinel for `{ tag: "err", value }`.
+    /// WHY: expression-position `call(...)!` propagation needs an effectful runtime path that can
+    /// unwind to the nearest result-returning function boundary.
+    fn emit_runtime_result_helpers(&mut self) {
+        self.emit_line("function __bs_result_propagate(result) {");
+        self.with_indent(|emitter| {
+            emitter.emit_line("if (result && result.tag === \"ok\") {");
+            emitter.with_indent(|em| em.emit_line("return result.value;"));
+            emitter.emit_line("}");
+            emitter.emit_line("if (result && result.tag === \"err\") {");
+            emitter.with_indent(|em| {
+                em.emit_line("throw { __bs_result_propagate: true, value: result.value };");
+            });
+            emitter.emit_line("}");
+            emitter.emit_line(
+                "throw new Error(\"Expected internal Result carrier during propagation\");",
+            );
+        });
+        self.emit_line("}");
+        self.emit_line("");
+
+        self.emit_line("function __bs_result_fallback(result, fallback) {");
+        self.with_indent(|emitter| {
+            emitter.emit_line("if (result && result.tag === \"ok\") {");
+            emitter.with_indent(|em| em.emit_line("return result.value;"));
+            emitter.emit_line("}");
+            emitter.emit_line("if (result && result.tag === \"err\") {");
+            emitter.with_indent(|em| em.emit_line("return fallback();"));
+            emitter.emit_line("}");
+            emitter.emit_line(
+                "throw new Error(\"Expected internal Result carrier during fallback handling\");",
+            );
         });
         self.emit_line("}");
         self.emit_line("");

@@ -445,6 +445,11 @@ fn collect_expression_values(expression: &HirExpression, out: &mut FxHashSet<Hir
             }
         }
         HirExpressionKind::ResultConstruct { value, .. } => collect_expression_values(value, out),
+        HirExpressionKind::ResultPropagate { result } => collect_expression_values(result, out),
+        HirExpressionKind::ResultFallback { result, fallback } => {
+            collect_expression_values(result, out);
+            collect_expression_values(fallback, out);
+        }
         HirExpressionKind::Int(_)
         | HirExpressionKind::Float(_)
         | HirExpressionKind::Bool(_)

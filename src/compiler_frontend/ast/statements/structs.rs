@@ -157,22 +157,22 @@ pub fn parse_explicit_signature_type(
     collection_ownership: Ownership,
     context: SignatureTypeContext,
 ) -> Result<DataType, CompilerError> {
-    match token_stream.current_token_kind() {
+    let parsed_type = match token_stream.current_token_kind() {
         TokenKind::DatatypeInt => {
             token_stream.advance();
-            Ok(DataType::Int)
+            DataType::Int
         }
         TokenKind::DatatypeFloat => {
             token_stream.advance();
-            Ok(DataType::Float)
+            DataType::Float
         }
         TokenKind::DatatypeBool => {
             token_stream.advance();
-            Ok(DataType::Bool)
+            DataType::Bool
         }
         TokenKind::DatatypeString => {
             token_stream.advance();
-            Ok(DataType::StringSlice)
+            DataType::StringSlice
         }
         TokenKind::DatatypeNone => {
             let (message, stage, suggestion) = match context {
@@ -198,18 +198,17 @@ pub fn parse_explicit_signature_type(
             )
         }
         TokenKind::OpenCurly => {
-            let data_type = parse_collection_signature_type(
+            parse_collection_signature_type(
                 token_stream,
                 string_table,
                 collection_ownership,
                 context,
-            )?;
-            Ok(data_type)
+            )?
         }
         TokenKind::Symbol(type_name) => {
             let type_name = *type_name;
             token_stream.advance();
-            Ok(DataType::NamedType(type_name))
+            DataType::NamedType(type_name)
         }
         _ => {
             let (message, stage, suggestion) = match context {
@@ -234,7 +233,9 @@ pub fn parse_explicit_signature_type(
                 }
             )
         }
-    }
+    };
+
+    parse_optional_type_suffix(token_stream, parsed_type, context)
 }
 
 fn parse_collection_signature_type(
@@ -281,22 +282,22 @@ fn parse_collection_inner_signature_type(
     _string_table: &StringTable,
     context: SignatureTypeContext,
 ) -> Result<DataType, CompilerError> {
-    match token_stream.current_token_kind() {
+    let parsed_type = match token_stream.current_token_kind() {
         TokenKind::DatatypeInt => {
             token_stream.advance();
-            Ok(DataType::Int)
+            DataType::Int
         }
         TokenKind::DatatypeFloat => {
             token_stream.advance();
-            Ok(DataType::Float)
+            DataType::Float
         }
         TokenKind::DatatypeBool => {
             token_stream.advance();
-            Ok(DataType::Bool)
+            DataType::Bool
         }
         TokenKind::DatatypeString => {
             token_stream.advance();
-            Ok(DataType::StringSlice)
+            DataType::StringSlice
         }
         TokenKind::DatatypeNone => {
             let (message, stage, suggestion) = match context {
@@ -324,7 +325,7 @@ fn parse_collection_inner_signature_type(
         TokenKind::Symbol(type_name) => {
             let type_name = *type_name;
             token_stream.advance();
-            Ok(DataType::NamedType(type_name))
+            DataType::NamedType(type_name)
         }
         _ => {
             let (message, stage, suggestion) = match context {
@@ -349,7 +350,37 @@ fn parse_collection_inner_signature_type(
                 }
             )
         }
+    };
+
+    parse_optional_type_suffix(token_stream, parsed_type, context)
+}
+
+fn parse_optional_type_suffix(
+    token_stream: &mut FileTokens,
+    parsed_type: DataType,
+    context: SignatureTypeContext,
+) -> Result<DataType, CompilerError> {
+    if token_stream.current_token_kind() != &TokenKind::QuestionMark {
+        return Ok(parsed_type);
     }
+
+    if matches!(parsed_type, DataType::Option(_)) {
+        let stage = match context {
+            SignatureTypeContext::Parameter => "Parameter Type Parsing",
+            SignatureTypeContext::Return => "Function Signature Parsing",
+        };
+        return_syntax_error!(
+            "Duplicate optional marker '?' in type declaration",
+            token_stream.current_location(),
+            {
+                CompilationStage => stage,
+                PrimarySuggestion => "Use a single '?' suffix for optional types",
+            }
+        );
+    }
+
+    token_stream.advance();
+    Ok(DataType::Option(Box::new(parsed_type)))
 }
 
 // The declaration syntax for parameters in function signatures or structs
@@ -408,7 +439,7 @@ pub fn new_parameter(
             return Ok(Declaration {
                 id: full_name,
                 value: Expression::new(
-                    ExpressionKind::None,
+                    ExpressionKind::NoValue,
                     token_stream.current_location(),
                     data_type,
                     ownership,
@@ -464,7 +495,7 @@ fn validate_struct_default_values(
     string_table: &StringTable,
 ) -> Result<(), CompilerError> {
     for field in fields {
-        if matches!(field.value.kind, ExpressionKind::None) {
+        if matches!(field.value.kind, ExpressionKind::NoValue) {
             continue;
         }
 

@@ -170,7 +170,7 @@ fn recursive_runtime_struct_cycles_are_rejected() {
         vec![Declaration {
             id: field_ab,
             value: Expression::new(
-                ExpressionKind::None,
+                ExpressionKind::NoValue,
                 SourceLocation::default(),
                 DataType::runtime_struct(struct_b.to_owned(), vec![], Ownership::MutableOwned),
                 Ownership::ImmutableOwned,
@@ -182,7 +182,7 @@ fn recursive_runtime_struct_cycles_are_rejected() {
         vec![Declaration {
             id: field_ba,
             value: Expression::new(
-                ExpressionKind::None,
+                ExpressionKind::NoValue,
                 SourceLocation::default(),
                 DataType::runtime_struct(struct_a, vec![], Ownership::MutableOwned),
                 Ownership::ImmutableOwned,
@@ -207,7 +207,7 @@ fn non_recursive_runtime_structs_are_allowed() {
         vec![Declaration {
             id: field_ax,
             value: Expression::new(
-                ExpressionKind::None,
+                ExpressionKind::NoValue,
                 SourceLocation::default(),
                 DataType::Int,
                 Ownership::ImmutableOwned,

@@ -4,7 +4,9 @@
 //! WHY: AST emission and receiver-method validation require fully resolved types up front.
 
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
-use crate::compiler_frontend::ast::statements::functions::{FunctionReturn, FunctionSignature};
+use crate::compiler_frontend::ast::statements::functions::{
+    FunctionReturn, FunctionSignature, ReturnSlot,
+};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, ReceiverKey};
 use crate::compiler_frontend::interned_path::InternedPath;
@@ -156,22 +158,22 @@ pub(crate) fn resolve_function_signature(
     }
 
     let mut resolved_returns = Vec::with_capacity(signature.returns.len());
-    for return_value in &signature.returns {
-        match return_value {
+    for return_slot in &signature.returns {
+        let resolved_value = match &return_slot.value {
             FunctionReturn::Value(data_type) => {
-                resolved_returns.push(FunctionReturn::Value(resolve_named_signature_type(
+                FunctionReturn::Value(resolve_named_signature_type(
                     data_type,
                     &function_location,
                     declarations,
                     visible_declaration_ids,
                     string_table,
-                )?));
+                )?)
             }
             FunctionReturn::AliasCandidates {
                 parameter_indices,
                 data_type,
             } => {
-                resolved_returns.push(FunctionReturn::AliasCandidates {
+                FunctionReturn::AliasCandidates {
                     parameter_indices: parameter_indices.to_owned(),
                     data_type: resolve_named_signature_type(
                         data_type,
@@ -180,9 +182,14 @@ pub(crate) fn resolve_function_signature(
                         visible_declaration_ids,
                         string_table,
                     )?,
-                });
+                }
             }
-        }
+        };
+
+        resolved_returns.push(ReturnSlot {
+            value: resolved_value,
+            channel: return_slot.channel,
+        });
     }
 
     Ok(ResolvedFunctionSignature {

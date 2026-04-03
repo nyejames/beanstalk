@@ -88,6 +88,7 @@ pub fn evaluate_expression(
     string_table: &mut StringTable,
 ) -> Result<Expression, CompilerError> {
     let mut simplified_expression: Vec<AstNode> = Vec::with_capacity(2);
+    let mut forced_result_type: Option<DataType> = None;
 
     if nodes.is_empty() {
         return_compiler_error!("No nodes found in expression. This should never happen.");
@@ -149,11 +150,30 @@ pub fn evaluate_expression(
                 simplified_expression.push(node.to_owned());
             }
 
+            NodeKind::ResultHandledFunctionCall { .. } => {
+                simplified_expression.push(node.to_owned());
+            }
+
             NodeKind::MethodCall { .. } => {
                 simplified_expression.push(node.to_owned());
             }
 
             NodeKind::Operator(op) => {
+                if matches!(
+                    op,
+                    crate::compiler_frontend::ast::expressions::expression::Operator::And
+                        | crate::compiler_frontend::ast::expressions::expression::Operator::Or
+                        | crate::compiler_frontend::ast::expressions::expression::Operator::GreaterThan
+                        | crate::compiler_frontend::ast::expressions::expression::Operator::GreaterThanOrEqual
+                        | crate::compiler_frontend::ast::expressions::expression::Operator::LessThan
+                        | crate::compiler_frontend::ast::expressions::expression::Operator::LessThanOrEqual
+                        | crate::compiler_frontend::ast::expressions::expression::Operator::Equality
+                        | crate::compiler_frontend::ast::expressions::expression::Operator::NotEqual
+                        | crate::compiler_frontend::ast::expressions::expression::Operator::Not
+                ) {
+                    forced_result_type = Some(DataType::Bool);
+                }
+
                 match current_type {
                     DataType::Template => {
                         let found_type_static: &'static str = match current_type {
@@ -296,7 +316,7 @@ pub fn evaluate_expression(
 
             Ok(Expression::runtime(
                 stack,
-                current_type.to_owned(),
+                forced_result_type.unwrap_or_else(|| current_type.to_owned()),
                 SourceLocation::new(context.scope.to_owned(), first_node_start, last_node_end),
                 ownership,
             ))

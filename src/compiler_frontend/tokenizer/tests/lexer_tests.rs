@@ -72,6 +72,36 @@ fn find_token_index(tokens: &[Token], predicate: impl Fn(&TokenKind) -> bool) ->
 }
 
 #[test]
+fn tokenizes_none_question_mark_and_bang_markers() {
+    let (file_tokens, _string_table) =
+        tokenize_source("value String? = none\npersist()!\nrecover = may_fail() ! \"\"\n");
+
+    assert!(
+        file_tokens
+            .tokens
+            .iter()
+            .any(|token| matches!(token.kind, TokenKind::QuestionMark)),
+        "expected '?' optional-type marker token"
+    );
+    assert!(
+        file_tokens
+            .tokens
+            .iter()
+            .any(|token| matches!(token.kind, TokenKind::NoneLiteral)),
+        "expected lowercase 'none' literal token"
+    );
+    assert!(
+        file_tokens
+            .tokens
+            .iter()
+            .filter(|token| matches!(token.kind, TokenKind::Bang))
+            .count()
+            >= 2,
+        "expected bang tokens for both propagate and fallback call handling"
+    );
+}
+
+#[test]
 fn tokenizes_style_directives_inside_template_heads() {
     let (file_tokens, string_table) = tokenize_source("[$markdown, $fresh: body]");
 

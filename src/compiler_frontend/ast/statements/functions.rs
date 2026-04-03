@@ -5,7 +5,9 @@
 
 use crate::compiler_frontend::ast::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
-use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
+use crate::compiler_frontend::ast::expressions::expression::{
+    Expression, ExpressionKind, ResultCallHandling,
+};
 use crate::compiler_frontend::ast::expressions::parse_expression::create_multiple_expressions;
 use crate::compiler_frontend::ast::statements::structs::{
     SignatureTypeContext, parse_explicit_signature_type, parse_parameters,
@@ -16,7 +18,7 @@ use crate::compiler_frontend::host_functions::HostFunctionDef;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
-use crate::{ast_log, return_syntax_error, return_type_error};
+use crate::{ast_log, return_rule_error, return_syntax_error, return_type_error};
 
 // Arg names and types are required
 // Can have default values
@@ -47,10 +49,54 @@ impl FunctionReturn {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ReturnChannel {
+    Success,
+    Error,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ReturnSlot {
+    pub value: FunctionReturn,
+    pub channel: ReturnChannel,
+}
+
+impl ReturnSlot {
+    pub fn success(value: FunctionReturn) -> Self {
+        Self {
+            value,
+            channel: ReturnChannel::Success,
+        }
+    }
+
+    pub fn error(value: FunctionReturn) -> Self {
+        Self {
+            value,
+            channel: ReturnChannel::Error,
+        }
+    }
+
+    pub fn data_type(&self) -> &DataType {
+        self.value.data_type()
+    }
+}
+
+impl PartialEq<FunctionReturn> for ReturnSlot {
+    fn eq(&self, other: &FunctionReturn) -> bool {
+        self.channel == ReturnChannel::Success && &self.value == other
+    }
+}
+
+impl PartialEq<ReturnSlot> for FunctionReturn {
+    fn eq(&self, other: &ReturnSlot) -> bool {
+        other == self
+    }
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct FunctionSignature {
     pub parameters: Vec<Declaration>,
-    pub returns: Vec<FunctionReturn>,
+    pub returns: Vec<ReturnSlot>,
 }
 
 impl FunctionSignature {
@@ -147,11 +193,37 @@ impl FunctionSignature {
         })
     }
 
+    /// Success-channel return types only.
     pub fn return_data_types(&self) -> Vec<DataType> {
-        self.returns
+        self.success_returns()
             .iter()
             .map(|return_value| return_value.data_type().clone())
             .collect()
+    }
+
+    pub fn success_returns(&self) -> Vec<&FunctionReturn> {
+        self.returns
+            .iter()
+            .filter(|slot| slot.channel == ReturnChannel::Success)
+            .map(|slot| &slot.value)
+            .collect()
+    }
+
+    pub fn error_return(&self) -> Option<&FunctionReturn> {
+        self.returns
+            .iter()
+            .find(|slot| slot.channel == ReturnChannel::Error)
+            .map(|slot| &slot.value)
+    }
+
+    pub fn error_return_index(&self) -> Option<usize> {
+        self.returns
+            .iter()
+            .position(|slot| slot.channel == ReturnChannel::Error)
+    }
+
+    pub fn has_error_slot(&self) -> bool {
+        self.error_return().is_some()
     }
 }
 
@@ -159,7 +231,7 @@ fn parse_return_list(
     token_stream: &mut FileTokens,
     parameters: &[Declaration],
     string_table: &StringTable,
-) -> Result<Vec<FunctionReturn>, CompilerError> {
+) -> Result<Vec<ReturnSlot>, CompilerError> {
     let mut returns = Vec::new();
 
     token_stream.advance();
@@ -187,6 +259,7 @@ fn parse_return_list(
             }
             TokenKind::Colon => {
                 token_stream.advance();
+                validate_return_slots(&returns, token_stream, string_table)?;
                 return Ok(returns);
             }
             TokenKind::Eof => {
@@ -240,7 +313,7 @@ fn parse_single_return_item(
     token_stream: &mut FileTokens,
     parameters: &[Declaration],
     string_table: &StringTable,
-) -> Result<FunctionReturn, CompilerError> {
+) -> Result<ReturnSlot, CompilerError> {
     let current_location = token_stream.current_location();
     if let Some(symbol) = parameter_alias_symbol(token_stream.current_token_kind()) {
         if parameters
@@ -274,15 +347,19 @@ fn parse_single_return_item(
 fn parse_value_return_type(
     token_stream: &mut FileTokens,
     string_table: &StringTable,
-) -> Result<FunctionReturn, CompilerError> {
+) -> Result<ReturnSlot, CompilerError> {
     let data_type = parse_explicit_signature_type(
         token_stream,
         string_table,
         Ownership::ImmutableOwned,
         SignatureTypeContext::Return,
     )?;
+    if token_stream.current_token_kind() == &TokenKind::Bang {
+        token_stream.advance();
+        return Ok(ReturnSlot::error(FunctionReturn::Value(data_type)));
+    }
 
-    Ok(FunctionReturn::Value(data_type))
+    Ok(ReturnSlot::success(FunctionReturn::Value(data_type)))
 }
 
 fn parse_alias_return_item(
@@ -290,7 +367,7 @@ fn parse_alias_return_item(
     parameters: &[Declaration],
     string_table: &StringTable,
     current_location: SourceLocation,
-) -> Result<FunctionReturn, CompilerError> {
+) -> Result<ReturnSlot, CompilerError> {
     let mut parameter_indices = Vec::new();
     let mut alias_type: Option<DataType> = None;
 
@@ -383,10 +460,74 @@ fn parse_alias_return_item(
         );
     };
 
-    Ok(FunctionReturn::AliasCandidates {
+    if token_stream.current_token_kind() == &TokenKind::Bang {
+        return_syntax_error!(
+            "Alias return declarations cannot be marked as an error slot in v1",
+            token_stream.current_location(),
+            {
+                CompilationStage => "Function Signature Parsing",
+                PrimarySuggestion => "Use a concrete type for the error slot (for example 'Error!')",
+            }
+        );
+    }
+
+    Ok(ReturnSlot::success(FunctionReturn::AliasCandidates {
         parameter_indices,
         data_type,
-    })
+    }))
+}
+
+fn validate_return_slots(
+    returns: &[ReturnSlot],
+    token_stream: &FileTokens,
+    string_table: &StringTable,
+) -> Result<(), CompilerError> {
+    let error_slots: Vec<(usize, &ReturnSlot)> = returns
+        .iter()
+        .enumerate()
+        .filter(|(_, slot)| slot.channel == ReturnChannel::Error)
+        .collect();
+
+    if error_slots.len() > 1 {
+        return_syntax_error!(
+            "Function signatures can only declare one distinguished error return slot",
+            token_stream.current_location(),
+            {
+                CompilationStage => "Function Signature Parsing",
+                PrimarySuggestion => "Keep a single 'Type!' error slot in the return signature",
+            }
+        );
+    }
+
+    if let Some((error_index, _)) = error_slots.first()
+        && *error_index + 1 != returns.len()
+    {
+        return_syntax_error!(
+            "The error return slot must be the final return slot in v1",
+            token_stream.current_location(),
+            {
+                CompilationStage => "Function Signature Parsing",
+                PrimarySuggestion => "Move the 'Type!' error slot to the end of the return signature",
+            }
+        );
+    }
+
+    for slot in returns {
+        if let DataType::NamedType(type_name) = slot.data_type()
+            && string_table.resolve(*type_name) == "Void"
+        {
+            return_syntax_error!(
+                "Void is not a valid function return declaration",
+                token_stream.current_location(),
+                {
+                    CompilationStage => "Function Signature Parsing",
+                    PrimarySuggestion => "Functions without return values should omit '->' entirely",
+                }
+            );
+        }
+    }
+
+    Ok(())
 }
 
 fn parameter_alias_symbol(
@@ -507,17 +648,181 @@ pub fn parse_function_call(
     // Create expressions until hitting a closed parenthesis
     let args =
         create_function_call_arguments(token_stream, &signature.parameters, context, string_table)?;
+    let success_result_types = signature.return_data_types();
+    let call_location = token_stream.current_location();
+
+    if let Some(error_return) = signature.error_return() {
+        if token_stream.current_token_kind() == &TokenKind::Bang {
+            token_stream.advance();
+
+            if is_result_propagation_boundary(token_stream.current_token_kind()) {
+                let Some(expected_error_type) = context.expected_error_type.as_ref() else {
+                    return_rule_error!(
+                        "This call uses '!' propagation, but the surrounding function does not declare an error return slot",
+                        token_stream.current_location(),
+                        {
+                            CompilationStage => "Function Call Parsing",
+                            PrimarySuggestion => "Declare a matching error slot in the surrounding function signature",
+                        }
+                    );
+                };
+
+                if expected_error_type != error_return.data_type() {
+                    return_type_error!(
+                        format!(
+                            "Mismatched propagated error type. Called function returns '{}', but current function expects '{}'.",
+                            error_return.data_type().display_with_table(string_table),
+                            expected_error_type.display_with_table(string_table)
+                        ),
+                        token_stream.current_location(),
+                        {
+                            CompilationStage => "Function Call Parsing",
+                            PrimarySuggestion => "Use a function with the same error type or change the surrounding function error slot type",
+                        }
+                    );
+                }
+
+                return Ok(AstNode {
+                    kind: NodeKind::ResultHandledFunctionCall {
+                        name: id.to_owned(),
+                        args,
+                        result_types: success_result_types,
+                        handling: ResultCallHandling::Propagate,
+                        location: call_location.to_owned(),
+                    },
+                    location: token_stream.current_location(),
+                    scope: context.scope.clone(),
+                });
+            }
+
+            if success_result_types.is_empty() {
+                return_rule_error!(
+                    "This function has no success return values, so fallback values cannot be provided here",
+                    token_stream.current_location(),
+                    {
+                        CompilationStage => "Function Call Parsing",
+                        PrimarySuggestion => "Use plain propagation syntax 'call(...)!' for error-only functions",
+                    }
+                );
+            }
+
+            let fallback_context = context.new_child_expression(success_result_types.to_owned());
+            let fallback_values = create_multiple_expressions(
+                token_stream,
+                &fallback_context,
+                false,
+                string_table,
+            )?;
+
+            if token_stream.current_token_kind() == &TokenKind::Comma {
+                return_type_error!(
+                    format!(
+                        "Fallback values provide more entries than the success return arity (expected {}).",
+                        success_result_types.len()
+                    ),
+                    token_stream.current_location(),
+                    {
+                        CompilationStage => "Function Call Parsing",
+                        PrimarySuggestion => "Provide exactly one fallback value for each success return slot",
+                    }
+                );
+            }
+
+            return Ok(AstNode {
+                kind: NodeKind::ResultHandledFunctionCall {
+                    name: id.to_owned(),
+                    args,
+                    result_types: success_result_types,
+                    handling: ResultCallHandling::Fallback(fallback_values),
+                    location: call_location.to_owned(),
+                },
+                location: token_stream.current_location(),
+                scope: context.scope.clone(),
+            });
+        }
+
+        if matches!(token_stream.current_token_kind(), TokenKind::Symbol(_))
+            && token_stream.peek_next_token() == Some(&TokenKind::Bang)
+        {
+            let TokenKind::Symbol(handler_name) = token_stream.current_token_kind().to_owned()
+            else {
+                unreachable!();
+            };
+
+            token_stream.advance();
+            token_stream.advance();
+
+            if token_stream.current_token_kind() != &TokenKind::Colon {
+                return_rule_error!(
+                    format!(
+                        "Bare '{}!' is invalid for result handling. Add a handler scope with ': ... ;' after the bang.",
+                        string_table.resolve(handler_name)
+                    ),
+                    token_stream.current_location(),
+                    {
+                        CompilationStage => "Function Call Parsing",
+                        PrimarySuggestion => "Use 'call(...)!' for propagation, 'call(...) ! fallback' for fallback values, or 'call(...) err!: ... ;' for a scoped handler",
+                    }
+                );
+            }
+
+            return_rule_error!(
+                format!(
+                    "Named error handlers ('{}!:' scopes) are not implemented in this compiler pass",
+                    string_table.resolve(handler_name)
+                ),
+                token_stream.current_location(),
+                {
+                    CompilationStage => "Function Call Parsing",
+                    PrimarySuggestion => "Use propagation ('call(...)!') or fallback ('call(...) ! value') syntax for now",
+                }
+            );
+        }
+
+        return_rule_error!(
+            "Calls to error-returning functions must be explicitly handled with '!' syntax",
+            token_stream.current_location(),
+            {
+                CompilationStage => "Function Call Parsing",
+                PrimarySuggestion => "Use 'call(...)!' to propagate or 'call(...) ! fallback' to provide fallback values",
+            }
+        );
+    } else if token_stream.current_token_kind() == &TokenKind::Bang {
+        return_rule_error!(
+            "The '!' call-handling suffix is only valid for functions that declare an error return slot",
+            token_stream.current_location(),
+            {
+                CompilationStage => "Function Call Parsing",
+                PrimarySuggestion => "Remove '!' from this call or add an error slot to the called function",
+            }
+        );
+    }
 
     Ok(AstNode {
         kind: NodeKind::FunctionCall {
             name: id.to_owned(),
             args,
-            result_types: signature.return_data_types(),
-            location: token_stream.current_location(),
+            result_types: success_result_types,
+            location: call_location,
         },
         location: token_stream.current_location(),
         scope: context.scope.clone(),
     })
+}
+
+fn is_result_propagation_boundary(token: &TokenKind) -> bool {
+    matches!(
+        token,
+        TokenKind::CloseParenthesis
+            | TokenKind::Comma
+            | TokenKind::Newline
+            | TokenKind::End
+            | TokenKind::Eof
+            | TokenKind::Colon
+            | TokenKind::TemplateClose
+            | TokenKind::CloseCurly
+            | TokenKind::Dot
+    )
 }
 
 pub fn create_function_call_arguments(
@@ -550,7 +855,7 @@ pub fn create_function_call_arguments(
     if token_stream.current_token_kind() == &TokenKind::CloseParenthesis {
         let missing_required = required_arguments
             .iter()
-            .filter(|argument| matches!(argument.value.kind, ExpressionKind::None))
+            .filter(|argument| matches!(argument.value.kind, ExpressionKind::NoValue))
             .count();
 
         if missing_required > 0 {

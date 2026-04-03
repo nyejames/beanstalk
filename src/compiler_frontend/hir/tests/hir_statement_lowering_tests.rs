@@ -9,9 +9,13 @@ use crate::compiler_frontend::ast::ast::{
 use crate::compiler_frontend::ast::ast_nodes::{
     AstNode, Declaration, ForLoopRange, NodeKind, RangeEndKind, SourceLocation,
 };
-use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
+use crate::compiler_frontend::ast::expressions::expression::{
+    Expression, ExpressionKind, ResultCallHandling,
+};
 use crate::compiler_frontend::ast::statements::branching::MatchArm;
-use crate::compiler_frontend::ast::statements::functions::{FunctionReturn, FunctionSignature};
+use crate::compiler_frontend::ast::statements::functions::{
+    FunctionReturn, FunctionSignature, ReturnSlot,
+};
 use crate::compiler_frontend::ast::templates::template::{SlotKey, SlotPlaceholder, TemplateAtom};
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::compiler_errors::{CompilerMessages, ErrorType};
@@ -57,7 +61,7 @@ fn param(
 
     Declaration {
         id: name,
-        value: Expression::new(ExpressionKind::None, location, data_type, ownership),
+        value: Expression::new(ExpressionKind::NoValue, location, data_type, ownership),
     }
 }
 
@@ -74,10 +78,11 @@ fn symbol(name: &str, string_table: &mut StringTable) -> InternedPath {
     InternedPath::from_single_str(name, string_table)
 }
 
-fn fresh_returns(result_types: Vec<DataType>) -> Vec<FunctionReturn> {
+fn fresh_returns(result_types: Vec<DataType>) -> Vec<ReturnSlot> {
     result_types
         .into_iter()
         .map(FunctionReturn::Value)
+        .map(ReturnSlot::success)
         .collect()
 }
 
@@ -146,6 +151,85 @@ fn assert_no_placeholder_terminators(module: &HirModule) {
 }
 
 #[test]
+fn statement_result_propagation_with_unit_success_emits_runtime_propagate_expression() {
+    let mut string_table = StringTable::new();
+    let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
+    let can_fail_name = symbol("can_fail", &mut string_table);
+    let location = test_location(1);
+
+    let can_fail_function = function_node(
+        can_fail_name.clone(),
+        FunctionSignature {
+            parameters: vec![],
+            returns: vec![ReturnSlot::error(FunctionReturn::Value(
+                DataType::StringSlice,
+            ))],
+        },
+        vec![node(
+            NodeKind::ReturnError(Expression::string_slice(
+                string_table.intern("boom"),
+                location.clone(),
+                Ownership::ImmutableOwned,
+            )),
+            location.clone(),
+        )],
+        location.clone(),
+    );
+
+    let start_function = function_node(
+        start_name.clone(),
+        FunctionSignature {
+            parameters: vec![],
+            returns: vec![ReturnSlot::error(FunctionReturn::Value(
+                DataType::StringSlice,
+            ))],
+        },
+        vec![node(
+            NodeKind::ResultHandledFunctionCall {
+                name: can_fail_name,
+                args: vec![],
+                result_types: vec![],
+                handling: ResultCallHandling::Propagate,
+                location: location.clone(),
+            },
+            location.clone(),
+        )],
+        location.clone(),
+    );
+
+    let module = lower_ast(
+        build_ast(vec![can_fail_function, start_function], entry_path),
+        &mut string_table,
+    )
+    .expect("statement propagation lowering should succeed");
+
+    let start_function = module
+        .functions
+        .iter()
+        .find(|function| function.id == module.start_function)
+        .expect("start function should exist");
+    let start_entry = module
+        .blocks
+        .iter()
+        .find(|block| block.id == start_function.entry)
+        .expect("start entry block should exist");
+
+    assert!(
+        start_entry
+            .statements
+            .iter()
+            .any(|statement| matches!(
+                statement.kind,
+                HirStatementKind::Expr(crate::compiler_frontend::hir::hir_nodes::HirExpression {
+                    kind: HirExpressionKind::ResultPropagate { .. },
+                    ..
+                })
+            )),
+        "unit-success statement propagation should still emit a ResultPropagate expression statement"
+    );
+}
+
+#[test]
 fn registers_declarations_and_resolves_start_function() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
@@ -159,7 +243,7 @@ fn registers_declarations_and_resolves_start_function() {
             vec![make_test_variable(
                 field_name,
                 Expression::new(
-                    ExpressionKind::None,
+                    ExpressionKind::NoValue,
                     test_location(1),
                     DataType::Int,
                     Ownership::ImmutableOwned,
@@ -423,7 +507,7 @@ fn lowers_struct_module_constant_into_record_with_ordered_fields() {
                 make_test_variable(
                     x_field.clone(),
                     Expression::new(
-                        ExpressionKind::None,
+                        ExpressionKind::NoValue,
                         test_location(1),
                         DataType::Int,
                         Ownership::ImmutableOwned,
@@ -432,7 +516,7 @@ fn lowers_struct_module_constant_into_record_with_ordered_fields() {
                 make_test_variable(
                     y_field.clone(),
                     Expression::new(
-                        ExpressionKind::None,
+                        ExpressionKind::NoValue,
                         test_location(1),
                         DataType::Int,
                         Ownership::ImmutableOwned,
@@ -1259,7 +1343,7 @@ fn continue_in_for_targets_step_block() {
             Box::new(make_test_variable(
                 i,
                 Expression::new(
-                    ExpressionKind::None,
+                    ExpressionKind::NoValue,
                     test_location(30),
                     DataType::Int,
                     Ownership::ImmutableOwned,
@@ -1531,7 +1615,7 @@ fn for_loop_lowers_to_header_body_step_exit_shape() {
             Box::new(make_test_variable(
                 i,
                 Expression::new(
-                    ExpressionKind::None,
+                    ExpressionKind::NoValue,
                     test_location(2),
                     DataType::Int,
                     Ownership::ImmutableOwned,
@@ -1625,7 +1709,7 @@ fn inclusive_range_header_uses_less_equal_comparison() {
             Box::new(make_test_variable(
                 i,
                 Expression::new(
-                    ExpressionKind::None,
+                    ExpressionKind::NoValue,
                     test_location(2),
                     DataType::Int,
                     Ownership::ImmutableOwned,
@@ -1699,7 +1783,7 @@ fn descending_range_with_positive_step_normalizes_to_negative_delta() {
             Box::new(make_test_variable(
                 i,
                 Expression::new(
-                    ExpressionKind::None,
+                    ExpressionKind::NoValue,
                     test_location(2),
                     DataType::Int,
                     Ownership::ImmutableOwned,

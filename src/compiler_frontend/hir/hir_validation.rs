@@ -440,11 +440,19 @@ impl<'a> HirValidator<'a> {
         function_id: FunctionId,
     ) -> Result<usize, CompilerError> {
         self.require_type_id(return_type, Some(HirLocation::Function(function_id)))?;
-        Ok(match &self.module.type_context.get(return_type).kind {
-            HirTypeKind::Unit => 0,
-            HirTypeKind::Tuple { fields } => fields.len(),
-            _ => 1,
-        })
+        let slot_count_for_value_type = |ty: TypeId| -> Result<usize, CompilerError> {
+            self.require_type_id(ty, Some(HirLocation::Function(function_id)))?;
+            Ok(match &self.module.type_context.get(ty).kind {
+                HirTypeKind::Unit => 0,
+                HirTypeKind::Tuple { fields } => fields.len(),
+                _ => 1,
+            })
+        };
+
+        match &self.module.type_context.get(return_type).kind {
+            HirTypeKind::Result { ok, .. } => slot_count_for_value_type(*ok),
+            _ => slot_count_for_value_type(return_type),
+        }
     }
 
     fn validate_function_cfg_ownership(&mut self) -> Result<(), CompilerError> {
@@ -899,6 +907,15 @@ impl<'a> HirValidator<'a> {
 
             HirExpressionKind::ResultConstruct { value, .. } => {
                 self.validate_expression(value, anchor)?;
+            }
+
+            HirExpressionKind::ResultPropagate { result } => {
+                self.validate_expression(result, anchor)?;
+            }
+
+            HirExpressionKind::ResultFallback { result, fallback } => {
+                self.validate_expression(result, anchor)?;
+                self.validate_expression(fallback, anchor)?;
             }
         }
 

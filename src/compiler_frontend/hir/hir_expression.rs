@@ -11,7 +11,7 @@ use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::hir::hir_datatypes::{HirTypeKind, TypeId};
 use crate::compiler_frontend::hir::hir_nodes::{
     HirBlock, HirExpression, HirExpressionKind, HirLocal, HirStatement, LocalId, RegionId,
-    ValueKind,
+    OptionVariant, ValueKind,
 };
 use crate::compiler_frontend::host_functions::CallTarget;
 use crate::compiler_frontend::interned_path::InternedPath;
@@ -128,6 +128,21 @@ impl<'a> HirBuilder<'a> {
                 )
             }
 
+            ExpressionKind::ResultHandledFunctionCall {
+                name,
+                args,
+                handling,
+            } => {
+                let function_id = self.resolve_function_id_or_error(name, &expr.location)?;
+                self.lower_result_handled_call_expression(
+                    CallTarget::UserFunction(function_id),
+                    args,
+                    &self.extract_return_types_from_datatype(&expr.data_type),
+                    handling,
+                    &expr.location,
+                )
+            }
+
             ExpressionKind::HostFunctionCall(host_id, args) => self.lower_call_expression(
                 CallTarget::HostFunction(host_id.to_owned()),
                 args,
@@ -238,11 +253,29 @@ impl<'a> HirBuilder<'a> {
                 )
             }
 
-            ExpressionKind::None => {
+            ExpressionKind::NoValue => {
                 let region = self.current_region_or_error(&expr.location)?;
                 Ok(LoweredExpression {
                     prelude: vec![],
                     value: self.unit_expression(&expr.location, region),
+                })
+            }
+
+            ExpressionKind::OptionNone => {
+                let region = self.current_region_or_error(&expr.location)?;
+                let ty = self.lower_data_type(&expr.data_type, &expr.location)?;
+                Ok(LoweredExpression {
+                    prelude: vec![],
+                    value: self.make_expression(
+                        &expr.location,
+                        HirExpressionKind::OptionConstruct {
+                            variant: OptionVariant::None,
+                            value: None,
+                        },
+                        ty,
+                        ValueKind::RValue,
+                        region,
+                    ),
                 })
             }
         }?;

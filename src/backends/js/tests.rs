@@ -28,7 +28,8 @@
 //   [names]          function_name_by_id exposes stable JS names for runtime-fragment lookup
 //   [names]          reserved JS identifiers are prefixed with _ to avoid collisions
 //   [names]          identifier characters invalid for JS are replaced with _
-//   [error]          unsupported HIR constructs (OptionConstruct) return a compiler error
+//   [error]          Option/Result construction lowers to tagged JS carrier objects
+//   [error]          result propagation/fallback helpers are emitted and referenced
 
 use crate::backends::js::{JsLoweringConfig, lower_hir_to_js};
 use crate::compiler_frontend::analysis::borrow_checker::{
@@ -1063,9 +1064,9 @@ fn exposes_function_name_map_for_runtime_fragments() {
 // Error handling test [error]
 // ---------------------------------------------------------------------------
 
-/// Verifies that an unsupported OptionConstruct expression returns a compiler error. [error]
+/// Verifies that OptionConstruct expressions lower to tagged JS objects. [option]
 #[test]
-fn returns_error_for_unsupported_option_construct() {
+fn lowers_option_construct_expression() {
     let mut string_table = StringTable::new();
     let (type_context, types) = build_type_context();
 
@@ -1107,15 +1108,95 @@ fn returns_error_for_unsupported_option_construct() {
         type_context,
     );
 
-    let error = lower_hir_to_js(
+    let output = lower_hir_to_js(
         &module,
         &crate::compiler_frontend::analysis::borrow_checker::BorrowCheckReport::default(),
         &string_table,
         default_config(),
     )
-    .expect_err("OptionConstruct should not be supported yet");
+    .expect("OptionConstruct lowering should succeed");
 
-    assert!(error.msg.contains("OptionConstruct"));
+    assert!(
+        output.source.contains("{ tag: \"some\", value: 10 }"),
+        "expected OptionConstruct(Some) to lower into a tagged JS object"
+    );
+}
+
+/// Verifies that Result fallback handling lowers to the JS runtime helper. [error]
+#[test]
+fn lowers_result_fallback_expression() {
+    let mut string_table = StringTable::new();
+    let (mut type_context, types) = build_type_context();
+    let result_int_string = type_context.insert(HirType {
+        kind: HirTypeKind::Result {
+            ok: types.int,
+            err: types.string,
+        },
+    });
+
+    let err_result = expression(
+        1,
+        HirExpressionKind::ResultConstruct {
+            variant: crate::compiler_frontend::hir::hir_nodes::ResultVariant::Err,
+            value: Box::new(string_expression(2, "boom", types.string, RegionId(0))),
+        },
+        result_int_string,
+        RegionId(0),
+        ValueKind::RValue,
+    );
+    let fallback = int_expression(3, 42, types.int, RegionId(0));
+
+    let handled = expression(
+        4,
+        HirExpressionKind::ResultFallback {
+            result: Box::new(err_result),
+            fallback: Box::new(fallback),
+        },
+        types.int,
+        RegionId(0),
+        ValueKind::RValue,
+    );
+
+    let handled_statement = statement(5, HirStatementKind::Expr(handled), 1);
+    let block = HirBlock {
+        id: BlockId(0),
+        region: RegionId(0),
+        locals: vec![],
+        statements: vec![handled_statement],
+        terminator: HirTerminator::Return(unit_expression(6, types.unit, RegionId(0))),
+    };
+    let function = HirFunction {
+        id: FunctionId(0),
+        entry: BlockId(0),
+        params: vec![],
+        return_type: types.unit,
+        return_aliases: vec![],
+    };
+    let module = build_module(
+        &mut string_table,
+        "main",
+        vec![block],
+        function,
+        &[],
+        type_context,
+    );
+
+    let output = lower_hir_to_js(
+        &module,
+        &BorrowCheckReport::default(),
+        &string_table,
+        default_config(),
+    )
+    .expect("ResultFallback lowering should succeed");
+
+    assert!(
+        output.source.contains("function __bs_result_fallback(result, fallback)"),
+        "JS runtime prelude should emit the result fallback helper"
+    );
+    assert!(
+        output.source.contains("__bs_result_fallback("),
+        "ResultFallback expressions should lower into __bs_result_fallback(...) calls"
+    );
 }
 
 // ---------------------------------------------------------------------------

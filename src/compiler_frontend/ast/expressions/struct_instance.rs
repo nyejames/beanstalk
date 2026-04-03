@@ -115,7 +115,7 @@ pub(crate) fn parse_struct_constructor_expression(
     let missing_required = fields
         .iter()
         .skip(provided_values.len())
-        .filter(|field| matches!(field.value.kind, ExpressionKind::None))
+        .filter(|field| matches!(field.value.kind, ExpressionKind::NoValue))
         .count();
     if missing_required > 0 {
         return_syntax_error!(

@@ -11,6 +11,7 @@ use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
+use crate::compiler_frontend::hir::hir_datatypes::HirTypeKind;
 use crate::compiler_frontend::hir::hir_nodes::{
     HirConstField, HirConstValue, HirField, HirFunction, HirLocal, HirModuleConst, HirPlace,
     HirRegion, HirStruct, HirTerminator, LocalId,
@@ -278,8 +279,17 @@ impl<'a> HirBuilder<'a> {
         }
 
         let function_id = self.allocate_function_id();
-        let return_type =
+        let success_return_type =
             self.lower_data_type(&DataType::Returns(signature.return_data_types()), location)?;
+        let return_type = if let Some(error_return) = signature.error_return() {
+            let error_type = self.lower_data_type(error_return.data_type(), location)?;
+            self.intern_type_kind(HirTypeKind::Result {
+                ok: success_return_type,
+                err: error_type,
+            })
+        } else {
+            success_return_type
+        };
 
         let region_id = self.allocate_region_id();
         self.push_region(HirRegion::lexical(region_id, None));
@@ -302,13 +312,9 @@ impl<'a> HirBuilder<'a> {
             params: vec![],
             return_type,
             return_aliases: signature
-                .returns
+                .success_returns()
                 .iter()
-                .map(|return_value| {
-                    return_value
-                        .alias_candidates()
-                        .map(|indices| indices.to_vec())
-                })
+                .map(|return_value| return_value.alias_candidates().map(|indices| indices.to_vec()))
                 .collect(),
         };
 

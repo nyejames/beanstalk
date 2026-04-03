@@ -15,7 +15,7 @@ use crate::compiler_frontend::ast::receiver_methods::free_function_receiver_meth
 use crate::compiler_frontend::ast::statements::collections::new_collection;
 use crate::compiler_frontend::ast::statements::declarations::create_reference;
 use crate::compiler_frontend::ast::statements::functions::{
-    FunctionReturn, FunctionSignature, parse_function_call,
+    FunctionReturn, FunctionSignature, ReturnSlot, parse_function_call,
 };
 use crate::compiler_frontend::ast::templates::template::TemplateType;
 use crate::compiler_frontend::ast::templates::template_types::Template;
@@ -192,33 +192,65 @@ fn parse_identifier_or_call(
                 // This is a function call - parse it using the function call parser
                 let function_call_node =
                     parse_function_call(token_stream, &arg.id, context, signature, string_table)?;
+                let function_call_location = function_call_node.location.to_owned();
 
                 // -------------------------------
                 // FUNCTION CALL INSIDE EXPRESSION
                 // -------------------------------
-                if let NodeKind::FunctionCall {
-                    name,
-                    args,
-                    result_types,
-                    location,
-                } = function_call_node.kind
-                {
-                    let func_call_expr =
-                        Expression::function_call(name, args, result_types, location);
+                match function_call_node.kind {
+                    NodeKind::FunctionCall {
+                        name,
+                        args,
+                        result_types,
+                        location,
+                    } => {
+                        let func_call_expr =
+                            Expression::function_call(name, args, result_types, location);
 
-                    push_expression_node(
-                        token_stream,
-                        context,
-                        string_table,
-                        expression,
-                        AstNode {
-                            kind: NodeKind::Rvalue(func_call_expr),
-                            location: function_call_node.location,
-                            scope: context.scope.clone(),
-                        },
-                    )?;
+                        push_expression_node(
+                            token_stream,
+                            context,
+                            string_table,
+                            expression,
+                            AstNode {
+                                kind: NodeKind::Rvalue(func_call_expr),
+                                location: function_call_location.to_owned(),
+                                scope: context.scope.clone(),
+                            },
+                        )?;
 
-                    return Ok(());
+                        return Ok(());
+                    }
+                    NodeKind::ResultHandledFunctionCall {
+                        name,
+                        args,
+                        result_types,
+                        handling,
+                        location,
+                    } => {
+                        let func_call_expr = Expression::result_handled_function_call(
+                            name,
+                            args,
+                            result_types,
+                            handling,
+                            location,
+                        );
+
+                        push_expression_node(
+                            token_stream,
+                            context,
+                            string_table,
+                            expression,
+                            AstNode {
+                                kind: NodeKind::Rvalue(func_call_expr),
+                                location: function_call_location.to_owned(),
+                                scope: context.scope.clone(),
+                            },
+                        )?;
+
+                        return Ok(());
+                    }
+                    _ => {}
                 }
             }
 
@@ -249,35 +281,66 @@ fn parse_identifier_or_call(
                     context,
                     &FunctionSignature {
                         parameters: vec![],
-                        returns: vec![FunctionReturn::Value(DataType::StringSlice)],
+                        returns: vec![ReturnSlot::success(FunctionReturn::Value(
+                            DataType::StringSlice,
+                        ))],
                     },
                     string_table,
                 )?;
+                let function_call_location = function_call_node.location.to_owned();
 
-                if let NodeKind::FunctionCall {
-                    name,
-                    args,
-                    result_types,
-                    location,
-                } = function_call_node.kind
-                {
-                    push_expression_node(
-                        token_stream,
-                        context,
-                        string_table,
-                        expression,
-                        AstNode {
-                            kind: NodeKind::Rvalue(Expression::function_call(
-                                name,
-                                args,
-                                result_types,
-                                location,
-                            )),
-                            location: function_call_node.location,
-                            scope: context.scope.clone(),
-                        },
-                    )?;
-                    return Ok(());
+                match function_call_node.kind {
+                    NodeKind::FunctionCall {
+                        name,
+                        args,
+                        result_types,
+                        location,
+                    } => {
+                        push_expression_node(
+                            token_stream,
+                            context,
+                            string_table,
+                            expression,
+                            AstNode {
+                                kind: NodeKind::Rvalue(Expression::function_call(
+                                    name,
+                                    args,
+                                    result_types,
+                                    location,
+                                )),
+                                location: function_call_location.to_owned(),
+                                scope: context.scope.clone(),
+                            },
+                        )?;
+                        return Ok(());
+                    }
+                    NodeKind::ResultHandledFunctionCall {
+                        name,
+                        args,
+                        result_types,
+                        handling,
+                        location,
+                    } => {
+                        push_expression_node(
+                            token_stream,
+                            context,
+                            string_table,
+                            expression,
+                            AstNode {
+                                kind: NodeKind::Rvalue(Expression::result_handled_function_call(
+                                    name,
+                                    args,
+                                    result_types,
+                                    handling,
+                                    location,
+                                )),
+                                location: function_call_location.to_owned(),
+                                scope: context.scope.clone(),
+                            },
+                        )?;
+                        return Ok(());
+                    }
+                    _ => {}
                 }
 
                 return_compiler_error!(
@@ -402,6 +465,7 @@ fn parse_identifier_or_call(
 fn parse_literal_expression(
     token_stream: &mut FileTokens,
     context: &ScopeContext,
+    expected_type: &DataType,
     ownership: &Ownership,
     expression: &mut Vec<AstNode>,
     next_number_negative: &mut bool,
@@ -502,6 +566,44 @@ fn parse_literal_expression(
                 expression,
                 AstNode {
                     kind: NodeKind::Rvalue(char_expr),
+                    location,
+                    scope: context.scope.clone(),
+                },
+            )?;
+            Ok(())
+        }
+
+        TokenKind::NoneLiteral => {
+            let inner_type = if let DataType::Option(inner_type) = expected_type {
+                inner_type.as_ref().to_owned()
+            } else if matches!(
+                token_stream.previous_token(),
+                TokenKind::Is | TokenKind::Not
+            ) {
+                // Comparisons like `value is none` infer the option shape from the
+                // left-hand side expression during evaluation.
+                DataType::Inferred
+            } else {
+                return_rule_error!(
+                    "The 'none' literal requires an explicit optional type context",
+                    token_stream.current_location(),
+                    {
+                        CompilationStage => "Expression Parsing",
+                        PrimarySuggestion => "Use 'none' only where a concrete optional type is expected (for example 'String?')",
+                    }
+                );
+            };
+
+            let location = token_stream.current_location();
+            let none_expr = Expression::option_none(inner_type, location.clone());
+            token_stream.advance();
+            push_expression_node(
+                token_stream,
+                context,
+                string_table,
+                expression,
+                AstNode {
+                    kind: NodeKind::Rvalue(none_expr),
                     location,
                     scope: context.scope.clone(),
                 },
@@ -802,10 +904,12 @@ fn dispatch_expression_token(
         | TokenKind::IntLiteral(_)
         | TokenKind::StringSliceLiteral(_)
         | TokenKind::BoolLiteral(_)
-        | TokenKind::CharLiteral(_) => {
+        | TokenKind::CharLiteral(_)
+        | TokenKind::NoneLiteral => {
             parse_literal_expression(
                 token_stream,
                 context,
+                state.data_type,
                 state.ownership,
                 state.expression,
                 state.next_number_negative,

@@ -14,7 +14,9 @@ use crate::compiler_frontend::ast::import_bindings::{
     resolve_file_import_bindings,
 };
 use crate::compiler_frontend::ast::receiver_methods::build_receiver_method_catalog;
-use crate::compiler_frontend::ast::statements::functions::{FunctionReturn, FunctionSignature};
+use crate::compiler_frontend::ast::statements::functions::{
+    FunctionReturn, FunctionSignature, ReturnSlot,
+};
 use crate::compiler_frontend::ast::statements::structs::create_struct_definition;
 use crate::compiler_frontend::ast::templates::template_folding::TemplateFoldContext;
 use crate::compiler_frontend::ast::templates::template_types::Template;
@@ -224,7 +226,7 @@ impl<'a> AstBuildState<'a> {
                     self.declarations.push(Declaration {
                         id: header.tokens.src_path.to_owned(),
                         value: Expression::new(
-                            ExpressionKind::None,
+                            ExpressionKind::NoValue,
                             header.name_location.to_owned(),
                             DataType::Function(Box::new(None), signature.to_owned()),
                             Ownership::ImmutableReference,
@@ -250,13 +252,15 @@ impl<'a> AstBuildState<'a> {
                     self.declarations.push(Declaration {
                         id: start_name.to_owned(),
                         value: Expression::new(
-                            ExpressionKind::None,
+                            ExpressionKind::NoValue,
                             header.name_location.to_owned(),
                             DataType::Function(
                                 Box::new(None),
                                 FunctionSignature {
                                     parameters: vec![],
-                                    returns: vec![FunctionReturn::Value(DataType::StringSlice)],
+                                    returns: vec![ReturnSlot::success(FunctionReturn::Value(
+                                        DataType::StringSlice,
+                                    ))],
                                 },
                             ),
                             Ownership::ImmutableReference,
@@ -377,7 +381,7 @@ impl<'a> AstBuildState<'a> {
                     self.declarations.push(Declaration {
                         id: header.tokens.src_path.to_owned(),
                         value: Expression::new(
-                            ExpressionKind::None,
+                            ExpressionKind::NoValue,
                             header.name_location.to_owned(),
                             DataType::runtime_struct(
                                 header.tokens.src_path.to_owned(),
@@ -503,7 +507,7 @@ impl<'a> AstBuildState<'a> {
                     }
 
                     // Function parameters should be available in the function body scope
-                    let context = ScopeContext::new(
+                    let mut context = ScopeContext::new(
                         ContextKind::Function,
                         header.tokens.src_path.to_owned(),
                         &function_declarations,
@@ -519,6 +523,10 @@ impl<'a> AstBuildState<'a> {
                     .with_rendered_path_usage_sink(self.rendered_path_usages.clone())
                     .with_receiver_methods(receiver_methods.clone())
                     .with_source_file_scope(source_file_scope.to_owned());
+                    context.expected_error_type = resolved_signature
+                        .signature
+                        .error_return()
+                        .map(|ret| ret.data_type().to_owned());
 
                     let mut token_stream = header.tokens;
 
@@ -596,7 +604,9 @@ impl<'a> AstBuildState<'a> {
 
                     let main_signature = FunctionSignature {
                         parameters: vec![],
-                        returns: vec![FunctionReturn::Value(DataType::StringSlice)],
+                        returns: vec![ReturnSlot::success(FunctionReturn::Value(
+                            DataType::StringSlice,
+                        ))],
                     };
 
                     self.ast.push(AstNode {
@@ -826,6 +836,7 @@ pub struct ScopeContext {
     // Bare file imports (`@path/to/file`) bind alias -> imported file start function path.
     pub start_import_aliases: FxHashMap<StringId, InternedPath>,
     pub expected_result_types: Vec<DataType>,
+    pub expected_error_type: Option<DataType>,
     pub host_registry: HostRegistry,
     pub style_directives: StyleDirectiveRegistry,
     pub loop_depth: usize,
@@ -884,6 +895,7 @@ impl ScopeContext {
             visible_declaration_ids: None,
             start_import_aliases: FxHashMap::default(),
             expected_result_types,
+            expected_error_type: None,
             host_registry,
             style_directives: StyleDirectiveRegistry::built_ins(),
             loop_depth: 0,
@@ -925,6 +937,7 @@ impl ScopeContext {
         let mut new_context = self.to_owned();
         new_context.kind = ContextKind::Function;
         new_context.expected_result_types = signature.return_data_types();
+        new_context.expected_error_type = signature.error_return().map(|ret| ret.data_type().to_owned());
 
         // Create a new scope path by joining the current scope with the function name
         new_context.scope = self.scope.append(id);
@@ -961,6 +974,7 @@ impl ScopeContext {
             visible_declaration_ids: self.visible_declaration_ids.clone(),
             start_import_aliases: self.start_import_aliases.clone(),
             expected_result_types: vec![],
+            expected_error_type: self.expected_error_type.clone(),
             host_registry: self.host_registry.clone(),
             style_directives: self.style_directives.clone(),
             loop_depth: self.loop_depth,
@@ -988,6 +1002,7 @@ impl ScopeContext {
             visible_declaration_ids: parent.visible_declaration_ids.clone(),
             start_import_aliases: parent.start_import_aliases.clone(),
             expected_result_types: Vec::new(),
+            expected_error_type: parent.expected_error_type.clone(),
             host_registry: parent.host_registry.clone(),
             style_directives: parent.style_directives.clone(),
             loop_depth: parent.loop_depth,

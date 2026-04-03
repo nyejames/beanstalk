@@ -43,6 +43,12 @@ impl ConstValueKind {
     }
 }
 
+#[derive(Clone, Debug)]
+pub enum ResultCallHandling {
+    Propagate,
+    Fallback(Vec<Expression>),
+}
+
 impl Expression {
     pub fn as_string(&self, string_table: &StringTable) -> String {
         match &self.kind {
@@ -87,6 +93,7 @@ impl Expression {
             }
             ExpressionKind::Function(..) => String::new(),
             ExpressionKind::FunctionCall(..) => String::new(),
+            ExpressionKind::ResultHandledFunctionCall { .. } => String::new(),
             ExpressionKind::HostFunctionCall(..) => String::new(),
             ExpressionKind::Runtime(..) => String::new(),
             ExpressionKind::Range(lower, upper) => {
@@ -96,7 +103,8 @@ impl Expression {
                     upper.as_string(string_table)
                 )
             }
-            ExpressionKind::None => String::new(),
+            ExpressionKind::NoValue => String::new(),
+            ExpressionKind::OptionNone => String::new(),
         }
     }
 
@@ -267,6 +275,24 @@ impl Expression {
         )
     }
 
+    pub fn result_handled_function_call(
+        name: InternedPath,
+        args: Vec<Expression>,
+        result_types: Vec<DataType>,
+        handling: ResultCallHandling,
+        location: SourceLocation,
+    ) -> Self {
+        Self::call_expression(
+            ExpressionKind::ResultHandledFunctionCall {
+                name,
+                args,
+                handling,
+            },
+            result_types,
+            location,
+        )
+    }
+
     pub fn host_function_call(
         name: InternedPath,
         args: Vec<Expression>,
@@ -367,6 +393,22 @@ impl Expression {
         )
     }
 
+    /// Internal sentinel used for declarations/signature defaults that do not
+    /// provide a value expression in source.
+    pub fn no_value(location: SourceLocation, data_type: DataType, ownership: Ownership) -> Self {
+        Self::new(ExpressionKind::NoValue, location, data_type, ownership)
+    }
+
+    /// User-facing `none` literal in an optional context.
+    pub fn option_none(inner_type: DataType, location: SourceLocation) -> Self {
+        Self::new(
+            ExpressionKind::OptionNone,
+            location,
+            DataType::Option(Box::new(inner_type)),
+            Ownership::ImmutableOwned,
+        )
+    }
+
     pub fn is_compile_time_constant(&self) -> bool {
         self.const_value_kind().is_compile_time_value()
     }
@@ -414,15 +456,22 @@ impl Expression {
             | ExpressionKind::Runtime(_)
             | ExpressionKind::Function(..)
             | ExpressionKind::FunctionCall(..)
+            | ExpressionKind::ResultHandledFunctionCall { .. }
             | ExpressionKind::HostFunctionCall(..)
             | ExpressionKind::StructDefinition(..)
-            | ExpressionKind::None => ConstValueKind::NonConst,
+            | ExpressionKind::NoValue
+            | ExpressionKind::OptionNone => ConstValueKind::NonConst,
         }
     }
 }
 #[derive(Clone, Debug)]
 pub enum ExpressionKind {
-    None,
+    /// Internal sentinel for "no source value was provided" (for example, a
+    /// parameter default that is intentionally absent).
+    NoValue,
+
+    /// User-authored `none` literal in an explicit option context.
+    OptionNone,
 
     Runtime(Vec<AstNode>),
 
@@ -452,6 +501,12 @@ pub enum ExpressionKind {
         InternedPath,    // Function name
         Vec<Expression>, // Arguments
     ),
+
+    ResultHandledFunctionCall {
+        name: InternedPath,
+        args: Vec<Expression>,
+        handling: ResultCallHandling,
+    },
 
     HostFunctionCall(InternedPath, Vec<Expression>),
 

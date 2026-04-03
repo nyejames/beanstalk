@@ -4,11 +4,14 @@
 //! WHY: statement parsing should preserve signature metadata and host/user call dispatch.
 
 use super::*;
-use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
+use crate::compiler_frontend::ast::expressions::expression::{
+    ExpressionKind, ResultCallHandling,
+};
 use crate::compiler_frontend::ast::test_support::{
     function_body_by_name, function_signature_by_name, parse_single_file_ast,
     parse_single_file_ast_error, start_function_body,
 };
+use crate::compiler_frontend::ast::statements::functions::ReturnSlot;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 
 #[test]
@@ -29,7 +32,7 @@ fn parses_function_parameters_and_return_types() {
     );
     assert_eq!(
         signature.returns,
-        vec![FunctionReturn::Value(DataType::Int)]
+        vec![ReturnSlot::success(FunctionReturn::Value(DataType::Int))]
     );
 }
 
@@ -44,10 +47,10 @@ fn parses_alias_return_candidates_in_function_signatures() {
     assert_eq!(signature.returns.len(), 1);
     assert_eq!(
         signature.returns[0],
-        FunctionReturn::AliasCandidates {
+        ReturnSlot::success(FunctionReturn::AliasCandidates {
             parameter_indices: vec![0, 1],
             data_type: DataType::StringSlice,
-        }
+        })
     );
 }
 
@@ -107,7 +110,7 @@ fn resolves_named_struct_type_in_function_returns() {
 
     let signature = function_signature_by_name(&ast, &string_table, "clone");
     assert!(matches!(
-        signature.returns[0],
+        signature.returns[0].value,
         FunctionReturn::Value(DataType::Struct {
             ownership: Ownership::MutableOwned,
             const_record: false,
@@ -215,4 +218,79 @@ fn rejects_mutable_receiver_methods_on_temporaries() {
         "{}",
         error.msg
     );
+}
+
+#[test]
+fn parses_result_propagation_call_in_expression_position() {
+    let (ast, string_table) = parse_single_file_ast(
+        "Error = |\n    msg String,\n|\n\ncan_error |value String| -> String, Error!:\n    return value\n;\n\nforward |value String| -> String, Error!:\n    return can_error(value)!\n;\n",
+    );
+
+    let body = function_body_by_name(&ast, &string_table, "forward");
+    let NodeKind::Return(values) = &body[0].kind else {
+        panic!("expected return statement in forward()");
+    };
+
+    assert_eq!(values.len(), 1);
+    assert!(matches!(
+        values[0].kind,
+        ExpressionKind::ResultHandledFunctionCall {
+            handling: ResultCallHandling::Propagate,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn parses_result_fallback_call_in_expression_position() {
+    let (ast, string_table) = parse_single_file_ast(
+        "Error = |\n    msg String,\n|\n\ncan_error |value String| -> String, Error!:\n    return value\n;\n\nrecover |value String| -> String:\n    return can_error(value) ! \"fallback\"\n;\n",
+    );
+
+    let body = function_body_by_name(&ast, &string_table, "recover");
+    let NodeKind::Return(values) = &body[0].kind else {
+        panic!("expected return statement in recover()");
+    };
+
+    assert_eq!(values.len(), 1);
+    let ExpressionKind::ResultHandledFunctionCall { handling, .. } = &values[0].kind else {
+        panic!("expected handled call expression in recover return");
+    };
+
+    let ResultCallHandling::Fallback(fallback_values) = handling else {
+        panic!("expected fallback handling");
+    };
+    assert_eq!(fallback_values.len(), 1);
+    assert!(matches!(
+        fallback_values[0].kind,
+        ExpressionKind::StringSlice(_)
+    ));
+}
+
+#[test]
+fn rejects_bare_named_error_handler_without_scope() {
+    let error = parse_single_file_ast_error(
+        "Error = |\n    msg String,\n|\n\ncan_error |value String| -> String, Error!:\n    return value\n;\n\nrecover |value String| -> String:\n    return can_error(value) err!\n;\n",
+    );
+
+    assert!(error.msg.contains("Bare 'err!' is invalid"), "{}", error.msg);
+}
+
+#[test]
+fn parses_standalone_result_propagation_statement() {
+    let (ast, string_table) = parse_single_file_ast(
+        "Error = |\n    msg String,\n|\n\ncan_error || -> Error!:\n    return\n;\n\nrun || -> Error!:\n    can_error()!\n;\n",
+    );
+
+    let body = function_body_by_name(&ast, &string_table, "run");
+    let NodeKind::Rvalue(expression) = &body[0].kind else {
+        panic!("expected standalone handled call to parse as rvalue statement");
+    };
+    assert!(matches!(
+        expression.kind,
+        ExpressionKind::ResultHandledFunctionCall {
+            handling: ResultCallHandling::Propagate,
+            ..
+        }
+    ));
 }

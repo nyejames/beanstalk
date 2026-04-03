@@ -10,7 +10,9 @@ use crate::compiler_frontend::analysis::borrow_checker::tests::test_support::{
 };
 use crate::compiler_frontend::ast::ast_nodes::NodeKind;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
-use crate::compiler_frontend::ast::statements::functions::{FunctionReturn, FunctionSignature};
+use crate::compiler_frontend::ast::statements::functions::{
+    FunctionReturn, FunctionSignature, ReturnSlot,
+};
 use crate::compiler_frontend::compiler_errors::ErrorType;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::host_functions::test_support::{
@@ -19,10 +21,11 @@ use crate::compiler_frontend::host_functions::test_support::{
 };
 use crate::compiler_frontend::string_interning::StringTable;
 
-fn fresh_returns(result_types: Vec<DataType>) -> Vec<FunctionReturn> {
+fn fresh_returns(result_types: Vec<DataType>) -> Vec<ReturnSlot> {
     result_types
         .into_iter()
         .map(FunctionReturn::Value)
+        .map(ReturnSlot::success)
         .collect()
 }
 
@@ -41,10 +44,10 @@ fn user_function_returning_param_aliases_caller_root() {
         alias_fn.clone(),
         FunctionSignature {
             parameters: vec![param(p.clone(), DataType::Int, false, location(1))],
-            returns: vec![FunctionReturn::AliasCandidates {
+            returns: vec![ReturnSlot::success(FunctionReturn::AliasCandidates {
                 parameter_indices: vec![0],
                 data_type: DataType::Int,
-            }],
+            })],
         },
         vec![node(
             NodeKind::Return(vec![reference_expr(p, DataType::Int, location(2))]),

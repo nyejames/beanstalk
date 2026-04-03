@@ -472,6 +472,21 @@ pub enum HirExpressionKind {
         variant: ResultVariant,
         value: Box<HirExpression>, // The wrapped value
     },
+
+    /// Unwraps an internal Result value for `call(...)!` propagation:
+    /// - Ok(v)  => evaluates to v
+    /// - Err(e) => propagates through the current function's error channel
+    ResultPropagate {
+        result: Box<HirExpression>,
+    },
+
+    /// Handles an internal Result value by returning fallback values on Err.
+    /// - Ok(v)  => evaluates to v
+    /// - Err(_) => evaluates to fallback
+    ResultFallback {
+        result: Box<HirExpression>,
+        fallback: Box<HirExpression>,
+    },
 }
 
 // ============================================================

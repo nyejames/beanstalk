@@ -23,7 +23,7 @@ fn parses_struct_definitions_with_field_defaults() {
 
     assert_eq!(path.name_str(&string_table), Some("Point"));
     assert_eq!(fields.len(), 2);
-    assert!(matches!(fields[0].value.kind, ExpressionKind::None));
+    assert!(matches!(fields[0].value.kind, ExpressionKind::NoValue));
     assert!(matches!(fields[1].value.kind, ExpressionKind::Int(2)));
 }
 

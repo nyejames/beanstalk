@@ -44,13 +44,36 @@ impl<'hir> JsEmitter<'hir> {
         self.emit_parameter_binding_setup(function)?;
 
         let strategy = self.choose_control_flow_strategy(function, &reachable_blocks)?;
-
-        match strategy {
-            ControlFlowStrategy::Structured => {
-                self.emit_structured_function_body(function)?;
+        if self.function_returns_result(function) {
+            self.emit_line("try {");
+            self.indent += 1;
+            match strategy {
+                ControlFlowStrategy::Structured => {
+                    self.emit_structured_function_body(function)?;
+                }
+                ControlFlowStrategy::Dispatcher => {
+                    self.emit_dispatcher_for_function(function, &reachable_blocks)?;
+                }
             }
-            ControlFlowStrategy::Dispatcher => {
-                self.emit_dispatcher_for_function(function, &reachable_blocks)?;
+            self.indent -= 1;
+            self.emit_line("} catch (__bs_err) {");
+            self.indent += 1;
+            self.emit_line("if (__bs_err && __bs_err.__bs_result_propagate === true) {");
+            self.indent += 1;
+            self.emit_line("return { tag: \"err\", value: __bs_err.value };");
+            self.indent -= 1;
+            self.emit_line("}");
+            self.emit_line("throw __bs_err;");
+            self.indent -= 1;
+            self.emit_line("}");
+        } else {
+            match strategy {
+                ControlFlowStrategy::Structured => {
+                    self.emit_structured_function_body(function)?;
+                }
+                ControlFlowStrategy::Dispatcher => {
+                    self.emit_dispatcher_for_function(function, &reachable_blocks)?;
+                }
             }
         }
 
@@ -90,6 +113,13 @@ impl<'hir> JsEmitter<'hir> {
         }
 
         Ok(())
+    }
+
+    fn function_returns_result(&self, function: &HirFunction) -> bool {
+        matches!(
+            self.hir.type_context.get(function.return_type).kind,
+            crate::compiler_frontend::hir::hir_datatypes::HirTypeKind::Result { .. }
+        )
     }
 
     fn emit_parameter_binding_setup(

@@ -81,6 +81,62 @@ function_name |param Int| -> Int:
 ;
 ```
 
+### Results and Options
+
+Beanstalk supports optional values and error returns with compact syntax.
+
+Optional types use `?`:
+
+```beanstalk
+name String? = none
+
+find_name |id String| -> String?:
+    if id.is_empty():
+        return none
+    ;
+
+    return "Alice"
+;
+```
+
+A normal value of type `T` can be used where `T?` is expected.  
+`none` is the only special option value.
+
+Error-returning functions mark one return slot with `!`:
+
+```beanstalk
+Error = |
+    msg String,
+|
+
+parse_number |text String| -> Int, Error!:
+    if text.is_empty():
+        return! Error("Missing number")
+    ;
+
+    return 42
+;
+```
+
+Error-returning calls must be handled at the call site.
+
+Bubble the error up:
+
+```beanstalk
+value = parse_number(text)!
+```
+
+Or provide fallback values:
+
+```beanstalk
+value = parse_number(text) ! 0
+```
+
+Named handler scopes (`err!:` forms) are reserved for explicit error-handling blocks.
+
+Beanstalk still uses multiple returns, so the success path keeps normal return values.  
+The special `!` return is only for the error path.
+
 **Collections**
 
 When a new collection uses the mutable symbol, its internal values can be mutated by default.

@@ -798,6 +798,13 @@ fn collect_expression_loaded_locals(expression: &HirExpression, visitor: &mut im
         HirExpressionKind::ResultConstruct { value, .. } => {
             collect_expression_loaded_locals(value, visitor);
         }
+        HirExpressionKind::ResultPropagate { result } => {
+            collect_expression_loaded_locals(result, visitor);
+        }
+        HirExpressionKind::ResultFallback { result, fallback } => {
+            collect_expression_loaded_locals(result, visitor);
+            collect_expression_loaded_locals(fallback, visitor);
+        }
         HirExpressionKind::Int(_)
         | HirExpressionKind::Float(_)
         | HirExpressionKind::Bool(_)

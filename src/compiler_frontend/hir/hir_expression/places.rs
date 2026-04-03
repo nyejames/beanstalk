@@ -48,6 +48,23 @@ impl<'a> HirBuilder<'a> {
                 )
             }
 
+            NodeKind::ResultHandledFunctionCall {
+                name,
+                args,
+                result_types,
+                handling,
+                location,
+            } => {
+                let function_id = self.resolve_function_id_or_error(name, location)?;
+                self.lower_result_handled_call_expression(
+                    CallTarget::UserFunction(function_id),
+                    args,
+                    result_types,
+                    handling,
+                    location,
+                )
+            }
+
             NodeKind::HostFunctionCall {
                 name: host_function_id,
                 args,
@@ -166,6 +183,25 @@ impl<'a> HirBuilder<'a> {
                     CallTarget::UserFunction(function_id),
                     args,
                     result_types,
+                    location,
+                )?;
+                let place = self.place_from_expression(&lowered.value, &node.location)?;
+                Ok((lowered.prelude, place))
+            }
+
+            NodeKind::ResultHandledFunctionCall {
+                name,
+                args,
+                result_types,
+                handling,
+                location,
+            } => {
+                let function_id = self.resolve_function_id_or_error(name, location)?;
+                let lowered = self.lower_result_handled_call_expression(
+                    CallTarget::UserFunction(function_id),
+                    args,
+                    result_types,
+                    handling,
                     location,
                 )?;
                 let place = self.place_from_expression(&lowered.value, &node.location)?;

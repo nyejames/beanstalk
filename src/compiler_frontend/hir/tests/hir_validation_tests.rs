@@ -6,7 +6,9 @@
 use crate::compiler_frontend::ast::ast::{Ast, AstDocFragment, AstDocFragmentKind, ModuleExport};
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind, SourceLocation};
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
-use crate::compiler_frontend::ast::statements::functions::{FunctionReturn, FunctionSignature};
+use crate::compiler_frontend::ast::statements::functions::{
+    FunctionReturn, FunctionSignature, ReturnSlot,
+};
 use crate::compiler_frontend::compiler_errors::{CompilerMessages, ErrorType};
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::hir::hir_builder::{HirBuilder, validate_module_for_tests};
@@ -50,7 +52,7 @@ fn param(
 
     Declaration {
         id: name,
-        value: Expression::new(ExpressionKind::None, location, data_type, ownership),
+        value: Expression::new(ExpressionKind::NoValue, location, data_type, ownership),
     }
 }
 
@@ -367,7 +369,7 @@ fn validator_rejects_out_of_range_return_alias_metadata() {
         start_name,
         FunctionSignature {
             parameters: vec![param(p.clone(), DataType::Int, false, test_location(1))],
-            returns: vec![FunctionReturn::Value(DataType::Int)],
+            returns: vec![ReturnSlot::success(FunctionReturn::Value(DataType::Int))],
         },
         vec![node(
             NodeKind::Return(vec![Expression::reference(

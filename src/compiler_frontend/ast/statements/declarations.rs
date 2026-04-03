@@ -122,7 +122,12 @@ pub fn resolve_declaration_syntax(
             )
         })?;
 
-        data_type = declared_type.value.data_type.to_owned();
+        let resolved_named_type = declared_type.value.data_type.to_owned();
+        data_type = if declaration_syntax.explicit_named_optional {
+            DataType::Option(Box::new(resolved_named_type))
+        } else {
+            resolved_named_type
+        };
     }
 
     let mut initializer_tokens = declaration_syntax.initializer_tokens;

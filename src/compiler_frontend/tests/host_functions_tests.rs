@@ -30,7 +30,7 @@ fn params_to_signature_preserves_alias_metadata() {
     assert_eq!(signature.parameters.len(), 2);
     assert_eq!(signature.returns.len(), 1);
     assert!(matches!(
-        &signature.returns[0],
+        &signature.returns[0].value,
         FunctionReturn::AliasCandidates {
             parameter_indices,
             data_type

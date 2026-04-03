@@ -389,6 +389,7 @@ pub enum TokenKind {
 
     // Datatypes
     DatatypeNone,
+    NoneLiteral,
     DatatypeInt,
     DatatypeFloat,
     DatatypeBool,

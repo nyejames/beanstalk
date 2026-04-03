@@ -16,6 +16,8 @@ pub struct DeclarationSyntax {
     pub explicit_type: DataType,
     // Named type annotations are resolved later after symbol tables are available.
     pub explicit_named_type: Option<StringId>,
+    // Whether a trailing `?` was present after a named type annotation.
+    pub explicit_named_optional: bool,
     pub initializer_tokens: Vec<Token>,
     pub location: SourceLocation,
 }
@@ -37,6 +39,9 @@ impl DeclarationSyntax {
                 TokenKind::Symbol(type_name),
                 self.location.clone(),
             ));
+            if self.explicit_named_optional {
+                tokens.push(Token::new(TokenKind::QuestionMark, self.location.clone()));
+            }
         } else {
             append_explicit_type_tokens(&mut tokens, &self.explicit_type, &self.location);
         }
@@ -77,7 +82,7 @@ pub fn parse_declaration_syntax(
         token_stream.advance();
     }
 
-    let (explicit_type, explicit_named_type) =
+    let (explicit_type, explicit_named_type, explicit_named_optional) =
         parse_explicit_type_annotation(token_stream, string_table)?;
 
     // Require assignment for declarations.
@@ -127,6 +132,7 @@ pub fn parse_declaration_syntax(
         mutable_marker,
         explicit_type,
         explicit_named_type,
+        explicit_named_optional,
         initializer_tokens,
         location: declaration_location,
     })
@@ -135,24 +141,71 @@ pub fn parse_declaration_syntax(
 fn parse_explicit_type_annotation(
     token_stream: &mut FileTokens,
     _string_table: &StringTable,
-) -> Result<(DataType, Option<StringId>), CompilerError> {
+) -> Result<(DataType, Option<StringId>, bool), CompilerError> {
+    fn parse_optional_suffix(
+        token_stream: &mut FileTokens,
+        parsed_type: DataType,
+    ) -> Result<DataType, CompilerError> {
+        if token_stream.current_token_kind() != &TokenKind::QuestionMark {
+            return Ok(parsed_type);
+        }
+
+        if matches!(parsed_type, DataType::Option(_)) {
+            return_syntax_error!(
+                "Duplicate optional marker '?' in declaration type annotation",
+                token_stream.current_location(), {
+                    CompilationStage => "Variable Declaration",
+                    PrimarySuggestion => "Use a single '?' suffix for optional types",
+                }
+            );
+        }
+
+        token_stream.advance();
+        Ok(DataType::Option(Box::new(parsed_type)))
+    }
+
     match token_stream.current_token_kind() {
-        TokenKind::Assign | TokenKind::Newline => Ok((DataType::Inferred, None)),
+        TokenKind::Assign | TokenKind::Newline => Ok((DataType::Inferred, None, false)),
         TokenKind::DatatypeInt => {
             token_stream.advance();
-            Ok((DataType::Int, None))
+            Ok((
+                parse_optional_suffix(token_stream, DataType::Int)?,
+                None,
+                false,
+            ))
         }
         TokenKind::DatatypeFloat => {
             token_stream.advance();
-            Ok((DataType::Float, None))
+            Ok((
+                parse_optional_suffix(token_stream, DataType::Float)?,
+                None,
+                false,
+            ))
         }
         TokenKind::DatatypeBool => {
             token_stream.advance();
-            Ok((DataType::Bool, None))
+            Ok((
+                parse_optional_suffix(token_stream, DataType::Bool)?,
+                None,
+                false,
+            ))
         }
         TokenKind::DatatypeString => {
             token_stream.advance();
-            Ok((DataType::StringSlice, None))
+            Ok((
+                parse_optional_suffix(token_stream, DataType::StringSlice)?,
+                None,
+                false,
+            ))
+        }
+        TokenKind::DatatypeNone => {
+            return_syntax_error!(
+                "none is not a valid declaration type annotation",
+                token_stream.current_location(), {
+                    CompilationStage => "Variable Declaration",
+                    PrimarySuggestion => "Use an optional type like 'String?' and assign 'none' as the value",
+                }
+            )
         }
         TokenKind::OpenCurly => {
             token_stream.advance();
@@ -174,18 +227,22 @@ fn parse_explicit_type_annotation(
             }
             token_stream.advance();
 
-            Ok((
-                DataType::Collection(
+            let collection_type = DataType::Collection(
                     Box::new(inner.unwrap_or(DataType::Inferred)),
                     Ownership::ImmutableOwned,
-                ),
-                None,
-            ))
+                );
+            Ok((parse_optional_suffix(token_stream, collection_type)?, None, false))
         }
         TokenKind::Symbol(name) => {
             let type_name = *name;
             token_stream.advance();
-            Ok((DataType::Inferred, Some(type_name)))
+            let named_optional = if token_stream.current_token_kind() == &TokenKind::QuestionMark {
+                token_stream.advance();
+                true
+            } else {
+                false
+            };
+            Ok((DataType::Inferred, Some(type_name), named_optional))
         }
         TokenKind::Colon => {
             return_rule_error!(
@@ -245,6 +302,10 @@ fn append_explicit_type_tokens(
             tokens.push(Token::new(TokenKind::OpenCurly, location.clone()));
             append_explicit_type_tokens(tokens, inner.as_ref(), location);
             tokens.push(Token::new(TokenKind::CloseCurly, location.clone()));
+        }
+        DataType::Option(inner) => {
+            append_explicit_type_tokens(tokens, inner.as_ref(), location);
+            tokens.push(Token::new(TokenKind::QuestionMark, location.clone()));
         }
         _ => {}
     }

@@ -1,5 +1,5 @@
 use crate::compiler_frontend::ast::expressions::expression::{
-    Expression, ExpressionKind, Operator,
+    Expression, ExpressionKind, Operator, ResultCallHandling,
 };
 use crate::compiler_frontend::ast::statements::branching::MatchArm;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
@@ -51,6 +51,7 @@ pub enum NodeKind {
 
     // Control Flow
     Return(Vec<Expression>),                            // Return value,
+    ReturnError(Expression),                            // return! value
     If(Expression, Vec<AstNode>, Option<Vec<AstNode>>), // Condition, If true, Else
 
     Match(
@@ -91,6 +92,14 @@ pub enum NodeKind {
         result_types: Vec<DataType>,
         location: SourceLocation,
         // bool, // Function is pure
+    },
+
+    ResultHandledFunctionCall {
+        name: InternedPath,
+        args: Vec<Expression>,
+        result_types: Vec<DataType>,
+        handling: ResultCallHandling,
+        location: SourceLocation,
     },
 
     // Host function call (functions provided by the runtime)
@@ -166,6 +175,20 @@ impl AstNode {
                 name.to_owned(),
                 arguments.to_owned(),
                 result_types.to_owned(),
+                location.to_owned(),
+            )),
+
+            NodeKind::ResultHandledFunctionCall {
+                name,
+                args: arguments,
+                result_types,
+                handling,
+                location,
+            } => Ok(Expression::result_handled_function_call(
+                name.to_owned(),
+                arguments.to_owned(),
+                result_types.to_owned(),
+                handling.to_owned(),
                 location.to_owned(),
             )),
 

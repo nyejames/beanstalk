@@ -204,6 +204,26 @@ impl DataType {
             return true;
         }
 
+        if let DataType::Option(expected_inner) = expression_type {
+            if self == expected_inner.as_ref() {
+                return true;
+            }
+
+            if let DataType::Option(actual_inner) = self {
+                if matches!(actual_inner.as_ref(), DataType::Inferred)
+                    || matches!(expected_inner.as_ref(), DataType::Inferred)
+                {
+                    return true;
+                }
+
+                return actual_inner.as_ref() == expected_inner.as_ref();
+            }
+
+            if matches!(self, DataType::None) {
+                return true;
+            }
+        }
+
         match self {
             DataType::Bool => {
                 matches!(

@@ -59,6 +59,26 @@ impl<'a> HirBuilder<'a> {
                     self.log_rpn_step("push-call", node, &stack);
                 }
 
+                NodeKind::ResultHandledFunctionCall {
+                    name,
+                    args,
+                    result_types,
+                    handling,
+                    location,
+                } => {
+                    let function_id = self.resolve_function_id_or_error(name, location)?;
+                    let lowered = self.lower_result_handled_call_expression(
+                        CallTarget::UserFunction(function_id),
+                        args,
+                        result_types,
+                        handling,
+                        location,
+                    )?;
+                    prelude.extend(lowered.prelude);
+                    stack.push(lowered.value);
+                    self.log_rpn_step("push-handled-call", node, &stack);
+                }
+
                 NodeKind::HostFunctionCall {
                     name: host_function_id,
                     args,
