@@ -51,6 +51,7 @@ fn is_expression_statement(expr: &Expression) -> bool {
     match &expr.kind {
         ExpressionKind::FunctionCall(..)
         | ExpressionKind::ResultHandledFunctionCall { .. }
+        | ExpressionKind::HandledResult { .. }
         | ExpressionKind::HostFunctionCall(..) => true,
         ExpressionKind::Runtime(nodes) => nodes.iter().any(|node| {
             matches!(

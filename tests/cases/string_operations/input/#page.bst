@@ -28,6 +28,6 @@ io("Empty string: '" + empty + "'")
 ch1 = 'a'
 ch2 = 'Z'
 ch3 = '😊'
-io([: Characters: ch1, ch2, ch3])
+io([: Characters: [ch1], [ch2], [ch3]])
 
 io("String operation tests passed")

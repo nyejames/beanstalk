@@ -570,7 +570,7 @@ fn format_type_for_error(data_type: &DataType) -> String {
         DataType::None => "None".to_string(),
         DataType::True => "True".to_string(),
         DataType::False => "False".to_string(),
-        DataType::CoerceToString => "String".to_string(),
+        DataType::Result(inner) => format!("{}!", format_type_for_error(inner)),
         DataType::Decimal => "Decimal".to_string(),
         DataType::Collection(inner, _) => format!("Collection<{}>", format_type_for_error(inner)),
         DataType::Struct { .. } => "Struct".to_string(),
@@ -604,33 +604,7 @@ fn get_type_conversion_hint(from_type: &DataType, to_type: &DataType) -> String 
 
 /// Check if two types are compatible for function call arguments
 fn types_compatible(arg_type: &DataType, param_type: &DataType) -> bool {
-    // Basic type compatibility check
-    // This is a simplified version - in a full implementation, this would handle
-    // more complex type relationships, ownership, mutability, etc.
-    match (arg_type, param_type) {
-        // CoerceToString accepts any type - this is the key for host_io_functions() function
-        (_, DataType::CoerceToString) => true,
-
-        // Exact type matches
-        (DataType::StringSlice, DataType::StringSlice) => true,
-        (DataType::Int, DataType::Int) => true,
-        (DataType::Float, DataType::Float) => true,
-        (DataType::Bool, DataType::Bool) => true,
-        (DataType::Template, DataType::Template) => true,
-
-        // Handle inferred types - they should be compatible with their target
-        (DataType::Inferred, _target) | (_target, DataType::Inferred) => {
-            // For now, assume inferred types are compatible
-            // In a full implementation; this would check the inferred type
-            true
-        }
-
-        // Numeric type promotions (if we want to allow them)
-        // (DataType::Int, DataType::Float) => true,  // Int can be promoted to Float
-
-        // All other combinations are incompatible
-        _ => false,
-    }
+    param_type.accepts_value_type(arg_type)
 }
 
 // Built-in functions will do their own thing
@@ -901,7 +875,7 @@ pub fn validate_host_function_call(
     function: &HostFunctionDef,
     args: &[Expression],
     location: SourceLocation,
-    _string_table: &StringTable,
+    string_table: &StringTable,
 ) -> Result<(), CompilerError> {
     // Check argument count
     if args.len() != function.parameters.len() {
@@ -963,7 +937,54 @@ pub fn validate_host_function_call(
         }
     }
 
-    // Check argument types
+    if function.name == crate::compiler_frontend::host_functions::IO_FUNC_NAME {
+        for (i, expression) in args.iter().enumerate() {
+            if expression.data_type.is_result() {
+                return_type_error!(
+                    format!(
+                        "Argument {} to function '{}' has incorrect type. Expected a renderable value, but got {}. Result values must be handled before reaching io(...).",
+                        i + 1,
+                        function.name,
+                        format_type_for_error(&expression.data_type)
+                    ),
+                    location.clone(),
+                    {
+                        CompilationStage => "Function Call Validation",
+                        PrimarySuggestion => "Handle the Result with '!' syntax before passing it to io(...)",
+                    }
+                );
+            }
+
+            if !matches!(
+                expression.data_type,
+                DataType::StringSlice
+                    | DataType::Template
+                    | DataType::TemplateWrapper
+                    | DataType::Int
+                    | DataType::Float
+                    | DataType::Bool
+                    | DataType::Char
+                    | DataType::Path(_)
+            ) {
+                return_type_error!(
+                    format!(
+                        "Argument {} to function '{}' has incorrect type. Expected a final scalar or textual value, but got {}.",
+                        i + 1,
+                        function.name,
+                        expression.data_type.display_with_table(string_table)
+                    ),
+                    location.clone(),
+                    {
+                        CompilationStage => "Function Call Validation",
+                        PrimarySuggestion => "Render collections/structs/templates earlier or pass a scalar/textual value to io(...)",
+                    }
+                );
+            }
+        }
+
+        return Ok(());
+    }
+
     for (i, (expression, param)) in args.iter().zip(&function.parameters).enumerate() {
         if !types_compatible(&expression.data_type, &param.language_type) {
             return_type_error!(

@@ -4,4 +4,4 @@ import @utils/string/format_number
 
 result = add(5, 3)
 formatted = format_number(result)
-io([: Result: formatted])
+io([: Result: [formatted]])

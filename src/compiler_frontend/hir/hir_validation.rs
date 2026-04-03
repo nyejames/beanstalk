@@ -357,6 +357,9 @@ impl<'a> HirValidator<'a> {
                 self.validate_module_const_value(start)?;
                 self.validate_module_const_value(end)?;
             }
+            HirConstValue::Result { value, .. } => {
+                self.validate_module_const_value(value)?;
+            }
             HirConstValue::Int(_)
             | HirConstValue::Float(_)
             | HirConstValue::Bool(_)
@@ -919,7 +922,8 @@ impl<'a> HirValidator<'a> {
 
             HirExpressionKind::ResultIsOk { result }
             | HirExpressionKind::ResultUnwrapOk { result }
-            | HirExpressionKind::ResultUnwrapErr { result } => {
+            | HirExpressionKind::ResultUnwrapErr { result }
+            | HirExpressionKind::BuiltinCast { value: result, .. } => {
                 self.validate_expression(result, anchor)?;
             }
         }

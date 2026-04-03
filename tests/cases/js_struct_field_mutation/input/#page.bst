@@ -9,4 +9,4 @@ Point = |
 p = Point(1, 2)
 p.x = 10
 p.y = 20
-io([: Point: (p.x, p.y)])
+io([: Point: ([p.x], [p.y])])

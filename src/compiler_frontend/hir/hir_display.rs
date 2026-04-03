@@ -466,6 +466,9 @@ impl<'a> HirDisplayContext<'a> {
             HirExpressionKind::ResultUnwrapErr { result } => {
                 format!("result_unwrap_err({})", self.render_expression(result))
             }
+            HirExpressionKind::BuiltinCast { kind, value } => {
+                format!("{:?}({})", kind, self.render_expression(value))
+            }
         }
     }
 

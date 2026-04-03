@@ -191,13 +191,17 @@ impl<'a> HirBuilder<'a> {
         chunk_type: &DataType,
         location: &SourceLocation,
     ) -> Result<TypeId, CompilerError> {
-        let normalized = match chunk_type {
-            // Runtime template chunks must have a concrete lowered type.
-            DataType::Inferred => DataType::CoerceToString,
-            other => other.clone(),
-        };
-
-        self.lower_data_type(&normalized, location)
+        match chunk_type {
+            // Template-head coercion happens after AST typing, so HIR template chunks should
+            // already have a concrete scalar or textual type by the time they reach lowering.
+            DataType::Inferred => {
+                return_hir_transformation_error!(
+                    "Inferred runtime template chunk reached HIR lowering",
+                    self.hir_error_location(location)
+                )
+            }
+            other => self.lower_data_type(other, location),
+        }
     }
 
     fn build_runtime_template_return_expression(

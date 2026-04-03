@@ -7,4 +7,4 @@ config() -- Call config's implicit main
 io("After config initialization")
 
 database_url = get_database_url()
-io([: Database URL: database_url])
+io([: Database URL: [database_url]])

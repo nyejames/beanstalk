@@ -135,7 +135,7 @@ impl HostRegistry {
         let io_function = HostFunctionDef {
             name: IO_FUNC_NAME,
             parameters: vec![HostParameter {
-                language_type: DataType::CoerceToString,
+                language_type: DataType::Inferred,
                 access_kind: HostAccessKind::Shared,
             }],
             return_type: HostAbiType::Void,

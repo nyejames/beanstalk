@@ -4,14 +4,16 @@
 //! This file contains the high-level dispatcher and shared expression utilities on `HirBuilder`.
 
 use crate::compiler_frontend::ast::ast_nodes::AstNode;
-use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
+use crate::compiler_frontend::ast::expressions::expression::{
+    BuiltinCastKind, Expression, ExpressionKind, ResultVariant as AstResultVariant,
+};
 use crate::compiler_frontend::compiler_errors::{CompilerError, SourceLocation};
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::hir::hir_datatypes::{HirTypeKind, TypeId};
 use crate::compiler_frontend::hir::hir_nodes::{
-    HirBlock, HirExpression, HirExpressionKind, HirLocal, HirStatement, LocalId, OptionVariant,
-    RegionId, ValueKind,
+    HirBlock, HirBuiltinCastKind, HirExpression, HirExpressionKind, HirLocal, HirStatement,
+    LocalId, OptionVariant, RegionId, ResultVariant, ValueKind,
 };
 use crate::compiler_frontend::host_functions::CallTarget;
 use crate::compiler_frontend::interned_path::InternedPath;
@@ -143,6 +145,37 @@ impl<'a> HirBuilder<'a> {
                     &expr.location,
                 )
             }
+
+            ExpressionKind::BuiltinCast { kind, value } => {
+                self.lower_builtin_cast_expression(*kind, value, &expr.location, &expr.data_type)
+            }
+
+            ExpressionKind::ResultConstruct { variant, value } => {
+                let lowered_value = self.lower_expression(value)?;
+                let region = self.current_region_or_error(&expr.location)?;
+                let ty = self.lower_data_type(&expr.data_type, &expr.location)?;
+                let hir_variant = match variant {
+                    AstResultVariant::Ok => ResultVariant::Ok,
+                    AstResultVariant::Err => ResultVariant::Err,
+                };
+
+                Ok(LoweredExpression {
+                    prelude: lowered_value.prelude,
+                    value: self.make_expression(
+                        &expr.location,
+                        HirExpressionKind::ResultConstruct {
+                            variant: hir_variant,
+                            value: Box::new(lowered_value.value),
+                        },
+                        ty,
+                        ValueKind::RValue,
+                        region,
+                    ),
+                })
+            }
+
+            ExpressionKind::HandledResult { value, handling } => self
+                .lower_handled_result_expression(value, handling, &expr.location, &expr.data_type),
 
             ExpressionKind::HostFunctionCall(host_id, args) => self.lower_call_expression(
                 CallTarget::HostFunction(host_id.to_owned()),
@@ -283,6 +316,36 @@ impl<'a> HirBuilder<'a> {
 
         self.log_expression_output(expr, &lowered.value);
         Ok(lowered)
+    }
+
+    fn lower_builtin_cast_expression(
+        &mut self,
+        kind: BuiltinCastKind,
+        value: &Expression,
+        location: &SourceLocation,
+        result_type: &DataType,
+    ) -> Result<LoweredExpression, CompilerError> {
+        let lowered_value = self.lower_expression(value)?;
+        let region = self.current_region_or_error(location)?;
+        let ty = self.lower_data_type(result_type, location)?;
+        let hir_kind = match kind {
+            BuiltinCastKind::Int => HirBuiltinCastKind::Int,
+            BuiltinCastKind::Float => HirBuiltinCastKind::Float,
+        };
+
+        Ok(LoweredExpression {
+            prelude: lowered_value.prelude,
+            value: self.make_expression(
+                location,
+                HirExpressionKind::BuiltinCast {
+                    kind: hir_kind,
+                    value: Box::new(lowered_value.value),
+                },
+                ty,
+                ValueKind::RValue,
+                region,
+            ),
+        })
     }
 
     // WHAT: appends a prebuilt statement to the current block.

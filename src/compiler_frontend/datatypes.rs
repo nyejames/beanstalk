@@ -78,11 +78,6 @@ pub enum DataType {
     // AST-only placeholder for nominal types that are resolved once the module declaration set is known.
     NamedType(StringId),
 
-    // Any type can be used in the expression and will be coerced to a string (for scenes only).
-    // Mathematical operations will still work and take priority, but strings can be used in these expressions.
-    // All types will finally be coerced to strings after everything is evaluated.
-    CoerceToString,
-
     // Container and composite runtime types.
     Collection(Box<DataType>, Ownership),
     Struct {
@@ -118,6 +113,7 @@ pub enum DataType {
     Choices(Vec<Declaration>), // Union of types
     #[allow(dead_code)] // Planned: Option<T> language-level type support.
     Option(Box<DataType>), // Shorthand for a choice of a type or None
+    Result(Box<DataType>),
     #[allow(dead_code)] // Planned: template wrapper values for slot-aware folding.
     TemplateWrapper, // Foldable template with a slot (becomes two string slices)
     #[allow(dead_code)] // Planned: explicit None literal/type flows.
@@ -196,20 +192,32 @@ impl DataType {
         }
     }
 
-    // IGNORES MUTABILITY
-    pub fn is_valid_type_in_expression(&self, expression_type: &DataType) -> bool {
-        // Has to make sure if either type is a union, that the other type is also a member of the union
-        // red_ln!("checking if: {:?} is accepted by: {:?}", data_type, accepted_type);
-        if matches!(expression_type, DataType::CoerceToString) {
+    pub fn is_result(&self) -> bool {
+        matches!(self, DataType::Result(_))
+    }
+
+    pub fn result_inner_type(&self) -> Option<&DataType> {
+        match self {
+            DataType::Result(inner) => Some(inner.as_ref()),
+            _ => None,
+        }
+    }
+
+    pub fn accepts_value_type(&self, actual: &DataType) -> bool {
+        if matches!(self, DataType::Inferred) || matches!(actual, DataType::Inferred) {
             return true;
         }
 
-        if let DataType::Option(expected_inner) = expression_type {
-            if self == expected_inner.as_ref() {
+        if let DataType::Option(expected_inner) = self {
+            if matches!(actual, DataType::None) {
                 return true;
             }
 
-            if let DataType::Option(actual_inner) = self {
+            if actual == expected_inner.as_ref() {
+                return true;
+            }
+
+            if let DataType::Option(actual_inner) = actual {
                 if matches!(actual_inner.as_ref(), DataType::Inferred)
                     || matches!(expected_inner.as_ref(), DataType::Inferred)
                 {
@@ -218,43 +226,27 @@ impl DataType {
 
                 return actual_inner.as_ref() == expected_inner.as_ref();
             }
+        }
 
-            if matches!(self, DataType::None) {
+        if let (DataType::Result(expected_inner), DataType::Result(actual_inner)) = (self, actual) {
+            if matches!(expected_inner.as_ref(), DataType::Inferred)
+                || matches!(actual_inner.as_ref(), DataType::Inferred)
+            {
                 return true;
             }
+
+            return expected_inner.as_ref() == actual_inner.as_ref();
         }
 
-        match self {
-            DataType::Bool => {
-                matches!(
-                    expression_type,
-                    DataType::Bool | DataType::Int | DataType::Float
-                )
-            }
-            DataType::Range => {
-                matches!(
-                    expression_type,
-                    DataType::Collection(..)
-                        | DataType::Parameters(_)
-                        | DataType::Float
-                        | DataType::Int
-                        | DataType::Decimal
-                        | DataType::StringSlice
-                )
-            }
-
-            DataType::Int => expression_type.is_numerical() || expression_type == &DataType::Bool,
-
-            DataType::Float => {
-                matches!(expression_type, &DataType::Float | &DataType::Bool)
-            }
-
-            _ => self == expression_type,
-        }
+        self == actual
     }
 
     pub fn is_numerical(&self) -> bool {
         matches!(self, DataType::Float | DataType::Int | DataType::Decimal)
+    }
+
+    pub fn is_textual_cast_input(&self) -> bool {
+        matches!(self, DataType::StringSlice | DataType::Template)
     }
 
     /// Display the DataType with proper string resolution for interned strings.
@@ -266,7 +258,6 @@ impl DataType {
             }
             DataType::Inferred => "Inferred".to_string(),
             DataType::NamedType(name) => string_table.resolve(*name).to_string(),
-            DataType::CoerceToString => "CoerceToString".to_string(),
             DataType::Bool => "Bool".to_string(),
             DataType::StringSlice => "String".to_string(),
             DataType::TemplateWrapper => "String".to_string(),
@@ -350,6 +341,9 @@ impl DataType {
             DataType::Option(inner_type) => {
                 format!("Option({})", inner_type.display_with_table(string_table))
             }
+            DataType::Result(inner_type) => {
+                format!("{}!", inner_type.display_with_table(string_table))
+            }
             DataType::Choices(inner_types) => {
                 let mut inner_types_str = String::new();
                 for inner_type in inner_types {
@@ -379,10 +373,10 @@ impl PartialEq for DataType {
             (DataType::True, DataType::True) => true,
             (DataType::False, DataType::False) => true,
             (DataType::StringSlice, DataType::StringSlice) => true,
-            (DataType::CoerceToString, DataType::CoerceToString) => true,
             (DataType::Float, DataType::Float) => true,
             (DataType::Int, DataType::Int) => true,
             (DataType::Decimal, DataType::Decimal) => true,
+            (DataType::Result(a), DataType::Result(b)) => a == b,
             (DataType::Collection(a, oa), DataType::Collection(b, ob)) => a == b && oa == ob,
             (DataType::Path(a), DataType::Path(b)) => a == b,
             (DataType::Template, DataType::Template) => true,

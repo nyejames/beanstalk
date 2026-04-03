@@ -1,3 +1,3 @@
 #greet |name String|:
-    io([:Hello, name])
+    io([:Hello, [name]])
 ;

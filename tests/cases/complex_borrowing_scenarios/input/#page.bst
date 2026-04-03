@@ -12,8 +12,8 @@ name_ref2 = name_ref1
 name_ref3 = name_ref2
 
 -- Use in templates (should not interfere with borrowing)
-welcome_msg = [:name_ref1 welcome]
-status_msg = [:name_ref2 is active]
+welcome_msg = [:[name_ref1] welcome]
+status_msg = [:[name_ref2] is active]
 
 -- After template usage, continue borrowing chain
 name_ref4 = name_ref3
@@ -25,7 +25,7 @@ if user_active:
     local_score_ref = user_score
     
     -- Use references in templates within scope
-    scope_msg = [:local_name_ref has score]
+    scope_msg = [:[local_name_ref] has score [local_score_ref]]
     
     -- Modify mutable data within scope
     user_score = user_score + 10
@@ -44,4 +44,4 @@ user_score_mut2 ~= user_score
 user_score_mut2 = 200
 
 -- Final template usage should work with all data
-summary = [:user_name final summary]
+summary = [:[user_name] final summary]

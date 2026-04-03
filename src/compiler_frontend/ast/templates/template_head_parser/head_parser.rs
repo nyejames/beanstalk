@@ -169,7 +169,7 @@ pub fn parse_template_head(
                             let expr = create_expression(
                                 token_stream,
                                 context,
-                                &mut DataType::CoerceToString,
+                                &mut DataType::Inferred,
                                 &arg.value.ownership,
                                 false,
                                 string_table,
@@ -208,7 +208,7 @@ pub fn parse_template_head(
                 let expr = create_expression(
                     token_stream,
                     context,
-                    &mut DataType::CoerceToString,
+                    &mut DataType::Inferred,
                     &Ownership::ImmutableOwned,
                     false,
                     string_table,
@@ -242,7 +242,7 @@ pub fn parse_template_head(
                 let expr = create_expression(
                     token_stream,
                     context,
-                    &mut DataType::CoerceToString,
+                    &mut DataType::Inferred,
                     &Ownership::ImmutableOwned,
                     true,
                     string_table,

@@ -131,6 +131,25 @@ impl<'a> HirBuilder<'a> {
                     Box::new(lowered_end),
                 )))
             }
+            ExpressionKind::ResultConstruct { variant, value } => {
+                let Some(lowered_value) = self.lower_const_value(value, location)? else {
+                    return Ok(None);
+                };
+
+                let hir_variant = match variant {
+                    crate::compiler_frontend::ast::expressions::expression::ResultVariant::Ok => {
+                        crate::compiler_frontend::hir::hir_nodes::ResultVariant::Ok
+                    }
+                    crate::compiler_frontend::ast::expressions::expression::ResultVariant::Err => {
+                        crate::compiler_frontend::hir::hir_nodes::ResultVariant::Err
+                    }
+                };
+
+                Ok(Some(HirConstValue::Result {
+                    variant: hir_variant,
+                    value: Box::new(lowered_value),
+                }))
+            }
             ExpressionKind::Template(template) => {
                 // WHAT: omit unresolved wrapper/slot helpers from the HIR constant pool.
                 // WHY: these are AST-time composition values, not concrete runtime metadata.

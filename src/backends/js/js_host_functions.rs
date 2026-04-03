@@ -12,7 +12,7 @@ pub(crate) fn resolve_host_function_path(
     let name = path.name_str(string_table)?;
 
     match name {
-        "io" => Some("console.log"),
+        "io" => Some("__bs_io"),
         _ => None,
     }
 }

@@ -1,6 +1,6 @@
 -- Helper file for multi-file module test
 #greet |name String|:
-    io([: Hello, name!])
+    io([: Hello, [name]!])
 ;
 
 -- This is helper's implicit main (callable but doesn't auto-execute)

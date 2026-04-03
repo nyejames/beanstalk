@@ -22,6 +22,69 @@ use crate::return_hir_transformation_error;
 use super::LoweredExpression;
 
 impl<'a> HirBuilder<'a> {
+    pub(crate) fn lower_handled_result_expression(
+        &mut self,
+        value: &Expression,
+        handling: &ResultCallHandling,
+        location: &SourceLocation,
+        expr_type: &DataType,
+    ) -> Result<LoweredExpression, CompilerError> {
+        let lowered = self.lower_expression(value)?;
+        let (carrier_type, ok_type, err_type) = match self.type_context.get(lowered.value.ty).kind {
+            HirTypeKind::Result { ok, err } => (lowered.value.ty, ok, err),
+            _ => {
+                return_hir_transformation_error!(
+                    "Handled result expression reached HIR lowering without an internal Result type",
+                    self.hir_error_location(location)
+                );
+            }
+        };
+
+        let expected_ok_type = self.lower_data_type(expr_type, location)?;
+        if expected_ok_type != ok_type {
+            return_hir_transformation_error!(
+                "Handled Result expression lowered with mismatched ok type",
+                self.hir_error_location(location)
+            );
+        }
+
+        if matches!(handling, ResultCallHandling::Propagate) {
+            let region = self.current_region_or_error(location)?;
+            return Ok(LoweredExpression {
+                prelude: lowered.prelude,
+                value: self.make_expression(
+                    location,
+                    HirExpressionKind::ResultPropagate {
+                        result: Box::new(lowered.value),
+                    },
+                    ok_type,
+                    ValueKind::RValue,
+                    region,
+                ),
+            });
+        }
+
+        let current_block = self.current_block_id_or_error(location)?;
+        for prelude in lowered.prelude {
+            self.emit_statement_to_current_block(prelude, location)?;
+        }
+
+        let result_local = self.allocate_temp_local(carrier_type, Some(location.to_owned()))?;
+        self.emit_assign_local_statement(result_local, lowered.value, location)?;
+
+        self.lower_result_carrier_with_branching(
+            current_block,
+            result_local,
+            &self.extract_return_types_from_datatype(expr_type),
+            handling,
+            carrier_type,
+            ok_type,
+            err_type,
+            true,
+            location,
+        )
+    }
+
     pub(crate) fn lower_receiver_method_call_expression(
         &mut self,
         method_path: &InternedPath,
@@ -283,7 +346,6 @@ impl<'a> HirBuilder<'a> {
         location: &SourceLocation,
     ) -> Result<LoweredExpression, CompilerError> {
         let current_block = self.current_block_id_or_error(location)?;
-        let region = self.current_region_or_error(location)?;
         let mut lowered_args = Vec::with_capacity(args.len());
 
         for arg in args {
@@ -307,6 +369,32 @@ impl<'a> HirBuilder<'a> {
         self.side_table.map_statement(location, &call_statement);
         self.emit_statement_to_current_block(call_statement, location)?;
 
+        self.lower_result_carrier_with_branching(
+            current_block,
+            result_local,
+            result_types,
+            handling,
+            carrier_type,
+            ok_type,
+            err_type,
+            value_required,
+            location,
+        )
+    }
+
+    fn lower_result_carrier_with_branching(
+        &mut self,
+        current_block: crate::compiler_frontend::hir::hir_nodes::BlockId,
+        result_local: LocalId,
+        result_types: &[DataType],
+        handling: &ResultCallHandling,
+        carrier_type: TypeId,
+        ok_type: TypeId,
+        err_type: TypeId,
+        value_required: bool,
+        location: &SourceLocation,
+    ) -> Result<LoweredExpression, CompilerError> {
+        let region = self.current_region_or_error(location)?;
         let bool_type = self.intern_type_kind(HirTypeKind::Bool);
         let result_for_test =
             self.make_result_carrier_load_expression(result_local, carrier_type, location, region);
@@ -335,10 +423,6 @@ impl<'a> HirBuilder<'a> {
             location,
         )?;
 
-        // WHAT: keeps one explicit continuation slot for handled calls that still need to yield a
-        // value after branching.
-        // WHY: both the ok branch and any non-terminating recovery path must merge back into one
-        // stable value source instead of duplicating continuation logic downstream.
         let needs_merge_value = value_required && !self.is_unit_type(ok_type);
         let merge_local = if needs_merge_value {
             Some(self.allocate_temp_local(ok_type, Some(location.to_owned()))?)

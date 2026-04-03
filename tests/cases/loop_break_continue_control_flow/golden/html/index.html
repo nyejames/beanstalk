@@ -181,7 +181,7 @@ body {
     </style>
   </head>
   <body style="">
-    <p>sum</p>
+    <div id="bst-slot-0"></div>
     <script>
     function __bs_is_ref(value) {
         return value !== null && typeof value === "object" && value.__bs_ref === true;
@@ -305,6 +305,58 @@ body {
         throw new Error("Expected internal Result carrier during fallback handling");
     }
 
+    function __bs_value_to_string(value) {
+        if (value === undefined || value === null) {
+            return "";
+        }
+        return String(value);
+    }
+
+    function __bs_io(value) {
+        console.log(__bs_value_to_string(value));
+    }
+
+    function __bs_normalize_numeric_text(value) {
+        return value.trim().replace(/_/g, "");
+    }
+
+    function __bs_cast_int(value) {
+        if (typeof value === "number") {
+            if (Number.isInteger(value)) {
+                return { tag: "ok", value };
+            }
+            return { tag: "err", value: "Float value is not an exact integer" };
+        }
+        if (typeof value === "string") {
+            const normalized = __bs_normalize_numeric_text(value);
+            if (/^[+-]?[0-9]+$/.test(normalized)) {
+                return { tag: "ok", value: Number.parseInt(normalized, 10) };
+            }
+            if (/^[+-]?[0-9]+\.[0-9]+$/.test(normalized)) {
+                const parsed = Number.parseFloat(normalized);
+                if (Number.isInteger(parsed)) {
+                    return { tag: "ok", value: parsed };
+                }
+            }
+            return { tag: "err", value: "Cannot parse Int from text" };
+        }
+        return { tag: "err", value: "Int(...) only accepts Int, Float, or string values" };
+    }
+
+    function __bs_cast_float(value) {
+        if (typeof value === "number") {
+            return { tag: "ok", value };
+        }
+        if (typeof value === "string") {
+            const normalized = __bs_normalize_numeric_text(value);
+            if (/^[+-]?[0-9]+$/.test(normalized) || /^[+-]?[0-9]+\.[0-9]+$/.test(normalized)) {
+                return { tag: "ok", value: Number.parseFloat(normalized) };
+            }
+            return { tag: "err", value: "Cannot parse Float from text" };
+        }
+        return { tag: "err", value: "Float(...) only accepts Int, Float, or string values" };
+    }
+
     function bst_start_fn0() {
         let bst_i_l0 = __bs_binding(undefined);
         let bst_sum_l1 = __bs_binding(undefined);
@@ -315,56 +367,56 @@ body {
                 case 0: {
                     __bs_assign_value(bst_i_l0, 0);
                     __bs_assign_value(bst_sum_l1, 0);
-                    __bb_0 = 1;
-                    continue;
-                }
-                case 1: {
-                    if ((__bs_read(bst_i_l0) < 10)) {
-                        __bb_0 = 2;
-                    } else {
-                        __bb_0 = 3;
-                    }
+                    __bb_0 = 2;
                     continue;
                 }
                 case 2: {
-                    __bs_assign_value(bst_i_l0, (__bs_read(bst_i_l0) + 1));
-                    if ((__bs_read(bst_i_l0) === 3)) {
-                        __bb_0 = 4;
+                    if ((__bs_read(bst_i_l0) < 10)) {
+                        __bb_0 = 3;
                     } else {
-                        __bb_0 = 5;
+                        __bb_0 = 4;
                     }
                     continue;
                 }
                 case 3: {
-                    return "";
-                }
-                case 4: {
-                    __bb_0 = 1;
-                    continue;
-                }
-                case 5: {
-                    __bb_0 = 6;
-                    continue;
-                }
-                case 6: {
-                    if ((__bs_read(bst_i_l0) === 7)) {
-                        __bb_0 = 7;
+                    __bs_assign_value(bst_i_l0, (__bs_read(bst_i_l0) + 1));
+                    if ((__bs_read(bst_i_l0) === 3)) {
+                        __bb_0 = 5;
                     } else {
-                        __bb_0 = 8;
+                        __bb_0 = 6;
                     }
                     continue;
                 }
+                case 4: {
+                    return "";
+                }
+                case 5: {
+                    __bb_0 = 2;
+                    continue;
+                }
+                case 6: {
+                    __bb_0 = 7;
+                    continue;
+                }
                 case 7: {
-                    __bb_0 = 3;
+                    if ((__bs_read(bst_i_l0) === 7)) {
+                        __bb_0 = 8;
+                    } else {
+                        __bb_0 = 9;
+                    }
                     continue;
                 }
                 case 8: {
-                    __bb_0 = 9;
+                    __bb_0 = 4;
                     continue;
                 }
                 case 9: {
+                    __bb_0 = 10;
+                    continue;
+                }
+                case 10: {
                     __bs_assign_value(bst_sum_l1, (__bs_read(bst_sum_l1) + __bs_read(bst_i_l0)));
-                    __bb_0 = 1;
+                    __bb_0 = 2;
                     continue;
                 }
                 default: {
@@ -374,10 +426,38 @@ body {
         }
     }
 
+    function bst___bst_frag_0_fn1() {
+        let bst_sum_l2 = __bs_binding(undefined);
+        let bst___hir_tmp_0_l7 = __bs_binding(undefined);
+        let bst___hir_tmp_1_l8 = __bs_binding(undefined);
+        
+        __bs_assign_value(bst_sum_l2, 0);
+        __bs_assign_value(bst___hir_tmp_0_l7, bst___template_fn_1_fn3(bst_sum_l2));
+        __bs_assign_value(bst___hir_tmp_1_l8, bst___template_fn_0_fn2(__bs_binding("<p>"), bst___hir_tmp_0_l7, __bs_binding("<\/p>")));
+        return __bs_clone_value(__bs_read(bst___hir_tmp_1_l8));
+    }
+
+    function bst___template_fn_0_fn2(bst_chunk_0_l3, bst_chunk_1_l4, bst_chunk_2_l5) {
+        
+        bst_chunk_0_l3 = __bs_param_binding(bst_chunk_0_l3);
+        bst_chunk_1_l4 = __bs_param_binding(bst_chunk_1_l4);
+        bst_chunk_2_l5 = __bs_param_binding(bst_chunk_2_l5);
+        
+        return ((("" + __bs_read(bst_chunk_0_l3)) + __bs_read(bst_chunk_1_l4)) + __bs_read(bst_chunk_2_l5));
+    }
+
+    function bst___template_fn_1_fn3(bst_chunk_0_l6) {
+        
+        bst_chunk_0_l6 = __bs_param_binding(bst_chunk_0_l6);
+        
+        return ("" + ("" + __bs_read(bst_chunk_0_l6)));
+    }
+
     </script>
     <script>
     (function () {
       const slots = [
+        ["bst-slot-0", bst___bst_frag_0_fn1],
       ];
 
       for (const [id, fn] of slots) {

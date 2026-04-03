@@ -13,6 +13,6 @@ log("Calculation complete")
 -- Test storage operations
 save("result", result)
 saved_value = load("result")
-io("Saved and loaded value: " + saved_value)
+io([: Saved and loaded value: [saved_value]])
 
 io("Complex module test complete")

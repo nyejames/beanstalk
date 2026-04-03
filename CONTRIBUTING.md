@@ -13,9 +13,16 @@ The current goal is compiling the documentation in the language itself using the
 
 This is a slow process as I'm writing the docs in an ideal form of Beanstalk code, then implement the missing features or fix bugs along the way to get that code to work correctly without test regressions.
 
-See `docs/Beanstalk Language Overview.md` and `docs/Beanstalk Compiler Development Guide.md` for more in depth details.
+See <a href="https://github.com/nyejames/beanstalk/blob/main/docs/Beanstalk%20Language%20Overview.md">the language overview</a> and <a href="https://github.com/nyejames/beanstalk/blob/main/docs/Beanstalk%20Compiler%20Design%20Overview.md">the compiler overview</a> for more in depth details.
 
-New code constributions must follow the style guide: `docs/Beanstalk Compiler Codebase Style Guide.md`.
+New code constributions must follow the style guide: <a href="https://github.com/nyejames/beanstalk/blob/main/docs/Beanstalk%20Compiler%20Codebase%20Style%20Guide.md">Codebase Style Guide</a>
+
+## Testing
+
+Run the compiler integration suite with `cargo run -- tests`.
+
+New integration fixtures should use the canonical `tests/cases/<case>/input + expect.toml` layout.
+An optional `tests/cases/manifest.toml` can define case ordering and tags during fixture migrations.
 
 ## New contributions
 If you are thinking of contributing, start with something small that is easy to read and review and follow the style guide closely. Readbility and modularity is *TOP PRIORITY* in this codebase. 90% of the time I use a simple subset of Rust that avoids complexity as the primary goal.
@@ -35,16 +42,4 @@ Agents should avoid updating or changing existing tests unless you understand ex
 
 Otherwise, the tests provide a useful baseline to prevent regressions and provide the agents a useful way to make progress without breaking stuff.
 
-**Useful Rules**
-
-I create detailed integration plans first and also use the following rules sometimes to make it clear what the priorities are for this codebase:
-
-ALWAYS Use modern, up to date idiomatic Rust code that follows best practices
-
-ALWAYS precisely follow project documentation and always ensure new code is following the style guide and design goals of the project
-
-ALWAYS add helpful comments to new functions, struct parameters and control flow that concisely describes WHAT code is doing and WHY it is there. These should be helpful for someone reading the code for the first time to quickly understand the codebase
-
-ALWAYS ensure code is as readable and maintainable as possible
-
-ALWAYS add a review stage to new plans that includes making sure code being worked on adheres to any provided style guides and checks for opportunities to reduce complexity / indirection or LOC through removing redundancy, bad patterns or consolidating other parts of the code.
+There is an AGENTS.md file in the root directory that can be used as a baseline for improving LLM output when working with this codebase.

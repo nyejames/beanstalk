@@ -806,7 +806,8 @@ fn collect_expression_loaded_locals(expression: &HirExpression, visitor: &mut im
         }
         HirExpressionKind::ResultIsOk { result }
         | HirExpressionKind::ResultUnwrapOk { result }
-        | HirExpressionKind::ResultUnwrapErr { result } => {
+        | HirExpressionKind::ResultUnwrapErr { result }
+        | HirExpressionKind::BuiltinCast { value: result, .. } => {
             collect_expression_loaded_locals(result, visitor);
         }
         HirExpressionKind::Int(_)

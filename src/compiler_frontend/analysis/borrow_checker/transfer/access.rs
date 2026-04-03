@@ -1029,7 +1029,8 @@ fn record_shared_reads_in_expression(
 
         HirExpressionKind::ResultIsOk { result }
         | HirExpressionKind::ResultUnwrapOk { result }
-        | HirExpressionKind::ResultUnwrapErr { result } => {
+        | HirExpressionKind::ResultUnwrapErr { result }
+        | HirExpressionKind::BuiltinCast { value: result, .. } => {
             record_shared_reads_in_expression(env, result, location.clone())?;
         }
     }
@@ -1124,7 +1125,8 @@ fn collect_expression_roots(
 
         HirExpressionKind::ResultIsOk { result }
         | HirExpressionKind::ResultUnwrapOk { result }
-        | HirExpressionKind::ResultUnwrapErr { result } => {
+        | HirExpressionKind::ResultUnwrapErr { result }
+        | HirExpressionKind::BuiltinCast { value: result, .. } => {
             collect_expression_roots(layout, state, result, out, location)?;
         }
 

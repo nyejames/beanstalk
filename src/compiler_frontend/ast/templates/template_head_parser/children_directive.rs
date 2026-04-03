@@ -55,7 +55,7 @@ pub(super) fn parse_children_style_directive(
     let argument = create_expression(
         token_stream,
         context,
-        &mut DataType::CoerceToString,
+        &mut DataType::Inferred,
         &Ownership::ImmutableOwned,
         false,
         string_table,

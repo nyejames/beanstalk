@@ -307,6 +307,58 @@ body {
         throw new Error("Expected internal Result carrier during fallback handling");
     }
 
+    function __bs_value_to_string(value) {
+        if (value === undefined || value === null) {
+            return "";
+        }
+        return String(value);
+    }
+
+    function __bs_io(value) {
+        console.log(__bs_value_to_string(value));
+    }
+
+    function __bs_normalize_numeric_text(value) {
+        return value.trim().replace(/_/g, "");
+    }
+
+    function __bs_cast_int(value) {
+        if (typeof value === "number") {
+            if (Number.isInteger(value)) {
+                return { tag: "ok", value };
+            }
+            return { tag: "err", value: "Float value is not an exact integer" };
+        }
+        if (typeof value === "string") {
+            const normalized = __bs_normalize_numeric_text(value);
+            if (/^[+-]?[0-9]+$/.test(normalized)) {
+                return { tag: "ok", value: Number.parseInt(normalized, 10) };
+            }
+            if (/^[+-]?[0-9]+\.[0-9]+$/.test(normalized)) {
+                const parsed = Number.parseFloat(normalized);
+                if (Number.isInteger(parsed)) {
+                    return { tag: "ok", value: parsed };
+                }
+            }
+            return { tag: "err", value: "Cannot parse Int from text" };
+        }
+        return { tag: "err", value: "Int(...) only accepts Int, Float, or string values" };
+    }
+
+    function __bs_cast_float(value) {
+        if (typeof value === "number") {
+            return { tag: "ok", value };
+        }
+        if (typeof value === "string") {
+            const normalized = __bs_normalize_numeric_text(value);
+            if (/^[+-]?[0-9]+$/.test(normalized) || /^[+-]?[0-9]+\.[0-9]+$/.test(normalized)) {
+                return { tag: "ok", value: Number.parseFloat(normalized) };
+            }
+            return { tag: "err", value: "Cannot parse Float from text" };
+        }
+        return { tag: "err", value: "Float(...) only accepts Int, Float, or string values" };
+    }
+
     function bst_start_fn0() {
         
         return "";

@@ -12,4 +12,4 @@ loop i < 10:
     sum = sum + i
 ;
 
-[:<p>sum</p>]
+[:<p>[sum]</p>]

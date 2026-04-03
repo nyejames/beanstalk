@@ -26,7 +26,7 @@
 
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::{
-    Expression, ExpressionKind, Operator,
+    BuiltinCastKind, Expression, ExpressionKind, Operator, ResultCallHandling, ResultVariant,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
@@ -151,6 +151,194 @@ pub fn constant_fold(
     Ok(stack)
 }
 
+pub fn fold_compile_time_expression(
+    expression: &Expression,
+    string_table: &mut StringTable,
+    constant_context: bool,
+) -> Result<Expression, CompilerError> {
+    match &expression.kind {
+        ExpressionKind::BuiltinCast { kind, value } => {
+            let folded_value = fold_compile_time_expression(value, string_table, constant_context)?;
+            fold_builtin_cast(
+                expression,
+                *kind,
+                &folded_value,
+                string_table,
+                constant_context,
+            )
+        }
+        ExpressionKind::HandledResult { value, handling } => {
+            let folded_value = fold_compile_time_expression(value, string_table, constant_context)?;
+
+            match &folded_value.kind {
+                ExpressionKind::ResultConstruct {
+                    variant: ResultVariant::Ok,
+                    value,
+                } => Ok(value.as_ref().to_owned()),
+                ExpressionKind::ResultConstruct {
+                    variant: ResultVariant::Err,
+                    ..
+                } => match handling {
+                    ResultCallHandling::Fallback(fallbacks) if fallbacks.len() == 1 => {
+                        fold_compile_time_expression(&fallbacks[0], string_table, constant_context)
+                    }
+                    _ => Ok(Expression::handled_result(
+                        folded_value,
+                        handling.to_owned(),
+                        expression.location.clone(),
+                    )),
+                },
+                _ => Ok(Expression::handled_result(
+                    folded_value,
+                    handling.to_owned(),
+                    expression.location.clone(),
+                )),
+            }
+        }
+        _ => Ok(expression.to_owned()),
+    }
+}
+
+fn fold_builtin_cast(
+    original_expression: &Expression,
+    kind: BuiltinCastKind,
+    value: &Expression,
+    string_table: &mut StringTable,
+    constant_context: bool,
+) -> Result<Expression, CompilerError> {
+    let cast_result = match kind {
+        BuiltinCastKind::Int => eval_int_cast(value, string_table),
+        BuiltinCastKind::Float => eval_float_cast(value, string_table),
+    };
+
+    match cast_result {
+        Ok(folded_value) => Ok(Expression::result_construct(
+            ResultVariant::Ok,
+            folded_value,
+            original_expression.data_type.to_owned(),
+            original_expression.location.clone(),
+            Ownership::ImmutableOwned,
+        )),
+        Err(error) if constant_context => {
+            return_rule_error!(error, original_expression.location.clone())
+        }
+        Err(_) => Ok(original_expression.to_owned()),
+    }
+}
+
+fn eval_int_cast(value: &Expression, string_table: &StringTable) -> Result<Expression, String> {
+    match &value.kind {
+        ExpressionKind::Int(int) => Ok(Expression::int(
+            *int,
+            value.location.clone(),
+            Ownership::ImmutableOwned,
+        )),
+        ExpressionKind::Float(float) => {
+            if float.fract() == 0.0 {
+                Ok(Expression::int(
+                    *float as i64,
+                    value.location.clone(),
+                    Ownership::ImmutableOwned,
+                ))
+            } else {
+                Err(format!(
+                    "Cannot cast Float {} to Int because it is not an exact integer value",
+                    float
+                ))
+            }
+        }
+        ExpressionKind::StringSlice(string) => {
+            let raw = string_table.resolve(*string);
+            let normalized = normalize_numeric_cast_text(raw);
+
+            if is_signed_integer_text(&normalized) {
+                let parsed = normalized
+                    .parse::<i64>()
+                    .map_err(|_| format!("Cannot parse '{}' as Int", raw))?;
+                return Ok(Expression::int(
+                    parsed,
+                    value.location.clone(),
+                    Ownership::ImmutableOwned,
+                ));
+            }
+
+            if is_signed_decimal_text(&normalized) {
+                let parsed = normalized
+                    .parse::<f64>()
+                    .map_err(|_| format!("Cannot parse '{}' as Int", raw))?;
+                if parsed.fract() == 0.0 {
+                    return Ok(Expression::int(
+                        parsed as i64,
+                        value.location.clone(),
+                        Ownership::ImmutableOwned,
+                    ));
+                }
+                return Err(format!(
+                    "Cannot cast Float {} to Int because it is not an exact integer value",
+                    normalized
+                ));
+            }
+
+            Err(format!("Cannot parse '{}' as Int", raw))
+        }
+        _ => Err("Int(...) only accepts Int, Float, or string values".to_string()),
+    }
+}
+
+fn eval_float_cast(value: &Expression, string_table: &StringTable) -> Result<Expression, String> {
+    match &value.kind {
+        ExpressionKind::Float(float) => Ok(Expression::float(
+            *float,
+            value.location.clone(),
+            Ownership::ImmutableOwned,
+        )),
+        ExpressionKind::Int(int) => Ok(Expression::float(
+            *int as f64,
+            value.location.clone(),
+            Ownership::ImmutableOwned,
+        )),
+        ExpressionKind::StringSlice(string) => {
+            let raw = string_table.resolve(*string);
+            let normalized = normalize_numeric_cast_text(raw);
+
+            if is_signed_integer_text(&normalized) || is_signed_decimal_text(&normalized) {
+                let parsed = normalized
+                    .parse::<f64>()
+                    .map_err(|_| format!("Cannot parse '{}' as Float", raw))?;
+                return Ok(Expression::float(
+                    parsed,
+                    value.location.clone(),
+                    Ownership::ImmutableOwned,
+                ));
+            }
+
+            Err(format!("Cannot parse '{}' as Float", raw))
+        }
+        _ => Err("Float(...) only accepts Int, Float, or string values".to_string()),
+    }
+}
+
+fn normalize_numeric_cast_text(raw: &str) -> String {
+    raw.trim().chars().filter(|ch| *ch != '_').collect()
+}
+
+fn is_signed_integer_text(raw: &str) -> bool {
+    let digits = raw.strip_prefix(['+', '-']).unwrap_or(raw);
+    !digits.is_empty() && digits.chars().all(|ch| ch.is_ascii_digit())
+}
+
+fn is_signed_decimal_text(raw: &str) -> bool {
+    let digits = raw.strip_prefix(['+', '-']).unwrap_or(raw);
+    let Some((left, right)) = digits.split_once('.') else {
+        return false;
+    };
+
+    !left.is_empty()
+        && !right.is_empty()
+        && left.chars().all(|ch| ch.is_ascii_digit())
+        && right.chars().all(|ch| ch.is_ascii_digit())
+}
+
 impl Expression {
     // Evaluates a binary operation between two expressions based on the operator
     // This helps with constant folding by handling type-specific operations
@@ -249,6 +437,50 @@ impl Expression {
                 }
             }
 
+            (ExpressionKind::Int(lhs_val), ExpressionKind::Float(rhs_val)) => {
+                let lhs = *lhs_val as f64;
+                match op {
+                    Operator::Add => ExpressionKind::Float(lhs + rhs_val),
+                    Operator::Subtract => ExpressionKind::Float(lhs - rhs_val),
+                    Operator::Multiply => ExpressionKind::Float(lhs * rhs_val),
+                    Operator::Divide => ExpressionKind::Float(lhs / rhs_val),
+                    Operator::Modulus => ExpressionKind::Float(lhs % rhs_val),
+                    Operator::Exponent => ExpressionKind::Float(lhs.powf(*rhs_val)),
+                    Operator::Equality => ExpressionKind::Bool(lhs == *rhs_val),
+                    Operator::NotEqual => ExpressionKind::Bool(lhs != *rhs_val),
+                    Operator::GreaterThan => ExpressionKind::Bool(lhs > *rhs_val),
+                    Operator::GreaterThanOrEqual => ExpressionKind::Bool(lhs >= *rhs_val),
+                    Operator::LessThan => ExpressionKind::Bool(lhs < *rhs_val),
+                    Operator::LessThanOrEqual => ExpressionKind::Bool(lhs <= *rhs_val),
+                    _ => return_rule_error!(
+                        format!("Can't perform operation {} on Int and Float", op.to_str()),
+                        self.location.to_owned()
+                    ),
+                }
+            }
+
+            (ExpressionKind::Float(lhs_val), ExpressionKind::Int(rhs_val)) => {
+                let rhs = *rhs_val as f64;
+                match op {
+                    Operator::Add => ExpressionKind::Float(lhs_val + rhs),
+                    Operator::Subtract => ExpressionKind::Float(lhs_val - rhs),
+                    Operator::Multiply => ExpressionKind::Float(lhs_val * rhs),
+                    Operator::Divide => ExpressionKind::Float(lhs_val / rhs),
+                    Operator::Modulus => ExpressionKind::Float(lhs_val % rhs),
+                    Operator::Exponent => ExpressionKind::Float(lhs_val.powf(rhs)),
+                    Operator::Equality => ExpressionKind::Bool(*lhs_val == rhs),
+                    Operator::NotEqual => ExpressionKind::Bool(*lhs_val != rhs),
+                    Operator::GreaterThan => ExpressionKind::Bool(*lhs_val > rhs),
+                    Operator::GreaterThanOrEqual => ExpressionKind::Bool(*lhs_val >= rhs),
+                    Operator::LessThan => ExpressionKind::Bool(*lhs_val < rhs),
+                    Operator::LessThanOrEqual => ExpressionKind::Bool(*lhs_val <= rhs),
+                    _ => return_rule_error!(
+                        format!("Can't perform operation {} on Float and Int", op.to_str()),
+                        self.location.to_owned()
+                    ),
+                }
+            }
+
             // Boolean operations
             (ExpressionKind::Bool(lhs_val), ExpressionKind::Bool(rhs_val)) => match op {
                 Operator::And => ExpressionKind::Bool(*lhs_val && *rhs_val),
@@ -297,6 +529,7 @@ impl Expression {
             ExpressionKind::Bool(_) => DataType::Bool,
             ExpressionKind::StringSlice(_) => DataType::StringSlice,
             ExpressionKind::Range(_, _) => DataType::Range,
+            ExpressionKind::Char(_) => DataType::Char,
             _ => self.data_type.to_owned(),
         };
 

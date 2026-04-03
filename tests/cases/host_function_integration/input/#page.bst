@@ -4,8 +4,8 @@ io(message)
 
 -- Test with different data types
 number = 42
-io([: Number: number])
+io([: Number: [number]])
 
 -- Test with expressions
 result = 10 + 5
-io([: Result: result])
+io([: Result: [result]])

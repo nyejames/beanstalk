@@ -76,6 +76,121 @@ pub(crate) fn parse_result_fallback_values(
     Ok(fallback_values)
 }
 
+fn result_success_types(result_type: &DataType) -> Vec<DataType> {
+    let Some(inner_type) = result_type.result_inner_type() else {
+        return vec![];
+    };
+
+    match inner_type {
+        DataType::Returns(values) => values.clone(),
+        DataType::None => vec![],
+        other => vec![other.clone()],
+    }
+}
+
+pub(crate) fn parse_result_handling_suffix_for_expression(
+    token_stream: &mut FileTokens,
+    context: &ScopeContext,
+    value: Expression,
+    value_required: bool,
+    warnings: Option<&mut Vec<CompilerWarning>>,
+    string_table: &mut StringTable,
+) -> Result<Expression, CompilerError> {
+    let Some(error_return_type) =
+        Some(DataType::StringSlice).filter(|_| value.data_type.is_result())
+    else {
+        return_rule_error!(
+            "The '!' result-handling suffix is only valid for Result-valued expressions",
+            token_stream.current_location(),
+            {
+                CompilationStage => "Expression Parsing",
+                PrimarySuggestion => "Apply '!' only to a cast or other Result-valued expression",
+            }
+        );
+    };
+
+    let success_result_types = result_success_types(&value.data_type);
+
+    if token_stream.current_token_kind() == &TokenKind::Bang {
+        token_stream.advance();
+
+        if is_result_propagation_boundary(token_stream.current_token_kind()) {
+            let Some(expected_error_type) = context.expected_error_type.as_ref() else {
+                return_rule_error!(
+                    "This expression uses '!' propagation, but the surrounding function does not declare an error return slot",
+                    token_stream.current_location(),
+                    {
+                        CompilationStage => "Expression Parsing",
+                        PrimarySuggestion => "Declare a matching error slot in the surrounding function signature",
+                    }
+                );
+            };
+
+            if expected_error_type != &error_return_type {
+                return_type_error!(
+                    format!(
+                        "Mismatched propagated error type. Result expression returns '{}', but current function expects '{}'.",
+                        error_return_type.display_with_table(string_table),
+                        expected_error_type.display_with_table(string_table)
+                    ),
+                    token_stream.current_location(),
+                    {
+                        CompilationStage => "Expression Parsing",
+                        PrimarySuggestion => "Handle the result locally or change the surrounding function error slot type",
+                    }
+                );
+            }
+
+            return Ok(Expression::handled_result(
+                value,
+                ResultCallHandling::Propagate,
+                token_stream.current_location(),
+            ));
+        }
+
+        if success_result_types.is_empty() {
+            return_rule_error!(
+                "This Result has no success value, so fallback values cannot be provided here",
+                token_stream.current_location(),
+                {
+                    CompilationStage => "Expression Parsing",
+                    PrimarySuggestion => "Use plain propagation syntax 'expr!' for error-only Results",
+                }
+            );
+        }
+
+        let fallback_values = parse_result_fallback_values(
+            token_stream,
+            context,
+            &success_result_types,
+            "Fallback values",
+            string_table,
+        )?;
+
+        return Ok(Expression::handled_result(
+            value,
+            ResultCallHandling::Fallback(fallback_values),
+            token_stream.current_location(),
+        ));
+    }
+
+    if matches!(token_stream.current_token_kind(), TokenKind::Symbol(_))
+        && token_stream.peek_next_token() == Some(&TokenKind::Bang)
+    {
+        return parse_named_result_handler_expression(
+            token_stream,
+            context,
+            value,
+            &error_return_type,
+            value_required,
+            warnings,
+            string_table,
+        );
+    }
+
+    Ok(value)
+}
+
 pub(crate) fn parse_named_result_handler_call(
     token_stream: &mut FileTokens,
     context: &ScopeContext,
@@ -174,6 +289,103 @@ pub(crate) fn parse_named_result_handler_call(
         },
         token_stream.current_location(),
         &context.scope,
+    ))
+}
+
+fn parse_named_result_handler_expression(
+    token_stream: &mut FileTokens,
+    context: &ScopeContext,
+    value: Expression,
+    error_return_type: &DataType,
+    value_required: bool,
+    warnings: Option<&mut Vec<CompilerWarning>>,
+    string_table: &mut StringTable,
+) -> Result<Expression, CompilerError> {
+    let TokenKind::Symbol(handler_name) = token_stream.current_token_kind().to_owned() else {
+        unreachable!("named handler parsing must start at the handler symbol");
+    };
+
+    if context.get_reference(&handler_name).is_some() {
+        return_rule_error!(
+            format!(
+                "Named handler '{}' conflicts with an existing visible declaration.",
+                string_table.resolve(handler_name)
+            ),
+            token_stream.current_location(),
+            {
+                CompilationStage => "Expression Parsing",
+                PrimarySuggestion => "Choose a unique handler variable name",
+            }
+        );
+    }
+
+    token_stream.advance();
+    token_stream.advance();
+    let handler_name_text = string_table.resolve(handler_name).to_owned();
+    let success_result_types = result_success_types(&value.data_type);
+    let handler_fallback = parse_named_handler_fallback(
+        token_stream,
+        context,
+        &success_result_types,
+        string_table,
+        &handler_name_text,
+    )?;
+
+    if token_stream.current_token_kind() != &TokenKind::Colon {
+        return_syntax_error!(
+            "Expected ':' to start the named handler scope.",
+            token_stream.current_location(),
+            {
+                CompilationStage => "Expression Parsing",
+                PrimarySuggestion => "Use 'expr err!: ... ;' or 'expr err! fallback: ... ;'",
+                SuggestedInsertion => ":",
+            }
+        );
+    }
+
+    token_stream.advance();
+    let mut handler_context = context.new_child_control_flow(ContextKind::Branch, string_table);
+    let handler_error_id = handler_context.scope.append(handler_name);
+    handler_context.add_var(Declaration {
+        id: handler_error_id.to_owned(),
+        value: Expression::no_value(
+            token_stream.current_location(),
+            error_return_type.to_owned(),
+            Ownership::ImmutableOwned,
+        ),
+    });
+
+    let mut local_handler_warnings: Vec<CompilerWarning> = Vec::new();
+    let warnings = match warnings {
+        Some(warnings) => warnings,
+        None => &mut local_handler_warnings,
+    };
+    let handler_body = function_body_to_ast(token_stream, handler_context, warnings, string_table)?;
+
+    if handler_fallback.is_none()
+        && value_required
+        && !success_result_types.is_empty()
+        && !scope_guarantees_exit(&handler_body)
+    {
+        return_rule_error!(
+            "Named handler without fallback can fall through while success values are required.",
+            token_stream.current_location(),
+            {
+                CompilationStage => "Expression Parsing",
+                PrimarySuggestion => "Add fallback values before ':' or make the handler body terminate with return/return!",
+            }
+        );
+    }
+
+    Ok(Expression::handled_result(
+        value,
+        ResultCallHandling::Handler {
+            error_name: handler_name,
+            error_binding: handler_error_id,
+            fallback: handler_fallback,
+            body: handler_body,
+        },
+        token_stream.current_location(),
     ))
 }
 

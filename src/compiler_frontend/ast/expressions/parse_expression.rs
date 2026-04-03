@@ -17,6 +17,7 @@ use crate::compiler_frontend::ast::statements::declarations::create_reference;
 use crate::compiler_frontend::ast::statements::functions::{
     FunctionReturn, FunctionSignature, ReturnSlot, parse_function_call,
 };
+use crate::compiler_frontend::ast::statements::result_handling::parse_result_handling_suffix_for_expression;
 use crate::compiler_frontend::ast::templates::template::TemplateType;
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorMetaDataKey};
@@ -35,6 +36,8 @@ fn push_expression_node(
     expression: &mut Vec<AstNode>,
     node: AstNode,
 ) -> Result<(), CompilerError> {
+    // Postfix parsing happens after the primary node exists so chains like `value.field ! fallback`
+    // bind to the fully-built primary expression instead of only the leading identifier token.
     let node = if token_stream.index < token_stream.length
         && token_stream.current_token_kind() == &TokenKind::Dot
     {
@@ -43,8 +46,108 @@ fn push_expression_node(
         node
     };
 
+    let node = if token_stream.index < token_stream.length
+        && (token_stream.current_token_kind() == &TokenKind::Bang
+            || (matches!(token_stream.current_token_kind(), TokenKind::Symbol(_))
+                && token_stream.peek_next_token() == Some(&TokenKind::Bang)))
+    {
+        let handled = parse_result_handling_suffix_for_expression(
+            token_stream,
+            context,
+            node.get_expr()?,
+            true,
+            None,
+            string_table,
+        )?;
+        AstNode {
+            kind: NodeKind::Rvalue(handled),
+            location: token_stream.current_location(),
+            scope: context.scope.clone(),
+        }
+    } else {
+        node
+    };
+
     expression.push(node);
     Ok(())
+}
+
+fn parse_builtin_cast_expression(
+    token_stream: &mut FileTokens,
+    context: &ScopeContext,
+    ownership: &Ownership,
+    string_table: &mut StringTable,
+) -> Result<Expression, CompilerError> {
+    // `Int(...)` and `Float(...)` are compiler-owned expression forms. Parse them here before the
+    // generic identifier/call path so they never masquerade as user-call resolution.
+    let cast_location = token_stream.current_location();
+    let cast_kind = token_stream.current_token_kind().to_owned();
+    token_stream.advance();
+
+    if token_stream.current_token_kind() != &TokenKind::OpenParenthesis {
+        return_syntax_error!(
+            "Builtin casts require parentheses and exactly one argument.",
+            token_stream.current_location(),
+            {
+                CompilationStage => "Expression Parsing",
+                PrimarySuggestion => "Use 'Int(value)' or 'Float(value)'",
+            }
+        );
+    }
+
+    token_stream.advance();
+    if token_stream.current_token_kind() == &TokenKind::CloseParenthesis {
+        return_syntax_error!(
+            "Builtin casts require exactly one argument.",
+            token_stream.current_location(),
+            {
+                CompilationStage => "Expression Parsing",
+                PrimarySuggestion => "Pass one expression to the cast",
+            }
+        );
+    }
+
+    let mut inferred_type = DataType::Inferred;
+    let value = create_expression_with_trailing_newline_policy(
+        token_stream,
+        context,
+        &mut inferred_type,
+        ownership,
+        false,
+        false,
+        string_table,
+    )?;
+
+    if token_stream.current_token_kind() == &TokenKind::Comma {
+        return_syntax_error!(
+            "Builtin casts take exactly one argument.",
+            token_stream.current_location(),
+            {
+                CompilationStage => "Expression Parsing",
+                PrimarySuggestion => "Remove the extra argument",
+            }
+        );
+    }
+
+    if token_stream.current_token_kind() != &TokenKind::CloseParenthesis {
+        return_syntax_error!(
+            "Expected ')' after builtin cast argument.",
+            token_stream.current_location(),
+            {
+                CompilationStage => "Expression Parsing",
+                PrimarySuggestion => "Close the builtin cast argument list",
+                SuggestedInsertion => ")",
+            }
+        );
+    }
+
+    token_stream.advance();
+
+    match cast_kind {
+        TokenKind::DatatypeInt => Ok(Expression::builtin_int_cast(value, cast_location)),
+        TokenKind::DatatypeFloat => Ok(Expression::builtin_float_cast(value, cast_location)),
+        _ => unreachable!("builtin cast parser only accepts Int/Float tokens"),
+    }
 }
 
 fn parse_collection_expression(
@@ -109,6 +212,8 @@ fn parse_identifier_or_call(
     expression: &mut Vec<AstNode>,
     string_table: &mut StringTable,
 ) -> Result<(), CompilerError> {
+    // One identifier token can expand into several expression forms: a local/reference read,
+    // struct construction, user-function call, host call, or imported start-function call.
     let TokenKind::Symbol(id, ..) = token_stream.current_token_kind().to_owned() else {
         return Ok(());
     };
@@ -770,6 +875,8 @@ fn dispatch_expression_token(
     state: &mut ExpressionDispatchState<'_>,
     string_table: &mut StringTable,
 ) -> Result<ExpressionTokenStep, CompilerError> {
+    // This state machine is intentionally flat: each token either appends one AST node, advances
+    // past a nested parse, or signals the caller that the surrounding grammar owns the delimiter.
     match token {
         TokenKind::CloseCurly
         | TokenKind::Comma
@@ -872,6 +979,30 @@ fn dispatch_expression_token(
                 AstNode {
                     kind: NodeKind::Rvalue(value),
                     location: token_stream.current_location(),
+                    scope: context.scope.clone(),
+                },
+            )?;
+
+            Ok(ExpressionTokenStep::Continue)
+        }
+
+        TokenKind::DatatypeInt | TokenKind::DatatypeFloat => {
+            let cast_expression = parse_builtin_cast_expression(
+                token_stream,
+                context,
+                state.ownership,
+                string_table,
+            )?;
+            let cast_location = cast_expression.location.clone();
+
+            push_expression_node(
+                token_stream,
+                context,
+                string_table,
+                state.expression,
+                AstNode {
+                    kind: NodeKind::Rvalue(cast_expression),
+                    location: cast_location,
                     scope: context.scope.clone(),
                 },
             )?;
@@ -1342,9 +1473,8 @@ fn create_expression_with_trailing_newline_policy(
         " Expression"
     );
 
-    // Loop through the expression and create the AST nodes
-    // Figure out the type it should be from the data
-    // DOES NOT MOVE TOKENS PAST THE CLOSING TOKEN
+    // Build the flat infix AST fragment first. `evaluate_expression` is the stage that turns
+    // this fragment into precedence-ordered RPN, resolves the final type, and folds constants.
     let mut next_number_negative = false;
     while token_stream.index < token_stream.length {
         let token = token_stream.current_token_kind().to_owned();
@@ -1382,6 +1512,8 @@ fn parse_copy_place_expression(
     context: &ScopeContext,
     string_table: &mut StringTable,
 ) -> Result<AstNode, CompilerError> {
+    // `copy` only accepts places because the backend clones the current stored value, not an
+    // arbitrary temporary expression result.
     match token_stream.current_token_kind() {
         TokenKind::OpenParenthesis => {
             let open_location = token_stream.current_location();

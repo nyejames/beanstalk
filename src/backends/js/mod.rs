@@ -181,6 +181,8 @@ impl<'hir> JsEmitter<'hir> {
         self.emit_runtime_computed_place_helpers();
         self.emit_runtime_clone_helpers();
         self.emit_runtime_result_helpers();
+        self.emit_runtime_string_helpers();
+        self.emit_runtime_cast_helpers();
     }
 
     /// Emits the core binding and slot read/write helpers.
@@ -413,6 +415,85 @@ impl<'hir> JsEmitter<'hir> {
             emitter.emit_line(
                 "throw new Error(\"Expected internal Result carrier during fallback handling\");",
             );
+        });
+        self.emit_line("}");
+        self.emit_line("");
+    }
+
+    fn emit_runtime_string_helpers(&mut self) {
+        self.emit_line("function __bs_value_to_string(value) {");
+        self.with_indent(|emitter| {
+            emitter.emit_line("if (value === undefined || value === null) {");
+            emitter.with_indent(|em| em.emit_line("return \"\";"));
+            emitter.emit_line("}");
+            emitter.emit_line("return String(value);");
+        });
+        self.emit_line("}");
+        self.emit_line("");
+
+        self.emit_line("function __bs_io(value) {");
+        self.with_indent(|emitter| {
+            emitter.emit_line("console.log(__bs_value_to_string(value));");
+        });
+        self.emit_line("}");
+        self.emit_line("");
+    }
+
+    fn emit_runtime_cast_helpers(&mut self) {
+        self.emit_line("function __bs_normalize_numeric_text(value) {");
+        self.with_indent(|emitter| {
+            emitter.emit_line("return value.trim().replace(/_/g, \"\");");
+        });
+        self.emit_line("}");
+        self.emit_line("");
+
+        self.emit_line("function __bs_cast_int(value) {");
+        self.with_indent(|emitter| {
+            emitter.emit_line("if (typeof value === \"number\") {");
+            emitter.with_indent(|em| {
+                em.emit_line("if (Number.isInteger(value)) {");
+                em.with_indent(|inner| inner.emit_line("return { tag: \"ok\", value };"));
+                em.emit_line("}");
+                em.emit_line("return { tag: \"err\", value: \"Float value is not an exact integer\" };");
+            });
+            emitter.emit_line("}");
+            emitter.emit_line("if (typeof value === \"string\") {");
+            emitter.with_indent(|em| {
+                em.emit_line("const normalized = __bs_normalize_numeric_text(value);");
+                em.emit_line("if (/^[+-]?[0-9]+$/.test(normalized)) {");
+                em.with_indent(|inner| inner.emit_line("return { tag: \"ok\", value: Number.parseInt(normalized, 10) };"));
+                em.emit_line("}");
+                em.emit_line("if (/^[+-]?[0-9]+\\.[0-9]+$/.test(normalized)) {");
+                em.with_indent(|inner| {
+                    inner.emit_line("const parsed = Number.parseFloat(normalized);");
+                    inner.emit_line("if (Number.isInteger(parsed)) {");
+                    inner.with_indent(|deep| deep.emit_line("return { tag: \"ok\", value: parsed };"));
+                    inner.emit_line("}");
+                });
+                em.emit_line("}");
+                em.emit_line("return { tag: \"err\", value: \"Cannot parse Int from text\" };");
+            });
+            emitter.emit_line("}");
+            emitter.emit_line("return { tag: \"err\", value: \"Int(...) only accepts Int, Float, or string values\" };");
+        });
+        self.emit_line("}");
+        self.emit_line("");
+
+        self.emit_line("function __bs_cast_float(value) {");
+        self.with_indent(|emitter| {
+            emitter.emit_line("if (typeof value === \"number\") {");
+            emitter.with_indent(|em| em.emit_line("return { tag: \"ok\", value };"));
+            emitter.emit_line("}");
+            emitter.emit_line("if (typeof value === \"string\") {");
+            emitter.with_indent(|em| {
+                em.emit_line("const normalized = __bs_normalize_numeric_text(value);");
+                em.emit_line("if (/^[+-]?[0-9]+$/.test(normalized) || /^[+-]?[0-9]+\\.[0-9]+$/.test(normalized)) {");
+                em.with_indent(|inner| inner.emit_line("return { tag: \"ok\", value: Number.parseFloat(normalized) };"));
+                em.emit_line("}");
+                em.emit_line("return { tag: \"err\", value: \"Cannot parse Float from text\" };");
+            });
+            emitter.emit_line("}");
+            emitter.emit_line("return { tag: \"err\", value: \"Float(...) only accepts Int, Float, or string values\" };");
         });
         self.emit_line("}");
         self.emit_line("");

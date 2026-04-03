@@ -67,7 +67,7 @@ fn concat_template_preserves_full_style_state_from_last_template() {
 }
 
 #[test]
-fn coerce_to_string_records_rendered_path_usages_for_path_values() {
+fn ordinary_expression_rejects_path_string_concatenation() {
     let mut string_table = StringTable::new();
     let source_scope = InternedPath::from_single_str("#page.bst", &mut string_table);
     let asset_path = InternedPath::from_single_str("assets", &mut string_table)
@@ -119,26 +119,21 @@ fn coerce_to_string_records_rendered_path_usages_for_path_values() {
         },
     ];
 
-    let mut current_type = DataType::CoerceToString;
-    let result = evaluate_expression(
+    let mut current_type = DataType::Inferred;
+    let error = evaluate_expression(
         &context,
         nodes,
         &mut current_type,
         &Ownership::ImmutableOwned,
         &mut string_table,
     )
-    .expect("coercion should succeed");
-
-    let ExpressionKind::StringSlice(rendered_id) = result.kind else {
-        panic!("expected string result");
-    };
-    assert_eq!(
-        string_table.resolve(rendered_id),
-        "/beanstalk/assets/logo.png?v=1"
+    .expect_err("ordinary expressions should stay strict");
+    assert!(
+        error
+            .msg
+            .contains("Only Int + Float and Float + Int mix numeric types implicitly")
     );
 
     let recorded = context.take_rendered_path_usages();
-    assert_eq!(recorded.len(), 1);
-    assert_eq!(recorded[0].source_path, asset_path);
-    assert_eq!(recorded[0].base, CompileTimePathBase::ProjectRootFolder);
+    assert!(recorded.is_empty());
 }

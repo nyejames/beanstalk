@@ -3,4 +3,5 @@
 
 original ~= {1, 2, 3}
 cloned = copy(original)
-io(cloned)
+original = cloned
+io(1)

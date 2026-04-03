@@ -15,12 +15,54 @@ use crate::compiler_frontend::ast::templates::template::{TemplateSegmentOrigin, 
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::{CompilerWarning, WarningKind};
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::datatypes::Ownership;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::rendered_path_usage::resolve_compile_time_paths_for_rendered_output;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation};
 use crate::{ast_log, return_syntax_error};
+
+fn validate_template_head_value_type(
+    expr: &Expression,
+    location: &SourceLocation,
+    string_table: &StringTable,
+) -> Result<(), CompilerError> {
+    if expr.data_type.is_result() {
+        return_syntax_error!(
+            "Template head expressions do not implicitly unwrap Result values.",
+            location.to_owned(),
+            {
+                PrimarySuggestion => "Handle the Result before the template boundary, for example with 'expr! fallback'",
+            }
+        );
+    }
+
+    if matches!(
+        expr.data_type,
+        DataType::StringSlice
+            | DataType::Template
+            | DataType::TemplateWrapper
+            | DataType::Int
+            | DataType::Float
+            | DataType::Bool
+            | DataType::Char
+            | DataType::Path(_)
+    ) {
+        return Ok(());
+    }
+
+    return_syntax_error!(
+        format!(
+            "Template head expressions only accept final scalar or textual values, found '{}'.",
+            expr.data_type.display_with_table(string_table)
+        ),
+        location.to_owned(),
+        {
+            PrimarySuggestion => "Convert the value before the template boundary or insert a template/scalar instead",
+        }
+    )
+}
 
 /// Handles a template-typed value found in the template head.
 /// Wrapper templates preserve slot semantics; runtime templates mark unfoldable.
@@ -81,6 +123,8 @@ pub(super) fn push_template_head_expression(
             string_table,
         );
     }
+
+    validate_template_head_value_type(&expr, location, string_table)?;
 
     if context.kind.is_constant_context() && !expr.is_compile_time_constant() {
         return_syntax_error!(

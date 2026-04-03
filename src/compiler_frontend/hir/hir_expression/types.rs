@@ -41,7 +41,6 @@ impl<'a> HirBuilder<'a> {
             DataType::Decimal => HirTypeKind::Decimal,
             DataType::Char => HirTypeKind::Char,
             DataType::StringSlice
-            | DataType::CoerceToString
             | DataType::Template
             | DataType::TemplateWrapper
             | DataType::Path(_) => HirTypeKind::String,
@@ -121,6 +120,12 @@ impl<'a> HirBuilder<'a> {
             DataType::Option(inner) => HirTypeKind::Option {
                 inner: self.lower_data_type(inner, location)?,
             },
+
+            DataType::Result(inner) => {
+                let ok = self.lower_data_type(inner, location)?;
+                let err = self.intern_type_kind(HirTypeKind::String);
+                HirTypeKind::Result { ok, err }
+            }
 
             DataType::Choices(variants) => {
                 let variant_types = variants

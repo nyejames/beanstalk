@@ -922,7 +922,7 @@ fn host_io_reads_the_underlying_value_before_logging() {
         .expect("expected local assignment to store the string value");
     let log_index = output
         .source
-        .find(&format!("console.log(__bs_read({}));", message_name))
+        .find(&format!("__bs_io(__bs_read({}));", message_name))
         .expect("expected host io call to read from the local binding");
 
     assert!(
@@ -1343,7 +1343,7 @@ fn alias_local_read_emits_bs_read() {
     assert!(
         output
             .source
-            .contains(&format!("console.log(__bs_read({}))", alias_name)),
+            .contains(&format!("__bs_io(__bs_read({}))", alias_name)),
         "reading an alias local in a host call must go through __bs_read"
     );
 }

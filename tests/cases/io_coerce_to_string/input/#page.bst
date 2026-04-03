@@ -1,4 +1,4 @@
--- Test CoerceToString functionality with io() function
+-- Test final-step host-boundary stringification with io()
 -- This tests compile-time constant folding for different types
 
 -- Test integer literal (should fold to "42" at compile time)

@@ -124,6 +124,11 @@ pub enum HirConstValue {
     Collection(Vec<HirConstValue>),
     Record(Vec<HirConstField>),
     Range(Box<HirConstValue>, Box<HirConstValue>),
+    Result {
+        #[allow(dead_code)] // Planned: const-result consumers will branch on the stored variant.
+        variant: ResultVariant,
+        value: Box<HirConstValue>,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -500,6 +505,11 @@ pub enum HirExpressionKind {
     ResultUnwrapErr {
         result: Box<HirExpression>,
     },
+
+    BuiltinCast {
+        kind: HirBuiltinCastKind,
+        value: Box<HirExpression>,
+    },
 }
 
 // ============================================================
@@ -564,6 +574,12 @@ pub enum OptionVariant {
     Some,
     #[allow(dead_code)] // Planned: Option::None variant handling.
     None,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum HirBuiltinCastKind {
+    Int,
+    Float,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

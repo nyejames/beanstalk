@@ -55,6 +55,18 @@ pub enum ResultCallHandling {
     },
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BuiltinCastKind {
+    Int,
+    Float,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ResultVariant {
+    Ok,
+    Err,
+}
+
 impl Expression {
     pub fn as_string(&self, string_table: &StringTable) -> String {
         match &self.kind {
@@ -100,6 +112,12 @@ impl Expression {
             ExpressionKind::Function(..) => String::new(),
             ExpressionKind::FunctionCall(..) => String::new(),
             ExpressionKind::ResultHandledFunctionCall { .. } => String::new(),
+            ExpressionKind::BuiltinCast { .. } => String::new(),
+            ExpressionKind::ResultConstruct { variant, value } => match variant {
+                ResultVariant::Ok => value.as_string(string_table),
+                ResultVariant::Err => String::new(),
+            },
+            ExpressionKind::HandledResult { .. } => String::new(),
             ExpressionKind::HostFunctionCall(..) => String::new(),
             ExpressionKind::Runtime(..) => String::new(),
             ExpressionKind::Range(lower, upper) => {
@@ -312,6 +330,69 @@ impl Expression {
         )
     }
 
+    pub fn builtin_int_cast(value: Expression, location: SourceLocation) -> Self {
+        Self::new(
+            ExpressionKind::BuiltinCast {
+                kind: BuiltinCastKind::Int,
+                value: Box::new(value),
+            },
+            location,
+            DataType::Result(Box::new(DataType::Int)),
+            Ownership::ImmutableOwned,
+        )
+    }
+
+    pub fn builtin_float_cast(value: Expression, location: SourceLocation) -> Self {
+        Self::new(
+            ExpressionKind::BuiltinCast {
+                kind: BuiltinCastKind::Float,
+                value: Box::new(value),
+            },
+            location,
+            DataType::Result(Box::new(DataType::Float)),
+            Ownership::ImmutableOwned,
+        )
+    }
+
+    pub fn result_construct(
+        variant: ResultVariant,
+        value: Expression,
+        data_type: DataType,
+        location: SourceLocation,
+        ownership: Ownership,
+    ) -> Self {
+        Self::new(
+            ExpressionKind::ResultConstruct {
+                variant,
+                value: Box::new(value),
+            },
+            location,
+            data_type,
+            ownership,
+        )
+    }
+
+    pub fn handled_result(
+        value: Expression,
+        handling: ResultCallHandling,
+        location: SourceLocation,
+    ) -> Self {
+        let result_type = value
+            .data_type
+            .result_inner_type()
+            .cloned()
+            .unwrap_or(DataType::Inferred);
+        Self::new(
+            ExpressionKind::HandledResult {
+                value: Box::new(value),
+                handling,
+            },
+            location,
+            result_type,
+            Ownership::ImmutableOwned,
+        )
+    }
+
     pub fn collection(
         items: Vec<Expression>,
         location: SourceLocation,
@@ -457,11 +538,20 @@ impl Expression {
                 TemplateConstValueKind::SlotInsertHelper => ConstValueKind::SlotInsertTemplate,
                 TemplateConstValueKind::NonConst => ConstValueKind::NonConst,
             },
+            ExpressionKind::ResultConstruct { value, .. } => {
+                if value.is_compile_time_constant() {
+                    ConstValueKind::Composite
+                } else {
+                    ConstValueKind::NonConst
+                }
+            }
             ExpressionKind::Reference(_)
             | ExpressionKind::Copy(_)
             | ExpressionKind::Runtime(_)
             | ExpressionKind::Function(..)
             | ExpressionKind::FunctionCall(..)
+            | ExpressionKind::BuiltinCast { .. }
+            | ExpressionKind::HandledResult { .. }
             | ExpressionKind::ResultHandledFunctionCall { .. }
             | ExpressionKind::HostFunctionCall(..)
             | ExpressionKind::StructDefinition(..)
@@ -511,6 +601,21 @@ pub enum ExpressionKind {
     ResultHandledFunctionCall {
         name: InternedPath,
         args: Vec<Expression>,
+        handling: ResultCallHandling,
+    },
+
+    BuiltinCast {
+        kind: BuiltinCastKind,
+        value: Box<Expression>,
+    },
+
+    ResultConstruct {
+        variant: ResultVariant,
+        value: Box<Expression>,
+    },
+
+    HandledResult {
+        value: Box<Expression>,
         handling: ResultCallHandling,
     },
 

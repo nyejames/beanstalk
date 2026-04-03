@@ -1,85 +1,27 @@
+//! Expression evaluation and AST-side constant folding.
+//!
+//! WHAT: resolves parsed infix expression fragments into typed AST expressions.
+//! WHY: AST is the semantic boundary that owns operator typing, result handling checks, and the
+//! final decision about whether an expression can collapse at compile time or must survive to HIR.
+
 use crate::compiler_frontend::ast::ast::ScopeContext;
 use crate::compiler_frontend::compiler_errors::{CompilerError, SourceLocation};
-use crate::compiler_frontend::compiler_warnings::{CompilerWarning, WarningKind};
-use crate::compiler_frontend::optimizers::constant_folding::constant_fold;
+use crate::compiler_frontend::optimizers::constant_folding::{
+    constant_fold, fold_compile_time_expression,
+};
 
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
+#[cfg(test)]
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
-use crate::compiler_frontend::paths::path_resolution::CompileTimePaths;
-use crate::compiler_frontend::paths::rendered_path_usage::record_compile_time_paths_for_rendered_output;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::return_type_error;
 use crate::{eval_log, return_compiler_error, return_syntax_error};
 
-/**
- * Evaluates an abstract syntax tree (AST) expression using the shunting-yard algorithm
- * and other utility functions to produce the final `Expression` output.
- * This function also performs the bulk of the type checking in the compiler_frontend.
- *
- * # Parameters
- *
- * * `context` - The current AST scope context, including rendered-output path capture state.
- * * `nodes` - A vector of `AstNode` which represents the sequence of nodes in the expression.
- * * `current_type` - A mutable reference to a `DataType`. Used to determine the data type of the evaluated result.
- *
- * # Returns
- *
- * If successful, returns an `Ok(Expression)` containing the resulting evaluated expression.
- * This will also be type safe.
- * If there is an error during evaluation, returns an `Err(CompileError)` with the appropriate error details.
- * If the expression wasn't folded, it will return a `Runtime` expression (ExpressionKind::Runtime) that contains AST nodes representing the expression.
- *
- * # Algorithm Details
- *
- * - Implements the **Shunting-Yard Algorithm** for parsing expressions and converting them to Reverse Polish Notation (RPN).
- * - Differentiates between handling strings, templates, function calls, and mathematical operators:
- *   - When dealing with strings and templates, it aggregates or processes the string results directly.
- *   - Mathematical operations are processed into RPN before evaluating.
- * - It folds constants where possible for optimization.
- * - Instead of handling parenthesis with shunting yard, every new set of parenthesis is parsed recursively using this function. The result of each nested expression is bubbled up to the first evaluate_expression call to be folded.
- *
- * # Error Handling
- *
- * - Ensures that unsupported AST nodes or invalid syntax result in a `CompileError`.
- * - Returns syntax errors related to invalid operator usage when types like `String` or `Template` are used improperly.
- * - Guards against inferred data types at runtime since they should already be resolved during type checking.
- *
- * # Workflow
- *
- * 1. Parse the AST `nodes` to create an `output_queue` and an `operators_stack`.
- * 2. Evaluate simple cases like single-node expressions directly for efficiency.
- * 3. For string and template expressions, handle concatenation or coercion to a string where necessary.
- * 4. For mathematical operations:
- *    - Convert to RPN via the shunting-yard algorithm.
- *    - Fold constant expressions for optimization.
- *    - Evaluate the resulting expression stack and return the final `Expression`.
- * 5. If no valid result is found, return an appropriate syntax error.
- *
- * # Example
- *
- * ```text
- * use std::path::PathBuf;
- *
- * // Assume `nodes` is already parsed (parse_expression) and represents a valid AST expression
- * let scope = PathBuf::from("path/to/scope");
- * let mut current_type = DataType::Inferred;
- *
- * let result = evaluate_expression(context, nodes, &mut current_type);
- *
- * match result {
- *     Ok(expression) => println!("Evaluated Expression: {:?}", expression),
- *     Err(e) => eprintln!("Compile Error: {:?}", e),
- * }
- * ```
- *
- * # Notes
- *
- * - The `eval_log!` macro is used throughout the function for debugging purposes.
- * - The `constant_fold` utility function is called to simplify the constant expressions where possible.
- * - Implements defensive checks for edge cases, such as invalid or unsupported AST nodes.
- */
+/// WHAT: turns one parsed expression fragment into a fully typed AST `Expression`.
+/// WHY: AST is the stage that owns operator typing, constant folding, and the decision about
+///      whether an expression can stay compile-time or must survive as runtime RPN.
 pub fn evaluate_expression(
     context: &ScopeContext,
     nodes: Vec<AstNode>,
@@ -87,133 +29,32 @@ pub fn evaluate_expression(
     ownership: &Ownership,
     string_table: &mut StringTable,
 ) -> Result<Expression, CompilerError> {
-    let mut simplified_expression: Vec<AstNode> = Vec::with_capacity(2);
-    let mut forced_result_type: Option<DataType> = None;
-
     if nodes.is_empty() {
         return_compiler_error!("No nodes found in expression. This should never happen.");
     }
 
-    // SHUNTING YARD ALGORITHM
     let mut output_queue: Vec<AstNode> = Vec::new();
     let mut operators_stack: Vec<AstNode> = Vec::new();
-
-    // Should always be at least one node in the expression being evaluated
     let location = extract_location(&nodes)?;
 
-    'outer: for node in nodes {
+    // The parser already handled parentheses recursively, so this pass only needs to order the
+    // flat infix fragment by precedence and associativity before typing/folding it.
+    for node in nodes {
         eval_log!("Evaluating node in expression: ", Pretty node);
         match &node.kind {
-            // Values
-            NodeKind::Rvalue(expr, ..) => {
-                if let DataType::Inferred = current_type {
-                    *current_type = expr.data_type.to_owned();
-                } else if !expr.data_type.is_valid_type_in_expression(current_type) {
-                    // Type mismatch
-                    return_type_error!(
-                        format!("Type mismatch in expression. Expected type '{:?}', but found type '{:?}'", current_type, expr.data_type),
-                        node.location, {
-                            CompilationStage => "Expression Evaluation",
-                            PrimarySuggestion => "Ensure all operands in the expression are of compatible types",
-                        }
-                    );
-                }
-
-                if let DataType::CoerceToString | DataType::Template = current_type {
-                    simplified_expression.push(node.to_owned());
-                    continue 'outer;
-                }
-
+            NodeKind::Rvalue(..) => {
                 output_queue.push(node.to_owned());
             }
 
-            NodeKind::FieldAccess {
-                base: _base,
-                field: _field,
-                data_type,
-                ..
-            } => {
-                if let DataType::Inferred = current_type {
-                    *current_type = data_type.to_owned();
-                }
-
-                if let DataType::CoerceToString | DataType::Template = current_type {
-                    simplified_expression.push(node.to_owned());
-                    continue 'outer;
-                }
-
+            NodeKind::FieldAccess { .. }
+            | NodeKind::FunctionCall { .. }
+            | NodeKind::ResultHandledFunctionCall { .. }
+            | NodeKind::MethodCall { .. }
+            | NodeKind::HostFunctionCall { .. } => {
                 output_queue.push(node.to_owned());
             }
 
-            NodeKind::FunctionCall { .. } => {
-                // Check the return type
-                simplified_expression.push(node.to_owned());
-            }
-
-            NodeKind::ResultHandledFunctionCall { .. } => {
-                simplified_expression.push(node.to_owned());
-            }
-
-            NodeKind::MethodCall { .. } => {
-                simplified_expression.push(node.to_owned());
-            }
-
-            NodeKind::Operator(op) => {
-                if matches!(
-                    op,
-                    crate::compiler_frontend::ast::expressions::expression::Operator::And
-                        | crate::compiler_frontend::ast::expressions::expression::Operator::Or
-                        | crate::compiler_frontend::ast::expressions::expression::Operator::GreaterThan
-                        | crate::compiler_frontend::ast::expressions::expression::Operator::GreaterThanOrEqual
-                        | crate::compiler_frontend::ast::expressions::expression::Operator::LessThan
-                        | crate::compiler_frontend::ast::expressions::expression::Operator::LessThanOrEqual
-                        | crate::compiler_frontend::ast::expressions::expression::Operator::Equality
-                        | crate::compiler_frontend::ast::expressions::expression::Operator::NotEqual
-                        | crate::compiler_frontend::ast::expressions::expression::Operator::Not
-                ) {
-                    forced_result_type = Some(DataType::Bool);
-                }
-
-                match current_type {
-                    DataType::Template => {
-                        let found_type_static: &'static str = match current_type {
-                            DataType::Template => "Template",
-                            _ => "Unknown",
-                        };
-                        return_syntax_error!(
-                            format!("You can't use the '{:?}' operator with strings or templates", op),
-                            node.location,
-                            {
-                                FoundType => found_type_static,
-                                CompilationStage => "Expression Evaluation",
-                                PrimarySuggestion => "Use string concatenation, template syntax, or host_io_functions() for output instead of arithmetic operators",
-                                AlternativeSuggestion => "Convert to a numeric type if arithmetic is needed",
-                            }
-                        )
-                    }
-
-                    DataType::CoerceToString => {
-                        if matches!(
-                            op,
-                            crate::compiler_frontend::ast::expressions::expression::Operator::Add
-                        ) {
-                            // '+' is just a separator in CoerceToString expressions.
-                            continue 'outer;
-                        }
-
-                        return_syntax_error!(
-                            format!("Unsupported operator '{:?}' in a CoerceToString expression", op),
-                            node.location,
-                            {
-                                CompilationStage => "Expression Evaluation",
-                                PrimarySuggestion => "Use '+' to concatenate values for CoerceToString arguments",
-                            }
-                        )
-                    }
-
-                    _ => {}
-                }
-
+            NodeKind::Operator(..) => {
                 let node_precedence = node.get_precedence();
                 let left_associative = node.is_left_associative();
 
@@ -236,141 +77,370 @@ pub fn evaluate_expression(
         }
     }
 
-    // If nothing to evaluate at compile time, just one value, return that value.
-    // If the value is a reference, then the data type needs to indicate this is a mutable / immutable reference to something else,
-    // or a copy of the value if explicitly copied.
-    if simplified_expression.len() == 1 {
-        let only_expression = simplified_expression[0].get_expr()?;
+    while let Some(operator) = operators_stack.pop() {
+        output_queue.push(operator);
+    }
+
+    if output_queue.len() == 1 {
+        // Standalone expressions still need folding here so builtin casts and handled results can
+        // collapse before we decide whether the surrounding declaration keeps a plain value or a
+        // result type.
+        let only_expression = fold_compile_time_expression(
+            &output_queue[0].get_expr()?,
+            string_table,
+            context.kind.is_constant_context(),
+        )?;
+        validate_expression_result_type(
+            current_type,
+            &only_expression.data_type,
+            &output_queue[0].location,
+            string_table,
+        )?;
 
         if let ExpressionKind::Reference(..) = only_expression.kind {
-            // The current type now becomes a reference (basically a safe pointer rather than a value)
-            *current_type = DataType::Reference(Box::from(only_expression.data_type.to_owned()));
+            *current_type = DataType::Reference(Box::new(only_expression.data_type.to_owned()));
+        } else if matches!(current_type, DataType::Inferred) {
+            *current_type = only_expression.data_type.to_owned();
         }
 
         return Ok(only_expression);
     }
 
-    // Since there is more than one value in this expression,
-    // it will copy the values and become Owned if not already.
+    // Resolve the result type from the RPN shape before folding. This keeps operator rules in AST
+    // and avoids relying on later stages to rediscover mixed numeric promotion or result misuse.
+    let resolved_type = resolve_expression_result_type(&output_queue, &location, string_table)?;
+    validate_expression_result_type(current_type, &resolved_type, &location, string_table)?;
+
+    if matches!(current_type, DataType::Inferred) {
+        *current_type = resolved_type.to_owned();
+    }
+
     let ownership = ownership.get_owned();
+    eval_log!("Attempting to Fold: ", Pretty output_queue);
+    let stack = constant_fold(&output_queue, string_table)?;
+    eval_log!("Stack after folding: ", Pretty stack);
 
-    match current_type {
-        DataType::Template => concat_template(&mut simplified_expression, ownership.get_owned()),
-
-        DataType::CoerceToString => {
-            let mut new_string = String::new();
-
-            // red_ln!("Treating this as simplified exp: {:#?}", simplified_expression);
-
-            for node in simplified_expression {
-                let expression = node.get_expr()?;
-                new_string +=
-                    &coerce_expression_to_rendered_string(&expression, context, string_table)?;
-            }
-
-            let new_id = string_table.intern(&new_string);
-
-            Ok(Expression::string_slice(new_id, location, ownership))
-        }
-
-        DataType::Inferred => {
-            return_compiler_error!(
-                "Inferred data type made it into eval_expression! Everything should be type checked by now"
-            )
-        }
-
-        _ => {
-            // MATHS EXPRESSIONS
-            // Push everything into the stack, is now in RPN notation
-            while let Some(operator) = operators_stack.pop() {
-                output_queue.push(operator);
-            }
-
-            eval_log!("Attempting to Fold: ", Pretty output_queue);
-
-            // Evaluate all constants in the maths expression
-            let stack = constant_fold(&output_queue, string_table)?;
-
-            eval_log!("Stack after folding: ", Pretty stack);
-
-            if stack.len() == 1 {
-                return stack[0].get_expr();
-            }
-
-            if stack.is_empty() {
-                let expected_type_str = current_type.display_with_table(string_table);
-                return_syntax_error!(
-                    "Invalid expression: no valid operands found during evaluation.",
-                    SourceLocation::default(),
-                    {
-                        ExpectedType => expected_type_str,
-                        CompilationStage => String::from("Expression Evaluation"),
-                        PrimarySuggestion => String::from("Ensure the expression contains valid operands and operators"),
-                    }
-                );
-            }
-
-            // Safe because of the previous two if statements.
-            let first_node_start = stack[0].location.start_pos;
-            let last_node_end = stack[stack.len() - 1].location.end_pos;
-
-            Ok(Expression::runtime(
-                stack,
-                forced_result_type.unwrap_or_else(|| current_type.to_owned()),
-                SourceLocation::new(context.scope.to_owned(), first_node_start, last_node_end),
-                ownership,
-            ))
-        }
+    if stack.len() == 1 {
+        // Fully folded expressions become the folded node itself, which lets callers keep compile-
+        // time constants instead of wrapping them in an unnecessary runtime expression shell.
+        return stack[0].get_expr();
     }
+
+    if stack.is_empty() {
+        let expected_type_str = current_type.display_with_table(string_table);
+        return_syntax_error!(
+            "Invalid expression: no valid operands found during evaluation.",
+            SourceLocation::default(),
+            {
+                ExpectedType => expected_type_str,
+                CompilationStage => String::from("Expression Evaluation"),
+                PrimarySuggestion => String::from("Ensure the expression contains valid operands and operators"),
+            }
+        );
+    }
+
+    let first_node_start = stack[0].location.start_pos;
+    let last_node_end = stack[stack.len() - 1].location.end_pos;
+
+    Ok(Expression::runtime(
+        stack,
+        resolved_type,
+        SourceLocation::new(context.scope.to_owned(), first_node_start, last_node_end),
+        ownership,
+    ))
 }
 
-fn coerce_expression_to_rendered_string(
-    expr: &Expression,
-    context: &ScopeContext,
-    string_table: &mut StringTable,
-) -> Result<String, CompilerError> {
-    let ExpressionKind::Path(paths) = &expr.kind else {
-        return Ok(expr.as_string(string_table));
-    };
-
-    emit_bst_file_path_output_warnings(paths, &expr.location, context, string_table);
-
-    let source_file_scope =
-        context.required_source_file_scope("rendered compile-time path string coercion")?;
-    let recorded = record_compile_time_paths_for_rendered_output(
-        paths,
-        source_file_scope,
-        &expr.location,
-        &context.path_format_config,
-        string_table,
-    );
-    context.record_rendered_path_usages(recorded.usages);
-
-    Ok(recorded.rendered_text)
-}
-
-fn emit_bst_file_path_output_warnings(
-    paths: &CompileTimePaths,
-    render_location: &SourceLocation,
-    context: &ScopeContext,
+fn validate_expression_result_type(
+    expected_type: &mut DataType,
+    actual_type: &DataType,
+    location: &SourceLocation,
     string_table: &StringTable,
-) {
-    for path in &paths.paths {
-        if path
-            .filesystem_path
-            .extension()
-            .is_some_and(|extension| extension == "bst")
+) -> Result<(), CompilerError> {
+    // Declaration parsing can leave the surrounding type open until the expression proves what it
+    // is. Once a concrete type exists, this helper enforces the boundary in one place.
+    if matches!(expected_type, DataType::Inferred) {
+        return Ok(());
+    }
+
+    if expected_type.accepts_value_type(actual_type) {
+        return Ok(());
+    }
+
+    return_type_error!(
+        format!(
+            "Type mismatch in expression. Expected '{}', but found '{}'.",
+            expected_type.display_with_table(string_table),
+            actual_type.display_with_table(string_table)
+        ),
+        location.clone(),
         {
-            context.emit_warning(CompilerWarning::new(
-                &format!(
-                    "Path to Beanstalk source file is being inserted into template output: '{}'",
-                    path.source_path.to_portable_string(string_table)
-                ),
-                render_location.clone(),
-                WarningKind::BstFilePathInTemplateOutput,
-            ));
+            CompilationStage => "Expression Evaluation",
+            PrimarySuggestion => "Ensure the expression produces the declared type, or add an explicit cast/handler first",
+        }
+    )
+}
+
+fn resolve_expression_result_type(
+    output_queue: &[AstNode],
+    expression_location: &SourceLocation,
+    string_table: &StringTable,
+) -> Result<DataType, CompilerError> {
+    // Mirror the final RPN evaluation shape with a type-only stack so operator diagnostics fire
+    // before constant folding mutates any nodes.
+    let mut stack: Vec<DataType> = Vec::with_capacity(output_queue.len());
+
+    for node in output_queue {
+        match &node.kind {
+            NodeKind::Rvalue(expr) => stack.push(expr.data_type.to_owned()),
+            NodeKind::FieldAccess { data_type, .. } => stack.push(data_type.to_owned()),
+            NodeKind::FunctionCall { result_types, .. }
+            | NodeKind::MethodCall { result_types, .. }
+            | NodeKind::HostFunctionCall { result_types, .. }
+            | NodeKind::ResultHandledFunctionCall { result_types, .. } => {
+                stack.push(Expression::call_result_type(result_types.to_owned()));
+            }
+            NodeKind::Operator(op) => match op.required_values() {
+                1 => {
+                    let Some(operand) = stack.pop() else {
+                        return_syntax_error!(
+                            format!("Missing operand for unary operator '{}'.", op.to_str()),
+                            node.location.clone(),
+                            {
+                                CompilationStage => "Expression Evaluation",
+                            }
+                        );
+                    };
+                    stack.push(resolve_unary_operator_type(
+                        op,
+                        &operand,
+                        &node.location,
+                        string_table,
+                    )?);
+                }
+                2 => {
+                    let Some(rhs) = stack.pop() else {
+                        return_syntax_error!(
+                            format!("Missing right-hand operand for operator '{}'.", op.to_str()),
+                            node.location.clone(),
+                            {
+                                CompilationStage => "Expression Evaluation",
+                            }
+                        );
+                    };
+                    let Some(lhs) = stack.pop() else {
+                        return_syntax_error!(
+                            format!("Missing left-hand operand for operator '{}'.", op.to_str()),
+                            node.location.clone(),
+                            {
+                                CompilationStage => "Expression Evaluation",
+                            }
+                        );
+                    };
+                    stack.push(resolve_binary_operator_type(
+                        &lhs,
+                        &rhs,
+                        op,
+                        &node.location,
+                        string_table,
+                    )?);
+                }
+                _ => {
+                    return_compiler_error!(format!(
+                        "Unsupported operator arity during expression typing: {:?}",
+                        op
+                    ));
+                }
+            },
+            _ => {
+                return_compiler_error!(format!(
+                    "Unsupported AST node found in expression typing: {:?}",
+                    node.kind
+                ));
+            }
         }
     }
+
+    if stack.len() != 1 {
+        return_syntax_error!(
+            "Invalid expression shape after operator resolution.",
+            expression_location.clone(),
+            {
+                CompilationStage => "Expression Evaluation",
+                PrimarySuggestion => "Check the number of operands and operators in this expression",
+            }
+        );
+    }
+
+    Ok(stack
+        .pop()
+        .expect("validated expression typing stack should contain one result type"))
+}
+
+fn resolve_unary_operator_type(
+    op: &crate::compiler_frontend::ast::expressions::expression::Operator,
+    operand: &DataType,
+    location: &SourceLocation,
+    string_table: &StringTable,
+) -> Result<DataType, CompilerError> {
+    match op {
+        crate::compiler_frontend::ast::expressions::expression::Operator::Not => {
+            if operand == &DataType::Bool {
+                Ok(DataType::Bool)
+            } else {
+                return_type_error!(
+                    format!(
+                        "Operator '{}' requires Bool, found '{}'.",
+                        op.to_str(),
+                        operand.display_with_table(string_table)
+                    ),
+                    location.clone(),
+                    {
+                        CompilationStage => "Expression Evaluation",
+                        PrimarySuggestion => "Use 'not' only with Bool values",
+                    }
+                )
+            }
+        }
+        other => Ok(match other {
+            // Unary minus preserves the numeric payload type. The tokenizer/parser already own the
+            // distinction between negative literals and a runtime unary subtraction operator.
+            crate::compiler_frontend::ast::expressions::expression::Operator::Subtract => {
+                operand.to_owned()
+            }
+            _ => operand.to_owned(),
+        }),
+    }
+}
+
+fn resolve_binary_operator_type(
+    lhs: &DataType,
+    rhs: &DataType,
+    op: &crate::compiler_frontend::ast::expressions::expression::Operator,
+    location: &SourceLocation,
+    string_table: &StringTable,
+) -> Result<DataType, CompilerError> {
+    if lhs.is_result() || rhs.is_result() {
+        return_type_error!(
+            format!(
+                "Operator '{}' does not implicitly unwrap Result values (found '{}' and '{}').",
+                op.to_str(),
+                lhs.display_with_table(string_table),
+                rhs.display_with_table(string_table)
+            ),
+            location.clone(),
+            {
+                CompilationStage => "Expression Evaluation",
+                PrimarySuggestion => "Handle the Result with '!' syntax before using it in an ordinary expression",
+            }
+        );
+    }
+
+    use crate::compiler_frontend::ast::expressions::expression::Operator;
+
+    if lhs == rhs {
+        // Same-type operator handling stays explicit so broad "compatible" types cannot quietly
+        // weaken arithmetic rules.
+        return match (lhs, op) {
+            (
+                DataType::Int,
+                Operator::Add
+                | Operator::Subtract
+                | Operator::Multiply
+                | Operator::Divide
+                | Operator::Modulus
+                | Operator::Exponent
+                | Operator::Root,
+            ) => Ok(DataType::Int),
+            (
+                DataType::Float,
+                Operator::Add
+                | Operator::Subtract
+                | Operator::Multiply
+                | Operator::Divide
+                | Operator::Modulus
+                | Operator::Exponent
+                | Operator::Root,
+            ) => Ok(DataType::Float),
+            (
+                DataType::Decimal,
+                Operator::Add
+                | Operator::Subtract
+                | Operator::Multiply
+                | Operator::Divide
+                | Operator::Modulus
+                | Operator::Exponent
+                | Operator::Root,
+            ) => Ok(DataType::Decimal),
+            (
+                DataType::Int | DataType::Float | DataType::Decimal,
+                Operator::Equality
+                | Operator::NotEqual
+                | Operator::GreaterThan
+                | Operator::GreaterThanOrEqual
+                | Operator::LessThan
+                | Operator::LessThanOrEqual,
+            ) => Ok(DataType::Bool),
+            (
+                DataType::Bool,
+                Operator::And | Operator::Or | Operator::Equality | Operator::NotEqual,
+            ) => Ok(DataType::Bool),
+            (DataType::StringSlice, Operator::Add) => Ok(DataType::StringSlice),
+            (DataType::StringSlice, Operator::Equality | Operator::NotEqual) => Ok(DataType::Bool),
+            (DataType::Char, Operator::Equality | Operator::NotEqual) => Ok(DataType::Bool),
+            (DataType::Int, Operator::Range) => Ok(DataType::Range),
+            _ => invalid_operator_types(lhs, rhs, op, location, string_table),
+        };
+    }
+
+    if matches!(
+        (lhs, rhs),
+        (DataType::Int, DataType::Float) | (DataType::Float, DataType::Int)
+    ) {
+        // Mixed numeric promotion is intentionally narrow: only Int/Float pairs mix implicitly,
+        // and only for numeric arithmetic/comparisons.
+        return match op {
+            Operator::Add
+            | Operator::Subtract
+            | Operator::Multiply
+            | Operator::Divide
+            | Operator::Modulus
+            | Operator::Exponent
+            | Operator::Root => Ok(DataType::Float),
+            Operator::Equality
+            | Operator::NotEqual
+            | Operator::GreaterThan
+            | Operator::GreaterThanOrEqual
+            | Operator::LessThan
+            | Operator::LessThanOrEqual => Ok(DataType::Bool),
+            _ => invalid_operator_types(lhs, rhs, op, location, string_table),
+        };
+    }
+
+    invalid_operator_types(lhs, rhs, op, location, string_table)
+}
+
+fn invalid_operator_types(
+    lhs: &DataType,
+    rhs: &DataType,
+    op: &crate::compiler_frontend::ast::expressions::expression::Operator,
+    location: &SourceLocation,
+    string_table: &StringTable,
+) -> Result<DataType, CompilerError> {
+    // Keep the mixed-type diagnostic centralized so every invalid operator path points users at
+    // the same strict-expression rule instead of scattering slightly different wording.
+    return_type_error!(
+        format!(
+            "Operator '{}' cannot be applied to '{}' and '{}'. Only Int + Float and Float + Int mix numeric types implicitly.",
+            op.to_str(),
+            lhs.display_with_table(string_table),
+            rhs.display_with_table(string_table)
+        ),
+        location.clone(),
+        {
+            CompilationStage => "Expression Evaluation",
+            PrimarySuggestion => "Use matching operand types or add an explicit cast first",
+        }
+    )
 }
 
 fn pop_higher_precedence(
@@ -379,6 +449,8 @@ fn pop_higher_precedence(
     current_precedence: u32,
     left_associative: bool,
 ) {
+    // Standard shunting-yard pop rule: earlier operators leave the stack when they bind at least
+    // as tightly as the new operator, adjusted for right-associative cases like exponentiation.
     while let Some(top_op_node) = operators_stack.last() {
         let o2_precedence = top_op_node.get_precedence();
 
@@ -402,6 +474,7 @@ fn pop_higher_precedence(
 
 // Planned: allow mixed const/runtime concatenation by splitting foldable template segments
 // from runtime segments instead of rejecting non-template values wholesale.
+#[cfg(test)]
 pub fn concat_template(
     simplified_expression: &mut Vec<AstNode>,
     ownership: Ownership,

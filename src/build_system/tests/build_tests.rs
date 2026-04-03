@@ -764,7 +764,7 @@ fn build_project_lowers_same_file_receiver_method_calls() {
     fs::create_dir_all(&root).expect("should create temp root");
     fs::write(
         root.join("main.bst"),
-        "Vector2 = |\n    x Float = 0,\n    y Float = 0,\n|\n\nreset |this ~Vector2|:\n    this.x = 0\n    this.y = 0\n;\n\nvec = Vector2(12, 87)\nvec.reset()\n",
+        "Vector2 = |\n    x Float = 0.0,\n    y Float = 0.0,\n|\n\nreset |this ~Vector2|:\n    this.x = 0.0\n    this.y = 0.0\n;\n\nvec = Vector2(12.0, 87.0)\nvec.reset()\n",
     )
     .expect("should write source file");
 

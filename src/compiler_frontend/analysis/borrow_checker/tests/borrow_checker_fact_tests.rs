@@ -451,7 +451,8 @@ fn collect_expression_values(expression: &HirExpression, out: &mut FxHashSet<Hir
         HirExpressionKind::ResultPropagate { result } => collect_expression_values(result, out),
         HirExpressionKind::ResultIsOk { result }
         | HirExpressionKind::ResultUnwrapOk { result }
-        | HirExpressionKind::ResultUnwrapErr { result } => {
+        | HirExpressionKind::ResultUnwrapErr { result }
+        | HirExpressionKind::BuiltinCast { value: result, .. } => {
             collect_expression_values(result, out);
         }
         HirExpressionKind::Int(_)

@@ -584,6 +584,38 @@ fn collect_references_from_expression(
             }
         }
 
+        ExpressionKind::BuiltinCast { value, .. } => {
+            collect_references_from_expression(value, references);
+        }
+
+        ExpressionKind::ResultConstruct { value, .. } => {
+            collect_references_from_expression(value, references);
+        }
+
+        ExpressionKind::HandledResult { value, handling } => {
+            collect_references_from_expression(value, references);
+
+            match handling {
+                ResultCallHandling::Fallback(fallback_values) => {
+                    for fallback in fallback_values {
+                        collect_references_from_expression(fallback, references);
+                    }
+                }
+                ResultCallHandling::Handler { fallback, body, .. } => {
+                    if let Some(fallback_values) = fallback {
+                        for fallback in fallback_values {
+                            collect_references_from_expression(fallback, references);
+                        }
+                    }
+
+                    for node in body {
+                        collect_references_from_ast_node(node, references);
+                    }
+                }
+                ResultCallHandling::Propagate => {}
+            }
+        }
+
         ExpressionKind::Template(template) => {
             for value in template.content.flatten_expressions() {
                 collect_references_from_expression(&value, references);

@@ -2,12 +2,12 @@
 storage_data ~= {}
 
 #save |key String, value Int|:
-    io([: Saving key = value])
+    io([: Saving [key] = [value]])
     -- In a real implementation, this would store to the collection
 ;
 
 #load |key String| -> Int:
-    io([: Loading key])
+    io([: Loading [key]])
     -- In a real implementation, this would load from the collection
     return 42
 ;

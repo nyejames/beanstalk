@@ -7,7 +7,8 @@ use crate::backends::js::JsEmitter;
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
 use crate::compiler_frontend::hir::hir_datatypes::HirTypeKind;
 use crate::compiler_frontend::hir::hir_nodes::{
-    HirBinOp, HirExpression, HirExpressionKind, HirPlace, HirUnaryOp, OptionVariant, ResultVariant,
+    HirBinOp, HirBuiltinCastKind, HirExpression, HirExpressionKind, HirPlace, HirUnaryOp,
+    OptionVariant, ResultVariant,
 };
 
 impl<'hir> JsEmitter<'hir> {
@@ -134,6 +135,15 @@ impl<'hir> JsEmitter<'hir> {
             HirExpressionKind::ResultUnwrapErr { result } => {
                 let lowered_result = self.lower_expr(result)?;
                 Ok(format!("(({}).value)", lowered_result))
+            }
+
+            HirExpressionKind::BuiltinCast { kind, value } => {
+                let lowered_value = self.lower_expr(value)?;
+                let helper = match kind {
+                    HirBuiltinCastKind::Int => "__bs_cast_int",
+                    HirBuiltinCastKind::Float => "__bs_cast_float",
+                };
+                Ok(format!("{}({})", helper, lowered_value))
             }
         }
     }
