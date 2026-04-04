@@ -1,0 +1,388 @@
+# Beanstalk Pre-Alpha Checklist
+
+This document is a working execution plan for getting the compiler to a credible first alpha.
+
+## Release gates
+
+These are the non-negotiable conditions for starting Alpha.
+
+- All claimed Alpha features compile, type check, and run through the full supported pipeline.
+- Unsupported syntax or incomplete features fail with structured compiler diagnostics, not panics.
+- The integration suite covers the supported language surface, not just recent feature areas.
+- The JS backend and HTML builder are stable enough for real small projects and docs-style sites.
+- Compiler diagnostics are useful, accurate, consistently formatted, and visually moving toward the Nushell-style goal.
+- Cross-platform output is stable enough that Windows and macOS do not produce avoidable golden drift.
+
+## Working rules for this checklist
+
+- Small opportunistic fixes can land between listed items if they unblock the current phase.
+- Avoid parallel large features unless one is pure test expansion or pure diagnostics cleanup.
+- Prefer landing a thin complete slice over a broad partial implementation.
+- Any feature added to the supported Alpha surface must immediately gain integration coverage.
+- Any user-input panic found during this work should be treated as a release-blocking bug.
+
+---
+
+## Phase 0 - tighten the release boundary
+
+### PR 0.1 - Remove panic-tolerant failure expectations from the test strategy
+
+
+Panics stop being accepted as valid outcomes for user programs.
+
+**Checklist**
+- Audit the integration runner and failure fixtures for any tolerated panic workflow.
+- Replace panic-shaped failures with structured diagnostics where incomplete features still surface.
+- Add a simple policy note: unsupported user input must produce compiler messages.
+
+**Done when**
+- The test suite does not treat panics as acceptable user-facing failure behavior.
+- Known incomplete features fail cleanly.
+
+---
+
+## Phase 1 - finish the next missing language slice
+
+### PR 1.1 - Reserve interface syntax cleanly in the parser/frontend
+
+
+Reserve interface syntax now so later implementation does not require breaking syntax churn during Alpha.
+
+**Checklist**
+- Reserve the chosen syntax in tokenization/parsing.
+- Ensure use of interface syntax produces a clear, structured “reserved / not implemented” error.
+- Add parser and integration tests for reservation behavior.
+
+**Done when**
+- Interface syntax cannot be used accidentally by user code for unrelated constructs.
+- The compiler response is intentional and well formatted.
+
+### PR 1.2 - Implement basic Choice declarations end-to-end
+
+Replace the current explicit rejection with a narrow but real Alpha-grade enum implementation.
+
+**Checklist**
+- Parse basic Choice declarations.
+- Add type representation through AST and HIR.
+- Support declaration visibility and name resolution.
+- Support value construction / use for the chosen initial scope.
+- Emit diagnostics for unsupported richer tagged-union behavior that is still deferred.
+- Add success and failure integration tests.
+
+**Scope guard**
+- Keep this to basic enums for Alpha.
+- Do not expand into the full final tagged-union design yet.
+
+**Done when**
+- Choice is no longer a deliberately rejected core feature.
+- The basic representation works through the supported pipeline.
+
+### PR 1.3 - Implement initial pattern matching for Alpha Choice scope
+
+
+Add the smallest stable pattern-matching feature set needed for Alpha use.
+
+**Checklist**
+- Implement a constrained match surface tied to current Choice scope.
+- Support simple matching over basic enum cases.
+- Enforce clear diagnostics for unsupported pattern forms.
+- Add typing checks and error paths.
+- Add integration tests for success and failure cases.
+
+**Scope guard**
+- No need to lock the full final match design.
+- Favor a conservative, stable subset.
+
+**Done when**
+- Pattern matching exists in a useful Alpha form.
+- Deferred match features fail explicitly rather than silently drifting.
+
+---
+
+## Phase 2 - close the core language feature gaps
+
+### PR 2.1 - Consolidate Char across the frontend and backend surface
+
+Stop Char being a neglected primitive with uneven support.
+
+**Checklist**
+- Audit tokenizer, parser, AST typing, HIR typing, evaluation, lowering, and backend handling for Char.
+- Fill any missing type-checking or lowering gaps.
+- Add parser, type, runtime/backend, and integration coverage.
+
+**Done when**
+- Char behaves like a deliberate core datatype rather than a half-kept edge type.
+
+### PR 2.2 - Add named argument passing for function calls and struct creation
+
+Support `as`-based named argument passing as the first non-positional call path.
+
+**Checklist**
+- Finalize the parser/lowering shape for named arguments using `as`.
+- Thread named call arguments through function-call checking.
+- Thread named field assignment through struct construction.
+- Add diagnostics for unknown names, duplicates, missing required args, mixed-order invalid cases if disallowed.
+- Add integration tests for calls and struct initialization.
+
+**Done when**
+- Named argument passing works for the chosen Alpha scope.
+- The compiler can explain bad named-argument usage cleanly.
+
+### PR 2.3 - Harden structs, records, and methods together
+
+Close the loop on struct/record/method behavior as one language slice.
+
+**Checklist**
+- Audit runtime structs and const records against current docs/scope.
+- Confirm methods resolve cleanly, especially receiver methods and same-file/export visibility.
+- Add missing integration tests for declaration, construction, defaults, methods, field access, mutation, and diagnostics.
+- Tighten any remaining semantic rough edges.
+
+**Done when**
+- Structs and records feel Alpha-ready as a practical feature, not a partially assembled one.
+
+### PR 2.4 - Harden basic if expressions and logical expressions
+
+Make these small core expression features boring and reliable.
+
+**Checklist**
+- Audit expression parsing, type checking, constant folding, and lowering.
+- Add focused integration cases for boolean combinations, nesting, precedence, and invalid type combinations.
+- Improve error messages for non-boolean logic misuse.
+
+**Done when**
+- These features no longer feel like edge behavior.
+
+---
+
+## Phase 3 - expand integration coverage across the full Alpha surface
+
+### PR 3.1 - Create a language-surface integration matrix
+
+Track what supported language features have canonical end-to-end coverage.
+
+**Checklist**
+- Add a simple feature-to-case mapping section or helper doc.
+- Enumerate the Alpha surface:
+  - control flow
+  - functions/calls
+  - templates/style directives
+  - structs/records/methods
+  - choices
+  - pattern matching
+  - arrays
+  - results/options/multiple returns/multiple assignment
+  - type checking
+  - paths/imports
+  - html project builds
+  - logical expressions
+  - if expressions
+  - char
+  - named arguments
+- Mark gaps explicitly.
+
+**Done when**
+- Missing integration coverage is visible immediately.
+
+### PR 3.2 - Add integration coverage for the neglected language areas
+
+Broaden the suite away from being overly concentrated on current recent work.
+
+**Checklist**
+- Add success and failure cases for basic control flow.
+- Add success and failure cases for function declarations/calls.
+- Add templates/style directive stability cases.
+- Add structs/records/methods cases.
+- Add arrays and array diagnostics.
+- Add logical and if-expression cases.
+- Add Char cases.
+
+**Done when**
+- The canonical integration suite represents the supported language rather than mostly paths/results/assets.
+
+### PR 3.3 - Add backend-facing integration checks for runtime-heavy features
+
+Make sure JS/backend semantics are being checked where language behavior depends on runtime lowering.
+
+**Checklist**
+- Add cases for alias-sensitive behavior where relevant.
+- Add cases for template runtime fragment insertion behavior.
+- Add cases for result propagation/fallback through generated outputs.
+- Add cases for arrays and casts where backend behavior matters.
+- Expand artifact assertions where goldens alone are too brittle or too vague.
+
+**Done when**
+- Runtime semantics are not being trusted blindly.
+
+---
+
+## Phase 4 - diagnostics and compiler UX hardening
+
+### PR 4.1 - Standardize unsupported/incomplete-feature diagnostics
+
+All incomplete or intentionally deferred features fail the same way: clearly and helpfully.
+
+**Checklist**
+- Audit current “not implemented”, “reserved”, and fallback diagnostics.
+- Normalize wording, stage metadata, source locations, and suggestion style.
+- Prefer one clean pattern for deferred-feature errors.
+
+**Done when**
+- Unsupported features feel deliberately handled.
+
+### PR 4.2 - Improve type-checking diagnostics across common user mistakes
+
+Push compiler errors toward useful Nushell-style presentation and clarity.
+
+**Checklist**
+- Audit the most common type mismatch surfaces.
+- Make messages name exact types and exact offending value/name where practical.
+- Improve suggestions for common mistakes in calls, assignments, expressions, and struct construction.
+- Add targeted failure fixtures proving the wording is specific enough.
+
+**Done when**
+- Type errors are accurate, grounded, and visibly better than generic compiler output.
+
+### PR 4.3 - Improve formatting/rendering of compiler errors
+
+Move the displayed output closer to the desired final feel.
+
+**Checklist**
+- Refine rendered formatting for file path, span, label ordering, suggestions, and grouped messages.
+- Make CLI `check` and normal build output feel consistent.
+- Keep the data model stable while improving presentation.
+- Add snapshot/golden-style tests for formatter output if practical.
+
+**Done when**
+- Errors look intentional and readable, not merely structurally correct.
+
+### PR 4.4 - Add variable-name ban list / reserved near-builtins
+
+Prevent obviously stupid or misleading variable names that collide with builtin semantics.
+
+**Checklist**
+- Define a ban/reservation policy for misleading names such as `_true`, `FALSE`, and too-close builtins.
+- Enforce it in parsing/name-resolution/type stages as appropriate.
+- Produce good diagnostics explaining why the name is reserved.
+- Add integration tests.
+
+**Done when**
+- Users cannot create confusing pseudo-builtin identifiers.
+
+---
+
+## Phase 5 - cross-platform consistency and test stability
+
+### PR 5.1 - Finish CRLF normalization in strings and templates
+
+Remove avoidable Windows/macOS golden drift from source normalization and emitted outputs.
+
+**Checklist**
+- Audit remaining CRLF behavior in strings, templates, and emitted output.
+- Make sure normalized newline handling is consistent through the frontend and builder outputs.
+- Add regression tests specifically for Windows-shaped input.
+
+**Done when**
+- Golden outputs are stable across normal Windows/macOS workflows.
+
+### PR 5.2 - Fix remaining Windows test-runner stability issues
+
+Remove test-runner and lock-poisoning rough edges that still make Windows less reliable.
+
+**Checklist**
+- Audit known lock poisoning paths and test-runner failure behavior.
+- Ensure failed tests/builds do not leave the runner in a poisoned or misleading state.
+- Add targeted tests where possible.
+
+**Done when**
+- Windows failures look like normal compiler/test failures, not infrastructure weirdness.
+
+---
+
+## Phase 6 - JS backend and HTML builder hardening pass
+
+### PR 6.1 - JS backend semantic audit for Alpha surface
+
+Verify that the JS backend behavior matches the intended Alpha language rules for the supported feature set.
+
+**Checklist**
+- Audit runtime helpers involved in aliasing, copying, arrays, result propagation, casts, and builtin helpers.
+- Add or expand integration tests where behavior depends on emitted JS runtime logic.
+- Fix any semantics that are currently “working by accident”.
+
+**Done when**
+- The JS backend is trustworthy enough for real Alpha examples.
+
+### PR 6.2 - HTML builder final stabilization pass
+
+Treat the HTML project builder as a real Alpha product surface.
+
+**Checklist**
+- Re-audit route derivation, homepage rules, duplicate path diagnostics, tracked assets, cleanup, and output layout.
+- Add any remaining config and artifact assertions needed for confidence.
+- Ensure docs site and small static-site projects remain a valid proving ground.
+
+**Done when**
+- The HTML project builder can be presented as a stable Alpha capability.
+
+---
+
+## Final pre-alpha sweep
+
+### PR 7.1 - Alpha checklist audit
+
+Verify that the Alpha gates are genuinely met.
+
+**Checklist**
+- Re-run the feature matrix and mark all supported areas as covered.
+- Re-check that unsupported/deferred features fail cleanly.
+- Re-check that docs and examples match actual support.
+- Re-check diagnostics quality on a representative set of failures.
+- Re-check cross-platform golden stability.
+
+**Done when**
+- There is a credible yes/no answer to “is Alpha ready?”
+
+### PR 7.2 - Alpha cleanup PR
+
+Land final small consistency and hygiene fixes before the release branch/tag.
+
+**Checklist**
+- Remove obsolete rejection fixtures for features that are now supported.
+- Tighten comments, TODOs, and dead-code justifications.
+- Prune stale scaffolding where the current design has clearly replaced it.
+- Update release-facing docs and contribution notes if needed.
+
+**Done when**
+- The repo feels intentional at the point Alpha begins.
+
+---
+
+## Small in-between PR bucket
+
+Use this for fixes that appear during the main work but do not justify rewriting the sequence.
+
+Examples:
+- one-off diagnostics cleanup
+- extra integration case for a newly discovered hole
+- small parser reservation fix
+- backend assertion expansion
+- comment or style-guide consistency cleanup
+- test harness rough-edge cleanup
+
+Rule:
+- only use this bucket for genuinely small work
+- if a “small” issue reveals a broad gap, promote it into the main sequence
+
+---
+
+## Deferred until after Alpha
+
+These are intentionally not Alpha blockers unless they become necessary for one of the supported slices.
+
+- builtin `Error` enrichment beyond what is already required for the current compiler/runtime surface
+- full tagged unions
+- full pattern-matching design
+- full interfaces implementation
+- broader Wasm maturity beyond the current experimental path
+- richer numeric redesign work not required by Alpha
