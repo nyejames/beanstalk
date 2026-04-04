@@ -1,7 +1,14 @@
 use super::*;
+use crate::compiler_frontend::ast::ast_nodes::Declaration;
+use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
-use crate::compiler_frontend::datatypes::BuiltinScalarReceiver;
+use crate::compiler_frontend::ast::type_resolution::validate_no_recursive_runtime_structs;
+use crate::compiler_frontend::datatypes::{
+    BuiltinScalarReceiver, DataType, Ownership, ReceiverKey,
+};
 use crate::compiler_frontend::host_functions::HostRegistry;
+use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use rustc_hash::FxHashMap;
 use std::rc::Rc;
