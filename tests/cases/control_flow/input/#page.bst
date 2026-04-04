@@ -20,9 +20,9 @@ if y > 10:
 -- Test pattern matching
 value = 42
 if value is:
-    0: io("zero");
-    42: io("forty-two");
-    else: io("other");
+    case 0 => io("zero");
+    case 42 => io("forty-two");
+    else => io("other");
 ;
 
 -- Test loop

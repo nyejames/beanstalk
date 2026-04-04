@@ -521,6 +521,22 @@ fn unexpected_function_body_token_error(
             error
         }
 
+        TokenKind::Case => {
+            let mut error = CompilerError::new_syntax_error(
+                "Unexpected 'case' in function body. 'case' arms are only valid inside an 'if <value> is:' match block.",
+                token_stream.current_location(),
+            );
+            error.new_metadata_entry(
+                ErrorMetaDataKey::CompilationStage,
+                String::from("AST Construction"),
+            );
+            error.new_metadata_entry(
+                ErrorMetaDataKey::PrimarySuggestion,
+                String::from("Wrap these arms in an 'if <value> is:' block or remove the stray 'case'"),
+            );
+            error
+        }
+
         other => {
             let mut error = CompilerError::new_syntax_error(
                 format!("Unexpected token '{other:?}' in a function body."),

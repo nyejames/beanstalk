@@ -1,5 +1,5 @@
 [backends.html]
 mode = "failure"
 warnings = "forbid"
-error_type = "Syntax"
-message_contains = ["Wildcard '_'", "Use 'else:'"]
+error_type = "Rule"
+message_contains = ["Wildcard patterns ('case _ =>') are deferred", "Use 'else =>'"]

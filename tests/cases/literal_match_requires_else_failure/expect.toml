@@ -1,0 +1,5 @@
+[backends.html]
+mode = "failure"
+warnings = "forbid"
+error_type = "Rule"
+message_contains = ["Non-choice matches must include an 'else =>' arm"]

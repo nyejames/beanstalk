@@ -2,4 +2,4 @@
 mode = "failure"
 warnings = "forbid"
 error_type = "Syntax"
-message_contains = ["Unexpected '->' in match arm", "use '=>'"]
+message_contains = ["Legacy match arm syntax is no longer supported"]

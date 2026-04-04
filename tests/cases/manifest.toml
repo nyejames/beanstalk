@@ -179,6 +179,21 @@ path = "choice_import_visibility_exported"
 tags = ["integration","language"]
 
 [[case]]
+id = "choice_match_exhaustive_success"
+path = "choice_match_exhaustive_success"
+tags = ["integration","control-flow","language"]
+
+[[case]]
+id = "choice_match_non_exhaustive_failure"
+path = "choice_match_non_exhaustive_failure"
+tags = ["integration","control-flow","diagnostics"]
+
+[[case]]
+id = "choice_match_unknown_variant_failure"
+path = "choice_match_unknown_variant_failure"
+tags = ["integration","control-flow","diagnostics"]
+
+[[case]]
 id = "circular_dependency"
 path = "circular_dependency"
 tags = ["integration","language"]
@@ -311,6 +326,16 @@ tags = ["integration","functions","diagnostics"]
 [[case]]
 id = "diagnostic_match_arrow_separator"
 path = "diagnostic_match_arrow_separator"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "diagnostic_match_deferred_relational_pattern"
+path = "diagnostic_match_deferred_relational_pattern"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "diagnostic_match_legacy_colon_syntax"
+path = "diagnostic_match_legacy_colon_syntax"
 tags = ["integration","diagnostics"]
 
 [[case]]
@@ -682,6 +707,16 @@ tags = ["integration","borrows"]
 id = "lifetime_inference_use_after_move"
 path = "lifetime_inference_use_after_move"
 tags = ["integration","borrows"]
+
+[[case]]
+id = "literal_match_requires_else_failure"
+path = "literal_match_requires_else_failure"
+tags = ["integration","control-flow","diagnostics"]
+
+[[case]]
+id = "literal_match_with_else_success"
+path = "literal_match_with_else_success"
+tags = ["integration","control-flow"]
 
 [[case]]
 id = "loop_break_continue_control_flow"
