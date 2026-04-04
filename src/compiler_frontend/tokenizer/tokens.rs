@@ -378,7 +378,7 @@ pub enum TokenKind {
     OpenParenthesis,  // (
     CloseParenthesis, // )
 
-    As, // Type casting
+    As,
 
     // Can modify types to become variadic parameters.
     // So any number of values can be passed in
@@ -451,6 +451,8 @@ pub enum TokenKind {
     InclusiveRange, // upto
 
     // Pattern matching
+    Case, // case
+    FatArrow, // =>
     Wildcard, // _
 
     // Memory Management
@@ -461,7 +463,6 @@ pub enum TokenKind {
     TemplateHead,
 
     // Channels
-    CreateChannel,  // =>
     ChannelSend,    // >>
     ChannelReceive, // <<
     Yield,

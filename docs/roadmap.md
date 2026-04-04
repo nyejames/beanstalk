@@ -30,7 +30,7 @@ Reserve interface syntax now so later implementation does not require breaking s
 - Interface syntax cannot be used accidentally by user code for unrelated constructs.
 - The compiler response is intentional and well formatted.
 
-### PR - Implement basic Choice declarations end-to-end
+### PR - Implement basic Choice declarations end-to-end (DONE - REQUIRES REVIEW)
 
 Replace the current explicit rejection with a narrow but real Alpha-grade enum implementation.
 

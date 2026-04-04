@@ -304,7 +304,7 @@ pub fn get_token_kind(
             && next_char == '>'
         {
             stream.next();
-            return_token!(TokenKind::CreateChannel, stream);
+            return_token!(TokenKind::FatArrow, stream);
         }
 
         return_token!(TokenKind::Assign, stream);
@@ -688,8 +688,8 @@ pub(crate) fn keyword_or_variable(
             "import" => return_token!(TokenKind::Import, stream),
 
             // Control Flow
-            // END_KEYWORD => return_token!(TokenKind::End, stream),
             "if" => return_token!(TokenKind::If, stream),
+            "case" => return_token!(TokenKind::Case, stream),
             "return" => return_token!(TokenKind::Return, stream),
             "yield" => return_token!(TokenKind::Yield, stream),
             "else" => return_token!(TokenKind::Else, stream),

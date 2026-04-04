@@ -19,12 +19,12 @@ This keeps async code readable, predictable, and analyzable.
 
 Coroutines do not share mutable state. Instead, they communicate by sending values through **channels**.
 
-### Channel creation: `=>`
+### Channel creation
 
-A channel is created using the `=>` operator, which produces two endpoints:
+A channel is created using the built-in keyword "Channel", which takes a type as a parameter and produces two endpoints:
 
 ```beanstalk
-in, out => Int
+in, out = Channel(Int)
 ```
 
 * `out` is the sending endpoint
@@ -143,7 +143,7 @@ Example putting everything together:
 
 ```beanstalk
 async:
-    in, out => Int
+    in, out = Channel(Int)
 
     spawn producer(out)
     spawn consumer(in)
@@ -203,7 +203,7 @@ The syntax and semantics described here are intended to remain stable even as th
 
 Beanstalk treats async as **structured control flow plus safe message passing**, not as magic. The primitives:
 
-* `=>` create channels
+* `Channel(T)` create channels
 * `>>` send values
 * `<<` receive values
 * `yield` suspends execution
