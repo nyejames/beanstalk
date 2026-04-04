@@ -15,33 +15,6 @@ These are the non-negotiable conditions for starting Alpha.
 
 ---
 
-## Phase 0 - tighten the test coverage
-
-### PR - Remove redundant, repetetive or poorly scoped tests
-
-This is an audit and solidification PR to make sure tests are solid before moving on.
-
-**Done when**
-- Both integration and unit tests don't have overlapping coverage 
-- The test suite only has focused and accurate integration tests
-- Tests are all separated from production code and well organised and arragened into their own folders and files
-- All tests are up to date with the current design and goals of the language, no legacy tests or support for outdated syntax or features remains
-
-### PR - Remove panic-tolerant failure expectations from the test strategy
-
-Panics stop being accepted as valid outcomes for user programs.
-
-**Checklist**
-- Audit the integration runner and failure fixtures for any tolerated panic workflow.
-- Replace panic-shaped failures with structured diagnostics where incomplete features still surface.
-- Add a simple policy note: unsupported user input must produce compiler messages.
-
-**Done when**
-- The test suite does not treat panics as acceptable user-facing failure behavior.
-- Known incomplete features fail cleanly.
-
----
-
 ## Phase 1 - finish the next missing language slice
 
 ### PR - Reserve interface syntax cleanly in the parser/frontend
@@ -308,6 +281,7 @@ Verify that the JS backend behavior matches the intended Alpha language rules fo
 - Audit runtime helpers involved in aliasing, copying, arrays, result propagation, casts, and builtin helpers.
 - Add or expand integration tests where behavior depends on emitted JS runtime logic.
 - Fix any semantics that are currently “working by accident”.
+- PullDeprecated enum variant (src/compiler_frontend/ast/field_access.rs:176, 189, 387): A deprecated CollectionBuiltinMethod variant guarded by three unreachable!() calls.
 
 **Done when**
 - The JS backend is trustworthy enough for real Alpha examples.
@@ -367,3 +341,4 @@ These are intentionally not Alpha blockers unless they become necessary for one 
 - full interfaces implementation
 - broader Wasm maturity beyond the current experimental path
 - richer numeric redesign work not required by Alpha
+- rt_string_from_i64 Wasm helper: Explicitly noted in the 1ac2613 commit message as an "incremental bridge implementation". It produces valid output but is not a complete runtime implementation. This is scoped for a dedicated follow-up and does not cause panics.
