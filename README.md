@@ -24,9 +24,9 @@
 </div>
 <p>Beanstalk is designed to be an original, opinionated and a refreshing modern app building experience.</p>
 
-<p>Beanstalk is designed to be web first, while being modular enough to be agnostic about the backend or platform. 
+<p>The build system is web first, while being modular enough to be agnostic about the backend or platform. 
 It originated with the desire to never have to use TypeScript, web frameworks or bloated UI/web ecosystems again.</p>
-<p>Beanstalk is an attempt to make something fresh and carefully designed from the ground up.</p>
+<p>Beanstalk is an attempt to make something fresh, future aware and carefully designed from the ground up for a wide variety of applications</p>
 
 <br>
 <br>
