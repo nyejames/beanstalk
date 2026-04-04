@@ -22,9 +22,12 @@
 ## First Class String Template Syntax
 
 </div>
-<p>Beanstalk is designed first for the web, while being modular enough to be agnostic about the backend or platform. 
+<p>Beanstalk is designed to be an original, opinionated and a refreshing modern app building experience.</p>
+
+<p>Beanstalk is designed to be web first, while being modular enough to be agnostic about the backend or platform. 
 It originated with the desire to never have to use TypeScript, web frameworks or bloated UI/web ecosystems again.</p>
 <p>Beanstalk is an attempt to make something fresh and carefully designed from the ground up.</p>
+
 <br>
 <br>
 
@@ -112,9 +115,10 @@ post = create_post("Boring Title", date, [$markdown:
 
 </div>
 
-<a href="https://github.com/nyejames/beanstalk-plugin">Language support / syntax highlighting for Visual Studio / VSCode can be found here</a>
+<a href="https://github.com/nyejames/beanstalk-plugin">Language support / syntax highlighting for Visual Studio / VSCode</a>
 
 <div align="center">
+<br>
 
 ## Development Progress
 
@@ -122,12 +126,14 @@ post = create_post("Boring Title", date, [$markdown:
 
 Before the first alpha release here are the current goals:
 
-- Stabilising the JS and Wasm backend and HTML project build system
+- Stabilising the JS backend and HTML project build system
 - Make user facing errors *WAY* more comprehensive, descriptive and helpful
 - All core syntax and language features must be represented and have comprehensive tests in place throughout the whole pipeline
 
 These goals are now close to being met and a first alpha release should come within the next couple of months.
 
 The syntax and some constructs (e.g. closures, interfaces, async) are still evolving in their design before full pipeline support. Not everything is set in stone with the design yet.
+
+The Wasm backend scaffolding is in place but needs a lot of work before it is stable enough for regular projects.
 
 <br>
