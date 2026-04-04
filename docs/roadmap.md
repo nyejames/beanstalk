@@ -21,28 +21,6 @@ This phase is a deliberate cleanup and consolidation checkpoint before pushing f
 The goal is to reduce structural risk now, remove stale paths while the compiler is still prealpha,
 and make later feature work land into a tighter codebase.
 
-### PR - Split AST module construction into focused passes
-
-Refactor the main AST module construction hotspot into smaller units with clearer boundaries.
-
-**Checklist**
-- Split `src/compiler_frontend/ast/module_ast.rs` into focused modules for:
-  - AST build state / shared context
-  - declaration collection
-  - import binding resolution
-  - type/signature resolution
-  - AST emission
-  - finalize/start-fragment assembly
-- Reduce `ScopeContext` accretion by separating optional capabilities or grouping related state more deliberately.
-- Replace macro-style context cloning where normal functions/builders are clearer.
-- Preserve current diagnostics and behavior exactly while improving structure.
-- Add or update tests to protect the refactor seam.
-
-**Done when**
-- `module_ast.rs` is no longer the dominant architectural hotspot.
-- AST construction reads as a sequence of named passes rather than one giant central file.
-- Context setup is easier to understand and harder to misuse.
-
 ### PR - Split frontend/build orchestration by responsibility
 
 Break apart frontend orchestration and project discovery so IO, discovery, and stage sequencing are not overly concentrated in one file.
