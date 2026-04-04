@@ -17,6 +17,9 @@ pub(crate) fn resolve_host_function_path(
         "__bs_collection_push" => Some("__bs_collection_push"),
         "__bs_collection_remove" => Some("__bs_collection_remove"),
         "__bs_collection_length" => Some("__bs_collection_length"),
+        "__bs_error_with_location" => Some("__bs_error_with_location"),
+        "__bs_error_push_trace" => Some("__bs_error_push_trace"),
+        "__bs_error_bubble" => Some("__bs_error_bubble"),
         _ => None,
     }
 }

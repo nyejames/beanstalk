@@ -4,10 +4,12 @@
 //! WHY: call lowering is reused across AST expression forms and needs one place to manage
 //! prelude sequencing, tuple return shaping, and temporary bindings.
 
-use crate::compiler_frontend::ast::ast_nodes::{AstNode, BuiltinMethodKind};
+use crate::compiler_frontend::ast::ast_nodes::AstNode;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ResultCallHandling};
+use crate::compiler_frontend::builtins::BuiltinMethodKind;
+use crate::compiler_frontend::builtins::error_type::ERROR_HELPER_BUBBLE_HOST;
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::datatypes::DataType;
+use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::hir::hir_datatypes::{HirTypeKind, TypeId};
 use crate::compiler_frontend::hir::hir_nodes::{
@@ -95,7 +97,7 @@ impl<'a> HirBuilder<'a> {
         location: &SourceLocation,
     ) -> Result<LoweredExpression, CompilerError> {
         if let Some(builtin) = builtin {
-            return self.lower_collection_builtin_call_expression(
+            return self.lower_builtin_receiver_call_expression(
                 builtin,
                 method_path,
                 receiver,
@@ -118,7 +120,7 @@ impl<'a> HirBuilder<'a> {
         )
     }
 
-    fn lower_collection_builtin_call_expression(
+    fn lower_builtin_receiver_call_expression(
         &mut self,
         builtin: BuiltinMethodKind,
         method_path: &InternedPath,
@@ -146,7 +148,101 @@ impl<'a> HirBuilder<'a> {
             BuiltinMethodKind::CollectionSet => {
                 self.lower_collection_set_call_expression(receiver, args, location)
             }
+
+            BuiltinMethodKind::ErrorWithLocation | BuiltinMethodKind::ErrorPushTrace => {
+                let mut full_args = Vec::with_capacity(args.len() + 1);
+                full_args.push(receiver.get_expr()?);
+                full_args.extend(args.iter().cloned());
+                self.lower_call_expression(
+                    CallTarget::HostFunction(method_path.to_owned()),
+                    &full_args,
+                    result_types,
+                    location,
+                )
+            }
+
+            BuiltinMethodKind::ErrorBubble => self.lower_error_bubble_call_expression(
+                method_path,
+                receiver,
+                args,
+                result_types,
+                location,
+            ),
         }
+    }
+
+    fn lower_error_bubble_call_expression(
+        &mut self,
+        method_path: &InternedPath,
+        receiver: &AstNode,
+        args: &[Expression],
+        result_types: &[DataType],
+        location: &SourceLocation,
+    ) -> Result<LoweredExpression, CompilerError> {
+        if !args.is_empty() {
+            return_hir_transformation_error!(
+                format!(
+                    "Error bubble lowering expected 0 explicit arguments, found {}",
+                    args.len()
+                ),
+                self.hir_error_location(location)
+            );
+        }
+
+        let mut full_args = Vec::with_capacity(5);
+        full_args.push(receiver.get_expr()?);
+        full_args.extend(self.make_error_bubble_context_args(method_path, location)?);
+
+        self.lower_call_expression(
+            CallTarget::HostFunction(method_path.to_owned()),
+            &full_args,
+            result_types,
+            location,
+        )
+    }
+
+    fn make_error_bubble_context_args(
+        &mut self,
+        method_path: &InternedPath,
+        location: &SourceLocation,
+    ) -> Result<Vec<Expression>, CompilerError> {
+        let method_name = method_path.name_str(self.string_table).unwrap_or_default();
+        if method_name != ERROR_HELPER_BUBBLE_HOST {
+            return_hir_transformation_error!(
+                format!(
+                    "Error bubble context argument synthesis used for non-bubble builtin '{}'",
+                    method_name
+                ),
+                self.hir_error_location(location)
+            );
+        }
+
+        let file_text = location.scope.to_portable_string(self.string_table);
+        let file_id = self.string_table.get_or_intern(file_text);
+        let line = (location.start_pos.line_number + 1).max(0) as i64;
+        let column = (location.start_pos.char_column + 1).max(0) as i64;
+
+        let function_name_text = self
+            .current_function_id_or_error(location)
+            .ok()
+            .and_then(|function_id| {
+                self.side_table
+                    .resolve_function_name(function_id, self.string_table)
+            })
+            .unwrap_or_default()
+            .to_owned();
+        let function_name_id = self.string_table.get_or_intern(function_name_text);
+
+        Ok(vec![
+            Expression::string_slice(file_id, location.to_owned(), Ownership::ImmutableOwned),
+            Expression::int(line, location.to_owned(), Ownership::ImmutableOwned),
+            Expression::int(column, location.to_owned(), Ownership::ImmutableOwned),
+            Expression::string_slice(
+                function_name_id,
+                location.to_owned(),
+                Ownership::ImmutableOwned,
+            ),
+        ])
     }
 
     fn lower_collection_set_call_expression(

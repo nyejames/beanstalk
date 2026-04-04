@@ -104,15 +104,20 @@ A normal value of type `T` can be used where `T?` is expected.
 
 Error-returning functions mark one return slot with `!`:
 
-`Error` is currently a temporary compiler-injected built-in struct with one field:
-`message String`.
+`Error` is a builtin language type with this default shape:
 
-During this scaffold phase, `Error` is reserved and cannot be re-declared by user code.
+- `kind ErrorKind`
+- `code String`
+- `message String`
+- `location ErrorLocation?`
+- `trace {StackFrame}?`
+
+`Error`, `ErrorKind`, `ErrorLocation`, and `StackFrame` are reserved builtin symbols and cannot be re-declared by user code.
 
 ```beanstalk
 parse_number |text String| -> Int, Error!:
     if text.is_empty():
-        return! Error("Missing number")
+        return! Error("Parse", "int.parse_invalid_format", "Missing number")
     ;
 
     return 42

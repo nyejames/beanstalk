@@ -1,0 +1,1 @@
+ErrorKind = 1

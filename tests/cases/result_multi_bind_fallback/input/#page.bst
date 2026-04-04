@@ -1,5 +1,5 @@
 pair_err |name String| -> String, Float, Error!:
-    return! Error("boom")
+    return! Error("Other", "test.synthetic_boom", "boom")
 ;
 
 recover || -> String, Float:

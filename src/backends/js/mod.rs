@@ -14,6 +14,12 @@ pub(crate) mod test_symbol_helpers;
 mod tests;
 
 use crate::compiler_frontend::analysis::borrow_checker::BorrowCheckReport;
+use crate::compiler_frontend::builtins::error_type::{
+    BuiltinErrorKind, ERROR_CODE_COLLECTION_EXPECTED_ORDERED_COLLECTION,
+    ERROR_CODE_COLLECTION_INDEX_OUT_OF_BOUNDS, ERROR_CODE_FLOAT_PARSE_INVALID_FORMAT,
+    ERROR_CODE_FLOAT_PARSE_OUT_OF_RANGE, ERROR_CODE_INT_PARSE_INVALID_FORMAT,
+    ERROR_CODE_INT_PARSE_OUT_OF_RANGE, builtin_error_kind_for_code,
+};
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
 use crate::compiler_frontend::hir::hir_nodes::{
     BlockId, FieldId, FunctionId, HirBlock, HirModule, HirTerminator, LocalId,
@@ -180,6 +186,7 @@ impl<'hir> JsEmitter<'hir> {
         self.emit_runtime_alias_helpers();
         self.emit_runtime_computed_place_helpers();
         self.emit_runtime_clone_helpers();
+        self.emit_runtime_error_helpers();
         self.emit_runtime_result_helpers();
         self.emit_runtime_collection_helpers();
         self.emit_runtime_string_helpers();
@@ -381,6 +388,88 @@ impl<'hir> JsEmitter<'hir> {
         self.emit_line("");
     }
 
+    /// Emits canonical builtin error helpers used by collection and cast lowering.
+    ///
+    /// WHAT: normalizes location paths, constructs canonical error records, and provides
+    /// context helpers for builtin `Error` methods.
+    /// WHY: all backend-owned error values should flow through one stable runtime shape.
+    fn emit_runtime_error_helpers(&mut self) {
+        self.emit_line("function __bs_error_normalize_file(file) {");
+        self.with_indent(|emitter| {
+            emitter.emit_line("if (typeof file !== \"string\") {");
+            emitter.with_indent(|em| em.emit_line("return \"\";"));
+            emitter.emit_line("}");
+            emitter.emit_line("if (file.startsWith(\"/\")) {");
+            emitter.with_indent(|em| {
+                em.emit_line("const parts = file.split(/[\\\\/]/).filter(Boolean);");
+                em.emit_line("return parts.length > 0 ? parts[parts.length - 1] : file;");
+            });
+            emitter.emit_line("}");
+            emitter.emit_line("if (/^[A-Za-z]:[\\\\/]/.test(file)) {");
+            emitter.with_indent(|em| {
+                em.emit_line("const parts = file.split(/[\\\\/]/).filter(Boolean);");
+                em.emit_line("return parts.length > 0 ? parts[parts.length - 1] : file;");
+            });
+            emitter.emit_line("}");
+            emitter.emit_line("return file;");
+        });
+        self.emit_line("}");
+        self.emit_line("");
+
+        self.emit_line("function __bs_make_error(kind, code, message, location, trace) {");
+        self.with_indent(|emitter| {
+            emitter.emit_line("return {");
+            emitter.with_indent(|em| {
+                em.emit_line("kind,");
+                em.emit_line("code,");
+                em.emit_line("message,");
+                em.emit_line("location: location ?? null,");
+                em.emit_line("trace: trace ?? null");
+            });
+            emitter.emit_line("};");
+        });
+        self.emit_line("}");
+        self.emit_line("");
+
+        self.emit_line("function __bs_error_with_location(error, location) {");
+        self.with_indent(|emitter| {
+            emitter.emit_line(
+                "return __bs_make_error(error.kind, error.code, error.message, location, error.trace);",
+            );
+        });
+        self.emit_line("}");
+        self.emit_line("");
+
+        self.emit_line("function __bs_error_push_trace(error, frame) {");
+        self.with_indent(|emitter| {
+            emitter.emit_line("const nextTrace = error.trace ? error.trace.concat([frame]) : [frame];");
+            emitter.emit_line(
+                "return __bs_make_error(error.kind, error.code, error.message, error.location, nextTrace);",
+            );
+        });
+        self.emit_line("}");
+        self.emit_line("");
+
+        self.emit_line("function __bs_error_bubble(error, file, line, column, functionName) {");
+        self.with_indent(|emitter| {
+            emitter.emit_line("const safeFunction = typeof functionName === \"string\" && functionName.length > 0 ? functionName : \"<unknown>\";");
+            emitter.emit_line("const location = {");
+            emitter.with_indent(|em| {
+                em.emit_line("file: __bs_error_normalize_file(file),");
+                em.emit_line("line,");
+                em.emit_line("column,");
+                em.emit_line("function: safeFunction === \"<unknown>\" ? null : safeFunction");
+            });
+            emitter.emit_line("};");
+            emitter.emit_line("const frame = { function: safeFunction, location };");
+            emitter.emit_line("const nextLocation = error.location ?? location;");
+            emitter.emit_line("const located = __bs_error_with_location(error, nextLocation);");
+            emitter.emit_line("return __bs_error_push_trace(located, frame);");
+        });
+        self.emit_line("}");
+        self.emit_line("");
+    }
+
     /// Emits helpers for internal Result propagation lowering.
     ///
     /// WHAT: `__bs_result_propagate` unwraps `{ tag: "ok", value }` and throws a structured
@@ -441,30 +530,31 @@ impl<'hir> JsEmitter<'hir> {
     }
 
     fn emit_runtime_collection_helpers(&mut self) {
-        let error_message_key = self
-            .builtin_error_message_key()
-            .unwrap_or("message")
-            .to_owned();
-        self.emit_line(&format!(
-            "const __bs_error_message_key = \"{}\";",
-            error_message_key
+        let invalid_collection_kind = runtime_error_kind_tag(builtin_error_kind_for_code(
+            ERROR_CODE_COLLECTION_EXPECTED_ORDERED_COLLECTION,
         ));
-        self.emit_line("");
+        let out_of_bounds_kind = runtime_error_kind_tag(builtin_error_kind_for_code(
+            ERROR_CODE_COLLECTION_INDEX_OUT_OF_BOUNDS,
+        ));
 
         self.emit_line("function __bs_collection_get(collectionRef, index) {");
         self.with_indent(|emitter| {
             emitter.emit_line("const collection = __bs_read(collectionRef);");
             emitter.emit_line("if (!Array.isArray(collection)) {");
             emitter.with_indent(|em| {
-                em.emit_line("const err = { message: \"Collection get(...) expects an ordered collection\" };");
-                em.emit_line("err[__bs_error_message_key] = err.message;");
+                em.emit_line(&format!(
+                    "const err = __bs_make_error(\"{}\", \"{}\", \"Collection get(...) expects an ordered collection\", null, null);",
+                    invalid_collection_kind, ERROR_CODE_COLLECTION_EXPECTED_ORDERED_COLLECTION
+                ));
                 em.emit_line("return { tag: \"err\", value: err };");
             });
             emitter.emit_line("}");
             emitter.emit_line("if (!Number.isInteger(index) || index < 0 || index >= collection.length) {");
             emitter.with_indent(|em| {
-                em.emit_line("const err = { message: \"Collection index out of bounds\" };");
-                em.emit_line("err[__bs_error_message_key] = err.message;");
+                em.emit_line(&format!(
+                    "const err = __bs_make_error(\"{}\", \"{}\", \"Collection index out of bounds\", null, null);",
+                    out_of_bounds_kind, ERROR_CODE_COLLECTION_INDEX_OUT_OF_BOUNDS
+                ));
                 em.emit_line("return { tag: \"err\", value: err };");
             });
             emitter.emit_line("}");
@@ -507,31 +597,8 @@ impl<'hir> JsEmitter<'hir> {
         self.emit_line("");
     }
 
-    fn builtin_error_message_key(&self) -> Option<&str> {
-        self.hir.structs.iter().find_map(|hir_struct| {
-            let struct_name = self
-                .hir
-                .side_table
-                .resolve_struct_name(hir_struct.id, self.string_table)?;
-            if struct_name != "Error" {
-                return None;
-            }
-
-            hir_struct.fields.iter().find_map(|field| {
-                let field_name = self
-                    .hir
-                    .side_table
-                    .resolve_field_name(field.id, self.string_table)?;
-                if field_name != "message" {
-                    return None;
-                }
-
-                self.field_name_by_id.get(&field.id).map(String::as_str)
-            })
-        })
-    }
-
     fn emit_runtime_cast_helpers(&mut self) {
+        let parse_kind = runtime_error_kind_tag(BuiltinErrorKind::Parse);
         self.emit_line("function __bs_normalize_numeric_text(value) {");
         self.with_indent(|emitter| {
             emitter.emit_line("return value.trim().replace(/_/g, \"\");");
@@ -543,30 +610,58 @@ impl<'hir> JsEmitter<'hir> {
         self.with_indent(|emitter| {
             emitter.emit_line("if (typeof value === \"number\") {");
             emitter.with_indent(|em| {
+                em.emit_line("if (!Number.isFinite(value) || !Number.isSafeInteger(value)) {");
+                em.with_indent(|inner| {
+                    inner.emit_line(&format!(
+                        "return {{ tag: \"err\", value: __bs_make_error(\"{}\", \"{}\", \"Int value is out of supported range\", null, null) }};",
+                        parse_kind, ERROR_CODE_INT_PARSE_OUT_OF_RANGE
+                    ));
+                });
+                em.emit_line("}");
                 em.emit_line("if (Number.isInteger(value)) {");
                 em.with_indent(|inner| inner.emit_line("return { tag: \"ok\", value };"));
                 em.emit_line("}");
-                em.emit_line("return { tag: \"err\", value: \"Float value is not an exact integer\" };");
+                em.emit_line(&format!(
+                    "return {{ tag: \"err\", value: __bs_make_error(\"{}\", \"{}\", \"Float value is not an exact integer\", null, null) }};",
+                    parse_kind, ERROR_CODE_INT_PARSE_INVALID_FORMAT
+                ));
             });
             emitter.emit_line("}");
             emitter.emit_line("if (typeof value === \"string\") {");
             emitter.with_indent(|em| {
                 em.emit_line("const normalized = __bs_normalize_numeric_text(value);");
                 em.emit_line("if (/^[+-]?[0-9]+$/.test(normalized)) {");
-                em.with_indent(|inner| inner.emit_line("return { tag: \"ok\", value: Number.parseInt(normalized, 10) };"));
+                em.with_indent(|inner| {
+                    inner.emit_line("const parsed = Number.parseInt(normalized, 10);");
+                    inner.emit_line("if (!Number.isSafeInteger(parsed)) {");
+                    inner.with_indent(|deep| {
+                        deep.emit_line(&format!(
+                            "return {{ tag: \"err\", value: __bs_make_error(\"{}\", \"{}\", \"Int value is out of supported range\", null, null) }};",
+                            parse_kind, ERROR_CODE_INT_PARSE_OUT_OF_RANGE
+                        ));
+                    });
+                    inner.emit_line("}");
+                    inner.emit_line("return { tag: \"ok\", value: parsed };");
+                });
                 em.emit_line("}");
                 em.emit_line("if (/^[+-]?[0-9]+\\.[0-9]+$/.test(normalized)) {");
                 em.with_indent(|inner| {
                     inner.emit_line("const parsed = Number.parseFloat(normalized);");
-                    inner.emit_line("if (Number.isInteger(parsed)) {");
+                    inner.emit_line("if (Number.isInteger(parsed) && Number.isSafeInteger(parsed)) {");
                     inner.with_indent(|deep| deep.emit_line("return { tag: \"ok\", value: parsed };"));
                     inner.emit_line("}");
                 });
                 em.emit_line("}");
-                em.emit_line("return { tag: \"err\", value: \"Cannot parse Int from text\" };");
+                em.emit_line(&format!(
+                    "return {{ tag: \"err\", value: __bs_make_error(\"{}\", \"{}\", \"Cannot parse Int from text\", null, null) }};",
+                    parse_kind, ERROR_CODE_INT_PARSE_INVALID_FORMAT
+                ));
             });
             emitter.emit_line("}");
-            emitter.emit_line("return { tag: \"err\", value: \"Int(...) only accepts Int, Float, or string values\" };");
+            emitter.emit_line(&format!(
+                "return {{ tag: \"err\", value: __bs_make_error(\"{}\", \"{}\", \"Int(...) only accepts Int, Float, or string values\", null, null) }};",
+                parse_kind, ERROR_CODE_INT_PARSE_INVALID_FORMAT
+            ));
         });
         self.emit_line("}");
         self.emit_line("");
@@ -574,18 +669,45 @@ impl<'hir> JsEmitter<'hir> {
         self.emit_line("function __bs_cast_float(value) {");
         self.with_indent(|emitter| {
             emitter.emit_line("if (typeof value === \"number\") {");
-            emitter.with_indent(|em| em.emit_line("return { tag: \"ok\", value };"));
+            emitter.with_indent(|em| {
+                em.emit_line("if (!Number.isFinite(value)) {");
+                em.with_indent(|inner| {
+                    inner.emit_line(&format!(
+                        "return {{ tag: \"err\", value: __bs_make_error(\"{}\", \"{}\", \"Float value is out of supported range\", null, null) }};",
+                        parse_kind, ERROR_CODE_FLOAT_PARSE_OUT_OF_RANGE
+                    ));
+                });
+                em.emit_line("}");
+                em.emit_line("return { tag: \"ok\", value };");
+            });
             emitter.emit_line("}");
             emitter.emit_line("if (typeof value === \"string\") {");
             emitter.with_indent(|em| {
                 em.emit_line("const normalized = __bs_normalize_numeric_text(value);");
                 em.emit_line("if (/^[+-]?[0-9]+$/.test(normalized) || /^[+-]?[0-9]+\\.[0-9]+$/.test(normalized)) {");
-                em.with_indent(|inner| inner.emit_line("return { tag: \"ok\", value: Number.parseFloat(normalized) };"));
+                em.with_indent(|inner| {
+                    inner.emit_line("const parsed = Number.parseFloat(normalized);");
+                    inner.emit_line("if (!Number.isFinite(parsed)) {");
+                    inner.with_indent(|deep| {
+                        deep.emit_line(&format!(
+                            "return {{ tag: \"err\", value: __bs_make_error(\"{}\", \"{}\", \"Float value is out of supported range\", null, null) }};",
+                            parse_kind, ERROR_CODE_FLOAT_PARSE_OUT_OF_RANGE
+                        ));
+                    });
+                    inner.emit_line("}");
+                    inner.emit_line("return { tag: \"ok\", value: parsed };");
+                });
                 em.emit_line("}");
-                em.emit_line("return { tag: \"err\", value: \"Cannot parse Float from text\" };");
+                em.emit_line(&format!(
+                    "return {{ tag: \"err\", value: __bs_make_error(\"{}\", \"{}\", \"Cannot parse Float from text\", null, null) }};",
+                    parse_kind, ERROR_CODE_FLOAT_PARSE_INVALID_FORMAT
+                ));
             });
             emitter.emit_line("}");
-            emitter.emit_line("return { tag: \"err\", value: \"Float(...) only accepts Int, Float, or string values\" };");
+            emitter.emit_line(&format!(
+                "return {{ tag: \"err\", value: __bs_make_error(\"{}\", \"{}\", \"Float(...) only accepts Int, Float, or string values\", null, null) }};",
+                parse_kind, ERROR_CODE_FLOAT_PARSE_INVALID_FORMAT
+            ));
         });
         self.emit_line("}");
         self.emit_line("");
@@ -836,6 +958,10 @@ impl<'hir> JsEmitter<'hir> {
     fn use_release_symbol_names(&self) -> bool {
         !self.config.pretty
     }
+}
+
+fn runtime_error_kind_tag(kind: BuiltinErrorKind) -> &'static str {
+    kind.as_runtime_tag()
 }
 
 fn sanitize_identifier(raw: &str) -> String {

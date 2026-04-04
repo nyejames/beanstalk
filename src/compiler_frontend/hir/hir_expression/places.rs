@@ -4,8 +4,9 @@
 //! WHY: HIR must distinguish assignable places from value expressions before later alias and
 //! mutation analysis can reason about them.
 
-use crate::compiler_frontend::ast::ast_nodes::{AstNode, BuiltinMethodKind, Declaration, NodeKind};
+use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
+use crate::compiler_frontend::builtins::BuiltinMethodKind;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;

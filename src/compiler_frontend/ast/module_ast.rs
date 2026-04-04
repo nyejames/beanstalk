@@ -27,6 +27,9 @@ use crate::compiler_frontend::ast::type_resolution::{
     ResolvedFunctionSignature, resolve_function_signature, resolve_struct_field_types,
     validate_no_recursive_runtime_structs,
 };
+use crate::compiler_frontend::builtins::error_type::{
+    is_reserved_builtin_symbol, register_builtin_error_types,
+};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
@@ -38,7 +41,6 @@ use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
-use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::projects::settings::{self, IMPLICIT_START_FUNC_NAME};
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::cell::RefCell;
@@ -58,13 +60,6 @@ pub(crate) use crate::compiler_frontend::ast::receiver_methods::{
 };
 
 static CONTROL_FLOW_SCOPE_COUNTER: AtomicUsize = AtomicUsize::new(0);
-
-// Temporary language scaffold:
-// The collection-method milestone needs a globally available error carrier so `.get(...)`
-// can return `Result<Elem, Error>` before the final built-in error model is designed.
-// This injected type is intentionally minimal and will be replaced in a later language pass.
-const TEMP_BUILTIN_ERROR_TYPE_NAME: &str = "Error";
-const TEMP_BUILTIN_ERROR_MESSAGE_FIELD_NAME: &str = "message";
 
 #[allow(dead_code)] // Used only in tests
 /// Exported symbol metadata captured at AST construction time.
@@ -135,7 +130,7 @@ struct AstBuildState<'a> {
     module_file_paths: FxHashSet<InternedPath>,
     canonical_source_by_symbol_path: FxHashMap<InternedPath, InternedPath>,
     builtin_visible_symbol_paths: FxHashSet<InternedPath>,
-    builtin_error_struct_path: Option<InternedPath>,
+    builtin_struct_ast_nodes: Vec<AstNode>,
 
     // Type resolution tables (populated in pass 2).
     resolved_struct_fields_by_path: FxHashMap<InternedPath, Vec<Declaration>>,
@@ -171,7 +166,7 @@ impl<'a> AstBuildState<'a> {
             module_file_paths: FxHashSet::default(),
             canonical_source_by_symbol_path: FxHashMap::default(),
             builtin_visible_symbol_paths: FxHashSet::default(),
-            builtin_error_struct_path: None,
+            builtin_struct_ast_nodes: Vec::new(),
             resolved_struct_fields_by_path: FxHashMap::default(),
             struct_source_by_path: FxHashMap::default(),
             resolved_function_signatures_by_path: FxHashMap::default(),
@@ -218,15 +213,15 @@ impl<'a> AstBuildState<'a> {
         sorted_headers: &[Header],
         string_table: &mut StringTable,
     ) -> Result<(), CompilerMessages> {
-        let reserved_error_name = string_table.intern(TEMP_BUILTIN_ERROR_TYPE_NAME);
-
         for header in sorted_headers {
-            if header.tokens.src_path.name() == Some(reserved_error_name) {
+            if let Some(symbol_name) = header.tokens.src_path.name()
+                && is_reserved_builtin_symbol(string_table.resolve(symbol_name))
+            {
                 return Err(self.error_messages(
                     CompilerError::new_rule_error(
                         format!(
-                            "'{}' is currently reserved by a temporary built-in error scaffold for collection methods.",
-                            TEMP_BUILTIN_ERROR_TYPE_NAME
+                            "'{}' is reserved as a builtin language type.",
+                            string_table.resolve(symbol_name)
                         ),
                         header.name_location.to_owned(),
                     ),
@@ -301,54 +296,16 @@ impl<'a> AstBuildState<'a> {
             }
         }
 
-        self.inject_temporary_builtin_error_type(string_table)
-            .map_err(|error| self.error_messages(error, string_table))
-    }
-
-    fn inject_temporary_builtin_error_type(
-        &mut self,
-        string_table: &mut StringTable,
-    ) -> Result<(), CompilerError> {
-        // Temporary language scaffold:
-        // this injected struct keeps `Result<Elem, Error>` available while built-in collection
-        // receiver methods are implemented. The final built-in error model is still in design.
-        let error_struct_path =
-            InternedPath::from_single_str(TEMP_BUILTIN_ERROR_TYPE_NAME, string_table);
-        let message_field_path =
-            error_struct_path.join_str(TEMP_BUILTIN_ERROR_MESSAGE_FIELD_NAME, string_table);
-
-        let message_field = Declaration {
-            id: message_field_path,
-            value: Expression::new(
-                ExpressionKind::NoValue,
-                SourceLocation::default(),
-                DataType::StringSlice,
-                Ownership::ImmutableOwned,
-            ),
-        };
-
-        let fields = vec![message_field];
-        self.declarations.push(Declaration {
-            id: error_struct_path.to_owned(),
-            value: Expression::new(
-                ExpressionKind::NoValue,
-                SourceLocation::default(),
-                DataType::runtime_struct(
-                    error_struct_path.to_owned(),
-                    fields.to_owned(),
-                    Ownership::MutableOwned,
-                ),
-                Ownership::ImmutableReference,
-            ),
-        });
-
+        let builtin_manifest = register_builtin_error_types(string_table);
         self.builtin_visible_symbol_paths
-            .insert(error_struct_path.to_owned());
+            .extend(builtin_manifest.visible_symbol_paths.iter().cloned());
+        self.declarations.extend(builtin_manifest.declarations);
         self.resolved_struct_fields_by_path
-            .insert(error_struct_path.to_owned(), fields);
+            .extend(builtin_manifest.resolved_struct_fields_by_path);
         self.struct_source_by_path
-            .insert(error_struct_path.to_owned(), InternedPath::new());
-        self.builtin_error_struct_path = Some(error_struct_path);
+            .extend(builtin_manifest.struct_source_by_path);
+        self.builtin_struct_ast_nodes
+            .extend(builtin_manifest.ast_struct_nodes);
 
         Ok(())
     }
@@ -840,23 +797,10 @@ impl<'a> AstBuildState<'a> {
         )
         .map_err(|error| self.error_messages(error, string_table))?;
 
-        if let Some(error_struct_path) = self.builtin_error_struct_path.as_ref()
-            && let Some(error_fields) = self
-                .resolved_struct_fields_by_path
-                .get(error_struct_path)
-                .cloned()
-        {
-            // Temporary language scaffold:
-            // keep the injected built-in `Error` visible to HIR registration by materializing
-            // one synthetic struct-definition AST node.
-            self.ast.insert(
-                0,
-                AstNode {
-                    kind: NodeKind::StructDefinition(error_struct_path.to_owned(), error_fields),
-                    location: SourceLocation::default(),
-                    scope: error_struct_path.to_owned(),
-                },
-            );
+        if !self.builtin_struct_ast_nodes.is_empty() {
+            let mut ast_nodes = self.builtin_struct_ast_nodes;
+            ast_nodes.extend(self.ast);
+            self.ast = ast_nodes;
         }
 
         Ok(Ast {

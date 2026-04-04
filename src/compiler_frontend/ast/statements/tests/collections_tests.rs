@@ -3,12 +3,12 @@
 //! WHAT: validates collection item parsing and unterminated-literal diagnostics.
 //! WHY: collections use expression recursion and can silently drift without focused coverage.
 
-use crate::compiler_frontend::ast::ast_nodes::BuiltinMethodKind;
 use crate::compiler_frontend::ast::ast_nodes::NodeKind;
 use crate::compiler_frontend::ast::expressions::expression::{ExpressionKind, ResultCallHandling};
 use crate::compiler_frontend::ast::test_support::{
     function_body_by_name, parse_single_file_ast, parse_single_file_ast_error, start_function_body,
 };
+use crate::compiler_frontend::builtins::BuiltinMethodKind;
 
 fn runtime_method_builtin_kind(
     expression: &crate::compiler_frontend::ast::expressions::expression::Expression,
@@ -26,6 +26,15 @@ fn runtime_method_builtin_kind(
     };
 
     *kind
+}
+
+fn declaration_runtime_method_builtin_kind(
+    node: &NodeKind,
+) -> crate::compiler_frontend::builtins::BuiltinMethodKind {
+    let NodeKind::VariableDeclaration(declaration) = node else {
+        panic!("expected variable declaration node");
+    };
+    runtime_method_builtin_kind(&declaration.value)
 }
 
 #[test]
@@ -182,5 +191,30 @@ fn rejects_unhandled_collection_get_result() {
             .contains("must be explicitly handled with '!' syntax"),
         "{}",
         error.msg
+    );
+}
+
+#[test]
+fn parses_builtin_error_helper_methods() {
+    let (ast, string_table) = parse_single_file_ast(
+        "apply_helpers |err Error, location ErrorLocation, frame StackFrame| -> Error:\n    first = err.with_location(location)\n    second = first.push_trace(frame)\n    return second.bubble()\n;\n",
+    );
+
+    let body = function_body_by_name(&ast, &string_table, "apply_helpers");
+    assert_eq!(
+        declaration_runtime_method_builtin_kind(&body[0].kind),
+        BuiltinMethodKind::ErrorWithLocation
+    );
+    assert_eq!(
+        declaration_runtime_method_builtin_kind(&body[1].kind),
+        BuiltinMethodKind::ErrorPushTrace
+    );
+
+    let NodeKind::Return(values) = &body[2].kind else {
+        panic!("expected return statement");
+    };
+    assert_eq!(
+        runtime_method_builtin_kind(&values[0]),
+        BuiltinMethodKind::ErrorBubble
     );
 }

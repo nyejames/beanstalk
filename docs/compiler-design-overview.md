@@ -237,6 +237,7 @@ Variables store their full path including their parents in their name, the last 
 - `DataType` information is attached to all expressions
 - Type mismatches are caught early in the pipeline
 - Module constants are stored in AST constant metadata, not emitted as top-level runtime declaration statements
+- Builtin error types (`Error`, `ErrorKind`, `ErrorLocation`, `StackFrame`) are registered from `src/compiler_frontend/builtins/error_type.rs` and lowered as canonical frontend-owned types
 
 **Development Notes**:
 - Use `show_ast` feature flag to inspect generated AST

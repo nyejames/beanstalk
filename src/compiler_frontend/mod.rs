@@ -15,6 +15,7 @@ pub(crate) mod optimizers {
 pub(crate) mod module_dependencies;
 
 pub(crate) mod basic_utility_functions;
+pub(crate) mod builtins;
 
 pub(crate) mod compiler_messages {
     pub(crate) mod compiler_dev_logging;

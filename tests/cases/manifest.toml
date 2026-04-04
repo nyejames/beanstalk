@@ -4,6 +4,11 @@ path = "basic_page_output"
 tags = ["success", "html"]
 
 [[case]]
+id = "builtin_error_reserved_symbols_rejected"
+path = "builtin_error_reserved_symbols_rejected"
+tags = ["diagnostics", "ast", "types"]
+
+[[case]]
 id = "choice_rejected"
 path = "choice_rejected"
 tags = ["diagnostics", "headers"]

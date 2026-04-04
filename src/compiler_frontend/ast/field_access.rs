@@ -1,16 +1,21 @@
 use crate::compiler_frontend::ast::ast::ScopeContext;
-use crate::compiler_frontend::ast::ast_nodes::{AstNode, BuiltinMethodKind, Declaration, NodeKind};
+use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::statements::functions::create_function_call_arguments;
+use crate::compiler_frontend::builtins::BuiltinMethodKind;
+use crate::compiler_frontend::builtins::error_type::{
+    ERROR_HELPER_BUBBLE, ERROR_HELPER_BUBBLE_HOST, ERROR_HELPER_PUSH_TRACE,
+    ERROR_HELPER_PUSH_TRACE_HOST, ERROR_HELPER_WITH_LOCATION, ERROR_HELPER_WITH_LOCATION_HOST,
+    is_builtin_error_data_type, resolve_builtin_error_location_type, resolve_builtin_error_type,
+    resolve_builtin_stack_frame_type,
+};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
-use crate::compiler_frontend::traits::ContainsReferences;
 use crate::return_rule_error;
 
-const BUILTIN_ERROR_NAME: &str = "Error";
 const COLLECTION_GET_NAME: &str = "get";
 const COLLECTION_SET_NAME: &str = "set";
 const COLLECTION_PUSH_NAME: &str = "push";
@@ -32,6 +37,13 @@ enum CollectionBuiltinMethod {
     Remove,
     Length,
     PullDeprecated,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ErrorBuiltinMethod {
+    WithLocation,
+    PushTrace,
+    Bubble,
 }
 
 fn reference_base_node(
@@ -178,23 +190,34 @@ fn collection_builtin_kind(builtin: CollectionBuiltinMethod) -> BuiltinMethodKin
     }
 }
 
-fn collection_builtin_error_type(
-    context: &ScopeContext,
-    location: &SourceLocation,
-    string_table: &mut StringTable,
-) -> Result<DataType, CompilerError> {
-    let error_name = string_table.intern(BUILTIN_ERROR_NAME);
-    let Some(error_decl) = context.get_reference(&error_name) else {
-        return_rule_error!(
-            "Collection built-ins require the temporary built-in 'Error' type, but it is missing from this compilation context.",
-            location.to_owned(),
-            {
-                CompilationStage => "AST Construction",
-            }
-        );
+fn error_builtin_method_name(
+    member_name: StringId,
+    string_table: &StringTable,
+) -> Option<ErrorBuiltinMethod> {
+    match string_table.resolve(member_name) {
+        ERROR_HELPER_WITH_LOCATION => Some(ErrorBuiltinMethod::WithLocation),
+        ERROR_HELPER_PUSH_TRACE => Some(ErrorBuiltinMethod::PushTrace),
+        ERROR_HELPER_BUBBLE => Some(ErrorBuiltinMethod::Bubble),
+        _ => None,
+    }
+}
+
+fn error_builtin_path(builtin: ErrorBuiltinMethod, string_table: &mut StringTable) -> InternedPath {
+    let builtin_name = match builtin {
+        ErrorBuiltinMethod::WithLocation => ERROR_HELPER_WITH_LOCATION_HOST,
+        ErrorBuiltinMethod::PushTrace => ERROR_HELPER_PUSH_TRACE_HOST,
+        ErrorBuiltinMethod::Bubble => ERROR_HELPER_BUBBLE_HOST,
     };
 
-    Ok(error_decl.value.data_type.to_owned())
+    InternedPath::from_single_str(builtin_name, string_table)
+}
+
+fn error_builtin_kind(builtin: ErrorBuiltinMethod) -> BuiltinMethodKind {
+    match builtin {
+        ErrorBuiltinMethod::WithLocation => BuiltinMethodKind::ErrorWithLocation,
+        ErrorBuiltinMethod::PushTrace => BuiltinMethodKind::ErrorPushTrace,
+        ErrorBuiltinMethod::Bubble => BuiltinMethodKind::ErrorBubble,
+    }
 }
 
 fn parse_collection_builtin_args(
@@ -314,8 +337,7 @@ fn parse_collection_builtin_member(
                 &member_location,
                 string_table,
             )?;
-            let error_type =
-                collection_builtin_error_type(context, &member_location, string_table)?;
+            let error_type = resolve_builtin_error_type(context, &member_location, string_table)?;
             let get_result_type = DataType::Result {
                 ok: Box::new(inner_type.as_ref().to_owned()),
                 err: Box::new(error_type),
@@ -387,6 +409,92 @@ fn parse_collection_builtin_member(
             method_path: collection_builtin_path(builtin, string_table),
             method: member_name,
             builtin: Some(collection_builtin_kind(builtin)),
+            args,
+            result_types,
+            location: member_location.clone(),
+        },
+        scope: context.scope.to_owned(),
+        location: member_location,
+    }))
+}
+
+fn parse_error_builtin_member(
+    token_stream: &mut FileTokens,
+    current_node: AstNode,
+    current_type: &DataType,
+    member_name: StringId,
+    member_location: SourceLocation,
+    context: &ScopeContext,
+    string_table: &mut StringTable,
+) -> Result<Option<AstNode>, CompilerError> {
+    if !is_builtin_error_data_type(current_type, string_table) {
+        return Ok(None);
+    }
+
+    let Some(builtin) = error_builtin_method_name(member_name, string_table) else {
+        return Ok(None);
+    };
+
+    if token_stream.peek_next_token() != Some(&TokenKind::OpenParenthesis) {
+        return_rule_error!(
+            format!(
+                "Builtin error method '{}' must be called with parentheses.",
+                string_table.resolve(member_name)
+            ),
+            member_location,
+            {
+                CompilationStage => "AST Construction",
+                PrimarySuggestion => "Call this builtin error helper with '(...)'",
+            }
+        );
+    }
+
+    token_stream.advance();
+
+    let error_type = resolve_builtin_error_type(context, &member_location, string_table)?;
+    let (args, result_types) = match builtin {
+        ErrorBuiltinMethod::WithLocation => {
+            let location_type =
+                resolve_builtin_error_location_type(context, &member_location, string_table)?;
+            let args = parse_collection_builtin_args(
+                token_stream,
+                &[location_type],
+                context,
+                &member_location,
+                string_table,
+            )?;
+            (args, vec![error_type])
+        }
+        ErrorBuiltinMethod::PushTrace => {
+            let frame_type =
+                resolve_builtin_stack_frame_type(context, &member_location, string_table)?;
+            let args = parse_collection_builtin_args(
+                token_stream,
+                &[frame_type],
+                context,
+                &member_location,
+                string_table,
+            )?;
+            (args, vec![error_type])
+        }
+        ErrorBuiltinMethod::Bubble => {
+            let args = parse_collection_builtin_args(
+                token_stream,
+                &[],
+                context,
+                &member_location,
+                string_table,
+            )?;
+            (args, vec![error_type])
+        }
+    };
+
+    Ok(Some(AstNode {
+        kind: NodeKind::MethodCall {
+            receiver: Box::new(current_node),
+            method_path: error_builtin_path(builtin, string_table),
+            method: member_name,
+            builtin: Some(error_builtin_kind(builtin)),
             args,
             result_types,
             location: member_location.clone(),
@@ -496,6 +604,19 @@ pub(crate) fn parse_postfix_chain(
             string_table,
         )? {
             current_node = collection_builtin_call;
+            continue;
+        }
+
+        if let Some(error_builtin_call) = parse_error_builtin_member(
+            token_stream,
+            current_node.to_owned(),
+            &current_type,
+            member_name,
+            member_location.clone(),
+            context,
+            string_table,
+        )? {
+            current_node = error_builtin_call;
             continue;
         }
 

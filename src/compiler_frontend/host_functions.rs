@@ -25,6 +25,9 @@ pub const COLLECTION_GET_HOST_NAME: &str = "__bs_collection_get";
 pub const COLLECTION_PUSH_HOST_NAME: &str = "__bs_collection_push";
 pub const COLLECTION_REMOVE_HOST_NAME: &str = "__bs_collection_remove";
 pub const COLLECTION_LENGTH_HOST_NAME: &str = "__bs_collection_length";
+pub const ERROR_WITH_LOCATION_HOST_NAME: &str = "__bs_error_with_location";
+pub const ERROR_PUSH_TRACE_HOST_NAME: &str = "__bs_error_push_trace";
+pub const ERROR_BUBBLE_HOST_NAME: &str = "__bs_error_bubble";
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum CallTarget {
@@ -210,6 +213,72 @@ impl HostRegistry {
                     access_kind: HostAccessKind::Shared,
                 }],
                 return_type: HostAbiType::I32,
+                return_alias: HostReturnAlias::Fresh,
+            },
+        );
+        registry.functions.insert(
+            ERROR_WITH_LOCATION_HOST_NAME,
+            HostFunctionDef {
+                name: ERROR_WITH_LOCATION_HOST_NAME,
+                parameters: vec![
+                    HostParameter {
+                        language_type: DataType::Inferred,
+                        access_kind: HostAccessKind::Shared,
+                    },
+                    HostParameter {
+                        language_type: DataType::Inferred,
+                        access_kind: HostAccessKind::Shared,
+                    },
+                ],
+                return_type: HostAbiType::Void,
+                return_alias: HostReturnAlias::Fresh,
+            },
+        );
+        registry.functions.insert(
+            ERROR_PUSH_TRACE_HOST_NAME,
+            HostFunctionDef {
+                name: ERROR_PUSH_TRACE_HOST_NAME,
+                parameters: vec![
+                    HostParameter {
+                        language_type: DataType::Inferred,
+                        access_kind: HostAccessKind::Shared,
+                    },
+                    HostParameter {
+                        language_type: DataType::Inferred,
+                        access_kind: HostAccessKind::Shared,
+                    },
+                ],
+                return_type: HostAbiType::Void,
+                return_alias: HostReturnAlias::Fresh,
+            },
+        );
+        registry.functions.insert(
+            ERROR_BUBBLE_HOST_NAME,
+            HostFunctionDef {
+                name: ERROR_BUBBLE_HOST_NAME,
+                parameters: vec![
+                    HostParameter {
+                        language_type: DataType::Inferred,
+                        access_kind: HostAccessKind::Shared,
+                    },
+                    HostParameter {
+                        language_type: DataType::StringSlice,
+                        access_kind: HostAccessKind::Shared,
+                    },
+                    HostParameter {
+                        language_type: DataType::Int,
+                        access_kind: HostAccessKind::Shared,
+                    },
+                    HostParameter {
+                        language_type: DataType::Int,
+                        access_kind: HostAccessKind::Shared,
+                    },
+                    HostParameter {
+                        language_type: DataType::StringSlice,
+                        access_kind: HostAccessKind::Shared,
+                    },
+                ],
+                return_type: HostAbiType::Void,
                 return_alias: HostReturnAlias::Fresh,
             },
         );

@@ -13,6 +13,7 @@ use crate::compiler_frontend::ast::statements::structs::create_struct_definition
 use crate::compiler_frontend::ast::{
     ast_nodes::Declaration, expressions::parse_expression::create_expression,
 };
+use crate::compiler_frontend::builtins::error_type::is_reserved_builtin_symbol;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
@@ -21,8 +22,6 @@ use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, Token, TokenKind};
 use crate::compiler_frontend::traits::ContainsReferences;
 use crate::{ast_log, return_rule_error};
-
-const TEMP_RESERVED_ERROR_SYMBOL: &str = "Error";
 
 pub fn create_reference(
     token_stream: &mut FileTokens,
@@ -59,13 +58,16 @@ pub fn new_declaration(
     warnings: &mut Vec<CompilerWarning>,
     string_table: &mut StringTable,
 ) -> Result<Declaration, CompilerError> {
-    if string_table.resolve(id) == TEMP_RESERVED_ERROR_SYMBOL {
+    if is_reserved_builtin_symbol(string_table.resolve(id)) {
         return_rule_error!(
-            "'Error' is currently reserved by a temporary built-in language scaffold.",
+            format!(
+                "'{}' is reserved as a builtin language type.",
+                string_table.resolve(id)
+            ),
             token_stream.current_location(),
             {
                 CompilationStage => "Variable Declaration",
-                PrimarySuggestion => "Use a different symbol name until the built-in Error scaffold is removed",
+                PrimarySuggestion => "Use a different symbol name for user declarations",
             }
         );
     }

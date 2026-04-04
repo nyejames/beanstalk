@@ -40,6 +40,7 @@ impl<'a> HirBuilder<'a> {
             DataType::Float => HirTypeKind::Float,
             DataType::Decimal => HirTypeKind::Decimal,
             DataType::Char => HirTypeKind::Char,
+            DataType::BuiltinErrorKind => HirTypeKind::String,
             DataType::StringSlice
             | DataType::Template
             | DataType::TemplateWrapper

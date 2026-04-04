@@ -9,6 +9,8 @@ use crate::compiler_frontend::ast::expressions::expression::{
 };
 use crate::compiler_frontend::ast::templates::template::{SlotKey, SlotPlaceholder, TemplateAtom};
 use crate::compiler_frontend::ast::templates::template_types::Template;
+use crate::compiler_frontend::builtins::BuiltinMethodKind;
+use crate::compiler_frontend::builtins::error_type::register_builtin_error_types;
 use crate::compiler_frontend::compiler_errors::ErrorType;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
@@ -85,6 +87,16 @@ fn register_local(
     );
 }
 
+fn register_runtime_struct_nominal(
+    builder: &mut HirBuilder<'_>,
+    data_type: &DataType,
+    struct_id: StructId,
+) {
+    if let DataType::Struct { nominal_path, .. } = data_type {
+        builder.test_register_struct_with_fields(struct_id, nominal_path.to_owned(), vec![]);
+    }
+}
+
 fn symbol(name: &str, string_table: &mut StringTable) -> InternedPath {
     InternedPath::from_single_str(name, string_table)
 }
@@ -123,6 +135,28 @@ fn runtime_template_expression(location: SourceLocation, content: Vec<Expression
     }
 
     Expression::template(template, Ownership::ImmutableOwned)
+}
+
+fn builtin_error_related_types(string_table: &mut StringTable) -> (DataType, DataType, DataType) {
+    let manifest = register_builtin_error_types(string_table);
+    let mut error_type = None;
+    let mut location_type = None;
+    let mut frame_type = None;
+
+    for declaration in manifest.declarations {
+        match declaration.id.name_str(string_table) {
+            Some("Error") => error_type = Some(declaration.value.data_type),
+            Some("ErrorLocation") => location_type = Some(declaration.value.data_type),
+            Some("StackFrame") => frame_type = Some(declaration.value.data_type),
+            _ => {}
+        }
+    }
+
+    (
+        error_type.expect("builtin Error type should be registered"),
+        location_type.expect("builtin ErrorLocation type should be registered"),
+        frame_type.expect("builtin StackFrame type should be registered"),
+    )
 }
 
 #[test]
@@ -651,6 +685,196 @@ fn lowers_builtin_scalar_receiver_method_call_with_receiver_as_first_argument() 
             ));
         }
         other => panic!("expected lowered builtin scalar receiver call statement, got {other:?}"),
+    }
+}
+
+#[test]
+fn lowers_builtin_error_with_location_and_push_trace_methods_to_host_calls() {
+    let mut string_table = StringTable::new();
+    let location = location(13);
+    let (error_type, location_type, frame_type) = builtin_error_related_types(&mut string_table);
+    let error_name = symbol("err_value", &mut string_table);
+    let location_name = symbol("err_location", &mut string_table);
+    let frame_name = symbol("err_frame", &mut string_table);
+    let with_location_path = symbol("__bs_error_with_location", &mut string_table);
+    let with_location_name = string_table.intern("with_location");
+    let push_trace_path = symbol("__bs_error_push_trace", &mut string_table);
+    let push_trace_name = string_table.intern("push_trace");
+
+    let mut builder = setup_builder(&mut string_table);
+    register_runtime_struct_nominal(&mut builder, &error_type, StructId(200));
+    register_runtime_struct_nominal(&mut builder, &location_type, StructId(201));
+    register_runtime_struct_nominal(&mut builder, &frame_type, StructId(202));
+    register_local(
+        &mut builder,
+        error_name.clone(),
+        LocalId(60),
+        error_type.to_owned(),
+        location.clone(),
+    );
+    register_local(
+        &mut builder,
+        location_name.clone(),
+        LocalId(61),
+        location_type.to_owned(),
+        location.clone(),
+    );
+    register_local(
+        &mut builder,
+        frame_name.clone(),
+        LocalId(62),
+        frame_type.to_owned(),
+        location.clone(),
+    );
+
+    let receiver = AstNode {
+        kind: NodeKind::Rvalue(Expression::reference(
+            error_name.to_owned(),
+            error_type.to_owned(),
+            location.to_owned(),
+            Ownership::ImmutableReference,
+        )),
+        location: location.to_owned(),
+        scope: InternedPath::new(),
+    };
+    let with_location = AstNode {
+        kind: NodeKind::MethodCall {
+            receiver: Box::new(receiver),
+            method_path: with_location_path.to_owned(),
+            method: with_location_name,
+            builtin: Some(BuiltinMethodKind::ErrorWithLocation),
+            args: vec![Expression::reference(
+                location_name.to_owned(),
+                location_type.to_owned(),
+                location.to_owned(),
+                Ownership::ImmutableReference,
+            )],
+            result_types: vec![error_type.to_owned()],
+            location: location.to_owned(),
+        },
+        location: location.to_owned(),
+        scope: InternedPath::new(),
+    };
+
+    let lowered_with_location = builder
+        .lower_ast_node_as_expression(&with_location)
+        .expect("with_location lowering should succeed");
+    assert_eq!(lowered_with_location.prelude.len(), 1);
+    match &lowered_with_location.prelude[0].kind {
+        HirStatementKind::Call { target, args, .. } => {
+            assert_eq!(target, &CallTarget::HostFunction(with_location_path));
+            assert_eq!(args.len(), 2);
+        }
+        other => panic!("expected host call for with_location builtin, got {other:?}"),
+    }
+
+    let receiver = AstNode {
+        kind: NodeKind::Rvalue(Expression::reference(
+            error_name,
+            error_type.to_owned(),
+            location.to_owned(),
+            Ownership::ImmutableReference,
+        )),
+        location: location.to_owned(),
+        scope: InternedPath::new(),
+    };
+    let push_trace = AstNode {
+        kind: NodeKind::MethodCall {
+            receiver: Box::new(receiver),
+            method_path: push_trace_path.to_owned(),
+            method: push_trace_name,
+            builtin: Some(BuiltinMethodKind::ErrorPushTrace),
+            args: vec![Expression::reference(
+                frame_name,
+                frame_type,
+                location.to_owned(),
+                Ownership::ImmutableReference,
+            )],
+            result_types: vec![error_type],
+            location: location.to_owned(),
+        },
+        location: location.to_owned(),
+        scope: InternedPath::new(),
+    };
+
+    let lowered_push_trace = builder
+        .lower_ast_node_as_expression(&push_trace)
+        .expect("push_trace lowering should succeed");
+    assert_eq!(lowered_push_trace.prelude.len(), 1);
+    match &lowered_push_trace.prelude[0].kind {
+        HirStatementKind::Call { target, args, .. } => {
+            assert_eq!(target, &CallTarget::HostFunction(push_trace_path));
+            assert_eq!(args.len(), 2);
+        }
+        other => panic!("expected host call for push_trace builtin, got {other:?}"),
+    }
+}
+
+#[test]
+fn lowers_builtin_error_bubble_with_compiler_supplied_context_args() {
+    let mut string_table = StringTable::new();
+    let mut call_location = location(14);
+    call_location.scope = symbol("tests/cases/example/main.bst", &mut string_table);
+    let (error_type, _, _) = builtin_error_related_types(&mut string_table);
+    let error_name = symbol("err_value", &mut string_table);
+    let bubble_path = symbol("__bs_error_bubble", &mut string_table);
+    let bubble_name = string_table.intern("bubble");
+
+    let mut builder = setup_builder(&mut string_table);
+    register_runtime_struct_nominal(&mut builder, &error_type, StructId(210));
+    register_local(
+        &mut builder,
+        error_name.clone(),
+        LocalId(80),
+        error_type.to_owned(),
+        call_location.to_owned(),
+    );
+
+    let bubble = AstNode {
+        kind: NodeKind::MethodCall {
+            receiver: Box::new(AstNode {
+                kind: NodeKind::Rvalue(Expression::reference(
+                    error_name,
+                    error_type.to_owned(),
+                    call_location.to_owned(),
+                    Ownership::ImmutableReference,
+                )),
+                location: call_location.to_owned(),
+                scope: InternedPath::new(),
+            }),
+            method_path: bubble_path.to_owned(),
+            method: bubble_name,
+            builtin: Some(BuiltinMethodKind::ErrorBubble),
+            args: vec![],
+            result_types: vec![error_type],
+            location: call_location.to_owned(),
+        },
+        location: call_location.to_owned(),
+        scope: InternedPath::new(),
+    };
+
+    let lowered = builder
+        .lower_ast_node_as_expression(&bubble)
+        .expect("bubble lowering should succeed");
+    assert_eq!(lowered.prelude.len(), 1);
+
+    match &lowered.prelude[0].kind {
+        HirStatementKind::Call { target, args, .. } => {
+            assert_eq!(target, &CallTarget::HostFunction(bubble_path));
+            assert_eq!(
+                args.len(),
+                5,
+                "bubble call should include receiver + context args"
+            );
+            assert!(matches!(
+                args[1].kind,
+                HirExpressionKind::StringLiteral(ref value) if value == "tests/cases/example/main.bst"
+            ));
+            assert!(matches!(args[2].kind, HirExpressionKind::Int(15)));
+            assert!(matches!(args[3].kind, HirExpressionKind::Int(1)));
+            assert!(matches!(args[4].kind, HirExpressionKind::StringLiteral(..)));
+        }
+        other => panic!("expected host call for bubble builtin, got {other:?}"),
     }
 }
 

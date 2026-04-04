@@ -1,5 +1,5 @@
 can_error |name String| -> String, Float, Error!:
-    return! Error("boom")
+    return! Error("Other", "test.synthetic_boom", "boom")
 ;
 
 recover |name String| -> String, Float:

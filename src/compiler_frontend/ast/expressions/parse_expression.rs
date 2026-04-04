@@ -12,7 +12,6 @@ use crate::compiler_frontend::ast::expressions::expression::{
 use crate::compiler_frontend::ast::expressions::struct_instance::parse_struct_constructor_expression;
 use crate::compiler_frontend::ast::field_access::{ast_node_is_place, parse_postfix_chain};
 use crate::compiler_frontend::ast::receiver_methods::free_function_receiver_method_call_error;
-use crate::compiler_frontend::ast::statements::collections::new_collection;
 use crate::compiler_frontend::ast::statements::declarations::create_reference;
 use crate::compiler_frontend::ast::statements::functions::{
     FunctionReturn, FunctionSignature, ReturnSlot, parse_function_call,
@@ -20,6 +19,9 @@ use crate::compiler_frontend::ast::statements::functions::{
 use crate::compiler_frontend::ast::statements::result_handling::parse_result_handling_suffix_for_expression;
 use crate::compiler_frontend::ast::templates::template::TemplateType;
 use crate::compiler_frontend::ast::templates::template_types::Template;
+use crate::compiler_frontend::builtins::expression_parsing::{
+    parse_builtin_cast_expression, parse_collection_expression,
+};
 use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorMetaDataKey};
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::string_interning::StringTable;
@@ -70,140 +72,6 @@ fn push_expression_node(
 
     expression.push(node);
     Ok(())
-}
-
-fn parse_builtin_cast_expression(
-    token_stream: &mut FileTokens,
-    context: &ScopeContext,
-    ownership: &Ownership,
-    string_table: &mut StringTable,
-) -> Result<Expression, CompilerError> {
-    // `Int(...)` and `Float(...)` are compiler-owned expression forms. Parse them here before the
-    // generic identifier/call path so they never masquerade as user-call resolution.
-    let cast_location = token_stream.current_location();
-    let cast_kind = token_stream.current_token_kind().to_owned();
-    token_stream.advance();
-
-    if token_stream.current_token_kind() != &TokenKind::OpenParenthesis {
-        return_syntax_error!(
-            "Builtin casts require parentheses and exactly one argument.",
-            token_stream.current_location(),
-            {
-                CompilationStage => "Expression Parsing",
-                PrimarySuggestion => "Use 'Int(value)' or 'Float(value)'",
-            }
-        );
-    }
-
-    token_stream.advance();
-    if token_stream.current_token_kind() == &TokenKind::CloseParenthesis {
-        return_syntax_error!(
-            "Builtin casts require exactly one argument.",
-            token_stream.current_location(),
-            {
-                CompilationStage => "Expression Parsing",
-                PrimarySuggestion => "Pass one expression to the cast",
-            }
-        );
-    }
-
-    let mut inferred_type = DataType::Inferred;
-    let value = create_expression_with_trailing_newline_policy(
-        token_stream,
-        context,
-        &mut inferred_type,
-        ownership,
-        false,
-        false,
-        string_table,
-    )?;
-
-    if token_stream.current_token_kind() == &TokenKind::Comma {
-        return_syntax_error!(
-            "Builtin casts take exactly one argument.",
-            token_stream.current_location(),
-            {
-                CompilationStage => "Expression Parsing",
-                PrimarySuggestion => "Remove the extra argument",
-            }
-        );
-    }
-
-    if token_stream.current_token_kind() != &TokenKind::CloseParenthesis {
-        return_syntax_error!(
-            "Expected ')' after builtin cast argument.",
-            token_stream.current_location(),
-            {
-                CompilationStage => "Expression Parsing",
-                PrimarySuggestion => "Close the builtin cast argument list",
-                SuggestedInsertion => ")",
-            }
-        );
-    }
-
-    token_stream.advance();
-
-    match cast_kind {
-        TokenKind::DatatypeInt => Ok(Expression::builtin_int_cast(value, cast_location)),
-        TokenKind::DatatypeFloat => Ok(Expression::builtin_float_cast(value, cast_location)),
-        _ => unreachable!("builtin cast parser only accepts Int/Float tokens"),
-    }
-}
-
-fn parse_collection_expression(
-    token_stream: &mut FileTokens,
-    context: &ScopeContext,
-    data_type: &DataType,
-    ownership: &Ownership,
-    expression: &mut Vec<AstNode>,
-    string_table: &mut StringTable,
-) -> Result<(), CompilerError> {
-    match data_type {
-        DataType::Collection(inner_type, _) => {
-            expression.push(AstNode {
-                kind: NodeKind::Rvalue(new_collection(
-                    token_stream,
-                    inner_type,
-                    context,
-                    ownership,
-                    string_table,
-                )?),
-                location: token_stream.current_location(),
-                scope: context.scope.clone(),
-            });
-            Ok(())
-        }
-
-        DataType::Inferred => {
-            expression.push(AstNode {
-                kind: NodeKind::Rvalue(new_collection(
-                    token_stream,
-                    &DataType::Inferred,
-                    context,
-                    ownership,
-                    string_table,
-                )?),
-                location: token_stream.current_location(),
-                scope: context.scope.clone(),
-            });
-            Ok(())
-        }
-
-        _ => {
-            return_type_error!(
-                format!(
-                    "Expected a collection, but assigned variable with a literal type of: {:?}",
-                    data_type
-                ),
-                token_stream.current_location(),
-                {
-                    ExpectedType => "Collection",
-                    CompilationStage => "Expression Parsing",
-                    PrimarySuggestion => "Change the variable type to a collection or use a different literal",
-                }
-            )
-        }
-    }
 }
 
 fn parse_identifier_or_call(
@@ -1469,7 +1337,7 @@ pub fn create_expression(
 // WHAT: shared expression parser entry with configurable trailing-newline behavior.
 // WHY: callers parsing comma-separated lists outside parentheses (for example
 //      fallback/return lists) must preserve line boundaries between statements.
-fn create_expression_with_trailing_newline_policy(
+pub(crate) fn create_expression_with_trailing_newline_policy(
     token_stream: &mut FileTokens,
     context: &ScopeContext,
     data_type: &mut DataType,

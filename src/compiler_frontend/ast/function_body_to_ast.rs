@@ -9,6 +9,7 @@ use crate::compiler_frontend::ast::expressions::parse_expression::{
 };
 use crate::compiler_frontend::ast::field_access::parse_field_access;
 use crate::compiler_frontend::ast::receiver_methods::free_function_receiver_method_call_error;
+use crate::compiler_frontend::builtins::error_type::is_reserved_builtin_symbol;
 use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorMetaDataKey};
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
@@ -29,8 +30,6 @@ use crate::compiler_frontend::traits::ContainsReferences;
 use crate::projects::settings;
 use crate::projects::settings::TOP_LEVEL_TEMPLATE_NAME;
 use crate::{ast_log, return_rule_error, return_syntax_error, return_type_error};
-
-const TEMP_RESERVED_ERROR_SYMBOL: &str = "Error";
 
 fn is_return_terminator(token: &TokenKind) -> bool {
     matches!(token, TokenKind::Newline | TokenKind::End | TokenKind::Eof)
@@ -200,13 +199,16 @@ fn parse_symbol_statement(
         );
     };
 
-    if string_table.resolve(id) == TEMP_RESERVED_ERROR_SYMBOL {
+    if is_reserved_builtin_symbol(string_table.resolve(id)) {
         return_rule_error!(
-            "'Error' is currently reserved by a temporary built-in language scaffold.",
+            format!(
+                "'{}' is reserved as a builtin language type.",
+                string_table.resolve(id)
+            ),
             token_stream.current_location(),
             {
                 CompilationStage => "AST Construction",
-                PrimarySuggestion => "Use a different symbol name while this temporary Error scaffold is active",
+                PrimarySuggestion => "Use a different symbol name for user variables and declarations",
             }
         );
     }

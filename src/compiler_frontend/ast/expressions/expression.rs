@@ -330,7 +330,11 @@ impl Expression {
         )
     }
 
-    pub fn builtin_int_cast(value: Expression, location: SourceLocation) -> Self {
+    pub fn builtin_int_cast(
+        value: Expression,
+        error_type: DataType,
+        location: SourceLocation,
+    ) -> Self {
         Self::new(
             ExpressionKind::BuiltinCast {
                 kind: BuiltinCastKind::Int,
@@ -339,13 +343,17 @@ impl Expression {
             location,
             DataType::Result {
                 ok: Box::new(DataType::Int),
-                err: Box::new(DataType::StringSlice),
+                err: Box::new(error_type),
             },
             Ownership::ImmutableOwned,
         )
     }
 
-    pub fn builtin_float_cast(value: Expression, location: SourceLocation) -> Self {
+    pub fn builtin_float_cast(
+        value: Expression,
+        error_type: DataType,
+        location: SourceLocation,
+    ) -> Self {
         Self::new(
             ExpressionKind::BuiltinCast {
                 kind: BuiltinCastKind::Float,
@@ -354,7 +362,7 @@ impl Expression {
             location,
             DataType::Result {
                 ok: Box::new(DataType::Float),
-                err: Box::new(DataType::StringSlice),
+                err: Box::new(error_type),
             },
             Ownership::ImmutableOwned,
         )

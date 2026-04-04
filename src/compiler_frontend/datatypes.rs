@@ -105,6 +105,7 @@ pub enum DataType {
     Decimal,
     StringSlice, // UTF-8 read-only string slice
     Char,
+    BuiltinErrorKind,
 
     // Reserved or not-yet-wired variants kept for planned language work.
     #[allow(dead_code)] // Planned: explicit parameter/record type surfaces.
@@ -228,7 +229,12 @@ impl DataType {
                 return true;
             }
 
-            if actual == expected_inner.as_ref() {
+            if actual == expected_inner.as_ref()
+                || matches!(
+                    (expected_inner.as_ref(), actual),
+                    (DataType::BuiltinErrorKind, DataType::StringSlice)
+                )
+            {
                 return true;
             }
 
@@ -266,6 +272,10 @@ impl DataType {
                 && expected_err.as_ref() == actual_err.as_ref();
         }
 
+        if matches!(self, DataType::BuiltinErrorKind) {
+            return matches!(actual, DataType::BuiltinErrorKind | DataType::StringSlice);
+        }
+
         self == actual
     }
 
@@ -290,6 +300,7 @@ impl DataType {
             DataType::StringSlice => "String".to_string(),
             DataType::TemplateWrapper => "String".to_string(),
             DataType::Char => "Char".to_string(),
+            DataType::BuiltinErrorKind => "ErrorKind".to_string(),
             DataType::Float => "Float".to_string(),
             DataType::Int => "Int".to_string(),
             DataType::Decimal => "Decimal".to_string(),
@@ -405,6 +416,7 @@ impl PartialEq for DataType {
             (DataType::True, DataType::True) => true,
             (DataType::False, DataType::False) => true,
             (DataType::StringSlice, DataType::StringSlice) => true,
+            (DataType::BuiltinErrorKind, DataType::BuiltinErrorKind) => true,
             (DataType::Float, DataType::Float) => true,
             (DataType::Int, DataType::Int) => true,
             (DataType::Decimal, DataType::Decimal) => true,
