@@ -1,6 +1,7 @@
 //! Tests for CLI command parsing and validation.
 
-use super::{Command, get_command};
+use super::{Command, get_command, integration_tests_exit_code};
+use crate::compiler_tests::integration_test_runner::IntegrationRunSummary;
 use crate::projects::dev_server::DevServerOptions;
 
 fn args(values: &[&str]) -> Vec<String> {
@@ -190,4 +191,30 @@ fn check_command_rejects_multiple_paths() {
     let error = get_command(&args(&["check", "a.bst", "b.bst"]))
         .expect_err("multiple check paths should fail");
     assert!(error.contains("at most one path"));
+}
+
+#[test]
+fn integration_tests_exit_code_is_zero_when_suite_is_correct() {
+    let summary = IntegrationRunSummary {
+        total_tests: 5,
+        passed_tests: 3,
+        failed_tests: 0,
+        expected_failures: 2,
+        unexpected_successes: 0,
+    };
+
+    assert_eq!(integration_tests_exit_code(summary), 0);
+}
+
+#[test]
+fn integration_tests_exit_code_is_non_zero_when_suite_is_incorrect() {
+    let summary = IntegrationRunSummary {
+        total_tests: 5,
+        passed_tests: 2,
+        failed_tests: 1,
+        expected_failures: 1,
+        unexpected_successes: 1,
+    };
+
+    assert_eq!(integration_tests_exit_code(summary), 1);
 }

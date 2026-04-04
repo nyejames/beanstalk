@@ -1,0 +1,3 @@
+#prefix || -> String:
+    return "A"
+;

@@ -2,7 +2,7 @@
 //!
 //! Supports:
 //! - canonical self-contained case folders under `tests/cases/<case>/`
-//! - optional manifest-driven case ordering
+//! - required manifest-driven case ordering and tags
 //! - backend-specific expectation matrices from a shared input fixture
 
 use crate::build_system::build::{
@@ -16,7 +16,7 @@ use crate::compiler_frontend::display_messages::print_formatted_error;
 use crate::compiler_frontend::display_messages::print_formatted_warning;
 use crate::projects::html_project::html_project_builder::HtmlProjectBuilder;
 use saying::say;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::any::Any;
 use std::collections::{BTreeMap, HashSet};
 use std::fs;
@@ -29,6 +29,7 @@ const MANIFEST_FILE_NAME: &str = "manifest.toml";
 const EXPECT_FILE_NAME: &str = "expect.toml";
 const INPUT_DIR_NAME: &str = "input";
 const GOLDEN_DIR_NAME: &str = "golden";
+const FAILURE_TRIAGE_REPORT_PATH: &str = "target/test-reports/integration_failure_triage.json";
 const SEPARATOR_LINE_LENGTH: usize = 37;
 
 /// Canonical backend IDs accepted by fixture expectation files and CLI filtering.
@@ -85,8 +86,6 @@ struct SuccessExpectation {
 
 #[derive(Clone)]
 struct FailureExpectation {
-    /// Allows panic passthrough for known in-progress failure cases.
-    allow_panic: bool,
     /// Warning assertion policy for failed builds.
     warnings: WarningExpectation,
     /// Expected diagnostic error type.
@@ -178,7 +177,7 @@ struct CaseExecutionResult {
     failure_reason: Option<String>,
 }
 
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 struct SummaryCounts {
     total_tests: usize,
     passed_tests: usize,
@@ -219,10 +218,53 @@ impl SummaryCounts {
     }
 }
 
+/// Aggregate integration-suite execution summary returned to callers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct IntegrationRunSummary {
+    pub total_tests: usize,
+    pub passed_tests: usize,
+    pub failed_tests: usize,
+    pub expected_failures: usize,
+    pub unexpected_successes: usize,
+}
+
+impl IntegrationRunSummary {
+    pub fn incorrect_results(&self) -> usize {
+        self.failed_tests + self.unexpected_successes
+    }
+}
+
+impl From<SummaryCounts> for IntegrationRunSummary {
+    fn from(value: SummaryCounts) -> Self {
+        Self {
+            total_tests: value.total_tests,
+            passed_tests: value.passed_tests,
+            failed_tests: value.failed_tests,
+            expected_failures: value.expected_failures,
+            unexpected_successes: value.unexpected_successes,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct FailureTriageEntry {
+    case: String,
+    backend: String,
+    expected_outcome: &'static str,
+    failure_reason: String,
+    panic_message: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct FailureTriageReport {
+    total_tests: usize,
+    incorrect_results: usize,
+    failures: Vec<FailureTriageEntry>,
+}
+
 struct ManifestCaseSpec {
     id: String,
     path: PathBuf,
-    _tags: Vec<String>,
 }
 
 struct ParsedExpectationFile {
@@ -239,8 +281,6 @@ struct ParsedBackendExpectation {
     flags: Vec<Flag>,
     /// Success/failure mode for this backend run.
     mode: ExpectationMode,
-    /// Panic allowance toggle for failure-mode cases.
-    allow_panic: bool,
     /// Warning expectation policy.
     warnings: WarningExpectation,
     /// Expected error type for failure mode.
@@ -275,8 +315,6 @@ struct ExpectationToml {
     #[serde(default)]
     flags: Vec<String>,
     builder: Option<String>,
-    #[serde(rename = "panic", default)]
-    allow_panic: bool,
     warnings: Option<String>,
     warning_count: Option<usize>,
     error_type: Option<String>,
@@ -294,8 +332,6 @@ struct BackendExpectationToml {
     mode: ExpectationMode,
     #[serde(default)]
     flags: Vec<String>,
-    #[serde(rename = "panic", default)]
-    allow_panic: bool,
     warnings: Option<String>,
     warning_count: Option<usize>,
     error_type: Option<String>,
@@ -323,24 +359,20 @@ struct ArtifactAssertionToml {
 }
 
 /// Runs all test cases from the `tests/cases` directory.
-pub fn run_all_test_cases(show_warnings: bool) {
-    run_all_test_cases_with_backend_filter(show_warnings, None);
+pub fn run_all_test_cases(show_warnings: bool) -> Result<IntegrationRunSummary, String> {
+    run_all_test_cases_with_backend_filter(show_warnings, None)
 }
 
 /// Runs all test cases with an optional backend filter.
 ///
 /// WHAT: narrows execution to one backend profile when requested.
 /// WHY: backend-focused loops should avoid rebuilding unrelated fixture variants.
-pub fn run_all_test_cases_with_backend_filter(show_warnings: bool, backend_filter: Option<&str>) {
+pub fn run_all_test_cases_with_backend_filter(
+    show_warnings: bool,
+    backend_filter: Option<&str>,
+) -> Result<IntegrationRunSummary, String> {
     let backend_filter = match backend_filter {
-        Some(raw_backend) => match BackendId::parse(raw_backend) {
-            Ok(backend) => Some(backend),
-            Err(error) => {
-                say!(Red "Failed to parse backend filter:");
-                println!("  {error}");
-                return;
-            }
-        },
+        Some(raw_backend) => Some(BackendId::parse(raw_backend)?),
         None => None,
     };
 
@@ -351,17 +383,11 @@ pub fn run_all_test_cases_with_backend_filter(show_warnings: bool, backend_filte
         backend_filter,
     };
 
-    let suite = match load_test_suite(options.backend_filter) {
-        Ok(spec) => spec,
-        Err(error) => {
-            say!(Red "Failed to load integration test suite:");
-            println!("  {error}");
-            return;
-        }
-    };
+    let suite = load_test_suite(options.backend_filter)?;
 
     let mut total_summary = SummaryCounts::default();
     let mut backend_summaries = BTreeMap::<BackendId, SummaryCounts>::new();
+    let mut failure_triage_entries = Vec::new();
 
     if !suite.cases.is_empty() {
         say!(Cyan "Testing integration cases:");
@@ -378,6 +404,16 @@ pub fn run_all_test_cases_with_backend_filter(show_warnings: bool, backend_filte
                 .entry(case.backend_id)
                 .or_default()
                 .record(case, &result);
+
+            if !result.passed {
+                failure_triage_entries.push(FailureTriageEntry {
+                    case: case.display_name.clone(),
+                    backend: case.backend_id.as_str().to_string(),
+                    expected_outcome: expected_outcome_label(&case.expected),
+                    failure_reason: observed_failure_reason(&result),
+                    panic_message: result.panic_message.clone(),
+                });
+            }
 
             say!(Dark White "-".repeat(SEPARATOR_LINE_LENGTH));
         }
@@ -437,7 +473,14 @@ pub fn run_all_test_cases_with_backend_filter(show_warnings: bool, backend_filte
         );
     }
 
+    if let Err(error) = write_failure_triage_report(total_summary, &failure_triage_entries) {
+        say!(Yellow format!(
+            "Failed to write machine-readable triage report: {error}"
+        ));
+    }
+
     say!(Dark White "=".repeat(SEPARATOR_LINE_LENGTH));
+    Ok(total_summary.into())
 }
 
 fn render_backend_summary(backend_summaries: &BTreeMap<BackendId, SummaryCounts>) {
@@ -468,6 +511,70 @@ fn format_pass_percentage(correct_results: usize, total_tests: usize) -> String 
     format!("{}.{}", scaled_tenths / 10, scaled_tenths % 10)
 }
 
+fn expected_outcome_label(expected: &ExpectedOutcome) -> &'static str {
+    match expected {
+        ExpectedOutcome::Success(_) => "success",
+        ExpectedOutcome::Failure(_) => "failure",
+    }
+}
+
+fn observed_failure_reason(result: &CaseExecutionResult) -> String {
+    if let Some(messages) = &result.messages
+        && let Some(first_error) = messages.errors.first()
+    {
+        let base = result
+            .failure_reason
+            .as_deref()
+            .unwrap_or("Compilation failed.");
+        return format!(
+            "{base} First diagnostic [{}]: {}",
+            error_type_to_str(&first_error.error_type),
+            first_error.msg
+        );
+    }
+
+    if let Some(reason) = &result.failure_reason {
+        return reason.to_owned();
+    }
+
+    if let Some(panic_message) = &result.panic_message {
+        return format!("Compiler panic: {panic_message}");
+    }
+
+    "No failure reason was recorded.".to_string()
+}
+
+fn write_failure_triage_report(
+    summary: SummaryCounts,
+    failures: &[FailureTriageEntry],
+) -> Result<(), String> {
+    let report = FailureTriageReport {
+        total_tests: summary.total_tests,
+        incorrect_results: summary.incorrect_results(),
+        failures: failures.to_vec(),
+    };
+
+    let report_path = Path::new(FAILURE_TRIAGE_REPORT_PATH);
+    if let Some(parent) = report_path.parent() {
+        fs::create_dir_all(parent).map_err(|error| {
+            format!(
+                "Failed to create triage report directory '{}': {error}",
+                parent.display()
+            )
+        })?;
+    }
+
+    let report_json =
+        serde_json::to_string_pretty(&report).map_err(|error| format!("JSON error: {error}"))?;
+    fs::write(report_path, report_json).map_err(|error| {
+        format!(
+            "Failed to write triage report '{}': {error}",
+            report_path.display()
+        )
+    })?;
+    Ok(())
+}
+
 fn load_test_suite(backend_filter: Option<BackendId>) -> Result<TestSuiteSpec, String> {
     load_test_suite_from_root_with_filter(Path::new(CANONICAL_TESTS_PATH), backend_filter)
 }
@@ -482,69 +589,104 @@ fn load_test_suite_from_root_with_filter(
     backend_filter: Option<BackendId>,
 ) -> Result<TestSuiteSpec, String> {
     let mut cases = Vec::new();
-    let mut loaded_canonical_paths = HashSet::new();
-
     let manifest_path = root.join(MANIFEST_FILE_NAME);
-    if manifest_path.is_file() {
-        for manifest_case in parse_manifest_file(&manifest_path)? {
-            let fixture_root = root.join(&manifest_case.path);
-            let case_specs =
-                load_canonical_case_specs(&fixture_root, Some(manifest_case.id), backend_filter)?;
-            loaded_canonical_paths.insert(fs::canonicalize(&fixture_root).unwrap_or(fixture_root));
-            cases.extend(case_specs);
-        }
+    if !manifest_path.is_file() {
+        return Err(format!(
+            "Canonical integration root '{}' must define '{}'.",
+            root.display(),
+            MANIFEST_FILE_NAME
+        ));
     }
 
-    if root.is_dir() {
-        let entries = fs::read_dir(root).map_err(|error| {
-            format!(
-                "Failed to read canonical test root '{}': {error}",
-                root.display()
-            )
-        })?;
+    let manifest_cases = parse_manifest_file(&manifest_path)?;
+    validate_manifest_authoritativeness(root, &manifest_cases)?;
 
-        let mut discovered_dirs = Vec::new();
-        for entry in entries {
-            let entry = entry.map_err(|error| format!("Failed to read test entry: {error}"))?;
-            let path = entry.path();
-            if !path.is_dir() {
-                continue;
-            }
-
-            let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
-                continue;
-            };
-
-            if matches!(name, "success" | "failure") {
-                continue;
-            }
-
-            if !(path.join(INPUT_DIR_NAME).is_dir() && path.join(EXPECT_FILE_NAME).is_file()) {
-                continue;
-            }
-
-            discovered_dirs.push(path);
-        }
-
-        discovered_dirs.sort();
-
-        for fixture_root in discovered_dirs {
-            let canonical_path =
-                fs::canonicalize(&fixture_root).unwrap_or_else(|_| fixture_root.clone());
-            if loaded_canonical_paths.contains(&canonical_path) {
-                continue;
-            }
-
-            cases.extend(load_canonical_case_specs(
-                &fixture_root,
-                None,
-                backend_filter,
-            )?);
-            loaded_canonical_paths.insert(canonical_path);
-        }
+    for manifest_case in manifest_cases {
+        let fixture_root = root.join(&manifest_case.path);
+        let case_specs =
+            load_canonical_case_specs(&fixture_root, Some(manifest_case.id), backend_filter)?;
+        cases.extend(case_specs);
     }
 
     Ok(TestSuiteSpec { cases })
+}
+
+fn validate_manifest_authoritativeness(
+    root: &Path,
+    manifest_cases: &[ManifestCaseSpec],
+) -> Result<(), String> {
+    let declared_paths = manifest_cases
+        .iter()
+        .map(|case| {
+            fs::canonicalize(root.join(&case.path)).unwrap_or_else(|_| root.join(&case.path))
+        })
+        .collect::<HashSet<_>>();
+
+    let discovered_roots = discover_canonical_fixture_roots(root)?;
+    let mut undeclared_fixtures = Vec::new();
+    for discovered_root in discovered_roots {
+        let canonical_discovered =
+            fs::canonicalize(&discovered_root).unwrap_or_else(|_| discovered_root.clone());
+        if !declared_paths.contains(&canonical_discovered) {
+            undeclared_fixtures.push(discovered_root);
+        }
+    }
+
+    if !undeclared_fixtures.is_empty() {
+        undeclared_fixtures.sort();
+        let preview = undeclared_fixtures
+            .iter()
+            .take(6)
+            .map(|path| {
+                path.file_name()
+                    .and_then(|name| name.to_str())
+                    .unwrap_or("unknown_case")
+                    .to_string()
+            })
+            .collect::<Vec<_>>()
+            .join(", ");
+        return Err(format!(
+            "Manifest '{}' must list every canonical case; found undeclared fixtures: {preview}.",
+            root.join(MANIFEST_FILE_NAME).display()
+        ));
+    }
+
+    Ok(())
+}
+
+fn discover_canonical_fixture_roots(root: &Path) -> Result<Vec<PathBuf>, String> {
+    let entries = fs::read_dir(root).map_err(|error| {
+        format!(
+            "Failed to read canonical test root '{}': {error}",
+            root.display()
+        )
+    })?;
+
+    let mut discovered_dirs = Vec::new();
+    for entry in entries {
+        let entry = entry.map_err(|error| format!("Failed to read test entry: {error}"))?;
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+
+        let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+            continue;
+        };
+
+        if matches!(name, "success" | "failure") {
+            continue;
+        }
+
+        if !(path.join(INPUT_DIR_NAME).is_dir() && path.join(EXPECT_FILE_NAME).is_file()) {
+            continue;
+        }
+
+        discovered_dirs.push(path);
+    }
+
+    discovered_dirs.sort();
+    Ok(discovered_dirs)
 }
 
 fn parse_manifest_file(path: &Path) -> Result<Vec<ManifestCaseSpec>, String> {
@@ -558,6 +700,8 @@ fn parse_manifest_file(path: &Path) -> Result<Vec<ManifestCaseSpec>, String> {
         )
     })?;
 
+    let mut seen_ids = HashSet::new();
+    let mut seen_paths = HashSet::new();
     let mut cases = Vec::with_capacity(parsed.case.len());
     for case in parsed.case {
         if case.id.trim().is_empty() {
@@ -572,11 +716,38 @@ fn parse_manifest_file(path: &Path) -> Result<Vec<ManifestCaseSpec>, String> {
                 path.display()
             ));
         }
+        if case.tags.is_empty() {
+            return Err(format!(
+                "Manifest '{}' case '{}' is missing required tags.",
+                path.display(),
+                case.id
+            ));
+        }
+        if case.tags.iter().any(|tag| tag.trim().is_empty()) {
+            return Err(format!(
+                "Manifest '{}' case '{}' has an empty tag value.",
+                path.display(),
+                case.id
+            ));
+        }
+        if !seen_ids.insert(case.id.clone()) {
+            return Err(format!(
+                "Manifest '{}' has duplicate case id '{}'.",
+                path.display(),
+                case.id
+            ));
+        }
+        if !seen_paths.insert(case.path.clone()) {
+            return Err(format!(
+                "Manifest '{}' has duplicate case path '{}'.",
+                path.display(),
+                case.path
+            ));
+        }
 
         cases.push(ManifestCaseSpec {
             id: case.id,
             path: PathBuf::from(case.path),
-            _tags: case.tags,
         });
     }
 
@@ -624,7 +795,6 @@ fn load_canonical_case_specs(
                 artifact_assertions: backend_expectation.artifact_assertions,
             }),
             ExpectationMode::Failure => ExpectedOutcome::Failure(FailureExpectation {
-                allow_panic: backend_expectation.allow_panic,
                 warnings: backend_expectation.warnings,
                 error_type: backend_expectation.error_type.ok_or_else(|| {
                     format!(
@@ -712,7 +882,6 @@ fn parse_matrix_expectation_file(
     // backend sections so each backend can evolve independently.
     if parsed.mode.is_some()
         || !parsed.flags.is_empty()
-        || parsed.allow_panic
         || parsed.warnings.is_some()
         || parsed.warning_count.is_some()
         || parsed.error_type.is_some()
@@ -755,7 +924,6 @@ fn parse_matrix_expectation_file(
             backend_id,
             flags,
             mode: backend_expectation.mode,
-            allow_panic: backend_expectation.allow_panic,
             warnings,
             error_type,
             message_contains: backend_expectation.message_contains,
@@ -984,13 +1152,6 @@ fn validate_fixture_contract(
                         golden_dir.display()
                     ));
                 }
-                if backend_expectation.allow_panic {
-                    return Err(format!(
-                        "Fixture '{}' backend '{}' uses mode = \"success\" and cannot set panic = true.",
-                        fixture_root.display(),
-                        backend_expectation.backend_id.as_str()
-                    ));
-                }
                 if backend_expectation.error_type.is_some()
                     || !backend_expectation.message_contains.is_empty()
                 {
@@ -1133,6 +1294,8 @@ fn execute_test_case(case: &TestCaseSpec) -> CaseExecutionResult {
         build_project(&builder, &entry_path, &flags)
     }));
 
+    // Policy: unsupported or incomplete user input must surface structured compiler diagnostics.
+    // Panics are always treated as failing outcomes and are only captured for robustness/triage.
     match execution {
         Ok(build_result) => match &case.expected {
             ExpectedOutcome::Success(expectation) => match build_result {
@@ -1161,24 +1324,17 @@ fn execute_test_case(case: &TestCaseSpec) -> CaseExecutionResult {
                 Err(messages) => validate_failure_result(messages, expectation),
             },
         },
-        Err(payload) => match &case.expected {
-            ExpectedOutcome::Failure(expectation) if expectation.allow_panic => {
-                CaseExecutionResult {
-                    passed: true,
-                    panic_message: Some(format_panic_payload(payload)),
-                    build_result: None,
-                    messages: None,
-                    failure_reason: None,
-                }
-            }
-            _ => CaseExecutionResult {
-                passed: false,
-                panic_message: Some(format_panic_payload(payload)),
-                build_result: None,
-                messages: None,
-                failure_reason: Some("The compiler panicked while running this case.".to_string()),
-            },
-        },
+        Err(payload) => panic_case_result(payload),
+    }
+}
+
+fn panic_case_result(payload: Box<dyn Any + Send>) -> CaseExecutionResult {
+    CaseExecutionResult {
+        passed: false,
+        panic_message: Some(format_panic_payload(payload)),
+        build_result: None,
+        messages: None,
+        failure_reason: Some("The compiler panicked while running this case.".to_string()),
     }
 }
 
@@ -1996,6 +2152,79 @@ mod tests {
     }
 
     #[test]
+    fn rejects_backend_panic_expectation_key() {
+        let root = temp_dir("reject_backend_panic_key");
+        let case_root = root.join("case");
+        let input_root = case_root.join(INPUT_DIR_NAME);
+        fs::create_dir_all(&input_root).expect("should create fixture input directory");
+        fs::write(input_root.join("#page.bst"), "#[:ok]\n").expect("should write fixture source");
+        fs::write(
+            case_root.join(EXPECT_FILE_NAME),
+            "[backends.html]\nmode = \"failure\"\npanic = true\nwarnings = \"forbid\"\nerror_type = \"rule\"\nmessage_contains = [\"x\"]\n",
+        )
+        .expect("should write expect file");
+
+        let Err(error) = parse_expectation_file(&case_root.join(EXPECT_FILE_NAME)) else {
+            panic!("panic key should be rejected");
+        };
+        assert!(error.contains("unknown field"), "unexpected error: {error}");
+
+        fs::remove_dir_all(&root).expect("should clean up temp fixture root");
+    }
+
+    #[test]
+    fn rejects_top_level_panic_expectation_key() {
+        let root = temp_dir("reject_top_level_panic_key");
+        let case_root = root.join("case");
+        let input_root = case_root.join(INPUT_DIR_NAME);
+        fs::create_dir_all(&input_root).expect("should create fixture input directory");
+        fs::write(input_root.join("#page.bst"), "#[:ok]\n").expect("should write fixture source");
+        fs::write(
+            case_root.join(EXPECT_FILE_NAME),
+            "panic = true\n\n[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\n",
+        )
+        .expect("should write expect file");
+
+        let Err(error) = parse_expectation_file(&case_root.join(EXPECT_FILE_NAME)) else {
+            panic!("panic key should be rejected");
+        };
+        assert!(error.contains("unknown field"), "unexpected error: {error}");
+
+        fs::remove_dir_all(&root).expect("should clean up temp fixture root");
+    }
+
+    #[test]
+    fn rejects_manifest_case_without_tags() {
+        let root = temp_dir("manifest_missing_tags");
+        fs::create_dir_all(&root).expect("should create root");
+        write_success_fixture(&root, "case");
+
+        fs::write(
+            root.join(MANIFEST_FILE_NAME),
+            "[[case]]\nid = \"case\"\npath = \"case\"\n",
+        )
+        .expect("should write manifest");
+
+        let Err(error) = load_test_suite_from_root(&root) else {
+            panic!("manifest missing tags should be rejected");
+        };
+        assert!(
+            error.contains("missing required tags"),
+            "unexpected: {error}"
+        );
+
+        fs::remove_dir_all(&root).expect("should clean up temp fixture root");
+    }
+
+    #[test]
+    fn panic_execution_results_are_always_failures() {
+        let result = panic_case_result(Box::new("boom".to_string()));
+        assert!(!result.passed);
+        assert_eq!(result.panic_message.as_deref(), Some("boom"));
+        assert!(result.failure_reason.is_some());
+    }
+
+    #[test]
     fn accepts_success_fixture_without_explicit_artifact_assertions() {
         let root = temp_dir("success_contract_golden_assertion");
         let case_root = root.join("case");
@@ -2017,7 +2246,7 @@ mod tests {
     }
 
     #[test]
-    fn manifest_order_is_preserved_before_discovery_fallback() {
+    fn manifest_order_is_preserved() {
         let root = temp_dir("manifest_order");
         fs::create_dir_all(&root).expect("should create root");
 
@@ -2027,7 +2256,7 @@ mod tests {
 
         fs::write(
             root.join(MANIFEST_FILE_NAME),
-            "[[case]]\nid = \"case_b\"\npath = \"case_b\"\n\n[[case]]\nid = \"case_a\"\npath = \"case_a\"\n",
+            "[[case]]\nid = \"case_b\"\npath = \"case_b\"\ntags = [\"ordered\"]\n\n[[case]]\nid = \"case_a\"\npath = \"case_a\"\ntags = [\"ordered\"]\n\n[[case]]\nid = \"case_c\"\npath = \"case_c\"\ntags = [\"ordered\"]\n",
         )
         .expect("should write manifest");
 
@@ -2040,6 +2269,31 @@ mod tests {
         assert_eq!(
             names,
             vec!["case_b [html]", "case_a [html]", "case_c [html]"]
+        );
+
+        fs::remove_dir_all(&root).expect("should clean up temp fixture root");
+    }
+
+    #[test]
+    fn manifest_must_declare_every_fixture_directory() {
+        let root = temp_dir("manifest_authoritative");
+        fs::create_dir_all(&root).expect("should create root");
+
+        write_success_fixture(&root, "case_a");
+        write_success_fixture(&root, "case_b");
+
+        fs::write(
+            root.join(MANIFEST_FILE_NAME),
+            "[[case]]\nid = \"case_a\"\npath = \"case_a\"\ntags = [\"coverage\"]\n",
+        )
+        .expect("should write manifest");
+
+        let Err(error) = load_test_suite_from_root(&root) else {
+            panic!("manifest should reject undeclared fixtures");
+        };
+        assert!(
+            error.contains("undeclared fixtures"),
+            "unexpected error: {error}"
         );
 
         fs::remove_dir_all(&root).expect("should clean up temp fixture root");
@@ -2108,7 +2362,7 @@ mod tests {
 
         fs::write(
             root.join(MANIFEST_FILE_NAME),
-            "[[case]]\nid = \"case\"\npath = \"case\"\n",
+            "[[case]]\nid = \"case\"\npath = \"case\"\ntags = [\"matrix\"]\n",
         )
         .expect("should write manifest");
 

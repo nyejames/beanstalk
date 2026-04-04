@@ -1,0 +1,3 @@
+[backends.html_wasm]
+mode = "success"
+warnings = "forbid"

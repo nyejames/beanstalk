@@ -8,7 +8,7 @@ use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::display_messages::print_compiler_messages;
 use crate::compiler_tests::integration_test_runner::{
-    run_all_test_cases, run_all_test_cases_with_backend_filter,
+    IntegrationRunSummary, run_all_test_cases, run_all_test_cases_with_backend_filter,
 };
 use crate::projects::check::{self, CheckOptions};
 use crate::projects::dev_server::{self, DevServerOptions};
@@ -18,6 +18,7 @@ use saying::say;
 use std::{
     env,
     io::{self, Write},
+    process,
 };
 
 #[derive(Debug, PartialEq, Eq)]
@@ -156,12 +157,34 @@ pub fn start_cli() {
         }
 
         Command::CompilerTests { backend_filter } => {
-            if let Some(backend_filter) = backend_filter.as_deref() {
-                run_all_test_cases_with_backend_filter(true, Some(backend_filter));
+            let summary_result = if let Some(backend_filter) = backend_filter.as_deref() {
+                run_all_test_cases_with_backend_filter(true, Some(backend_filter))
             } else {
-                run_all_test_cases(true);
+                run_all_test_cases(true)
+            };
+
+            match summary_result {
+                Ok(summary) => {
+                    let exit_code = integration_tests_exit_code(summary);
+                    if exit_code != 0 {
+                        process::exit(exit_code);
+                    }
+                }
+                Err(error) => {
+                    say!(Red "Failed to run integration tests:");
+                    println!("  {error}");
+                    process::exit(1);
+                }
             }
         }
+    }
+}
+
+fn integration_tests_exit_code(summary: IntegrationRunSummary) -> i32 {
+    if summary.incorrect_results() > 0 {
+        1
+    } else {
+        0
     }
 }
 
