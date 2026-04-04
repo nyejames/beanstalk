@@ -1,11 +1,4 @@
-@libs/html/Basic
-@styles/Docs
-@./components
-[Basic.page:
-[Components.Navbar]
-
-[Docs.Header Basic.center: [Basic.title(1): ERROR HANDLING AND OPTIONALS]]
-[Basic.Page:
+# Errors and Panics
 
 Errors are treated as values in Beanstalk, and
 they represent Result types similar to Rust.
@@ -123,7 +116,3 @@ Effectively creating a runtime assertion.
 ```beanstalk
     #panic "Message about the panic"
 ```
-
-]
-
-[Footer]

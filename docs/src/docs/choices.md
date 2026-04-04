@@ -1,12 +1,3 @@
-@libs/html/Basic
-@styles/Docs
-@./components
-[Docs.navbar]
-[Basic.page:
-
-[Docs.header Basic.center: [title(1): CHOICES]]
-[Basic.page:
-
 # Choices (enums)
 Choices are a way to define a set of possible values. 
 They are similar to enums in Rust (tagged unions).
@@ -42,5 +33,3 @@ Choices can also be defined with default values, the same way structs can.
     -- No need to set a value, it defaults to 'true'
     currentStatus = Status::Active
 ```
-
-[Docs.footer]

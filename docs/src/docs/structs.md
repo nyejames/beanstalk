@@ -1,12 +1,3 @@
-@libs/html/Basic
-@styles/Docs
-@./components
-[Basic.page:
-
-[Docs.Navbar]
-
-[Docs.header, Basic.center: [Basic.title(): STRUCTS]]
-
 # The Struct
 A struct is a collection of named fields, similar to a struct in other languages.
 
@@ -71,7 +62,3 @@ You define a receiver by making the first parameter literally named `this`.
 `this` is reserved for method receivers. You are limited to one `this` parameter per method, and `method(value, ...)` is not valid syntax for calling receiver methods.
 
 Const-coerced struct values are data-only records. They can be read, but they do not expose runtime methods.
-
-]
-
-[Footer]

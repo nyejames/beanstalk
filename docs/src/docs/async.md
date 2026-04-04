@@ -1,14 +1,4 @@
-import @libs/html/Basic
-import @styles/Docs
-import @./components
-[Basic.page:
-
-[Docs.navbar]
-[Docs.header, Basic.center:
-    [Basic.title: Async and Coroutines]
-]
-
-## Coroutines and Async in Beanstalk (Design Overview)
+# Coroutines and Async in Beanstalk (Design Overview)
 
 Beanstalk approaches async and concurrency by making **control flow explicit** and **communication safe by default**. 
 Instead of hiding async behind keywords like `async` / `await` or complex runtime abstractions, 
@@ -218,5 +208,3 @@ Beanstalk treats async as **structured control flow plus safe message passing**,
 * `<<` receive values
 * `yield` suspends execution
 * `async` defines a concurrency boundary
-
-]

@@ -1,11 +1,4 @@
-@libs/html/Basic
-@styles/Docs
-@./components
-[Basic.page:
-
-[Docs.Navbar]
-
-[Docs.Header, Basic.Center: [Basic.Title: COLLECTIONS]]
+# Collections
 
 When a new collection uses the mutable symbol, its internal values can be mutated by default.
 
@@ -59,5 +52,3 @@ The compiler lowers many collection built-ins directly.
 ## Hash Maps
 Hash map keyed method behavior is deferred in this milestone.
 Current built-in collection receiver methods are implemented for ordered collections only.
-
-[Docs.footer]

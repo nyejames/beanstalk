@@ -1,14 +1,4 @@
-@libs/html/Basic
-@styles/Docs
-@./components
-
-[Basic.page:
-
-[Docs.navbar]
-
-[Docs.header, Basic.center:
-    [Basic.title: REACTIVITY]
-]
+# Reactivity in Beanstalk Templates
 
 This document describes the design and semantics of **reactivity in Beanstalk templates**.
 
@@ -216,7 +206,3 @@ Instead:
 > Mutating a place updates all template bindings that explicitly observe that place.
 
 This keeps reactivity small, understandable, and aligned with the rest of the language design.
-
-[Docs.footer]
-
-]
