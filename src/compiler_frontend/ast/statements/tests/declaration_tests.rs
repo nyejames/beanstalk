@@ -5,7 +5,9 @@
 
 use crate::compiler_frontend::ast::ast_nodes::NodeKind;
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
-use crate::compiler_frontend::ast::test_support::{parse_single_file_ast, start_function_body};
+use crate::compiler_frontend::ast::test_support::{
+    parse_single_file_ast, parse_single_file_ast_error, start_function_body,
+};
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 
 #[test]
@@ -52,4 +54,18 @@ fn resolves_named_type_annotations_against_prior_structs() {
         origin_decl.value.kind,
         ExpressionKind::StructInstance(..)
     ));
+}
+
+#[test]
+fn rejects_user_declarations_named_error() {
+    let error = parse_single_file_ast_error("Error = 1\n");
+    assert!(error.msg.contains("reserved"), "{}", error.msg);
+    assert!(error.msg.contains("Error"), "{}", error.msg);
+}
+
+#[test]
+fn rejects_struct_redefinition_of_reserved_error_symbol() {
+    let error = parse_single_file_ast_error("Error = |\n    message String,\n|\n");
+    assert!(error.msg.contains("reserved"), "{}", error.msg);
+    assert!(error.msg.contains("Error"), "{}", error.msg);
 }

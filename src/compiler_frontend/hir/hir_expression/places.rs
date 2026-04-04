@@ -4,7 +4,7 @@
 //! WHY: HIR must distinguish assignable places from value expressions before later alias and
 //! mutation analysis can reason about them.
 
-use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
+use crate::compiler_frontend::ast::ast_nodes::{AstNode, BuiltinMethodKind, Declaration, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
@@ -103,12 +103,14 @@ impl<'a> HirBuilder<'a> {
             NodeKind::MethodCall {
                 receiver,
                 method_path,
+                builtin,
                 args,
                 result_types,
                 location,
                 ..
             } => self.lower_receiver_method_call_expression(
                 method_path,
+                *builtin,
                 receiver,
                 args,
                 result_types,
@@ -229,13 +231,19 @@ impl<'a> HirBuilder<'a> {
             NodeKind::MethodCall {
                 receiver,
                 method_path,
+                builtin,
                 args,
                 result_types,
                 location,
                 ..
             } => {
+                if matches!(builtin, Some(BuiltinMethodKind::CollectionGet)) {
+                    return self.lower_collection_get_place(receiver, args, location);
+                }
+
                 let lowered = self.lower_receiver_method_call_expression(
                     method_path,
+                    *builtin,
                     receiver,
                     args,
                     result_types,
@@ -269,6 +277,37 @@ impl<'a> HirBuilder<'a> {
                 )
             }
         }
+    }
+
+    fn lower_collection_get_place(
+        &mut self,
+        receiver: &AstNode,
+        args: &[crate::compiler_frontend::ast::expressions::expression::Expression],
+        location: &SourceLocation,
+    ) -> Result<(Vec<HirStatement>, HirPlace), CompilerError> {
+        if args.len() != 1 {
+            return_hir_transformation_error!(
+                format!(
+                    "Collection get-place lowering expected 1 index argument, found {}",
+                    args.len()
+                ),
+                self.hir_error_location(location)
+            );
+        }
+
+        let (receiver_prelude, receiver_place) = self.lower_ast_node_to_place(receiver)?;
+        let lowered_index = self.lower_expression(&args[0])?;
+
+        let mut prelude = receiver_prelude;
+        prelude.extend(lowered_index.prelude);
+
+        Ok((
+            prelude,
+            HirPlace::Index {
+                base: Box::new(receiver_place),
+                index: Box::new(lowered_index.value),
+            },
+        ))
     }
 
     pub(super) fn lower_reference_expression(

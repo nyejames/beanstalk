@@ -30,6 +30,8 @@ use crate::projects::settings;
 use crate::projects::settings::TOP_LEVEL_TEMPLATE_NAME;
 use crate::{ast_log, return_rule_error, return_syntax_error, return_type_error};
 
+const TEMP_RESERVED_ERROR_SYMBOL: &str = "Error";
+
 fn is_return_terminator(token: &TokenKind) -> bool {
     matches!(token, TokenKind::Newline | TokenKind::End | TokenKind::Eof)
 }
@@ -197,6 +199,18 @@ fn parse_symbol_statement(
             }
         );
     };
+
+    if string_table.resolve(id) == TEMP_RESERVED_ERROR_SYMBOL {
+        return_rule_error!(
+            "'Error' is currently reserved by a temporary built-in language scaffold.",
+            token_stream.current_location(),
+            {
+                CompilationStage => "AST Construction",
+                PrimarySuggestion => "Use a different symbol name while this temporary Error scaffold is active",
+            }
+        );
+    }
+
     let full_path = context.scope.append(id);
 
     if let Some(multi_bind) = parse_multi_bind_statement(token_stream, context, string_table)? {

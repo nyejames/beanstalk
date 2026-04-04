@@ -564,6 +564,7 @@ fn lowers_receiver_method_call_with_receiver_as_first_argument() {
                 receiver: Box::new(receiver),
                 method_path: method_path.clone(),
                 method: method_name,
+                builtin: None,
                 args: vec![Expression::int(
                     7,
                     location.clone(),
@@ -629,6 +630,7 @@ fn lowers_builtin_scalar_receiver_method_call_with_receiver_as_first_argument() 
                 receiver: Box::new(receiver),
                 method_path: method_path.clone(),
                 method: method_name,
+                builtin: None,
                 args: vec![],
                 result_types: vec![DataType::Int],
                 location: location.clone(),

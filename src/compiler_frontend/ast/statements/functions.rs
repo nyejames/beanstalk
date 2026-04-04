@@ -570,7 +570,13 @@ fn format_type_for_error(data_type: &DataType) -> String {
         DataType::None => "None".to_string(),
         DataType::True => "True".to_string(),
         DataType::False => "False".to_string(),
-        DataType::Result(inner) => format!("{}!", format_type_for_error(inner)),
+        DataType::Result { ok, err } => {
+            format!(
+                "Result<{}, {}>",
+                format_type_for_error(ok),
+                format_type_for_error(err)
+            )
+        }
         DataType::Decimal => "Decimal".to_string(),
         DataType::Collection(inner, _) => format!("Collection<{}>", format_type_for_error(inner)),
         DataType::Struct { .. } => "Struct".to_string(),

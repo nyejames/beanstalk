@@ -13,6 +13,10 @@ pub(crate) fn resolve_host_function_path(
 
     match name {
         "io" => Some("__bs_io"),
+        "__bs_collection_get" => Some("__bs_collection_get"),
+        "__bs_collection_push" => Some("__bs_collection_push"),
+        "__bs_collection_remove" => Some("__bs_collection_remove"),
+        "__bs_collection_length" => Some("__bs_collection_length"),
         _ => None,
     }
 }

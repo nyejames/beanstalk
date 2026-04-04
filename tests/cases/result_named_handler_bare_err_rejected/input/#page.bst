@@ -1,7 +1,3 @@
-Error = |
-    msg String,
-|
-
 can_error |value String| -> String, Error!:
     return value
 ;

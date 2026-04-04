@@ -337,7 +337,10 @@ impl Expression {
                 value: Box::new(value),
             },
             location,
-            DataType::Result(Box::new(DataType::Int)),
+            DataType::Result {
+                ok: Box::new(DataType::Int),
+                err: Box::new(DataType::StringSlice),
+            },
             Ownership::ImmutableOwned,
         )
     }
@@ -349,7 +352,10 @@ impl Expression {
                 value: Box::new(value),
             },
             location,
-            DataType::Result(Box::new(DataType::Float)),
+            DataType::Result {
+                ok: Box::new(DataType::Float),
+                err: Box::new(DataType::StringSlice),
+            },
             Ownership::ImmutableOwned,
         )
     }

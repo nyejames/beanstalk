@@ -21,6 +21,10 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 pub const IO_FUNC_NAME: &str = "io";
+pub const COLLECTION_GET_HOST_NAME: &str = "__bs_collection_get";
+pub const COLLECTION_PUSH_HOST_NAME: &str = "__bs_collection_push";
+pub const COLLECTION_REMOVE_HOST_NAME: &str = "__bs_collection_remove";
+pub const COLLECTION_LENGTH_HOST_NAME: &str = "__bs_collection_length";
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum CallTarget {
@@ -143,6 +147,72 @@ impl HostRegistry {
         };
 
         registry.functions.insert(io_function.name, io_function);
+        registry.functions.insert(
+            COLLECTION_GET_HOST_NAME,
+            HostFunctionDef {
+                name: COLLECTION_GET_HOST_NAME,
+                parameters: vec![
+                    HostParameter {
+                        language_type: DataType::Inferred,
+                        access_kind: HostAccessKind::Shared,
+                    },
+                    HostParameter {
+                        language_type: DataType::Int,
+                        access_kind: HostAccessKind::Shared,
+                    },
+                ],
+                return_type: HostAbiType::Void,
+                return_alias: HostReturnAlias::Fresh,
+            },
+        );
+        registry.functions.insert(
+            COLLECTION_PUSH_HOST_NAME,
+            HostFunctionDef {
+                name: COLLECTION_PUSH_HOST_NAME,
+                parameters: vec![
+                    HostParameter {
+                        language_type: DataType::Inferred,
+                        access_kind: HostAccessKind::Shared,
+                    },
+                    HostParameter {
+                        language_type: DataType::Inferred,
+                        access_kind: HostAccessKind::Shared,
+                    },
+                ],
+                return_type: HostAbiType::Void,
+                return_alias: HostReturnAlias::Fresh,
+            },
+        );
+        registry.functions.insert(
+            COLLECTION_REMOVE_HOST_NAME,
+            HostFunctionDef {
+                name: COLLECTION_REMOVE_HOST_NAME,
+                parameters: vec![
+                    HostParameter {
+                        language_type: DataType::Inferred,
+                        access_kind: HostAccessKind::Shared,
+                    },
+                    HostParameter {
+                        language_type: DataType::Int,
+                        access_kind: HostAccessKind::Shared,
+                    },
+                ],
+                return_type: HostAbiType::Void,
+                return_alias: HostReturnAlias::Fresh,
+            },
+        );
+        registry.functions.insert(
+            COLLECTION_LENGTH_HOST_NAME,
+            HostFunctionDef {
+                name: COLLECTION_LENGTH_HOST_NAME,
+                parameters: vec![HostParameter {
+                    language_type: DataType::Inferred,
+                    access_kind: HostAccessKind::Shared,
+                }],
+                return_type: HostAbiType::I32,
+                return_alias: HostReturnAlias::Fresh,
+            },
+        );
         registry
     }
 

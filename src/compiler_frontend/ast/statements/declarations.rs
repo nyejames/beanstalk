@@ -22,6 +22,8 @@ use crate::compiler_frontend::tokenizer::tokens::{FileTokens, Token, TokenKind};
 use crate::compiler_frontend::traits::ContainsReferences;
 use crate::{ast_log, return_rule_error};
 
+const TEMP_RESERVED_ERROR_SYMBOL: &str = "Error";
+
 pub fn create_reference(
     token_stream: &mut FileTokens,
     reference_arg: &Declaration,
@@ -57,6 +59,17 @@ pub fn new_declaration(
     warnings: &mut Vec<CompilerWarning>,
     string_table: &mut StringTable,
 ) -> Result<Declaration, CompilerError> {
+    if string_table.resolve(id) == TEMP_RESERVED_ERROR_SYMBOL {
+        return_rule_error!(
+            "'Error' is currently reserved by a temporary built-in language scaffold.",
+            token_stream.current_location(),
+            {
+                CompilationStage => "Variable Declaration",
+                PrimarySuggestion => "Use a different symbol name until the built-in Error scaffold is removed",
+            }
+        );
+    }
+
     // Move past the name
     token_stream.advance();
 

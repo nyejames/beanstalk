@@ -96,9 +96,7 @@ pub(crate) fn parse_result_handling_suffix_for_expression(
     warnings: Option<&mut Vec<CompilerWarning>>,
     string_table: &mut StringTable,
 ) -> Result<Expression, CompilerError> {
-    let Some(error_return_type) =
-        Some(DataType::StringSlice).filter(|_| value.data_type.is_result())
-    else {
+    let Some(error_return_type) = value.data_type.result_error_type().cloned() else {
         return_rule_error!(
             "The '!' result-handling suffix is only valid for Result-valued expressions",
             token_stream.current_location(),

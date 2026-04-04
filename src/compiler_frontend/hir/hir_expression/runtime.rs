@@ -107,6 +107,7 @@ impl<'a> HirBuilder<'a> {
                 NodeKind::MethodCall {
                     receiver,
                     method_path,
+                    builtin,
                     args,
                     result_types,
                     location,
@@ -114,6 +115,7 @@ impl<'a> HirBuilder<'a> {
                 } => {
                     let lowered = self.lower_receiver_method_call_expression(
                         method_path,
+                        *builtin,
                         receiver,
                         args,
                         result_types,

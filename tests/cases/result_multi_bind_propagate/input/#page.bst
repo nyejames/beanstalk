@@ -1,7 +1,3 @@
-Error = |
-    msg String,
-|
-
 pair_ok |name String| -> String, Int, Error!:
     return name, 2
 ;

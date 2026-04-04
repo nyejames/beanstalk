@@ -1,14 +1,30 @@
 use crate::compiler_frontend::ast::ast::ScopeContext;
-use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
+use crate::compiler_frontend::ast::ast_nodes::{AstNode, BuiltinMethodKind, Declaration, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::{Expression, Operator};
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
 use crate::compiler_frontend::ast::field_access::{
     ast_node_is_mutable_place, ast_node_is_place, parse_field_access,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::{ast_log, return_rule_error, return_syntax_error};
+
+fn assignment_target_value_type(target: &AstNode) -> Result<DataType, CompilerError> {
+    if let NodeKind::MethodCall {
+        builtin: Some(BuiltinMethodKind::CollectionGet),
+        result_types,
+        ..
+    } = &target.kind
+        && let Some(result_type) = result_types.first()
+        && let Some(ok_type) = result_type.result_ok_type()
+    {
+        return Ok(ok_type.to_owned());
+    }
+
+    Ok(target.get_expr()?.data_type)
+}
 
 fn build_mutation_from_target(
     token_stream: &mut FileTokens,
@@ -18,7 +34,14 @@ fn build_mutation_from_target(
     string_table: &mut StringTable,
 ) -> Result<AstNode, CompilerError> {
     let location = token_stream.current_location();
-    let target_type = target.get_expr()?.data_type;
+    let target_type = assignment_target_value_type(&target)?;
+    let is_collection_get_index_write = matches!(
+        &target.kind,
+        NodeKind::MethodCall {
+            builtin: Some(BuiltinMethodKind::CollectionGet),
+            ..
+        }
+    );
     ast_log!(
         "Handling mutation for ",
         #variable_arg.value.ownership, " ",
@@ -45,6 +68,18 @@ fn build_mutation_from_target(
                 BorrowKind => "Mutable",
                 CompilationStage => "Expression Parsing",
                 PrimarySuggestion => "Declare the variable with '~=' to make it mutable",
+            }
+        );
+    }
+
+    if is_collection_get_index_write && token_stream.current_token_kind() != &TokenKind::Assign {
+        return_rule_error!(
+            "Collection indexed writes only support '=' assignment.",
+            location,
+            {
+                BorrowKind => "Mutable",
+                CompilationStage => "Expression Parsing",
+                PrimarySuggestion => "Use 'collection.get(index) = value' or call 'collection.set(index, value)'",
             }
         );
     }

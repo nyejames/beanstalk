@@ -368,7 +368,14 @@ fn parse_identifier_or_call(
 
             DataType::Struct { .. } => {
                 // Fall through to normal reference behaviour for non-constructor uses.
-                expression.push(create_reference(token_stream, arg, context, string_table)?);
+                let reference_node = create_reference(token_stream, arg, context, string_table)?;
+                push_expression_node(
+                    token_stream,
+                    context,
+                    string_table,
+                    expression,
+                    reference_node,
+                )?;
                 return Ok(());
             }
 
@@ -376,7 +383,14 @@ fn parse_identifier_or_call(
             // VARIABLE INSIDE EXPRESSION
             // --------------------------
             _ => {
-                expression.push(create_reference(token_stream, arg, context, string_table)?);
+                let reference_node = create_reference(token_stream, arg, context, string_table)?;
+                push_expression_node(
+                    token_stream,
+                    context,
+                    string_table,
+                    expression,
+                    reference_node,
+                )?;
                 return Ok(()); // Will have moved onto the next token already
             }
         }

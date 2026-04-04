@@ -44,6 +44,15 @@ pub enum RangeEndKind {
     Inclusive,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BuiltinMethodKind {
+    CollectionGet,
+    CollectionSet,
+    CollectionPush,
+    CollectionRemove,
+    CollectionLength,
+}
+
 #[derive(Debug, Clone)]
 pub struct ForLoopRange {
     pub start: Expression,
@@ -96,6 +105,7 @@ pub enum NodeKind {
         receiver: Box<AstNode>,
         method_path: InternedPath,
         method: StringId,
+        builtin: Option<BuiltinMethodKind>,
         args: Vec<Expression>,
         result_types: Vec<DataType>,
         location: SourceLocation,

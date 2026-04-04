@@ -15,6 +15,10 @@ use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::tokenizer::newline_handling::NewlineMode;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenizeMode};
 use crate::compiler_frontend::{CompilerFrontend, FrontendBuildProfile};
+use crate::compiler_frontend::{
+    hir::hir_nodes::{HirPlace, HirStatementKind},
+    host_functions::CallTarget,
+};
 use crate::projects::settings::Config;
 use std::fs;
 use std::path::PathBuf;
@@ -319,6 +323,57 @@ fn compiles_multi_file_import_program_through_borrow_check() {
 
     assert!(report.stats.functions_analyzed >= 2);
     assert!(!report.analysis.value_facts.is_empty());
+}
+
+#[test]
+fn compiles_collection_builtins_and_error_propagation_through_borrow_check() {
+    let mut project = FrontendProject::new(
+        &[(
+            "src/#page.bst",
+            "first_or_error |values {Int}, idx Int| -> Int, Error!:\n    return values.get(idx)!\n;\n\nmutate_and_length || -> Int:\n    values ~= {1, 2, 3}\n    values.set(0, 9)\n    values.get(1) = 8\n    values.push(4)\n    values.remove(0)\n    return values.length()\n;\n\ntotal = mutate_and_length()\npicked = first_or_error({10, 20}, 1) ! 0\nio(total)\nio(picked)\n",
+        )],
+        "src/#page.bst",
+    );
+
+    let hir = project.hir();
+
+    assert!(
+        hir.blocks
+            .iter()
+            .flat_map(|block| block.statements.iter())
+            .any(|statement| matches!(
+                statement.kind,
+                HirStatementKind::Assign {
+                    target: HirPlace::Index { .. },
+                    ..
+                }
+            )),
+        "expected at least one indexed assignment in lowered HIR"
+    );
+
+    assert!(
+        hir.blocks
+            .iter()
+            .flat_map(|block| block.statements.iter())
+            .any(|statement| match &statement.kind {
+                HirStatementKind::Call {
+                    target: CallTarget::HostFunction(path),
+                    ..
+                } => {
+                    path.name_str(&project.frontend.string_table) == Some("__bs_collection_get")
+                }
+                _ => false,
+            }),
+        "expected collection get(...) to lower into a host call target"
+    );
+
+    let report = project
+        .frontend
+        .check_borrows(&hir)
+        .expect("borrow checking should succeed");
+
+    assert!(report.stats.functions_analyzed >= 2);
+    assert!(!report.analysis.statement_facts.is_empty());
 }
 
 #[test]

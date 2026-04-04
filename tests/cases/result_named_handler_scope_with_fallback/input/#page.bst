@@ -1,14 +1,10 @@
-Error = |
-    msg String,
-|
-
 can_error |name String| -> String, Float, Error!:
     return! Error("boom")
 ;
 
 recover |name String| -> String, Float:
     value, score = can_error(name) err! "guest", 0.0:
-        io(err.msg)
+        io(err.message)
     ;
     return value, score
 ;

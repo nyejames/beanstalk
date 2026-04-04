@@ -1,7 +1,3 @@
-Error = |
-    msg String,
-|
-
 pair_err |name String| -> String, Float, Error!:
     return! Error("boom")
 ;

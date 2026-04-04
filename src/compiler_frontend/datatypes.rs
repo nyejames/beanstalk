@@ -113,7 +113,10 @@ pub enum DataType {
     Choices(Vec<Declaration>), // Union of types
     #[allow(dead_code)] // Planned: Option<T> language-level type support.
     Option(Box<DataType>), // Shorthand for a choice of a type or None
-    Result(Box<DataType>),
+    Result {
+        ok: Box<DataType>,
+        err: Box<DataType>,
+    },
     #[allow(dead_code)] // Planned: template wrapper values for slot-aware folding.
     TemplateWrapper, // Foldable template with a slot (becomes two string slices)
     #[allow(dead_code)] // Planned: explicit None literal/type flows.
@@ -193,14 +196,26 @@ impl DataType {
     }
 
     pub fn is_result(&self) -> bool {
-        matches!(self, DataType::Result(_))
+        matches!(self, DataType::Result { .. })
+    }
+
+    pub fn result_ok_type(&self) -> Option<&DataType> {
+        match self {
+            DataType::Result { ok, .. } => Some(ok.as_ref()),
+            _ => None,
+        }
+    }
+
+    pub fn result_error_type(&self) -> Option<&DataType> {
+        match self {
+            DataType::Result { err, .. } => Some(err.as_ref()),
+            _ => None,
+        }
     }
 
     pub fn result_inner_type(&self) -> Option<&DataType> {
-        match self {
-            DataType::Result(inner) => Some(inner.as_ref()),
-            _ => None,
-        }
+        // Backward-compatible alias used by existing callers while Result handling is migrated.
+        self.result_ok_type()
     }
 
     pub fn accepts_value_type(&self, actual: &DataType) -> bool {
@@ -228,14 +243,27 @@ impl DataType {
             }
         }
 
-        if let (DataType::Result(expected_inner), DataType::Result(actual_inner)) = (self, actual) {
-            if matches!(expected_inner.as_ref(), DataType::Inferred)
-                || matches!(actual_inner.as_ref(), DataType::Inferred)
+        if let (
+            DataType::Result {
+                ok: expected_ok,
+                err: expected_err,
+            },
+            DataType::Result {
+                ok: actual_ok,
+                err: actual_err,
+            },
+        ) = (self, actual)
+        {
+            if matches!(expected_ok.as_ref(), DataType::Inferred)
+                || matches!(actual_ok.as_ref(), DataType::Inferred)
+                || matches!(expected_err.as_ref(), DataType::Inferred)
+                || matches!(actual_err.as_ref(), DataType::Inferred)
             {
                 return true;
             }
 
-            return expected_inner.as_ref() == actual_inner.as_ref();
+            return expected_ok.as_ref() == actual_ok.as_ref()
+                && expected_err.as_ref() == actual_err.as_ref();
         }
 
         self == actual
@@ -341,8 +369,12 @@ impl DataType {
             DataType::Option(inner_type) => {
                 format!("Option({})", inner_type.display_with_table(string_table))
             }
-            DataType::Result(inner_type) => {
-                format!("{}!", inner_type.display_with_table(string_table))
+            DataType::Result { ok, err } => {
+                format!(
+                    "Result({}, {})",
+                    ok.display_with_table(string_table),
+                    err.display_with_table(string_table)
+                )
             }
             DataType::Choices(inner_types) => {
                 let mut inner_types_str = String::new();
@@ -376,7 +408,16 @@ impl PartialEq for DataType {
             (DataType::Float, DataType::Float) => true,
             (DataType::Int, DataType::Int) => true,
             (DataType::Decimal, DataType::Decimal) => true,
-            (DataType::Result(a), DataType::Result(b)) => a == b,
+            (
+                DataType::Result {
+                    ok: ok_a,
+                    err: err_a,
+                },
+                DataType::Result {
+                    ok: ok_b,
+                    err: err_b,
+                },
+            ) => ok_a == ok_b && err_a == err_b,
             (DataType::Collection(a, oa), DataType::Collection(b, ob)) => a == b && oa == ob,
             (DataType::Path(a), DataType::Path(b)) => a == b,
             (DataType::Template, DataType::Template) => true,

@@ -14,7 +14,13 @@ fn parses_struct_definitions_with_field_defaults() {
     let struct_node = ast
         .nodes
         .iter()
-        .find(|node| matches!(node.kind, NodeKind::StructDefinition(..)))
+        .find(|node| {
+            matches!(
+                &node.kind,
+                NodeKind::StructDefinition(path, ..)
+                    if path.name_str(&string_table) == Some("Point")
+            )
+        })
         .expect("expected struct definition");
 
     let NodeKind::StructDefinition(path, fields) = &struct_node.kind else {

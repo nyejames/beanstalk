@@ -4,7 +4,7 @@
 //! WHY: call lowering is reused across AST expression forms and needs one place to manage
 //! prelude sequencing, tuple return shaping, and temporary bindings.
 
-use crate::compiler_frontend::ast::ast_nodes::AstNode;
+use crate::compiler_frontend::ast::ast_nodes::{AstNode, BuiltinMethodKind};
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ResultCallHandling};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
@@ -88,11 +88,23 @@ impl<'a> HirBuilder<'a> {
     pub(crate) fn lower_receiver_method_call_expression(
         &mut self,
         method_path: &InternedPath,
+        builtin: Option<BuiltinMethodKind>,
         receiver: &AstNode,
         args: &[Expression],
         result_types: &[DataType],
         location: &SourceLocation,
     ) -> Result<LoweredExpression, CompilerError> {
+        if let Some(builtin) = builtin {
+            return self.lower_collection_builtin_call_expression(
+                builtin,
+                method_path,
+                receiver,
+                args,
+                result_types,
+                location,
+            );
+        }
+
         let function_id = self.resolve_function_id_or_error(method_path, location)?;
         let mut full_args = Vec::with_capacity(args.len() + 1);
         full_args.push(receiver.get_expr()?);
@@ -104,6 +116,83 @@ impl<'a> HirBuilder<'a> {
             result_types,
             location,
         )
+    }
+
+    fn lower_collection_builtin_call_expression(
+        &mut self,
+        builtin: BuiltinMethodKind,
+        method_path: &InternedPath,
+        receiver: &AstNode,
+        args: &[Expression],
+        result_types: &[DataType],
+        location: &SourceLocation,
+    ) -> Result<LoweredExpression, CompilerError> {
+        match builtin {
+            BuiltinMethodKind::CollectionGet
+            | BuiltinMethodKind::CollectionPush
+            | BuiltinMethodKind::CollectionRemove
+            | BuiltinMethodKind::CollectionLength => {
+                let mut full_args = Vec::with_capacity(args.len() + 1);
+                full_args.push(receiver.get_expr()?);
+                full_args.extend(args.iter().cloned());
+                self.lower_call_expression(
+                    CallTarget::HostFunction(method_path.to_owned()),
+                    &full_args,
+                    result_types,
+                    location,
+                )
+            }
+
+            BuiltinMethodKind::CollectionSet => {
+                self.lower_collection_set_call_expression(receiver, args, location)
+            }
+        }
+    }
+
+    fn lower_collection_set_call_expression(
+        &mut self,
+        receiver: &AstNode,
+        args: &[Expression],
+        location: &SourceLocation,
+    ) -> Result<LoweredExpression, CompilerError> {
+        if args.len() != 2 {
+            return_hir_transformation_error!(
+                format!(
+                    "Collection set lowering expected 2 arguments, found {}",
+                    args.len()
+                ),
+                self.hir_error_location(location)
+            );
+        }
+
+        let (receiver_prelude, receiver_place) = self.lower_ast_node_to_place(receiver)?;
+        let lowered_index = self.lower_expression(&args[0])?;
+        let lowered_value = self.lower_expression(&args[1])?;
+
+        let mut prelude = receiver_prelude;
+        prelude.extend(lowered_index.prelude);
+        prelude.extend(lowered_value.prelude);
+
+        let index_place = HirPlace::Index {
+            base: Box::new(receiver_place),
+            index: Box::new(lowered_index.value),
+        };
+
+        let assign_statement = HirStatement {
+            id: self.allocate_node_id(),
+            kind: HirStatementKind::Assign {
+                target: index_place,
+                value: lowered_value.value,
+            },
+            location: location.to_owned(),
+        };
+        self.side_table.map_statement(location, &assign_statement);
+        prelude.push(assign_statement);
+
+        let region = self.current_region_or_error(location)?;
+        let value = self.unit_expression(location, region);
+
+        Ok(LoweredExpression { prelude, value })
     }
 
     // WHAT: lowers a resolved call target plus arguments into HIR call statements and values.

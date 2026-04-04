@@ -181,6 +181,7 @@ impl<'hir> JsEmitter<'hir> {
         self.emit_runtime_computed_place_helpers();
         self.emit_runtime_clone_helpers();
         self.emit_runtime_result_helpers();
+        self.emit_runtime_collection_helpers();
         self.emit_runtime_string_helpers();
         self.emit_runtime_cast_helpers();
     }
@@ -437,6 +438,97 @@ impl<'hir> JsEmitter<'hir> {
         });
         self.emit_line("}");
         self.emit_line("");
+    }
+
+    fn emit_runtime_collection_helpers(&mut self) {
+        let error_message_key = self
+            .builtin_error_message_key()
+            .unwrap_or("message")
+            .to_owned();
+        self.emit_line(&format!(
+            "const __bs_error_message_key = \"{}\";",
+            error_message_key
+        ));
+        self.emit_line("");
+
+        self.emit_line("function __bs_collection_get(collectionRef, index) {");
+        self.with_indent(|emitter| {
+            emitter.emit_line("const collection = __bs_read(collectionRef);");
+            emitter.emit_line("if (!Array.isArray(collection)) {");
+            emitter.with_indent(|em| {
+                em.emit_line("const err = { message: \"Collection get(...) expects an ordered collection\" };");
+                em.emit_line("err[__bs_error_message_key] = err.message;");
+                em.emit_line("return { tag: \"err\", value: err };");
+            });
+            emitter.emit_line("}");
+            emitter.emit_line("if (!Number.isInteger(index) || index < 0 || index >= collection.length) {");
+            emitter.with_indent(|em| {
+                em.emit_line("const err = { message: \"Collection index out of bounds\" };");
+                em.emit_line("err[__bs_error_message_key] = err.message;");
+                em.emit_line("return { tag: \"err\", value: err };");
+            });
+            emitter.emit_line("}");
+            emitter.emit_line("return { tag: \"ok\", value: collection[index] };");
+        });
+        self.emit_line("}");
+        self.emit_line("");
+
+        self.emit_line("function __bs_collection_push(collectionRef, value) {");
+        self.with_indent(|emitter| {
+            emitter.emit_line("const collection = __bs_read(collectionRef);");
+            emitter.emit_line("if (Array.isArray(collection)) {");
+            emitter.with_indent(|em| em.emit_line("collection.push(value);"));
+            emitter.emit_line("}");
+        });
+        self.emit_line("}");
+        self.emit_line("");
+
+        self.emit_line("function __bs_collection_remove(collectionRef, index) {");
+        self.with_indent(|emitter| {
+            emitter.emit_line("const collection = __bs_read(collectionRef);");
+            emitter.emit_line(
+                "if (Array.isArray(collection) && Number.isInteger(index) && index >= 0 && index < collection.length) {",
+            );
+            emitter.with_indent(|em| em.emit_line("collection.splice(index, 1);"));
+            emitter.emit_line("}");
+        });
+        self.emit_line("}");
+        self.emit_line("");
+
+        self.emit_line("function __bs_collection_length(collectionRef) {");
+        self.with_indent(|emitter| {
+            emitter.emit_line("const collection = __bs_read(collectionRef);");
+            emitter.emit_line("if (!Array.isArray(collection)) {");
+            emitter.with_indent(|em| em.emit_line("return 0;"));
+            emitter.emit_line("}");
+            emitter.emit_line("return collection.length;");
+        });
+        self.emit_line("}");
+        self.emit_line("");
+    }
+
+    fn builtin_error_message_key(&self) -> Option<&str> {
+        self.hir.structs.iter().find_map(|hir_struct| {
+            let struct_name = self
+                .hir
+                .side_table
+                .resolve_struct_name(hir_struct.id, self.string_table)?;
+            if struct_name != "Error" {
+                return None;
+            }
+
+            hir_struct.fields.iter().find_map(|field| {
+                let field_name = self
+                    .hir
+                    .side_table
+                    .resolve_field_name(field.id, self.string_table)?;
+                if field_name != "message" {
+                    return None;
+                }
+
+                self.field_name_by_id.get(&field.id).map(String::as_str)
+            })
+        })
     }
 
     fn emit_runtime_cast_helpers(&mut self) {

@@ -121,9 +121,9 @@ impl<'a> HirBuilder<'a> {
                 inner: self.lower_data_type(inner, location)?,
             },
 
-            DataType::Result(inner) => {
-                let ok = self.lower_data_type(inner, location)?;
-                let err = self.intern_type_kind(HirTypeKind::String);
+            DataType::Result { ok, err } => {
+                let ok = self.lower_data_type(ok, location)?;
+                let err = self.lower_data_type(err, location)?;
                 HirTypeKind::Result { ok, err }
             }
 
