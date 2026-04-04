@@ -9,6 +9,9 @@ use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::reserved_trait_syntax::{
+    reserved_trait_keyword, reserved_trait_keyword_error,
+};
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
 use crate::{return_compiler_error, return_rule_error};
@@ -72,6 +75,18 @@ pub(crate) fn parse_choice_header_payload(
         let current_token = token_stream.current_token_kind().to_owned();
 
         match current_token {
+            TokenKind::Must | TokenKind::TraitThis => {
+                let keyword = reserved_trait_keyword(token_stream.current_token_kind())
+                    .expect("reserved trait token should map to a keyword");
+
+                return Err(reserved_trait_keyword_error(
+                    keyword,
+                    current_location,
+                    "Header Parsing",
+                    "Use a normal choice variant name until traits are implemented",
+                ));
+            }
+
             TokenKind::Symbol(variant_name) => {
                 if !seen_variants.insert(variant_name) {
                     return_rule_error!(
@@ -98,6 +113,14 @@ pub(crate) fn parse_choice_header_payload(
                 // The token immediately after a parsed variant decides whether this stays in
                 // alpha-scope syntax or enters deferred territory.
                 let next_token = token_stream.current_token_kind().to_owned();
+                if let Some(keyword) = reserved_trait_keyword(&next_token) {
+                    return Err(reserved_trait_keyword_error(
+                        keyword,
+                        token_stream.current_location(),
+                        "Header Parsing",
+                        "Use a normal choice variant form until traits are implemented",
+                    ));
+                }
                 if starts_choice_payload_type(&next_token) {
                     return_rule_error!(
                         "Choice payload variants are deferred for Alpha. Only unit variants ('Choice :: VariantA, VariantB;') are supported in this phase.",
@@ -156,6 +179,18 @@ pub(crate) fn parse_choice_header_payload(
                             TokenKind::End => {
                                 token_stream.advance();
                                 break;
+                            }
+                            TokenKind::Must | TokenKind::TraitThis => {
+                                let keyword =
+                                    reserved_trait_keyword(token_stream.current_token_kind())
+                                        .expect("reserved trait token should map to a keyword");
+
+                                return Err(reserved_trait_keyword_error(
+                                    keyword,
+                                    token_stream.current_location(),
+                                    "Header Parsing",
+                                    "Use a normal choice variant name until traits are implemented",
+                                ));
                             }
                             TokenKind::Symbol(_) => {
                                 continue;
@@ -314,6 +349,17 @@ pub(crate) fn parse_choice_variant_value(
     let variant_location = token_stream.current_location();
     let variant_name = match token_stream.current_token_kind() {
         TokenKind::Symbol(name) => *name,
+        TokenKind::Must | TokenKind::TraitThis => {
+            let keyword = reserved_trait_keyword(token_stream.current_token_kind())
+                .expect("reserved trait token should map to a keyword");
+
+            return Err(reserved_trait_keyword_error(
+                keyword,
+                token_stream.current_location(),
+                "Expression Parsing",
+                "Use a normal choice variant name until traits are implemented",
+            ));
+        }
         _ => {
             return_rule_error!(
                 format!("Expected a variant name after '{}::'.", choice_name),

@@ -87,3 +87,21 @@ fn reports_multi_bind_mutable_target_without_explicit_type() {
         error.msg
     );
 }
+
+#[test]
+fn reports_reserved_must_keyword_in_function_body() {
+    let error = parse_single_file_ast_error("must = 1\n");
+
+    assert_eq!(error.error_type, ErrorType::Rule);
+    assert!(error.msg.contains("'must' is reserved for traits"));
+    assert!(error.msg.contains("not implemented yet in Alpha"));
+}
+
+#[test]
+fn reports_reserved_this_keyword_in_declaration_type_position() {
+    let error = parse_single_file_ast_error("value This = 1\n");
+
+    assert_eq!(error.error_type, ErrorType::Rule);
+    assert!(error.msg.contains("'This' is reserved for traits"));
+    assert!(error.msg.contains("not implemented yet in Alpha"));
+}

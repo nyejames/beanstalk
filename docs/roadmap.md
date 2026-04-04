@@ -17,17 +17,17 @@ These are the non-negotiable conditions for starting Alpha.
 
 ## Phase 1 - finish the next missing language slice
 
-### PR - Reserve interface syntax cleanly in the parser/frontend
+### PR - Reserve trait syntax cleanly in the parser/frontend
 
-Reserve interface syntax now so later implementation does not require breaking syntax churn during Alpha.
+Reserve trait syntax now so later implementation does not require breaking syntax churn during Alpha.
 
 **Checklist**
 - Reserve the chosen syntax in tokenization/parsing.
-- Ensure use of interface syntax produces a clear, structured “reserved / not implemented” error.
+- Ensure use of trait syntax produces a clear, structured “reserved / not implemented” error.
 - Add parser and integration tests for reservation behavior.
 
 **Done when**
-- Interface syntax cannot be used accidentally by user code for unrelated constructs.
+- Trait syntax cannot be used accidentally by user code for unrelated constructs.
 - The compiler response is intentional and well formatted.
 
 ## Phase 2 - close the core language feature gaps

@@ -6,6 +6,9 @@ use crate::compiler_frontend::ast::expressions::parse_expression::create_express
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::reserved_trait_syntax::{
+    reserved_trait_keyword, reserved_trait_keyword_error,
+};
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::{return_rule_error, return_syntax_error};
@@ -115,6 +118,18 @@ pub fn parse_parameters(
                 next_in_list = true;
             }
 
+            TokenKind::Must | TokenKind::TraitThis => {
+                let keyword = reserved_trait_keyword(token_stream.current_token_kind())
+                    .expect("reserved trait token should map to a keyword");
+
+                return Err(reserved_trait_keyword_error(
+                    keyword,
+                    token_stream.current_location(),
+                    "Struct/Parameter Parsing",
+                    "Use a normal parameter or field name until traits are implemented",
+                ));
+            }
+
             TokenKind::Newline => {
                 token_stream.advance();
             }
@@ -196,6 +211,27 @@ pub fn parse_explicit_signature_type(
                     PrimarySuggestion => suggestion,
                 }
             )
+        }
+        TokenKind::Must | TokenKind::TraitThis => {
+            let keyword = reserved_trait_keyword(token_stream.current_token_kind())
+                .expect("reserved trait token should map to a keyword");
+            let (stage, suggestion) = match context {
+                SignatureTypeContext::Parameter => (
+                    "Parameter Type Parsing",
+                    "Use a normal type name until traits are implemented",
+                ),
+                SignatureTypeContext::Return => (
+                    "Function Signature Parsing",
+                    "Use a normal return type until traits are implemented",
+                ),
+            };
+
+            return Err(reserved_trait_keyword_error(
+                keyword,
+                token_stream.current_location(),
+                stage,
+                suggestion,
+            ));
         }
         TokenKind::OpenCurly => parse_collection_signature_type(
             token_stream,
@@ -319,6 +355,27 @@ fn parse_collection_inner_signature_type(
                     PrimarySuggestion => suggestion,
                 }
             )
+        }
+        TokenKind::Must | TokenKind::TraitThis => {
+            let keyword = reserved_trait_keyword(token_stream.current_token_kind())
+                .expect("reserved trait token should map to a keyword");
+            let (stage, suggestion) = match context {
+                SignatureTypeContext::Parameter => (
+                    "Parameter Type Parsing",
+                    "Use a normal item type until traits are implemented",
+                ),
+                SignatureTypeContext::Return => (
+                    "Function Signature Parsing",
+                    "Use a normal collection item type until traits are implemented",
+                ),
+            };
+
+            return Err(reserved_trait_keyword_error(
+                keyword,
+                token_stream.current_location(),
+                stage,
+                suggestion,
+            ));
         }
         TokenKind::Symbol(type_name) => {
             let type_name = *type_name;

@@ -25,6 +25,9 @@ use crate::compiler_frontend::builtins::expression_parsing::{
 };
 use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorMetaDataKey};
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::reserved_trait_syntax::{
+    reserved_trait_keyword, reserved_trait_keyword_error,
+};
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
 use crate::compiler_frontend::traits::ContainsReferences;
@@ -1020,6 +1023,18 @@ fn dispatch_expression_token(
             Ok(ExpressionTokenStep::Continue)
         }
 
+        TokenKind::Must | TokenKind::TraitThis => {
+            let keyword = reserved_trait_keyword(token_stream.current_token_kind())
+                .expect("reserved trait token should map to a keyword");
+
+            return Err(reserved_trait_keyword_error(
+                keyword,
+                token_stream.current_location(),
+                "Expression Parsing",
+                "Use a normal expression element until traits are implemented",
+            ));
+        }
+
         TokenKind::Hash => {
             if token_stream.peek_next_token() != Some(&TokenKind::TemplateHead) {
                 return_type_error!(
@@ -1500,6 +1515,18 @@ fn parse_copy_place_expression(
                     Ok(place)
                 }
             }
+        }
+
+        TokenKind::Must | TokenKind::TraitThis => {
+            let keyword = reserved_trait_keyword(token_stream.current_token_kind())
+                .expect("reserved trait token should map to a keyword");
+
+            return Err(reserved_trait_keyword_error(
+                keyword,
+                token_stream.current_location(),
+                "Expression Parsing",
+                "Use a normal place expression until traits are implemented",
+            ));
         }
 
         _ => {

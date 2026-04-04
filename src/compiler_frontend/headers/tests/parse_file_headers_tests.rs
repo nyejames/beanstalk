@@ -641,3 +641,26 @@ fn choice_headers_reject_payload_variant_forms_for_alpha() {
             .contains("Tagged choice variant bodies using '| ... |' are deferred for Alpha")
     }));
 }
+
+#[test]
+fn trait_declarations_using_must_are_reserved_during_header_parsing() {
+    let result = parse_single_file_headers_with_entry(
+        "Drawable must:\n    draw |This, surface Surface| -> String;\n;\n",
+        "src/#page.bst",
+        "src/#page.bst",
+    );
+
+    assert!(
+        result.is_err(),
+        "trait declarations using 'must' should fail during header parsing"
+    );
+    let errors = result.err().expect("expected parse errors");
+
+    assert!(errors.iter().any(|error| {
+        error.error_type == crate::compiler_frontend::compiler_errors::ErrorType::Rule
+            && error
+                .msg
+                .contains("Trait declarations using 'must' are reserved for traits")
+            && error.msg.contains("not implemented yet in Alpha")
+    }));
+}

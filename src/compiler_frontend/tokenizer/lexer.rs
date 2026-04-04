@@ -695,6 +695,8 @@ pub(crate) fn keyword_or_variable(
             "else" => return_token!(TokenKind::Else, stream),
             "as" => return_token!(TokenKind::As, stream),
             "copy" => return_token!(TokenKind::Copy, stream),
+            "must" => return_token!(TokenKind::Must, stream),
+            "This" => return_token!(TokenKind::TraitThis, stream),
 
             // Loops
             "loop" => return_token!(TokenKind::Loop, stream),

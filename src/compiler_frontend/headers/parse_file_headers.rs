@@ -14,6 +14,10 @@ use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::paths::paths::parse_import_clause_tokens;
+use crate::compiler_frontend::reserved_trait_syntax::{
+    ReservedTraitKeyword, reserved_trait_declaration_error, reserved_trait_keyword,
+    reserved_trait_keyword_error,
+};
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
 use crate::projects::settings::{
@@ -383,6 +387,17 @@ fn parse_headers_in_file(
                 next_statement_exported = true;
             }
 
+            TokenKind::Must | TokenKind::TraitThis => {
+                if let Some(keyword) = reserved_trait_keyword(&current_token.kind) {
+                    return Err(reserved_trait_keyword_error(
+                        keyword,
+                        current_location,
+                        "Header Parsing",
+                        "Use a normal identifier or type name until traits are implemented",
+                    ));
+                }
+            }
+
             TokenKind::TemplateHead => {
                 if next_statement_exported {
                     if !context.is_entry_file {
@@ -663,6 +678,21 @@ fn create_header(
             }
 
             kind = HeaderKind::Function { signature };
+        }
+
+        TokenKind::Must => {
+            return Err(reserved_trait_declaration_error(
+                token_stream.current_location(),
+            ));
+        }
+
+        TokenKind::TraitThis => {
+            return Err(reserved_trait_keyword_error(
+                ReservedTraitKeyword::This,
+                token_stream.current_location(),
+                "Header Parsing",
+                "Use a normal identifier or type name until traits are implemented",
+            ));
         }
 
         // Could be a struct

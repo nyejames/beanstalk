@@ -374,6 +374,10 @@ pub enum TokenKind {
     DoubleColon, // ::
     Assign,      // =
 
+    // Reserved trait syntax
+    Must,
+    TraitThis,
+
     // Scope
     OpenParenthesis,  // (
     CloseParenthesis, // )

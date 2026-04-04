@@ -1104,6 +1104,16 @@ path = "top_level_const_template_single_item"
 tags = ["integration","templates"]
 
 [[case]]
+id = "trait_declaration_reserved"
+path = "trait_declaration_reserved"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "trait_this_reserved"
+path = "trait_this_reserved"
+tags = ["integration","diagnostics"]
+
+[[case]]
 id = "undefined_variable_mutation"
 path = "undefined_variable_mutation"
 tags = ["integration","diagnostics"]

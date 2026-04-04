@@ -16,6 +16,9 @@ use crate::compiler_frontend::host_functions::{
     ERROR_WITH_LOCATION_HOST_NAME,
 };
 use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::reserved_trait_syntax::{
+    reserved_trait_keyword, reserved_trait_keyword_error,
+};
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
 use crate::return_rule_error;
@@ -125,6 +128,17 @@ fn parse_member_name(
     match token_stream.current_token_kind() {
         TokenKind::Symbol(id) => Ok(*id),
         TokenKind::IntLiteral(value) => Ok(string_table.get_or_intern(value.to_string())),
+        TokenKind::Must | TokenKind::TraitThis => {
+            let keyword = reserved_trait_keyword(token_stream.current_token_kind())
+                .expect("reserved trait token should map to a keyword");
+
+            return Err(reserved_trait_keyword_error(
+                keyword,
+                token_stream.current_location(),
+                "AST Construction",
+                "Use a normal field or receiver method name until traits are implemented",
+            ));
+        }
         _ => return_rule_error!(
             format!(
                 "Expected property or method name after '.', found '{:?}'",

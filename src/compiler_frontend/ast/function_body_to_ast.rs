@@ -13,6 +13,9 @@ use crate::compiler_frontend::builtins::error_type::is_reserved_builtin_symbol;
 use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorMetaDataKey};
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::reserved_trait_syntax::{
+    reserved_trait_keyword, reserved_trait_keyword_error,
+};
 
 use crate::compiler_frontend::ast::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::ast::statements::branching::create_branch;
@@ -487,6 +490,18 @@ fn unexpected_function_body_token_error(
                 String::from("Remove the stray '|' or move it into a declaration signature"),
             );
             error
+        }
+
+        TokenKind::Must | TokenKind::TraitThis => {
+            let keyword = reserved_trait_keyword(token)
+                .expect("reserved trait token should map to a keyword");
+
+            reserved_trait_keyword_error(
+                keyword,
+                token_stream.current_location(),
+                "AST Construction",
+                "Use a normal statement or expression until traits are implemented",
+            )
         }
 
         TokenKind::Arrow => {

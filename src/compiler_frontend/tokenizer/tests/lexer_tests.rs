@@ -72,6 +72,32 @@ fn find_token_index(tokens: &[Token], predicate: impl Fn(&TokenKind) -> bool) ->
 }
 
 #[test]
+fn tokenizes_reserved_trait_keywords_as_reserved_tokens() {
+    let (file_tokens, _string_table) = tokenize_source("must This\n");
+
+    assert!(
+        matches!(file_tokens.tokens[0].kind, TokenKind::ModuleStart),
+        "token streams always begin with the module sentinel"
+    );
+    assert!(
+        matches!(file_tokens.tokens[1].kind, TokenKind::Must),
+        "expected 'must' to lex as a reserved trait token"
+    );
+    assert!(
+        matches!(file_tokens.tokens[2].kind, TokenKind::TraitThis),
+        "expected 'This' to lex as a reserved trait token"
+    );
+    assert!(
+        !matches!(file_tokens.tokens[1].kind, TokenKind::Symbol(_)),
+        "'must' should not remain a user symbol"
+    );
+    assert!(
+        !matches!(file_tokens.tokens[2].kind, TokenKind::Symbol(_)),
+        "'This' should not remain a user symbol"
+    );
+}
+
+#[test]
 fn tokenizes_none_question_mark_and_bang_markers() {
     let (file_tokens, _string_table) =
         tokenize_source("value String? = none\npersist()!\nrecover = may_fail() ! \"\"\n");

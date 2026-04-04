@@ -1,5 +1,8 @@
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::reserved_trait_syntax::{
+    reserved_trait_keyword, reserved_trait_keyword_error,
+};
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
 use crate::{return_rule_error, return_syntax_error};
@@ -244,6 +247,17 @@ fn parse_explicit_type_annotation(
                     PrimarySuggestion => "Use an optional type like 'String?' and assign 'none' as the value",
                 }
             )
+        }
+        TokenKind::Must | TokenKind::TraitThis => {
+            let keyword = reserved_trait_keyword(token_stream.current_token_kind())
+                .expect("reserved trait token should map to a keyword");
+
+            return Err(reserved_trait_keyword_error(
+                keyword,
+                token_stream.current_location(),
+                "Variable Declaration",
+                "Use a normal type name until traits are implemented",
+            ));
         }
         TokenKind::OpenCurly => {
             token_stream.advance();
