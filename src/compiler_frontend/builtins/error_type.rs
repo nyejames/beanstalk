@@ -39,10 +39,6 @@ pub(crate) const ERROR_HELPER_WITH_LOCATION: &str = "with_location";
 pub(crate) const ERROR_HELPER_PUSH_TRACE: &str = "push_trace";
 pub(crate) const ERROR_HELPER_BUBBLE: &str = "bubble";
 
-pub(crate) const ERROR_HELPER_WITH_LOCATION_HOST: &str = "__bs_error_with_location";
-pub(crate) const ERROR_HELPER_PUSH_TRACE_HOST: &str = "__bs_error_push_trace";
-pub(crate) const ERROR_HELPER_BUBBLE_HOST: &str = "__bs_error_bubble";
-
 pub(crate) const ERROR_CODE_COLLECTION_EXPECTED_ORDERED_COLLECTION: &str =
     "collection.expected_ordered_collection";
 pub(crate) const ERROR_CODE_COLLECTION_INDEX_OUT_OF_BOUNDS: &str = "collection.index_out_of_bounds";
@@ -116,31 +112,6 @@ pub(crate) fn builtin_error_location_type_path(string_table: &mut StringTable) -
 
 pub(crate) fn builtin_stack_frame_type_path(string_table: &mut StringTable) -> InternedPath {
     InternedPath::from_single_str(STACK_FRAME_TYPE_NAME, string_table)
-}
-
-#[allow(dead_code)] // Shared canonical field-name helper for parser/backend call sites.
-pub(crate) fn builtin_error_message_field_name() -> &'static str {
-    ERROR_FIELD_MESSAGE
-}
-
-#[allow(dead_code)] // Shared canonical field-name helper for parser/backend call sites.
-pub(crate) fn builtin_error_code_field_name() -> &'static str {
-    ERROR_FIELD_CODE
-}
-
-#[allow(dead_code)] // Shared canonical field-name helper for parser/backend call sites.
-pub(crate) fn builtin_error_kind_field_name() -> &'static str {
-    ERROR_FIELD_KIND
-}
-
-#[allow(dead_code)] // Shared canonical field-name helper for parser/backend call sites.
-pub(crate) fn builtin_error_location_field_name() -> &'static str {
-    ERROR_FIELD_LOCATION
-}
-
-#[allow(dead_code)] // Shared canonical field-name helper for parser/backend call sites.
-pub(crate) fn builtin_error_trace_field_name() -> &'static str {
-    ERROR_FIELD_TRACE
 }
 
 pub(crate) fn builtin_error_kind_for_code(code: &str) -> BuiltinErrorKind {
@@ -432,59 +403,5 @@ fn defaulted_optional_field(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::{
-        ERROR_FIELD_CODE, ERROR_FIELD_KIND, ERROR_FIELD_LOCATION, ERROR_FIELD_MESSAGE,
-        ERROR_FIELD_TRACE, ERROR_KIND_TYPE_NAME, ERROR_LOCATION_TYPE_NAME, ERROR_TYPE_NAME,
-        STACK_FRAME_TYPE_NAME, is_reserved_builtin_symbol, register_builtin_error_types,
-    };
-    use crate::compiler_frontend::string_interning::StringTable;
-
-    #[test]
-    fn registers_builtin_error_manifest_with_canonical_symbols() {
-        let mut string_table = StringTable::new();
-        let manifest = register_builtin_error_types(&mut string_table);
-
-        assert_eq!(manifest.declarations.len(), 4);
-        assert_eq!(manifest.reserved_symbol_paths.len(), 4);
-        assert_eq!(manifest.visible_symbol_paths.len(), 4);
-
-        let error_path = super::builtin_error_type_path(&mut string_table);
-        let error_fields = manifest
-            .resolved_struct_fields_by_path
-            .get(&error_path)
-            .expect("Error fields should be registered");
-
-        let mut field_names = error_fields
-            .iter()
-            .map(|field| {
-                field
-                    .id
-                    .name_str(&string_table)
-                    .expect("field names should exist")
-                    .to_owned()
-            })
-            .collect::<Vec<_>>();
-        field_names.sort();
-
-        assert_eq!(
-            field_names,
-            vec![
-                ERROR_FIELD_CODE.to_owned(),
-                ERROR_FIELD_KIND.to_owned(),
-                ERROR_FIELD_LOCATION.to_owned(),
-                ERROR_FIELD_MESSAGE.to_owned(),
-                ERROR_FIELD_TRACE.to_owned(),
-            ]
-        );
-    }
-
-    #[test]
-    fn reserves_builtin_error_symbol_names() {
-        assert!(is_reserved_builtin_symbol(ERROR_TYPE_NAME));
-        assert!(is_reserved_builtin_symbol(ERROR_KIND_TYPE_NAME));
-        assert!(is_reserved_builtin_symbol(ERROR_LOCATION_TYPE_NAME));
-        assert!(is_reserved_builtin_symbol(STACK_FRAME_TYPE_NAME));
-        assert!(!is_reserved_builtin_symbol("UserError"));
-    }
-}
+#[path = "tests/error_type_tests.rs"]
+mod error_type_tests;

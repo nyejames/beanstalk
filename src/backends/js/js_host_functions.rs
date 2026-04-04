@@ -2,6 +2,11 @@
 //!
 //! This keeps backend-specific JS host bindings isolated from general HIR emission logic.
 
+use crate::compiler_frontend::host_functions::{
+    COLLECTION_GET_HOST_NAME, COLLECTION_LENGTH_HOST_NAME, COLLECTION_PUSH_HOST_NAME,
+    COLLECTION_REMOVE_HOST_NAME, ERROR_BUBBLE_HOST_NAME, ERROR_PUSH_TRACE_HOST_NAME,
+    ERROR_WITH_LOCATION_HOST_NAME, IO_FUNC_NAME,
+};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
 
@@ -12,14 +17,14 @@ pub(crate) fn resolve_host_function_path(
     let name = path.name_str(string_table)?;
 
     match name {
-        "io" => Some("__bs_io"),
-        "__bs_collection_get" => Some("__bs_collection_get"),
-        "__bs_collection_push" => Some("__bs_collection_push"),
-        "__bs_collection_remove" => Some("__bs_collection_remove"),
-        "__bs_collection_length" => Some("__bs_collection_length"),
-        "__bs_error_with_location" => Some("__bs_error_with_location"),
-        "__bs_error_push_trace" => Some("__bs_error_push_trace"),
-        "__bs_error_bubble" => Some("__bs_error_bubble"),
+        IO_FUNC_NAME => Some("__bs_io"),
+        COLLECTION_GET_HOST_NAME => Some(COLLECTION_GET_HOST_NAME),
+        COLLECTION_PUSH_HOST_NAME => Some(COLLECTION_PUSH_HOST_NAME),
+        COLLECTION_REMOVE_HOST_NAME => Some(COLLECTION_REMOVE_HOST_NAME),
+        COLLECTION_LENGTH_HOST_NAME => Some(COLLECTION_LENGTH_HOST_NAME),
+        ERROR_WITH_LOCATION_HOST_NAME => Some(ERROR_WITH_LOCATION_HOST_NAME),
+        ERROR_PUSH_TRACE_HOST_NAME => Some(ERROR_PUSH_TRACE_HOST_NAME),
+        ERROR_BUBBLE_HOST_NAME => Some(ERROR_BUBBLE_HOST_NAME),
         _ => None,
     }
 }

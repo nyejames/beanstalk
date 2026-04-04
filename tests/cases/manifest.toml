@@ -217,3 +217,48 @@ tags = ["diagnostics", "ast", "results", "options"]
 id = "result_handler_without_fallback_fallthrough_rejected"
 path = "result_handler_without_fallback_fallthrough_rejected"
 tags = ["diagnostics", "ast", "results", "options"]
+
+[[case]]
+id = "structs_and_collections"
+path = "structs_and_collections"
+tags = ["success", "html", "structs", "collections"]
+
+[[case]]
+id = "collection_literal_smoke"
+path = "collection_literal_smoke"
+tags = ["success", "html", "collections"]
+
+[[case]]
+id = "collection_methods_end_to_end"
+path = "collection_methods_end_to_end"
+tags = ["success", "html", "collections"]
+
+[[case]]
+id = "collection_get_out_of_bounds"
+path = "collection_get_out_of_bounds"
+tags = ["success", "html", "collections", "results"]
+
+[[case]]
+id = "collection_indexed_write_end_to_end"
+path = "collection_indexed_write_end_to_end"
+tags = ["success", "html", "collections"]
+
+[[case]]
+id = "error_field_access_in_handler"
+path = "error_field_access_in_handler"
+tags = ["success", "html", "results", "error"]
+
+[[case]]
+id = "builtin_error_reserved_symbol_rejected"
+path = "builtin_error_reserved_symbol_rejected"
+tags = ["diagnostics", "ast", "types"]
+
+[[case]]
+id = "builtin_error_location_reserved_symbol_rejected"
+path = "builtin_error_location_reserved_symbol_rejected"
+tags = ["diagnostics", "ast", "types"]
+
+[[case]]
+id = "builtin_stack_frame_reserved_symbol_rejected"
+path = "builtin_stack_frame_reserved_symbol_rejected"
+tags = ["diagnostics", "ast", "types"]

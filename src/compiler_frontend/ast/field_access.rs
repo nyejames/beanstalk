@@ -4,13 +4,17 @@ use crate::compiler_frontend::ast::expressions::expression::{Expression, Express
 use crate::compiler_frontend::ast::statements::functions::create_function_call_arguments;
 use crate::compiler_frontend::builtins::BuiltinMethodKind;
 use crate::compiler_frontend::builtins::error_type::{
-    ERROR_HELPER_BUBBLE, ERROR_HELPER_BUBBLE_HOST, ERROR_HELPER_PUSH_TRACE,
-    ERROR_HELPER_PUSH_TRACE_HOST, ERROR_HELPER_WITH_LOCATION, ERROR_HELPER_WITH_LOCATION_HOST,
+    ERROR_HELPER_BUBBLE, ERROR_HELPER_PUSH_TRACE, ERROR_HELPER_WITH_LOCATION,
     is_builtin_error_data_type, resolve_builtin_error_location_type, resolve_builtin_error_type,
     resolve_builtin_stack_frame_type,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::host_functions::{
+    COLLECTION_GET_HOST_NAME, COLLECTION_LENGTH_HOST_NAME, COLLECTION_PUSH_HOST_NAME,
+    COLLECTION_REMOVE_HOST_NAME, ERROR_BUBBLE_HOST_NAME, ERROR_PUSH_TRACE_HOST_NAME,
+    ERROR_WITH_LOCATION_HOST_NAME,
+};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
@@ -23,11 +27,7 @@ const COLLECTION_REMOVE_NAME: &str = "remove";
 const COLLECTION_PULL_NAME: &str = "pull";
 const COLLECTION_LENGTH_NAME: &str = "length";
 
-const COLLECTION_BUILTIN_GET_PATH: &str = "__bs_collection_get";
 const COLLECTION_BUILTIN_SET_PATH: &str = "__bs_collection_set";
-const COLLECTION_BUILTIN_PUSH_PATH: &str = "__bs_collection_push";
-const COLLECTION_BUILTIN_REMOVE_PATH: &str = "__bs_collection_remove";
-const COLLECTION_BUILTIN_LENGTH_PATH: &str = "__bs_collection_length";
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum CollectionBuiltinMethod {
@@ -168,11 +168,11 @@ fn collection_builtin_path(
     string_table: &mut StringTable,
 ) -> InternedPath {
     let builtin_name = match builtin {
-        CollectionBuiltinMethod::Get => COLLECTION_BUILTIN_GET_PATH,
+        CollectionBuiltinMethod::Get => COLLECTION_GET_HOST_NAME,
         CollectionBuiltinMethod::Set => COLLECTION_BUILTIN_SET_PATH,
-        CollectionBuiltinMethod::Push => COLLECTION_BUILTIN_PUSH_PATH,
-        CollectionBuiltinMethod::Remove => COLLECTION_BUILTIN_REMOVE_PATH,
-        CollectionBuiltinMethod::Length => COLLECTION_BUILTIN_LENGTH_PATH,
+        CollectionBuiltinMethod::Push => COLLECTION_PUSH_HOST_NAME,
+        CollectionBuiltinMethod::Remove => COLLECTION_REMOVE_HOST_NAME,
+        CollectionBuiltinMethod::Length => COLLECTION_LENGTH_HOST_NAME,
         CollectionBuiltinMethod::PullDeprecated => unreachable!(),
     };
 
@@ -204,9 +204,9 @@ fn error_builtin_method_name(
 
 fn error_builtin_path(builtin: ErrorBuiltinMethod, string_table: &mut StringTable) -> InternedPath {
     let builtin_name = match builtin {
-        ErrorBuiltinMethod::WithLocation => ERROR_HELPER_WITH_LOCATION_HOST,
-        ErrorBuiltinMethod::PushTrace => ERROR_HELPER_PUSH_TRACE_HOST,
-        ErrorBuiltinMethod::Bubble => ERROR_HELPER_BUBBLE_HOST,
+        ErrorBuiltinMethod::WithLocation => ERROR_WITH_LOCATION_HOST_NAME,
+        ErrorBuiltinMethod::PushTrace => ERROR_PUSH_TRACE_HOST_NAME,
+        ErrorBuiltinMethod::Bubble => ERROR_BUBBLE_HOST_NAME,
     };
 
     InternedPath::from_single_str(builtin_name, string_table)
@@ -220,7 +220,7 @@ fn error_builtin_kind(builtin: ErrorBuiltinMethod) -> BuiltinMethodKind {
     }
 }
 
-fn parse_collection_builtin_args(
+fn parse_builtin_method_args(
     token_stream: &mut FileTokens,
     expected_types: &[DataType],
     context: &ScopeContext,
@@ -230,7 +230,7 @@ fn parse_collection_builtin_args(
     if expected_types.is_empty() {
         if token_stream.current_token_kind() != &TokenKind::OpenParenthesis {
             return_rule_error!(
-                "Collection method call is missing '(' before the argument list.",
+                "Builtin method call is missing '(' before the argument list.",
                 token_stream.current_location(),
                 {
                     CompilationStage => "AST Construction",
@@ -243,7 +243,7 @@ fn parse_collection_builtin_args(
 
         if token_stream.current_token_kind() != &TokenKind::CloseParenthesis {
             return_rule_error!(
-                "This collection method takes no arguments.",
+                "This builtin method takes no arguments.",
                 token_stream.current_location(),
                 {
                     CompilationStage => "AST Construction",
@@ -330,7 +330,7 @@ fn parse_collection_builtin_member(
 
     let (args, result_types) = match builtin {
         CollectionBuiltinMethod::Get => {
-            let args = parse_collection_builtin_args(
+            let args = parse_builtin_method_args(
                 token_stream,
                 &[DataType::Int],
                 context,
@@ -345,7 +345,7 @@ fn parse_collection_builtin_member(
             (args, vec![get_result_type])
         }
         CollectionBuiltinMethod::Set => {
-            let args = parse_collection_builtin_args(
+            let args = parse_builtin_method_args(
                 token_stream,
                 &[DataType::Int, inner_type.as_ref().to_owned()],
                 context,
@@ -355,7 +355,7 @@ fn parse_collection_builtin_member(
             (args, Vec::new())
         }
         CollectionBuiltinMethod::Push => {
-            let args = parse_collection_builtin_args(
+            let args = parse_builtin_method_args(
                 token_stream,
                 &[inner_type.as_ref().to_owned()],
                 context,
@@ -365,7 +365,7 @@ fn parse_collection_builtin_member(
             (args, Vec::new())
         }
         CollectionBuiltinMethod::Remove => {
-            let args = parse_collection_builtin_args(
+            let args = parse_builtin_method_args(
                 token_stream,
                 &[DataType::Int],
                 context,
@@ -375,7 +375,7 @@ fn parse_collection_builtin_member(
             (args, Vec::new())
         }
         CollectionBuiltinMethod::Length => {
-            let args = parse_collection_builtin_args(
+            let args = parse_builtin_method_args(
                 token_stream,
                 &[],
                 context,
@@ -456,7 +456,7 @@ fn parse_error_builtin_member(
         ErrorBuiltinMethod::WithLocation => {
             let location_type =
                 resolve_builtin_error_location_type(context, &member_location, string_table)?;
-            let args = parse_collection_builtin_args(
+            let args = parse_builtin_method_args(
                 token_stream,
                 &[location_type],
                 context,
@@ -468,7 +468,7 @@ fn parse_error_builtin_member(
         ErrorBuiltinMethod::PushTrace => {
             let frame_type =
                 resolve_builtin_stack_frame_type(context, &member_location, string_table)?;
-            let args = parse_collection_builtin_args(
+            let args = parse_builtin_method_args(
                 token_stream,
                 &[frame_type],
                 context,
@@ -478,7 +478,7 @@ fn parse_error_builtin_member(
             (args, vec![error_type])
         }
         ErrorBuiltinMethod::Bubble => {
-            let args = parse_collection_builtin_args(
+            let args = parse_builtin_method_args(
                 token_stream,
                 &[],
                 context,

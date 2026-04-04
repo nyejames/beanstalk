@@ -7,7 +7,7 @@
 use crate::compiler_frontend::ast::ast_nodes::AstNode;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ResultCallHandling};
 use crate::compiler_frontend::builtins::BuiltinMethodKind;
-use crate::compiler_frontend::builtins::error_type::ERROR_HELPER_BUBBLE_HOST;
+use crate::compiler_frontend::host_functions::ERROR_BUBBLE_HOST_NAME;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
@@ -207,7 +207,7 @@ impl<'a> HirBuilder<'a> {
         location: &SourceLocation,
     ) -> Result<Vec<Expression>, CompilerError> {
         let method_name = method_path.name_str(self.string_table).unwrap_or_default();
-        if method_name != ERROR_HELPER_BUBBLE_HOST {
+        if method_name != ERROR_BUBBLE_HOST_NAME {
             return_hir_transformation_error!(
                 format!(
                     "Error bubble context argument synthesis used for non-bubble builtin '{}'",
