@@ -1,6 +1,6 @@
 # Beanstalk Pre-Alpha Checklist
 
-This document is a working execution plan for getting the compiler to a credible first alpha.
+This is a working execution plan for getting the compiler to a credible first alpha.
 
 ## Release gates
 
@@ -13,20 +13,21 @@ These are the non-negotiable conditions for starting Alpha.
 - Compiler diagnostics are useful, accurate, consistently formatted, and visually moving toward the Nushell-style goal.
 - Cross-platform output is stable enough that Windows and macOS do not produce avoidable golden drift.
 
-## Working rules for this checklist
-
-- Small opportunistic fixes can land between listed items if they unblock the current phase.
-- Avoid parallel large features unless one is pure test expansion or pure diagnostics cleanup.
-- Prefer landing a thin complete slice over a broad partial implementation.
-- Any feature added to the supported Alpha surface must immediately gain integration coverage.
-- Any user-input panic found during this work should be treated as a release-blocking bug.
-
 ---
 
-## Phase 0 - tighten the release boundary
+## Phase 0 - tighten the test coverage
 
-### PR 0.1 - Remove panic-tolerant failure expectations from the test strategy
+### PR - Remove redundant, repetetive or poorly scoped tests
 
+This is an audit and solidification PR to make sure tests are solid before moving on.
+
+**Done when**
+- Both integration and unit tests don't have overlapping coverage 
+- The test suite only has focused and accurate integration tests
+- Tests are all separated from production code and well organised and arragened into their own folders and files
+- All tests are up to date with the current design and goals of the language, no legacy tests or support for outdated syntax or features remains
+
+### PR - Remove panic-tolerant failure expectations from the test strategy
 
 Panics stop being accepted as valid outcomes for user programs.
 
@@ -43,8 +44,7 @@ Panics stop being accepted as valid outcomes for user programs.
 
 ## Phase 1 - finish the next missing language slice
 
-### PR 1.1 - Reserve interface syntax cleanly in the parser/frontend
-
+### PR - Reserve interface syntax cleanly in the parser/frontend
 
 Reserve interface syntax now so later implementation does not require breaking syntax churn during Alpha.
 
@@ -57,7 +57,7 @@ Reserve interface syntax now so later implementation does not require breaking s
 - Interface syntax cannot be used accidentally by user code for unrelated constructs.
 - The compiler response is intentional and well formatted.
 
-### PR 1.2 - Implement basic Choice declarations end-to-end
+### PR - Implement basic Choice declarations end-to-end
 
 Replace the current explicit rejection with a narrow but real Alpha-grade enum implementation.
 
@@ -77,8 +77,7 @@ Replace the current explicit rejection with a narrow but real Alpha-grade enum i
 - Choice is no longer a deliberately rejected core feature.
 - The basic representation works through the supported pipeline.
 
-### PR 1.3 - Implement initial pattern matching for Alpha Choice scope
-
+### PR - Implement initial pattern matching for Alpha Choice scope
 
 Add the smallest stable pattern-matching feature set needed for Alpha use.
 
@@ -101,7 +100,7 @@ Add the smallest stable pattern-matching feature set needed for Alpha use.
 
 ## Phase 2 - close the core language feature gaps
 
-### PR 2.1 - Consolidate Char across the frontend and backend surface
+### PR - Consolidate Char across the frontend and backend surface
 
 Stop Char being a neglected primitive with uneven support.
 
@@ -113,7 +112,7 @@ Stop Char being a neglected primitive with uneven support.
 **Done when**
 - Char behaves like a deliberate core datatype rather than a half-kept edge type.
 
-### PR 2.2 - Add named argument passing for function calls and struct creation
+### PR - Add named argument passing for function calls and struct creation
 
 Support `as`-based named argument passing as the first non-positional call path.
 
@@ -128,7 +127,7 @@ Support `as`-based named argument passing as the first non-positional call path.
 - Named argument passing works for the chosen Alpha scope.
 - The compiler can explain bad named-argument usage cleanly.
 
-### PR 2.3 - Harden structs, records, and methods together
+### PR - Harden structs, records, and methods together
 
 Close the loop on struct/record/method behavior as one language slice.
 
@@ -141,7 +140,7 @@ Close the loop on struct/record/method behavior as one language slice.
 **Done when**
 - Structs and records feel Alpha-ready as a practical feature, not a partially assembled one.
 
-### PR 2.4 - Harden basic if expressions and logical expressions
+### PR - Harden basic if expressions and logical expressions
 
 Make these small core expression features boring and reliable.
 
@@ -157,7 +156,7 @@ Make these small core expression features boring and reliable.
 
 ## Phase 3 - expand integration coverage across the full Alpha surface
 
-### PR 3.1 - Create a language-surface integration matrix
+### PR - Create a language-surface integration matrix
 
 Track what supported language features have canonical end-to-end coverage.
 
@@ -184,7 +183,7 @@ Track what supported language features have canonical end-to-end coverage.
 **Done when**
 - Missing integration coverage is visible immediately.
 
-### PR 3.2 - Add integration coverage for the neglected language areas
+### PR - Add integration coverage for the neglected language areas
 
 Broaden the suite away from being overly concentrated on current recent work.
 
@@ -200,7 +199,7 @@ Broaden the suite away from being overly concentrated on current recent work.
 **Done when**
 - The canonical integration suite represents the supported language rather than mostly paths/results/assets.
 
-### PR 3.3 - Add backend-facing integration checks for runtime-heavy features
+### PR - Add backend-facing integration checks for runtime-heavy features
 
 Make sure JS/backend semantics are being checked where language behavior depends on runtime lowering.
 
@@ -218,7 +217,7 @@ Make sure JS/backend semantics are being checked where language behavior depends
 
 ## Phase 4 - diagnostics and compiler UX hardening
 
-### PR 4.1 - Standardize unsupported/incomplete-feature diagnostics
+### PR - Standardize unsupported/incomplete-feature diagnostics
 
 All incomplete or intentionally deferred features fail the same way: clearly and helpfully.
 
@@ -230,7 +229,7 @@ All incomplete or intentionally deferred features fail the same way: clearly and
 **Done when**
 - Unsupported features feel deliberately handled.
 
-### PR 4.2 - Improve type-checking diagnostics across common user mistakes
+### PR - Improve type-checking diagnostics across common user mistakes
 
 Push compiler errors toward useful Nushell-style presentation and clarity.
 
@@ -243,7 +242,7 @@ Push compiler errors toward useful Nushell-style presentation and clarity.
 **Done when**
 - Type errors are accurate, grounded, and visibly better than generic compiler output.
 
-### PR 4.3 - Improve formatting/rendering of compiler errors
+### PR - Improve formatting/rendering of compiler errors
 
 Move the displayed output closer to the desired final feel.
 
@@ -256,7 +255,7 @@ Move the displayed output closer to the desired final feel.
 **Done when**
 - Errors look intentional and readable, not merely structurally correct.
 
-### PR 4.4 - Add variable-name ban list / reserved near-builtins
+### PR - Add variable-name ban list / reserved near-builtins
 
 Prevent obviously stupid or misleading variable names that collide with builtin semantics.
 
@@ -273,7 +272,7 @@ Prevent obviously stupid or misleading variable names that collide with builtin 
 
 ## Phase 5 - cross-platform consistency and test stability
 
-### PR 5.1 - Finish CRLF normalization in strings and templates
+### PR - Finish CRLF normalization in strings and templates
 
 Remove avoidable Windows/macOS golden drift from source normalization and emitted outputs.
 
@@ -285,7 +284,7 @@ Remove avoidable Windows/macOS golden drift from source normalization and emitte
 **Done when**
 - Golden outputs are stable across normal Windows/macOS workflows.
 
-### PR 5.2 - Fix remaining Windows test-runner stability issues
+### PR - Fix remaining Windows test-runner stability issues
 
 Remove test-runner and lock-poisoning rough edges that still make Windows less reliable.
 
@@ -301,7 +300,7 @@ Remove test-runner and lock-poisoning rough edges that still make Windows less r
 
 ## Phase 6 - JS backend and HTML builder hardening pass
 
-### PR 6.1 - JS backend semantic audit for Alpha surface
+### PR - JS backend semantic audit for Alpha surface
 
 Verify that the JS backend behavior matches the intended Alpha language rules for the supported feature set.
 
@@ -313,7 +312,7 @@ Verify that the JS backend behavior matches the intended Alpha language rules fo
 **Done when**
 - The JS backend is trustworthy enough for real Alpha examples.
 
-### PR 6.2 - HTML builder final stabilization pass
+### PR - HTML builder final stabilization pass
 
 Treat the HTML project builder as a real Alpha product surface.
 
@@ -329,7 +328,7 @@ Treat the HTML project builder as a real Alpha product surface.
 
 ## Final pre-alpha sweep
 
-### PR 7.1 - Alpha checklist audit
+### PR - Alpha checklist audit
 
 Verify that the Alpha gates are genuinely met.
 
@@ -343,7 +342,7 @@ Verify that the Alpha gates are genuinely met.
 **Done when**
 - There is a credible yes/no answer to “is Alpha ready?”
 
-### PR 7.2 - Alpha cleanup PR
+### PR - Alpha cleanup PR
 
 Land final small consistency and hygiene fixes before the release branch/tag.
 
@@ -355,24 +354,6 @@ Land final small consistency and hygiene fixes before the release branch/tag.
 
 **Done when**
 - The repo feels intentional at the point Alpha begins.
-
----
-
-## Small in-between PR bucket
-
-Use this for fixes that appear during the main work but do not justify rewriting the sequence.
-
-Examples:
-- one-off diagnostics cleanup
-- extra integration case for a newly discovered hole
-- small parser reservation fix
-- backend assertion expansion
-- comment or style-guide consistency cleanup
-- test harness rough-edge cleanup
-
-Rule:
-- only use this bucket for genuinely small work
-- if a “small” issue reveals a broad gap, promote it into the main sequence
 
 ---
 
