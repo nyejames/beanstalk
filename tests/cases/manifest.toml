@@ -146,7 +146,37 @@ tags = ["integration","diagnostics"]
 [[case]]
 id = "choice_rejected"
 path = "choice_rejected"
+tags = ["integration","language"]
+
+[[case]]
+id = "choice_payload_decl_deferred"
+path = "choice_payload_decl_deferred"
 tags = ["integration","diagnostics"]
+
+[[case]]
+id = "choice_default_decl_deferred"
+path = "choice_default_decl_deferred"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "choice_tagged_decl_deferred"
+path = "choice_tagged_decl_deferred"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "choice_constructor_use_deferred"
+path = "choice_constructor_use_deferred"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "choice_import_visibility_non_exported"
+path = "choice_import_visibility_non_exported"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "choice_import_visibility_exported"
+path = "choice_import_visibility_exported"
+tags = ["integration","language"]
 
 [[case]]
 id = "circular_dependency"
@@ -1057,4 +1087,3 @@ tags = ["integration","language"]
 id = "white_space"
 path = "white_space"
 tags = ["integration","language"]
-

@@ -262,6 +262,36 @@ impl<'a> AstBuildState<'a> {
                         Some(header.exported),
                     );
                 }
+                HeaderKind::Choice { metadata } => {
+                    let variants = metadata
+                        .variants
+                        .iter()
+                        .map(|variant| Declaration {
+                            id: header.tokens.src_path.append(variant.name),
+                            value: Expression::no_value(
+                                variant.location.to_owned(),
+                                DataType::None,
+                                Ownership::ImmutableOwned,
+                            ),
+                        })
+                        .collect::<Vec<_>>();
+
+                    self.declarations.push(Declaration {
+                        id: header.tokens.src_path.to_owned(),
+                        value: Expression::new(
+                            ExpressionKind::NoValue,
+                            header.name_location.to_owned(),
+                            DataType::Choices(variants),
+                            Ownership::ImmutableReference,
+                        ),
+                    });
+
+                    self.register_declared_symbol(
+                        &header.tokens.src_path,
+                        &header.source_file,
+                        Some(header.exported),
+                    );
+                }
                 HeaderKind::StartFunction => {
                     let start_name = header
                         .source_file
@@ -679,13 +709,8 @@ impl<'a> AstBuildState<'a> {
                     // Constant headers are parsed into declarations in the prepass above.
                 }
 
-                HeaderKind::Choice => {
-                    return Err(self.error_messages(
-                        CompilerError::compiler_error(
-                            "Choice headers should be rejected during header parsing before AST construction.",
-                        ),
-                        string_table,
-                    ));
+                HeaderKind::Choice { .. } => {
+                    // Choice declarations are type metadata only in this phase.
                 }
 
                 HeaderKind::ConstTemplate { .. } => {
@@ -1331,3 +1356,7 @@ macro_rules! new_condition_context {
 #[cfg(test)]
 #[path = "tests/module_ast_receiver_method_tests.rs"]
 mod module_ast_receiver_method_tests;
+
+#[cfg(test)]
+#[path = "tests/choice_expression_tests.rs"]
+mod choice_expression_tests;

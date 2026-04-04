@@ -1,0 +1,1 @@
+HiddenStatus :: Ready, Busy;

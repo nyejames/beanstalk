@@ -39,6 +39,37 @@ fn parse_single_file_headers(source: &str) -> Headers {
     .expect("headers should parse")
 }
 
+fn parse_single_file_headers_with_table(source: &str) -> (Headers, StringTable) {
+    let mut string_table = StringTable::new();
+    let style_directives = StyleDirectiveRegistry::built_ins();
+    let file_path = PathBuf::from("src/#page.bst");
+    let interned_path = InternedPath::from_path_buf(&file_path, &mut string_table);
+    let file_tokens = tokenize(
+        source,
+        &interned_path,
+        TokenizeMode::Normal,
+        NewlineMode::NormalizeToLf,
+        &style_directives,
+        &mut string_table,
+        None,
+    )
+    .expect("tokenization should succeed");
+
+    let host_registry = HostRegistry::new();
+    let mut warnings = Vec::new();
+
+    let headers = parse_headers(
+        vec![file_tokens],
+        &host_registry,
+        &mut warnings,
+        &file_path,
+        &mut string_table,
+    )
+    .expect("headers should parse");
+
+    (headers, string_table)
+}
+
 fn parse_single_file_headers_with_entry(
     source: &str,
     file_path: &str,
@@ -499,5 +530,114 @@ fn duplicate_top_level_function_names_error_during_header_parsing() {
             && error
                 .msg
                 .contains("There is already a top-level declaration using this name")
+    }));
+}
+
+#[test]
+fn choice_headers_parse_unit_variants_in_declaration_order() {
+    let (headers, string_table) =
+        parse_single_file_headers_with_table("Status :: Ready,\nBusy,\nIdle,\n;\n");
+    let choice_header = headers
+        .headers
+        .iter()
+        .find(|header| matches!(header.kind, HeaderKind::Choice { .. }))
+        .expect("expected choice header");
+
+    let HeaderKind::Choice { metadata } = &choice_header.kind else {
+        panic!("expected choice metadata");
+    };
+
+    assert_eq!(metadata.variants.len(), 3, "expected three parsed variants");
+    assert_eq!(string_table.resolve(metadata.variants[0].name), "Ready");
+    assert_eq!(string_table.resolve(metadata.variants[1].name), "Busy");
+    assert_eq!(string_table.resolve(metadata.variants[2].name), "Idle");
+}
+
+#[test]
+fn choice_headers_reject_duplicate_variants() {
+    let result = parse_single_file_headers_with_entry(
+        "Status :: Ready, Ready;\n",
+        "src/#page.bst",
+        "src/#page.bst",
+    );
+    assert!(result.is_err(), "duplicate choice variants must fail");
+    let errors = result.err().expect("expected parse errors");
+
+    assert!(errors.iter().any(|error| {
+        error.msg.contains("Duplicate choice variant")
+            && error.msg.contains("Variant names must be unique")
+    }));
+}
+
+#[test]
+fn choice_headers_reject_payload_variant_forms_for_alpha() {
+    let payload_type_result = parse_single_file_headers_with_entry(
+        "Status :: Ready String;\n",
+        "src/#page.bst",
+        "src/#page.bst",
+    );
+    assert!(
+        payload_type_result.is_err(),
+        "payload choice variants must fail in alpha"
+    );
+    let payload_errors = payload_type_result
+        .err()
+        .expect("expected payload parse errors");
+    assert!(payload_errors.iter().any(|error| {
+        error
+            .msg
+            .contains("Choice payload variants are deferred for Alpha")
+    }));
+
+    let payload_paren_result = parse_single_file_headers_with_entry(
+        "Status :: Ready(String);\n",
+        "src/#page.bst",
+        "src/#page.bst",
+    );
+    assert!(
+        payload_paren_result.is_err(),
+        "constructor-style payload variants must fail in alpha"
+    );
+    let payload_paren_errors = payload_paren_result
+        .err()
+        .expect("expected constructor-style payload parse errors");
+    assert!(payload_paren_errors.iter().any(|error| {
+        error.msg.contains(
+            "Choice payload variants using constructor-style declarations ('Variant(...)') are deferred for Alpha",
+        )
+    }));
+
+    let defaults_result = parse_single_file_headers_with_entry(
+        "Status :: Ready = true;\n",
+        "src/#page.bst",
+        "src/#page.bst",
+    );
+    assert!(
+        defaults_result.is_err(),
+        "choice variant defaults must fail in alpha"
+    );
+    let default_errors = defaults_result
+        .err()
+        .expect("expected default parse errors");
+    assert!(default_errors.iter().any(|error| {
+        error
+            .msg
+            .contains("Choice variant default values are deferred for Alpha")
+    }));
+
+    let tagged_result = parse_single_file_headers_with_entry(
+        "Status :: Pending |\n    RetryCount Int,\n|;\n",
+        "src/#page.bst",
+        "src/#page.bst",
+    );
+    assert!(
+        tagged_result.is_err(),
+        "tagged choice variants must fail in alpha"
+    );
+    let tagged_errors = tagged_result.err().expect("expected tagged parse errors");
+    assert!(tagged_errors.iter().any(|error| {
+        error
+            .msg
+            .contains("Tagged choice variant bodies using '| ... |' are deferred for Alpha")
     }));
 }

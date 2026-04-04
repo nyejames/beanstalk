@@ -1,4 +1,7 @@
 use crate::compiler_frontend::ast::module_ast::{ContextKind, ScopeContext};
+use crate::compiler_frontend::ast::statements::choices::{
+    ChoiceHeaderMetadata, parse_choice_header_payload,
+};
 use crate::compiler_frontend::ast::statements::declaration_syntax::{
     DeclarationSyntax, parse_declaration_syntax,
 };
@@ -63,14 +66,14 @@ pub enum TopLevelTemplateKind {
     RuntimeTemplate,
 }
 
-#[allow(dead_code)] // Planned: `Choice` headers are reserved for tagged-union syntax.
+#[allow(dead_code)] // Planned: `ConstTemplate.file_order` is consumed by a later template pass.
 #[derive(Clone, Debug)]
 pub enum HeaderKind {
     Function { signature: FunctionSignature },
 
     Constant { metadata: ConstantHeaderMetadata },
     Struct { metadata: StructHeaderMetadata },
-    Choice, // Tagged unions. Not yet implemented in the language
+    Choice { metadata: ChoiceHeaderMetadata },
 
     ConstTemplate { file_order: usize },
 
@@ -497,6 +500,8 @@ fn starts_duplicate_top_level_header_declaration(
             token_stream.current_token_kind(),
             // Exported functions still parse like normal `name |...|` declarations.
             TokenKind::TypeParameterBracket
+                // Exported choice declarations parse as `#Name :: ...`.
+                | TokenKind::DoubleColon
         );
     }
 
@@ -508,8 +513,24 @@ fn starts_duplicate_top_level_header_declaration(
             token_stream.peek_next_token(),
             Some(TokenKind::TypeParameterBracket)
         ),
+        // `name :: ...` starts a choice declaration.
+        TokenKind::DoubleColon => symbol_is_at_top_level_statement_start(token_stream),
         _ => false,
     }
+}
+
+fn symbol_is_at_top_level_statement_start(token_stream: &FileTokens) -> bool {
+    // `parse_headers_in_file` advances once before calling duplicate detection, so:
+    // - `index - 1` is the current symbol token
+    // - `index - 2` is the token immediately before that symbol (if any)
+    if token_stream.index <= 1 {
+        return true;
+    }
+
+    matches!(
+        token_stream.tokens[token_stream.index - 2].kind,
+        TokenKind::Newline | TokenKind::End | TokenKind::ModuleStart
+    )
 }
 
 fn normalize_import_dependency_path(
@@ -606,9 +627,9 @@ fn create_header(
                         body.push(token_stream.current_token());
                     }
 
-                    // Double colons need to be closed with semicolons also
+                    // `::` is an expression/operator token (for example `Choice::Variant`) and
+                    // must not affect function-scope balancing here.
                     TokenKind::DoubleColon => {
-                        scopes_opened += 1;
                         body.push(token_stream.current_token());
                     }
 
@@ -744,14 +765,13 @@ fn create_header(
         // Should be a choice declaration
         // Choice :: Option1, Option2, Option3;
         TokenKind::DoubleColon => {
-            return_rule_error!(
-                "Choice declarations are not yet implemented in the language.",
-                token_stream.current_location(),
-                {
-                    CompilationStage => "Header Parsing",
-                    PrimarySuggestion => "Remove the '::' declaration for now or rewrite this as supported syntax",
-                }
-            )
+            // Delegate full choice grammar parsing to the dedicated choice parser module so
+            // header classification stays focused and future choice forms land in one place.
+            let choice_header = parse_choice_header_payload(token_stream, context.string_table)?;
+            body = choice_header.body;
+            kind = HeaderKind::Choice {
+                metadata: choice_header.metadata,
+            };
         }
 
         // Ignored, going into the start function

@@ -18,6 +18,7 @@ pub(crate) mod expressions {
 }
 pub(crate) mod statements {
     pub(crate) mod branching;
+    pub(crate) mod choices;
     pub(crate) mod collections;
     pub(crate) mod declaration_syntax;
     pub(crate) mod declarations;

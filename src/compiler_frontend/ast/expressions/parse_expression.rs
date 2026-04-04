@@ -12,6 +12,7 @@ use crate::compiler_frontend::ast::expressions::expression::{
 use crate::compiler_frontend::ast::expressions::struct_instance::parse_struct_constructor_expression;
 use crate::compiler_frontend::ast::field_access::{ast_node_is_place, parse_postfix_chain};
 use crate::compiler_frontend::ast::receiver_methods::free_function_receiver_method_call_error;
+use crate::compiler_frontend::ast::statements::choices::parse_choice_variant_value;
 use crate::compiler_frontend::ast::statements::declarations::create_reference;
 use crate::compiler_frontend::ast::statements::functions::{
     FunctionReturn, FunctionSignature, ReturnSlot, parse_function_call,
@@ -141,6 +142,41 @@ fn parse_identifier_or_call(
             )?;
 
             return Ok(());
+        }
+
+        if token_stream.peek_next_token() == Some(&TokenKind::DoubleColon) {
+            if matches!(&arg.value.data_type, DataType::Choices(_)) {
+                // Keep choice construction semantics centralized in `statements::choices` so
+                // parse-expression only routes the `Choice::Variant` shape.
+                let choice_value = parse_choice_variant_value(token_stream, arg, string_table)?;
+                let choice_location = choice_value.location.to_owned();
+
+                push_expression_node(
+                    token_stream,
+                    context,
+                    string_table,
+                    expression,
+                    AstNode {
+                        kind: NodeKind::Rvalue(choice_value),
+                        location: choice_location,
+                        scope: context.scope.clone(),
+                    },
+                )?;
+
+                return Ok(());
+            }
+
+            return_rule_error!(
+                format!(
+                    "'{}' is not a choice declaration. Only choices support namespaced variant construction with '::'.",
+                    string_table.resolve(id)
+                ),
+                token_stream.current_location(),
+                {
+                    CompilationStage => "Expression Parsing",
+                    PrimarySuggestion => "Use 'Choice::Variant' only when the left symbol is a declared choice type",
+                }
+            );
         }
 
         if context.kind.is_constant_context() && !arg.value.is_compile_time_constant() {
