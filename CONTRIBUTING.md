@@ -34,7 +34,7 @@ If using agents to help with contributing to this project, it is important that 
 
 Minimising redundant code and reading and validating EVERYTHING an agent produces is really important for maintaining a managable codebase. 
 
-One of the most common things I find myself doing it removing or refactoring code to reduce LOC and complexity, ask it to add more helpful, descriptive comments or telling it to keep tests separated from the rest of the code.
+You usually have to end up removing or refactoring agent generated code to reduce LOC and complexity, ask it to add more helpful, descriptive comments or tell it to keep tests separated from the rest of the code.
 
 **Tests**
 
