@@ -15,20 +15,152 @@ These are the non-negotiable conditions for starting Alpha.
 
 ---
 
-## Phase 1 - finish the next missing language slice
+## Phase 1 - Code review checkpoint
 
-### PR - Reserve trait syntax cleanly in the parser/frontend
+This phase is a deliberate cleanup and consolidation checkpoint before pushing further on language surface.
+The goal is to reduce structural risk now, remove stale paths while the compiler is still prealpha,
+and make later feature work land into a tighter codebase.
 
-Reserve trait syntax now so later implementation does not require breaking syntax churn during Alpha.
+### PR - Remove stale scaffolding and legacy leftovers
+
+Strip out obviously superseded codepaths, stale comments, dead variants, and temporary scaffolding that no longer matches the current design.
 
 **Checklist**
-- Reserve the chosen syntax in tokenization/parsing.
-- Ensure use of trait syntax produces a clear, structured “reserved / not implemented” error.
-- Add parser and integration tests for reservation behavior.
+- Audit and remove dead or effectively dead production paths that are only hanging around speculatively.
+- Remove obsolete comments and notes that describe an older compiler shape or a “placeholder-heavy” state that is no longer true.
+- Prune deprecated enum variants, unreachable fallback branches, and test-only shims that can be replaced with a cleaner seam.
+- Remove compatibility-style leftovers where the latest design has clearly won.
+- Keep any intentionally deferred scaffolding only where it has a near-term purpose and a clear comment explaining why it still exists.
 
 **Done when**
-- Trait syntax cannot be used accidentally by user code for unrelated constructs.
-- The compiler response is intentional and well formatted.
+- The repo no longer carries obvious stale baggage from earlier iterations.
+- Dead-code allowances and unreachable branches are materially reduced.
+- A new contributor can read core files without constantly tripping over outdated intent.
+
+### PR - Split AST module construction into focused passes
+
+Refactor the main AST module construction hotspot into smaller units with clearer boundaries.
+
+**Checklist**
+- Split `src/compiler_frontend/ast/module_ast.rs` into focused modules for:
+  - AST build state / shared context
+  - declaration collection
+  - import binding resolution
+  - type/signature resolution
+  - AST emission
+  - finalize/start-fragment assembly
+- Reduce `ScopeContext` accretion by separating optional capabilities or grouping related state more deliberately.
+- Replace macro-style context cloning where normal functions/builders are clearer.
+- Preserve current diagnostics and behavior exactly while improving structure.
+- Add or update tests to protect the refactor seam.
+
+**Done when**
+- `module_ast.rs` is no longer the dominant architectural hotspot.
+- AST construction reads as a sequence of named passes rather than one giant central file.
+- Context setup is easier to understand and harder to misuse.
+
+### PR - Split frontend/build orchestration by responsibility
+
+Break apart frontend orchestration and project discovery so IO, discovery, and stage sequencing are not overly concentrated in one file.
+
+**Checklist**
+- Refactor `src/build_system/create_project_modules.rs` into smaller units for:
+  - module discovery
+  - reachable-file discovery
+  - source loading
+  - import scanning
+  - per-module frontend orchestration
+- Keep `compile_project_frontend(...)` as the top-level entrypoint, but make it a thin coordinator over named helpers/modules.
+- Tighten naming around “discovery”, “loading”, and “compilation” so the responsibilities are obvious.
+- Preserve current StringTable and diagnostic handoff behavior.
+- Add regression coverage for single-file and directory-project flows while refactoring.
+
+**Done when**
+- Stage 0/frontend orchestration is easier to audit.
+- Filesystem work and compiler-pipeline work are no longer bundled together more than necessary.
+- Future module/build changes can land without expanding one already-large file.
+
+### PR - Split JS backend emitter/runtime helpers into a maintainable shape
+
+Refactor the JS backend so the runtime model and emitter logic stay understandable as more language features land.
+
+**Checklist**
+- Split `src/backends/js/mod.rs` into focused modules for:
+  - runtime prelude helpers
+  - symbol generation / naming
+  - module/function emission orchestration
+  - shared backend utilities
+- Keep the backend behavior identical while making aliasing/runtime helper responsibilities easier to see.
+- Group runtime helper emission by semantic area rather than letting one file keep growing indefinitely.
+- Add targeted tests around emitted helper presence and any runtime-sensitive behavior touched by the refactor.
+- Remove any “working by accident” layout or ordering assumptions discovered during the split.
+
+**Done when**
+- The JS backend is no longer a single oversized concentration point.
+- Runtime semantics are easier to inspect independently of formatting and symbol logic.
+- Further backend work can extend focused files instead of one catch-all module.
+
+### PR - Consolidate and simplify test infrastructure
+
+Reduce bespoke test setup duplication and split the integration runner into clearer pieces before the test surface grows further.
+
+**Checklist**
+- Refactor `src/compiler_tests/integration_test_runner.rs` into smaller modules for:
+  - manifest/expectation parsing
+  - fixture loading
+  - case execution
+  - artifact assertions
+  - rendering/reporting
+- Consolidate overlapping frontend/AST/HIR/borrow-checker test helpers where the setup logic is effectively the same.
+- Remove redundant one-off test support layers where a shared fixture path is cleaner.
+- Keep tests out of production files where practical and avoid adding new in-file test bloat.
+- Preserve current integration behavior and output while reducing maintenance cost.
+
+**Done when**
+- Test support feels like one deliberate system instead of several parallel mini-systems.
+- The integration runner can evolve without becoming a second monolith.
+- New tests can be written with less setup repetition.
+
+### PR - Add coverage for the audit-discovered blind spots
+
+Use the audit as a direct test-gap backlog and close the highest-value coverage holes before more features are added.
+
+**Checklist**
+- Add or expand coverage for:
+  - Stage 0 config parsing and validation edge cases
+  - module discovery and routing/homepage behavior
+  - top-level const-template and start-fragment ordering rules
+  - receiver method visibility/import/same-file constraints
+  - borrow-checker CFG edge cases and merge/drop-site behavior
+  - JS runtime-sensitive lowering paths
+  - Wasm request/contract validation paths
+  - output cleanup and stale artifact behavior
+- Prefer end-to-end integration coverage where it gives better protection than narrow unit tests.
+- Prune or rewrite tests that are redundant after the new coverage lands.
+
+**Done when**
+- The most important audit findings are protected by tests.
+- Regressions in recently-refactored hotspots are more likely to be caught at the right layer.
+- The suite becomes broader rather than just denser in a few areas.
+
+### PR - Run a style-guide and readability sweep across the touched areas
+
+Finish the checkpoint by making the newly-refactored code read like deliberate final code rather than churn aftermath.
+
+**Checklist**
+- Add or tighten file-level docs and WHAT/WHY comments where the refactors introduced new seams.
+- Normalize naming and function boundaries to match `docs/codebase-style-guide.md`.
+- Remove any remaining low-value comments that only narrate syntax or restate code.
+- Re-check that touched files are not carrying avoidable inline imports, broad dead-code allowances, or mixed responsibilities.
+- Run the normal verification loop:
+  - `cargo check`
+  - `cargo test`
+  - `cargo run tests`
+
+**Done when**
+- The refactor checkpoint leaves the codebase clearer, not just differently arranged.
+- The touched subsystems read consistently with the style guide.
+- This phase ends with the compiler in a tighter shape for the next language-feature work.
 
 ## Phase 2 - close the core language feature gaps
 
