@@ -84,6 +84,41 @@ fn start_function_distinguishes_user_and_host_calls() {
 }
 
 #[test]
+fn accepts_mutable_collection_argument_for_immutable_parameter() {
+    parse_single_file_ast(
+        "sum |items {Int}| -> Int:\n    return items.length()\n;\n\nvalues ~= {1, 2, 3}\ncount = sum(values)\n",
+    );
+}
+
+#[test]
+fn rejects_immutable_collection_argument_for_mutable_parameter() {
+    let error = parse_single_file_ast_error(
+        "touch |items ~{Int}| -> Int:\n    return items.length()\n;\n\nvalues = {1, 2, 3}\ncount = touch(values)\n",
+    );
+
+    assert!(
+        error.msg.contains("Type mismatch in expression"),
+        "{}",
+        error.msg
+    );
+}
+
+#[test]
+fn rejects_collection_element_type_mismatch_with_mutability_relaxation() {
+    let error = parse_single_file_ast_error(
+        "sum |items {Int}| -> Int:\n    return items.length()\n;\n\nvalues ~= {true, false}\ncount = sum(values)\n",
+    );
+
+    assert!(
+        error
+            .msg
+            .contains("Argument 1 to function 'sum' has incorrect type"),
+        "{}",
+        error.msg
+    );
+}
+
+#[test]
 fn resolves_named_struct_type_in_function_parameters() {
     let (ast, string_table) = parse_single_file_ast(
         "Point = |\n    x Int,\n|\n\nshow |value Point|:\n    io(value.x)\n;\n",

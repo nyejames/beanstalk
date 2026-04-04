@@ -25,6 +25,8 @@ pub(crate) enum WasmRuntimeHelper {
     StringPtr,
     /// Read the byte length from a finalized string handle.
     StringLen,
+    /// Convert i64 scalar values into finalized string handles for template interpolation.
+    StringFromI64,
     /// Reserved release helper for ownership tuning.
     Release,
     /// Conditional drop hook used at `possible_drop` sites.

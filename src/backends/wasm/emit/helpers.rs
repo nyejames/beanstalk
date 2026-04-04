@@ -52,6 +52,10 @@ pub(crate) fn emit_helper_function(
             // param 0: buffer  |  local 1: result_handle (scratch)
             Function::new(vec![(1, ValType::I32)])
         }
+        WasmRuntimeHelper::StringFromI64 => {
+            // param 0: value_i64 | local 1: buffer_handle
+            Function::new(vec![(1, ValType::I32)])
+        }
         WasmRuntimeHelper::StringPtr
         | WasmRuntimeHelper::StringLen
         | WasmRuntimeHelper::Release
@@ -303,6 +307,46 @@ pub(crate) fn emit_helper_function(
             const HANDLE: u32 = 0;
             function.instruction(&Instruction::LocalGet(HANDLE));
             function.instruction(&Instruction::I32Load(memarg(4)));
+            function.instruction(&Instruction::Return);
+        }
+        WasmRuntimeHelper::StringFromI64 => {
+            // WHAT: materialize a string handle from an i64 interpolation chunk.
+            // WHY: frontend template coercion currently models numeric->string as `"" + value`.
+            // A dedicated helper keeps lowering deterministic while scalar formatting support is
+            // incrementally implemented.
+            let string_new_buffer_index = plan
+                .helper_indices
+                .get(&WasmRuntimeHelper::StringNewBuffer)
+                .copied()
+                .ok_or_else(|| {
+                    CompilerError::compiler_error(
+                        "Wasm emission missing rt_string_new_buffer helper index",
+                    )
+                    .with_error_type(ErrorType::WasmGeneration)
+                })?;
+            let string_finish_index = plan
+                .helper_indices
+                .get(&WasmRuntimeHelper::StringFinish)
+                .copied()
+                .ok_or_else(|| {
+                    CompilerError::compiler_error(
+                        "Wasm emission missing rt_string_finish helper index",
+                    )
+                    .with_error_type(ErrorType::WasmGeneration)
+                })?;
+
+            const VALUE_I64: u32 = 0;
+            const BUFFER_HANDLE: u32 = 1;
+
+            // Keep the input value consumed so helper semantics remain explicit.
+            function.instruction(&Instruction::LocalGet(VALUE_I64));
+            function.instruction(&Instruction::Drop);
+
+            // Temporary phase behavior: emit an empty finalized string handle.
+            function.instruction(&Instruction::Call(string_new_buffer_index));
+            function.instruction(&Instruction::LocalSet(BUFFER_HANDLE));
+            function.instruction(&Instruction::LocalGet(BUFFER_HANDLE));
+            function.instruction(&Instruction::Call(string_finish_index));
             function.instruction(&Instruction::Return);
         }
         WasmRuntimeHelper::Release | WasmRuntimeHelper::DropIfOwned => {

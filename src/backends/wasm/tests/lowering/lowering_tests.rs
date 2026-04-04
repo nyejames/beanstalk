@@ -253,6 +253,296 @@ fn lowers_runtime_template_with_literal_and_handle_chunks_in_order() {
 }
 
 #[test]
+fn lowers_non_runtime_string_add_as_buffer_concat() {
+    let mut string_table = StringTable::new();
+    let (type_context, types) = build_type_context();
+    let function_path = InternedPath::from_single_str("render_title", &mut string_table);
+
+    let concat = expression(
+        1300,
+        HirExpressionKind::BinOp {
+            left: Box::new(string_expression(
+                1301,
+                "Title: ",
+                types.string,
+                RegionId(0),
+            )),
+            op: HirBinOp::Add,
+            right: Box::new(load_local(1302, LocalId(0), types.string, RegionId(0))),
+        },
+        types.string,
+        RegionId(0),
+        ValueKind::RValue,
+    );
+
+    let block = HirBlock {
+        id: BlockId(0),
+        region: RegionId(0),
+        locals: vec![local(0, types.string, RegionId(0))],
+        statements: vec![],
+        terminator: HirTerminator::Return(concat),
+    };
+    let function = HirFunction {
+        id: FunctionId(0),
+        entry: BlockId(0),
+        params: vec![LocalId(0)],
+        return_type: types.string,
+        return_aliases: vec![],
+    };
+    let module = build_module(
+        &mut string_table,
+        vec![(function, function_path, HirFunctionOrigin::Normal)],
+        vec![block],
+        type_context,
+        FunctionId(0),
+    );
+
+    let result = lower_hir_to_wasm_lir(
+        &module,
+        &default_borrow_facts(),
+        &WasmBackendRequest::default(),
+        &string_table,
+    )
+    .expect("non-runtime string Add should lower to buffer operations");
+
+    let lowered = result
+        .lir_module
+        .functions
+        .iter()
+        .find(|function| function.id == WasmLirFunctionId(0))
+        .expect("lowered function should be present");
+    let statements = &lowered.blocks[0].statements;
+
+    assert!(matches!(statements[0], WasmLirStmt::StringNewBuffer { .. }));
+    assert!(matches!(
+        statements[1],
+        WasmLirStmt::StringPushLiteral { .. }
+    ));
+    assert!(matches!(
+        statements[2],
+        WasmLirStmt::StringPushHandle { .. }
+    ));
+    assert!(matches!(statements[3], WasmLirStmt::StringFinish { .. }));
+}
+
+#[test]
+fn lowers_non_runtime_string_add_with_i64_chunk_via_string_from_i64() {
+    let mut string_table = StringTable::new();
+    let (type_context, types) = build_type_context();
+    let function_path = InternedPath::from_single_str("render_runtime_int", &mut string_table);
+
+    let concat = expression(
+        1310,
+        HirExpressionKind::BinOp {
+            left: Box::new(string_expression(1311, "", types.string, RegionId(0))),
+            op: HirBinOp::Add,
+            right: Box::new(load_local(1312, LocalId(0), types.int, RegionId(0))),
+        },
+        types.string,
+        RegionId(0),
+        ValueKind::RValue,
+    );
+    let block = HirBlock {
+        id: BlockId(0),
+        region: RegionId(0),
+        locals: vec![local(0, types.int, RegionId(0))],
+        statements: vec![],
+        terminator: HirTerminator::Return(concat),
+    };
+    let function = HirFunction {
+        id: FunctionId(0),
+        entry: BlockId(0),
+        params: vec![LocalId(0)],
+        return_type: types.string,
+        return_aliases: vec![],
+    };
+    let module = build_module(
+        &mut string_table,
+        vec![(function, function_path, HirFunctionOrigin::Normal)],
+        vec![block],
+        type_context,
+        FunctionId(0),
+    );
+
+    let result = lower_hir_to_wasm_lir(
+        &module,
+        &default_borrow_facts(),
+        &WasmBackendRequest::default(),
+        &string_table,
+    )
+    .expect("non-runtime string Add should bridge i64 chunks");
+    let lowered = result
+        .lir_module
+        .functions
+        .iter()
+        .find(|function| function.id == WasmLirFunctionId(0))
+        .expect("lowered function should be present");
+
+    assert!(
+        lowered.blocks[0]
+            .statements
+            .iter()
+            .any(|statement| matches!(statement, WasmLirStmt::StringFromI64 { .. })),
+        "lowered statements should include i64-to-string bridge"
+    );
+}
+
+#[test]
+fn lowers_ordered_comparison_and_numeric_add_for_control_flow() {
+    let mut string_table = StringTable::new();
+    let (type_context, types) = build_type_context();
+    let function_path = InternedPath::from_single_str("loop_like_fn", &mut string_table);
+
+    let condition = expression(
+        1400,
+        HirExpressionKind::BinOp {
+            left: Box::new(load_local(1401, LocalId(0), types.int, RegionId(0))),
+            op: HirBinOp::Le,
+            right: Box::new(int_expression(1402, 5, types.int, RegionId(0))),
+        },
+        types.boolean,
+        RegionId(0),
+        ValueKind::RValue,
+    );
+    let updated_sum = expression(
+        1403,
+        HirExpressionKind::BinOp {
+            left: Box::new(load_local(1404, LocalId(1), types.int, RegionId(0))),
+            op: HirBinOp::Add,
+            right: Box::new(int_expression(1405, 1, types.int, RegionId(0))),
+        },
+        types.int,
+        RegionId(0),
+        ValueKind::RValue,
+    );
+    let decremented_counter = expression(
+        1410,
+        HirExpressionKind::BinOp {
+            left: Box::new(load_local(1411, LocalId(0), types.int, RegionId(0))),
+            op: HirBinOp::Sub,
+            right: Box::new(int_expression(1412, 1, types.int, RegionId(0))),
+        },
+        types.int,
+        RegionId(0),
+        ValueKind::RValue,
+    );
+
+    let entry_block = HirBlock {
+        id: BlockId(0),
+        region: RegionId(0),
+        locals: vec![
+            local(0, types.int, RegionId(0)),
+            local(1, types.int, RegionId(0)),
+        ],
+        statements: vec![
+            statement(
+                1,
+                HirStatementKind::Assign {
+                    target: HirPlace::Local(LocalId(0)),
+                    value: int_expression(1406, 0, types.int, RegionId(0)),
+                },
+                1,
+            ),
+            statement(
+                2,
+                HirStatementKind::Assign {
+                    target: HirPlace::Local(LocalId(1)),
+                    value: int_expression(1407, 10, types.int, RegionId(0)),
+                },
+                2,
+            ),
+        ],
+        terminator: HirTerminator::If {
+            condition,
+            then_block: BlockId(1),
+            else_block: BlockId(2),
+        },
+    };
+    let then_block = HirBlock {
+        id: BlockId(1),
+        region: RegionId(0),
+        locals: vec![],
+        statements: vec![
+            statement(
+                3,
+                HirStatementKind::Assign {
+                    target: HirPlace::Local(LocalId(1)),
+                    value: updated_sum,
+                },
+                3,
+            ),
+            statement(
+                4,
+                HirStatementKind::Assign {
+                    target: HirPlace::Local(LocalId(0)),
+                    value: decremented_counter,
+                },
+                4,
+            ),
+        ],
+        terminator: HirTerminator::Return(load_local(1408, LocalId(1), types.int, RegionId(0))),
+    };
+    let else_block = HirBlock {
+        id: BlockId(2),
+        region: RegionId(0),
+        locals: vec![],
+        statements: vec![],
+        terminator: HirTerminator::Return(int_expression(1409, 0, types.int, RegionId(0))),
+    };
+    let function = HirFunction {
+        id: FunctionId(0),
+        entry: BlockId(0),
+        params: vec![],
+        return_type: types.int,
+        return_aliases: vec![],
+    };
+    let module = build_module(
+        &mut string_table,
+        vec![(function, function_path, HirFunctionOrigin::Normal)],
+        vec![entry_block, then_block, else_block],
+        type_context,
+        FunctionId(0),
+    );
+
+    let result = lower_hir_to_wasm_lir(
+        &module,
+        &default_borrow_facts(),
+        &WasmBackendRequest::default(),
+        &string_table,
+    )
+    .expect("ordered comparisons and Add should lower in non-runtime functions");
+
+    let lowered = result
+        .lir_module
+        .functions
+        .iter()
+        .find(|function| function.id == WasmLirFunctionId(0))
+        .expect("lowered function should be present");
+
+    assert!(
+        lowered.blocks[0]
+            .statements
+            .iter()
+            .any(|statement| matches!(statement, WasmLirStmt::OrderedLe { .. })),
+        "entry block should include ordered comparison lowering"
+    );
+    assert!(
+        lowered.blocks[1]
+            .statements
+            .iter()
+            .any(|statement| matches!(statement, WasmLirStmt::IntAdd { .. })),
+        "then block should include numeric add lowering"
+    );
+    assert!(
+        lowered.blocks[1]
+            .statements
+            .iter()
+            .any(|statement| matches!(statement, WasmLirStmt::IntSub { .. })),
+        "then block should include numeric sub lowering"
+    );
+}
+
+#[test]
 fn deduplicates_static_utf8_segments() {
     let mut string_table = StringTable::new();
     let (type_context, types) = build_type_context();

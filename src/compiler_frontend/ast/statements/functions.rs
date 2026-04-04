@@ -611,7 +611,61 @@ fn get_type_conversion_hint(from_type: &DataType, to_type: &DataType) -> String 
 
 /// Check if two types are compatible for function call arguments
 fn types_compatible(arg_type: &DataType, param_type: &DataType) -> bool {
-    param_type.accepts_value_type(arg_type)
+    if param_type.accepts_value_type(arg_type) {
+        return true;
+    }
+
+    allows_mutable_collection_for_immutable_parameter(arg_type, param_type)
+}
+
+fn allows_mutable_collection_for_immutable_parameter(
+    arg_type: &DataType,
+    param_type: &DataType,
+) -> bool {
+    // WHAT: allow passing mutable collections to immutable collection parameters.
+    // WHY: read-only call sites should accept strictly more-capable collection values without
+    // forcing caller-side copies or broadening global type-compatibility rules.
+    let (
+        DataType::Collection(arg_element, arg_ownership),
+        DataType::Collection(param_element, param_ownership),
+    ) = (arg_type, param_type)
+    else {
+        return false;
+    };
+
+    arg_ownership.is_mutable()
+        && !param_ownership.is_mutable()
+        && param_element.accepts_value_type(arg_element.as_ref())
+}
+
+fn validate_user_function_argument_types(
+    function_name: &InternedPath,
+    args: &[Expression],
+    parameters: &[Declaration],
+    location: SourceLocation,
+    string_table: &StringTable,
+) -> Result<(), CompilerError> {
+    for (index, (expression, parameter)) in args.iter().zip(parameters.iter()).enumerate() {
+        if !types_compatible(&expression.data_type, &parameter.value.data_type) {
+            return_type_error!(
+                format!(
+                    "Argument {} to function '{}' has incorrect type. Expected {}, but got {}. {}",
+                    index + 1,
+                    function_name.name_str(string_table).unwrap_or("<unknown>"),
+                    format_type_for_error(&parameter.value.data_type),
+                    format_type_for_error(&expression.data_type),
+                    get_type_conversion_hint(&expression.data_type, &parameter.value.data_type)
+                ),
+                location,
+                {
+                    CompilationStage => "Function Call Validation",
+                    PrimarySuggestion => "Convert the argument to the expected type",
+                }
+            );
+        }
+    }
+
+    Ok(())
 }
 
 // Built-in functions will do their own thing
@@ -636,6 +690,14 @@ pub fn parse_function_call(
     // Create expressions until hitting a closed parenthesis
     let args =
         create_function_call_arguments(token_stream, &signature.parameters, context, string_table)?;
+    validate_user_function_argument_types(
+        id,
+        &args,
+        &signature.parameters,
+        token_stream.current_location(),
+        string_table,
+    )?;
+
     let call = ResultHandledCall {
         name: id.to_owned(),
         args,
@@ -831,7 +893,13 @@ pub fn create_function_call_arguments(
     } else {
         let required_argument_types: Vec<DataType> = required_arguments
             .iter()
-            .map(|var| var.value.data_type.to_owned())
+            .map(|argument| match &argument.value.data_type {
+                // WHAT: keep immutable-collection argument parsing permissive.
+                // WHY: call compatibility allows mutable collections for immutable parameters.
+                // Parsing should defer this ownership-specific check to function call validation.
+                DataType::Collection(_, ownership) if !ownership.is_mutable() => DataType::Inferred,
+                _ => argument.value.data_type.to_owned(),
+            })
             .collect();
 
         let call_context = context.new_child_expression(required_argument_types.to_owned());

@@ -149,7 +149,7 @@ pub(crate) fn build_emit_plan(
     })
 }
 
-pub(crate) fn helper_emit_order() -> [WasmRuntimeHelper; 9] {
+pub(crate) fn helper_emit_order() -> [WasmRuntimeHelper; 10] {
     // WHAT: canonical helper declaration order.
     // WHY: helper function indices must be deterministic for stable exports/debug output.
     [
@@ -160,13 +160,14 @@ pub(crate) fn helper_emit_order() -> [WasmRuntimeHelper; 9] {
         WasmRuntimeHelper::StringFinish,
         WasmRuntimeHelper::StringPtr,
         WasmRuntimeHelper::StringLen,
+        WasmRuntimeHelper::StringFromI64,
         WasmRuntimeHelper::Release,
         WasmRuntimeHelper::DropIfOwned,
     ]
 }
 
 pub(crate) fn helper_signature(helper: WasmRuntimeHelper) -> WasmLirSignature {
-    use WasmAbiType::{Handle, I32};
+    use WasmAbiType::{Handle, I32, I64};
 
     match helper {
         WasmRuntimeHelper::Alloc => WasmLirSignature {
@@ -197,6 +198,10 @@ pub(crate) fn helper_signature(helper: WasmRuntimeHelper) -> WasmLirSignature {
             params: vec![Handle],
             results: vec![I32],
         },
+        WasmRuntimeHelper::StringFromI64 => WasmLirSignature {
+            params: vec![I64],
+            results: vec![Handle],
+        },
         WasmRuntimeHelper::Release => WasmLirSignature {
             params: vec![Handle],
             results: vec![],
@@ -225,6 +230,7 @@ pub(crate) fn helper_name(helper: WasmRuntimeHelper) -> &'static str {
         WasmRuntimeHelper::StringFinish => "rt_string_finish",
         WasmRuntimeHelper::StringPtr => "rt_string_ptr",
         WasmRuntimeHelper::StringLen => "rt_string_len",
+        WasmRuntimeHelper::StringFromI64 => "rt_string_from_i64",
         WasmRuntimeHelper::Release => "rt_release",
         WasmRuntimeHelper::DropIfOwned => "rt_drop_if_owned",
     }
@@ -347,6 +353,7 @@ fn module_uses_runtime_helpers(module: &WasmLirModule) -> bool {
                     WasmLirStmt::StringNewBuffer { .. }
                         | WasmLirStmt::StringPushLiteral { .. }
                         | WasmLirStmt::StringPushHandle { .. }
+                        | WasmLirStmt::StringFromI64 { .. }
                         | WasmLirStmt::StringFinish { .. }
                         | WasmLirStmt::DropIfOwned { .. }
                 ) {

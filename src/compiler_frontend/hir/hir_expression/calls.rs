@@ -7,7 +7,6 @@
 use crate::compiler_frontend::ast::ast_nodes::AstNode;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ResultCallHandling};
 use crate::compiler_frontend::builtins::BuiltinMethodKind;
-use crate::compiler_frontend::host_functions::ERROR_BUBBLE_HOST_NAME;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
@@ -17,6 +16,7 @@ use crate::compiler_frontend::hir::hir_nodes::{
     LocalId, ValueKind,
 };
 use crate::compiler_frontend::host_functions::CallTarget;
+use crate::compiler_frontend::host_functions::ERROR_BUBBLE_HOST_NAME;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::return_hir_transformation_error;

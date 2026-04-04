@@ -144,6 +144,14 @@ pub(crate) fn emit_statement(
                 WasmRuntimeHelper::StringPushHandle,
             )?));
         }
+        WasmLirStmt::StringFromI64 { dst, value } => {
+            function.instruction(&Instruction::LocalGet(local_index(*value, context)?));
+            function.instruction(&Instruction::Call(helper_index(
+                plan,
+                WasmRuntimeHelper::StringFromI64,
+            )?));
+            function.instruction(&Instruction::LocalSet(local_index(*dst, context)?));
+        }
         WasmLirStmt::StringFinish { dst, buffer } => {
             function.instruction(&Instruction::LocalGet(local_index(*buffer, context)?));
             function.instruction(&Instruction::Call(helper_index(
@@ -170,6 +178,38 @@ pub(crate) fn emit_statement(
         }
         WasmLirStmt::IntNe { dst, lhs, rhs } => {
             emit_compare(function, *lhs, *rhs, context, false)?;
+            function.instruction(&Instruction::LocalSet(local_index(*dst, context)?));
+        }
+        WasmLirStmt::IntAdd { dst, lhs, rhs } => {
+            emit_numeric_add(function, *lhs, *rhs, context, NumericAddKind::Int)?;
+            function.instruction(&Instruction::LocalSet(local_index(*dst, context)?));
+        }
+        WasmLirStmt::IntSub { dst, lhs, rhs } => {
+            emit_numeric_sub(function, *lhs, *rhs, context, NumericSubKind::Int)?;
+            function.instruction(&Instruction::LocalSet(local_index(*dst, context)?));
+        }
+        WasmLirStmt::FloatAdd { dst, lhs, rhs } => {
+            emit_numeric_add(function, *lhs, *rhs, context, NumericAddKind::Float)?;
+            function.instruction(&Instruction::LocalSet(local_index(*dst, context)?));
+        }
+        WasmLirStmt::FloatSub { dst, lhs, rhs } => {
+            emit_numeric_sub(function, *lhs, *rhs, context, NumericSubKind::Float)?;
+            function.instruction(&Instruction::LocalSet(local_index(*dst, context)?));
+        }
+        WasmLirStmt::OrderedLt { dst, lhs, rhs } => {
+            emit_ordered_compare(function, *lhs, *rhs, context, OrderedCompareKind::Lt)?;
+            function.instruction(&Instruction::LocalSet(local_index(*dst, context)?));
+        }
+        WasmLirStmt::OrderedLe { dst, lhs, rhs } => {
+            emit_ordered_compare(function, *lhs, *rhs, context, OrderedCompareKind::Le)?;
+            function.instruction(&Instruction::LocalSet(local_index(*dst, context)?));
+        }
+        WasmLirStmt::OrderedGt { dst, lhs, rhs } => {
+            emit_ordered_compare(function, *lhs, *rhs, context, OrderedCompareKind::Gt)?;
+            function.instruction(&Instruction::LocalSet(local_index(*dst, context)?));
+        }
+        WasmLirStmt::OrderedGe { dst, lhs, rhs } => {
+            emit_ordered_compare(function, *lhs, *rhs, context, OrderedCompareKind::Ge)?;
             function.instruction(&Instruction::LocalSet(local_index(*dst, context)?));
         }
     }
@@ -240,6 +280,26 @@ fn set_dispatch_target(
     Ok(())
 }
 
+#[derive(Clone, Copy)]
+enum NumericAddKind {
+    Int,
+    Float,
+}
+
+#[derive(Clone, Copy)]
+enum NumericSubKind {
+    Int,
+    Float,
+}
+
+#[derive(Clone, Copy)]
+enum OrderedCompareKind {
+    Lt,
+    Le,
+    Gt,
+    Ge,
+}
+
 fn emit_compare(
     function: &mut Function,
     lhs: WasmLirLocalId,
@@ -250,20 +310,8 @@ fn emit_compare(
     function.instruction(&Instruction::LocalGet(local_index(lhs, context)?));
     function.instruction(&Instruction::LocalGet(local_index(rhs, context)?));
 
-    let lhs_type = context.local_type_by_id.get(&lhs).copied().ok_or_else(|| {
-        CompilerError::compiler_error(format!(
-            "Wasm emission missing local type for lhs {:?} in function {:?}",
-            lhs, context.function_id
-        ))
-        .with_error_type(ErrorType::WasmGeneration)
-    })?;
-    let rhs_type = context.local_type_by_id.get(&rhs).copied().ok_or_else(|| {
-        CompilerError::compiler_error(format!(
-            "Wasm emission missing local type for rhs {:?} in function {:?}",
-            rhs, context.function_id
-        ))
-        .with_error_type(ErrorType::WasmGeneration)
-    })?;
+    let lhs_type = local_type(lhs, context, "lhs")?;
+    let rhs_type = local_type(rhs, context, "rhs")?;
     if lhs_type != rhs_type {
         return Err(CompilerError::compiler_error(format!(
             "Wasm emission type mismatch in comparison: lhs {:?} is {:?}, rhs {:?} is {:?} in {:?}",
@@ -311,6 +359,195 @@ fn emit_compare(
     }
 
     Ok(())
+}
+
+fn emit_numeric_add(
+    function: &mut Function,
+    lhs: WasmLirLocalId,
+    rhs: WasmLirLocalId,
+    context: &LirBodyEmitContext<'_>,
+    kind: NumericAddKind,
+) -> Result<(), CompilerError> {
+    function.instruction(&Instruction::LocalGet(local_index(lhs, context)?));
+    function.instruction(&Instruction::LocalGet(local_index(rhs, context)?));
+
+    let lhs_type = local_type(lhs, context, "lhs")?;
+    let rhs_type = local_type(rhs, context, "rhs")?;
+    if lhs_type != rhs_type {
+        return Err(CompilerError::compiler_error(format!(
+            "Wasm emission type mismatch in numeric add: lhs {:?} is {:?}, rhs {:?} is {:?} in {:?}",
+            lhs, lhs_type, rhs, rhs_type, context.function_id
+        ))
+        .with_error_type(ErrorType::WasmGeneration));
+    }
+
+    match kind {
+        NumericAddKind::Int => match lhs_type {
+            WasmAbiType::I64 => {
+                function.instruction(&Instruction::I64Add);
+            }
+            _ => {
+                return Err(CompilerError::compiler_error(format!(
+                    "Wasm emission cannot lower IntAdd for ABI type {:?} in function {:?}",
+                    lhs_type, context.function_id
+                ))
+                .with_error_type(ErrorType::WasmGeneration));
+            }
+        },
+        NumericAddKind::Float => match lhs_type {
+            WasmAbiType::F32 => {
+                function.instruction(&Instruction::F32Add);
+            }
+            WasmAbiType::F64 => {
+                function.instruction(&Instruction::F64Add);
+            }
+            _ => {
+                return Err(CompilerError::compiler_error(format!(
+                    "Wasm emission cannot lower FloatAdd for ABI type {:?} in function {:?}",
+                    lhs_type, context.function_id
+                ))
+                .with_error_type(ErrorType::WasmGeneration));
+            }
+        },
+    }
+
+    Ok(())
+}
+
+fn emit_ordered_compare(
+    function: &mut Function,
+    lhs: WasmLirLocalId,
+    rhs: WasmLirLocalId,
+    context: &LirBodyEmitContext<'_>,
+    kind: OrderedCompareKind,
+) -> Result<(), CompilerError> {
+    function.instruction(&Instruction::LocalGet(local_index(lhs, context)?));
+    function.instruction(&Instruction::LocalGet(local_index(rhs, context)?));
+
+    let lhs_type = local_type(lhs, context, "lhs")?;
+    let rhs_type = local_type(rhs, context, "rhs")?;
+    if lhs_type != rhs_type {
+        return Err(CompilerError::compiler_error(format!(
+            "Wasm emission type mismatch in ordered comparison: lhs {:?} is {:?}, rhs {:?} is {:?} in {:?}",
+            lhs, lhs_type, rhs, rhs_type, context.function_id
+        ))
+        .with_error_type(ErrorType::WasmGeneration));
+    }
+
+    match lhs_type {
+        WasmAbiType::I32 => {
+            function.instruction(match kind {
+                OrderedCompareKind::Lt => &Instruction::I32LtS,
+                OrderedCompareKind::Le => &Instruction::I32LeS,
+                OrderedCompareKind::Gt => &Instruction::I32GtS,
+                OrderedCompareKind::Ge => &Instruction::I32GeS,
+            });
+        }
+        WasmAbiType::I64 => {
+            function.instruction(match kind {
+                OrderedCompareKind::Lt => &Instruction::I64LtS,
+                OrderedCompareKind::Le => &Instruction::I64LeS,
+                OrderedCompareKind::Gt => &Instruction::I64GtS,
+                OrderedCompareKind::Ge => &Instruction::I64GeS,
+            });
+        }
+        WasmAbiType::F32 => {
+            function.instruction(match kind {
+                OrderedCompareKind::Lt => &Instruction::F32Lt,
+                OrderedCompareKind::Le => &Instruction::F32Le,
+                OrderedCompareKind::Gt => &Instruction::F32Gt,
+                OrderedCompareKind::Ge => &Instruction::F32Ge,
+            });
+        }
+        WasmAbiType::F64 => {
+            function.instruction(match kind {
+                OrderedCompareKind::Lt => &Instruction::F64Lt,
+                OrderedCompareKind::Le => &Instruction::F64Le,
+                OrderedCompareKind::Gt => &Instruction::F64Gt,
+                OrderedCompareKind::Ge => &Instruction::F64Ge,
+            });
+        }
+        WasmAbiType::Handle | WasmAbiType::Void => {
+            return Err(CompilerError::compiler_error(format!(
+                "Wasm emission cannot lower ordered comparison for ABI type {:?} in function {:?}",
+                lhs_type, context.function_id
+            ))
+            .with_error_type(ErrorType::WasmGeneration));
+        }
+    }
+
+    Ok(())
+}
+
+fn emit_numeric_sub(
+    function: &mut Function,
+    lhs: WasmLirLocalId,
+    rhs: WasmLirLocalId,
+    context: &LirBodyEmitContext<'_>,
+    kind: NumericSubKind,
+) -> Result<(), CompilerError> {
+    function.instruction(&Instruction::LocalGet(local_index(lhs, context)?));
+    function.instruction(&Instruction::LocalGet(local_index(rhs, context)?));
+
+    let lhs_type = local_type(lhs, context, "lhs")?;
+    let rhs_type = local_type(rhs, context, "rhs")?;
+    if lhs_type != rhs_type {
+        return Err(CompilerError::compiler_error(format!(
+            "Wasm emission type mismatch in numeric sub: lhs {:?} is {:?}, rhs {:?} is {:?} in {:?}",
+            lhs, lhs_type, rhs, rhs_type, context.function_id
+        ))
+        .with_error_type(ErrorType::WasmGeneration));
+    }
+
+    match kind {
+        NumericSubKind::Int => match lhs_type {
+            WasmAbiType::I64 => {
+                function.instruction(&Instruction::I64Sub);
+            }
+            _ => {
+                return Err(CompilerError::compiler_error(format!(
+                    "Wasm emission cannot lower IntSub for ABI type {:?} in function {:?}",
+                    lhs_type, context.function_id
+                ))
+                .with_error_type(ErrorType::WasmGeneration));
+            }
+        },
+        NumericSubKind::Float => match lhs_type {
+            WasmAbiType::F32 => {
+                function.instruction(&Instruction::F32Sub);
+            }
+            WasmAbiType::F64 => {
+                function.instruction(&Instruction::F64Sub);
+            }
+            _ => {
+                return Err(CompilerError::compiler_error(format!(
+                    "Wasm emission cannot lower FloatSub for ABI type {:?} in function {:?}",
+                    lhs_type, context.function_id
+                ))
+                .with_error_type(ErrorType::WasmGeneration));
+            }
+        },
+    }
+
+    Ok(())
+}
+
+fn local_type(
+    local_id: WasmLirLocalId,
+    context: &LirBodyEmitContext<'_>,
+    label: &str,
+) -> Result<WasmAbiType, CompilerError> {
+    context
+        .local_type_by_id
+        .get(&local_id)
+        .copied()
+        .ok_or_else(|| {
+            CompilerError::compiler_error(format!(
+                "Wasm emission missing local type for {label} {:?} in function {:?}",
+                local_id, context.function_id
+            ))
+            .with_error_type(ErrorType::WasmGeneration)
+        })
 }
 
 fn local_index(

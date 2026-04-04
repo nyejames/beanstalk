@@ -141,6 +141,27 @@ fn rejects_invalid_helper_export_policy() {
 }
 
 #[test]
+fn rejects_mismatched_numeric_add_types() {
+    let mut module = build_manual_lir_module();
+    let main = module
+        .functions
+        .iter_mut()
+        .find(|function| function.id == WasmLirFunctionId(1))
+        .expect("manual main function should be present");
+
+    main.blocks[0].statements.push(WasmLirStmt::IntAdd {
+        dst: WasmLirLocalId(13),
+        lhs: WasmLirLocalId(1),
+        rhs: WasmLirLocalId(3),
+    });
+
+    let error = emit_lir_to_wasm_module(&module, &WasmBackendRequest::default())
+        .expect_err("mismatched IntAdd operands should fail emission");
+    assert_eq!(error.error_type, ErrorType::WasmGeneration);
+    assert!(error.msg.contains("type mismatch in numeric add"));
+}
+
+#[test]
 fn rejects_unsupported_wasm_feature_flags() {
     let mut request = WasmBackendRequest::default();
     request.target_features.use_wasm_gc = true;
@@ -407,6 +428,16 @@ fn build_manual_lir_module() -> WasmLirModule {
             local(10, WasmAbiType::I32, "eq"),
             local(11, WasmAbiType::I32, "ne"),
             local(12, WasmAbiType::I32, "call_result"),
+            local(13, WasmAbiType::I64, "sum_i64"),
+            local(14, WasmAbiType::F64, "sum_f64"),
+            local(15, WasmAbiType::I32, "lt_i64"),
+            local(16, WasmAbiType::I32, "le_i64"),
+            local(17, WasmAbiType::I32, "gt_i64"),
+            local(18, WasmAbiType::I32, "ge_i64"),
+            local(19, WasmAbiType::I32, "lt_f64"),
+            local(20, WasmAbiType::I64, "sub_i64"),
+            local(21, WasmAbiType::F64, "sub_f64"),
+            local(22, WasmAbiType::Handle, "string_from_i64"),
         ],
         blocks: vec![WasmLirBlock {
             id: WasmLirBlockId(0),
@@ -466,6 +497,14 @@ fn build_manual_lir_module() -> WasmLirModule {
                     buffer: WasmLirLocalId(8),
                     handle: WasmLirLocalId(5),
                 },
+                WasmLirStmt::StringFromI64 {
+                    dst: WasmLirLocalId(22),
+                    value: WasmLirLocalId(1),
+                },
+                WasmLirStmt::StringPushHandle {
+                    buffer: WasmLirLocalId(8),
+                    handle: WasmLirLocalId(22),
+                },
                 WasmLirStmt::StringFinish {
                     dst: WasmLirLocalId(9),
                     buffer: WasmLirLocalId(8),
@@ -487,6 +526,51 @@ fn build_manual_lir_module() -> WasmLirModule {
                     dst: WasmLirLocalId(11),
                     lhs: WasmLirLocalId(0),
                     rhs: WasmLirLocalId(10),
+                },
+                WasmLirStmt::IntAdd {
+                    dst: WasmLirLocalId(13),
+                    lhs: WasmLirLocalId(1),
+                    rhs: WasmLirLocalId(1),
+                },
+                WasmLirStmt::FloatAdd {
+                    dst: WasmLirLocalId(14),
+                    lhs: WasmLirLocalId(3),
+                    rhs: WasmLirLocalId(3),
+                },
+                WasmLirStmt::IntSub {
+                    dst: WasmLirLocalId(20),
+                    lhs: WasmLirLocalId(13),
+                    rhs: WasmLirLocalId(1),
+                },
+                WasmLirStmt::FloatSub {
+                    dst: WasmLirLocalId(21),
+                    lhs: WasmLirLocalId(14),
+                    rhs: WasmLirLocalId(3),
+                },
+                WasmLirStmt::OrderedLt {
+                    dst: WasmLirLocalId(15),
+                    lhs: WasmLirLocalId(1),
+                    rhs: WasmLirLocalId(13),
+                },
+                WasmLirStmt::OrderedLe {
+                    dst: WasmLirLocalId(16),
+                    lhs: WasmLirLocalId(1),
+                    rhs: WasmLirLocalId(13),
+                },
+                WasmLirStmt::OrderedGt {
+                    dst: WasmLirLocalId(17),
+                    lhs: WasmLirLocalId(13),
+                    rhs: WasmLirLocalId(1),
+                },
+                WasmLirStmt::OrderedGe {
+                    dst: WasmLirLocalId(18),
+                    lhs: WasmLirLocalId(13),
+                    rhs: WasmLirLocalId(1),
+                },
+                WasmLirStmt::OrderedLt {
+                    dst: WasmLirLocalId(19),
+                    lhs: WasmLirLocalId(3),
+                    rhs: WasmLirLocalId(14),
                 },
             ],
             terminator: WasmLirTerminator::Return { value: None },

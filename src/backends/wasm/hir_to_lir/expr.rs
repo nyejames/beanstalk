@@ -1,12 +1,12 @@
 //! Expression lowering helpers for HIR -> Wasm LIR.
 
-use crate::backends::wasm::hir_to_lir::context::WasmFunctionLoweringContext;
+use crate::backends::wasm::hir_to_lir::context::{WasmFunctionLoweringContext, lower_type_to_abi};
 use crate::backends::wasm::hir_to_lir::static_data::intern_static_utf8;
 use crate::backends::wasm::lir::instructions::WasmLirStmt;
 use crate::backends::wasm::lir::types::{WasmAbiType, WasmLirLocalId, WasmLocalRole};
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
 use crate::compiler_frontend::hir::hir_nodes::{
-    HirBinOp, HirExpression, HirExpressionKind, HirPlace,
+    HirBinOp, HirExpression, HirExpressionKind, HirFunctionOrigin, HirPlace,
 };
 
 /// Result of lowering a single HIR expression into LIR statements and a destination local.
@@ -101,39 +101,7 @@ pub(crate) fn lower_expression(
             })
         }
         HirExpressionKind::BinOp { left, op, right } => {
-            let lhs = lower_expression(context, left, statements)?;
-            let rhs = lower_expression(context, right, statements)?;
-
-            match op {
-                HirBinOp::Eq => {
-                    let dst = context.alloc_temp(WasmAbiType::I32);
-                    statements.push(WasmLirStmt::IntEq {
-                        dst,
-                        lhs: lhs.value,
-                        rhs: rhs.value,
-                    });
-                    Ok(ExprLoweringOutput {
-                        value: dst,
-                        prefer_move: false,
-                    })
-                }
-                HirBinOp::Ne => {
-                    let dst = context.alloc_temp(WasmAbiType::I32);
-                    statements.push(WasmLirStmt::IntNe {
-                        dst,
-                        lhs: lhs.value,
-                        rhs: rhs.value,
-                    });
-                    Ok(ExprLoweringOutput {
-                        value: dst,
-                        prefer_move: false,
-                    })
-                }
-                _ => Err(CompilerError::lir_transformation(format!(
-                    "Wasm lowering does not yet support binary operator {:?}",
-                    op
-                ))),
-            }
+            lower_binary_expression(context, expression, left, *op, right, statements)
         }
         HirExpressionKind::UnaryOp { op, .. } => Err(CompilerError::lir_transformation(format!(
             "Wasm lowering does not yet support unary operator {:?}",
@@ -154,6 +122,292 @@ pub(crate) fn lower_expression(
             "Wasm lowering does not yet support this expression construct",
         )),
     }
+}
+
+fn lower_binary_expression(
+    context: &mut WasmFunctionLoweringContext<'_, '_>,
+    expression: &HirExpression,
+    left: &HirExpression,
+    op: HirBinOp,
+    right: &HirExpression,
+    statements: &mut Vec<WasmLirStmt>,
+) -> Result<ExprLoweringOutput, CompilerError> {
+    if matches!(op, HirBinOp::Add) && should_lower_as_string_concat(context, expression) {
+        return lower_string_concat_expression(context, expression, statements);
+    }
+
+    let lhs_abi = expression_abi(context, left);
+    let rhs_abi = expression_abi(context, right);
+    let lhs = lower_expression(context, left, statements)?;
+    let rhs = lower_expression(context, right, statements)?;
+
+    match op {
+        HirBinOp::Eq => {
+            let dst = context.alloc_temp(WasmAbiType::I32);
+            statements.push(WasmLirStmt::IntEq {
+                dst,
+                lhs: lhs.value,
+                rhs: rhs.value,
+            });
+            Ok(ExprLoweringOutput {
+                value: dst,
+                prefer_move: false,
+            })
+        }
+        HirBinOp::Ne => {
+            let dst = context.alloc_temp(WasmAbiType::I32);
+            statements.push(WasmLirStmt::IntNe {
+                dst,
+                lhs: lhs.value,
+                rhs: rhs.value,
+            });
+            Ok(ExprLoweringOutput {
+                value: dst,
+                prefer_move: false,
+            })
+        }
+        HirBinOp::Add => {
+            if lhs_abi != rhs_abi {
+                return Err(CompilerError::lir_transformation(format!(
+                    "Wasm lowering does not support Add for mismatched ABI types {:?} and {:?}",
+                    lhs_abi, rhs_abi
+                )));
+            }
+
+            match lhs_abi {
+                WasmAbiType::I64 => {
+                    let dst = context.alloc_temp(WasmAbiType::I64);
+                    statements.push(WasmLirStmt::IntAdd {
+                        dst,
+                        lhs: lhs.value,
+                        rhs: rhs.value,
+                    });
+                    Ok(ExprLoweringOutput {
+                        value: dst,
+                        prefer_move: false,
+                    })
+                }
+                WasmAbiType::F32 | WasmAbiType::F64 => {
+                    let dst = context.alloc_temp(lhs_abi);
+                    statements.push(WasmLirStmt::FloatAdd {
+                        dst,
+                        lhs: lhs.value,
+                        rhs: rhs.value,
+                    });
+                    Ok(ExprLoweringOutput {
+                        value: dst,
+                        prefer_move: false,
+                    })
+                }
+                _ => Err(CompilerError::lir_transformation(format!(
+                    "Wasm lowering does not support Add for ABI type {:?}",
+                    lhs_abi
+                ))),
+            }
+        }
+        HirBinOp::Sub => {
+            if lhs_abi != rhs_abi {
+                return Err(CompilerError::lir_transformation(format!(
+                    "Wasm lowering does not support Sub for mismatched ABI types {:?} and {:?}",
+                    lhs_abi, rhs_abi
+                )));
+            }
+
+            match lhs_abi {
+                WasmAbiType::I64 => {
+                    let dst = context.alloc_temp(WasmAbiType::I64);
+                    statements.push(WasmLirStmt::IntSub {
+                        dst,
+                        lhs: lhs.value,
+                        rhs: rhs.value,
+                    });
+                    Ok(ExprLoweringOutput {
+                        value: dst,
+                        prefer_move: false,
+                    })
+                }
+                WasmAbiType::F32 | WasmAbiType::F64 => {
+                    let dst = context.alloc_temp(lhs_abi);
+                    statements.push(WasmLirStmt::FloatSub {
+                        dst,
+                        lhs: lhs.value,
+                        rhs: rhs.value,
+                    });
+                    Ok(ExprLoweringOutput {
+                        value: dst,
+                        prefer_move: false,
+                    })
+                }
+                _ => Err(CompilerError::lir_transformation(format!(
+                    "Wasm lowering does not support Sub for ABI type {:?}",
+                    lhs_abi
+                ))),
+            }
+        }
+        HirBinOp::Lt | HirBinOp::Le | HirBinOp::Gt | HirBinOp::Ge => {
+            if lhs_abi != rhs_abi {
+                return Err(CompilerError::lir_transformation(format!(
+                    "Wasm lowering does not support ordered comparison {:?} for mismatched ABI types {:?} and {:?}",
+                    op, lhs_abi, rhs_abi
+                )));
+            }
+
+            match lhs_abi {
+                WasmAbiType::I32 | WasmAbiType::I64 | WasmAbiType::F32 | WasmAbiType::F64 => {
+                    let dst = context.alloc_temp(WasmAbiType::I32);
+                    let statement = match op {
+                        HirBinOp::Lt => WasmLirStmt::OrderedLt {
+                            dst,
+                            lhs: lhs.value,
+                            rhs: rhs.value,
+                        },
+                        HirBinOp::Le => WasmLirStmt::OrderedLe {
+                            dst,
+                            lhs: lhs.value,
+                            rhs: rhs.value,
+                        },
+                        HirBinOp::Gt => WasmLirStmt::OrderedGt {
+                            dst,
+                            lhs: lhs.value,
+                            rhs: rhs.value,
+                        },
+                        HirBinOp::Ge => WasmLirStmt::OrderedGe {
+                            dst,
+                            lhs: lhs.value,
+                            rhs: rhs.value,
+                        },
+                        _ => unreachable!("ordered branch already filtered non-ordered operators"),
+                    };
+                    statements.push(statement);
+                    Ok(ExprLoweringOutput {
+                        value: dst,
+                        prefer_move: false,
+                    })
+                }
+                _ => Err(CompilerError::lir_transformation(format!(
+                    "Wasm lowering does not support ordered comparison {:?} for ABI type {:?}",
+                    op, lhs_abi
+                ))),
+            }
+        }
+        _ => Err(CompilerError::lir_transformation(format!(
+            "Wasm lowering does not yet support binary operator {:?}",
+            op
+        ))),
+    }
+}
+
+fn should_lower_as_string_concat(
+    context: &WasmFunctionLoweringContext<'_, '_>,
+    expression: &HirExpression,
+) -> bool {
+    !is_runtime_template_function(context) && is_handle_type(context, expression)
+}
+
+fn lower_string_concat_expression(
+    context: &mut WasmFunctionLoweringContext<'_, '_>,
+    expression: &HirExpression,
+    statements: &mut Vec<WasmLirStmt>,
+) -> Result<ExprLoweringOutput, CompilerError> {
+    // WHAT: lower non-runtime-template string `Add` chains into explicit buffer operations.
+    // WHY: regular function bodies can still produce template-like concatenation and must emit
+    // deterministic runtime string helper calls instead of failing the lowering pass.
+    let mut chunks = Vec::new();
+    collect_string_concat_chunks(context, expression, &mut chunks);
+
+    let buffer = context.alloc_local(None, WasmAbiType::Handle, WasmLocalRole::BufferHandle);
+    statements.push(WasmLirStmt::StringNewBuffer { dst: buffer });
+
+    for chunk in chunks {
+        match &chunk.kind {
+            HirExpressionKind::StringLiteral(literal) => {
+                let static_id =
+                    intern_static_utf8(context.module_context, literal, "hir.string_concat");
+                statements.push(WasmLirStmt::StringPushLiteral {
+                    buffer,
+                    data: static_id,
+                });
+            }
+            _ => {
+                let lowered = lower_expression(context, chunk, statements)?;
+                let chunk_handle = match expression_abi(context, chunk) {
+                    WasmAbiType::Handle => lowered.value,
+                    WasmAbiType::I64 => {
+                        let converted = context.alloc_local(
+                            None,
+                            WasmAbiType::Handle,
+                            WasmLocalRole::ValueHandle,
+                        );
+                        statements.push(WasmLirStmt::StringFromI64 {
+                            dst: converted,
+                            value: lowered.value,
+                        });
+                        converted
+                    }
+                    other => {
+                        return Err(CompilerError::lir_transformation(format!(
+                            "Wasm lowering string concatenation requires handle-compatible chunks, found {:?}",
+                            other
+                        )));
+                    }
+                };
+                statements.push(WasmLirStmt::StringPushHandle {
+                    buffer,
+                    handle: chunk_handle,
+                });
+            }
+        }
+    }
+
+    let dst = context.alloc_local(None, WasmAbiType::Handle, WasmLocalRole::ValueHandle);
+    statements.push(WasmLirStmt::StringFinish { dst, buffer });
+
+    Ok(ExprLoweringOutput {
+        value: dst,
+        prefer_move: false,
+    })
+}
+
+fn collect_string_concat_chunks<'a>(
+    context: &WasmFunctionLoweringContext<'_, '_>,
+    expression: &'a HirExpression,
+    out: &mut Vec<&'a HirExpression>,
+) {
+    if let HirExpressionKind::BinOp { left, op, right } = &expression.kind
+        && matches!(op, HirBinOp::Add)
+        && is_handle_type(context, expression)
+    {
+        collect_string_concat_chunks(context, left, out);
+        collect_string_concat_chunks(context, right, out);
+        return;
+    }
+
+    out.push(expression);
+}
+
+fn is_runtime_template_function(context: &WasmFunctionLoweringContext<'_, '_>) -> bool {
+    matches!(
+        context
+            .module_context
+            .hir_module
+            .function_origins
+            .get(&context.hir_function.id),
+        Some(HirFunctionOrigin::RuntimeTemplate)
+    )
+}
+
+fn is_handle_type(
+    context: &WasmFunctionLoweringContext<'_, '_>,
+    expression: &HirExpression,
+) -> bool {
+    matches!(expression_abi(context, expression), WasmAbiType::Handle)
+}
+
+fn expression_abi(
+    context: &WasmFunctionLoweringContext<'_, '_>,
+    expression: &HirExpression,
+) -> WasmAbiType {
+    lower_type_to_abi(context.module_context, expression.ty)
 }
 
 fn lower_place_local(

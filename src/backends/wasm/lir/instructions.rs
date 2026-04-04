@@ -65,6 +65,12 @@ pub(crate) enum WasmLirStmt {
         buffer: WasmLirLocalId,
         handle: WasmLirLocalId,
     },
+    /// Scalar-to-string bridge for template interpolation paths.
+    /// NOTE: currently used for i64 chunks emitted by frontend string coercion.
+    StringFromI64 {
+        dst: WasmLirLocalId,
+        value: WasmLirLocalId,
+    },
     StringFinish {
         dst: WasmLirLocalId,
         buffer: WasmLirLocalId,
@@ -83,6 +89,46 @@ pub(crate) enum WasmLirStmt {
         rhs: WasmLirLocalId,
     },
     IntNe {
+        dst: WasmLirLocalId,
+        lhs: WasmLirLocalId,
+        rhs: WasmLirLocalId,
+    },
+    IntAdd {
+        dst: WasmLirLocalId,
+        lhs: WasmLirLocalId,
+        rhs: WasmLirLocalId,
+    },
+    IntSub {
+        dst: WasmLirLocalId,
+        lhs: WasmLirLocalId,
+        rhs: WasmLirLocalId,
+    },
+    FloatAdd {
+        dst: WasmLirLocalId,
+        lhs: WasmLirLocalId,
+        rhs: WasmLirLocalId,
+    },
+    FloatSub {
+        dst: WasmLirLocalId,
+        lhs: WasmLirLocalId,
+        rhs: WasmLirLocalId,
+    },
+    OrderedLt {
+        dst: WasmLirLocalId,
+        lhs: WasmLirLocalId,
+        rhs: WasmLirLocalId,
+    },
+    OrderedLe {
+        dst: WasmLirLocalId,
+        lhs: WasmLirLocalId,
+        rhs: WasmLirLocalId,
+    },
+    OrderedGt {
+        dst: WasmLirLocalId,
+        lhs: WasmLirLocalId,
+        rhs: WasmLirLocalId,
+    },
+    OrderedGe {
         dst: WasmLirLocalId,
         lhs: WasmLirLocalId,
         rhs: WasmLirLocalId,
