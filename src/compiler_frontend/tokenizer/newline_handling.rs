@@ -16,8 +16,7 @@ pub enum NewlineMode {
     #[default]
     NormalizeToLf,
 
-    #[allow(dead_code)]
-    // for now, since this is only used in the REPL currently which is not yet implemented
+    #[allow(dead_code)] // Deferred: needed when the REPL is implemented.
     PreserveRaw,
 }
 

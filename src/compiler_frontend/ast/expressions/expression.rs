@@ -393,7 +393,7 @@ impl Expression {
     ) -> Self {
         let result_type = value
             .data_type
-            .result_inner_type()
+            .result_ok_type()
             .cloned()
             .unwrap_or(DataType::Inferred);
         Self::new(

@@ -77,7 +77,7 @@ pub(crate) fn parse_result_fallback_values(
 }
 
 fn result_success_types(result_type: &DataType) -> Vec<DataType> {
-    let Some(inner_type) = result_type.result_inner_type() else {
+    let Some(inner_type) = result_type.result_ok_type() else {
         return vec![];
     };
 

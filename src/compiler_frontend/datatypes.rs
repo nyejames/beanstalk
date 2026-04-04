@@ -214,11 +214,6 @@ impl DataType {
         }
     }
 
-    pub fn result_inner_type(&self) -> Option<&DataType> {
-        // Backward-compatible alias used by existing callers while Result handling is migrated.
-        self.result_ok_type()
-    }
-
     pub fn accepts_value_type(&self, actual: &DataType) -> bool {
         if matches!(self, DataType::Inferred) || matches!(actual, DataType::Inferred) {
             return true;

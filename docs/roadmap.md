@@ -21,22 +21,6 @@ This phase is a deliberate cleanup and consolidation checkpoint before pushing f
 The goal is to reduce structural risk now, remove stale paths while the compiler is still prealpha,
 and make later feature work land into a tighter codebase.
 
-### PR - Remove stale scaffolding and legacy leftovers
-
-Strip out obviously superseded codepaths, stale comments, dead variants, and temporary scaffolding that no longer matches the current design.
-
-**Checklist**
-- Audit and remove dead or effectively dead production paths that are only hanging around speculatively.
-- Remove obsolete comments and notes that describe an older compiler shape or a “placeholder-heavy” state that is no longer true.
-- Prune deprecated enum variants, unreachable fallback branches, and test-only shims that can be replaced with a cleaner seam.
-- Remove compatibility-style leftovers where the latest design has clearly won.
-- Keep any intentionally deferred scaffolding only where it has a near-term purpose and a clear comment explaining why it still exists.
-
-**Done when**
-- The repo no longer carries obvious stale baggage from earlier iterations.
-- Dead-code allowances and unreachable branches are materially reduced.
-- A new contributor can read core files without constantly tripping over outdated intent.
-
 ### PR - Split AST module construction into focused passes
 
 Refactor the main AST module construction hotspot into smaller units with clearer boundaries.

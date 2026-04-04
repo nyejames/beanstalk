@@ -27,7 +27,6 @@ const COLLECTION_GET_NAME: &str = "get";
 const COLLECTION_SET_NAME: &str = "set";
 const COLLECTION_PUSH_NAME: &str = "push";
 const COLLECTION_REMOVE_NAME: &str = "remove";
-const COLLECTION_PULL_NAME: &str = "pull";
 const COLLECTION_LENGTH_NAME: &str = "length";
 
 const COLLECTION_BUILTIN_SET_PATH: &str = "__bs_collection_set";
@@ -39,7 +38,6 @@ enum CollectionBuiltinMethod {
     Push,
     Remove,
     Length,
-    PullDeprecated,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -171,7 +169,6 @@ fn collection_builtin_method_name(
         COLLECTION_SET_NAME => Some(CollectionBuiltinMethod::Set),
         COLLECTION_PUSH_NAME => Some(CollectionBuiltinMethod::Push),
         COLLECTION_REMOVE_NAME => Some(CollectionBuiltinMethod::Remove),
-        COLLECTION_PULL_NAME => Some(CollectionBuiltinMethod::PullDeprecated),
         COLLECTION_LENGTH_NAME => Some(CollectionBuiltinMethod::Length),
         _ => None,
     }
@@ -187,7 +184,6 @@ fn collection_builtin_path(
         CollectionBuiltinMethod::Push => COLLECTION_PUSH_HOST_NAME,
         CollectionBuiltinMethod::Remove => COLLECTION_REMOVE_HOST_NAME,
         CollectionBuiltinMethod::Length => COLLECTION_LENGTH_HOST_NAME,
-        CollectionBuiltinMethod::PullDeprecated => unreachable!(),
     };
 
     InternedPath::from_single_str(builtin_name, string_table)
@@ -200,7 +196,6 @@ fn collection_builtin_kind(builtin: CollectionBuiltinMethod) -> BuiltinMethodKin
         CollectionBuiltinMethod::Push => BuiltinMethodKind::CollectionPush,
         CollectionBuiltinMethod::Remove => BuiltinMethodKind::CollectionRemove,
         CollectionBuiltinMethod::Length => BuiltinMethodKind::CollectionLength,
-        CollectionBuiltinMethod::PullDeprecated => unreachable!(),
     }
 }
 
@@ -299,11 +294,7 @@ fn parse_collection_builtin_member(
         return Ok(None);
     };
 
-    let Some(builtin) = collection_builtin_method_name(member_name, string_table) else {
-        return Ok(None);
-    };
-
-    if matches!(builtin, CollectionBuiltinMethod::PullDeprecated) {
+    if string_table.resolve(member_name) == "pull" {
         return_rule_error!(
             "Collection method 'pull(...)' was removed. Use 'remove(index)' instead.",
             member_location,
@@ -313,6 +304,10 @@ fn parse_collection_builtin_member(
             }
         );
     }
+
+    let Some(builtin) = collection_builtin_method_name(member_name, string_table) else {
+        return Ok(None);
+    };
 
     if token_stream.peek_next_token() != Some(&TokenKind::OpenParenthesis) {
         return_rule_error!(
@@ -398,7 +393,6 @@ fn parse_collection_builtin_member(
             )?;
             (args, vec![DataType::Int])
         }
-        CollectionBuiltinMethod::PullDeprecated => unreachable!(),
     };
 
     if matches!(builtin, CollectionBuiltinMethod::Get)
