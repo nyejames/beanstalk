@@ -33,12 +33,17 @@ fn reports_wildcard_match_arms_as_deferred_rule_errors() {
         parse_single_file_ast_error("value = 1\nif value is:\n    case _ => io(\"one\");\n;\n");
 
     assert_eq!(error.error_type, ErrorType::Rule);
-    assert!(error.msg.contains("Wildcard patterns ('case _ =>') are deferred"));
+    assert!(
+        error
+            .msg
+            .contains("Wildcard patterns ('case _ =>') are deferred")
+    );
 }
 
 #[test]
 fn reports_unterminated_match_scope_at_end_of_file() {
-    let error = parse_single_file_ast_error("value = 1\nif value is:\n    case 1 => io(\"one\");\n");
+    let error =
+        parse_single_file_ast_error("value = 1\nif value is:\n    case 1 => io(\"one\");\n");
 
     assert_eq!(error.error_type, ErrorType::Rule);
     assert!(
@@ -54,9 +59,7 @@ fn reports_case_outside_match_scope() {
 
     assert_eq!(error.error_type, ErrorType::Syntax);
     assert!(
-        error
-            .msg
-            .contains("Unexpected 'case' in function body"),
+        error.msg.contains("Unexpected 'case' in function body"),
         "{}",
         error.msg
     );

@@ -532,7 +532,9 @@ fn unexpected_function_body_token_error(
             );
             error.new_metadata_entry(
                 ErrorMetaDataKey::PrimarySuggestion,
-                String::from("Wrap these arms in an 'if <value> is:' block or remove the stray 'case'"),
+                String::from(
+                    "Wrap these arms in an 'if <value> is:' block or remove the stray 'case'",
+                ),
             );
             error
         }

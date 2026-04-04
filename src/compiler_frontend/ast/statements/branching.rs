@@ -1,3 +1,11 @@
+//! Match and if/else branching AST construction.
+//!
+//! WHAT: parses `if`/`else` conditionals and `if value is:` match statements
+//! into AST branch and match nodes.
+//! WHY: match parsing centralizes exhaustiveness checking, deferred-feature
+//! rejection, and choice-variant resolution at the AST level so HIR lowering
+//! receives validated, normalized match structures.
+
 use crate::compiler_frontend::ast::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::Expression;
@@ -120,6 +128,12 @@ fn is_boolean_expression(expression: &Expression) -> bool {
     }
 }
 
+/// Parse a complete `if <subject> is:` match statement into a `NodeKind::Match`.
+///
+/// WHAT: loops through `case`/`else` arms, validates ordering and uniqueness, then
+/// delegates exhaustiveness checking before returning the match node.
+/// WHY: all match-level invariants (at least one case before else, no duplicates,
+/// exhaustiveness) are enforced here so downstream HIR lowering can assume valid input.
 fn create_match_node(
     subject: Expression,
     token_stream: &mut FileTokens,
@@ -330,6 +344,12 @@ fn parse_else_arm(
     )
 }
 
+/// Parse a single `case <pattern> => <body>` arm.
+///
+/// WHAT: dispatches to choice-variant or literal pattern parsing based on the
+/// scrutinee type, validates the `=>` separator, and parses the arm body.
+/// WHY: separating choice and literal paths here keeps each pattern parser focused
+/// on one concern while this function handles shared arm-level syntax validation.
 fn parse_case_arm(
     subject: &Expression,
     token_stream: &mut FileTokens,
@@ -421,6 +441,12 @@ fn parse_case_arm(
     })
 }
 
+/// Resolve a choice variant pattern to its deterministic tag index.
+///
+/// WHAT: accepts bare (`Ready`) or qualified (`Status::Ready`) variant names and
+/// normalizes them to the variant's positional index expression.
+/// WHY: match lowering compares integer tag indices, so normalizing here lets HIR
+/// treat choice arms identically to literal-int arms.
 fn parse_choice_variant_pattern(
     token_stream: &mut FileTokens,
     variants: &[Declaration],
@@ -553,12 +579,22 @@ fn parse_choice_variant_pattern(
     };
 
     Ok((
-        Expression::int(variant_index as i64, variant_location.clone(), Ownership::ImmutableOwned),
+        Expression::int(
+            variant_index as i64,
+            variant_location.clone(),
+            Ownership::ImmutableOwned,
+        ),
         variant_name,
         variant_location,
     ))
 }
 
+/// Parse a literal value pattern and type-check it against the scrutinee.
+///
+/// WHAT: accepts int, float, bool, char, string, and negative numeric literals and
+/// verifies the pattern type is compatible with the scrutinee type.
+/// WHY: catching type mismatches at parse time produces better source-located errors
+/// than deferring the check to HIR lowering.
 fn parse_literal_pattern(
     token_stream: &mut FileTokens,
     subject_type: &DataType,
@@ -602,7 +638,8 @@ fn parse_literal_pattern(
             token_stream.advance();
             match token_stream.current_token_kind() {
                 TokenKind::IntLiteral(value) => {
-                    let expression = Expression::int(-(*value), negative_location, Ownership::ImmutableOwned);
+                    let expression =
+                        Expression::int(-(*value), negative_location, Ownership::ImmutableOwned);
                     token_stream.advance();
                     expression
                 }
@@ -708,14 +745,15 @@ fn reject_deferred_pattern_lead_token(token_stream: &FileTokens) -> Result<(), C
     Ok(())
 }
 
+/// Unwrap a `Reference` wrapper so pattern checks compare against the inner value type.
 fn normalized_subject_type(data_type: &DataType) -> &DataType {
-    // Pattern checks run against the value type, not the borrow wrapper.
     match data_type {
         DataType::Reference(inner) => inner.as_ref(),
         _ => data_type,
     }
 }
 
+/// Extract the parent choice type name shared by all variant declarations for diagnostics.
 fn choice_type_name_id(variants: &[Declaration]) -> Option<StringId> {
     let mut names = variants
         .iter()
@@ -729,6 +767,12 @@ fn choice_type_name_id(variants: &[Declaration]) -> Option<StringId> {
     }
 }
 
+/// Verify that a match statement covers all possible values.
+///
+/// WHAT: for choice scrutinees, checks that every declared variant has an arm or an
+/// `else` fallback exists; for non-choice types, requires an explicit `else =>` arm.
+/// WHY: exhaustiveness at parse time prevents silent fallthrough bugs and gives users
+/// actionable diagnostics listing the specific missing variants.
 fn enforce_match_exhaustiveness(
     subject: &Expression,
     else_block: &Option<Vec<AstNode>>,

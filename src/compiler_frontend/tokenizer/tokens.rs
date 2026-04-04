@@ -451,7 +451,7 @@ pub enum TokenKind {
     InclusiveRange, // upto
 
     // Pattern matching
-    Case, // case
+    Case,     // case
     FatArrow, // =>
     Wildcard, // _
 

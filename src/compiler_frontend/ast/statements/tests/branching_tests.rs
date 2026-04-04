@@ -92,7 +92,9 @@ fn rejects_legacy_colon_match_arm_syntax() {
 
     assert_eq!(error.error_type, ErrorType::Syntax);
     assert!(
-        error.msg.contains("Legacy match arm syntax is no longer supported"),
+        error
+            .msg
+            .contains("Legacy match arm syntax is no longer supported"),
         "{}",
         error.msg
     );
@@ -109,7 +111,11 @@ fn rejects_non_exhaustive_choice_match_without_else() {
     );
 
     assert_eq!(error.error_type, ErrorType::Rule);
-    assert!(error.msg.contains("Non-exhaustive choice match"), "{}", error.msg);
+    assert!(
+        error.msg.contains("Non-exhaustive choice match"),
+        "{}",
+        error.msg
+    );
     assert!(error.msg.contains("Busy"), "{}", error.msg);
 }
 

@@ -144,8 +144,8 @@ path = "builtin_stack_frame_reserved_symbol_rejected"
 tags = ["integration","diagnostics"]
 
 [[case]]
-id = "choice_rejected"
-path = "choice_rejected"
+id = "choice_basic_declaration_and_use"
+path = "choice_basic_declaration_and_use"
 tags = ["integration","language"]
 
 [[case]]
@@ -326,6 +326,11 @@ tags = ["integration","functions","diagnostics"]
 [[case]]
 id = "diagnostic_match_arrow_separator"
 path = "diagnostic_match_arrow_separator"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "diagnostic_match_deferred_capture_pattern"
+path = "diagnostic_match_deferred_capture_pattern"
 tags = ["integration","diagnostics"]
 
 [[case]]

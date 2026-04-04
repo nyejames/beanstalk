@@ -315,6 +315,14 @@ impl<'a> HirBuilder<'a> {
         self.set_current_block(exit_block, location)
     }
 
+    /// Lower an AST match statement into explicit CFG blocks and a `Match` terminator.
+    ///
+    /// WHAT: creates a block per arm (plus optional default and merge blocks), emits
+    /// the `HirTerminator::Match`, then lowers each arm body and wires non-terminal
+    /// arms to a shared merge block.
+    /// WHY: HIR represents control flow as a flat block graph, so structured match
+    /// syntax must be decomposed here. Lazy merge-block creation avoids empty blocks
+    /// when every arm terminates explicitly.
     pub(super) fn lower_match_statement(
         &mut self,
         scrutinee: &Expression,
@@ -436,6 +444,12 @@ impl<'a> HirBuilder<'a> {
         self.set_current_block(current_block, location)
     }
 
+    /// Validate and lower a match arm pattern, rejecting non-literal expressions.
+    ///
+    /// WHAT: lowers the pattern expression and verifies it has no side-effect prelude,
+    /// is a compile-time constant, and is one of the supported literal kinds.
+    /// WHY: match dispatch relies on constant comparison values; catching non-literals
+    /// here produces clear HIR-stage errors instead of miscompilation.
     fn lower_match_literal_pattern(
         &mut self,
         condition: &Expression,
@@ -472,6 +486,7 @@ impl<'a> HirBuilder<'a> {
         Ok(lowered_pattern.value)
     }
 
+    /// Lazily create the shared merge block on the first non-terminal arm that needs it.
     fn ensure_match_merge_block(
         &mut self,
         region: crate::compiler_frontend::hir::hir_nodes::RegionId,

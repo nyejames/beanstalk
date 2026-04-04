@@ -30,47 +30,6 @@ Reserve interface syntax now so later implementation does not require breaking s
 - Interface syntax cannot be used accidentally by user code for unrelated constructs.
 - The compiler response is intentional and well formatted.
 
-### PR - Implement basic Choice declarations end-to-end (DONE - REQUIRES REVIEW)
-
-Replace the current explicit rejection with a narrow but real Alpha-grade enum implementation.
-
-**Checklist**
-- Parse basic Choice declarations.
-- Add type representation through AST and HIR.
-- Support declaration visibility and name resolution.
-- Support value construction / use for the chosen initial scope.
-- Emit diagnostics for unsupported richer tagged-union behavior that is still deferred.
-- Add success and failure integration tests.
-
-**Scope guard**
-- Keep this to basic enums for Alpha.
-- Do not expand into the full final tagged-union design yet.
-
-**Done when**
-- Choice is no longer a deliberately rejected core feature.
-- The basic representation works through the supported pipeline.
-
-### PR - Implement initial pattern matching for Alpha Choice scope
-
-Add the smallest stable pattern-matching feature set needed for Alpha use.
-
-**Checklist**
-- Implement a constrained match surface tied to current Choice scope.
-- Support simple matching over basic enum cases.
-- Enforce clear diagnostics for unsupported pattern forms.
-- Add typing checks and error paths.
-- Add integration tests for success and failure cases.
-
-**Scope guard**
-- No need to lock the full final match design.
-- Favor a conservative, stable subset.
-
-**Done when**
-- Pattern matching exists in a useful Alpha form.
-- Deferred match features fail explicitly rather than silently drifting.
-
----
-
 ## Phase 2 - close the core language feature gaps
 
 ### PR - Consolidate Char across the frontend and backend surface
@@ -332,13 +291,20 @@ Land final small consistency and hygiene fixes before the release branch/tag.
 ---
 
 ## Deferred until after Alpha
-
 These are intentionally not Alpha blockers unless they become necessary for one of the supported slices.
+
+This is a collection of notes and findings for future roadmaps once the roadmap above is complete.
 
 - builtin `Error` enrichment beyond what is already required for the current compiler/runtime surface
 - full tagged unions
 - full pattern-matching design
 - full interfaces implementation
-- broader Wasm maturity beyond the current experimental path
 - richer numeric redesign work not required by Alpha
+
+**Wasm**
+
+Broader Wasm maturity beyond the current experimental path.
+
+Notes and limitations from previous investigations:
+- The WASM backend can't handle Choice/Union types yet (maps to Handle but produces i32/i64 mismatches). 
 - rt_string_from_i64 Wasm helper: Explicitly noted in the 1ac2613 commit message as an "incremental bridge implementation". It produces valid output but is not a complete runtime implementation. This is scoped for a dedicated follow-up and does not cause panics.
