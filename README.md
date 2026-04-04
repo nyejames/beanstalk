@@ -22,13 +22,12 @@
 ## First Class String Template Syntax
 
 </div>
-<p>Beanstalk is designed to be an original, opinionated and a refreshing modern app building experience.</p>
+<p>Beanstalk is designed to be an original, opinionated and a refreshing modern app building language and ecosystem</p>
 
-<p>The build system is web first, while being modular enough to be agnostic about the backend or platform. 
+<p>The build system is web first, while being modular enough to be agnostic about the backend or platform. This opens up a future where Beanstalk can be ran or embedded anywhere.
 It originated with the desire to never have to use TypeScript, web frameworks or bloated UI/web ecosystems again.</p>
-<p>Beanstalk is an attempt to make something fresh, future aware and carefully designed from the ground up for a wide variety of applications</p>
+<p>Beanstalk is an attempt to make something fresh, future aware and carefully designed from the ground up for a wide variety of applications with the sleek feel of a modern high-level language</p>
 
-<br>
 <br>
 
 ```haskell
@@ -57,6 +56,7 @@ import @blog_styles {section, divider}
 ```
 
 The HTML build system will generate an HTML page from this code:
+
 ```haskell
 import @generators {create_post}
 import @blog_styles {page, title}
@@ -82,7 +82,7 @@ post = create_post("Boring Title", date, [$markdown:
 
 </div>
 
-- String templates that can double up as a tiny compile time HTML/markup engine or anything else you want. Perfect for UI generation and string formatting.
+- String templates that can double up as a tiny compile time HTML/markup engine or anything else you want. Perfect for UI generation and string formatting. Even comes with built-in markdown parsing.
 - Readability-first syntax. Modern, concise and consistent.
 - Modular and fast for snappy tooling and fast development builds
 - Integrated build system and tooling for web projects and beyond
@@ -97,15 +97,15 @@ post = create_post("Boring Title", date, [$markdown:
 </div>
 <strong>
 <li>
-<a href="https://github.com/nyejames/beanstalk/blob/main/docs/Beanstalk%20Language%20Overview.md">The language</a>
+<a href="https://github.com/nyejames/beanstalk/blob/main/docs/language-overview.md">The language</a>
 </li>
 <br>
 <li>
-<a href="https://github.com/nyejames/beanstalk/blob/main/docs/Beanstalk%20Compiler%20Design%20Overview.md">An Overview of the Compiler</a>
+<a href="https://github.com/nyejames/beanstalk/blob/main/docs/compiler-design-overview.md">An Overview of the Compiler</a>
 </li>
 <br>
 <li>
-<a href="https://github.com/nyejames/beanstalk/blob/main/docs/Beanstalk%20Memory%20Management.md">The memory management strategy</a>
+<a href="https://github.com/nyejames/beanstalk/blob/main/docs/memory-management-design.md">The memory management strategy</a>
 </li>
 </strong>
 
@@ -124,16 +124,11 @@ post = create_post("Boring Title", date, [$markdown:
 
 </div>
 
-Before the first alpha release here are the current goals:
+Here is the current <a href="https://github.com/nyejames/beanstalk/blob/main/docs/roadmap.md">Roadmap to the first alpha release</a>.
 
-- Stabilising the JS backend and HTML project build system
-- Make user facing errors *WAY* more comprehensive, descriptive and helpful
-- All core syntax and language features must be represented and have comprehensive tests in place throughout the whole pipeline
-
-These goals are now close to being met and a first alpha release should come within the next couple of months.
-
-The syntax and some constructs (e.g. closures, interfaces, async) are still evolving in their design before full pipeline support. Not everything is set in stone with the design yet.
+The syntax and some constructs (e.g. closures, interfaces, async, pattern matching) will still evolve in their design during the alpha stage. Not everything is completely set in stone.
 
 The Wasm backend scaffolding is in place but needs a lot of work before it is stable enough for regular projects.
+Wasm backend stability is also a goal once the lanaguge is at the Alpha stage.
 
 <br>
