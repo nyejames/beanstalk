@@ -195,7 +195,7 @@ This enables the AST to perform full type checking.
 
 ---
 
-### Stage 4: AST Construction (`src/compiler_frontend/ast/ast.rs`)
+### Stage 4: AST Construction (`src/compiler_frontend/ast/module_ast/mod.rs`)
 **Purpose**: Transform headers into Abstract Syntax Tree with compile-time optimizations.
 
 **Key Features**:

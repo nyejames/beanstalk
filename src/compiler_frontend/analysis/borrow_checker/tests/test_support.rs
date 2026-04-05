@@ -22,22 +22,13 @@ use crate::compiler_frontend::host_functions::{
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::string_interning::StringTable;
-pub(crate) use crate::compiler_frontend::test_support::test_project_path_resolver;
-use crate::compiler_frontend::tokenizer::tokens::CharPosition;
+pub(crate) use crate::compiler_frontend::test_support::{
+    test_project_path_resolver, test_source_location,
+};
 use crate::projects::settings::IMPLICIT_START_FUNC_NAME;
 
 pub(crate) fn location(line: i32) -> SourceLocation {
-    SourceLocation {
-        scope: InternedPath::new(),
-        start_pos: CharPosition {
-            line_number: line,
-            char_column: 0,
-        },
-        end_pos: CharPosition {
-            line_number: line,
-            char_column: 120, // Arbitrary number
-        },
-    }
+    test_source_location(line)
 }
 
 pub(crate) fn node(kind: NodeKind, location: SourceLocation) -> AstNode {
