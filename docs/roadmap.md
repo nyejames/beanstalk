@@ -15,6 +15,22 @@ These are the non-negotiable conditions for starting Alpha.
 
 ---
 
+## Phase 0 - Correct Type coersing behaviour
+
+This phase is about cleaning up loose ends in the types system, primarily with numerical types "Int" and "Float".
+
+**Checklist**
+- Make sure Ints correctly promote to Floats if the declaration has an explicit "Float" type.
+- Enforce the same behaviour for returns with raw int expressions in the place of a float
+- Make sure there is test coverage for the correct behaviour
+
+This is currently an error but should not be:
+`result Float = 1 + 1`
+
+Both ints (1) should be promoted to floats when Float is explicitly specified as the type.
+
+This only works for Type promotion from Int to Float (not the other way around or for any other types).
+
 ## Phase 1 - Code review checkpoint
 
 This phase is a deliberate cleanup and consolidation checkpoint before pushing further on language surface.
