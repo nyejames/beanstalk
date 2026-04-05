@@ -99,8 +99,7 @@ pub(crate) fn lower_function(
 
         let Some(lir_block) = function_context.block_mut(*block_id) else {
             return Err(CompilerError::lir_transformation(format!(
-                "Wasm lowering could not resolve lowered block mapping for {:?}",
-                block_id
+                "Wasm lowering could not resolve lowered block mapping for {block_id:?}",
             )));
         };
         lir_block.statements = lowered_statements;
@@ -160,8 +159,7 @@ fn alloc_function_locals(
     for param_local in &context.hir_function.params {
         let Some(type_id) = local_type_map.get(param_local).copied() else {
             return Err(CompilerError::lir_transformation(format!(
-                "Wasm lowering missing type for parameter local {:?}",
-                param_local
+                "Wasm lowering missing type for parameter local {param_local:?}",
             )));
         };
 
@@ -270,8 +268,7 @@ fn block_by_id_or_error<'a>(
         .find(|block| block.id == block_id)
         .ok_or_else(|| {
             CompilerError::lir_transformation(format!(
-                "Wasm lowering could not resolve block {:?} for function {:?}",
-                block_id, function_id
+                "Wasm lowering could not resolve block {block_id:?} for function {function_id:?}",
             ))
         })
 }

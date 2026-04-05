@@ -28,8 +28,7 @@ pub(crate) fn build_code_section(
             DefinedFunctionKey::Lir(function_id) => {
                 let function = lir_functions.get(&function_id.0).copied().ok_or_else(|| {
                     CompilerError::compiler_error(format!(
-                        "Wasm emission missing lowered function body for {:?}",
-                        function_id
+                        "Wasm emission missing lowered function body for {function_id:?}"
                     ))
                     .with_error_type(ErrorType::WasmGeneration)
                 })?;

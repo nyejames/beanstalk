@@ -233,31 +233,32 @@ pub(crate) fn register_builtin_error_types(string_table: &mut StringTable) -> Bu
         ),
     ];
 
-    let mut declarations = Vec::with_capacity(4);
-    declarations.push(type_declaration(
-        error_kind_path.to_owned(),
-        DataType::BuiltinErrorKind,
-        location.clone(),
-    ));
-    declarations.push(type_declaration(
-        error_location_path.to_owned(),
-        error_location_type.to_owned(),
-        location.clone(),
-    ));
-    declarations.push(type_declaration(
-        stack_frame_path.to_owned(),
-        stack_frame_type.to_owned(),
-        location.clone(),
-    ));
-    declarations.push(type_declaration(
-        error_path.to_owned(),
-        DataType::runtime_struct(
-            error_path.to_owned(),
-            error_fields.to_owned(),
-            Ownership::MutableOwned,
+    let declarations = vec![
+        type_declaration(
+            error_kind_path.to_owned(),
+            DataType::BuiltinErrorKind,
+            location.clone(),
         ),
-        location.clone(),
-    ));
+        type_declaration(
+            error_location_path.to_owned(),
+            error_location_type.to_owned(),
+            location.clone(),
+        ),
+        type_declaration(
+            stack_frame_path.to_owned(),
+            stack_frame_type.to_owned(),
+            location.clone(),
+        ),
+        type_declaration(
+            error_path.to_owned(),
+            DataType::runtime_struct(
+                error_path.to_owned(),
+                error_fields.to_owned(),
+                Ownership::MutableOwned,
+            ),
+            location.clone(),
+        ),
+    ];
 
     let mut resolved_struct_fields_by_path = FxHashMap::default();
     resolved_struct_fields_by_path.insert(error_location_path.to_owned(), error_location_fields);
@@ -354,8 +355,7 @@ fn resolve_builtin_named_type(
 
     if declaration.value.data_type == DataType::Inferred {
         return Err(CompilerError::compiler_error(format!(
-            "Builtin type '{type_name}' resolved to an inferred placeholder at {:?}.",
-            location
+            "Builtin type '{type_name}' resolved to an inferred placeholder at {location:?}.",
         )));
     }
 

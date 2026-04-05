@@ -26,8 +26,7 @@ pub(crate) fn build_export_section(
                     .copied()
                     .ok_or_else(|| {
                         CompilerError::compiler_error(format!(
-                            "Wasm emission could not resolve function index for export '{:?}'",
-                            function_id
+                            "Wasm emission could not resolve function index for export '{function_id:?}'"
                         ))
                         .with_error_type(ErrorType::WasmGeneration)
                     })?;

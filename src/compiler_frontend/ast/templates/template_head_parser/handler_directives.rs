@@ -192,7 +192,7 @@ fn normalize_provided_style_argument_value(
         },
         StyleDirectiveArgumentType::Template => match expression.kind {
             ExpressionKind::Template(template) => Ok(StyleDirectiveArgumentValue::Template(
-                template.as_ref().to_owned(),
+                Box::new(*template.to_owned()),
             )),
             _ => {
                 return_syntax_error!(

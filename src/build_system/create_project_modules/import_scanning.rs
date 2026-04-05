@@ -5,7 +5,7 @@
 use super::source_loading::extract_source_code;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::paths::paths::collect_paths_from_tokens;
+use crate::compiler_frontend::paths::const_paths::collect_paths_from_tokens;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::tokenizer::lexer::tokenize;

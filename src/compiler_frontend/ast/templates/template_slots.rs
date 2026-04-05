@@ -87,7 +87,7 @@ pub(crate) fn compose_template_with_slots(
     location: &SourceLocation,
     string_table: &StringTable,
 ) -> Result<TemplateContent, CompilerError> {
-    let slot_schema = collect_slot_schema(wrapper, &location)?;
+    let slot_schema = collect_slot_schema(wrapper, location)?;
     if !slot_schema.has_any_slots() {
         return Err(CompilerError::compiler_error(
             "Internal template wrapper state error: expected at least one '$slot' while composing.",
@@ -105,7 +105,7 @@ pub(crate) fn compose_template_with_slots(
 
         for (target, inserted_atoms) in slot_inserts {
             if !slot_schema.accepts_target(&target) {
-                return unknown_slot_target_error(&target, &location);
+                return unknown_slot_target_error(&target, location);
             }
 
             match target {
@@ -143,10 +143,10 @@ pub(crate) fn compose_template_with_slots(
         }
 
         if !slot_schema.positional_slots.is_empty() {
-            return extra_loose_content_without_default_slot_error(&location);
+            return extra_loose_content_without_default_slot_error(location);
         }
 
-        return loose_content_without_default_slot_error(&location);
+        return loose_content_without_default_slot_error(location);
     }
 
     let atoms =

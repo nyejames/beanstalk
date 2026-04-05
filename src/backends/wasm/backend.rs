@@ -85,28 +85,24 @@ fn validate_request(
     for function_id in &request.export_policy.exported_functions {
         if !seen.insert(function_id.0) {
             return Err(CompilerError::lir_transformation(format!(
-                "Wasm backend request contains duplicate export target {:?}",
-                function_id
+                "Wasm backend request contains duplicate export target {function_id:?}",
             )));
         }
 
         if !contains_function(hir_module, *function_id) {
             return Err(CompilerError::lir_transformation(format!(
-                "Wasm backend request references missing function {:?}",
-                function_id
+                "Wasm backend request references missing function {function_id:?}",
             )));
         }
 
         let Some(export_name) = request.export_policy.export_names.get(function_id) else {
             return Err(CompilerError::lir_transformation(format!(
-                "Wasm backend request missing stable export name for {:?}",
-                function_id
+                "Wasm backend request missing stable export name for {function_id:?}",
             )));
         };
         if !export_name_set.insert(export_name.to_owned()) {
             return Err(CompilerError::lir_transformation(format!(
-                "Wasm backend request contains duplicate export name '{}'",
-                export_name
+                "Wasm backend request contains duplicate export name '{export_name}'",
             )));
         }
     }
@@ -114,22 +110,19 @@ fn validate_request(
     for (function_id, export_name) in &request.export_policy.export_names {
         if !contains_function(hir_module, *function_id) {
             return Err(CompilerError::lir_transformation(format!(
-                "Wasm backend request has export name entry for unknown function {:?}",
-                function_id
+                "Wasm backend request has export name entry for unknown function {function_id:?}"
             )));
         }
 
         if export_name.trim().is_empty() {
             return Err(CompilerError::lir_transformation(format!(
-                "Wasm backend request contains an empty export name for {:?}",
-                function_id
+                "Wasm backend request contains an empty export name for {function_id:?}"
             )));
         }
 
         if !seen.contains(&function_id.0) {
             return Err(CompilerError::lir_transformation(format!(
-                "Wasm backend request has export name entry for {:?} but it is not in exported_functions",
-                function_id
+                "Wasm backend request has export name entry for {function_id:?} but it is not in exported_functions"
             )));
         }
     }
@@ -222,8 +215,7 @@ fn validate_helper_export_policy(
 
             if !export_name_set.insert(name.to_owned()) {
                 return Err(CompilerError::compiler_error(format!(
-                    "Wasm helper export '{}' collides with an existing function export name",
-                    name
+                    "Wasm helper export '{name}' collides with an existing function export name",
                 ))
                 .with_error_type(ErrorType::WasmGeneration));
             }

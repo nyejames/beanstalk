@@ -34,15 +34,13 @@ pub(crate) fn synthesize_export_wrappers(
             .get(function_id)
             .ok_or_else(|| {
                 CompilerError::lir_transformation(format!(
-                    "Wasm export wrapper synthesis missing export name for {:?}",
-                    function_id
+                    "Wasm export wrapper synthesis missing export name for {function_id:?}"
                 ))
             })?;
 
         if !seen_export_names.insert(export_name.clone()) {
             return Err(CompilerError::lir_transformation(format!(
-                "Wasm export wrapper synthesis encountered duplicate export name '{}'",
-                export_name
+                "Wasm export wrapper synthesis encountered duplicate export name '{export_name}'"
             )));
         }
 
@@ -52,8 +50,7 @@ pub(crate) fn synthesize_export_wrappers(
             .copied()
             .ok_or_else(|| {
                 CompilerError::lir_transformation(format!(
-                    "Wasm export wrapper synthesis could not resolve target function {:?}",
-                    function_id
+                    "Wasm export wrapper synthesis could not resolve target function {function_id:?}"
                 ))
             })?;
 
@@ -66,15 +63,13 @@ pub(crate) fn synthesize_export_wrappers(
             .map(|function| function.signature.clone())
             .ok_or_else(|| {
                 CompilerError::lir_transformation(format!(
-                    "Wasm export wrapper synthesis missing lowered target function {:?}",
-                    target_lir_id
+                    "Wasm export wrapper synthesis missing lowered target function {target_lir_id:?}"
                 ))
             })?;
 
         if target_signature.results.len() > 1 {
             return Err(CompilerError::lir_transformation(format!(
-                "Wasm export wrapper synthesis does not yet support multi-value returns for {:?}",
-                target_lir_id
+                "Wasm export wrapper synthesis does not yet support multi-value returns for {target_lir_id:?}"
             )));
         }
 

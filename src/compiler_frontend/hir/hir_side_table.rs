@@ -36,14 +36,14 @@ pub(crate) enum HirLocation {
 impl Display for HirLocation {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
-            HirLocation::Block(id) => write!(f, "block({})", id),
-            HirLocation::Function(id) => write!(f, "function({})", id),
-            HirLocation::Struct(id) => write!(f, "struct({})", id),
-            HirLocation::Field(id) => write!(f, "field({})", id),
-            HirLocation::Local(id) => write!(f, "local({})", id),
-            HirLocation::Statement(id) => write!(f, "statement({})", id),
-            HirLocation::Value(id) => write!(f, "value({})", id),
-            HirLocation::Terminator(block) => write!(f, "terminator({})", block),
+            HirLocation::Block(id) => write!(f, "block({id})"),
+            HirLocation::Function(id) => write!(f, "function({id})"),
+            HirLocation::Struct(id) => write!(f, "struct({id})"),
+            HirLocation::Field(id) => write!(f, "field({id})"),
+            HirLocation::Local(id) => write!(f, "local({id})"),
+            HirLocation::Statement(id) => write!(f, "statement({id})"),
+            HirLocation::Value(id) => write!(f, "value({id})"),
+            HirLocation::Terminator(block) => write!(f, "terminator({block})"),
         }
     }
 }

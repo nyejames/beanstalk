@@ -58,8 +58,7 @@ fn resolve_block_id(
 ) -> Result<crate::backends::wasm::lir::types::WasmLirBlockId, CompilerError> {
     context.block_map.get(&block_id).copied().ok_or_else(|| {
         CompilerError::lir_transformation(format!(
-            "Wasm lowering could not resolve block id {:?}",
-            block_id
+            "Wasm lowering could not resolve block id {block_id:?}"
         ))
     })
 }

@@ -285,8 +285,7 @@ fn return_behavior_for_function(
         .find(|function| function.id == function_id)
         .ok_or_else(|| {
             CompilerError::compiler_error(format!(
-                "HTML Wasm bootstrap generation missing function metadata for {:?}",
-                function_id
+                "HTML Wasm bootstrap generation missing function metadata for {function_id:?}",
             ))
         })?;
     let return_type = hir_module.type_context.get(function.return_type);

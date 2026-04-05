@@ -1,11 +1,11 @@
 //! Frontend compilation coordinator for Beanstalk projects.
 //!
 //! Dispatches to single-file or directory-project flows, then delegates to focused submodules:
-//! - `frontend_orchestration` — per-module pipeline (tokenization through borrow checking)
-//! - `module_discovery`       — project-level entry-file and reachable-file discovery
+//! - `frontend_orchestration`   — per-module pipeline (tokenization through borrow checking)
+//! - `module_discovery`         — project-level entry-file and reachable-file discovery
 //! - `reachable_file_discovery` — BFS traversal over import graphs
-//! - `import_scanning`        — per-file import path extraction
-//! - `source_loading`         — raw file I/O
+//! - `import_scanning`          — per-file import path extraction
+//! - `source_loading`           — raw file I/O
 //!
 //! Stage 0 config loading lives in `project_config`. This module begins after config has been
 //! applied to `Config`.

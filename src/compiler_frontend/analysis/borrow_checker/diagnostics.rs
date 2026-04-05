@@ -30,7 +30,7 @@ impl<'a> BorrowDiagnostics<'a> {
             .side_table
             .resolve_local_name(local_id, self.string_table)
             .map(str::to_owned)
-            .unwrap_or_else(|| format!("{}", local_id))
+            .unwrap_or_else(|| format!("{local_id}"))
     }
 
     pub(super) fn function_name(&self, function_id: FunctionId) -> String {
@@ -38,7 +38,7 @@ impl<'a> BorrowDiagnostics<'a> {
             .side_table
             .resolve_function_name(function_id, self.string_table)
             .map(str::to_owned)
-            .unwrap_or_else(|| format!("{}", function_id))
+            .unwrap_or_else(|| format!("{function_id}"))
     }
 
     pub(super) fn path_name(&self, path: &InternedPath) -> String {

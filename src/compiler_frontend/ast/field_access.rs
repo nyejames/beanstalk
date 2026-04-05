@@ -130,12 +130,12 @@ fn parse_member_name(
             let keyword = reserved_trait_keyword(token_stream.current_token_kind())
                 .expect("reserved trait token should map to a keyword");
 
-            return Err(reserved_trait_keyword_error(
+            Err(reserved_trait_keyword_error(
                 keyword,
                 token_stream.current_location(),
                 "AST Construction",
                 "Use a normal field or receiver method name until traits are implemented",
-            ));
+            ))
         }
         _ => return_rule_error!(
             format!(

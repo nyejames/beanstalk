@@ -312,7 +312,7 @@ impl DataType {
                         arg.value.data_type.display_with_table(string_table)
                     ));
                 }
-                format!("Parameters({})", arg_str)
+                format!("Parameters({arg_str})")
             }
             DataType::Struct {
                 nominal_path,
@@ -343,7 +343,7 @@ impl DataType {
                     returns_string
                         .push_str(&return_type.display_with_table(string_table).to_string());
                 }
-                format!("Returns({})", returns_string)
+                format!("Returns({returns_string})")
             }
             DataType::Function(_, signature) => {
                 let mut arg_str = String::new();
@@ -362,7 +362,7 @@ impl DataType {
                         return_type.data_type().display_with_table(string_table)
                     ));
                 }
-                format!("Function({} -> {})", arg_str, returns_string)
+                format!("Function({arg_str} -> {returns_string})")
             }
 
             DataType::Path(PathTypeKind::File) => "Path(File)".to_string(),
@@ -393,7 +393,7 @@ impl DataType {
                             .to_string(),
                     );
                 }
-                format!("Choices({})", inner_types_str)
+                format!("Choices({inner_types_str})")
             }
         }
     }

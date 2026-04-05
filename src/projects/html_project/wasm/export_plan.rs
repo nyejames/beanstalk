@@ -182,8 +182,7 @@ fn block_by_id_or_error(
         .find(|block| block.id == block_id)
         .ok_or_else(|| {
             CompilerError::compiler_error(format!(
-                "HTML Wasm export planning could not resolve block {:?}",
-                block_id
+                "HTML Wasm export planning could not resolve block {block_id:?}",
             ))
         })
 }

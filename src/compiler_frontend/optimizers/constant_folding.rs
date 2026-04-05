@@ -242,8 +242,7 @@ fn eval_int_cast(value: &Expression, string_table: &StringTable) -> Result<Expre
                 ))
             } else {
                 Err(format!(
-                    "Cannot cast Float {} to Int because it is not an exact integer value",
-                    float
+                    "Cannot cast Float {float} to Int because it is not an exact integer value"
                 ))
             }
         }
@@ -254,7 +253,7 @@ fn eval_int_cast(value: &Expression, string_table: &StringTable) -> Result<Expre
             if is_signed_integer_text(&normalized) {
                 let parsed = normalized
                     .parse::<i64>()
-                    .map_err(|_| format!("Cannot parse '{}' as Int", raw))?;
+                    .map_err(|_| format!("Cannot parse '{raw}' as Int"))?;
                 return Ok(Expression::int(
                     parsed,
                     value.location.clone(),
@@ -265,7 +264,7 @@ fn eval_int_cast(value: &Expression, string_table: &StringTable) -> Result<Expre
             if is_signed_decimal_text(&normalized) {
                 let parsed = normalized
                     .parse::<f64>()
-                    .map_err(|_| format!("Cannot parse '{}' as Int", raw))?;
+                    .map_err(|_| format!("Cannot parse '{raw}' as Int"))?;
                 if parsed.fract() == 0.0 {
                     return Ok(Expression::int(
                         parsed as i64,
@@ -274,12 +273,11 @@ fn eval_int_cast(value: &Expression, string_table: &StringTable) -> Result<Expre
                     ));
                 }
                 return Err(format!(
-                    "Cannot cast Float {} to Int because it is not an exact integer value",
-                    normalized
+                    "Cannot cast Float {normalized} to Int because it is not an exact integer value"
                 ));
             }
 
-            Err(format!("Cannot parse '{}' as Int", raw))
+            Err(format!("Cannot parse '{raw}' as Int"))
         }
         _ => Err("Int(...) only accepts Int, Float, or string values".to_string()),
     }
@@ -304,7 +302,7 @@ fn eval_float_cast(value: &Expression, string_table: &StringTable) -> Result<Exp
             if is_signed_integer_text(&normalized) || is_signed_decimal_text(&normalized) {
                 let parsed = normalized
                     .parse::<f64>()
-                    .map_err(|_| format!("Cannot parse '{}' as Float", raw))?;
+                    .map_err(|_| format!("Cannot parse '{raw}' as Float"))?;
                 return Ok(Expression::float(
                     parsed,
                     value.location.clone(),
@@ -312,7 +310,7 @@ fn eval_float_cast(value: &Expression, string_table: &StringTable) -> Result<Exp
                 ));
             }
 
-            Err(format!("Cannot parse '{}' as Float", raw))
+            Err(format!("Cannot parse '{raw}' as Float"))
         }
         _ => Err("Float(...) only accepts Int, Float, or string values".to_string()),
     }
@@ -501,7 +499,7 @@ impl Expression {
                         // Resolve both interned strings, concatenate, and intern the result
                         let lhs_str = string_table.resolve(*lhs_val);
                         let rhs_str = string_table.resolve(*rhs_val);
-                        let concatenated = format!("{}{}", lhs_str, rhs_str);
+                        let concatenated = format!("{lhs_str}{rhs_str}");
                         let interned_result = string_table.get_or_intern(concatenated);
                         ExpressionKind::StringSlice(interned_result)
                     }

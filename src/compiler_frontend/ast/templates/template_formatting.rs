@@ -291,12 +291,8 @@ fn aggregate_text_piece_location(run: &[RenderPiece]) -> Option<SourceLocation> 
         }
     }
 
-    let Some(start) = first else {
-        return None;
-    };
-    let Some(end) = last else {
-        return None;
-    };
+    let start = first?;
+    let end = last?;
 
     if start.scope != end.scope {
         return Some(start);

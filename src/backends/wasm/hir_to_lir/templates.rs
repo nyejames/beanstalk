@@ -24,8 +24,7 @@ pub(crate) fn lower_runtime_template_function(
     let hir_entry = context.hir_function.entry;
     if !context.block_map.contains_key(&hir_entry) {
         return Err(CompilerError::lir_transformation(format!(
-            "Runtime template lowering requires pre-allocated block mapping for {:?}",
-            hir_entry
+            "Runtime template lowering requires pre-allocated block mapping for {hir_entry:?}"
         )));
     }
 
@@ -37,8 +36,7 @@ pub(crate) fn lower_runtime_template_function(
         .find(|block| block.id == hir_entry)
         .ok_or_else(|| {
             CompilerError::lir_transformation(format!(
-                "Runtime template lowering could not find entry block {:?}",
-                hir_entry
+                "Runtime template lowering could not find entry block {hir_entry:?}",
             ))
         })?
         .clone();

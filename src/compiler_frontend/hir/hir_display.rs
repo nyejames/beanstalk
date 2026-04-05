@@ -414,13 +414,13 @@ impl<'a> HirDisplayContext<'a> {
                     .map(|element| self.render_expression(element))
                     .collect::<Vec<_>>()
                     .join(", ");
-                format!("[{}]", joined)
+                format!("[{joined}]")
             }
             HirExpressionKind::Range { start, end } => {
                 format!(
-                    "{}..{}",
-                    self.render_expression(start),
-                    self.render_expression(end)
+                    "{start}..{end}",
+                    start = self.render_expression(start),
+                    end = self.render_expression(end)
                 )
             }
             HirExpressionKind::TupleConstruct { elements } => {
@@ -435,9 +435,9 @@ impl<'a> HirDisplayContext<'a> {
                     .join(", ");
 
                 if elements.len() == 1 {
-                    format!("({},)", joined)
+                    format!("({joined},)")
                 } else {
-                    format!("({})", joined)
+                    format!("({joined})")
                 }
             }
             HirExpressionKind::TupleGet { tuple, index } => {
@@ -526,9 +526,9 @@ impl<'a> HirDisplayContext<'a> {
                     .collect::<Vec<_>>()
                     .join(", ");
                 if elements.len() == 1 {
-                    format!("({},)", joined)
+                    format!("({joined},)")
                 } else {
-                    format!("({})", joined)
+                    format!("({joined})")
                 }
             }
             HirPattern::Option {
@@ -632,12 +632,12 @@ impl<'a> HirDisplayContext<'a> {
                     .map(|field| self.render_type_with_context(type_context, *field, depth + 1))
                     .collect::<Vec<_>>()
                     .join(", ");
-                format!("({})", joined)
+                format!("({joined})")
             }
             HirTypeKind::Collection { element } => {
                 format!(
-                    "[{}]",
-                    self.render_type_with_context(type_context, *element, depth + 1)
+                    "[{element}]",
+                    element = self.render_type_with_context(type_context, *element, depth + 1)
                 )
             }
             HirTypeKind::Struct { struct_id } => self.struct_label(*struct_id),
@@ -669,12 +669,12 @@ impl<'a> HirDisplayContext<'a> {
                         .map(|ret| self.render_type_with_context(type_context, *ret, depth + 1))
                         .collect::<Vec<_>>()
                         .join(", ");
-                    format!("({})", joined)
+                    format!("({joined})")
                 };
 
                 match receiver {
-                    Some(receiver) => format!("fn({}{})->{}", receiver, params, returns),
-                    None => format!("fn({})->{}", params, returns),
+                    Some(receiver) => format!("fn({receiver}{params})->{returns}"),
+                    None => format!("fn({params})->{returns}"),
                 }
             }
             HirTypeKind::Option { inner } => {
@@ -694,7 +694,7 @@ impl<'a> HirDisplayContext<'a> {
                     .map(|variant| self.render_type_with_context(type_context, *variant, depth + 1))
                     .collect::<Vec<_>>()
                     .join(" | ");
-                format!("union({})", joined)
+                format!("union({joined})")
             }
         }
     }

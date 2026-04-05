@@ -42,13 +42,32 @@ pub fn check_if_valid_path(
 
 // For Windows compatability
 pub fn normalize_path(path: &Path) -> PathBuf {
-    let s = path.to_string_lossy();
+    #[cfg(windows)]
+    {
+        use std::path::{Component, Prefix};
 
-    if let Some(stripped) = s.strip_prefix(r"\\?\") {
-        PathBuf::from(stripped)
-    } else {
-        path.to_path_buf()
+        let mut components = path.components();
+
+        if let Some(Component::Prefix(prefix)) = components.next() {
+            match prefix.kind() {
+                Prefix::VerbatimDisk(_) => {
+                    // Strip \\?\C:\ → C:\
+                    return components.as_path().to_path_buf();
+                }
+                Prefix::VerbatimUNC(server, share) => {
+                    // Convert \\?\UNC\server\share → \\server\share
+                    let mut new_path = PathBuf::from(r"\\");
+                    new_path.push(server);
+                    new_path.push(share);
+                    new_path.push(components.as_path());
+                    return new_path;
+                }
+                _ => {}
+            }
+        }
     }
+
+    path.to_path_buf()
 }
 
 // Turns any path to a local file into the correct format for a URL
@@ -72,7 +91,7 @@ pub fn file_url_from_path(path: &Path, encoded: bool) -> String {
     }
 
     // Browsers expect file links to be URL-safe, so encode the filesystem path before embedding it.
-    format!("file://{}", path_string)
+    format!("file://{path_string}")
 }
 
 fn percent_encode_file_url_path(path: &str) -> String {

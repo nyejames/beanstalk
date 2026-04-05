@@ -1027,12 +1027,12 @@ fn dispatch_expression_token(
             let keyword = reserved_trait_keyword(token_stream.current_token_kind())
                 .expect("reserved trait token should map to a keyword");
 
-            return Err(reserved_trait_keyword_error(
+            Err(reserved_trait_keyword_error(
                 keyword,
                 token_stream.current_location(),
                 "Expression Parsing",
                 "Use a normal expression element until traits are implemented",
-            ));
+            ))
         }
 
         TokenKind::Hash => {
@@ -1521,12 +1521,12 @@ fn parse_copy_place_expression(
             let keyword = reserved_trait_keyword(token_stream.current_token_kind())
                 .expect("reserved trait token should map to a keyword");
 
-            return Err(reserved_trait_keyword_error(
+            Err(reserved_trait_keyword_error(
                 keyword,
                 token_stream.current_location(),
                 "Expression Parsing",
                 "Use a normal place expression until traits are implemented",
-            ));
+            ))
         }
 
         _ => {

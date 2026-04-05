@@ -90,7 +90,7 @@ impl<'hir> JsEmitter<'hir> {
         let mut identifier = sanitize_identifier(raw);
 
         if is_js_reserved(&identifier) {
-            identifier = format!("_{}", identifier);
+            identifier = format!("_{identifier}");
         }
 
         if identifier.is_empty() {
@@ -101,7 +101,7 @@ impl<'hir> JsEmitter<'hir> {
         let mut suffix = 1usize;
 
         while self.used_identifiers.contains(&candidate) {
-            candidate = format!("{}_{}", identifier, suffix);
+            candidate = format!("{identifier}_{suffix}");
             suffix += 1;
         }
 

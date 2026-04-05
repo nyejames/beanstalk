@@ -30,8 +30,7 @@ impl<'hir> JsEmitter<'hir> {
             .map(String::as_str)
             .ok_or_else(|| {
                 CompilerError::compiler_error(format!(
-                    "JavaScript backend: missing function symbol for {:?}",
-                    function_id
+                    "JavaScript backend: missing function symbol for {function_id:?}",
                 ))
             })
     }
@@ -42,8 +41,7 @@ impl<'hir> JsEmitter<'hir> {
             .map(String::as_str)
             .ok_or_else(|| {
                 CompilerError::compiler_error(format!(
-                    "JavaScript backend: missing local symbol for {:?}",
-                    local_id
+                    "JavaScript backend: missing local symbol for {local_id:?}"
                 ))
             })
     }
@@ -54,8 +52,7 @@ impl<'hir> JsEmitter<'hir> {
             .map(String::as_str)
             .ok_or_else(|| {
                 CompilerError::compiler_error(format!(
-                    "JavaScript backend: missing field symbol for {:?}",
-                    field_id
+                    "JavaScript backend: missing field symbol for {field_id:?}"
                 ))
             })
     }
@@ -63,8 +60,7 @@ impl<'hir> JsEmitter<'hir> {
     pub(crate) fn block_by_id(&self, block_id: BlockId) -> Result<&'hir HirBlock, CompilerError> {
         self.blocks_by_id.get(&block_id).copied().ok_or_else(|| {
             CompilerError::compiler_error(format!(
-                "JavaScript backend: block {:?} not found in HIR module",
-                block_id
+                "JavaScript backend: block {block_id:?} not found in HIR module"
             ))
         })
     }
@@ -131,7 +127,7 @@ impl<'hir> JsEmitter<'hir> {
         let line = location.start_pos.line_number + 1;
         let start = location.start_pos.char_column;
         let end = location.end_pos.char_column;
-        self.emit_line(&format!("// source {}:{}-{}", line, start, end));
+        self.emit_line(&format!("// source {line}:{start}-{end}"));
     }
 
     pub(crate) fn with_indent<F>(&mut self, mut callback: F)
@@ -168,7 +164,7 @@ pub(crate) fn sanitize_identifier(raw: &str) -> String {
         .next()
         .is_some_and(|first| first.is_ascii_digit())
     {
-        format!("_{}", result)
+        format!("_{result}")
     } else {
         result
     }

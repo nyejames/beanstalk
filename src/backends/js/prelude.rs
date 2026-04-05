@@ -394,8 +394,7 @@ impl<'hir> JsEmitter<'hir> {
             emitter.emit_line("if (!Array.isArray(collection)) {");
             emitter.with_indent(|em| {
                 em.emit_line(&format!(
-                    "const err = __bs_make_error(\"{}\", \"{}\", \"Collection get(...) expects an ordered collection\", null, null);",
-                    invalid_collection_kind, ERROR_CODE_COLLECTION_EXPECTED_ORDERED_COLLECTION
+                    "const err = __bs_make_error(\"{invalid_collection_kind}\", \"{ERROR_CODE_COLLECTION_EXPECTED_ORDERED_COLLECTION}\", \"Collection get(...) expects an ordered collection\", null, null);",
                 ));
                 em.emit_line("return { tag: \"err\", value: err };");
             });
@@ -403,8 +402,7 @@ impl<'hir> JsEmitter<'hir> {
             emitter.emit_line("if (!Number.isInteger(index) || index < 0 || index >= collection.length) {");
             emitter.with_indent(|em| {
                 em.emit_line(&format!(
-                    "const err = __bs_make_error(\"{}\", \"{}\", \"Collection index out of bounds\", null, null);",
-                    out_of_bounds_kind, ERROR_CODE_COLLECTION_INDEX_OUT_OF_BOUNDS
+                    "const err = __bs_make_error(\"{out_of_bounds_kind}\", \"{ERROR_CODE_COLLECTION_INDEX_OUT_OF_BOUNDS}\", \"Collection index out of bounds\", null, null);",
                 ));
                 em.emit_line("return { tag: \"err\", value: err };");
             });
@@ -464,8 +462,7 @@ impl<'hir> JsEmitter<'hir> {
                 em.emit_line("if (!Number.isFinite(value) || !Number.isSafeInteger(value)) {");
                 em.with_indent(|inner| {
                     inner.emit_line(&format!(
-                        "return {{ tag: \"err\", value: __bs_make_error(\"{}\", \"{}\", \"Int value is out of supported range\", null, null) }};",
-                        parse_kind, ERROR_CODE_INT_PARSE_OUT_OF_RANGE
+                        "return {{ tag: \"err\", value: __bs_make_error(\"{parse_kind}\", \"{ERROR_CODE_INT_PARSE_OUT_OF_RANGE}\", \"Int value is out of supported range\", null, null) }};",
                     ));
                 });
                 em.emit_line("}");
@@ -473,8 +470,7 @@ impl<'hir> JsEmitter<'hir> {
                 em.with_indent(|inner| inner.emit_line("return { tag: \"ok\", value };"));
                 em.emit_line("}");
                 em.emit_line(&format!(
-                    "return {{ tag: \"err\", value: __bs_make_error(\"{}\", \"{}\", \"Float value is not an exact integer\", null, null) }};",
-                    parse_kind, ERROR_CODE_INT_PARSE_INVALID_FORMAT
+                    "return {{ tag: \"err\", value: __bs_make_error(\"{parse_kind}\", \"{ERROR_CODE_INT_PARSE_INVALID_FORMAT}\", \"Float value is not an exact integer\", null, null) }};",
                 ));
             });
             emitter.emit_line("}");
@@ -487,8 +483,7 @@ impl<'hir> JsEmitter<'hir> {
                     inner.emit_line("if (!Number.isSafeInteger(parsed)) {");
                     inner.with_indent(|deep| {
                         deep.emit_line(&format!(
-                            "return {{ tag: \"err\", value: __bs_make_error(\"{}\", \"{}\", \"Int value is out of supported range\", null, null) }};",
-                            parse_kind, ERROR_CODE_INT_PARSE_OUT_OF_RANGE
+                            "return {{ tag: \"err\", value: __bs_make_error(\"{parse_kind}\", \"{ERROR_CODE_INT_PARSE_OUT_OF_RANGE}\", \"Int value is out of supported range\", null, null) }};",
                         ));
                     });
                     inner.emit_line("}");
@@ -504,14 +499,12 @@ impl<'hir> JsEmitter<'hir> {
                 });
                 em.emit_line("}");
                 em.emit_line(&format!(
-                    "return {{ tag: \"err\", value: __bs_make_error(\"{}\", \"{}\", \"Cannot parse Int from text\", null, null) }};",
-                    parse_kind, ERROR_CODE_INT_PARSE_INVALID_FORMAT
+                    "return {{ tag: \"err\", value: __bs_make_error(\"{parse_kind}\", \"{ERROR_CODE_INT_PARSE_INVALID_FORMAT}\", \"Cannot parse Int from text\", null, null) }};",
                 ));
             });
             emitter.emit_line("}");
             emitter.emit_line(&format!(
-                "return {{ tag: \"err\", value: __bs_make_error(\"{}\", \"{}\", \"Int(...) only accepts Int, Float, or string values\", null, null) }};",
-                parse_kind, ERROR_CODE_INT_PARSE_INVALID_FORMAT
+                "return {{ tag: \"err\", value: __bs_make_error(\"{parse_kind}\", \"{ERROR_CODE_INT_PARSE_INVALID_FORMAT}\", \"Int(...) only accepts Int, Float, or string values\", null, null) }};",
             ));
         });
         self.emit_line("}");
@@ -524,8 +517,7 @@ impl<'hir> JsEmitter<'hir> {
                 em.emit_line("if (!Number.isFinite(value)) {");
                 em.with_indent(|inner| {
                     inner.emit_line(&format!(
-                        "return {{ tag: \"err\", value: __bs_make_error(\"{}\", \"{}\", \"Float value is out of supported range\", null, null) }};",
-                        parse_kind, ERROR_CODE_FLOAT_PARSE_OUT_OF_RANGE
+                        "return {{ tag: \"err\", value: __bs_make_error(\"{parse_kind}\", \"{ERROR_CODE_FLOAT_PARSE_OUT_OF_RANGE}\", \"Float value is out of supported range\", null, null) }};",
                     ));
                 });
                 em.emit_line("}");
@@ -541,8 +533,7 @@ impl<'hir> JsEmitter<'hir> {
                     inner.emit_line("if (!Number.isFinite(parsed)) {");
                     inner.with_indent(|deep| {
                         deep.emit_line(&format!(
-                            "return {{ tag: \"err\", value: __bs_make_error(\"{}\", \"{}\", \"Float value is out of supported range\", null, null) }};",
-                            parse_kind, ERROR_CODE_FLOAT_PARSE_OUT_OF_RANGE
+                            "return {{ tag: \"err\", value: __bs_make_error(\"{parse_kind}\", \"{ERROR_CODE_FLOAT_PARSE_OUT_OF_RANGE}\", \"Float value is out of supported range\", null, null) }};",
                         ));
                     });
                     inner.emit_line("}");
@@ -550,14 +541,12 @@ impl<'hir> JsEmitter<'hir> {
                 });
                 em.emit_line("}");
                 em.emit_line(&format!(
-                    "return {{ tag: \"err\", value: __bs_make_error(\"{}\", \"{}\", \"Cannot parse Float from text\", null, null) }};",
-                    parse_kind, ERROR_CODE_FLOAT_PARSE_INVALID_FORMAT
+                    "return {{ tag: \"err\", value: __bs_make_error(\"{parse_kind}\", \"{ERROR_CODE_FLOAT_PARSE_INVALID_FORMAT}\", \"Cannot parse Float from text\", null, null) }};",
                 ));
             });
             emitter.emit_line("}");
             emitter.emit_line(&format!(
-                "return {{ tag: \"err\", value: __bs_make_error(\"{}\", \"{}\", \"Float(...) only accepts Int, Float, or string values\", null, null) }};",
-                parse_kind, ERROR_CODE_FLOAT_PARSE_INVALID_FORMAT
+                "return {{ tag: \"err\", value: __bs_make_error(\"{parse_kind}\", \"{ERROR_CODE_FLOAT_PARSE_INVALID_FORMAT}\", \"Float(...) only accepts Int, Float, or string values\", null, null) }};",
             ));
         });
         self.emit_line("}");

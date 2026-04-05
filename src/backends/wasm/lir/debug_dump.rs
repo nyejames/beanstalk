@@ -62,9 +62,9 @@ fn dump_function(out: &mut String, function: &WasmLirFunction) {
 }
 
 fn format_stmt(statement: &WasmLirStmt) -> String {
-    format!("{:?}", statement)
+    format!("{statement:?}")
 }
 
 fn format_terminator(terminator: &WasmLirTerminator) -> String {
-    format!("{:?}", terminator)
+    format!("{terminator:?}")
 }

@@ -104,8 +104,7 @@ pub(crate) fn lower_expression(
             lower_binary_expression(context, expression, left, *op, right, statements)
         }
         HirExpressionKind::UnaryOp { op, .. } => Err(CompilerError::lir_transformation(format!(
-            "Wasm lowering does not yet support unary operator {:?}",
-            op
+            "Wasm lowering does not yet support unary operator {op:?}"
         ))),
         HirExpressionKind::StructConstruct { .. }
         | HirExpressionKind::Collection(_)
@@ -169,8 +168,7 @@ fn lower_binary_expression(
         HirBinOp::Add => {
             if lhs_abi != rhs_abi {
                 return Err(CompilerError::lir_transformation(format!(
-                    "Wasm lowering does not support Add for mismatched ABI types {:?} and {:?}",
-                    lhs_abi, rhs_abi
+                    "Wasm lowering does not support Add for mismatched ABI types {lhs_abi:?} and {rhs_abi:?}"
                 )));
             }
 
@@ -200,16 +198,14 @@ fn lower_binary_expression(
                     })
                 }
                 _ => Err(CompilerError::lir_transformation(format!(
-                    "Wasm lowering does not support Add for ABI type {:?}",
-                    lhs_abi
+                    "Wasm lowering does not support Add for ABI type {lhs_abi:?}"
                 ))),
             }
         }
         HirBinOp::Sub => {
             if lhs_abi != rhs_abi {
                 return Err(CompilerError::lir_transformation(format!(
-                    "Wasm lowering does not support Sub for mismatched ABI types {:?} and {:?}",
-                    lhs_abi, rhs_abi
+                    "Wasm lowering does not support Sub for mismatched ABI types {lhs_abi:?} and {rhs_abi:?}"
                 )));
             }
 
@@ -239,16 +235,14 @@ fn lower_binary_expression(
                     })
                 }
                 _ => Err(CompilerError::lir_transformation(format!(
-                    "Wasm lowering does not support Sub for ABI type {:?}",
-                    lhs_abi
+                    "Wasm lowering does not support Sub for ABI type {lhs_abi:?}"
                 ))),
             }
         }
         HirBinOp::Lt | HirBinOp::Le | HirBinOp::Gt | HirBinOp::Ge => {
             if lhs_abi != rhs_abi {
                 return Err(CompilerError::lir_transformation(format!(
-                    "Wasm lowering does not support ordered comparison {:?} for mismatched ABI types {:?} and {:?}",
-                    op, lhs_abi, rhs_abi
+                    "Wasm lowering does not support ordered comparison {op:?} for mismatched ABI types {lhs_abi:?} and {rhs_abi:?}"
                 )));
             }
 
@@ -285,14 +279,12 @@ fn lower_binary_expression(
                     })
                 }
                 _ => Err(CompilerError::lir_transformation(format!(
-                    "Wasm lowering does not support ordered comparison {:?} for ABI type {:?}",
-                    op, lhs_abi
+                    "Wasm lowering does not support ordered comparison {op:?} for ABI type {lhs_abi:?}"
                 ))),
             }
         }
         _ => Err(CompilerError::lir_transformation(format!(
-            "Wasm lowering does not yet support binary operator {:?}",
-            op
+            "Wasm lowering does not yet support binary operator {op:?}"
         ))),
     }
 }
@@ -346,8 +338,7 @@ fn lower_string_concat_expression(
                     }
                     other => {
                         return Err(CompilerError::lir_transformation(format!(
-                            "Wasm lowering string concatenation requires handle-compatible chunks, found {:?}",
-                            other
+                            "Wasm lowering string concatenation requires handle-compatible chunks, found {other:?}"
                         )));
                     }
                 };
@@ -419,8 +410,7 @@ fn lower_place_local(
     match place {
         HirPlace::Local(local_id) => context.local_map.get(local_id).copied().ok_or_else(|| {
             CompilerError::lir_transformation(format!(
-                "Wasm lowering could not resolve local {:?}",
-                local_id
+                "Wasm lowering could not resolve local {local_id:?}",
             ))
         }),
         HirPlace::Field { .. } | HirPlace::Index { .. } => Err(CompilerError::lir_transformation(

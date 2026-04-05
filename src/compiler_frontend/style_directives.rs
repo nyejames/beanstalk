@@ -53,7 +53,7 @@ pub enum StyleDirectiveArgumentType {
 #[derive(Clone, Debug)]
 pub enum StyleDirectiveArgumentValue {
     String(String),
-    Template(Template),
+    Template(Box<Template>),
     Number(f64),
     Bool(bool),
 }

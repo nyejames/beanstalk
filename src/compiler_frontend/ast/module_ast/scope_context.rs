@@ -146,7 +146,7 @@ impl ScopeContext {
         let scope_id = CONTROL_FLOW_SCOPE_COUNTER.fetch_add(1, Ordering::Relaxed);
         new_context.scope = self
             .scope
-            .join_str(&format!("__scope_{}", scope_id), string_table);
+            .join_str(&format!("__scope_{scope_id}"), string_table);
 
         new_context
     }

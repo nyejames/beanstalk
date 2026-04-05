@@ -167,7 +167,7 @@ fn validate_balanced_delimiters(chars: &[char], warnings: &mut Vec<SourceWarning
     for (open, open_index) in stack {
         push_warning(
             warnings,
-            format!("Unclosed '{}' in CSS template body.", open),
+            format!("Unclosed '{open}' in CSS template body."),
             open_index,
             open_index.saturating_add(1),
         );

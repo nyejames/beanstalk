@@ -105,7 +105,7 @@ impl<'hir> JsEmitter<'hir> {
 
         for local_id in local_ids {
             let local_name = self.local_name(local_id)?;
-            self.emit_line(&format!("let {} = __bs_binding(undefined);", local_name));
+            self.emit_line(&format!("let {local_name} = __bs_binding(undefined);"));
         }
 
         if !reachable_blocks.is_empty() || !function.params.is_empty() {
@@ -129,8 +129,7 @@ impl<'hir> JsEmitter<'hir> {
         for parameter_local in &function.params {
             let parameter_name = self.local_name(*parameter_local)?;
             self.emit_line(&format!(
-                "{} = __bs_param_binding({});",
-                parameter_name, parameter_name
+                "{parameter_name} = __bs_param_binding({parameter_name});"
             ));
         }
 
@@ -301,7 +300,7 @@ impl<'hir> JsEmitter<'hir> {
 
         let condition = self.lower_expr(condition)?;
 
-        self.emit_line(&format!("if ({}) {{", condition));
+        self.emit_line(&format!("if ({condition}) {{"));
         self.indent += 1;
         self.emit_simple_branch_block(then_block, merge_target, emitted_blocks)?;
         self.indent -= 1;
@@ -329,15 +328,15 @@ impl<'hir> JsEmitter<'hir> {
         let scrutinee = self.lower_expr(scrutinee)?;
         let scrutinee_temp = self.next_temp_identifier("__match_value");
 
-        self.emit_line(&format!("const {} = {};", scrutinee_temp, scrutinee));
+        self.emit_line(&format!("const {scrutinee_temp} = {scrutinee};"));
 
         for (index, arm) in arms.iter().enumerate() {
             let condition = self.lower_match_arm_condition(&scrutinee_temp, arm)?;
 
             if index == 0 {
-                self.emit_line(&format!("if ({}) {{", condition));
+                self.emit_line(&format!("if ({condition}) {{"));
             } else {
-                self.emit_line(&format!("else if ({}) {{", condition));
+                self.emit_line(&format!("else if ({condition}) {{"));
             }
 
             self.indent += 1;

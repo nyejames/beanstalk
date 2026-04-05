@@ -641,6 +641,7 @@ fn build_project_keeps_one_shared_string_table_for_multi_module_diagnostics() {
 
     assert_eq!(messages.errors.len(), 1);
     assert_eq!(messages.warnings.len(), 1);
+
     assert_eq!(
         messages.errors[0]
             .location

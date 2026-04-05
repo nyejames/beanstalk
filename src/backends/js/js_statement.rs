@@ -49,23 +49,23 @@ impl<'hir> JsEmitter<'hir> {
                         .collect::<Result<Vec<_>, _>>()?
                 };
 
-                let call = format!("{}({})", target_name, args.join(", "));
+                let call = format!("{target_name}({})", args.join(", "));
 
                 if let Some(result_local) = result {
                     let result_name = self.local_name(*result_local)?;
                     if self.call_returns_alias_reference(target) {
-                        self.emit_line(&format!("__bs_assign_borrow({}, {});", result_name, call));
+                        self.emit_line(&format!("__bs_assign_borrow({result_name}, {call});"));
                     } else {
-                        self.emit_line(&format!("__bs_assign_value({}, {});", result_name, call));
+                        self.emit_line(&format!("__bs_assign_value({result_name}, {call});"));
                     }
                 } else {
-                    self.emit_line(&format!("{};", call));
+                    self.emit_line(&format!("{call};"));
                 }
             }
 
             HirStatementKind::Expr(expression) => {
                 let expression = self.lower_expr(expression)?;
-                self.emit_line(&format!("{};", expression));
+                self.emit_line(&format!("{expression};"));
             }
 
             HirStatementKind::Drop(_) => {
@@ -113,7 +113,7 @@ impl<'hir> JsEmitter<'hir> {
                     }
                     _ => self.lower_expr(value)?,
                 };
-                self.emit_line(&format!("__bs_write({}, {});", target_ref, emitted_value));
+                self.emit_line(&format!("__bs_write({target_ref}, {emitted_value});"));
 
                 Ok(())
             }
@@ -134,27 +134,26 @@ impl<'hir> JsEmitter<'hir> {
                 let source = self.lower_place(place)?;
                 if alias_only {
                     self.emit_line(&format!(
-                        "__bs_write({}, __bs_read({}));",
-                        local_name, source
+                        "__bs_write({local_name}, __bs_read({source}));",
                     ));
                 } else {
-                    self.emit_line(&format!("__bs_assign_borrow({}, {});", local_name, source));
+                    self.emit_line(&format!("__bs_assign_borrow({local_name}, {source});"));
                 }
             }
             HirExpressionKind::Copy(place) => {
                 let copied = format!("__bs_clone_value(__bs_read({}))", self.lower_place(place)?);
                 if alias_only {
-                    self.emit_line(&format!("__bs_write({}, {});", local_name, copied));
+                    self.emit_line(&format!("__bs_write({local_name}, {copied});"));
                 } else {
-                    self.emit_line(&format!("__bs_assign_value({}, {});", local_name, copied));
+                    self.emit_line(&format!("__bs_assign_value({local_name}, {copied});"));
                 }
             }
             _ => {
                 let lowered = self.lower_expr(value)?;
                 if alias_only {
-                    self.emit_line(&format!("__bs_write({}, {});", local_name, lowered));
+                    self.emit_line(&format!("__bs_write({local_name}, {lowered});"));
                 } else {
-                    self.emit_line(&format!("__bs_assign_value({}, {});", local_name, lowered));
+                    self.emit_line(&format!("__bs_assign_value({local_name}, {lowered});"));
                 }
             }
         }
@@ -209,7 +208,7 @@ impl<'hir> JsEmitter<'hir> {
         }
 
         let value = self.lower_return_value_expression(expression)?;
-        self.emit_line(&format!("return {};", value));
+        self.emit_line(&format!("return {value};"));
         Ok(())
     }
 
@@ -219,7 +218,7 @@ impl<'hir> JsEmitter<'hir> {
     ) -> Result<(), CompilerError> {
         if let Some(message) = message {
             let message = self.lower_expr(message)?;
-            self.emit_line(&format!("throw new Error({});", message));
+            self.emit_line(&format!("throw new Error({message});"));
         } else {
             self.emit_line("throw new Error(\"panic\");");
         }
@@ -234,10 +233,10 @@ impl<'hir> JsEmitter<'hir> {
     ) -> Result<(), CompilerError> {
         let state_identifier = self.next_temp_identifier("__bb");
 
-        self.emit_line(&format!("let {} = {};", state_identifier, function.entry.0));
+        self.emit_line(&format!("let {state_identifier} = {};", function.entry.0));
         self.emit_line("while (true) {");
         self.indent += 1;
-        self.emit_line(&format!("switch ({}) {{", state_identifier));
+        self.emit_line(&format!("switch ({state_identifier}) {{"));
         self.indent += 1;
 
         for block_id in reachable_blocks {
@@ -271,8 +270,7 @@ impl<'hir> JsEmitter<'hir> {
         self.emit_line("default: {");
         self.with_indent(|emitter| {
             emitter.emit_line(&format!(
-                "throw new Error(\"Invalid control-flow block: \" + {});",
-                state_identifier
+                "throw new Error(\"Invalid control-flow block: \" + {state_identifier});",
             ));
         });
         self.emit_line("}");
@@ -298,7 +296,7 @@ impl<'hir> JsEmitter<'hir> {
                     ));
                 }
 
-                self.emit_line(&format!("{} = {};", state_identifier, target.0));
+                self.emit_line(&format!("{state_identifier} = {};", target.0));
                 self.emit_line("continue;");
             }
 
@@ -308,13 +306,13 @@ impl<'hir> JsEmitter<'hir> {
                 else_block,
             } => {
                 let condition = self.lower_expr(condition)?;
-                self.emit_line(&format!("if ({}) {{", condition));
+                self.emit_line(&format!("if ({condition}) {{"));
                 self.with_indent(|emitter| {
-                    emitter.emit_line(&format!("{} = {};", state_identifier, then_block.0));
+                    emitter.emit_line(&format!("{state_identifier} = {};", then_block.0));
                 });
                 self.emit_line("} else {");
                 self.with_indent(|emitter| {
-                    emitter.emit_line(&format!("{} = {};", state_identifier, else_block.0));
+                    emitter.emit_line(&format!("{state_identifier} = {};", else_block.0));
                 });
                 self.emit_line("}");
                 self.emit_line("continue;");
@@ -329,18 +327,18 @@ impl<'hir> JsEmitter<'hir> {
 
                 let scrutinee = self.lower_expr(scrutinee)?;
                 let scrutinee_temp = self.next_temp_identifier("__match");
-                self.emit_line(&format!("const {} = {};", scrutinee_temp, scrutinee));
+                self.emit_line(&format!("const {scrutinee_temp} = {scrutinee};"));
 
                 for (index, arm) in arms.iter().enumerate() {
                     let condition = self.lower_match_arm_condition(&scrutinee_temp, arm)?;
                     if index == 0 {
-                        self.emit_line(&format!("if ({}) {{", condition));
+                        self.emit_line(&format!("if ({condition}) {{"));
                     } else {
-                        self.emit_line(&format!("else if ({}) {{", condition));
+                        self.emit_line(&format!("else if ({condition}) {{"));
                     }
 
                     self.with_indent(|emitter| {
-                        emitter.emit_line(&format!("{} = {};", state_identifier, arm.body.0));
+                        emitter.emit_line(&format!("{state_identifier} = {};", arm.body.0));
                     });
                     self.emit_line("}");
                 }
@@ -354,12 +352,12 @@ impl<'hir> JsEmitter<'hir> {
             }
 
             HirTerminator::Loop { body, .. } => {
-                self.emit_line(&format!("{} = {};", state_identifier, body.0));
+                self.emit_line(&format!("{state_identifier} = {};", body.0));
                 self.emit_line("continue;");
             }
 
             HirTerminator::Break { target } | HirTerminator::Continue { target } => {
-                self.emit_line(&format!("{} = {};", state_identifier, target.0));
+                self.emit_line(&format!("{state_identifier} = {};", target.0));
                 self.emit_line("continue;");
             }
 
@@ -383,22 +381,21 @@ impl<'hir> JsEmitter<'hir> {
         let pattern_condition = match &arm.pattern {
             HirPattern::Literal(value) => {
                 let literal = self.lower_expr(value)?;
-                format!("{} === {}", scrutinee_expression, literal)
+                format!("{scrutinee_expression} === {literal}")
             }
 
             HirPattern::Wildcard => "true".to_owned(),
 
             unsupported => {
                 return Err(CompilerError::compiler_error(format!(
-                    "JavaScript backend: unsupported match pattern {:?}",
-                    unsupported
+                    "JavaScript backend: unsupported match pattern {unsupported:?}",
                 )));
             }
         };
 
         if let Some(guard) = &arm.guard {
             let guard = self.lower_expr(guard)?;
-            Ok(format!("({}) && ({})", pattern_condition, guard))
+            Ok(format!("({pattern_condition}) && ({guard})"))
         } else {
             Ok(pattern_condition)
         }

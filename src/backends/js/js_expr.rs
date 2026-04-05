@@ -56,7 +56,7 @@ impl<'hir> JsEmitter<'hir> {
                 for (field_id, value) in fields {
                     let field_name = self.field_name(*field_id)?.to_owned();
                     let field_value = self.lower_expr(value)?;
-                    pairs.push(format!("{}: {}", field_name, field_value));
+                    pairs.push(format!("{field_name}: {field_value}"));
                 }
 
                 Ok(format!("{{ {} }}", pairs.join(", ")))
@@ -74,7 +74,7 @@ impl<'hir> JsEmitter<'hir> {
             HirExpressionKind::Range { start, end } => {
                 let start = self.lower_expr(start)?;
                 let end = self.lower_expr(end)?;
-                Ok(format!("{{ start: {}, end: {} }}", start, end))
+                Ok(format!("{{ start: {start}, end: {end} }}"))
             }
 
             HirExpressionKind::TupleConstruct { elements } => {
@@ -91,7 +91,7 @@ impl<'hir> JsEmitter<'hir> {
 
             HirExpressionKind::TupleGet { tuple, index } => {
                 let tuple = self.lower_expr(tuple)?;
-                Ok(format!("({})[{}]", tuple, index))
+                Ok(format!("({tuple})[{index}]"))
             }
 
             HirExpressionKind::OptionConstruct { variant, value } => match (variant, value) {
@@ -114,27 +114,27 @@ impl<'hir> JsEmitter<'hir> {
                     ResultVariant::Ok => "ok",
                     ResultVariant::Err => "err",
                 };
-                Ok(format!("{{ tag: \"{}\", value: {} }}", tag, lowered_value))
+                Ok(format!("{{ tag: \"{tag}\", value: {lowered_value} }}"))
             }
 
             HirExpressionKind::ResultPropagate { result } => {
                 let lowered_result = self.lower_expr(result)?;
-                Ok(format!("__bs_result_propagate({})", lowered_result))
+                Ok(format!("__bs_result_propagate({lowered_result})"))
             }
 
             HirExpressionKind::ResultIsOk { result } => {
                 let lowered_result = self.lower_expr(result)?;
-                Ok(format!("(({}).tag === \"ok\")", lowered_result))
+                Ok(format!("(({lowered_result}).tag === \"ok\")"))
             }
 
             HirExpressionKind::ResultUnwrapOk { result } => {
                 let lowered_result = self.lower_expr(result)?;
-                Ok(format!("(({}).value)", lowered_result))
+                Ok(format!("(({lowered_result}).value)"))
             }
 
             HirExpressionKind::ResultUnwrapErr { result } => {
                 let lowered_result = self.lower_expr(result)?;
-                Ok(format!("(({}).value)", lowered_result))
+                Ok(format!("(({lowered_result}).value)"))
             }
 
             HirExpressionKind::BuiltinCast { kind, value } => {
@@ -143,7 +143,7 @@ impl<'hir> JsEmitter<'hir> {
                     HirBuiltinCastKind::Int => "__bs_cast_int",
                     HirBuiltinCastKind::Float => "__bs_cast_float",
                 };
-                Ok(format!("{}({})", helper, lowered_value))
+                Ok(format!("{helper}({lowered_value})"))
             }
         }
     }
@@ -155,13 +155,13 @@ impl<'hir> JsEmitter<'hir> {
             HirPlace::Field { base, field } => {
                 let base = self.lower_place(base)?;
                 let field = escape_js_string(self.field_name(*field)?);
-                Ok(format!("__bs_field({}, {})", base, field))
+                Ok(format!("__bs_field({base}, {field})"))
             }
 
             HirPlace::Index { base, index } => {
                 let base = self.lower_place(base)?;
                 let index = self.lower_expr(index)?;
-                Ok(format!("__bs_index({}, {})", base, index))
+                Ok(format!("__bs_index({base}, {index})"))
             }
         }
     }
@@ -251,11 +251,11 @@ impl<'hir> JsEmitter<'hir> {
             HirBinOp::Or => "||",
             HirBinOp::Exponent => "**",
             HirBinOp::Root => {
-                return Ok(format!("Math.pow({}, 1 / {})", right, left));
+                return Ok(format!("Math.pow({right}, 1 / {left})"));
             }
         };
 
-        Ok(format!("({} {} {})", left, js_operator, right))
+        Ok(format!("({left} {js_operator} {right})"))
     }
 
     fn lower_unary_op(
@@ -269,7 +269,7 @@ impl<'hir> JsEmitter<'hir> {
             HirUnaryOp::Not => "!",
         };
 
-        Ok(format!("({}{})", js_operator, operand))
+        Ok(format!("({js_operator}{operand})"))
     }
 }
 

@@ -40,8 +40,7 @@ pub(crate) fn lower_statement(
                         .copied()
                         .ok_or_else(|| {
                             CompilerError::lir_transformation(format!(
-                                "Wasm lowering missing function id mapping for {:?}",
-                                function_id
+                                "Wasm lowering missing function id mapping for {function_id:?}"
                             ))
                         })?;
                     WasmCalleeRef::Function(function_id)
@@ -73,8 +72,7 @@ pub(crate) fn lower_statement(
             // Keep explicit source-level drops in LIR when the value is handle-like.
             let mapped_local = context.local_map.get(local_id).copied().ok_or_else(|| {
                 CompilerError::lir_transformation(format!(
-                    "Wasm lowering could not resolve drop local {:?}",
-                    local_id
+                    "Wasm lowering could not resolve drop local {local_id:?}"
                 ))
             })?;
 
@@ -109,8 +107,7 @@ fn lower_assignment(
         .copied()
         .ok_or_else(|| {
             CompilerError::lir_transformation(format!(
-                "Wasm lowering could not resolve assignment target local {:?}",
-                target_local
+                "Wasm lowering could not resolve assignment target local {target_local:?}",
             ))
         })?;
 

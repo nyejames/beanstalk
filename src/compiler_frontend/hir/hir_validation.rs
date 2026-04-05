@@ -75,7 +75,7 @@ impl<'a> HirValidator<'a> {
         for region in &self.module.regions {
             let id = region.id();
             if !self.region_ids.insert(id) {
-                return Err(self.error_with_hir(format!("Duplicate HIR region id {:?}", id), None));
+                return Err(self.error_with_hir(format!("Duplicate HIR region id {id:?}"), None));
             }
         }
 
@@ -238,8 +238,7 @@ impl<'a> HirValidator<'a> {
             {
                 return Err(self.error_with_hir(
                     format!(
-                        "Runtime start fragment function {:?} must be tagged as RuntimeTemplate",
-                        function_id
+                        "Runtime start fragment function {function_id:?} must be tagged as RuntimeTemplate"
                     ),
                     Some(HirLocation::Function(*function_id)),
                 ));
@@ -269,8 +268,7 @@ impl<'a> HirValidator<'a> {
                     if !self.function_ids.contains(function_id) {
                         return Err(self.error_with_hir(
                             format!(
-                                "Start fragment #{index} references missing runtime function {:?}",
-                                function_id
+                                "Start fragment #{index} references missing runtime function {function_id:?}"
                             ),
                             Some(HirLocation::Function(*function_id)),
                         ));
@@ -587,8 +585,7 @@ impl<'a> HirValidator<'a> {
         {
             return Err(self.error_with_hir(
                 format!(
-                    "Block {} terminator is missing AST->HIR side-table mapping",
-                    block_id
+                    "Block {block_id} terminator is missing AST->HIR side-table mapping"
                 ),
                 Some(terminator_location),
             ));
@@ -602,8 +599,7 @@ impl<'a> HirValidator<'a> {
         {
             return Err(self.error_with_hir(
                 format!(
-                    "Block {} terminator is missing HIR source side-table mapping",
-                    block_id
+                    "Block {block_id} terminator is missing HIR source side-table mapping",
                 ),
                 Some(terminator_location),
             ));
@@ -938,7 +934,7 @@ impl<'a> HirValidator<'a> {
     ) -> Result<TypeId, CompilerError> {
         match place {
             HirPlace::Local(local_id) => self.local_types.get(local_id).copied().ok_or_else(|| {
-                self.error_with_hir(format!("Unknown local id {:?}", local_id), anchor)
+                self.error_with_hir(format!("Unknown local id {local_id:?}"), anchor)
             }),
 
             HirPlace::Field { base, field } => {
@@ -957,7 +953,7 @@ impl<'a> HirValidator<'a> {
 
                 self.require_field_owned_by(*field, base_struct_id, anchor)?;
                 self.field_types.get(field).copied().ok_or_else(|| {
-                    self.error_with_hir(format!("Unknown field id {:?}", field), anchor)
+                    self.error_with_hir(format!("Unknown field id {field:?}"), anchor)
                 })
             }
 
@@ -986,7 +982,7 @@ impl<'a> HirValidator<'a> {
             return Ok(());
         }
 
-        Err(self.error_with_hir(format!("Unknown HIR block id {:?}", block_id), anchor))
+        Err(self.error_with_hir(format!("Unknown HIR block id {block_id:?}"), anchor))
     }
 
     fn require_struct_id(
@@ -998,7 +994,7 @@ impl<'a> HirValidator<'a> {
             return Ok(());
         }
 
-        Err(self.error_with_hir(format!("Unknown HIR struct id {:?}", struct_id), anchor))
+        Err(self.error_with_hir(format!("Unknown HIR struct id {struct_id:?}"), anchor))
     }
 
     fn require_field_id(
@@ -1010,7 +1006,7 @@ impl<'a> HirValidator<'a> {
             return Ok(());
         }
 
-        Err(self.error_with_hir(format!("Unknown HIR field id {:?}", field_id), anchor))
+        Err(self.error_with_hir(format!("Unknown HIR field id {field_id:?}"), anchor))
     }
 
     fn require_local_id(
@@ -1022,7 +1018,7 @@ impl<'a> HirValidator<'a> {
             return Ok(());
         }
 
-        Err(self.error_with_hir(format!("Unknown HIR local id {:?}", local_id), anchor))
+        Err(self.error_with_hir(format!("Unknown HIR local id {local_id:?}"), anchor))
     }
 
     fn require_region_id(
@@ -1034,7 +1030,7 @@ impl<'a> HirValidator<'a> {
             return Ok(());
         }
 
-        Err(self.error_with_hir(format!("Unknown HIR region id {:?}", region_id), anchor))
+        Err(self.error_with_hir(format!("Unknown HIR region id {region_id:?}"), anchor))
     }
 
     fn require_type_id(
@@ -1046,7 +1042,7 @@ impl<'a> HirValidator<'a> {
             return Ok(());
         }
 
-        Err(self.error_with_hir(format!("Unknown HIR type id {:?}", type_id), anchor))
+        Err(self.error_with_hir(format!("Unknown HIR type id {type_id:?}"), anchor))
     }
 
     fn require_same_function_cfg_owner(
@@ -1057,13 +1053,13 @@ impl<'a> HirValidator<'a> {
     ) -> Result<(), CompilerError> {
         let Some(source_owner) = self.block_owner_by_id.get(&source_block).copied() else {
             return Err(self.error_with_hir(
-                format!("Block {} has no function CFG owner", source_block),
+                format!("Block {source_block} has no function CFG owner"),
                 anchor,
             ));
         };
         let Some(target_owner) = self.block_owner_by_id.get(&target_block).copied() else {
             return Err(self.error_with_hir(
-                format!("Block {} has no function CFG owner", target_block),
+                format!("Block {target_block} has no function CFG owner"),
                 anchor,
             ));
         };
@@ -1074,8 +1070,7 @@ impl<'a> HirValidator<'a> {
 
         Err(self.error_with_hir(
             format!(
-                "CFG edge from block {} to block {} crosses function boundary ({:?} -> {:?})",
-                source_block, target_block, source_owner, target_owner
+                "CFG edge from block {source_block} to block {target_block} crosses function boundary ({source_owner:?} -> {target_owner:?})"
             ),
             anchor,
         ))
@@ -1086,10 +1081,10 @@ impl<'a> HirValidator<'a> {
         block_id: BlockId,
     ) -> Result<&crate::compiler_frontend::hir::hir_nodes::HirBlock, CompilerError> {
         let Some(index) = self.block_index_by_id.get(&block_id).copied() else {
-            return Err(self.error_with_hir(
-                format!("Unknown HIR block id {:?}", block_id),
-                Some(HirLocation::Block(block_id)),
-            ));
+                return Err(self.error_with_hir(
+                    format!("Unknown HIR block id {block_id:?}"),
+                    Some(HirLocation::Block(block_id)),
+                ));
         };
 
         Ok(&self.module.blocks[index])
@@ -1106,7 +1101,7 @@ impl<'a> HirValidator<'a> {
 
         let Some(owner) = self.field_owner.get(&field_id).copied() else {
             return Err(self.error_with_hir(
-                format!("Field {:?} has no owning struct in HIR metadata", field_id),
+                format!("Field {field_id:?} has no owning struct in HIR metadata"),
                 anchor,
             ));
         };
@@ -1117,8 +1112,7 @@ impl<'a> HirValidator<'a> {
 
         Err(self.error_with_hir(
             format!(
-                "Field {:?} is owned by struct {:?}, not {:?}",
-                field_id, owner, struct_id
+                "Field {field_id:?} is owned by struct {owner:?}, not {struct_id:?}"
             ),
             anchor,
         ))

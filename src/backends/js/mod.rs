@@ -158,7 +158,7 @@ impl<'hir> JsEmitter<'hir> {
                 self.emit_line("");
             }
 
-            self.emit_line(&format!("{}();", start_name));
+            self.emit_line(&format!("{start_name}();"));
         }
 
         Ok(JsModule {

@@ -111,7 +111,7 @@ fn format_terse_summary_line(
         return format!("{}. No errors or warnings.", success_message(duration));
     }
 
-    format!("errors={}, warnings={warning_count}.", error_count)
+    format!("errors={error_count}, warnings={warning_count}.")
 }
 
 fn format_duration(duration: Duration) -> String {

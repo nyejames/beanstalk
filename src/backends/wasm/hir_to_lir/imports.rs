@@ -15,11 +15,9 @@ pub(crate) fn register_required_host_imports(
     // WHY: deterministic import-id assignment for the whole module.
     for block in &context.hir_module.blocks {
         for statement in &block.statements {
-            if let HirStatementKind::Call { target, .. } = &statement.kind {
-                if let CallTarget::HostFunction(path) = target {
-                    let host_function = resolve_host_function_name(context, path)?;
-                    ensure_host_import(context, host_function);
-                }
+            if let HirStatementKind::Call { target: CallTarget::HostFunction(path), .. } = &statement.kind {
+                let host_function = resolve_host_function_name(context, path)?;
+                ensure_host_import(context, host_function);
             }
         }
     }
@@ -59,8 +57,7 @@ fn resolve_host_function_name(
     match name {
         "io" => Ok(WasmHostFunction::LogString),
         _ => Err(CompilerError::lir_transformation(format!(
-            "Wasm backend does not yet support host function '{}'",
-            name
+            "Wasm backend does not yet support host function '{name}'"
         ))),
     }
 }
