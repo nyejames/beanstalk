@@ -21,27 +21,6 @@ This phase is a deliberate cleanup and consolidation checkpoint before pushing f
 The goal is to reduce structural risk now, remove stale paths while the compiler is still prealpha,
 and make later feature work land into a tighter codebase.
 
-### PR - Consolidate and simplify test infrastructure
-
-Reduce bespoke test setup duplication and split the integration runner into clearer pieces before the test surface grows further.
-
-**Checklist**
-- Refactor `src/compiler_tests/integration_test_runner.rs` into smaller modules for:
-  - manifest/expectation parsing
-  - fixture loading
-  - case execution
-  - artifact assertions
-  - rendering/reporting
-- Consolidate overlapping frontend/AST/HIR/borrow-checker test helpers where the setup logic is effectively the same.
-- Remove redundant one-off test support layers where a shared fixture path is cleaner.
-- Keep tests out of production files where practical and avoid adding new in-file test bloat.
-- Preserve current integration behavior and output while reducing maintenance cost.
-
-**Done when**
-- Test support feels like one deliberate system instead of several parallel mini-systems.
-- The integration runner can evolve without becoming a second monolith.
-- New tests can be written with less setup repetition.
-
 ### PR - Add coverage for the audit-discovered blind spots
 
 Use the audit as a direct test-gap backlog and close the highest-value coverage holes before more features are added.
