@@ -1,0 +1,7 @@
+entry = "."
+
+[backends.html]
+mode = "failure"
+warnings = "forbid"
+error_type = "Config"
+message_contains = ["'#src' is deprecated", "#entry_root"]

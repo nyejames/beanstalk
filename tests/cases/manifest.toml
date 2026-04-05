@@ -79,6 +79,11 @@ path = "basic_page_output"
 tags = ["integration","language"]
 
 [[case]]
+id = "borrow_checker_alias_not_live_after_scope"
+path = "borrow_checker_alias_not_live_after_scope"
+tags = ["integration","borrows"]
+
+[[case]]
 id = "borrow_checker_basic_variables"
 path = "borrow_checker_basic_variables"
 tags = ["integration","borrows"]
@@ -86,6 +91,11 @@ tags = ["integration","borrows"]
 [[case]]
 id = "borrow_checker_function_calls"
 path = "borrow_checker_function_calls"
+tags = ["integration","borrows"]
+
+[[case]]
+id = "borrow_checker_loop_break_with_alias"
+path = "borrow_checker_loop_break_with_alias"
 tags = ["integration","borrows"]
 
 [[case]]
@@ -254,6 +264,11 @@ path = "config_backward_compat"
 tags = ["integration","config"]
 
 [[case]]
+id = "config_deprecated_src_key_rejected"
+path = "config_deprecated_src_key_rejected"
+tags = ["integration","config","diagnostics"]
+
+[[case]]
 id = "config_libraries_rejected"
 path = "config_libraries_rejected"
 tags = ["integration","config","diagnostics"]
@@ -266,6 +281,16 @@ tags = ["integration","config"]
 [[case]]
 id = "config_multi_error"
 path = "config_multi_error"
+tags = ["integration","config","diagnostics"]
+
+[[case]]
+id = "config_root_folders_absolute_path_rejected"
+path = "config_root_folders_absolute_path_rejected"
+tags = ["integration","config","diagnostics"]
+
+[[case]]
+id = "config_root_folders_nested_path_rejected"
+path = "config_root_folders_nested_path_rejected"
 tags = ["integration","config","diagnostics"]
 
 [[case]]
@@ -649,6 +674,11 @@ path = "js_function_param_passing"
 tags = ["integration","functions"]
 
 [[case]]
+id = "js_mutable_param_reassignment"
+path = "js_mutable_param_reassignment"
+tags = ["integration","js-backend"]
+
+[[case]]
 id = "js_nested_struct_field"
 path = "js_nested_struct_field"
 tags = ["integration","js-backend"]
@@ -656,6 +686,11 @@ tags = ["integration","js-backend"]
 [[case]]
 id = "js_operator_mapping"
 path = "js_operator_mapping"
+tags = ["integration","js-backend"]
+
+[[case]]
+id = "js_sequential_mutable_assignments"
+path = "js_sequential_mutable_assignments"
 tags = ["integration","js-backend"]
 
 [[case]]
@@ -914,6 +949,26 @@ path = "print_with_variables"
 tags = ["integration","language"]
 
 [[case]]
+id = "receiver_method_basic_call"
+path = "receiver_method_basic_call"
+tags = ["integration","receivers"]
+
+[[case]]
+id = "receiver_method_cross_file_rejected"
+path = "receiver_method_cross_file_rejected"
+tags = ["integration","receivers","diagnostics"]
+
+[[case]]
+id = "receiver_method_field_name_conflict_rejected"
+path = "receiver_method_field_name_conflict_rejected"
+tags = ["integration","receivers","diagnostics"]
+
+[[case]]
+id = "receiver_method_free_function_call_rejected"
+path = "receiver_method_free_function_call_rejected"
+tags = ["integration","receivers","diagnostics"]
+
+[[case]]
 id = "relative_import_dot_segments"
 path = "relative_import_dot_segments"
 tags = ["integration","language"]
@@ -1092,6 +1147,16 @@ tags = ["integration","templates"]
 id = "top_level_const_template"
 path = "top_level_const_template"
 tags = ["integration","templates"]
+
+[[case]]
+id = "top_level_const_template_multiple_ordered"
+path = "top_level_const_template_multiple_ordered"
+tags = ["integration","templates"]
+
+[[case]]
+id = "top_level_const_template_non_entry_file_rejected"
+path = "top_level_const_template_non_entry_file_rejected"
+tags = ["integration","templates","diagnostics"]
 
 [[case]]
 id = "top_level_const_template_rejects_runtime_template"
