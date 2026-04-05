@@ -21,47 +21,6 @@ This phase is a deliberate cleanup and consolidation checkpoint before pushing f
 The goal is to reduce structural risk now, remove stale paths while the compiler is still prealpha,
 and make later feature work land into a tighter codebase.
 
-### PR - Split frontend/build orchestration by responsibility
-
-Break apart frontend orchestration and project discovery so IO, discovery, and stage sequencing are not overly concentrated in one file.
-
-**Checklist**
-- Refactor `src/build_system/create_project_modules.rs` into smaller units for:
-  - module discovery
-  - reachable-file discovery
-  - source loading
-  - import scanning
-  - per-module frontend orchestration
-- Keep `compile_project_frontend(...)` as the top-level entrypoint, but make it a thin coordinator over named helpers/modules.
-- Tighten naming around “discovery”, “loading”, and “compilation” so the responsibilities are obvious.
-- Preserve current StringTable and diagnostic handoff behavior.
-- Add regression coverage for single-file and directory-project flows while refactoring.
-
-**Done when**
-- Stage 0/frontend orchestration is easier to audit.
-- Filesystem work and compiler-pipeline work are no longer bundled together more than necessary.
-- Future module/build changes can land without expanding one already-large file.
-
-### PR - Split JS backend emitter/runtime helpers into a maintainable shape
-
-Refactor the JS backend so the runtime model and emitter logic stay understandable as more language features land.
-
-**Checklist**
-- Split `src/backends/js/mod.rs` into focused modules for:
-  - runtime prelude helpers
-  - symbol generation / naming
-  - module/function emission orchestration
-  - shared backend utilities
-- Keep the backend behavior identical while making aliasing/runtime helper responsibilities easier to see.
-- Group runtime helper emission by semantic area rather than letting one file keep growing indefinitely.
-- Add targeted tests around emitted helper presence and any runtime-sensitive behavior touched by the refactor.
-- Remove any “working by accident” layout or ordering assumptions discovered during the split.
-
-**Done when**
-- The JS backend is no longer a single oversized concentration point.
-- Runtime semantics are easier to inspect independently of formatting and symbol logic.
-- Further backend work can extend focused files instead of one catch-all module.
-
 ### PR - Consolidate and simplify test infrastructure
 
 Reduce bespoke test setup duplication and split the integration runner into clearer pieces before the test surface grows further.

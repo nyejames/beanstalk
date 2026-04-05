@@ -17,9 +17,14 @@
 //   [clone]          explicit copy of arrays uses __bs_clone_value (recursive per-element)
 //   [clone]          explicit copy of objects uses __bs_clone_value (recursive per-key)
 //   [clone]          Copy expression in HIR emits __bs_clone_value(__bs_read(...))
-//   [prelude-order]  binding helpers precede alias helpers in emitted output
-//   [prelude-order]  alias helpers precede computed-place helpers in emitted output
-//   [prelude-order]  computed-place helpers precede clone helper in emitted output
+//   [prelude-order]    binding helpers precede alias helpers in emitted output
+//   [prelude-order]    alias helpers precede computed-place helpers in emitted output
+//   [prelude-order]    computed-place helpers precede clone helper in emitted output
+//   [prelude-presence] error helper group present: __bs_make_error is emitted
+//   [prelude-presence] result helper group present: __bs_result_propagate is emitted
+//   [prelude-presence] string helper group present: __bs_value_to_string and __bs_io are emitted
+//   [prelude-presence] collection helper group present: __bs_collection_get is emitted
+//   [prelude-presence] cast helper group present: __bs_cast_int and __bs_cast_float are emitted
 //   [cfg]            acyclic if-then-else lowers to structured `if` without dispatcher
 //   [cfg]            cycles and back-edges fall back to switch-based block dispatcher
 //   [cfg]            break/continue terminators emit correct block-number assignments
@@ -398,6 +403,73 @@ fn computed_place_helpers_appear_before_clone_helper() {
     assert!(
         computed_pos < clone_pos,
         "computed-place helpers must appear before the clone helper in emitted JS"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Prelude helper group presence tests [prelude-presence]
+// ---------------------------------------------------------------------------
+
+/// Verifies that the error helper group is present in the emitted prelude. [prelude-presence]
+#[test]
+fn runtime_prelude_contains_error_helpers() {
+    let source = lower_minimal_module("main");
+
+    assert!(
+        source.contains("function __bs_make_error("),
+        "prelude must contain __bs_make_error"
+    );
+}
+
+/// Verifies that the result helper group is present in the emitted prelude. [prelude-presence]
+#[test]
+fn runtime_prelude_contains_result_helpers() {
+    let source = lower_minimal_module("main");
+
+    assert!(
+        source.contains("function __bs_result_propagate("),
+        "prelude must contain __bs_result_propagate"
+    );
+}
+
+/// Verifies that the string helper group is present in the emitted prelude. [prelude-presence]
+#[test]
+fn runtime_prelude_contains_string_helpers() {
+    let source = lower_minimal_module("main");
+
+    assert!(
+        source.contains("function __bs_value_to_string("),
+        "prelude must contain __bs_value_to_string"
+    );
+    assert!(
+        source.contains("function __bs_io("),
+        "prelude must contain __bs_io"
+    );
+}
+
+/// Verifies that the collection helper group is present in the emitted prelude. [prelude-presence]
+#[test]
+fn runtime_prelude_contains_collection_helpers() {
+    let source = lower_minimal_module("main");
+
+    assert!(
+        source.contains("function __bs_collection_get("),
+        "prelude must contain __bs_collection_get"
+    );
+}
+
+/// Verifies that the cast helper group is present in the emitted prelude. [prelude-presence]
+#[test]
+fn runtime_prelude_contains_cast_helpers() {
+    let source = lower_minimal_module("main");
+
+    assert!(
+        source.contains("function __bs_cast_int("),
+        "prelude must contain __bs_cast_int"
+    );
+    assert!(
+        source.contains("function __bs_cast_float("),
+        "prelude must contain __bs_cast_float"
     );
 }
 
