@@ -12,6 +12,7 @@ pub(crate) mod type_resolution;
 pub(crate) mod expressions {
     pub(crate) mod eval_expression;
     pub(crate) mod expression;
+    pub(crate) mod function_calls;
     pub(crate) mod mutation;
     pub(crate) mod parse_expression;
     pub(crate) mod struct_instance;

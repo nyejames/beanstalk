@@ -15,9 +15,11 @@ These are the non-negotiable conditions for starting Alpha.
 
 ---
 
-## Phase 0 - Correct Type coersing behaviour
+## Phase 0 - Correct Type behaviour
 
-This phase is about cleaning up loose ends in the types system, primarily with numerical types "Int" and "Float".
+This phase is about cleaning up loose ends in the type system
+
+### PR - Fix Int promotion to Float with explicit Float declaration
 
 **Checklist**
 - Make sure Ints correctly promote to Floats if the declaration has an explicit "Float" type.
@@ -31,33 +33,16 @@ Both ints (1) should be promoted to floats when Float is explicitly specified as
 
 This only works for Type promotion from Int to Float (not the other way around or for any other types).
 
+### PR - Extend function call syntax with named args and mutability
+
+**Checklist**
+TODO
+
 ## Phase 1 - Code review checkpoint
 
 This phase is a deliberate cleanup and consolidation checkpoint before pushing further on language surface.
 The goal is to reduce structural risk now, remove stale paths while the compiler is still prealpha,
 and make later feature work land into a tighter codebase.
-
-### PR - Add coverage for the audit-discovered blind spots
-
-Use the audit as a direct test-gap backlog and close the highest-value coverage holes before more features are added.
-
-**Checklist**
-- Add or expand coverage for:
-  - Stage 0 config parsing and validation edge cases
-  - module discovery and routing/homepage behavior
-  - top-level const-template and start-fragment ordering rules
-  - receiver method visibility/import/same-file constraints
-  - borrow-checker CFG edge cases and merge/drop-site behavior
-  - JS runtime-sensitive lowering paths
-  - Wasm request/contract validation paths
-  - output cleanup and stale artifact behavior
-- Prefer end-to-end integration coverage where it gives better protection than narrow unit tests.
-- Prune or rewrite tests that are redundant after the new coverage lands.
-
-**Done when**
-- The most important audit findings are protected by tests.
-- Regressions in recently-refactored hotspots are more likely to be caught at the right layer.
-- The suite becomes broader rather than just denser in a few areas.
 
 ### PR - Run a style-guide and readability sweep across the touched areas
 

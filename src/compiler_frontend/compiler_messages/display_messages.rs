@@ -8,6 +8,7 @@ use crate::compiler_frontend::string_interning::StringTable;
 use saying::say;
 use std::path::{Path, PathBuf};
 use std::{env, fs};
+use crate::compiler_frontend::datatypes::DataType;
 
 pub(crate) fn relative_display_path_from_root(scope: &Path, root: &Path) -> String {
     let normalized_scope = normalize_path(scope);
@@ -428,6 +429,25 @@ fn terse_metadata_key_name(key: &ErrorMetaDataKey) -> &'static str {
         ErrorMetaDataKey::ConflictingPlace => "conflicting_place",
         ErrorMetaDataKey::ExistingBorrowPlace => "existing_borrow_place",
         ErrorMetaDataKey::ConflictType => "conflict_type",
+    }
+}
+
+/// Provide helpful hints for type conversion
+pub fn get_type_conversion_hint(from_type: &DataType, to_type: &DataType) -> String {
+    match (from_type, to_type) {
+        (DataType::Int, DataType::StringSlice) => {
+            "Try converting the integer to a string first".to_string()
+        }
+        (DataType::Float, DataType::StringSlice) => {
+            "Try converting the float to a string first".to_string()
+        }
+        (DataType::Bool, DataType::StringSlice) => {
+            "Try converting the boolean to a string first".to_string()
+        }
+        (DataType::StringSlice, DataType::Int) => {
+            "Try parsing the string as an integer first".to_string()
+        }
+        _ => "Check the function documentation for the expected argument types".to_string(),
     }
 }
 

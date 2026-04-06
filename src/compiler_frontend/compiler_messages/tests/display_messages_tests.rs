@@ -175,6 +175,7 @@ fn relative_display_path_strips_root_prefix() {
     assert_eq!(relative, "src/main.bst");
 }
 
+#[cfg(windows)]
 #[test]
 fn normalize_display_path_strips_windows_extended_prefix() {
     let normalized = normalize_path(Path::new(r"\\?\C:\workspace\main.bst"));

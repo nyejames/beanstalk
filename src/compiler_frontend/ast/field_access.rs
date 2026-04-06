@@ -1,7 +1,7 @@
 use crate::compiler_frontend::ast::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
-use crate::compiler_frontend::ast::statements::functions::create_function_call_arguments;
+use crate::compiler_frontend::ast::expressions::function_calls::create_function_call_arguments;
 use crate::compiler_frontend::builtins::BuiltinMethodKind;
 use crate::compiler_frontend::builtins::error_type::{
     ERROR_HELPER_BUBBLE, ERROR_HELPER_PUSH_TRACE, ERROR_HELPER_WITH_LOCATION,

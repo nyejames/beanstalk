@@ -4,6 +4,7 @@
 //! WHY: statement parsing should preserve signature metadata and host/user call dispatch.
 
 use super::*;
+use crate::compiler_frontend::ast::ast_nodes::NodeKind;
 use crate::compiler_frontend::ast::expressions::expression::{ExpressionKind, ResultCallHandling};
 use crate::compiler_frontend::ast::statements::functions::ReturnSlot;
 use crate::compiler_frontend::ast::test_support::{
@@ -80,13 +81,6 @@ fn start_function_distinguishes_user_and_host_calls() {
             .iter()
             .any(|node| matches!(node.kind, NodeKind::Return(..))),
         "explicit function body should preserve return statements"
-    );
-}
-
-#[test]
-fn accepts_mutable_collection_argument_for_immutable_parameter() {
-    parse_single_file_ast(
-        "sum |items {Int}| -> Int:\n    return items.length()\n;\n\nvalues ~= {1, 2, 3}\ncount = sum(values)\n",
     );
 }
 

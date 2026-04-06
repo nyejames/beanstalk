@@ -283,10 +283,8 @@ fn build_debug_name(
         .hir_module
         .side_table
         .function_name_path(hir_function.id)
-    {
-        if let Some(name) = path.name_str(module_context.string_table) {
-            return format!("fn_{}_{}", name, hir_function.id.0);
-        }
+    && let Some(name) = path.name_str(module_context.string_table) {
+        return format!("fn_{}_{}", name, hir_function.id.0);
     }
     format!("fn_{}", hir_function.id.0)
 }

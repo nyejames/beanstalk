@@ -15,7 +15,7 @@ use crate::compiler_frontend::ast::receiver_methods::free_function_receiver_meth
 use crate::compiler_frontend::ast::statements::choices::parse_choice_variant_value;
 use crate::compiler_frontend::ast::statements::declarations::create_reference;
 use crate::compiler_frontend::ast::statements::functions::{
-    FunctionReturn, FunctionSignature, ReturnSlot, parse_function_call,
+    FunctionReturn, FunctionSignature, ReturnSlot,
 };
 use crate::compiler_frontend::ast::statements::result_handling::parse_result_handling_suffix_for_expression;
 use crate::compiler_frontend::ast::templates::template::TemplateType;
@@ -34,6 +34,7 @@ use crate::compiler_frontend::traits::ContainsReferences;
 use crate::{
     ast_log, return_compiler_error, return_rule_error, return_syntax_error, return_type_error,
 };
+use crate::compiler_frontend::ast::expressions::function_calls::parse_function_call;
 
 fn push_expression_node(
     token_stream: &mut FileTokens,

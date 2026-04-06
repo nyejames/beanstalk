@@ -18,10 +18,11 @@ use crate::compiler_frontend::reserved_trait_syntax::{
 };
 
 use crate::compiler_frontend::ast::ast::{ContextKind, ScopeContext};
+use crate::compiler_frontend::ast::expressions::function_calls::parse_function_call;
 use crate::compiler_frontend::ast::statements::branching::create_branch;
 use crate::compiler_frontend::ast::statements::declarations::new_declaration;
 use crate::compiler_frontend::ast::statements::functions::{
-    FunctionReturn, FunctionSignature, ReturnSlot, parse_function_call,
+    FunctionReturn, FunctionSignature, ReturnSlot,
 };
 use crate::compiler_frontend::ast::statements::loops::create_loop;
 use crate::compiler_frontend::ast::statements::multi_bind::parse_multi_bind_statement;
