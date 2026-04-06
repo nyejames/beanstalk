@@ -16,6 +16,8 @@ use crate::compiler_frontend::host_functions::HostFunctionDef;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
+use crate::compiler_frontend::type_coercion::CompatibilityContext;
+use crate::compiler_frontend::type_coercion::compatibility::is_type_compatible;
 use crate::{ast_log, return_rule_error, return_syntax_error, return_type_error};
 use crate::compiler_frontend::display_messages::get_type_conversion_hint;
 
@@ -267,7 +269,7 @@ fn validate_user_function_argument_types(
     string_table: &StringTable,
 ) -> Result<(), CompilerError> {
     for (index, (expression, parameter)) in args.iter().zip(parameters.iter()).enumerate() {
-        if !&expression.data_type.accepts_value_type(&parameter.value.data_type) {
+        if !is_type_compatible(&expression.data_type, &parameter.value.data_type, CompatibilityContext::Exact) {
             return_type_error!(
                 format!(
                     "Argument {} to function '{}' has incorrect type. Expected {}, but got {}. {}",
@@ -442,10 +444,7 @@ pub fn validate_host_function_call(
     }
 
     for (i, (expression, param)) in args.iter().zip(&function.parameters).enumerate() {
-        if !param
-            .language_type
-            .accepts_value_type(&expression.data_type)
-        {
+        if !is_type_compatible(&param.language_type, &expression.data_type, CompatibilityContext::Exact) {
             return_type_error!(
                 format!(
                     "Argument {} to function '{}' has incorrect type. Expected {}, but got {}. {}",

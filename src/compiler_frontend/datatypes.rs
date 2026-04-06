@@ -214,6 +214,12 @@ impl DataType {
         }
     }
 
+    /// Type compatibility check for assignment-like contexts.
+    ///
+    /// NOTE: callers that want context-aware coercion should use
+    /// `type_coercion::compatibility::is_type_compatible` instead.
+    /// This method is kept for cases where the circular dependency makes the
+    /// direct import impractical (e.g. inside `datatypes.rs` itself).
     pub fn accepts_value_type(&self, actual: &DataType) -> bool {
         if matches!(self, DataType::Inferred) || matches!(actual, DataType::Inferred) {
             return true;

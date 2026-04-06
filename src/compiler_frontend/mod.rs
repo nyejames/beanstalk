@@ -28,6 +28,7 @@ pub(crate) use compiler_messages::compiler_errors;
 pub(crate) use compiler_messages::compiler_warnings;
 pub(crate) use compiler_messages::display_messages;
 pub(crate) mod datatypes;
+pub(crate) mod type_coercion;
 pub(crate) mod interned_path;
 pub(crate) mod string_interning;
 pub(crate) mod traits;

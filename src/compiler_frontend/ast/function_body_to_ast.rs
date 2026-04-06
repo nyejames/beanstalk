@@ -31,6 +31,8 @@ use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::compiler_frontend::traits::ContainsReferences;
+use crate::compiler_frontend::type_coercion::compatibility::is_numeric_coercible;
+use crate::compiler_frontend::type_coercion::numeric::coerce_expression_to_return_type;
 use crate::projects::settings;
 use crate::projects::settings::TOP_LEVEL_TEMPLATE_NAME;
 use crate::{ast_log, return_rule_error, return_syntax_error, return_type_error};
@@ -775,33 +777,46 @@ pub fn function_body_to_ast(
                         );
                     }
 
+                    let mut coerced_returns: Vec<Expression> =
+                        Vec::with_capacity(parsed_returns.len());
+
                     for (index, (returned_value, expected_type)) in parsed_returns
-                        .iter()
+                        .into_iter()
                         .zip(context.expected_result_types.iter())
                         .enumerate()
                     {
                         let normalized_actual =
                             normalize_return_expression_type(&returned_value.data_type);
 
-                        if &normalized_actual != expected_type {
-                            return_type_error!(
-                                format!(
-                                    "Return value {} has incorrect type. Expected '{}', got '{}'. Return values must match the function signature exactly.",
-                                    index + 1,
-                                    expected_type.display_with_table(string_table),
-                                    normalized_actual.display_with_table(string_table)
-                                ),
-                                returned_value.location.clone(),
-                                {
-                                    CompilationStage => "AST Construction",
-                                    PrimarySuggestion => "Update the returned expression to match the declared return type",
-                                    AlternativeSuggestion => "If this value is intended, change the function return signature to the correct type",
-                                }
-                            );
+                        if &normalized_actual == expected_type {
+                            coerced_returns.push(returned_value);
+                            continue;
                         }
+
+                        // Allow Int → Float at return sites and rewrite the expression.
+                        if is_numeric_coercible(&normalized_actual, expected_type) {
+                            coerced_returns
+                                .push(coerce_expression_to_return_type(returned_value, expected_type));
+                            continue;
+                        }
+
+                        return_type_error!(
+                            format!(
+                                "Return value {} has incorrect type. Expected '{}', got '{}'. Return values must match the function signature exactly.",
+                                index + 1,
+                                expected_type.display_with_table(string_table),
+                                normalized_actual.display_with_table(string_table)
+                            ),
+                            returned_value.location.clone(),
+                            {
+                                CompilationStage => "AST Construction",
+                                PrimarySuggestion => "Update the returned expression to match the declared return type",
+                                AlternativeSuggestion => "If this value is intended, change the function return signature to the correct type",
+                            }
+                        );
                     }
 
-                    parsed_returns
+                    coerced_returns
                 };
 
                 // if !return_value.is_pure() {

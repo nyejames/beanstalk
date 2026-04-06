@@ -16,6 +16,8 @@ use crate::compiler_frontend::ast::expressions::expression::{Expression, Express
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::type_coercion::CompatibilityContext;
+use crate::compiler_frontend::type_coercion::compatibility::is_type_compatible;
 use crate::return_type_error;
 use crate::{eval_log, return_compiler_error, return_syntax_error};
 
@@ -162,7 +164,10 @@ fn validate_expression_result_type(
         return Ok(());
     }
 
-    if expected_type.accepts_value_type(actual_type) {
+    // Declaration context allows contextual numeric coercions such as Int → Float.
+    // Callers that require strict equality (function arguments, match patterns) use
+    // their own type checks directly through `is_type_compatible(Exact)`.
+    if is_type_compatible(expected_type, actual_type, CompatibilityContext::Declaration) {
         return Ok(());
     }
 

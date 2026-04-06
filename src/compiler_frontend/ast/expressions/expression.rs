@@ -129,6 +129,7 @@ impl Expression {
             }
             ExpressionKind::NoValue => String::new(),
             ExpressionKind::OptionNone => String::new(),
+            ExpressionKind::Coerced { value, .. } => value.as_string(string_table),
         }
     }
 
@@ -368,6 +369,27 @@ impl Expression {
         )
     }
 
+    /// Build an explicit contextual coercion node.
+    ///
+    /// WHAT: wraps `value` in a `Coerced` expression kind that carries the
+    /// target type explicitly in the AST.
+    /// WHY: contextual promotions such as Int → Float must be represented
+    /// deliberately so that lowering stages can emit the correct conversion
+    /// rather than silently mistyping the inner value.
+    pub fn coerced(value: Expression, to_type: DataType) -> Self {
+        let location = value.location.clone();
+        let ownership = value.ownership.to_owned();
+        Self::new(
+            ExpressionKind::Coerced {
+                value: Box::new(value),
+                to_type: to_type.to_owned(),
+            },
+            location,
+            to_type,
+            ownership,
+        )
+    }
+
     pub fn result_construct(
         variant: ResultVariant,
         value: Expression,
@@ -571,6 +593,9 @@ impl Expression {
             | ExpressionKind::StructDefinition(..)
             | ExpressionKind::NoValue
             | ExpressionKind::OptionNone => ConstValueKind::NonConst,
+            // Delegate const classification to the wrapped value — the coercion
+            // does not change whether an expression is compile-time foldable.
+            ExpressionKind::Coerced { value, .. } => value.const_value_kind(),
         }
     }
 }
@@ -648,6 +673,19 @@ pub enum ExpressionKind {
     // Upper and lower bounds are inclusive.
     // Instead of making this a function, it has its own special case to make constant folding easier
     Range(Box<Expression>, Box<Expression>),
+
+    /// An implicit contextual coercion applied by the compiler at a declaration
+    /// or return site. The inner value retains its original expression kind;
+    /// `to_type` records the promoted type so lowering stages can emit the
+    /// correct conversion.
+    ///
+    /// WHY a separate variant: silent type pretending (e.g. storing an Int
+    /// expression but calling it Float) makes later lowering fragile. An
+    /// explicit `Coerced` node makes the coercion visible and auditable.
+    Coerced {
+        value: Box<Expression>,
+        to_type: DataType,
+    },
 }
 
 impl ExpressionKind {

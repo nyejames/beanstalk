@@ -18,6 +18,7 @@ use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
+use crate::compiler_frontend::type_coercion::string::{FoldedStringPiece, fold_expression_kind_to_string};
 use crate::{ast_log, return_compiler_error};
 
 /// Required context for compile-time template folding.
@@ -97,31 +98,30 @@ fn fold_plan(
             continue;
         };
 
-        match expression_kind {
-            ExpressionKind::StringSlice(string) => {
-                final_string.push_str(fold_context.string_table.resolve(string));
+        // Delegate the "what can become string content" policy to the coercion module.
+        // Template mechanics (slot resolution, formatting) live in the template subsystem;
+        // the decision about which expression kinds are renderable lives in type_coercion::string.
+        match fold_expression_kind_to_string(&expression_kind, fold_context.string_table) {
+            Some(FoldedStringPiece::Text(text)) => {
+                final_string.push_str(&text);
             }
 
-            ExpressionKind::Float(float) => {
-                final_string.push_str(&float.to_string());
+            Some(FoldedStringPiece::Char(ch)) => {
+                final_string.push(ch);
             }
 
-            ExpressionKind::Int(int) => {
-                final_string.push_str(&int.to_string());
+            Some(FoldedStringPiece::Skip) => {
+                continue;
             }
 
-            ExpressionKind::Bool(value) => {
-                final_string.push_str(&value.to_string());
-            }
-
-            ExpressionKind::Char(value) => {
-                final_string.push(value);
-            }
-
-            ExpressionKind::Template(template) => {
-                if matches!(template.kind, TemplateType::Comment(_)) {
-                    continue;
-                }
+            Some(FoldedStringPiece::NestedTemplate) => {
+                // The expression kind was a Template — retrieve the template from the
+                // original piece to recursively fold it with full project context.
+                let ExpressionKind::Template(template) = expression_kind else {
+                    return_compiler_error!(
+                        "String coercion returned NestedTemplate for a non-Template expression kind."
+                    );
+                };
 
                 if matches!(template.kind, TemplateType::SlotInsert(_))
                     || template.content.contains_slot_insertions()
@@ -138,11 +138,11 @@ fn fold_plan(
             }
 
             // Anything else can't be folded and should not get to this stage.
-            _ => {
+            None => {
                 return_compiler_error!(
                     "Invalid Expression Used Inside template when trying to fold into a string.\
                          The compiler_frontend should not be trying to fold this template."
-                )
+                );
             }
         }
     }

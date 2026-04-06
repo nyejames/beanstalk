@@ -1202,3 +1202,23 @@ tags = ["integration","language"]
 id = "white_space"
 path = "white_space"
 tags = ["integration","language"]
+
+[[case]]
+id = "int_promotion_to_float_declaration"
+path = "int_promotion_to_float_declaration"
+tags = ["integration", "type-coercion"]
+
+[[case]]
+id = "int_promotion_to_float_return"
+path = "int_promotion_to_float_return"
+tags = ["integration", "type-coercion"]
+
+[[case]]
+id = "float_declaration_from_bool_rejected"
+path = "float_declaration_from_bool_rejected"
+tags = ["integration", "type-coercion"]
+
+[[case]]
+id = "int_declaration_from_float_rejected"
+path = "int_declaration_from_float_rejected"
+tags = ["integration", "type-coercion"]

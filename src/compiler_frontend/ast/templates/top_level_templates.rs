@@ -639,6 +639,10 @@ fn collect_references_from_expression(
             }
         }
 
+        ExpressionKind::Coerced { value, .. } => {
+            collect_references_from_expression(value, references);
+        }
+
         ExpressionKind::NoValue
         | ExpressionKind::OptionNone
         | ExpressionKind::Int(_)

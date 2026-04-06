@@ -273,6 +273,19 @@ impl<'a> HirBuilder<'a> {
                 self.lower_runtime_template_expression(template.as_ref(), &expr.location)
             }
 
+            // Lower the inner value and override the HIR type with the declared
+            // coercion target. The actual numeric conversion (e.g. Int → Float)
+            // is expected to be resolved by the code generation backend based on
+            // the type annotation. For constant int literals that were already
+            // folded to float in `type_coercion::numeric`, this arm will not be
+            // reached.
+            ExpressionKind::Coerced { value, .. } => {
+                let mut lowered = self.lower_expression(value)?;
+                let coerced_ty = self.lower_data_type(&expr.data_type, &expr.location)?;
+                lowered.value.ty = coerced_ty;
+                Ok(lowered)
+            }
+
             ExpressionKind::Function(_, _) => {
                 return_hir_transformation_error!(
                     "Function expressions are not lowered in this phase",

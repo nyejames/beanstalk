@@ -20,6 +20,7 @@ use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, Token, TokenKind};
 use crate::compiler_frontend::traits::ContainsReferences;
+use crate::compiler_frontend::type_coercion::numeric::coerce_expression_to_declared_type;
 use crate::{ast_log, return_rule_error};
 
 pub fn create_reference(
@@ -169,14 +170,20 @@ pub fn resolve_declaration_syntax(
             )
         }
 
-        _ => create_expression(
-            &mut initializer_stream,
-            context,
-            &mut data_type,
-            &ownership,
-            false,
-            string_table,
-        )?,
+        _ => {
+            let expr = create_expression(
+                &mut initializer_stream,
+                context,
+                &mut data_type,
+                &ownership,
+                false,
+                string_table,
+            )?;
+            // Apply contextual numeric coercion (e.g. Int → Float) when the
+            // declared type requires it. This runs after expression parsing so
+            // the natural expression type is known before promotion is attempted.
+            coerce_expression_to_declared_type(expr, &data_type)
+        }
     };
 
     // Declaration mutability is determined by the left-hand marker (`~=`) for direct references.
