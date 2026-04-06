@@ -33,10 +33,217 @@ Both ints (1) should be promoted to floats when Float is explicitly specified as
 
 This only works for Type promotion from Int to Float (not the other way around or for any other types).
 
-### PR - Extend function call syntax with named args and mutability
+### PR - Extend function call syntax with named args and explicit argument access
+
+Unify the function-call argument model before more syntax lands on top of it.
+
+This PR should establish one canonical `CallArgument` shape that can represent:
+- a positional argument
+- a named argument using `as`
+- an explicit mutable-access call argument using `~`
+- combinations of the above, where the name belongs to the argument slot and the `~` belongs to the value expression being passed
+
+
+This PR is the semantic foundation for call syntax going into Alpha.
+It should not try to also solve method-call receiver syntax in the same change.
+Method-call explicit mutability remains a follow-up PR.
+
+**Scope**
+- Function calls only
+- Host function calls must follow the same argument parsing model where practical
+- Result-handling suffixes (`!`, fallback, named handler) must continue to work on top of the new call-argument representation
+- Method-call receiver syntax is explicitly out of scope for this PR
+
+**Syntax goals**
+- Positional immutable/shared argument:
+  - `sum(values)`
+- Positional explicit mutable argument:
+  - `sum(~values)`
+- Named immutable/shared argument:
+  - `sum(items as values)`
+- Named explicit mutable argument:
+  - `sum(items as ~values)`
+- The `~` marker belongs to the passed expression, not the parameter name
+- Named arguments must target declared parameter names exactly
+- Calls must no longer rely on any implicit “mutable can satisfy immutable” collection shortcut
+- Mutability at the call site must be explicit and type-checked for all argument kinds, including collections
 
 **Checklist**
-TODO
+- Introduce a dedicated `CallArgument` AST type instead of passing around bare `Expression` values for function-call arguments.
+- Make `CallArgument` carry at minimum:
+  - the parsed value expression
+  - an optional targeted parameter name
+  - the explicit call-site access mode (shared/default vs explicit mutable)
+- Refactor function-call parsing in the new `ast/expressions/function_calls.rs` area so argument parsing is no longer modeled as only `Vec<Expression>`.
+- Replace the current “expected argument types only” parsing path with a richer per-parameter expectation shape that can validate:
+  - parameter type
+  - parameter mutability/access requirement
+  - parameter name for named calls
+- Parse `as` inside call arguments as the argument-name syntax for function calls.
+- Decide and enforce the chosen grammar for named arguments consistently:
+  - either `name as expr`
+  - or another final chosen `as` direction
+  - whichever shape is chosen, lock it in consistently in parser, diagnostics, docs, and tests
+- Parse explicit mutable call arguments with `~` only on valid place expressions where required by the called parameter.
+- Reject invalid `~` argument forms cleanly:
+  - non-place expressions
+  - immutable places
+  - values that cannot be passed with mutable access
+- Reject missing `~` where the parameter requires mutable/exclusive access.
+- Remove any remaining compatibility behavior that treats mutable collections as implicitly acceptable for immutable parameters.
+- Make collection arguments obey the same explicit call-site access rules as every other type instead of having special permissive behavior.
+- Preserve the distinction between:
+  - declaration-time mutability of a place
+  - call-site explicit mutable access
+  - later move/borrow lowering decisions
+- Do not overload these into one flag if it makes the code harder to reason about.
+- Thread the new `CallArgument` shape through:
+  - user function call parsing
+  - host function call parsing
+  - result-handled call parsing
+  - AST node construction for `FunctionCall`, `HostFunctionCall`, and `ResultHandledFunctionCall`
+- Update call validation so it checks, in a clear order:
+  - argument count / defaults
+  - named argument resolution
+  - duplicate names
+  - positional vs named ordering rules
+  - missing required parameters
+  - unexpected parameter names
+  - argument type compatibility
+  - explicit mutable/shared access correctness
+- Decide and enforce one consistent rule for mixed positional and named arguments.
+  Recommended default:
+  - positional arguments first
+  - then named arguments
+  - no positional arguments after the first named argument
+- Ensure defaults still work correctly when named arguments skip earlier parameters.
+- Make duplicate-parameter assignment in one call a hard error whether it happens through:
+  - duplicate named args
+  - positional + named targeting the same parameter
+- Keep result-handling syntax (`call(...)!`, `call(...) ! fallback`, named handler blocks) working unchanged on top of the new call parser.
+- Keep diagnostics specific and structured. Add dedicated errors for:
+  - unknown named parameter
+  - duplicate argument target
+  - positional argument after named argument
+  - mutable parameter requires explicit `~`
+  - `~` used on non-place expression
+  - `~` used on immutable place
+  - wrong type even when name/access mode are otherwise valid
+- Add WHAT/WHY comments around the new `CallArgument` representation and validation flow so the code reads like final design code, not transition code.
+- Remove any old helper paths or compatibility logic that become redundant after the new call-argument model lands.
+- Do not keep transitional wrappers just to preserve the older parser shape.
+
+**Suggested implementation order**
+1. Introduce `CallArgument` and thread it through AST node shapes first.
+2. Refactor `create_function_call_arguments` into a dedicated argument parser that returns structured arguments rather than expressions.
+3. Add per-parameter expectation metadata so parsing/validation can see both type and access requirements.
+4. Add named-argument parsing with `as`.
+5. Add explicit mutable-argument parsing and validation.
+6. Rewrite validation around the new structured arguments.
+7. Update host-call and result-handled call paths.
+8. Prune old compatibility logic and stale helper code.
+9. Add tests only after the new canonical parsing path is stable enough to avoid churn.
+
+**Testing checklist**
+- Parser/unit coverage for:
+  - positional immutable arguments
+  - positional mutable arguments
+  - named immutable arguments
+  - named mutable arguments
+  - mixed positional + named valid cases
+  - invalid ordering of positional/named args
+  - duplicate parameter targeting
+  - unknown parameter names
+  - missing required arguments with defaults present on other parameters
+  - `~` on temporary / literal / non-place expression
+  - `~` on immutable variable
+  - missing `~` for mutable parameter
+- Integration coverage for:
+  - normal user function calls
+  - host calls that still use the unified argument path
+  - result-returning calls with `!`
+  - result-returning calls with fallback values
+  - named handler blocks after calls parsed through the new argument layer
+  - collection arguments passed explicitly as shared vs mutable
+- Update any now-invalid fixtures that relied on old implicit mutable call behavior.
+- Re-run:
+  - `cargo check`
+  - `cargo test`
+  - `cargo run tests`
+
+**Done when**
+- Function-call syntax has one canonical argument representation instead of several partial conventions.
+- Named arguments and explicit mutable call-site access both work through the same parsing and validation path.
+- Collections no longer get a hidden call-compatibility exception.
+- Invalid call-site mutability is a normal structured type/rule error rather than accidental behavior.
+- The codebase is in a better shape for the later method-call explicit mutability PR instead of baking in more special cases.
+- The compiler can explain bad named-argument usage cleanly.
+
+
+
+### PR - Update function-call docs, diagnostics, and migrated tests for explicit call-site mutability
+
+Once the new function-call argument model lands, clean up the user-facing surface immediately so the docs, diagnostics, and tests all describe the same language.
+
+This PR is specifically about removing stale expectations from documentation and tests, and tightening the presentation of the new rules.
+It should not introduce new call syntax semantics beyond what the implementation PR already decided.
+
+**Scope**
+- Language docs
+- Compiler docs
+- Roadmap references if needed
+- Integration fixtures and parser/unit fixtures
+- Diagnostic wording improvements directly related to the new function-call rules
+
+**Checklist**
+- Audit the language overview and any function/method documentation for outdated examples that omit required call-site mutability.
+- Update docs so they clearly state:
+  - function-call mutability is explicit at the call site
+  - passing a mutable/exclusive argument without `~` is an error
+  - using `~` on an invalid value is an error
+  - collections follow the same explicit call-site mutability rules and do not get a permissive exception
+- Add a concise explanation of the difference between:
+  - a mutable variable declaration
+  - an explicitly mutable function-call argument
+- Update all examples that now require `~` at call sites.
+- Update or remove old tests that were only passing because of the previous implicit behavior.
+- Add explicit failure fixtures proving that the old behavior is now rejected.
+- Add failure fixtures with message-fragment assertions for the most important mistakes:
+  - missing `~` for mutable parameter
+  - `~` on immutable place
+  - `~` on non-place expression
+  - wrong named parameter
+  - duplicate named parameter
+- Tighten diagnostic wording where needed so the compiler names:
+  - the called function
+  - the parameter name when available
+  - the expected access mode
+  - the actual argument form
+- Ensure diagnostics suggest the direct fix where practical, for example:
+  - “Call this with `~value`”
+  - “Remove `~` because this parameter expects shared access”
+  - “Use a declared parameter name”
+- Audit any roadmap/doc references that still describe the older permissive collection-call behavior.
+- Keep test names and fixture names aligned with the new rules instead of preserving old assumptions in file names.
+- Re-run:
+  - `cargo check`
+  - `cargo test`
+  - `cargo run tests`
+
+**Suggested docs to audit**
+- `README.md`
+- language overview docs
+- compiler design notes where function-call semantics are mentioned
+- roadmap notes around named args / mutability
+- any examples in tests or docs site content that demonstrate function calls
+
+**Done when**
+- The documented language matches the implemented language for function calls.
+- There are no stale examples implying that mutable call-site access can be inferred.
+- Tests now protect the explicit-call-site rule instead of preserving the old accidental behavior.
+- Diagnostics make the new rule feel intentional rather than surprising.
+
+
 
 ## Phase 1 - Code review checkpoint
 
@@ -76,21 +283,6 @@ Stop Char being a neglected primitive with uneven support.
 
 **Done when**
 - Char behaves like a deliberate core datatype rather than a half-kept edge type.
-
-### PR - Add named argument passing for function calls and struct creation
-
-Support `as`-based named argument passing as the first non-positional call path.
-
-**Checklist**
-- Finalize the parser/lowering shape for named arguments using `as`.
-- Thread named call arguments through function-call checking.
-- Thread named field assignment through struct construction.
-- Add diagnostics for unknown names, duplicates, missing required args, mixed-order invalid cases if disallowed.
-- Add integration tests for calls and struct initialization.
-
-**Done when**
-- Named argument passing works for the chosen Alpha scope.
-- The compiler can explain bad named-argument usage cleanly.
 
 ### PR - Harden structs, records, and methods together
 
