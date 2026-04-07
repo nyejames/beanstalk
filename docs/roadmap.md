@@ -19,20 +19,6 @@ These are the non-negotiable conditions for starting Alpha.
 
 This phase is about cleaning up loose ends in the type system
 
-### PR - Fix Int promotion to Float with explicit Float declaration
-
-**Checklist**
-- Make sure Ints correctly promote to Floats if the declaration has an explicit "Float" type.
-- Enforce the same behaviour for returns with raw int expressions in the place of a float
-- Make sure there is test coverage for the correct behaviour
-
-This is currently an error but should not be:
-`result Float = 1 + 1`
-
-Both ints (1) should be promoted to floats when Float is explicitly specified as the type.
-
-This only works for Type promotion from Int to Float (not the other way around or for any other types).
-
 ### PR - Extend function call syntax with named args and explicit argument access
 
 Unify the function-call argument model before more syntax lands on top of it.
@@ -178,7 +164,6 @@ Method-call explicit mutability remains a follow-up PR.
 - Invalid call-site mutability is a normal structured type/rule error rather than accidental behavior.
 - The codebase is in a better shape for the later method-call explicit mutability PR instead of baking in more special cases.
 - The compiler can explain bad named-argument usage cleanly.
-
 
 
 ### PR - Update function-call docs, diagnostics, and migrated tests for explicit call-site mutability

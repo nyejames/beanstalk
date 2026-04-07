@@ -34,6 +34,9 @@ This comes before the type if there is an explicit type declaration.
     int ~= 0
     float ~= 0.0
 
+    -- You could also create a float with an explicit Type like this:
+    float Float ~= 0
+
     -- Note: This is not a mutable heap allocated string, just a slice
     -- Regular strings are created using string templates
     -- Mutability here means that string_slice_value can be reassigned with another string slice
@@ -84,6 +87,7 @@ function_name |param Int| -> Int:
 ### Results and Options
 
 Beanstalk supports optional values and error returns with compact syntax.
+none is parse-context-sensitive: it requires an optional surrounding type context rather than being recovered later by post-parse coercion.
 
 Optional types use `?`:
 

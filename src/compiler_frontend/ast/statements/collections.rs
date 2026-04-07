@@ -12,6 +12,7 @@ use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::compiler_frontend::type_coercion::numeric::coerce_expression_to_declared_type;
+use crate::compiler_frontend::type_coercion::parse_context::parse_expectation_for_target_type;
 use crate::return_syntax_error;
 
 /// Parse a collection literal with homogeneous item expressions.
@@ -62,7 +63,9 @@ pub fn new_collection(
                     )
                 }
 
-                let mut expr_type = DataType::Inferred;
+                // Pass parse-time context for Option(_) collection types so
+                // that `none` items can resolve their inner type during parsing.
+                let mut expr_type = parse_expectation_for_target_type(collection_type);
                 let raw = create_expression(
                     token_stream,
                     context,

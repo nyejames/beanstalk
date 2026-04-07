@@ -8,7 +8,7 @@ Priorities:
 3. Correctness and diagnostics
 
 Before finishing changes, always run:
-- `cargo check`
+- `cargo clippy`
 - `cargo test`
 - `cargo run tests`
 

@@ -1,7 +1,10 @@
 # Beanstalk Memory Management Strategy
 The goal of Beanstalk’s memory system is to guarantee memory safety under all circumstances, while allowing performance to scale with the strength of static analysis.
 
-Beanstalk adopts a GC-first, statically eliding strategy. Garbage collection defines the baseline semantics. Static analysis progressively removes GC participation where it can prove safety.
+Beanstalk adopts a GC-first, statically eliding strategy. Garbage collection defines the baseline semantics. Static analysis progressively removes GC participation where it can prove safety. All programs are correct under GC. 
+
+Programs that satisfy stronger static rules run faster. Beanstalk treats ownership as an optimization target.
+If static guarantees are missing or incomplete, the value falls back to GC.
 
 ## High-Level Goals
 - Memory safety is always ensured.
@@ -22,7 +25,7 @@ Beanstalk’s memory model is intentionally layered:
 - In the baseline execution model:
 - All heap values are managed by a garbage collector.
 - No deterministic drops are required for correctness.
-- possible_drop sites compile to no-ops.
+- drop_if_owned sites compile to no-ops.
 - Borrowing rules still apply to prevent races and logical misuse.
 
 This model is used by:
@@ -93,7 +96,7 @@ If a use is determined to be the last possible use:
 - Responsibility is deferred to the consumer.
 
 If a path exits a scope without a last use:
-* A `possible_drop` is inserted.
+* A `drop_if_owned` is inserted.
 * The drop executes only if the value is owned at runtime.
 
 In GC-only backends, these sites are ignored. In hybrid backends, they become conditional destruction points.
@@ -101,7 +104,7 @@ In GC-only backends, these sites are ignored. In hybrid backends, they become co
 ## Control Flow and Drops
 Control flow constructs (`if`, `loop`, `break`, `return`) interact with ownership explicitly.
 
-* Every control-flow exit that leaves a scope capable of owning a value has an associated `possible_drop`.
+* Every control-flow exit that leaves a scope capable of owning a value has an associated `drop_if_owned`.
 * Branches are analysed independently.
 * Merges are conservative: if *any* path may own a value, a drop point must exist.
 
@@ -129,10 +132,10 @@ Static analysis guarantees that the caller will not use a value again if ownersh
 
 This design keeps dispatch static, avoids monomorphization and prevents binary-size growth on Wasm while still allowing the compiler to freely choose between moves and mutable references based on last-use analysis.
 
-Future release optimisations can also remove the 'possible' part if all calls either consume or borrow their arguments the same way across the program.
+Future release optimisations can also remove the 'if owned' part if all calls either consume or borrow their arguments the same way across the program.
 ```Rust
     enum OwnershipEffect {
-        MayConsume,     // Default, possible_drop will be used in this function
+        MayConsume,     // Default, drop_if_owned will be used in this function
         NeverConsumes,  // No drop inserted at all
         AlwaysConsumes, // Drop is always inserted
     }
@@ -156,7 +159,7 @@ The compiler enforces memory safety through the following steps:
    * enforces exclusivity rules,
    * prevents illegal overlapping access,
    * Enables ownership eligibility,
-   * provides advisory possible_drop sites
+   * provides advisory drop_if_owned sites
 4. **Final Lowering**, where:
    * ownership flags are generated,
    * possible drops become conditional frees,
@@ -171,7 +174,7 @@ Compared to a fully static borrow checker:
 
 * Some ownership decisions are deferred to runtime.
 * Some errors are detected later than theoretically possible.
-* Small runtime cost from possible drop checks.
+* Small runtime cost from drop_if_owned checks.
 
 Comparing the other languages:
 * Swift SIL - ownership is explicit in IR, verifier checks validity, optimizer exploits it

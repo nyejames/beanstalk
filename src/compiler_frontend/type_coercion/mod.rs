@@ -1,6 +1,6 @@
 //! Coercion policy for the Beanstalk compiler frontend.
 //!
-//! WHAT: owns all contextual coercion and type-compatibility decisions.
+//! WHAT: Compatibility and coercion policy are centralized here, but assignment-like frontend sites still apply those rules explicitly after parsing.
 //! WHY: coercion logic was previously scattered across datatypes, expression
 //! evaluation, declarations, returns, and templates — each maintaining its own
 //! mini-policy. This module is the single home for all of those decisions.
@@ -19,6 +19,7 @@
 
 pub(crate) mod compatibility;
 pub(crate) mod numeric;
+pub(crate) mod parse_context;
 pub(crate) mod string;
 
 /// The context in which a coercion is being applied.

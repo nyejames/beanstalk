@@ -879,6 +879,26 @@ path = "nested_borrowing_patterns"
 tags = ["integration","borrows"]
 
 [[case]]
+id = "none_declaration_success"
+path = "none_declaration_success"
+tags = ["integration","language","optionals"]
+
+[[case]]
+id = "none_mutation_success"
+path = "none_mutation_success"
+tags = ["integration","language","optionals"]
+
+[[case]]
+id = "none_return_success"
+path = "none_return_success"
+tags = ["integration","language","optionals"]
+
+[[case]]
+id = "none_without_context_rejected"
+path = "none_without_context_rejected"
+tags = ["integration","language","optionals","diagnostics"]
+
+[[case]]
 id = "path_bst_template_warning"
 path = "path_bst_template_warning"
 tags = ["integration","paths"]

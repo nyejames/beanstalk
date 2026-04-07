@@ -1,23 +1,18 @@
 # Compilation 
 ## What is this compiler?
-- A high-level language with templates as first-class citizens and ownership treated as an optimisation (GC is the fallback).
+- A high-level language with templates as first-class citizens 
 - Near-term target is a stable JS backend/build system for static pages and JS output. Wasm remains the long-term primary target.
 - Build systems can use the compiler up through HIR (and borrow checking) and then apply their own codegen for any backend, including potential Rust-interpreter-backed builds.
-- A modular compiler exposed as a library, plus a build system and CLI that assemble single-file and multi-file projects into runnable bundles.
+- A modular compiler exposed as a library, plus a build system, dev server and CLI that assemble single-file and multi-file projects into runnable bundles.
+- Ownership treated as an optimisation (GC is the fallback).
+- At runtime, ownership is resolved via tagged pointers, allowing a single calling convention for borrowed and owned values.
 
-Beanstalk's compiler enforces memory safety through a hybrid strategy: A fallback garbage collector combined with increasingly strong static analysis that incrementally removes the need for runtime memory management.
-All programs are correct under GC. Programs that satisfy stronger static rules run faster. Beanstalk treats ownership as an optimization target.
-If static guarantees are missing or incomplete, the value falls back to GC.
-
-## Current status
-- Early development: The primary milestone is a stable JS build system/backend for static pages and JS output.
-- Syntax and semantics are still shifting. Some constructs such as closures, interfaces or async are not final or fully implemented in the pipeline.
-
-In early compiler iterations and in the JavaScript backend, all heap values are managed by a garbage collector. As the compiler matures, static analyses (last-use analysis, borrow validation, region reasoning) are layered on top to eliminate GC participation where possible, especially for the Wasm backend.
-
-At runtime, ownership is resolved via tagged pointers, allowing a single calling convention for borrowed and owned values.
-
-This style of memory management can be incrementally strengthened with region analysis, stricter static lifetimes or place-based tracking in future iterations of the compiler without having to change the language semantics.
+### Frontend structure at a glance
+- `src/compiler_frontend/mod.rs` wires stages together
+- `src/compiler_frontend/ast/` builds the typed AST
+- `src/compiler_frontend/type_coercion/` owns type compatibility and contextual coercion rules
+- `src/compiler_frontend/hir/` lowers AST into HIR
+- `src/compiler_frontend/analysis/borrow_checker/` validates borrow/exclusivity rules
 
 ## Overview
 Build systems create a `BackendBuilder` implementation and wrap it in a `ProjectBuilder` struct.
@@ -140,8 +135,6 @@ Project builders then perform:
 **Development Notes**:
 This stage of the compiler is stable and currently can represent almost all the tokens Beanstalk will need to represent.
 
----
-
 ### Stage 2: Header Parsing (`src/compiler_frontend/headers/parse_file_headers.rs`)
 **Purpose**: Extract function definitions, structs, constants, imports and identify entry points before AST construction.
 
@@ -180,8 +173,6 @@ pub struct ConstantHeaderMetadata {
 }
 ```
 
----
-
 ### Stage 3: Dependency Sorting (`src/compiler_frontend/module_dependencies.rs`)
 **Purpose**: Order headers topologically to ensure the proper compilation sequence so the AST for the whole module can be created in one pass. 
 This enables the AST to perform full type checking.
@@ -192,8 +183,6 @@ This enables the AST to perform full type checking.
 - Source-order stability for constants declared in the same file
 - Circular dependency detection
 - Missing dependency diagnostics
-
----
 
 ### Stage 4: AST Construction (`src/compiler_frontend/ast/module_ast/mod.rs`)
 **Purpose**: Transform headers into Abstract Syntax Tree with compile-time optimizations.
@@ -206,6 +195,20 @@ This enables the AST to perform full type checking.
 - **Namespace Resolution**: Makes sure that variables exist and are unique to the entire module.
 Variables store their full path including their parents in their name, the last part of the path is the variable name.
 - **Type Checking**: Early type resolution and validation
+
+**Type checking and coercion**
+
+Generic expression evaluation determines the natural type of an expression and stays strict. Contextual promotion is applied afterwards by the frontend site that owns the boundary, such as a declaration or return slot.
+
+- `parse_expression.rs` and `eval_expression.rs` determine the natural type of expressions and enforce operator typing.
+- `type_coercion::compatibility` decides whether one type is accepted in another context.
+- `type_coercion::numeric` applies explicit contextual promotions such as Int -> Float.
+- `type_coercion::string` owns what can become string content at template boundaries.
+- Declarations and returns may apply coercion after expression parsing; generic expression evaluation itself stays strict.
+- Int -> Float is supported in explicit declaration / return contexts
+- function arguments and match patterns still require exact compatibility
+- templates and template wrappers are accepted where string slices are expected because they lower to the same HIR/string representation
+- builtin casts like Float(x) / Int(x) remain explicit frontend-owned syntax
 
 **Constant rules enforced by AST**:
 - Constant declarations share declaration syntax with normal variables
@@ -241,8 +244,6 @@ Variables store their full path including their parents in their name, the last 
 
 **Development Notes**:
 - Use `show_ast` feature flag to inspect generated AST
-
----
 
 ## Stage 5: HIR Generation (`src/compiler_frontend/hir/`)
 HIR (High-Level IR) is Beanstalk’s semantic lowering stage.
@@ -296,8 +297,6 @@ HIR is the first stage where resource lifetime semantics are made explicit, but 
 ### Debugging HIR
 Use the `show_hir` flag to see the output.
 
----
-
 ## Stage 6: Borrow Validation (`src/compiler_frontend/analysis/borrow_checker/`)
 Borrow validation is a mandatory frontend phase for backend semantic parity:
 - Programs that violate borrow/exclusivity rules are rejected before backend lowering.
@@ -310,8 +309,8 @@ HIR represents semantic meaning under GC. Ownership is an optimization layer, no
 Project builders and debug builds can skip optional post-borrow analyses to avoid compile time overhead,
 but mandatory borrow validation itself is not optional.
 
-**Possible Drop Insertion**
-- This analysis can reveal conditional possible_drop(x) locations:
+**`Drop if owned` Insertion**
+- This analysis can reveal conditional drop_if_owned(x) locations:
     1. At block exits
     2. On return
     3. On break from ownership-bearing scopes
@@ -340,8 +339,6 @@ Branches are checked independently and merges enforce conservative rules.
 **Drop Safety**
 Ensures all values that might own data eventually reach a drop site.
 
----
-
 ### 1. Shared References (Default)
 - Borrowing is the Default
 - Multiple shared references to the same data are allowed
@@ -362,7 +359,7 @@ Ensures all values that might own data eventually reach a drop site.
 - Moves are identified via last-use analysis but finalized at runtime using ownership flags
 - The compiler determines when the last use of a variable happens statically for any given scope
 - If the variable is passed into a function call or assigned to a new variable, and it's determined to be a move at runtime, then the new owner is responsible for dropping the value
-- Otherwise, the last time an owner uses a value without moving it, a possible_drop() insertion will drop the value
+- Otherwise, the last time an owner uses a value without moving it, a drop_if_owned() insertion will drop the value
 
 ### 4. Copies are Explicit
 - No implicit copying for any types unless they are part of an expression creating a new value out of multiple references, or when used inside a template head

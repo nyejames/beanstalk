@@ -106,6 +106,19 @@ pub(crate) fn is_type_compatible(
     expected == actual
 }
 
+/// Returns true when `actual` is acceptable at an explicit declaration site
+/// expecting `expected`.
+///
+/// WHAT: the compatibility predicate for `result T = expr` declarations.
+/// WHY: declarations accept exact structural matches plus the single implicit
+/// numeric promotion `Int → Float`. They do not reuse `ReturnSlot` context,
+/// which was semantically misleading even though it happened to allow the same
+/// numeric promotion.
+pub(crate) fn is_declaration_compatible(expected: &DataType, actual: &DataType) -> bool {
+    is_type_compatible(expected, actual, CompatibilityContext::Exact)
+        || is_numeric_coercible(actual, expected)
+}
+
 /// Returns true when `actual` can be implicitly promoted to `expected` as a
 /// contextual numeric coercion.
 ///

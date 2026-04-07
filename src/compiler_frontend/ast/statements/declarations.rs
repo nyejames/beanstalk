@@ -20,9 +20,9 @@ use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, Token, TokenKind};
 use crate::compiler_frontend::traits::ContainsReferences;
-use crate::compiler_frontend::type_coercion::compatibility::is_type_compatible;
+use crate::compiler_frontend::type_coercion::compatibility::is_declaration_compatible;
 use crate::compiler_frontend::type_coercion::numeric::coerce_expression_to_declared_type;
-use crate::compiler_frontend::type_coercion::CompatibilityContext;
+use crate::compiler_frontend::type_coercion::parse_context::parse_expectation_for_target_type;
 use crate::{ast_log, return_rule_error, return_type_error};
 
 pub fn create_reference(
@@ -173,12 +173,17 @@ pub fn resolve_declaration_syntax(
         }
 
         _ => {
-            // Save the annotated type so the coercion step below can reference
-            // it after the expression has discovered its own natural type.
-            // Passing Inferred here lets eval_expression stay strict (Exact
-            // context); each declaration caller owns its own coercion.
+            // Save the annotated type so the compatibility and coercion steps
+            // below can reference it after the expression has resolved its own
+            // natural type.
+            //
+            // Pass parse-time context only where syntax requires it: Option(_)
+            // targets need the context so that `none` literals can extract their
+            // inner type during parsing. Everything else uses Inferred so that
+            // eval_expression stays strict (Exact context) and coercion remains
+            // explicit and post-parse.
             let declared_type = data_type.clone();
-            let mut expr_type = DataType::Inferred;
+            let mut expr_type = parse_expectation_for_target_type(&declared_type);
             let expr = create_expression(
                 &mut initializer_stream,
                 context,
@@ -188,12 +193,11 @@ pub fn resolve_declaration_syntax(
                 string_table,
             )?;
 
-            // Reject incompatible types (e.g. Bool → Float, Float → Int)
-            // before attempting contextual coercion. ReturnSlot context allows
-            // Int → Float, which is the only promotion we support at declaration
-            // sites.
+            // Reject incompatible types (e.g. Bool → Float, Float → Int).
+            // is_declaration_compatible accepts exact matches and Int → Float;
+            // it does not reuse ReturnSlot semantics.
             if !matches!(declared_type, DataType::Inferred)
-                && !is_type_compatible(&declared_type, &expr.data_type, CompatibilityContext::ReturnSlot)
+                && !is_declaration_compatible(&declared_type, &expr.data_type)
             {
                 return_type_error!(
                     format!(

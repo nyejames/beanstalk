@@ -11,6 +11,7 @@ use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::compiler_frontend::type_coercion::numeric::coerce_expression_to_declared_type;
+use crate::compiler_frontend::type_coercion::parse_context::parse_expectation_for_target_type;
 use crate::{ast_log, return_rule_error, return_syntax_error};
 
 fn assignment_target_value_type(target: &AstNode) -> Result<DataType, CompilerError> {
@@ -90,9 +91,13 @@ fn build_mutation_from_target(
     let value = match token_stream.current_token_kind() {
         TokenKind::Assign => {
             // Simple mutation: variable = new_value
+            // Pass parse-time context only for Option(_) targets so that `none`
+            // literals can resolve their inner type. Compound assignments below
+            // use Inferred unconditionally because optional context does not
+            // apply to arithmetic operators.
             token_stream.advance();
 
-            let mut expr_type = DataType::Inferred;
+            let mut expr_type = parse_expectation_for_target_type(&target_type);
             let rhs = create_expression(
                 token_stream,
                 context,

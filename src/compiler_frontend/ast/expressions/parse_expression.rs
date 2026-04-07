@@ -35,6 +35,7 @@ use crate::{
     ast_log, return_compiler_error, return_rule_error, return_syntax_error, return_type_error,
 };
 use crate::compiler_frontend::ast::expressions::function_calls::parse_function_call;
+use crate::compiler_frontend::type_coercion::parse_context::parse_expectation_for_target_type;
 
 fn push_expression_node(
     token_stream: &mut FileTokens,
@@ -619,10 +620,12 @@ fn parse_literal_expression(
         TokenKind::NoneLiteral => {
             let inner_type = if let DataType::Option(inner_type) = expected_type {
                 inner_type.as_ref().to_owned()
-            } else if matches!(
-                token_stream.previous_token(),
-                TokenKind::Is | TokenKind::Not
-            ) {
+            } else if token_stream.index > 0
+                && matches!(
+                    token_stream.previous_token(),
+                    TokenKind::Is | TokenKind::Not
+                )
+            {
                 // Comparisons like `value is none` infer the option shape from the
                 // left-hand side expression during evaluation.
                 DataType::Inferred
@@ -638,7 +641,11 @@ fn parse_literal_expression(
             };
 
             let location = token_stream.current_location();
-            let none_expr = Expression::option_none(inner_type, location.clone());
+            // Propagate the binding's ownership so that `name ~String? = none`
+            // produces a mutable binding. Other literals (int, float, string)
+            // already receive ownership from the same parameter; none must too.
+            let mut none_expr = Expression::option_none(inner_type, location.clone());
+            none_expr.ownership = ownership.to_owned();
             token_stream.advance();
             push_expression_node(
                 token_stream,
@@ -1306,10 +1313,7 @@ pub fn create_multiple_expressions(
         // strict (Exact context); callers own their own coercion or validation after this
         // call returns. Pass the expected type through only for Option variants so that
         // `none` literals can resolve their inner type from the surrounding context.
-        let mut expr_type = match expected_type {
-            DataType::Option(_) => expected_type.to_owned(),
-            _ => DataType::Inferred,
-        };
+        let mut expr_type = parse_expectation_for_target_type(expected_type);
         let expression = create_expression_with_trailing_newline_policy(
             token_stream,
             context,
