@@ -339,7 +339,7 @@ Branches are checked independently and merges enforce conservative rules.
 **Drop Safety**
 Ensures all values that might own data eventually reach a drop site.
 
-### 1. Shared References (Default)
+### Shared References (Default)
 - Borrowing is the Default
 - Multiple shared references to the same data are allowed
 - Shared references are read-only access
@@ -347,21 +347,29 @@ Ensures all values that might own data eventually reach a drop site.
 - **No explicit `&` or `&mut` operators** - these don't exist in Beanstalk
 - All variable usage creates immutable references by default
 
-### 2. Mutable Access (`~` syntax)
-- Mutability is always explicit
-- Use `~` to indicate mutable access (reference or ownership)
-- Only one mutable access is allowed at a time
-- Mutable access is exclusive (no other references allowed)
-- Created by mutable assignment: `x ~= y`
-- The compiler guarantees exclusivity statically; whether the access consumes ownership is resolved dynamically.
+### Mutable Access (`~`)
+Mutable access must always be explicit.
 
-### 3. Ownership Transfer (Moves)
+* At most one mutable access to a value may exist at any time.
+* Mutable access excludes all other access (shared or mutable).
+* `~` on a declaration or reassignment makes the binding mutable.
+* `~` at a call site requests mutable/exclusive access for that specific argument.
+* A mutable/exclusive parameter is never satisfied implicitly. The caller must spell `~` at the use site.
+* `~` is only valid on a mutable place. Immutable bindings, literals, temporaries, and computed expressions are rejected.
+* Collections and mutable receiver/member calls follow the same explicit rule.
+* Mutable access may be either:
+  * a mutable borrow, or
+  * an ownership transfer
+
+Which of these occurs is determined by static last-use analysis and finalised at runtime.
+
+### Ownership Transfer (Moves)
 - Moves are identified via last-use analysis but finalized at runtime using ownership flags
 - The compiler determines when the last use of a variable happens statically for any given scope
 - If the variable is passed into a function call or assigned to a new variable, and it's determined to be a move at runtime, then the new owner is responsible for dropping the value
 - Otherwise, the last time an owner uses a value without moving it, a drop_if_owned() insertion will drop the value
 
-### 4. Copies are Explicit
+### Copies are Explicit
 - No implicit copying for any types unless they are part of an expression creating a new value out of multiple references, or when used inside a template head
 - All types require explicit copy semantics when copying is needed
 - Most operations use borrowing instead of copying

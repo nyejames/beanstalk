@@ -86,24 +86,32 @@ function_name |param Int| -> Int:
 
 ### Function Call Arguments
 
-Named call arguments use `parameter = value`. Mutable call-site access uses `~` on the value side only:
+Named call arguments use `parameter = value`. Access mode is chosen at the call site.
 
 ```beanstalk
-sum(values)            -- positional shared
-sum(~values)           -- positional mutable
-sum(items = values)    -- named shared
-sum(items = ~values)   -- named mutable
+sum(values)                 -- positional shared
+sum(~values)                -- positional mutable/exclusive
+sum(items = values)         -- named shared
+sum(items = ~values)        -- named mutable/exclusive
 ```
 
 Rules:
-- positional arguments must come before named arguments
-- no positional arguments are allowed after the first named argument
-- each parameter can be provided only once (named+named and positional+named duplicates are errors)
-- host function calls and builtin member calls are currently positional-only
+
+* Function-call mutability is explicit at the call site.
+* A parameter declared as `~T` must be passed with `~place`.
+* Passing a mutable/exclusive parameter without `~` is an error.
+* `~` is only valid on a mutable place. Using `~` on an immutable binding, literal, temporary, or computed expression is an error.
+* Collections follow the same rule. Mutating collection operations do not get a permissive exception.
+* Positional arguments must come before named arguments.
+* No positional arguments are allowed after the first named argument.
+* Each parameter can be provided only once.
+* Host function calls and builtin member calls are currently positional-only.
 
 Variable mutability declarations and call-site mutable access are separate concepts:
-- `value ~= ...` declares/reassigns a mutable binding
-- `fn(~value)` or `fn(target = ~value)` requests mutable access for that specific call argument
+
+* `value ~= ...` declares or reassigns a mutable binding.
+* `fn(~value)` or `fn(param = ~value)` requests mutable/exclusive access for one specific call argument.
+* A mutable binding does not automatically satisfy a mutable parameter. The call still has to spell `~`.
 
 ### Results and Options
 
@@ -189,8 +197,16 @@ The special `!` return is only for the error path.
 
 When a new collection uses the mutable symbol, its internal values can be mutated by default.
 
-Instead of direct index syntax, ordered collections use compiler-owned built-ins:
-`get`, `set`, `push`, `remove`, and `length`.
+`set`, `push`, and `remove` are mutating collection operations and require explicit mutable/exclusive receiver access at the call site.
+`get(index) = value` is also a mutating write and therefore requires a mutable place target.
+Collections do not get a permissive exception: mutating collection operations follow the same explicit call-site mutability rules as user-defined mutable parameters.
+
+```beanstalk
+items ~= {10, 20, 30}
+~items.push(40)
+~items.set(0, 99)
+~items.remove(1)
+```
 
 Collections are ordered groups of values that are zero-indexed.
 
@@ -501,8 +517,8 @@ loop t in 0.0 to 1.0 by 0.1:
         this.y = 0
     ;
 
-    vec = Vector2(x = 12, y = 87)
-    vec.reset()
+    vec ~= Vector2(x = 12, y = 87)
+    ~vec.reset()
 ```
 
 Runtime structs are nominal types. Matching field shapes do not make two structs interchangeable.
@@ -514,6 +530,7 @@ Receiver methods in v1 are statically resolved:
 - Collection built-ins (`get`, `set`, `push`, `remove`, `length`) are compiler-owned operations and are not declared via `this`
 - `this Type` declares an immutable receiver
 - `this ~Type` declares a mutable receiver
+- Mutable receiver calls must spell mutable/exclusive access at the receiver site; a mutable binding alone is not enough.
 - Methods are called with receiver syntax only: `value.method(...)`
 - `method(value, ...)` is not valid for receiver methods
 - Mutable receiver methods require a mutable place receiver, so temporaries and rvalues cannot be mutated through method syntax

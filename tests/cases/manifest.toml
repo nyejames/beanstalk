@@ -109,9 +109,29 @@ path = "borrow_checker_mutable_immutable_conflict"
 tags = ["integration","borrows"]
 
 [[case]]
-id = "borrow_checker_mutable_user_param_immutable_reuse"
-path = "borrow_checker_mutable_user_param_immutable_reuse"
-tags = ["integration","borrows"]
+id = "function_call_mutable_param_requires_explicit_tilde"
+path = "function_call_mutable_param_requires_explicit_tilde"
+tags = ["integration","functions","diagnostics"]
+
+[[case]]
+id = "function_call_tilde_on_immutable_place"
+path = "function_call_tilde_on_immutable_place"
+tags = ["integration","functions","diagnostics"]
+
+[[case]]
+id = "function_call_tilde_on_non_place_expression"
+path = "function_call_tilde_on_non_place_expression"
+tags = ["integration","functions","diagnostics"]
+
+[[case]]
+id = "function_call_named_args_mutable_success"
+path = "function_call_named_args_mutable_success"
+tags = ["integration","functions","named-args"]
+
+[[case]]
+id = "function_call_named_args_mutable_missing_tilde"
+path = "function_call_named_args_mutable_missing_tilde"
+tags = ["integration","functions","named-args","diagnostics"]
 
 [[case]]
 id = "borrow_checker_string_memory"
@@ -227,6 +247,11 @@ tags = ["integration","collections"]
 id = "collection_methods_end_to_end"
 path = "collection_methods_end_to_end"
 tags = ["integration","collections"]
+
+[[case]]
+id = "collection_mutating_method_requires_explicit_receiver_tilde"
+path = "collection_mutating_method_requires_explicit_receiver_tilde"
+tags = ["integration","collections","diagnostics"]
 
 [[case]]
 id = "commas"
@@ -1342,3 +1367,4 @@ tags = ["integration", "type-coercion"]
 id = "int_declaration_from_float_rejected"
 path = "int_declaration_from_float_rejected"
 tags = ["integration", "type-coercion"]
+

@@ -2,4 +2,8 @@
 mode = "failure"
 warnings = "forbid"
 error_type = "Rule"
-message_contains = ["no parameter named 'typo'"]
+message_contains = [
+  "Function 'sum'",
+  "no parameter named 'typo'",
+  "Use a declared parameter name",
+]

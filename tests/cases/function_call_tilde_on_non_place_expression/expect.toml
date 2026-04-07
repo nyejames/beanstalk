@@ -3,7 +3,7 @@ mode = "failure"
 warnings = "forbid"
 error_type = "Rule"
 message_contains = [
-  "Function 'sum'",
-  "parameter 'a'",
-  "provided more than once",
+  "Function 'mutate'",
+  "parameter 'value'",
+  "non-place expression",
 ]

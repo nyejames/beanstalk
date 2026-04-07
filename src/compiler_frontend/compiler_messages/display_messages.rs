@@ -432,25 +432,6 @@ fn terse_metadata_key_name(key: &ErrorMetaDataKey) -> &'static str {
     }
 }
 
-/// Provide helpful hints for type conversion
-pub fn get_type_conversion_hint(from_type: &DataType, to_type: &DataType) -> String {
-    match (from_type, to_type) {
-        (DataType::Int, DataType::StringSlice) => {
-            "Try converting the integer to a string first".to_string()
-        }
-        (DataType::Float, DataType::StringSlice) => {
-            "Try converting the float to a string first".to_string()
-        }
-        (DataType::Bool, DataType::StringSlice) => {
-            "Try converting the boolean to a string first".to_string()
-        }
-        (DataType::StringSlice, DataType::Int) => {
-            "Try parsing the string as an integer first".to_string()
-        }
-        _ => "Check the function documentation for the expected argument types".to_string(),
-    }
-}
-
 #[cfg(test)]
 #[path = "tests/display_messages_tests.rs"]
 mod display_messages_tests;
