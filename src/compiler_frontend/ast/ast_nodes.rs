@@ -2,7 +2,7 @@ use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, Operator, ResultCallHandling,
 };
 use crate::compiler_frontend::ast::expressions::call_argument::{
-    CallArgument, call_argument_values,
+    CallArgument, normalize_call_argument_values,
 };
 use crate::compiler_frontend::ast::statements::branching::MatchArm;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
@@ -186,7 +186,7 @@ impl AstNode {
                 location,
             } => Ok(Expression::function_call(
                 name.to_owned(),
-                call_argument_values(arguments),
+                normalize_call_argument_values(arguments),
                 result_types.to_owned(),
                 location.to_owned(),
             )),
@@ -198,7 +198,7 @@ impl AstNode {
                 location,
             } => Ok(Expression::host_function_call(
                 name.to_owned(),
-                call_argument_values(arguments),
+                normalize_call_argument_values(arguments),
                 result_types.to_owned(),
                 location.to_owned(),
             )),
@@ -211,7 +211,7 @@ impl AstNode {
                 location,
             } => Ok(Expression::result_handled_function_call(
                 name.to_owned(),
-                call_argument_values(arguments),
+                normalize_call_argument_values(arguments),
                 result_types.to_owned(),
                 handling.to_owned(),
                 location.to_owned(),

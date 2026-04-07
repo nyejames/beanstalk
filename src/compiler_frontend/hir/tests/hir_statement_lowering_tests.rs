@@ -1207,6 +1207,7 @@ fn call_statements_emit_without_result_binding() {
                         Ownership::ImmutableOwned,
                         ),
                         CallAccessMode::Shared,
+                        test_location(3),
                     )],
                     result_types: vec![DataType::Int],
                     location: test_location(3),

@@ -93,7 +93,7 @@ fn rejects_immutable_collection_argument_for_mutable_parameter() {
     assert!(
         error
             .msg
-            .contains("Argument 1 to function 'touch' has incorrect type"),
+            .contains("Argument for parameter 'items' in function 'touch' has incorrect type"),
         "{}",
         error.msg
     );
@@ -108,7 +108,7 @@ fn rejects_collection_element_type_mismatch_with_mutability_relaxation() {
     assert!(
         error
             .msg
-            .contains("Argument 1 to function 'sum' has incorrect type"),
+            .contains("Argument for parameter 'items' in function 'sum' has incorrect type"),
         "{}",
         error.msg
     );

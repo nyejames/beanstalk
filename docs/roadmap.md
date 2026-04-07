@@ -416,7 +416,7 @@ Track what supported language features have canonical end-to-end coverage.
   - logical expressions
   - if expressions
   - char
-  - named arguments
+  - named arguments (`parameter = value`, with call-site `~` on the value expression)
 - Mark gaps explicitly.
 
 For every feature, mark:

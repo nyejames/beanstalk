@@ -296,6 +296,7 @@ fn mutable_user_argument_is_accepted_without_false_shared_conflict() {
                     args: vec![CallArgument::positional(
                         reference_expr(x, DataType::Int, location(11)),
                         CallAccessMode::Shared,
+                        location(11),
                     )],
                     result_types: vec![],
                     location: location(11),
@@ -350,6 +351,7 @@ fn host_mutable_parameter_requires_mutable_access() {
                     args: vec![CallArgument::positional(
                         reference_expr(x, DataType::Int, location(2)),
                         CallAccessMode::Shared,
+                        location(2),
                     )],
                     result_types: vec![],
                     location: location(2),
@@ -403,6 +405,7 @@ fn host_mutable_parameter_accepts_mutable_local_argument() {
                     args: vec![CallArgument::positional(
                         reference_expr(x, DataType::Int, location(2)),
                         CallAccessMode::Shared,
+                        location(2),
                     )],
                     result_types: vec![],
                     location: location(2),
@@ -454,6 +457,7 @@ fn host_shared_parameter_is_shared_only() {
                     args: vec![CallArgument::positional(
                         reference_expr(x, DataType::Int, location(2)),
                         CallAccessMode::Shared,
+                        location(2),
                     )],
                     result_types: vec![],
                     location: location(2),
@@ -514,10 +518,12 @@ fn two_mutable_args_to_same_root_are_rejected() {
                         CallArgument::positional(
                             reference_expr(x.clone(), DataType::Int, location(11)),
                             CallAccessMode::Shared,
+                            location(11),
                         ),
                         CallArgument::positional(
                             reference_expr(x, DataType::Int, location(11)),
                             CallAccessMode::Shared,
+                            location(11),
                         ),
                     ],
                     result_types: vec![],
@@ -583,10 +589,12 @@ fn shared_then_mutable_args_to_same_root_are_rejected() {
                         CallArgument::positional(
                             reference_expr(x.clone(), DataType::Int, location(11)),
                             CallAccessMode::Shared,
+                            location(11),
                         ),
                         CallArgument::positional(
                             reference_expr(x, DataType::Int, location(11)),
                             CallAccessMode::Shared,
+                            location(11),
                         ),
                     ],
                     result_types: vec![],
@@ -714,6 +722,7 @@ fn mutable_user_parameter_rejects_immutable_argument_reused_after_call() {
                     args: vec![CallArgument::positional(
                         reference_expr(x.clone(), DataType::Int, location(11)),
                         CallAccessMode::Shared,
+                        location(11),
                     )],
                     result_types: vec![],
                     location: location(11),
@@ -777,6 +786,7 @@ fn out_of_range_return_alias_metadata_is_reported_at_call_site() {
                     args: vec![CallArgument::positional(
                         reference_expr(x, DataType::Int, location(11)),
                         CallAccessMode::Shared,
+                        location(11),
                     )],
                     result_types: vec![DataType::Int],
                     location: location(11),
@@ -839,6 +849,7 @@ fn same_line_mutable_call_then_reuse_uses_order_keys() {
                     args: vec![CallArgument::positional(
                         reference_expr(x.clone(), DataType::Int, same_line.clone()),
                         CallAccessMode::Shared,
+                        same_line.clone(),
                     )],
                     result_types: vec![],
                     location: same_line.clone(),

@@ -84,6 +84,27 @@ function_name |param Int| -> Int:
 ;
 ```
 
+### Function Call Arguments
+
+Named call arguments use `parameter = value`. Mutable call-site access uses `~` on the value side only:
+
+```beanstalk
+sum(values)            -- positional shared
+sum(~values)           -- positional mutable
+sum(items = values)    -- named shared
+sum(items = ~values)   -- named mutable
+```
+
+Rules:
+- positional arguments must come before named arguments
+- no positional arguments are allowed after the first named argument
+- each parameter can be provided only once (named+named and positional+named duplicates are errors)
+- host function calls and builtin member calls are currently positional-only
+
+Variable mutability declarations and call-site mutable access are separate concepts:
+- `value ~= ...` declares/reassigns a mutable binding
+- `fn(~value)` or `fn(target = ~value)` requests mutable access for that specific call argument
+
 ### Results and Options
 
 Beanstalk supports optional values and error returns with compact syntax.
@@ -480,7 +501,7 @@ loop t in 0.0 to 1.0 by 0.1:
         this.y = 0
     ;
 
-    vec = Vector2(12, 87)
+    vec = Vector2(x = 12, y = 87)
     vec.reset()
 ```
 

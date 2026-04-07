@@ -6,7 +6,7 @@ use crate::compiler_frontend::ast::expressions::call_validation::{
 use crate::compiler_frontend::ast::expressions::expression::{
     ResultCallHandling,
 };
-use crate::compiler_frontend::ast::expressions::parse_expression::create_expression_until;
+use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
 use crate::compiler_frontend::ast::module_ast::ScopeContext;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::ast::statements::result_handling::{
@@ -205,7 +205,7 @@ pub fn parse_call_arguments(
         return Ok(Vec::new());
     }
 
-    let mut args = Vec::new();
+    let mut args: Vec<CallArgument> = Vec::new();
     loop {
         token_stream.skip_newlines();
         if token_stream.current_token_kind() == &TokenKind::CloseParenthesis {
@@ -213,64 +213,101 @@ pub fn parse_call_arguments(
             break;
         }
 
-        let mut access_mode = CallAccessMode::Shared;
-        let mut has_leading_mutable = false;
-        let mut has_named_mutable = false;
         let argument_location = token_stream.current_location();
-
-        if token_stream.current_token_kind() == &TokenKind::Mutable {
-            has_leading_mutable = true;
-            access_mode = CallAccessMode::Mutable;
-            token_stream.advance();
-        }
-
-        let value = create_expression_until(
-            token_stream,
-            context,
-            &mut DataType::Inferred,
-            &crate::compiler_frontend::datatypes::Ownership::ImmutableOwned,
-            &[TokenKind::Comma, TokenKind::CloseParenthesis, TokenKind::As],
-            string_table,
-        )?;
-
-        let mut target_param = None;
-        if token_stream.current_token_kind() == &TokenKind::As {
-            token_stream.advance();
-            if token_stream.current_token_kind() == &TokenKind::Mutable {
-                has_named_mutable = true;
-                access_mode = CallAccessMode::Mutable;
-                token_stream.advance();
-            }
-
-            let TokenKind::Symbol(name) = token_stream.current_token_kind() else {
+        let named_target = match token_stream.current_token_kind() {
+            TokenKind::Mutable
+                if matches!(token_stream.peek_next_token(), Some(TokenKind::Symbol(_)))
+                    && token_stream
+                        .tokens
+                        .get(token_stream.index + 2)
+                        .map(|token| &token.kind)
+                        == Some(&TokenKind::Assign) =>
+            {
                 return_syntax_error!(
-                    "Expected parameter name after 'as' in named argument",
+                    "Mutable marker '~' is only allowed on the value side of a named argument",
                     token_stream.current_location(),
                     {
                         CompilationStage => "Function Call Parsing",
-                        PrimarySuggestion => "Use '<value> as parameter_name'",
+                        PrimarySuggestion => "Write named mutable arguments as 'parameter = ~value'",
                     }
                 );
-            };
-            target_param = Some(*name);
-            token_stream.advance();
-        }
+            }
+            TokenKind::Symbol(name) if token_stream.peek_next_token() == Some(&TokenKind::Assign) => {
+                let target_location = token_stream.current_location();
+                let target_name = *name;
+                token_stream.advance();
+                token_stream.advance();
+                token_stream.skip_newlines();
+                Some((target_name, target_location))
+            }
+            TokenKind::OpenParenthesis
+                if matches!(token_stream.peek_next_token(), Some(TokenKind::Symbol(_)))
+                    && token_stream
+                        .tokens
+                        .get(token_stream.index + 2)
+                        .map(|token| &token.kind)
+                        == Some(&TokenKind::CloseParenthesis)
+                    && token_stream
+                        .tokens
+                        .get(token_stream.index + 3)
+                        .map(|token| &token.kind)
+                        == Some(&TokenKind::Assign) =>
+            {
+                return_syntax_error!(
+                    "Named argument target must be a parameter name",
+                    token_stream.current_location(),
+                    {
+                        CompilationStage => "Function Call Parsing",
+                        PrimarySuggestion => "Use a bare parameter name on the left side of '='",
+                    }
+                );
+            }
+            _ => None,
+        };
 
-        if has_leading_mutable && has_named_mutable {
+        let access_mode = if token_stream.current_token_kind() == &TokenKind::Mutable {
+            token_stream.advance();
+            CallAccessMode::Mutable
+        } else {
+            CallAccessMode::Shared
+        };
+
+        if token_stream.current_token_kind() == &TokenKind::Comma
+            || token_stream.current_token_kind() == &TokenKind::CloseParenthesis
+        {
+            if named_target.is_some() {
+                return_syntax_error!(
+                    "Expected expression after '=' in named argument",
+                    token_stream.current_location(),
+                    {
+                        CompilationStage => "Function Call Parsing",
+                        PrimarySuggestion => "Provide a value expression on the right side of '='",
+                    }
+                );
+            }
             return_syntax_error!(
-                "Argument used mutable marker twice",
-                argument_location,
+                "Expected expression for call argument",
+                token_stream.current_location(),
                 {
                     CompilationStage => "Function Call Parsing",
-                    PrimarySuggestion => "Use '~' either before the value or before the named parameter target",
+                    PrimarySuggestion => "Provide a value expression for this argument",
                 }
             );
         }
 
-        args.push(if let Some(name) = target_param {
-            CallArgument::named(value, name, access_mode)
+        let value = create_expression(
+            token_stream,
+            context,
+            &mut DataType::Inferred,
+            &crate::compiler_frontend::datatypes::Ownership::ImmutableOwned,
+            false,
+            string_table,
+        )?;
+
+        args.push(if let Some((name, target_location)) = named_target {
+            CallArgument::named(value, name, access_mode, argument_location, target_location)
         } else {
-            CallArgument::positional(value, access_mode)
+            CallArgument::positional(value, access_mode, argument_location)
         });
 
         match token_stream.current_token_kind() {
@@ -327,6 +364,8 @@ pub fn parse_host_function_call(
 ) -> Result<AstNode, CompilerError> {
     let location = token_stream.current_location();
 
+    // Host signatures currently synthesize positional parameter labels (`_arg{N}`), so named
+    // arguments remain intentionally unsupported until host metadata carries stable public names.
     let raw_args = parse_call_arguments(token_stream, context, string_table)?;
     if raw_args.iter().any(|argument| argument.target_param.is_some()) {
         return_rule_error!(

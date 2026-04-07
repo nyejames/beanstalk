@@ -449,6 +449,26 @@ path = "function_call_arg_errorKind_accepts_string"
 tags = ["integration", "functions", "type-checking", "compatibility"]
 
 [[case]]
+id = "function_call_named_args_success"
+path = "function_call_named_args_success"
+tags = ["integration", "functions"]
+
+[[case]]
+id = "function_call_named_args_host_rejected"
+path = "function_call_named_args_host_rejected"
+tags = ["integration", "functions", "diagnostics"]
+
+[[case]]
+id = "function_call_named_args_builtin_rejected"
+path = "function_call_named_args_builtin_rejected"
+tags = ["integration", "functions", "diagnostics"]
+
+[[case]]
+id = "function_call_old_as_named_syntax_rejected"
+path = "function_call_old_as_named_syntax_rejected"
+tags = ["integration", "functions", "diagnostics"]
+
+[[case]]
 id = "function_calls"
 path = "function_calls"
 tags = ["integration","functions"]

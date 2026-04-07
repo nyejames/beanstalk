@@ -2,4 +2,4 @@
 mode = "failure"
 warnings = "forbid"
 error_type = "Syntax"
-message_contains = ["Expected ',' or ')' after call argument"]
+message_contains = ["Invalid token used in expression: 'As'"]

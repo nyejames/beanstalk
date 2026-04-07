@@ -74,6 +74,15 @@ pub(crate) fn resolve_call_arguments(
     location: SourceLocation,
     string_table: &StringTable,
 ) -> Result<Vec<CallArgument>, CompilerError> {
+    // Validation flow order is intentionally fixed:
+    // 1) build parameter expectation table,
+    // 2) resolve named targets,
+    // 3) enforce positional-before-named ordering,
+    // 4) detect duplicate targets,
+    // 5) fill defaults,
+    // 6) detect missing required parameters,
+    // 7) validate types,
+    // 8) validate access mode.
     let mut resolved: Vec<Option<CallArgument>> = vec![None; expectations.len()];
     let mut positional_cursor = 0usize;
     let mut saw_named_argument = false;
@@ -89,13 +98,27 @@ pub(crate) fn resolve_call_arguments(
         let slot = if let Some(target_name) = argument.target_param {
             saw_named_argument = true;
             let Some(slot) = name_to_slot.get(&target_name).copied() else {
+                let known_parameters = expectations
+                    .iter()
+                    .filter_map(|expectation| expectation.name)
+                    .map(|name| format!("'{}'", string_table.resolve(name)))
+                    .collect::<Vec<_>>();
+                let known_parameter_hint = if known_parameters.is_empty() {
+                    String::from("This call accepts positional-only parameters.")
+                } else {
+                    format!("Known parameters: {}", known_parameters.join(", "))
+                };
                 return_rule_error!(
                     format!(
-                        "No parameter named '{}' in function '{}'",
+                        "Function '{}' has no parameter named '{}'. {}",
+                        call_name,
                         string_table.resolve(target_name),
-                        call_name
+                        known_parameter_hint
                     ),
-                    location.clone(),
+                    argument
+                        .target_location
+                        .clone()
+                        .unwrap_or_else(|| argument.location.clone()),
                     {
                         CompilationStage => "Function Call Validation",
                         PrimarySuggestion => "Use a declared parameter name in this call",
@@ -106,8 +129,11 @@ pub(crate) fn resolve_call_arguments(
         } else {
             if saw_named_argument {
                 return_rule_error!(
-                    "Positional argument after named argument",
-                    location.clone(),
+                    format!(
+                        "Function '{}' does not allow positional arguments after named arguments",
+                        call_name
+                    ),
+                    argument.location.clone(),
                     {
                         CompilationStage => "Function Call Validation",
                         PrimarySuggestion => "Move positional arguments before named arguments",
@@ -138,9 +164,16 @@ pub(crate) fn resolve_call_arguments(
         };
 
         if resolved[slot].is_some() {
+            let parameter_name = expectations[slot]
+                .name
+                .map(|name| string_table.resolve(name).to_owned())
+                .unwrap_or_else(|| format!("#{}", slot + 1));
             return_rule_error!(
-                "This parameter was targeted more than once",
-                location.clone(),
+                format!("Parameter '{}' was provided more than once", parameter_name),
+                argument
+                    .target_location
+                    .clone()
+                    .unwrap_or_else(|| argument.location.clone()),
                 {
                     CompilationStage => "Function Call Validation",
                     PrimarySuggestion => "Provide each parameter at most once",
@@ -157,6 +190,7 @@ pub(crate) fn resolve_call_arguments(
                 resolved[slot] = Some(CallArgument::positional(
                     default_value.clone(),
                     CallAccessMode::Shared,
+                    location.clone(),
                 ));
             } else {
                 let parameter_label = expectation
@@ -186,15 +220,27 @@ pub(crate) fn resolve_call_arguments(
             &argument.value.data_type,
             CompatibilityContext::Exact,
         ) {
+            let conversion_hint = if matches!(
+                (&expectation.data_type, &argument.value.data_type),
+                (DataType::Float, DataType::Int)
+            ) {
+                "Only Int + Float and Float + Int mix numeric types implicitly."
+            } else {
+                "Convert the argument to the expected type."
+            };
             return_type_error!(
                 format!(
-                    "Argument {} to function '{}' has incorrect type. Expected {}, but got {}.",
-                    slot + 1,
+                    "Argument for parameter {} in function '{}' has incorrect type. Expected {}, but got {}. {}",
+                    expectation
+                        .name
+                        .map(|name| format!("'{}'", string_table.resolve(name)))
+                        .unwrap_or_else(|| format!("#{}", slot + 1)),
                     call_name,
                     expectation.data_type.display_with_table(string_table),
                     argument.value.data_type.display_with_table(string_table),
+                    conversion_hint,
                 ),
-                location.clone(),
+                argument.location.clone(),
                 {
                     CompilationStage => "Function Call Validation",
                     PrimarySuggestion => "Convert the argument to the expected type",
@@ -213,17 +259,22 @@ fn validate_call_access_mode(
     call_name: &str,
     argument: &CallArgument,
     expectation: &ParameterExpectation,
-    location: SourceLocation,
+    _location: SourceLocation,
 ) -> Result<(), CompilerError> {
+    let parameter_label = if expectation.name.is_some() {
+        "this named parameter"
+    } else {
+        "this parameter"
+    };
     match (argument.access_mode, &expectation.access_mode) {
         (CallAccessMode::Shared, ExpectedAccessMode::Shared) => Ok(()),
         (CallAccessMode::Shared, ExpectedAccessMode::Mutable) => {
             return_rule_error!(
                 format!(
-                    "Function '{}' parameter requires mutable access - use '~'",
-                    call_name
+                    "Function '{}' requires explicit '~' for {}",
+                    call_name, parameter_label
                 ),
-                location,
+                argument.location.clone(),
                 {
                     CompilationStage => "Function Call Validation",
                     PrimarySuggestion => "Add '~' to this argument",
@@ -232,8 +283,11 @@ fn validate_call_access_mode(
         }
         (CallAccessMode::Mutable, ExpectedAccessMode::Shared) => {
             return_rule_error!(
-                "This parameter does not accept explicit mutable access",
-                location,
+                format!(
+                    "Function '{}' does not accept '~' for {}",
+                    call_name, parameter_label
+                ),
+                argument.location.clone(),
                 {
                     CompilationStage => "Function Call Validation",
                     PrimarySuggestion => "Remove '~' from this argument",
@@ -243,8 +297,11 @@ fn validate_call_access_mode(
         (CallAccessMode::Mutable, ExpectedAccessMode::Mutable) => {
             if !expression_is_place(&argument.value) {
                 return_rule_error!(
-                    "'~' is only valid on mutable place expressions",
-                    location,
+                    format!(
+                        "Function '{}' received '~' on a non-place argument for {}",
+                        call_name, parameter_label
+                    ),
+                    argument.location.clone(),
                     {
                         CompilationStage => "Function Call Validation",
                         PrimarySuggestion => "Use '~' with a mutable variable or mutable field place",
@@ -253,8 +310,11 @@ fn validate_call_access_mode(
             }
             if !expression_is_mutable_place(&argument.value) {
                 return_rule_error!(
-                    "'~' used on immutable variable",
-                    location,
+                    format!(
+                        "Function '{}' received '~' on an immutable place for {}",
+                        call_name, parameter_label
+                    ),
+                    argument.location.clone(),
                     {
                         CompilationStage => "Function Call Validation",
                         PrimarySuggestion => "Use a mutable variable or remove '~'",

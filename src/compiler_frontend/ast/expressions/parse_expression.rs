@@ -6,7 +6,7 @@
 use super::eval_expression::evaluate_expression;
 use crate::compiler_frontend::ast::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
-use crate::compiler_frontend::ast::expressions::call_argument::call_argument_values;
+use crate::compiler_frontend::ast::expressions::call_argument::normalize_call_argument_values;
 use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, Operator,
 };
@@ -229,7 +229,7 @@ fn parse_identifier_or_call(
                         let func_call_expr =
                             Expression::function_call(
                                 name,
-                                call_argument_values(&args),
+                                normalize_call_argument_values(&args),
                                 result_types,
                                 location,
                             );
@@ -257,7 +257,7 @@ fn parse_identifier_or_call(
                     } => {
                         let func_call_expr = Expression::result_handled_function_call(
                             name,
-                            call_argument_values(&args),
+                            normalize_call_argument_values(&args),
                             result_types,
                             handling,
                             location,
@@ -347,7 +347,7 @@ fn parse_identifier_or_call(
                             AstNode {
                                 kind: NodeKind::Rvalue(Expression::function_call(
                                     name,
-                                    call_argument_values(&args),
+                                    normalize_call_argument_values(&args),
                                     result_types,
                                     location,
                                 )),
@@ -372,7 +372,7 @@ fn parse_identifier_or_call(
                             AstNode {
                                 kind: NodeKind::Rvalue(Expression::result_handled_function_call(
                                     name,
-                                    call_argument_values(&args),
+                                    normalize_call_argument_values(&args),
                                     result_types,
                                     handling,
                                     location,
@@ -464,7 +464,7 @@ fn parse_identifier_or_call(
         {
             let func_call_expr = Expression::host_function_call(
                 host_function_id,
-                call_argument_values(&args),
+                normalize_call_argument_values(&args),
                 result_types,
                 location,
             );
