@@ -1,8 +1,8 @@
-use crate::compiler_frontend::ast::expressions::expression::{
-    Expression, ExpressionKind, Operator, ResultCallHandling,
-};
 use crate::compiler_frontend::ast::expressions::call_argument::{
     CallArgument, normalize_call_argument_values,
+};
+use crate::compiler_frontend::ast::expressions::expression::{
+    Expression, ExpressionKind, Operator, ResultCallHandling,
 };
 use crate::compiler_frontend::ast::statements::branching::MatchArm;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;

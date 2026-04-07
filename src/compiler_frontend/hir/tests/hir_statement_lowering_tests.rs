@@ -1201,11 +1201,7 @@ fn call_statements_emit_without_result_binding() {
                 NodeKind::HostFunctionCall {
                     name: alloc,
                     args: vec![CallArgument::positional(
-                        Expression::int(
-                        1,
-                        test_location(3),
-                        Ownership::ImmutableOwned,
-                        ),
+                        Expression::int(1, test_location(3), Ownership::ImmutableOwned),
                         CallAccessMode::Shared,
                         test_location(3),
                     )],

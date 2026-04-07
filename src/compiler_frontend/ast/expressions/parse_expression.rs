@@ -10,6 +10,7 @@ use crate::compiler_frontend::ast::expressions::call_argument::normalize_call_ar
 use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, Operator,
 };
+use crate::compiler_frontend::ast::expressions::function_calls::parse_function_call;
 use crate::compiler_frontend::ast::expressions::struct_instance::parse_struct_constructor_expression;
 use crate::compiler_frontend::ast::field_access::{ast_node_is_place, parse_postfix_chain};
 use crate::compiler_frontend::ast::receiver_methods::free_function_receiver_method_call_error;
@@ -32,11 +33,10 @@ use crate::compiler_frontend::reserved_trait_syntax::{
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
 use crate::compiler_frontend::traits::ContainsReferences;
+use crate::compiler_frontend::type_coercion::parse_context::parse_expectation_for_target_type;
 use crate::{
     ast_log, return_compiler_error, return_rule_error, return_syntax_error, return_type_error,
 };
-use crate::compiler_frontend::ast::expressions::function_calls::parse_function_call;
-use crate::compiler_frontend::type_coercion::parse_context::parse_expectation_for_target_type;
 
 fn push_expression_node(
     token_stream: &mut FileTokens,
@@ -226,13 +226,12 @@ fn parse_identifier_or_call(
                         result_types,
                         location,
                     } => {
-                        let func_call_expr =
-                            Expression::function_call(
-                                name,
-                                normalize_call_argument_values(&args),
-                                result_types,
-                                location,
-                            );
+                        let func_call_expr = Expression::function_call(
+                            name,
+                            normalize_call_argument_values(&args),
+                            result_types,
+                            location,
+                        );
 
                         push_expression_node(
                             token_stream,

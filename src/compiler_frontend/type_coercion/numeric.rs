@@ -34,7 +34,10 @@ pub(crate) fn coerce_expression_to_declared_type(
 /// independently of the return type, so coercion is applied after the fact.
 ///
 /// Returns the original expression unchanged when no coercion is needed.
-pub(crate) fn coerce_expression_to_return_type(expr: Expression, expected: &DataType) -> Expression {
+pub(crate) fn coerce_expression_to_return_type(
+    expr: Expression,
+    expected: &DataType,
+) -> Expression {
     apply_numeric_coercion(expr, expected)
 }
 

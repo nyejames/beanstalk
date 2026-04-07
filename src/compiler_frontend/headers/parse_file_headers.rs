@@ -11,9 +11,9 @@ use crate::compiler_frontend::compiler_warnings::{CompilerWarning, WarningKind};
 use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::identity::FileId;
 use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::paths::const_paths::parse_import_clause_tokens;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
-use crate::compiler_frontend::paths::const_paths::parse_import_clause_tokens;
 use crate::compiler_frontend::reserved_trait_syntax::{
     ReservedTraitKeyword, reserved_trait_declaration_error, reserved_trait_keyword,
     reserved_trait_keyword_error,

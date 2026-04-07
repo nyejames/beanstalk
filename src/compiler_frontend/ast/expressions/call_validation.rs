@@ -45,7 +45,9 @@ pub(crate) fn expectations_from_user_parameters(
         .collect()
 }
 
-pub(crate) fn expectations_from_host_function(function: &HostFunctionDef) -> Vec<ParameterExpectation> {
+pub(crate) fn expectations_from_host_function(
+    function: &HostFunctionDef,
+) -> Vec<ParameterExpectation> {
     function
         .parameters
         .iter()
@@ -61,9 +63,7 @@ pub(crate) fn expectations_from_host_function(function: &HostFunctionDef) -> Vec
         .collect()
 }
 
-pub(crate) fn expectations_from_struct_fields(
-    fields: &[Declaration],
-) -> Vec<ParameterExpectation> {
+pub(crate) fn expectations_from_struct_fields(fields: &[Declaration]) -> Vec<ParameterExpectation> {
     fields
         .iter()
         .map(|field| ParameterExpectation {
@@ -267,7 +267,13 @@ pub(crate) fn resolve_call_arguments(
             );
         }
 
-        validate_call_access_mode(call_name, &argument, expectation, location.clone(), string_table)?;
+        validate_call_access_mode(
+            call_name,
+            &argument,
+            expectation,
+            location.clone(),
+            string_table,
+        )?;
         ordered.push(argument);
     }
 

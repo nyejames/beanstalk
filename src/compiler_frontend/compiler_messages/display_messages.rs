@@ -3,12 +3,12 @@ use crate::compiler_frontend::compiler_errors::{
     CompilerError, CompilerMessages, ErrorMetaDataKey, ErrorType,
 };
 use crate::compiler_frontend::compiler_warnings::{CompilerWarning, WarningKind};
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
 use saying::say;
 use std::path::{Path, PathBuf};
 use std::{env, fs};
-use crate::compiler_frontend::datatypes::DataType;
 
 pub(crate) fn relative_display_path_from_root(scope: &Path, root: &Path) -> String {
     let normalized_scope = normalize_path(scope);

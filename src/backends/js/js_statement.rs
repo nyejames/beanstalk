@@ -133,9 +133,7 @@ impl<'hir> JsEmitter<'hir> {
             HirExpressionKind::Load(place) => {
                 let source = self.lower_place(place)?;
                 if alias_only {
-                    self.emit_line(&format!(
-                        "__bs_write({local_name}, __bs_read({source}));",
-                    ));
+                    self.emit_line(&format!("__bs_write({local_name}, __bs_read({source}));",));
                 } else {
                     self.emit_line(&format!("__bs_assign_borrow({local_name}, {source});"));
                 }

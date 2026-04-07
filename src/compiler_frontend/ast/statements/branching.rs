@@ -675,7 +675,11 @@ fn parse_literal_pattern(
         }
     };
 
-    if !is_type_compatible(subject_type, &pattern.data_type, CompatibilityContext::Exact) {
+    if !is_type_compatible(
+        subject_type,
+        &pattern.data_type,
+        CompatibilityContext::Exact,
+    ) {
         return_rule_error!(
             format!(
                 "Match arm literal type '{}' does not match scrutinee type '{}'.",

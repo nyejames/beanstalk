@@ -281,7 +281,10 @@ fn parse_builtin_method_args(
         .collect::<Vec<_>>();
 
     let raw_args = parse_call_arguments(token_stream, context, string_table)?;
-    if raw_args.iter().any(|argument| argument.target_param.is_some()) {
+    if raw_args
+        .iter()
+        .any(|argument| argument.target_param.is_some())
+    {
         return_rule_error!(
             "Named arguments are not supported for builtin member calls",
             member_location.to_owned(),

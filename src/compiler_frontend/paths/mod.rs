@@ -2,7 +2,7 @@
 //!
 //! WHAT: normalizes language path syntax into canonical/public/runtime forms for frontend stages.
 
+pub(crate) mod const_paths;
 pub(crate) mod path_format;
 pub(crate) mod path_resolution;
-pub(crate) mod const_paths;
 pub(crate) mod rendered_path_usage;

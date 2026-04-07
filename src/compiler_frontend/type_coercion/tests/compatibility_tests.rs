@@ -35,7 +35,10 @@ fn return_slot_context_int_vs_float_is_compatible() {
 
 #[test]
 fn float_to_int_is_never_compatible() {
-    for context in [CompatibilityContext::Exact, CompatibilityContext::ReturnSlot] {
+    for context in [
+        CompatibilityContext::Exact,
+        CompatibilityContext::ReturnSlot,
+    ] {
         assert!(
             !is_type_compatible(&DataType::Int, &DataType::Float, context),
             "expected Int not to accept Float in {context:?}"
@@ -45,7 +48,10 @@ fn float_to_int_is_never_compatible() {
 
 #[test]
 fn bool_to_float_is_never_compatible() {
-    for context in [CompatibilityContext::Exact, CompatibilityContext::ReturnSlot] {
+    for context in [
+        CompatibilityContext::Exact,
+        CompatibilityContext::ReturnSlot,
+    ] {
         assert!(
             !is_type_compatible(&DataType::Float, &DataType::Bool, context),
             "expected Float not to accept Bool in {context:?}"
@@ -96,13 +102,20 @@ fn builtin_error_kind_accepts_string_slice() {
 
 #[test]
 fn identical_types_are_always_compatible() {
-    for context in [CompatibilityContext::Exact, CompatibilityContext::ReturnSlot] {
+    for context in [
+        CompatibilityContext::Exact,
+        CompatibilityContext::ReturnSlot,
+    ] {
         assert!(is_type_compatible(&DataType::Int, &DataType::Int, context));
         assert!(is_type_compatible(
             &DataType::Float,
             &DataType::Float,
             context
         ));
-        assert!(is_type_compatible(&DataType::Bool, &DataType::Bool, context));
+        assert!(is_type_compatible(
+            &DataType::Bool,
+            &DataType::Bool,
+            context
+        ));
     }
 }

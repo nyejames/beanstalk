@@ -2,8 +2,8 @@
 //!
 //! WHAT: groups expression/statement parsing, header-to-AST lowering, and template AST handling.
 
-pub(crate) mod signatures;
 pub(crate) mod module_ast;
+pub(crate) mod signatures;
 pub(crate) use module_ast as ast;
 pub(crate) mod ast_nodes;
 pub(crate) mod function_body_to_ast;

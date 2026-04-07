@@ -1830,10 +1830,9 @@ fn build_project_rejects_const_record_when_required_fields_are_missing() {
         };
 
         assert!(
-            messages
-                .errors
-                .iter()
-                .any(|error| error.msg.contains("Missing required argument for parameter")),
+            messages.errors.iter().any(|error| error
+                .msg
+                .contains("Missing required argument for parameter")),
             "expected a missing-required-fields constructor diagnostic"
         );
     }
@@ -1864,10 +1863,9 @@ fn build_project_rejects_struct_constructor_with_too_many_arguments() {
         };
 
         assert!(
-            messages
-                .errors
-                .iter()
-                .any(|error| error.msg.contains("extra positional arguments were provided")),
+            messages.errors.iter().any(|error| error
+                .msg
+                .contains("extra positional arguments were provided")),
             "expected a too-many-arguments constructor diagnostic"
         );
     }

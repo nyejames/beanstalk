@@ -1,7 +1,7 @@
-use crate::compiler_frontend::ast::expressions::call_argument::CallAccessMode;
 use crate::compiler_frontend::ast::ast::{ContextKind, ScopeContext};
-use crate::compiler_frontend::ast::test_support::parse_single_file_ast_error;
+use crate::compiler_frontend::ast::expressions::call_argument::CallAccessMode;
 use crate::compiler_frontend::ast::expressions::function_calls::parse_call_arguments;
+use crate::compiler_frontend::ast::test_support::parse_single_file_ast_error;
 use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
@@ -9,7 +9,9 @@ use crate::compiler_frontend::tokenizer::lexer::tokenize;
 use crate::compiler_frontend::tokenizer::newline_handling::NewlineMode;
 use crate::compiler_frontend::tokenizer::tokens::{TokenKind, TokenizeMode};
 
-fn parse_args(source: &str) -> Vec<crate::compiler_frontend::ast::expressions::call_argument::CallArgument> {
+fn parse_args(
+    source: &str,
+) -> Vec<crate::compiler_frontend::ast::expressions::call_argument::CallArgument> {
     let mut string_table = StringTable::new();
     let file_path = InternedPath::from_single_str("#page.bst", &mut string_table);
     let mut tokens = tokenize(
@@ -110,7 +112,11 @@ value ~= 1
 take(~value = value)
 "#,
     );
-    assert!(error.msg.contains("Mutable marker '~' is only allowed on the value side of a named argument"));
+    assert!(
+        error
+            .msg
+            .contains("Mutable marker '~' is only allowed on the value side of a named argument")
+    );
 }
 
 #[test]
@@ -141,9 +147,7 @@ sum |a Int, b Int| -> Int:
 sum(a = 1, a = 2)
 "#,
     );
-    assert!(
-        error.msg.contains("more than once") || error.msg.contains("Parameter 'a'")
-    );
+    assert!(error.msg.contains("more than once") || error.msg.contains("Parameter 'a'"));
 }
 
 #[test]
@@ -171,14 +175,16 @@ sum |a Int, b Int| -> Int:
 sum(a = 1)
 "#,
     );
-    assert!(
-        error.msg.contains("Missing required argument") || error.msg.contains("parameter 'b'")
-    );
+    assert!(error.msg.contains("Missing required argument") || error.msg.contains("parameter 'b'"));
 }
 
 #[test]
 fn rejects_tilde_on_left_side_of_named_arg() {
     // ~name = value is explicitly rejected at the parse level
     let error = parse_args_error("take(~value = 1)");
-    assert!(error.msg.contains("Mutable marker '~' is only allowed on the value side"));
+    assert!(
+        error
+            .msg
+            .contains("Mutable marker '~' is only allowed on the value side")
+    );
 }

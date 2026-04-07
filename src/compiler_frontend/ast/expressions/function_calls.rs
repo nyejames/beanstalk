@@ -3,9 +3,7 @@ use crate::compiler_frontend::ast::expressions::call_argument::{CallAccessMode, 
 use crate::compiler_frontend::ast::expressions::call_validation::{
     expectations_from_host_function, expectations_from_user_parameters, resolve_call_arguments,
 };
-use crate::compiler_frontend::ast::expressions::expression::{
-    ResultCallHandling,
-};
+use crate::compiler_frontend::ast::expressions::expression::ResultCallHandling;
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
 use crate::compiler_frontend::ast::module_ast::ScopeContext;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
@@ -232,7 +230,9 @@ pub fn parse_call_arguments(
                     }
                 );
             }
-            TokenKind::Symbol(name) if token_stream.peek_next_token() == Some(&TokenKind::Assign) => {
+            TokenKind::Symbol(name)
+                if token_stream.peek_next_token() == Some(&TokenKind::Assign) =>
+            {
                 let target_location = token_stream.current_location();
                 let target_name = *name;
                 token_stream.advance();
@@ -367,7 +367,10 @@ pub fn parse_host_function_call(
     // Host signatures currently synthesize positional parameter labels (`_arg{N}`), so named
     // arguments remain intentionally unsupported until host metadata carries stable public names.
     let raw_args = parse_call_arguments(token_stream, context, string_table)?;
-    if raw_args.iter().any(|argument| argument.target_param.is_some()) {
+    if raw_args
+        .iter()
+        .any(|argument| argument.target_param.is_some())
+    {
         return_rule_error!(
             "Named arguments are not supported for host function calls",
             location.clone(),

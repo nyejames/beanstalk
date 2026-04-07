@@ -601,11 +601,7 @@ fn lowers_receiver_method_call_with_receiver_as_first_argument() {
                 method: method_name,
                 builtin: None,
                 args: vec![CallArgument::positional(
-                    Expression::int(
-                    7,
-                    location.clone(),
-                    Ownership::ImmutableOwned,
-                    ),
+                    Expression::int(7, location.clone(), Ownership::ImmutableOwned),
                     CallAccessMode::Shared,
                     location.clone(),
                 )],
@@ -750,10 +746,10 @@ fn lowers_builtin_error_with_location_and_push_trace_methods_to_host_calls() {
             builtin: Some(BuiltinMethodKind::ErrorWithLocation),
             args: vec![CallArgument::positional(
                 Expression::reference(
-                location_name.to_owned(),
-                location_type.to_owned(),
-                location.to_owned(),
-                Ownership::ImmutableReference,
+                    location_name.to_owned(),
+                    location_type.to_owned(),
+                    location.to_owned(),
+                    Ownership::ImmutableReference,
                 ),
                 CallAccessMode::Shared,
                 location.clone(),
@@ -795,10 +791,10 @@ fn lowers_builtin_error_with_location_and_push_trace_methods_to_host_calls() {
             builtin: Some(BuiltinMethodKind::ErrorPushTrace),
             args: vec![CallArgument::positional(
                 Expression::reference(
-                frame_name,
-                frame_type,
-                location.to_owned(),
-                Ownership::ImmutableReference,
+                    frame_name,
+                    frame_type,
+                    location.to_owned(),
+                    Ownership::ImmutableReference,
                 ),
                 CallAccessMode::Shared,
                 location.clone(),

@@ -795,8 +795,10 @@ pub fn function_body_to_ast(
 
                         // Allow Int → Float at return sites and rewrite the expression.
                         if is_numeric_coercible(&normalized_actual, expected_type) {
-                            coerced_returns
-                                .push(coerce_expression_to_return_type(returned_value, expected_type));
+                            coerced_returns.push(coerce_expression_to_return_type(
+                                returned_value,
+                                expected_type,
+                            ));
                             continue;
                         }
 

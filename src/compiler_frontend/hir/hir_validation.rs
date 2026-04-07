@@ -584,9 +584,7 @@ impl<'a> HirValidator<'a> {
             .is_none()
         {
             return Err(self.error_with_hir(
-                format!(
-                    "Block {block_id} terminator is missing AST->HIR side-table mapping"
-                ),
+                format!("Block {block_id} terminator is missing AST->HIR side-table mapping"),
                 Some(terminator_location),
             ));
         }
@@ -598,9 +596,7 @@ impl<'a> HirValidator<'a> {
             .is_none()
         {
             return Err(self.error_with_hir(
-                format!(
-                    "Block {block_id} terminator is missing HIR source side-table mapping",
-                ),
+                format!("Block {block_id} terminator is missing HIR source side-table mapping",),
                 Some(terminator_location),
             ));
         }
@@ -1081,10 +1077,10 @@ impl<'a> HirValidator<'a> {
         block_id: BlockId,
     ) -> Result<&crate::compiler_frontend::hir::hir_nodes::HirBlock, CompilerError> {
         let Some(index) = self.block_index_by_id.get(&block_id).copied() else {
-                return Err(self.error_with_hir(
-                    format!("Unknown HIR block id {block_id:?}"),
-                    Some(HirLocation::Block(block_id)),
-                ));
+            return Err(self.error_with_hir(
+                format!("Unknown HIR block id {block_id:?}"),
+                Some(HirLocation::Block(block_id)),
+            ));
         };
 
         Ok(&self.module.blocks[index])
@@ -1111,9 +1107,7 @@ impl<'a> HirValidator<'a> {
         }
 
         Err(self.error_with_hir(
-            format!(
-                "Field {field_id:?} is owned by struct {owner:?}, not {struct_id:?}"
-            ),
+            format!("Field {field_id:?} is owned by struct {owner:?}, not {struct_id:?}"),
             anchor,
         ))
     }

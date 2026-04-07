@@ -59,6 +59,7 @@ pub(crate) enum CompatibilityContext {
     /// currently calls `is_numeric_coercible` directly rather than routing through
     /// `is_type_compatible`, but this variant is available for when that path is
     /// unified. Keeping it explicit documents the intended future direction.
-    #[allow(dead_code)] // Planned: used once return handling routes through is_type_compatible.
+    #[allow(dead_code)]
+    // Planned: used once return handling routes through is_type_compatible.
     ReturnSlot,
 }

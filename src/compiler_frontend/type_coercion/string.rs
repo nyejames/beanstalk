@@ -44,9 +44,9 @@ pub(crate) fn fold_expression_kind_to_string(
     string_table: &StringTable,
 ) -> Option<FoldedStringPiece> {
     match kind {
-        ExpressionKind::StringSlice(string) => {
-            Some(FoldedStringPiece::Text(string_table.resolve(*string).to_owned()))
-        }
+        ExpressionKind::StringSlice(string) => Some(FoldedStringPiece::Text(
+            string_table.resolve(*string).to_owned(),
+        )),
         ExpressionKind::Float(value) => Some(FoldedStringPiece::Text(value.to_string())),
         ExpressionKind::Int(value) => Some(FoldedStringPiece::Text(value.to_string())),
         ExpressionKind::Bool(value) => Some(FoldedStringPiece::Text(value.to_string())),
