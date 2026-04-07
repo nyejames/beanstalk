@@ -14,11 +14,13 @@ fn exact_context_int_vs_float_is_incompatible() {
 }
 
 #[test]
-fn declaration_context_int_vs_float_is_compatible() {
+fn promotion_context_int_vs_float_is_compatible() {
+    // Declaration-site coercion is now applied by coerce_expression_to_declared_type
+    // before is_type_compatible is called, so only ReturnSlot needs to allow this.
     assert!(is_type_compatible(
         &DataType::Float,
         &DataType::Int,
-        CompatibilityContext::Declaration
+        CompatibilityContext::ReturnSlot
     ));
 }
 
@@ -33,11 +35,7 @@ fn return_slot_context_int_vs_float_is_compatible() {
 
 #[test]
 fn float_to_int_is_never_compatible() {
-    for context in [
-        CompatibilityContext::Exact,
-        CompatibilityContext::Declaration,
-        CompatibilityContext::ReturnSlot,
-    ] {
+    for context in [CompatibilityContext::Exact, CompatibilityContext::ReturnSlot] {
         assert!(
             !is_type_compatible(&DataType::Int, &DataType::Float, context),
             "expected Int not to accept Float in {context:?}"
@@ -47,11 +45,7 @@ fn float_to_int_is_never_compatible() {
 
 #[test]
 fn bool_to_float_is_never_compatible() {
-    for context in [
-        CompatibilityContext::Exact,
-        CompatibilityContext::Declaration,
-        CompatibilityContext::ReturnSlot,
-    ] {
+    for context in [CompatibilityContext::Exact, CompatibilityContext::ReturnSlot] {
         assert!(
             !is_type_compatible(&DataType::Float, &DataType::Bool, context),
             "expected Float not to accept Bool in {context:?}"
@@ -102,11 +96,7 @@ fn builtin_error_kind_accepts_string_slice() {
 
 #[test]
 fn identical_types_are_always_compatible() {
-    for context in [
-        CompatibilityContext::Exact,
-        CompatibilityContext::Declaration,
-        CompatibilityContext::ReturnSlot,
-    ] {
+    for context in [CompatibilityContext::Exact, CompatibilityContext::ReturnSlot] {
         assert!(is_type_compatible(&DataType::Int, &DataType::Int, context));
         assert!(is_type_compatible(
             &DataType::Float,

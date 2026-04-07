@@ -10,6 +10,7 @@ use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
+use crate::compiler_frontend::type_coercion::numeric::coerce_expression_to_declared_type;
 use crate::{ast_log, return_rule_error, return_syntax_error};
 
 fn assignment_target_value_type(target: &AstNode) -> Result<DataType, CompilerError> {
@@ -91,31 +92,32 @@ fn build_mutation_from_target(
             // Simple mutation: variable = new_value
             token_stream.advance();
 
-            let mut expected_type = target_type.to_owned();
-
-            create_expression(
+            let mut expr_type = DataType::Inferred;
+            let rhs = create_expression(
                 token_stream,
                 context,
-                &mut expected_type,
+                &mut expr_type,
                 &variable_arg.value.ownership,
                 false,
                 string_table,
-            )?
+            )?;
+            coerce_expression_to_declared_type(rhs, &target_type)
         }
 
         TokenKind::AddAssign => {
             // Compound assignment: variable += value
             token_stream.advance();
 
-            let mut expected_type = target_type.to_owned();
-            let add_value = create_expression(
+            let mut expr_type = DataType::Inferred;
+            let rhs = create_expression(
                 token_stream,
                 context,
-                &mut expected_type,
+                &mut expr_type,
                 &variable_arg.value.ownership,
                 false,
                 string_table,
             )?;
+            let add_value = coerce_expression_to_declared_type(rhs, &target_type);
 
             // Create an addition expression in RPN order: variable, add_value, +
             let variable_ref = target.clone();
@@ -132,7 +134,7 @@ fn build_mutation_from_target(
 
             Expression::runtime(
                 vec![variable_ref, add_value_node, add_op],
-                expected_type,
+                target_type.to_owned(),
                 location.to_owned(),
                 variable_arg.value.ownership.to_owned(),
             )
@@ -142,15 +144,16 @@ fn build_mutation_from_target(
             // Compound assignment: variable -= value
             token_stream.advance();
 
-            let mut expected_type = target_type.to_owned();
-            let subtract_value = create_expression(
+            let mut expr_type = DataType::Inferred;
+            let rhs = create_expression(
                 token_stream,
                 context,
-                &mut expected_type,
+                &mut expr_type,
                 &variable_arg.value.ownership,
                 false,
                 string_table,
             )?;
+            let subtract_value = coerce_expression_to_declared_type(rhs, &target_type);
 
             // Create a subtraction expression in RPN order: variable, subtract_value, -
             let variable_ref = target.clone();
@@ -167,7 +170,7 @@ fn build_mutation_from_target(
 
             Expression::runtime(
                 vec![variable_ref, subtract_value_node, subtract_op],
-                expected_type,
+                target_type.to_owned(),
                 location.to_owned(),
                 variable_arg.value.ownership.to_owned(),
             )
@@ -177,15 +180,16 @@ fn build_mutation_from_target(
             // Compound assignment: variable *= value
             token_stream.advance();
 
-            let mut expected_type = target_type.to_owned();
-            let multiply_value = create_expression(
+            let mut expr_type = DataType::Inferred;
+            let rhs = create_expression(
                 token_stream,
                 context,
-                &mut expected_type,
+                &mut expr_type,
                 &variable_arg.value.ownership,
                 false,
                 string_table,
             )?;
+            let multiply_value = coerce_expression_to_declared_type(rhs, &target_type);
 
             // Create a multiplication expression in RPN order: variable, multiply_value, *
             let variable_ref = target.clone();
@@ -202,7 +206,7 @@ fn build_mutation_from_target(
 
             Expression::runtime(
                 vec![variable_ref, multiply_value_node, multiply_op],
-                expected_type,
+                target_type.to_owned(),
                 location.clone(),
                 variable_arg.value.ownership.to_owned(),
             )
@@ -212,15 +216,16 @@ fn build_mutation_from_target(
             // Compound assignment: variable /= value
             token_stream.advance();
 
-            let mut expected_type = target_type.to_owned();
-            let divide_value = create_expression(
+            let mut expr_type = DataType::Inferred;
+            let rhs = create_expression(
                 token_stream,
                 context,
-                &mut expected_type,
+                &mut expr_type,
                 &variable_arg.value.ownership,
                 false,
                 string_table,
             )?;
+            let divide_value = coerce_expression_to_declared_type(rhs, &target_type);
 
             // Create a division expression in RPN order: variable, divide_value, /
             let variable_ref = target.clone();
@@ -237,7 +242,7 @@ fn build_mutation_from_target(
 
             Expression::runtime(
                 vec![variable_ref, divide_value_node, divide_op],
-                expected_type,
+                target_type.to_owned(),
                 location.clone(),
                 variable_arg.value.ownership.to_owned(),
             )

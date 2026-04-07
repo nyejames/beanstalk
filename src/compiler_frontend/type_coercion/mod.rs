@@ -40,20 +40,24 @@ pub(crate) enum CoercionContext {
 /// WHAT: distinguishes what level of leniency is applied when deciding
 /// whether a value of one type is acceptable in a position expecting another.
 /// WHY: function arguments and match patterns require exact type matches,
-/// while declaration and return contexts allow narrowly-defined promotions.
+/// while return contexts allow narrowly-defined promotions.
+///
+/// Declaration-site coercion (e.g. `result Float = 1`) is no longer handled
+/// through this context — it is applied by `coerce_expression_to_declared_type`
+/// before `is_type_compatible` is ever called, so `eval_expression` always sees
+/// an already-compatible type and uses `Exact`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum CompatibilityContext {
-    /// Exact structural match required. Used for function arguments and patterns.
+    /// Exact structural match required. Used for function arguments, patterns,
+    /// and expression evaluation. Declaration callers apply coercion before
+    /// reaching this check, so they always pass `Exact`.
     Exact,
-    /// Declaration initializer or return value slot. Allows Int → Float promotion.
-    ///
-    /// WHY a single variant for both: the permitted set of promotions is identical
-    /// today. If the two contexts diverge in a future release, split this variant.
-    Declaration,
     /// Return value slot. Allows Int → Float promotion.
     ///
-    /// NOTE: currently carries the same rules as `Declaration`. Kept as a
-    /// distinct variant so call-sites document their intent explicitly.
-    #[allow(dead_code)] // Planned: used as callers document their return-slot context.
+    /// WHY kept as a distinct variant: return handling in `function_body_to_ast`
+    /// currently calls `is_numeric_coercible` directly rather than routing through
+    /// `is_type_compatible`, but this variant is available for when that path is
+    /// unified. Keeping it explicit documents the intended future direction.
+    #[allow(dead_code)] // Planned: used once return handling routes through is_type_compatible.
     ReturnSlot,
 }

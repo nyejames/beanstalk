@@ -434,6 +434,21 @@ path = "float_literals_and_arithmetic"
 tags = ["integration","language"]
 
 [[case]]
+id = "function_call_arg_type_correct"
+path = "function_call_arg_type_correct"
+tags = ["integration", "functions", "type-checking"]
+
+[[case]]
+id = "function_call_arg_type_rejected"
+path = "function_call_arg_type_rejected"
+tags = ["integration", "functions", "type-checking"]
+
+[[case]]
+id = "function_call_arg_errorKind_accepts_string"
+path = "function_call_arg_errorKind_accepts_string"
+tags = ["integration", "functions", "type-checking", "compatibility"]
+
+[[case]]
 id = "function_calls"
 path = "function_calls"
 tags = ["integration","functions"]
@@ -1211,6 +1226,11 @@ tags = ["integration", "type-coercion"]
 [[case]]
 id = "int_promotion_to_float_return"
 path = "int_promotion_to_float_return"
+tags = ["integration", "type-coercion"]
+
+[[case]]
+id = "int_promotion_to_float_via_function_call"
+path = "int_promotion_to_float_via_function_call"
 tags = ["integration", "type-coercion"]
 
 [[case]]

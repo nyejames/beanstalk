@@ -164,10 +164,13 @@ fn validate_expression_result_type(
         return Ok(());
     }
 
-    // Declaration context allows contextual numeric coercions such as Int → Float.
-    // Callers that require strict equality (function arguments, match patterns) use
-    // their own type checks directly through `is_type_compatible(Exact)`.
-    if is_type_compatible(expected_type, actual_type, CompatibilityContext::Declaration) {
+    // Strict boundary check: the expression must produce a type that is exactly
+    // compatible with the expected type. Contextual numeric coercions (e.g.
+    // Int → Float) are applied by callers before reaching here, so each site
+    // that needs promotion — declarations, mutations, struct constructors,
+    // collection literals — calls coerce_expression_to_declared_type itself
+    // and passes DataType::Inferred here instead.
+    if is_type_compatible(expected_type, actual_type, CompatibilityContext::Exact) {
         return Ok(());
     }
 

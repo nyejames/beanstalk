@@ -20,8 +20,10 @@ use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, Token, TokenKind};
 use crate::compiler_frontend::traits::ContainsReferences;
+use crate::compiler_frontend::type_coercion::compatibility::is_type_compatible;
 use crate::compiler_frontend::type_coercion::numeric::coerce_expression_to_declared_type;
-use crate::{ast_log, return_rule_error};
+use crate::compiler_frontend::type_coercion::CompatibilityContext;
+use crate::{ast_log, return_rule_error, return_type_error};
 
 pub fn create_reference(
     token_stream: &mut FileTokens,
@@ -171,18 +173,45 @@ pub fn resolve_declaration_syntax(
         }
 
         _ => {
+            // Save the annotated type so the coercion step below can reference
+            // it after the expression has discovered its own natural type.
+            // Passing Inferred here lets eval_expression stay strict (Exact
+            // context); each declaration caller owns its own coercion.
+            let declared_type = data_type.clone();
+            let mut expr_type = DataType::Inferred;
             let expr = create_expression(
                 &mut initializer_stream,
                 context,
-                &mut data_type,
+                &mut expr_type,
                 &ownership,
                 false,
                 string_table,
             )?;
+
+            // Reject incompatible types (e.g. Bool → Float, Float → Int)
+            // before attempting contextual coercion. ReturnSlot context allows
+            // Int → Float, which is the only promotion we support at declaration
+            // sites.
+            if !matches!(declared_type, DataType::Inferred)
+                && !is_type_compatible(&declared_type, &expr.data_type, CompatibilityContext::ReturnSlot)
+            {
+                return_type_error!(
+                    format!(
+                        "Type mismatch in expression. Expected '{}', but found '{}'.",
+                        declared_type.display_with_table(string_table),
+                        expr.data_type.display_with_table(string_table)
+                    ),
+                    expr.location.clone(),
+                    {
+                        CompilationStage => "Expression Evaluation",
+                        PrimarySuggestion => "Ensure the expression produces the declared type",
+                    }
+                );
+            }
+
             // Apply contextual numeric coercion (e.g. Int → Float) when the
-            // declared type requires it. This runs after expression parsing so
-            // the natural expression type is known before promotion is attempted.
-            coerce_expression_to_declared_type(expr, &data_type)
+            // declared type requires it.
+            coerce_expression_to_declared_type(expr, &declared_type)
         }
     };
 

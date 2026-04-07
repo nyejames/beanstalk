@@ -3,10 +3,11 @@ use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::datatypes::Ownership;
+use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
+use crate::compiler_frontend::type_coercion::numeric::coerce_expression_to_declared_type;
 use crate::{return_compiler_error, return_rule_error, return_syntax_error, return_type_error};
 
 /// Parse `StructName(...)` and return a finalized struct instance expression.
@@ -61,18 +62,19 @@ pub(crate) fn parse_struct_constructor_expression(
             );
         }
 
-        // Parse each argument using the destination field type.
-        // This reuses existing type-checking behavior and keeps constructor
-        // argument semantics aligned with all other expression assignments.
-        let mut expected_type = fields[field_index].value.data_type.to_owned();
-        let value = create_expression(
+        // Parse each argument and apply contextual coercion against the
+        // destination field type (e.g. Int → Float for Float fields).
+        let field_type = fields[field_index].value.data_type.to_owned();
+        let mut expr_type = DataType::Inferred;
+        let raw = create_expression(
             token_stream,
             context,
-            &mut expected_type,
+            &mut expr_type,
             &Ownership::ImmutableOwned,
             false,
             string_table,
         )?;
+        let value = coerce_expression_to_declared_type(raw, &field_type);
         provided_values.push(value);
         field_index += 1;
 

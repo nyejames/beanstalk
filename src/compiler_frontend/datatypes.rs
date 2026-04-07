@@ -128,6 +128,10 @@ pub enum DataType {
     False,
 }
 
+// OWNERSHIP NOTE: DataType owns type structure and structural helper methods only.
+// Compatibility policy (what type is accepted in what position) lives exclusively
+// in `type_coercion::compatibility::is_type_compatible`.
+// Contextual numeric promotion logic lives in `type_coercion::numeric`.
 impl DataType {
     pub fn runtime_struct(
         nominal_path: InternedPath,
@@ -212,72 +216,6 @@ impl DataType {
             DataType::Result { err, .. } => Some(err.as_ref()),
             _ => None,
         }
-    }
-
-    /// Type compatibility check for assignment-like contexts.
-    ///
-    /// NOTE: callers that want context-aware coercion should use
-    /// `type_coercion::compatibility::is_type_compatible` instead.
-    /// This method is kept for cases where the circular dependency makes the
-    /// direct import impractical (e.g. inside `datatypes.rs` itself).
-    pub fn accepts_value_type(&self, actual: &DataType) -> bool {
-        if matches!(self, DataType::Inferred) || matches!(actual, DataType::Inferred) {
-            return true;
-        }
-
-        if let DataType::Option(expected_inner) = self {
-            if matches!(actual, DataType::None) {
-                return true;
-            }
-
-            if actual == expected_inner.as_ref()
-                || matches!(
-                    (expected_inner.as_ref(), actual),
-                    (DataType::BuiltinErrorKind, DataType::StringSlice)
-                )
-            {
-                return true;
-            }
-
-            if let DataType::Option(actual_inner) = actual {
-                if matches!(actual_inner.as_ref(), DataType::Inferred)
-                    || matches!(expected_inner.as_ref(), DataType::Inferred)
-                {
-                    return true;
-                }
-
-                return actual_inner.as_ref() == expected_inner.as_ref();
-            }
-        }
-
-        if let (
-            DataType::Result {
-                ok: expected_ok,
-                err: expected_err,
-            },
-            DataType::Result {
-                ok: actual_ok,
-                err: actual_err,
-            },
-        ) = (self, actual)
-        {
-            if matches!(expected_ok.as_ref(), DataType::Inferred)
-                || matches!(actual_ok.as_ref(), DataType::Inferred)
-                || matches!(expected_err.as_ref(), DataType::Inferred)
-                || matches!(actual_err.as_ref(), DataType::Inferred)
-            {
-                return true;
-            }
-
-            return expected_ok.as_ref() == actual_ok.as_ref()
-                && expected_err.as_ref() == actual_err.as_ref();
-        }
-
-        if matches!(self, DataType::BuiltinErrorKind) {
-            return matches!(actual, DataType::BuiltinErrorKind | DataType::StringSlice);
-        }
-
-        self == actual
     }
 
     pub fn is_numerical(&self) -> bool {

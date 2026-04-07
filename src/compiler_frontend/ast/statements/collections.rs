@@ -11,6 +11,7 @@ use crate::compiler_frontend::datatypes::Ownership::MutableOwned;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
+use crate::compiler_frontend::type_coercion::numeric::coerce_expression_to_declared_type;
 use crate::return_syntax_error;
 
 /// Parse a collection literal with homogeneous item expressions.
@@ -61,15 +62,16 @@ pub fn new_collection(
                     )
                 }
 
-                let mut collection_inner_type = collection_type.to_owned();
-                let item = create_expression(
+                let mut expr_type = DataType::Inferred;
+                let raw = create_expression(
                     token_stream,
                     context,
-                    &mut collection_inner_type,
+                    &mut expr_type,
                     &MutableOwned,
                     false,
                     string_table,
                 )?;
+                let item = coerce_expression_to_declared_type(raw, collection_type);
 
                 items.push(item);
 

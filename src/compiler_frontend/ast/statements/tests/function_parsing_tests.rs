@@ -91,7 +91,9 @@ fn rejects_immutable_collection_argument_for_mutable_parameter() {
     );
 
     assert!(
-        error.msg.contains("Type mismatch in expression"),
+        error
+            .msg
+            .contains("Argument 1 to function 'touch' has incorrect type"),
         "{}",
         error.msg
     );

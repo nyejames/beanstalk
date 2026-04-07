@@ -1302,11 +1302,18 @@ pub fn create_multiple_expressions(
 ) -> Result<Vec<Expression>, CompilerError> {
     let mut expressions: Vec<Expression> = Vec::new();
     for (type_index, expected_type) in context.expected_result_types.iter().enumerate() {
-        let mut expected_arg = expected_type.to_owned();
+        // Pass Inferred for concrete scalar/composite types so that eval_expression stays
+        // strict (Exact context); callers own their own coercion or validation after this
+        // call returns. Pass the expected type through only for Option variants so that
+        // `none` literals can resolve their inner type from the surrounding context.
+        let mut expr_type = match expected_type {
+            DataType::Option(_) => expected_type.to_owned(),
+            _ => DataType::Inferred,
+        };
         let expression = create_expression_with_trailing_newline_policy(
             token_stream,
             context,
-            &mut expected_arg,
+            &mut expr_type,
             &Ownership::ImmutableOwned,
             false,
             consume_closing_parenthesis,

@@ -2,26 +2,28 @@
 //!
 //! WHAT: determines whether a value of a given type is accepted in a position
 //! expecting a target type, taking the surrounding context into account.
-//! WHY: previously this logic lived on `DataType::accepts_value_type`, which
-//! had no way to express context-dependent allowances. Moving it here lets
-//! declaration and return contexts permit Int → Float without widening the
-//! rules for function arguments or match patterns.
+//! WHY: this is the sole owner of compatibility policy. All call sites that
+//! need to check type compatibility must go through `is_type_compatible` so
+//! that context-specific rules are applied consistently.
+//! `datatypes.rs` owns type structure only; it no longer carries any
+//! compatibility logic.
 
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::type_coercion::CompatibilityContext;
 
 /// Returns true when `actual` is acceptable in a position that expects `expected`.
 ///
-/// WHAT: the central compatibility predicate for assignment-like contexts.
-/// WHY: callers should use this instead of `DataType::accepts_value_type` so
-/// that context-specific promotions are applied in exactly the right places.
+/// WHAT: the central compatibility predicate for all type positions.
+/// WHY: centralising here means context-specific promotions are applied in
+/// exactly the right places rather than scattered across callers.
 ///
 /// Rules:
 /// - `Inferred` on either side is always compatible (type inference is not yet resolved).
 /// - `Option<T>` accepts `None`, `T`, and `Option<T>`.
 /// - `BuiltinErrorKind` accepts itself or `StringSlice`.
+/// - `StringSlice` accepts `Template` and `TemplateWrapper` (all lower to the same HIR type).
 /// - `Result<ok, err>` requires both sides to match structurally.
-/// - `Declaration` and `ReturnSlot` contexts also accept `Int` where `Float` is expected.
+/// - `ReturnSlot` context also accepts `Int` where `Float` is expected.
 /// - All other cases require structural equality.
 pub(crate) fn is_type_compatible(
     expected: &DataType,
@@ -84,11 +86,19 @@ pub(crate) fn is_type_compatible(
         return matches!(actual, DataType::BuiltinErrorKind | DataType::StringSlice);
     }
 
-    // Contextual numeric promotion: Int is accepted where Float is declared.
-    if matches!(
-        context,
-        CompatibilityContext::Declaration | CompatibilityContext::ReturnSlot
-    ) && is_numeric_coercible(actual, expected)
+    // Template and TemplateWrapper lower to the same HIR representation as StringSlice, so
+    // they are accepted wherever a StringSlice is expected (e.g. String declarations, function
+    // parameters that take String, return slots typed String).
+    if matches!(expected, DataType::StringSlice)
+        && matches!(actual, DataType::Template | DataType::TemplateWrapper)
+    {
+        return true;
+    }
+
+    // Contextual numeric promotion: Int is accepted where Float is expected at a return slot.
+    // Declaration sites apply coerce_expression_to_declared_type before calling this, so
+    // they always arrive here with Exact context and already-compatible types.
+    if matches!(context, CompatibilityContext::ReturnSlot) && is_numeric_coercible(actual, expected)
     {
         return true;
     }

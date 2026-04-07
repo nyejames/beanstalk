@@ -1,0 +1,5 @@
+[backends.html]
+mode = "failure"
+warnings = "forbid"
+error_type = "Type"
+message_contains = ["Argument 1", "takes_string", "String", "Int"]

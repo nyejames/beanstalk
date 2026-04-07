@@ -269,7 +269,7 @@ fn validate_user_function_argument_types(
     string_table: &StringTable,
 ) -> Result<(), CompilerError> {
     for (index, (expression, parameter)) in args.iter().zip(parameters.iter()).enumerate() {
-        if !is_type_compatible(&expression.data_type, &parameter.value.data_type, CompatibilityContext::Exact) {
+        if !is_type_compatible(&parameter.value.data_type, &expression.data_type, CompatibilityContext::Exact) {
             return_type_error!(
                 format!(
                     "Argument {} to function '{}' has incorrect type. Expected {}, but got {}. {}",
