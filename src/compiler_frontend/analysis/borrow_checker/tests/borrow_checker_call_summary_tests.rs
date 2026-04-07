@@ -9,6 +9,7 @@ use crate::compiler_frontend::analysis::borrow_checker::tests::test_support::{
     run_borrow_checker, symbol,
 };
 use crate::compiler_frontend::ast::ast_nodes::NodeKind;
+use crate::compiler_frontend::ast::expressions::call_argument::{CallAccessMode, CallArgument};
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::statements::functions::{
     FunctionReturn, FunctionSignature, ReturnSlot,
@@ -292,7 +293,10 @@ fn mutable_user_argument_is_accepted_without_false_shared_conflict() {
             node(
                 NodeKind::FunctionCall {
                     name: mut_sink,
-                    args: vec![reference_expr(x, DataType::Int, location(11))],
+                    args: vec![CallArgument::positional(
+                        reference_expr(x, DataType::Int, location(11)),
+                        CallAccessMode::Shared,
+                    )],
                     result_types: vec![],
                     location: location(11),
                 },
@@ -343,7 +347,10 @@ fn host_mutable_parameter_requires_mutable_access() {
             node(
                 NodeKind::HostFunctionCall {
                     name: host_fn,
-                    args: vec![reference_expr(x, DataType::Int, location(2))],
+                    args: vec![CallArgument::positional(
+                        reference_expr(x, DataType::Int, location(2)),
+                        CallAccessMode::Shared,
+                    )],
                     result_types: vec![],
                     location: location(2),
                 },
@@ -393,7 +400,10 @@ fn host_mutable_parameter_accepts_mutable_local_argument() {
             node(
                 NodeKind::HostFunctionCall {
                     name: host_fn,
-                    args: vec![reference_expr(x, DataType::Int, location(2))],
+                    args: vec![CallArgument::positional(
+                        reference_expr(x, DataType::Int, location(2)),
+                        CallAccessMode::Shared,
+                    )],
                     result_types: vec![],
                     location: location(2),
                 },
@@ -441,7 +451,10 @@ fn host_shared_parameter_is_shared_only() {
             node(
                 NodeKind::HostFunctionCall {
                     name: host_fn,
-                    args: vec![reference_expr(x, DataType::Int, location(2))],
+                    args: vec![CallArgument::positional(
+                        reference_expr(x, DataType::Int, location(2)),
+                        CallAccessMode::Shared,
+                    )],
                     result_types: vec![],
                     location: location(2),
                 },
@@ -498,8 +511,14 @@ fn two_mutable_args_to_same_root_are_rejected() {
                 NodeKind::FunctionCall {
                     name: mut2,
                     args: vec![
-                        reference_expr(x.clone(), DataType::Int, location(11)),
-                        reference_expr(x, DataType::Int, location(11)),
+                        CallArgument::positional(
+                            reference_expr(x.clone(), DataType::Int, location(11)),
+                            CallAccessMode::Shared,
+                        ),
+                        CallArgument::positional(
+                            reference_expr(x, DataType::Int, location(11)),
+                            CallAccessMode::Shared,
+                        ),
                     ],
                     result_types: vec![],
                     location: location(11),
@@ -561,8 +580,14 @@ fn shared_then_mutable_args_to_same_root_are_rejected() {
                 NodeKind::FunctionCall {
                     name: read_then_mut,
                     args: vec![
-                        reference_expr(x.clone(), DataType::Int, location(11)),
-                        reference_expr(x, DataType::Int, location(11)),
+                        CallArgument::positional(
+                            reference_expr(x.clone(), DataType::Int, location(11)),
+                            CallAccessMode::Shared,
+                        ),
+                        CallArgument::positional(
+                            reference_expr(x, DataType::Int, location(11)),
+                            CallAccessMode::Shared,
+                        ),
                     ],
                     result_types: vec![],
                     location: location(11),
@@ -686,7 +711,10 @@ fn mutable_user_parameter_rejects_immutable_argument_reused_after_call() {
             node(
                 NodeKind::FunctionCall {
                     name: mut_user,
-                    args: vec![reference_expr(x.clone(), DataType::Int, location(11))],
+                    args: vec![CallArgument::positional(
+                        reference_expr(x.clone(), DataType::Int, location(11)),
+                        CallAccessMode::Shared,
+                    )],
                     result_types: vec![],
                     location: location(11),
                 },
@@ -746,7 +774,10 @@ fn out_of_range_return_alias_metadata_is_reported_at_call_site() {
             node(
                 NodeKind::HostFunctionCall {
                     name: bad_alias_host,
-                    args: vec![reference_expr(x, DataType::Int, location(11))],
+                    args: vec![CallArgument::positional(
+                        reference_expr(x, DataType::Int, location(11)),
+                        CallAccessMode::Shared,
+                    )],
                     result_types: vec![DataType::Int],
                     location: location(11),
                 },
@@ -805,7 +836,10 @@ fn same_line_mutable_call_then_reuse_uses_order_keys() {
             node(
                 NodeKind::FunctionCall {
                     name: mut_user,
-                    args: vec![reference_expr(x.clone(), DataType::Int, same_line.clone())],
+                    args: vec![CallArgument::positional(
+                        reference_expr(x.clone(), DataType::Int, same_line.clone()),
+                        CallAccessMode::Shared,
+                    )],
                     result_types: vec![],
                     location: same_line.clone(),
                 },

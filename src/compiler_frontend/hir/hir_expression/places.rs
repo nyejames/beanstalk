@@ -5,6 +5,7 @@
 //! mutation analysis can reason about them.
 
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
+use crate::compiler_frontend::ast::expressions::call_argument::call_argument_values;
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
 use crate::compiler_frontend::builtins::BuiltinMethodKind;
 use crate::compiler_frontend::compiler_errors::CompilerError;
@@ -43,7 +44,7 @@ impl<'a> HirBuilder<'a> {
                 let function_id = self.resolve_function_id_or_error(name, location)?;
                 self.lower_call_expression(
                     CallTarget::UserFunction(function_id),
-                    args,
+                    &call_argument_values(args),
                     result_types,
                     location,
                 )
@@ -59,7 +60,7 @@ impl<'a> HirBuilder<'a> {
                 let function_id = self.resolve_function_id_or_error(name, location)?;
                 self.lower_result_handled_call_expression(
                     CallTarget::UserFunction(function_id),
-                    args,
+                    &call_argument_values(args),
                     result_types,
                     handling,
                     true,
@@ -74,7 +75,7 @@ impl<'a> HirBuilder<'a> {
                 location,
             } => self.lower_call_expression(
                 CallTarget::HostFunction(host_function_id.to_owned()),
-                args,
+                &call_argument_values(args),
                 result_types,
                 location,
             ),
@@ -113,7 +114,7 @@ impl<'a> HirBuilder<'a> {
                 method_path,
                 *builtin,
                 receiver,
-                args,
+                &call_argument_values(args),
                 result_types,
                 location,
             ),
@@ -185,7 +186,7 @@ impl<'a> HirBuilder<'a> {
                 let function_id = self.resolve_function_id_or_error(name, location)?;
                 let lowered = self.lower_call_expression(
                     CallTarget::UserFunction(function_id),
-                    args,
+                    &call_argument_values(args),
                     result_types,
                     location,
                 )?;
@@ -203,7 +204,7 @@ impl<'a> HirBuilder<'a> {
                 let function_id = self.resolve_function_id_or_error(name, location)?;
                 let lowered = self.lower_result_handled_call_expression(
                     CallTarget::UserFunction(function_id),
-                    args,
+                    &call_argument_values(args),
                     result_types,
                     handling,
                     true,
@@ -221,7 +222,7 @@ impl<'a> HirBuilder<'a> {
             } => {
                 let lowered = self.lower_call_expression(
                     CallTarget::HostFunction(host_function_id.to_owned()),
-                    args,
+                    &call_argument_values(args),
                     result_types,
                     location,
                 )?;
@@ -239,14 +240,18 @@ impl<'a> HirBuilder<'a> {
                 ..
             } => {
                 if matches!(builtin, Some(BuiltinMethodKind::CollectionGet)) {
-                    return self.lower_collection_get_place(receiver, args, location);
+                    return self.lower_collection_get_place(
+                        receiver,
+                        &call_argument_values(args),
+                        location,
+                    );
                 }
 
                 let lowered = self.lower_receiver_method_call_expression(
                     method_path,
                     *builtin,
                     receiver,
-                    args,
+                    &call_argument_values(args),
                     result_types,
                     location,
                 )?;

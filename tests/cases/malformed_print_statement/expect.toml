@@ -2,4 +2,4 @@
 mode = "failure"
 warnings = "forbid"
 error_type = "Syntax"
-message_contains = ["Expected closing parenthesis after arguments"]
+message_contains = ["Expected one of [Comma, CloseParenthesis, As] to end this expression"]

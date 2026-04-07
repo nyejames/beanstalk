@@ -3,7 +3,7 @@ Point = |
     y Int,
 |
 
-load_index |items {Int}, idx Int| -> Int, Error!:
+load_index |items ~{Int}, idx Int| -> Int, Error!:
     return items.get(idx)!
 ;
 

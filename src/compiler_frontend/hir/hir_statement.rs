@@ -7,6 +7,7 @@ use crate::compiler_frontend::ast::ast_nodes::{
     AstNode, Declaration, ForLoopRange, MultiBindTarget, MultiBindTargetKind, NodeKind,
     SourceLocation,
 };
+use crate::compiler_frontend::ast::expressions::call_argument::call_argument_values;
 use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, ResultCallHandling,
 };
@@ -125,7 +126,11 @@ impl<'a> HirBuilder<'a> {
                 location,
             } => {
                 let function_id = self.resolve_function_id_or_error(name, location)?;
-                self.lower_call_statement(CallTarget::UserFunction(function_id), args, location)
+                self.lower_call_statement(
+                    CallTarget::UserFunction(function_id),
+                    &call_argument_values(args),
+                    location,
+                )
             }
 
             NodeKind::ResultHandledFunctionCall {
@@ -136,7 +141,7 @@ impl<'a> HirBuilder<'a> {
                 location,
             } => self.lower_result_handled_call_statement(
                 name,
-                args,
+                &call_argument_values(args),
                 result_types,
                 handling,
                 location,
@@ -149,7 +154,7 @@ impl<'a> HirBuilder<'a> {
                 location,
             } => self.lower_call_statement(
                 CallTarget::HostFunction(host_function_id.to_owned()),
-                args,
+                &call_argument_values(args),
                 location,
             ),
 

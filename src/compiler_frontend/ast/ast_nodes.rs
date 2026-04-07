@@ -1,6 +1,9 @@
 use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, Operator, ResultCallHandling,
 };
+use crate::compiler_frontend::ast::expressions::call_argument::{
+    CallArgument, call_argument_values,
+};
 use crate::compiler_frontend::ast::statements::branching::MatchArm;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::builtins::BuiltinMethodKind;
@@ -98,14 +101,14 @@ pub enum NodeKind {
         method_path: InternedPath,
         method: StringId,
         builtin: Option<BuiltinMethodKind>,
-        args: Vec<Expression>,
+        args: Vec<CallArgument>,
         result_types: Vec<DataType>,
         location: SourceLocation,
     },
 
     FunctionCall {
         name: InternedPath,
-        args: Vec<Expression>,
+        args: Vec<CallArgument>,
         result_types: Vec<DataType>,
         location: SourceLocation,
         // bool, // Function is pure
@@ -113,7 +116,7 @@ pub enum NodeKind {
 
     ResultHandledFunctionCall {
         name: InternedPath,
-        args: Vec<Expression>,
+        args: Vec<CallArgument>,
         result_types: Vec<DataType>,
         handling: ResultCallHandling,
         location: SourceLocation,
@@ -122,7 +125,7 @@ pub enum NodeKind {
     // Host function call (functions provided by the runtime)
     HostFunctionCall {
         name: InternedPath,
-        args: Vec<Expression>,
+        args: Vec<CallArgument>,
         result_types: Vec<DataType>,
         location: SourceLocation,
     },
@@ -183,7 +186,7 @@ impl AstNode {
                 location,
             } => Ok(Expression::function_call(
                 name.to_owned(),
-                arguments.to_owned(),
+                call_argument_values(arguments),
                 result_types.to_owned(),
                 location.to_owned(),
             )),
@@ -195,7 +198,7 @@ impl AstNode {
                 location,
             } => Ok(Expression::host_function_call(
                 name.to_owned(),
-                arguments.to_owned(),
+                call_argument_values(arguments),
                 result_types.to_owned(),
                 location.to_owned(),
             )),
@@ -208,7 +211,7 @@ impl AstNode {
                 location,
             } => Ok(Expression::result_handled_function_call(
                 name.to_owned(),
-                arguments.to_owned(),
+                call_argument_values(arguments),
                 result_types.to_owned(),
                 handling.to_owned(),
                 location.to_owned(),

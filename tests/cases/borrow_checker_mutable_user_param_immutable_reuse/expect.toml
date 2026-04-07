@@ -1,5 +1,5 @@
 [backends.html]
 mode = "failure"
 warnings = "forbid"
-error_type = "BorrowChecker"
-message_contains = ["immutable local"]
+error_type = "Rule"
+message_contains = ["requires mutable access"]

@@ -6,6 +6,7 @@
 use super::eval_expression::evaluate_expression;
 use crate::compiler_frontend::ast::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
+use crate::compiler_frontend::ast::expressions::call_argument::call_argument_values;
 use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, Operator,
 };
@@ -226,7 +227,12 @@ fn parse_identifier_or_call(
                         location,
                     } => {
                         let func_call_expr =
-                            Expression::function_call(name, args, result_types, location);
+                            Expression::function_call(
+                                name,
+                                call_argument_values(&args),
+                                result_types,
+                                location,
+                            );
 
                         push_expression_node(
                             token_stream,
@@ -251,7 +257,7 @@ fn parse_identifier_or_call(
                     } => {
                         let func_call_expr = Expression::result_handled_function_call(
                             name,
-                            args,
+                            call_argument_values(&args),
                             result_types,
                             handling,
                             location,
@@ -341,7 +347,7 @@ fn parse_identifier_or_call(
                             AstNode {
                                 kind: NodeKind::Rvalue(Expression::function_call(
                                     name,
-                                    args,
+                                    call_argument_values(&args),
                                     result_types,
                                     location,
                                 )),
@@ -366,7 +372,7 @@ fn parse_identifier_or_call(
                             AstNode {
                                 kind: NodeKind::Rvalue(Expression::result_handled_function_call(
                                     name,
-                                    args,
+                                    call_argument_values(&args),
                                     result_types,
                                     handling,
                                     location,
@@ -458,7 +464,7 @@ fn parse_identifier_or_call(
         {
             let func_call_expr = Expression::host_function_call(
                 host_function_id,
-                args.to_owned(),
+                call_argument_values(&args),
                 result_types,
                 location,
             );
@@ -952,7 +958,11 @@ fn dispatch_expression_token(
         }
 
         TokenKind::Newline => {
-            let previous_token = token_stream.previous_token();
+            let previous_token = if token_stream.index == 0 {
+                &TokenKind::Newline
+            } else {
+                token_stream.previous_token()
+            };
             if state.consume_closing_parenthesis
                 || (previous_token.continues_expression()
                     && !matches!(previous_token, TokenKind::End))
@@ -1579,19 +1589,25 @@ pub(crate) fn create_expression_until(
     let start_index = token_stream.index;
     let mut end_index = token_stream.index;
     let mut parenthesis_depth: i32 = 0;
+    let mut curly_depth: i32 = 0;
 
     while end_index < token_stream.length {
         let token_kind = &token_stream.tokens[end_index].kind;
 
+        // Delimiters only terminate at top-level depth so nested subexpressions remain intact.
+        if parenthesis_depth == 0
+            && curly_depth == 0
+            && stop_tokens.iter().any(|stop| token_kind == stop)
+        {
+            break;
+        }
+
         match token_kind {
             TokenKind::OpenParenthesis => parenthesis_depth += 1,
             TokenKind::CloseParenthesis if parenthesis_depth > 0 => parenthesis_depth -= 1,
+            TokenKind::OpenCurly => curly_depth += 1,
+            TokenKind::CloseCurly if curly_depth > 0 => curly_depth -= 1,
             _ => {}
-        }
-
-        // Delimiters only terminate at top-level depth so nested subexpressions remain intact.
-        if parenthesis_depth == 0 && stop_tokens.iter().any(|stop| token_kind == stop) {
-            break;
         }
 
         if matches!(token_kind, TokenKind::Eof) {

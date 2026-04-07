@@ -10,6 +10,8 @@ pub(crate) mod import_bindings;
 pub(crate) mod receiver_methods;
 pub(crate) mod type_resolution;
 pub(crate) mod expressions {
+    pub(crate) mod call_argument;
+    pub(crate) mod call_validation;
     pub(crate) mod eval_expression;
     pub(crate) mod expression;
     pub(crate) mod function_calls;

@@ -672,19 +672,19 @@ fn collect_references_from_ast_node(node: &AstNode, references: &mut FxHashSet<I
         NodeKind::MethodCall { receiver, args, .. } => {
             collect_references_from_ast_node(receiver, references);
             for argument in args {
-                collect_references_from_expression(argument, references);
+                collect_references_from_expression(&argument.value, references);
             }
         }
 
         NodeKind::FunctionCall { args, .. } | NodeKind::HostFunctionCall { args, .. } => {
             for argument in args {
-                collect_references_from_expression(argument, references);
+                collect_references_from_expression(&argument.value, references);
             }
         }
 
         NodeKind::ResultHandledFunctionCall { args, handling, .. } => {
             for argument in args {
-                collect_references_from_expression(argument, references);
+                collect_references_from_expression(&argument.value, references);
             }
 
             match handling {

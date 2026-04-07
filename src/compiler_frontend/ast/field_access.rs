@@ -1,7 +1,12 @@
 use crate::compiler_frontend::ast::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
+use crate::compiler_frontend::ast::expressions::call_argument::CallArgument;
+use crate::compiler_frontend::ast::expressions::call_validation::{
+    ExpectedAccessMode, ParameterExpectation, expectations_from_receiver_method_signature,
+    resolve_call_arguments,
+};
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
-use crate::compiler_frontend::ast::expressions::function_calls::create_function_call_arguments;
+use crate::compiler_frontend::ast::expressions::function_calls::parse_call_arguments;
 use crate::compiler_frontend::builtins::BuiltinMethodKind;
 use crate::compiler_frontend::builtins::error_type::{
     ERROR_HELPER_BUBBLE, ERROR_HELPER_PUSH_TRACE, ERROR_HELPER_WITH_LOCATION,
@@ -235,7 +240,7 @@ fn parse_builtin_method_args(
     context: &ScopeContext,
     member_location: &SourceLocation,
     string_table: &mut StringTable,
-) -> Result<Vec<Expression>, CompilerError> {
+) -> Result<Vec<CallArgument>, CompilerError> {
     if expected_types.is_empty() {
         if token_stream.current_token_kind() != &TokenKind::OpenParenthesis {
             return_rule_error!(
@@ -265,20 +270,24 @@ fn parse_builtin_method_args(
         return Ok(Vec::new());
     }
 
-    let signature_params = expected_types
+    let expectations = expected_types
         .iter()
-        .enumerate()
-        .map(|(index, expected_type)| Declaration {
-            id: InternedPath::from_single_str(&format!("__builtin_arg_{index}"), string_table),
-            value: Expression::no_value(
-                member_location.to_owned(),
-                expected_type.to_owned(),
-                Ownership::ImmutableReference,
-            ),
+        .map(|expected_type| ParameterExpectation {
+            name: None,
+            data_type: expected_type.to_owned(),
+            access_mode: ExpectedAccessMode::Shared,
+            default_value: None,
         })
         .collect::<Vec<_>>();
 
-    create_function_call_arguments(token_stream, &signature_params, context, string_table)
+    let raw_args = parse_call_arguments(token_stream, context, string_table)?;
+    resolve_call_arguments(
+        "<builtin member>",
+        &raw_args,
+        &expectations,
+        member_location.to_owned(),
+        string_table,
+    )
 }
 
 fn parse_collection_builtin_member(
@@ -688,10 +697,14 @@ pub(crate) fn parse_postfix_chain(
             );
         }
 
-        let args = create_function_call_arguments(
-            token_stream,
-            &method_entry.signature.parameters[1..],
-            context,
+        let raw_args = parse_call_arguments(token_stream, context, string_table)?;
+        let expectations =
+            expectations_from_receiver_method_signature(&method_entry.signature.parameters[1..]);
+        let args = resolve_call_arguments(
+            &method_entry.function_path.to_string(string_table),
+            &raw_args,
+            &expectations,
+            member_location.clone(),
             string_table,
         )?;
         let result_types = method_entry.signature.return_data_types();

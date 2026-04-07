@@ -10,6 +10,7 @@ use crate::compiler_frontend::ast::ast_nodes::{
     AstNode, Declaration, ForLoopRange, MultiBindTarget, MultiBindTargetKind, NodeKind,
     RangeEndKind, SourceLocation,
 };
+use crate::compiler_frontend::ast::expressions::call_argument::{CallAccessMode, CallArgument};
 use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, ResultCallHandling,
 };
@@ -1199,10 +1200,13 @@ fn call_statements_emit_without_result_binding() {
             node(
                 NodeKind::HostFunctionCall {
                     name: alloc,
-                    args: vec![Expression::int(
+                    args: vec![CallArgument::positional(
+                        Expression::int(
                         1,
                         test_location(3),
                         Ownership::ImmutableOwned,
+                        ),
+                        CallAccessMode::Shared,
                     )],
                     result_types: vec![DataType::Int],
                     location: test_location(3),

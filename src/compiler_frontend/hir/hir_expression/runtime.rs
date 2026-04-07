@@ -5,6 +5,7 @@
 //! without rebuilding parser-era operator rules.
 
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
+use crate::compiler_frontend::ast::expressions::call_argument::call_argument_values;
 use crate::compiler_frontend::ast::expressions::expression::Operator::Range;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
@@ -50,7 +51,7 @@ impl<'a> HirBuilder<'a> {
                     let function_id = self.resolve_function_id_or_error(name, location)?;
                     let lowered = self.lower_call_expression(
                         CallTarget::UserFunction(function_id),
-                        args,
+                        &call_argument_values(args),
                         result_types,
                         location,
                     )?;
@@ -69,7 +70,7 @@ impl<'a> HirBuilder<'a> {
                     let function_id = self.resolve_function_id_or_error(name, location)?;
                     let lowered = self.lower_result_handled_call_expression(
                         CallTarget::UserFunction(function_id),
-                        args,
+                        &call_argument_values(args),
                         result_types,
                         handling,
                         true,
@@ -88,7 +89,7 @@ impl<'a> HirBuilder<'a> {
                 } => {
                     let lowered = self.lower_call_expression(
                         CallTarget::HostFunction(host_function_id.to_owned()),
-                        args,
+                        &call_argument_values(args),
                         result_types,
                         location,
                     )?;
@@ -117,7 +118,7 @@ impl<'a> HirBuilder<'a> {
                         method_path,
                         *builtin,
                         receiver,
-                        args,
+                        &call_argument_values(args),
                         result_types,
                         location,
                     )?;

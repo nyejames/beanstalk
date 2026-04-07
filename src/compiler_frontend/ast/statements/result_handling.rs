@@ -7,6 +7,7 @@
 
 use crate::compiler_frontend::ast::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
+use crate::compiler_frontend::ast::expressions::call_argument::CallArgument;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ResultCallHandling};
 use crate::compiler_frontend::ast::expressions::parse_expression::create_multiple_expressions;
 use crate::compiler_frontend::ast::function_body_to_ast::function_body_to_ast;
@@ -21,7 +22,7 @@ use crate::{return_rule_error, return_syntax_error, return_type_error};
 
 pub(crate) struct ResultHandledCall {
     pub(crate) name: InternedPath,
-    pub(crate) args: Vec<Expression>,
+    pub(crate) args: Vec<CallArgument>,
     pub(crate) result_types: Vec<DataType>,
     pub(crate) call_location: SourceLocation,
 }

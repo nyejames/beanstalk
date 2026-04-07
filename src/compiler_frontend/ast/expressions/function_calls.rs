@@ -1,8 +1,12 @@
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
-use crate::compiler_frontend::ast::expressions::expression::{
-    Expression, ExpressionKind, ResultCallHandling,
+use crate::compiler_frontend::ast::expressions::call_argument::{CallAccessMode, CallArgument};
+use crate::compiler_frontend::ast::expressions::call_validation::{
+    expectations_from_host_function, expectations_from_user_parameters, resolve_call_arguments,
 };
-use crate::compiler_frontend::ast::expressions::parse_expression::create_multiple_expressions;
+use crate::compiler_frontend::ast::expressions::expression::{
+    ResultCallHandling,
+};
+use crate::compiler_frontend::ast::expressions::parse_expression::create_expression_until;
 use crate::compiler_frontend::ast::module_ast::ScopeContext;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::ast::statements::result_handling::{
@@ -16,10 +20,7 @@ use crate::compiler_frontend::host_functions::HostFunctionDef;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
-use crate::compiler_frontend::type_coercion::CompatibilityContext;
-use crate::compiler_frontend::type_coercion::compatibility::is_type_compatible;
 use crate::{ast_log, return_rule_error, return_syntax_error, return_type_error};
-use crate::compiler_frontend::display_messages::get_type_conversion_hint;
 
 // Built-in functions will do their own thing
 pub fn parse_function_call(
@@ -41,11 +42,10 @@ pub fn parse_function_call(
     }
 
     // Create expressions until hitting a closed parenthesis
-    let args =
-        create_function_call_arguments(token_stream, &signature.parameters, context, string_table)?;
-    validate_user_function_argument_types(
+    let raw_args = parse_call_arguments(token_stream, context, string_table)?;
+    let args = validate_user_function_call_arguments(
         id,
-        &args,
+        &raw_args,
         &signature.parameters,
         token_stream.current_location(),
         string_table,
@@ -173,12 +173,11 @@ pub fn parse_function_call(
     })
 }
 
-pub fn create_function_call_arguments(
+pub fn parse_call_arguments(
     token_stream: &mut FileTokens,
-    required_arguments: &[Declaration],
     context: &ScopeContext,
     string_table: &mut StringTable,
-) -> Result<Vec<Expression>, CompilerError> {
+) -> Result<Vec<CallArgument>, CompilerError> {
     // Starts at the first token after the function name
     ast_log!("Creating function call arguments");
 
@@ -199,96 +198,124 @@ pub fn create_function_call_arguments(
     }
 
     token_stream.advance();
+    token_stream.skip_newlines();
 
     if token_stream.current_token_kind() == &TokenKind::CloseParenthesis {
-        let missing_required = required_arguments
-            .iter()
-            .filter(|argument| matches!(argument.value.kind, ExpressionKind::NoValue))
-            .count();
-
-        if missing_required > 0 {
-            return_syntax_error!(
-                format!(
-                    "This function requires {missing_required} argument(s) without defaults, but none were provided.",
-                ),
-                token_stream.current_location(),
-                {
-                    CompilationStage => "Function Call Parsing",
-                    PrimarySuggestion => "Provide the required arguments or add defaults in the declaration",
-                }
-            )
-        }
-
         token_stream.advance();
         return Ok(Vec::new());
     }
 
-    if required_arguments.is_empty() {
-        // Make sure there is a closing parenthesis
-        if token_stream.current_token_kind() != &TokenKind::CloseParenthesis {
-            return_syntax_error!(
-                format!(
-                    "This function does not accept any arguments, found '{:?}' instead",
-                    token_stream.current_token_kind()
-                ),
-                token_stream.current_location(),
-                {
-                    CompilationStage => "Function Call Parsing",
-                    PrimarySuggestion => "Remove the arguments or check the function signature",
-                }
-            )
+    let mut args = Vec::new();
+    loop {
+        token_stream.skip_newlines();
+        if token_stream.current_token_kind() == &TokenKind::CloseParenthesis {
+            token_stream.advance();
+            break;
         }
 
-        // Advance past the closing parenthesis
-        token_stream.advance();
+        let mut access_mode = CallAccessMode::Shared;
+        let mut has_leading_mutable = false;
+        let mut has_named_mutable = false;
+        let argument_location = token_stream.current_location();
 
-        Ok(Vec::new())
-    } else {
-        let required_argument_types: Vec<DataType> = required_arguments
-            .iter()
-            .map(|argument| match &argument.value.data_type {
-                // WHAT: keep immutable-collection argument parsing permissive.
-                // WHY: call compatibility allows mutable collections for immutable parameters.
-                // Parsing should defer this ownership-specific check to function call validation.
-                DataType::Collection(_, ownership) if !ownership.is_mutable() => DataType::Inferred,
-                _ => argument.value.data_type.to_owned(),
-            })
-            .collect();
+        if token_stream.current_token_kind() == &TokenKind::Mutable {
+            has_leading_mutable = true;
+            access_mode = CallAccessMode::Mutable;
+            token_stream.advance();
+        }
 
-        let call_context = context.new_child_expression(required_argument_types.to_owned());
+        let value = create_expression_until(
+            token_stream,
+            context,
+            &mut DataType::Inferred,
+            &crate::compiler_frontend::datatypes::Ownership::ImmutableOwned,
+            &[TokenKind::Comma, TokenKind::CloseParenthesis, TokenKind::As],
+            string_table,
+        )?;
 
-        create_multiple_expressions(token_stream, &call_context, true, string_table)
-    }
-}
+        let mut target_param = None;
+        if token_stream.current_token_kind() == &TokenKind::As {
+            token_stream.advance();
+            if token_stream.current_token_kind() == &TokenKind::Mutable {
+                has_named_mutable = true;
+                access_mode = CallAccessMode::Mutable;
+                token_stream.advance();
+            }
 
-fn validate_user_function_argument_types(
-    function_name: &InternedPath,
-    args: &[Expression],
-    parameters: &[Declaration],
-    location: SourceLocation,
-    string_table: &StringTable,
-) -> Result<(), CompilerError> {
-    for (index, (expression, parameter)) in args.iter().zip(parameters.iter()).enumerate() {
-        if !is_type_compatible(&parameter.value.data_type, &expression.data_type, CompatibilityContext::Exact) {
-            return_type_error!(
-                format!(
-                    "Argument {} to function '{}' has incorrect type. Expected {}, but got {}. {}",
-                    index + 1,
-                    function_name.name_str(string_table).unwrap_or("<unknown>"),
-                    &parameter.value.data_type.display_with_table(string_table),
-                    &expression.data_type.display_with_table(string_table),
-                    get_type_conversion_hint(&expression.data_type, &parameter.value.data_type)
-                ),
-                location,
+            let TokenKind::Symbol(name) = token_stream.current_token_kind() else {
+                return_syntax_error!(
+                    "Expected parameter name after 'as' in named argument",
+                    token_stream.current_location(),
+                    {
+                        CompilationStage => "Function Call Parsing",
+                        PrimarySuggestion => "Use '<value> as parameter_name'",
+                    }
+                );
+            };
+            target_param = Some(*name);
+            token_stream.advance();
+        }
+
+        if has_leading_mutable && has_named_mutable {
+            return_syntax_error!(
+                "Argument used mutable marker twice",
+                argument_location,
                 {
-                    CompilationStage => "Function Call Validation",
-                    PrimarySuggestion => "Convert the argument to the expected type",
+                    CompilationStage => "Function Call Parsing",
+                    PrimarySuggestion => "Use '~' either before the value or before the named parameter target",
                 }
             );
         }
+
+        args.push(if let Some(name) = target_param {
+            CallArgument::named(value, name, access_mode)
+        } else {
+            CallArgument::positional(value, access_mode)
+        });
+
+        match token_stream.current_token_kind() {
+            TokenKind::Comma => {
+                token_stream.advance();
+                token_stream.skip_newlines();
+            }
+            TokenKind::CloseParenthesis => {
+                token_stream.advance();
+                break;
+            }
+            _ => {
+                return_syntax_error!(
+                    format!(
+                        "Expected ',' or ')' after call argument, found '{:?}'",
+                        token_stream.current_token_kind()
+                    ),
+                    token_stream.current_location(),
+                    {
+                        CompilationStage => "Function Call Parsing",
+                        PrimarySuggestion => "Separate arguments with commas and close the call with ')'",
+                    }
+                );
+            }
+        }
     }
 
-    Ok(())
+    Ok(args)
+}
+
+fn validate_user_function_call_arguments(
+    function_name: &InternedPath,
+    raw_args: &[CallArgument],
+    parameters: &[Declaration],
+    location: SourceLocation,
+    string_table: &StringTable,
+) -> Result<Vec<CallArgument>, CompilerError> {
+    let expectations = expectations_from_user_parameters(parameters);
+    resolve_call_arguments(
+        function_name.name_str(string_table).unwrap_or("<unknown>"),
+        raw_args,
+        &expectations,
+        location,
+        string_table,
+    )
 }
 
 /// Parse a host function call
@@ -300,17 +327,26 @@ pub fn parse_host_function_call(
 ) -> Result<AstNode, CompilerError> {
     let location = token_stream.current_location();
 
-    let params_as_args = host_func.params_to_signature(string_table);
+    let raw_args = parse_call_arguments(token_stream, context, string_table)?;
+    if raw_args.iter().any(|argument| argument.target_param.is_some()) {
+        return_rule_error!(
+            "Named arguments are not supported for host function calls",
+            location.clone(),
+            {
+                CompilationStage => "Function Call Validation",
+                PrimarySuggestion => "Use positional arguments when calling host functions",
+            }
+        );
+    }
 
-    // Parse arguments using the same logic as regular function calls
-    let args = create_function_call_arguments(
-        token_stream,
-        &params_as_args.parameters,
-        context,
+    let expectations = expectations_from_host_function(host_func);
+    let args = resolve_call_arguments(
+        host_func.name,
+        &raw_args,
+        &expectations,
+        location.clone(),
         string_table,
     )?;
-
-    // Validate the host function call
     validate_host_function_call(host_func, &args, location.clone(), string_table)?;
 
     // Create an interned path name from the name
@@ -320,7 +356,9 @@ pub fn parse_host_function_call(
         kind: NodeKind::HostFunctionCall {
             name,
             args,
-            result_types: params_as_args.return_data_types(),
+            result_types: host_func
+                .params_to_signature(string_table)
+                .return_data_types(),
             location: location.clone(),
         },
         location,
@@ -328,10 +366,10 @@ pub fn parse_host_function_call(
     })
 }
 
-/// Validate a host function call against its signature
+/// Validate host-only special call constraints.
 pub fn validate_host_function_call(
     function: &HostFunctionDef,
-    args: &[Expression],
+    args: &[CallArgument],
     location: SourceLocation,
     string_table: &StringTable,
 ) -> Result<(), CompilerError> {
@@ -396,14 +434,14 @@ pub fn validate_host_function_call(
     }
 
     if function.name == crate::compiler_frontend::host_functions::IO_FUNC_NAME {
-        for (i, expression) in args.iter().enumerate() {
-            if expression.data_type.is_result() {
+        for (i, argument) in args.iter().enumerate() {
+            if argument.value.data_type.is_result() {
                 return_type_error!(
                     format!(
                         "Argument {} to function '{}' has incorrect type. Expected a renderable value, but got {}. Result values must be handled before reaching io(...).",
                         i + 1,
                         function.name,
-                        &expression.data_type.display_with_table(string_table)
+                        &argument.value.data_type.display_with_table(string_table)
                     ),
                     location.clone(),
                     {
@@ -414,7 +452,7 @@ pub fn validate_host_function_call(
             }
 
             if !matches!(
-                expression.data_type,
+                argument.value.data_type,
                 DataType::StringSlice
                     | DataType::Template
                     | DataType::TemplateWrapper
@@ -429,7 +467,7 @@ pub fn validate_host_function_call(
                         "Argument {} to function '{}' has incorrect type. Expected a final scalar or textual value, but got {}.",
                         i + 1,
                         function.name,
-                        expression.data_type.display_with_table(string_table)
+                        argument.value.data_type.display_with_table(string_table)
                     ),
                     location.clone(),
                     {
@@ -441,26 +479,6 @@ pub fn validate_host_function_call(
         }
 
         return Ok(());
-    }
-
-    for (i, (expression, param)) in args.iter().zip(&function.parameters).enumerate() {
-        if !is_type_compatible(&param.language_type, &expression.data_type, CompatibilityContext::Exact) {
-            return_type_error!(
-                format!(
-                    "Argument {} to function '{}' has incorrect type. Expected {}, but got {}. {}",
-                    i + 1,
-                    function.name,
-                    &param.language_type.display_with_table(string_table),
-                    &expression.data_type.display_with_table(string_table),
-                    get_type_conversion_hint(&expression.data_type, &param.language_type)
-                ),
-                location,
-                {
-                    CompilationStage => "Function Call Validation",
-                    PrimarySuggestion => "Convert the argument to the expected type",
-                }
-            );
-        }
     }
 
     Ok(())

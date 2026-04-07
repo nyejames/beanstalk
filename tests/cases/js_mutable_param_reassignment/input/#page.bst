@@ -4,5 +4,5 @@ increment |value ~Int| -> Int:
 ;
 
 x ~= 10
-result = increment(x)
+result = increment(~x)
 io(result)

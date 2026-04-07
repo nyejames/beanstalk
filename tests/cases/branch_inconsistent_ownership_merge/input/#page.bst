@@ -5,8 +5,8 @@ data ~= "hello"
 flag = true
 
 if flag:
-    consume(data)
+    consume(~data)
 else
-    consume(data)
+    consume(~data)
     io(data)
 ;
