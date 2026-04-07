@@ -5,7 +5,7 @@
 
 use crate::compiler_frontend::ast::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
-use crate::compiler_frontend::ast::statements::structs::{
+use crate::compiler_frontend::ast::signatures::{
     SignatureTypeContext, parse_explicit_signature_type, parse_parameters,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;

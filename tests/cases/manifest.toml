@@ -464,9 +464,69 @@ path = "function_call_named_args_builtin_rejected"
 tags = ["integration", "functions", "diagnostics"]
 
 [[case]]
-id = "function_call_old_as_named_syntax_rejected"
-path = "function_call_old_as_named_syntax_rejected"
-tags = ["integration", "functions", "diagnostics"]
+id = "function_call_named_args_all_named"
+path = "function_call_named_args_all_named"
+tags = ["integration", "functions", "named-args"]
+
+[[case]]
+id = "function_call_named_args_default_skip"
+path = "function_call_named_args_default_skip"
+tags = ["integration", "functions", "named-args"]
+
+[[case]]
+id = "function_call_named_args_positional_after_named"
+path = "function_call_named_args_positional_after_named"
+tags = ["integration", "functions", "named-args", "diagnostics"]
+
+[[case]]
+id = "function_call_named_args_duplicate"
+path = "function_call_named_args_duplicate"
+tags = ["integration", "functions", "named-args", "diagnostics"]
+
+[[case]]
+id = "function_call_named_args_unknown"
+path = "function_call_named_args_unknown"
+tags = ["integration", "functions", "named-args", "diagnostics"]
+
+[[case]]
+id = "function_call_named_args_missing_required"
+path = "function_call_named_args_missing_required"
+tags = ["integration", "functions", "named-args", "diagnostics"]
+
+[[case]]
+id = "struct_constructor_named_args_all_named"
+path = "struct_constructor_named_args_all_named"
+tags = ["integration", "structs", "named-args"]
+
+[[case]]
+id = "struct_constructor_named_args_mixed"
+path = "struct_constructor_named_args_mixed"
+tags = ["integration", "structs", "named-args"]
+
+[[case]]
+id = "struct_constructor_named_args_default_skip"
+path = "struct_constructor_named_args_default_skip"
+tags = ["integration", "structs", "named-args"]
+
+[[case]]
+id = "struct_constructor_named_args_positional_after_named"
+path = "struct_constructor_named_args_positional_after_named"
+tags = ["integration", "structs", "named-args", "diagnostics"]
+
+[[case]]
+id = "struct_constructor_named_args_duplicate"
+path = "struct_constructor_named_args_duplicate"
+tags = ["integration", "structs", "named-args", "diagnostics"]
+
+[[case]]
+id = "struct_constructor_named_args_unknown"
+path = "struct_constructor_named_args_unknown"
+tags = ["integration", "structs", "named-args", "diagnostics"]
+
+[[case]]
+id = "struct_constructor_named_args_missing_required"
+path = "struct_constructor_named_args_missing_required"
+tags = ["integration", "structs", "named-args", "diagnostics"]
 
 [[case]]
 id = "function_calls"

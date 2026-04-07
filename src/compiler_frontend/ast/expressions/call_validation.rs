@@ -61,6 +61,25 @@ pub(crate) fn expectations_from_host_function(function: &HostFunctionDef) -> Vec
         .collect()
 }
 
+pub(crate) fn expectations_from_struct_fields(
+    fields: &[Declaration],
+) -> Vec<ParameterExpectation> {
+    fields
+        .iter()
+        .map(|field| ParameterExpectation {
+            name: field.id.name(),
+            data_type: field.value.data_type.clone(),
+            // Constructor arguments are always passed by shared value; the field's own
+            // declared mutability applies after construction, not at the call site.
+            access_mode: ExpectedAccessMode::Shared,
+            default_value: match field.value.kind {
+                ExpressionKind::NoValue => None,
+                _ => Some(field.value.clone()),
+            },
+        })
+        .collect()
+}
+
 pub(crate) fn expectations_from_receiver_method_signature(
     parameters_excluding_receiver: &[Declaration],
 ) -> Vec<ParameterExpectation> {
@@ -248,7 +267,7 @@ pub(crate) fn resolve_call_arguments(
             );
         }
 
-        validate_call_access_mode(call_name, &argument, expectation, location.clone())?;
+        validate_call_access_mode(call_name, &argument, expectation, location.clone(), string_table)?;
         ordered.push(argument);
     }
 
@@ -260,12 +279,17 @@ fn validate_call_access_mode(
     argument: &CallArgument,
     expectation: &ParameterExpectation,
     _location: SourceLocation,
+    string_table: &StringTable,
 ) -> Result<(), CompilerError> {
-    let parameter_label = if expectation.name.is_some() {
-        "this named parameter"
-    } else {
-        "this parameter"
-    };
+    let parameter_label = expectation
+        .name
+        .map(|name| format!("parameter '{}'", string_table.resolve(name)))
+        .unwrap_or_else(|| {
+            argument
+                .target_param
+                .map(|name| format!("parameter '{}'", string_table.resolve(name)))
+                .unwrap_or_else(|| String::from("this parameter"))
+        });
     match (argument.access_mode, &expectation.access_mode) {
         (CallAccessMode::Shared, ExpectedAccessMode::Shared) => Ok(()),
         (CallAccessMode::Shared, ExpectedAccessMode::Mutable) => {

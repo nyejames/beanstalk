@@ -82,7 +82,6 @@ It should not introduce new call syntax semantics beyond what the implementation
 - Diagnostics make the new rule feel intentional rather than surprising.
 
 
-
 ## Phase 1 - Code review checkpoint
 
 This phase is a deliberate cleanup and consolidation checkpoint before pushing further on language surface.

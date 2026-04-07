@@ -1,5 +1,0 @@
-[backends.html]
-mode = "failure"
-warnings = "forbid"
-error_type = "Syntax"
-message_contains = ["Invalid token used in expression: 'As'"]

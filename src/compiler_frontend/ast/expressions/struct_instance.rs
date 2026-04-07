@@ -1,29 +1,32 @@
 use crate::compiler_frontend::ast::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
-use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
-use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
+use crate::compiler_frontend::ast::expressions::call_validation::{
+    expectations_from_struct_fields, resolve_call_arguments,
+};
+use crate::compiler_frontend::ast::expressions::expression::Expression;
+use crate::compiler_frontend::ast::expressions::function_calls::parse_call_arguments;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::Ownership;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::compiler_frontend::type_coercion::numeric::coerce_expression_to_declared_type;
-use crate::compiler_frontend::type_coercion::parse_context::parse_expectation_for_target_type;
-use crate::{return_compiler_error, return_rule_error, return_syntax_error, return_type_error};
+use crate::{return_compiler_error, return_rule_error};
 
 /// Parse `StructName(...)` and return a finalized struct instance expression.
 ///
 /// WHAT:
-/// - Parses positional constructor arguments in source order.
-/// - Validates arity and per-field types.
+/// - Parses constructor arguments (positional and named) using the shared call-argument model.
+/// - Validates arity, named-target lookup, duplicate detection, positional-before-named ordering,
+///   default filling, missing required-field detection, and per-field type compatibility.
 /// - Fills trailing fields from struct defaults when arguments are omitted.
 /// - Produces a canonical `Expression::struct_instance` with definition-order fields.
 ///
 /// WHY:
-/// - Keeping constructor synthesis centralized makes struct-instance behavior
-///   discoverable and easier to extend (named args, diagnostics, etc.).
-/// - This function is the single place where const-record coercion rules are
-///   enforced for top-level `#` constants.
+/// - Constructor syntax is syntactically identical to function call syntax; sharing the same
+///   argument-resolution machinery keeps the two forms consistent and avoids a parallel
+///   resolution system.
+/// - Const-record coercion for top-level `#` constants is applied after resolution.
 pub(crate) fn parse_struct_constructor_expression(
     token_stream: &mut FileTokens,
     struct_path: &InternedPath,
@@ -34,121 +37,33 @@ pub(crate) fn parse_struct_constructor_expression(
     string_table: &mut StringTable,
 ) -> Result<Expression, CompilerError> {
     let constructor_location = token_stream.current_location();
+    let struct_name_str = string_table.resolve(struct_name).to_owned();
 
-    // We are called while the stream points at the struct symbol.
-    // Advance to "(" and then to the first argument token so expression parsing
-    // can consume arguments with the normal expression pipeline.
+    // The stream is positioned on the struct symbol when called.
+    // Advance past it to '(' so parse_call_arguments can take over.
     token_stream.advance();
     if token_stream.current_token_kind() != &TokenKind::OpenParenthesis {
         return_compiler_error!("Struct constructor parser called without an opening parenthesis");
     }
-    token_stream.advance();
 
-    let mut provided_values = Vec::with_capacity(fields.len());
-    let mut field_index = 0usize;
-
-    while token_stream.current_token_kind() != &TokenKind::CloseParenthesis {
-        if field_index >= fields.len() {
-            return_type_error!(
-                format!(
-                    "Struct constructor '{}' received too many arguments. Expected at most {}, but more were provided.",
-                    string_table.resolve(struct_name),
-                    fields.len()
-                ),
-                token_stream.current_location(),
-                {
-                    CompilationStage => "Expression Parsing",
-                    PrimarySuggestion => "Remove extra struct constructor arguments so they match the declared fields",
-                }
-            );
-        }
-
-        // Parse each argument and apply contextual coercion against the
-        // destination field type (e.g. Int → Float for Float fields).
-        // Pass parse-time context for Option(_) fields so that `none`
-        // arguments can resolve their inner type during parsing.
-        let field_type = fields[field_index].value.data_type.to_owned();
-        let mut expr_type = parse_expectation_for_target_type(&field_type);
-        let raw = create_expression(
-            token_stream,
-            context,
-            &mut expr_type,
-            &Ownership::ImmutableOwned,
-            false,
-            string_table,
-        )?;
-        let value = coerce_expression_to_declared_type(raw, &field_type);
-        provided_values.push(value);
-        field_index += 1;
-
-        match token_stream.current_token_kind() {
-            TokenKind::Comma => {
-                token_stream.advance();
-                if token_stream.current_token_kind() == &TokenKind::CloseParenthesis {
-                    return_syntax_error!(
-                        "Trailing commas in struct constructor arguments are not supported.",
-                        token_stream.current_location(),
-                        {
-                            CompilationStage => "Expression Parsing",
-                            PrimarySuggestion => "Remove the trailing comma in this constructor call",
-                        }
-                    );
-                }
-            }
-            TokenKind::CloseParenthesis => {}
-            _ => {
-                return_syntax_error!(
-                    format!(
-                        "Expected ',' or ')' after struct constructor argument, found '{:?}'",
-                        token_stream.current_token_kind()
-                    ),
-                    token_stream.current_location(),
-                    {
-                        CompilationStage => "Expression Parsing",
-                        PrimarySuggestion => "Separate constructor arguments with ',' and close with ')'",
-                    }
-                );
-            }
-        }
-    }
-
-    // Consume ')' so callers continue from the token after constructor syntax.
-    token_stream.advance();
-
-    // Missing values are only legal when the remaining fields have defaults.
-    // This enables partial constructor calls while keeping required fields strict.
-    let missing_required = fields
-        .iter()
-        .skip(provided_values.len())
-        .filter(|field| matches!(field.value.kind, ExpressionKind::NoValue))
-        .count();
-    if missing_required > 0 {
-        return_syntax_error!(
-            format!(
-                "Struct constructor for '{}' is missing {missing_required} required field argument(s) without defaults.",
-                string_table.resolve(struct_name)
-            ),
-            constructor_location,
-            {
-                CompilationStage => "Expression Parsing",
-                PrimarySuggestion => "Provide all required field arguments or add defaults for those struct fields",
-            }
-        );
-    }
+    let raw_args = parse_call_arguments(token_stream, context, string_table)?;
+    let expectations = expectations_from_struct_fields(fields);
+    let resolved_args = resolve_call_arguments(
+        &struct_name_str,
+        &raw_args,
+        &expectations,
+        constructor_location.clone(),
+        string_table,
+    )?;
 
     let enforce_const_record = context.kind.allows_const_record_coercion();
     let mut struct_fields = Vec::with_capacity(fields.len());
 
-    for (index, field) in fields.iter().enumerate() {
-        // WHAT: combine explicit arguments + trailing defaults.
-        // WHY: struct instances must always materialize every field explicitly
-        // before later AST/HIR passes; downstream phases should never infer
-        // omitted fields themselves.
-        let mut value = if let Some(provided) = provided_values.get(index) {
-            provided.to_owned()
-        } else {
-            field.value.to_owned()
-        };
+    for (field, arg) in fields.iter().zip(resolved_args.iter()) {
+        let field_type = &field.value.data_type;
+        // Apply contextual numeric coercion (Int → Float) post-resolution, consistent with
+        // declaration sites. resolve_call_arguments has already validated type compatibility.
+        let mut value = coerce_expression_to_declared_type(arg.value.clone(), field_type);
 
         if enforce_const_record {
             if !value.is_compile_time_constant() {
@@ -157,7 +72,7 @@ pub(crate) fn parse_struct_constructor_expression(
                     format!(
                         "Const struct coercion requires compile-time field values. Field '{}' in '{}' is not compile-time constant.",
                         field_name,
-                        string_table.resolve(struct_name)
+                        struct_name_str
                     ),
                     value.location,
                     {
@@ -166,7 +81,6 @@ pub(crate) fn parse_struct_constructor_expression(
                     }
                 );
             }
-
             // Const records are data-only exports, so mutable ownership is
             // removed to keep constant semantics explicit in later stages.
             value.ownership = Ownership::ImmutableOwned;
