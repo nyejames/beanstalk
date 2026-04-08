@@ -283,7 +283,9 @@ sum(a = 1, a = 2)
     );
 
     assert!(
-        error.msg.contains("Parameter 'a' was provided more than once"),
+        error
+            .msg
+            .contains("Parameter 'a' was provided more than once"),
         "{}",
         error.msg
     );
@@ -302,7 +304,9 @@ sum(a = 1, typo = 2)
     );
 
     assert!(
-        error.msg.contains("Function 'sum' has no parameter named 'typo'"),
+        error
+            .msg
+            .contains("Function 'sum' has no parameter named 'typo'"),
         "{}",
         error.msg
     );

@@ -5,14 +5,13 @@
 
 use crate::compiler_frontend::ast::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
-use crate::compiler_frontend::ast::signatures::{
-    SignatureTypeContext, parse_explicit_signature_type, parse_parameters,
-};
+use crate::compiler_frontend::ast::signatures::parse_parameters;
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
+use crate::compiler_frontend::type_syntax::{TypeAnnotationContext, parse_type_annotation};
 use crate::{return_syntax_error, return_type_error};
 
 // Arg names and types are required
@@ -341,14 +340,10 @@ fn parse_single_return_item(
 
 fn parse_value_return_type(
     token_stream: &mut FileTokens,
-    string_table: &StringTable,
+    _string_table: &StringTable,
 ) -> Result<ReturnSlot, CompilerError> {
-    let data_type = parse_explicit_signature_type(
-        token_stream,
-        string_table,
-        Ownership::ImmutableOwned,
-        SignatureTypeContext::Return,
-    )?;
+    let data_type =
+        parse_type_annotation(token_stream, TypeAnnotationContext::SignatureReturn)?.data_type;
     if token_stream.current_token_kind() == &TokenKind::Bang {
         token_stream.advance();
         return Ok(ReturnSlot::error(FunctionReturn::Value(data_type)));

@@ -34,6 +34,7 @@ use crate::compiler_frontend::reserved_trait_syntax::{
     reserved_trait_keyword, reserved_trait_keyword_error,
 };
 use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::token_scan::find_expression_end_index;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
 use crate::compiler_frontend::traits::ContainsReferences;
 use crate::compiler_frontend::type_coercion::parse_context::parse_expectation_for_target_type;
@@ -573,7 +574,13 @@ fn parse_mutable_receiver_expression(
         ReceiverAccessMode::Mutable,
         string_table,
     )?;
-    push_expression_node(token_stream, context, string_table, expression, receiver_node)
+    push_expression_node(
+        token_stream,
+        context,
+        string_table,
+        expression,
+        receiver_node,
+    )
 }
 
 fn parse_literal_expression(
@@ -1661,35 +1668,7 @@ pub(crate) fn create_expression_until(
     }
 
     let start_index = token_stream.index;
-    let mut end_index = token_stream.index;
-    let mut parenthesis_depth: i32 = 0;
-    let mut curly_depth: i32 = 0;
-
-    while end_index < token_stream.length {
-        let token_kind = &token_stream.tokens[end_index].kind;
-
-        // Delimiters only terminate at top-level depth so nested subexpressions remain intact.
-        if parenthesis_depth == 0
-            && curly_depth == 0
-            && stop_tokens.iter().any(|stop| token_kind == stop)
-        {
-            break;
-        }
-
-        match token_kind {
-            TokenKind::OpenParenthesis => parenthesis_depth += 1,
-            TokenKind::CloseParenthesis if parenthesis_depth > 0 => parenthesis_depth -= 1,
-            TokenKind::OpenCurly => curly_depth += 1,
-            TokenKind::CloseCurly if curly_depth > 0 => curly_depth -= 1,
-            _ => {}
-        }
-
-        if matches!(token_kind, TokenKind::Eof) {
-            break;
-        }
-
-        end_index += 1;
-    }
+    let end_index = find_expression_end_index(&token_stream.tokens, start_index, stop_tokens);
 
     if end_index >= token_stream.length {
         let expected_tokens = stop_tokens

@@ -17,8 +17,10 @@ use crate::compiler_frontend::ast::statements::declaration_syntax::{
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::token_scan::has_top_level_comma_before_statement_end;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::compiler_frontend::traits::ContainsReferences;
+use crate::compiler_frontend::type_syntax::resolve_named_types_in_data_type;
 use crate::{return_rule_error, return_syntax_error, return_type_error};
 use std::collections::HashSet;
 
@@ -32,7 +34,7 @@ pub(crate) fn parse_multi_bind_statement(
     context: &mut ScopeContext,
     string_table: &mut StringTable,
 ) -> Result<Option<AstNode>, CompilerError> {
-    if !statement_has_top_level_comma(token_stream) {
+    if !has_top_level_comma_before_statement_end(token_stream) {
         return Ok(None);
     }
 
@@ -71,40 +73,6 @@ pub(crate) fn parse_multi_bind_statement(
         location: token_stream.current_location(),
         scope: context.scope.clone(),
     }))
-}
-
-fn statement_has_top_level_comma(token_stream: &FileTokens) -> bool {
-    let mut paren_depth = 0usize;
-    let mut curly_depth = 0usize;
-    let mut template_depth = 0usize;
-    let mut index = token_stream.index;
-
-    while index < token_stream.length {
-        let token = &token_stream.tokens[index].kind;
-        let at_top_level = paren_depth == 0 && curly_depth == 0 && template_depth == 0;
-
-        if at_top_level && matches!(token, TokenKind::Newline | TokenKind::End | TokenKind::Eof) {
-            break;
-        }
-
-        if at_top_level && matches!(token, TokenKind::Comma) {
-            return true;
-        }
-
-        match token {
-            TokenKind::OpenParenthesis => paren_depth += 1,
-            TokenKind::CloseParenthesis => paren_depth = paren_depth.saturating_sub(1),
-            TokenKind::OpenCurly => curly_depth += 1,
-            TokenKind::CloseCurly => curly_depth = curly_depth.saturating_sub(1),
-            TokenKind::TemplateHead => template_depth += 1,
-            TokenKind::TemplateClose => template_depth = template_depth.saturating_sub(1),
-            _ => {}
-        }
-
-        index += 1;
-    }
-
-    false
 }
 
 fn parse_target_list(
@@ -476,32 +444,24 @@ fn resolve_target_explicit_type(
     context: &ScopeContext,
     string_table: &StringTable,
 ) -> Result<Option<DataType>, CompilerError> {
-    if let Some(type_name) = target.explicit_named_type {
-        let Some(named_declaration) = context.get_reference(&type_name) else {
-            return_rule_error!(
-                format!(
-                    "Unknown type '{}'. Type names must be declared before use.",
-                    string_table.resolve(type_name)
-                ),
-                target.location.clone(),
-                {
-                    CompilationStage => "AST Construction",
-                    PrimarySuggestion => "Declare this type before using it in a multi-bind target",
-                }
-            );
-        };
-
-        let resolved_named_type = named_declaration.value.data_type.to_owned();
-        return Ok(Some(if target.explicit_named_optional {
-            DataType::Option(Box::new(resolved_named_type))
-        } else {
-            resolved_named_type
-        }));
-    }
-
-    if matches!(target.explicit_type, DataType::Inferred) {
+    if !target.type_annotation.has_explicit_type() {
         return Ok(None);
     }
 
-    Ok(Some(target.explicit_type.to_owned()))
+    let resolved_type = resolve_named_types_in_data_type(
+        &target.type_annotation.data_type,
+        &target.location,
+        &mut |type_name| {
+            context
+                .get_reference(&type_name)
+                .map(|declaration| declaration.value.data_type.to_owned())
+        },
+        string_table,
+    )?;
+
+    if matches!(resolved_type, DataType::Inferred) {
+        return Ok(None);
+    }
+
+    Ok(Some(resolved_type))
 }

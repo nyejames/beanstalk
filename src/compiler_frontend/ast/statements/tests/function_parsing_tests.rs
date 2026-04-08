@@ -275,7 +275,9 @@ fn rejects_mutable_receiver_methods_without_explicit_receiver_tilde() {
     );
 
     assert!(
-        error.msg.contains("expects mutable access at the receiver call site"),
+        error
+            .msg
+            .contains("expects mutable access at the receiver call site"),
         "{}",
         error.msg
     );

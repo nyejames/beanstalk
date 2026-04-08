@@ -21,8 +21,10 @@ use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, Token, TokenKind};
 use crate::compiler_frontend::traits::ContainsReferences;
 use crate::compiler_frontend::type_coercion::compatibility::is_declaration_compatible;
+use crate::compiler_frontend::type_coercion::diagnostics::expected_found_clause;
 use crate::compiler_frontend::type_coercion::numeric::coerce_expression_to_declared_type;
 use crate::compiler_frontend::type_coercion::parse_context::parse_expectation_for_target_type;
+use crate::compiler_frontend::type_syntax::resolve_named_types_in_data_type;
 use crate::{ast_log, return_rule_error, return_type_error};
 
 pub fn create_reference(
@@ -130,24 +132,17 @@ pub fn resolve_declaration_syntax(
 
     let mut data_type = declaration_syntax.to_data_type(&ownership);
 
-    if let Some(type_name) = declaration_syntax.explicit_named_type {
-        let declared_type = context.get_reference(&type_name).ok_or_else(|| {
-            CompilerError::new_rule_error(
-                format!(
-                    "Unknown type '{}'. Type names must be declared before use.",
-                    string_table.resolve(type_name)
-                ),
-                declaration_syntax.location.clone(),
-            )
-        })?;
-
-        let resolved_named_type = declared_type.value.data_type.to_owned();
-        data_type = if declaration_syntax.explicit_named_optional {
-            DataType::Option(Box::new(resolved_named_type))
-        } else {
-            resolved_named_type
-        };
-    }
+    let declaration_location = declaration_syntax.location.clone();
+    data_type = resolve_named_types_in_data_type(
+        &data_type,
+        &declaration_location,
+        &mut |type_name| {
+            context
+                .get_reference(&type_name)
+                .map(|declaration| declaration.value.data_type.to_owned())
+        },
+        string_table,
+    )?;
 
     let mut initializer_tokens = declaration_syntax.initializer_tokens;
     initializer_tokens.push(Token::new(
@@ -201,9 +196,8 @@ pub fn resolve_declaration_syntax(
             {
                 return_type_error!(
                     format!(
-                        "Type mismatch in expression. Expected '{}', but found '{}'.",
-                        declared_type.display_with_table(string_table),
-                        expr.data_type.display_with_table(string_table)
+                        "Type mismatch in expression. {}",
+                        expected_found_clause(&declared_type, &expr.data_type, string_table)
                     ),
                     expr.location.clone(),
                     {

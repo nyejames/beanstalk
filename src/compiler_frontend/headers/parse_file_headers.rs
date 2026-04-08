@@ -19,7 +19,9 @@ use crate::compiler_frontend::reserved_trait_syntax::{
     reserved_trait_keyword_error,
 };
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
+use crate::compiler_frontend::token_scan::{NestingDepth, consume_balanced_template_region};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
+use crate::compiler_frontend::type_syntax::for_each_named_type_in_data_type;
 use crate::projects::settings::{
     MINIMUM_LIKELY_DECLARATIONS, TOKEN_TO_DECLARATION_RATIO, TOKEN_TO_HEADER_RATIO,
     TOP_LEVEL_CONST_TEMPLATE_NAME,
@@ -876,17 +878,20 @@ fn collect_constant_symbol_dependencies(
     let mut dependencies = HashSet::new();
     let mut previous_token_was_dot = false;
 
-    if let Some(type_name) = declaration_syntax.explicit_named_type {
-        if let Some(import_path) = context
-            .file_imports
-            .iter()
-            .find(|import_path| import_path.name() == Some(type_name))
-        {
-            dependencies.insert(import_path.to_owned());
-        } else {
-            dependencies.insert(context.source_file.append(type_name));
-        }
-    }
+    for_each_named_type_in_data_type(
+        &declaration_syntax.type_annotation.data_type,
+        &mut |type_name| {
+            if let Some(import_path) = context
+                .file_imports
+                .iter()
+                .find(|import_path| import_path.name() == Some(type_name))
+            {
+                dependencies.insert(import_path.to_owned());
+            } else {
+                dependencies.insert(context.source_file.append(type_name));
+            }
+        },
+    );
 
     for token in &declaration_syntax.initializer_tokens {
         let token_kind = &token.kind;
@@ -921,9 +926,7 @@ fn collect_struct_default_dependencies(
     let mut dependencies = HashSet::new();
     let mut saw_opening_bracket = false;
     let mut inside_default_expression = false;
-    let mut paren_depth = 0usize;
-    let mut curly_depth = 0usize;
-    let mut template_depth = 0usize;
+    let mut depth = NestingDepth::default();
     let mut previous_token_was_dot = false;
 
     for token in tokens {
@@ -940,9 +943,7 @@ fn collect_struct_default_dependencies(
         if !inside_default_expression {
             if matches!(token_kind, TokenKind::Assign) {
                 inside_default_expression = true;
-                paren_depth = 0;
-                curly_depth = 0;
-                template_depth = 0;
+                depth = NestingDepth::default();
             }
             previous_token_was_dot = matches!(token_kind, TokenKind::Dot);
             continue;
@@ -951,53 +952,28 @@ fn collect_struct_default_dependencies(
         if matches!(
             token_kind,
             TokenKind::Comma | TokenKind::TypeParameterBracket
-        ) && paren_depth == 0
-            && curly_depth == 0
-            && template_depth == 0
+        ) && depth.is_top_level()
         {
             inside_default_expression = false;
             previous_token_was_dot = matches!(token_kind, TokenKind::Dot);
             continue;
         }
 
-        match token_kind {
-            TokenKind::OpenParenthesis => {
-                paren_depth += 1;
+        if let TokenKind::Symbol(symbol_id) = token_kind
+            && !previous_token_was_dot
+        {
+            if let Some(import_path) = context
+                .file_imports
+                .iter()
+                .find(|import_path| import_path.name() == Some(*symbol_id))
+            {
+                dependencies.insert(import_path.to_owned());
+            } else {
+                dependencies.insert(context.source_file.append(*symbol_id));
             }
-            TokenKind::CloseParenthesis => {
-                paren_depth = paren_depth.saturating_sub(1);
-            }
-            TokenKind::OpenCurly => {
-                curly_depth += 1;
-            }
-            TokenKind::CloseCurly => {
-                curly_depth = curly_depth.saturating_sub(1);
-            }
-            TokenKind::TemplateHead => {
-                template_depth += 1;
-            }
-            TokenKind::TemplateClose => {
-                template_depth = template_depth.saturating_sub(1);
-            }
-            TokenKind::Symbol(symbol_id) => {
-                if previous_token_was_dot {
-                    previous_token_was_dot = false;
-                    continue;
-                }
-
-                if let Some(import_path) = context
-                    .file_imports
-                    .iter()
-                    .find(|import_path| import_path.name() == Some(*symbol_id))
-                {
-                    dependencies.insert(import_path.to_owned());
-                } else {
-                    dependencies.insert(context.source_file.append(*symbol_id));
-                }
-            }
-            _ => {}
         }
 
+        depth.step(token_kind);
         previous_token_was_dot = matches!(token_kind, TokenKind::Dot);
     }
 
@@ -1023,53 +999,34 @@ fn create_top_level_const_template(
 
     let start_location = token_stream.current_location();
 
-    let mut scopes_opened = 1;
-    let mut scopes_closed = 0;
-
-    // The caller has already consumed the opening token.
-    while scopes_opened > scopes_closed {
-        match token_stream.current_token_kind() {
-            TokenKind::TemplateHead => {
-                scopes_opened += 1;
-                body.push(token_stream.current_token());
+    consume_balanced_template_region(
+        token_stream,
+        |token, token_kind| {
+            if let TokenKind::Symbol(name_id) = token_kind
+                && let Some(path) = context.file_imports.iter().find(|f| f.name() == Some(*name_id))
+            {
+                dependencies.insert(path.to_owned());
             }
-
-            TokenKind::TemplateClose => {
-                scopes_closed += 1;
-                // Preserve the closing token for the outermost template too.
-                // Template parsing relies on seeing a close/eof boundary token.
-                body.push(token_stream.current_token());
-            }
-
-            TokenKind::Eof => {
-                return_rule_error!(
-                    "Unexpected end of file while parsing top-level const template. Missing ']' to close the template.",
-                    token_stream.current_location(),
-                    {
-                        PrimarySuggestion => "Close the template with ']'",
-                        SuggestedInsertion => "]",
-                    }
-                )
-            }
-
-            TokenKind::Symbol(name_id) => {
-                if let Some(path) = context
-                    .file_imports
-                    .iter()
-                    .find(|f| f.name() == Some(*name_id))
-                {
-                    dependencies.insert(path.to_owned());
-                }
-                body.push(token_stream.current_token());
-            }
-
-            _ => {
-                body.push(token_stream.current_token());
-            }
-        }
-
-        token_stream.advance();
-    }
+            body.push(token);
+        },
+        |location| {
+            CompilerError::new_rule_error(
+                "Unexpected end of file while parsing top-level const template. Missing ']' to close the template.",
+                location,
+            )
+        },
+    )
+    .map_err(|mut error| {
+        error.new_metadata_entry(
+            crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
+            String::from("Close the template with ']'"),
+        );
+        error.new_metadata_entry(
+            crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::SuggestedInsertion,
+            String::from("]"),
+        );
+        error
+    })?;
 
     // Add an EOF sentinel so downstream parsers can safely terminate even if
     // expression parsing consumed to the end of this synthetic token stream.
@@ -1111,51 +1068,34 @@ fn push_runtime_template_tokens_to_start_function(
 ) -> Result<(), CompilerError> {
     main_function_body.push(opening_template_token);
 
-    let mut scopes_opened = 1usize;
-    let mut scopes_closed = 0usize;
-
-    while scopes_opened > scopes_closed {
-        match token_stream.current_token_kind() {
-            TokenKind::TemplateHead => {
-                scopes_opened += 1;
-                main_function_body.push(token_stream.current_token());
+    consume_balanced_template_region(
+        token_stream,
+        |token, token_kind| {
+            if let TokenKind::Symbol(name_id) = token_kind
+                && let Some(path) = file_imports.iter().find(|path| path.name() == Some(*name_id))
+            {
+                main_function_dependencies.insert(path.to_owned());
             }
-
-            TokenKind::TemplateClose => {
-                scopes_closed += 1;
-                main_function_body.push(token_stream.current_token());
-            }
-
-            TokenKind::Eof => {
-                return_rule_error!(
-                    "Unexpected end of file while parsing top-level runtime template. Missing ']' to close the template.",
-                    token_stream.current_location(),
-                    {
-                        PrimarySuggestion => "Close the template with ']'",
-                        SuggestedInsertion => "]",
-                    }
-                )
-            }
-
-            TokenKind::Symbol(name_id) => {
-                if let Some(path) = file_imports
-                    .iter()
-                    .find(|path| path.name() == Some(*name_id))
-                {
-                    main_function_dependencies.insert(path.to_owned());
-                }
-                main_function_body.push(token_stream.current_token());
-            }
-
-            _ => {
-                main_function_body.push(token_stream.current_token());
-            }
-        }
-
-        token_stream.advance();
-    }
-
-    Ok(())
+            main_function_body.push(token);
+        },
+        |location| {
+            CompilerError::new_rule_error(
+                "Unexpected end of file while parsing top-level runtime template. Missing ']' to close the template.",
+                location,
+            )
+        },
+    )
+    .map_err(|mut error| {
+        error.new_metadata_entry(
+            crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
+            String::from("Close the template with ']'"),
+        );
+        error.new_metadata_entry(
+            crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::SuggestedInsertion,
+            String::from("]"),
+        );
+        error
+    })
 }
 
 #[cfg(test)]

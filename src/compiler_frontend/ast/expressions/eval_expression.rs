@@ -18,6 +18,9 @@ use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::type_coercion::CompatibilityContext;
 use crate::compiler_frontend::type_coercion::compatibility::is_type_compatible;
+use crate::compiler_frontend::type_coercion::diagnostics::{
+    NUMERIC_MIX_HINT, expected_found_clause,
+};
 use crate::return_type_error;
 use crate::{eval_log, return_compiler_error, return_syntax_error};
 
@@ -176,9 +179,8 @@ fn validate_expression_result_type(
 
     return_type_error!(
         format!(
-            "Type mismatch in expression. Expected '{}', but found '{}'.",
-            expected_type.display_with_table(string_table),
-            actual_type.display_with_table(string_table)
+            "Type mismatch in expression. {}",
+            expected_found_clause(expected_type, actual_type, string_table)
         ),
         location.clone(),
         {
@@ -438,10 +440,11 @@ fn invalid_operator_types(
     // the same strict-expression rule instead of scattering slightly different wording.
     return_type_error!(
         format!(
-            "Operator '{}' cannot be applied to '{}' and '{}'. Only Int + Float and Float + Int mix numeric types implicitly.",
+            "Operator '{}' cannot be applied to '{}' and '{}'. {}",
             op.to_str(),
             lhs.display_with_table(string_table),
-            rhs.display_with_table(string_table)
+            rhs.display_with_table(string_table),
+            NUMERIC_MIX_HINT
         ),
         location.clone(),
         {

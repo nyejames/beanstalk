@@ -18,6 +18,7 @@
 //! - template formatting, composition, or slot mechanics
 
 pub(crate) mod compatibility;
+pub(crate) mod diagnostics;
 pub(crate) mod numeric;
 pub(crate) mod parse_context;
 pub(crate) mod string;

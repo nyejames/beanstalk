@@ -12,6 +12,7 @@ use crate::compiler_frontend::datatypes::{DataType, ReceiverKey};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
+use crate::compiler_frontend::type_syntax::resolve_named_types_in_data_type;
 use crate::return_rule_error;
 use rustc_hash::{FxHashMap, FxHashSet};
 
@@ -44,34 +45,15 @@ pub(crate) fn resolve_named_signature_type(
     visible_declaration_ids: Option<&FxHashSet<InternedPath>>,
     string_table: &StringTable,
 ) -> Result<DataType, CompilerError> {
-    match data_type {
-        DataType::NamedType(type_name) => {
-            let declared_type =
-                visible_declaration_by_name(declarations, visible_declaration_ids, *type_name)
-                    .ok_or_else(|| {
-                        CompilerError::new_rule_error(
-                            format!(
-                                "Unknown type '{}'. Type names must be declared before use.",
-                                string_table.resolve(*type_name)
-                            ),
-                            location.clone(),
-                        )
-                    })?;
-
-            Ok(declared_type.value.data_type.to_owned())
-        }
-        DataType::Collection(inner, ownership) => Ok(DataType::Collection(
-            Box::new(resolve_named_signature_type(
-                inner,
-                location,
-                declarations,
-                visible_declaration_ids,
-                string_table,
-            )?),
-            ownership.to_owned(),
-        )),
-        _ => Ok(data_type.to_owned()),
-    }
+    resolve_named_types_in_data_type(
+        data_type,
+        location,
+        &mut |type_name| {
+            visible_declaration_by_name(declarations, visible_declaration_ids, type_name)
+                .map(|declaration| declaration.value.data_type.to_owned())
+        },
+        string_table,
+    )
 }
 
 /// Resolve a function signature and extract receiver metadata for method cataloging.

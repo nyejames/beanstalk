@@ -30,8 +30,10 @@ pub(crate) use compiler_messages::display_messages;
 pub(crate) mod datatypes;
 pub(crate) mod interned_path;
 pub(crate) mod string_interning;
+pub(crate) mod token_scan;
 pub(crate) mod traits;
 pub(crate) mod type_coercion;
+pub(crate) mod type_syntax;
 
 pub(crate) mod host_functions;
 

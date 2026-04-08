@@ -15,6 +15,7 @@ use crate::compiler_frontend::ast::templates::template_types::{Template, Templat
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::Ownership;
 use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::token_scan::consume_balanced_template_region;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::{ast_log, return_syntax_error};
 
@@ -206,68 +207,42 @@ fn consume_balanced_brackets_as_literal_text(
     ));
     token_stream.advance();
 
-    let mut depth = 1usize;
-
-    while depth > 0 && token_stream.index < token_stream.tokens.len() {
-        match token_stream.current_token_kind() {
-            TokenKind::Eof => break,
-
+    let _ = consume_balanced_template_region(
+        token_stream,
+        |token, token_kind| match token_kind {
             TokenKind::TemplateHead => {
                 let bracket_id = string_table.intern("[");
                 template.content.add(Expression::string_slice(
                     bracket_id,
-                    token_stream.current_location(),
+                    token.location.clone(),
                     Ownership::ImmutableOwned,
                 ));
-                depth += 1;
             }
-
             TokenKind::TemplateClose => {
-                depth -= 1;
-                if depth == 0 {
-                    // Emit the closing bracket and consume it.
-                    let close_bracket_id = string_table.intern("]");
-                    template.content.add(Expression::string_slice(
-                        close_bracket_id,
-                        token_stream.current_location(),
-                        Ownership::ImmutableOwned,
-                    ));
-                    token_stream.advance();
-                    return;
-                }
-
                 let bracket_id = string_table.intern("]");
                 template.content.add(Expression::string_slice(
                     bracket_id,
-                    token_stream.current_location(),
+                    token.location.clone(),
                     Ownership::ImmutableOwned,
                 ));
             }
-
             TokenKind::RawStringLiteral(content) | TokenKind::StringSliceLiteral(content) => {
                 template.content.add(Expression::string_slice(
                     *content,
-                    token_stream.current_location(),
+                    token.location.clone(),
                     Ownership::ImmutableOwned,
                 ));
             }
-
             TokenKind::Newline => {
                 let newline_id = string_table.intern("\n");
                 template.content.add(Expression::string_slice(
                     newline_id,
-                    token_stream.current_location(),
+                    token.location.clone(),
                     Ownership::ImmutableOwned,
                 ));
             }
-
-            // Tokens the tokenizer produces inside template head regions.
-            // These must be converted back to literal text representations.
             TokenKind::Symbol(id) | TokenKind::StyleDirective(id) => {
-                let prefix = if matches!(
-                    token_stream.current_token_kind(),
-                    TokenKind::StyleDirective(_)
-                ) {
+                let prefix = if matches!(token_kind, TokenKind::StyleDirective(_)) {
                     "$"
                 } else {
                     ""
@@ -277,56 +252,46 @@ fn consume_balanced_brackets_as_literal_text(
                 let literal_id = string_table.intern(&literal);
                 template.content.add(Expression::string_slice(
                     literal_id,
-                    token_stream.current_location(),
+                    token.location.clone(),
                     Ownership::ImmutableOwned,
                 ));
             }
-
             TokenKind::StartTemplateBody | TokenKind::Colon => {
                 let colon_id = string_table.intern(":");
                 template.content.add(Expression::string_slice(
                     colon_id,
-                    token_stream.current_location(),
+                    token.location.clone(),
                     Ownership::ImmutableOwned,
                 ));
             }
-
             TokenKind::Comma => {
                 let comma_id = string_table.intern(",");
                 template.content.add(Expression::string_slice(
                     comma_id,
-                    token_stream.current_location(),
+                    token.location.clone(),
                     Ownership::ImmutableOwned,
                 ));
             }
-
             TokenKind::OpenParenthesis => {
                 let paren_id = string_table.intern("(");
                 template.content.add(Expression::string_slice(
                     paren_id,
-                    token_stream.current_location(),
+                    token.location.clone(),
                     Ownership::ImmutableOwned,
                 ));
             }
-
             TokenKind::CloseParenthesis => {
                 let paren_id = string_table.intern(")");
                 template.content.add(Expression::string_slice(
                     paren_id,
-                    token_stream.current_location(),
+                    token.location.clone(),
                     Ownership::ImmutableOwned,
                 ));
             }
-
-            _ => {
-                // Remaining token kinds (operators, keywords, etc.) are silently
-                // skipped. The common cases — text, symbols, brackets, and structural
-                // punctuation — are covered above.
-            }
-        }
-
-        token_stream.advance();
-    }
+            _ => {}
+        },
+        |_location| (),
+    );
 }
 
 /// Returns true if the template contains any direct child template output atoms.

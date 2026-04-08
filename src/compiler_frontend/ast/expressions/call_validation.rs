@@ -8,6 +8,7 @@ use crate::compiler_frontend::host_functions::{HostAccessKind, HostFunctionDef};
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::type_coercion::CompatibilityContext;
 use crate::compiler_frontend::type_coercion::compatibility::is_type_compatible;
+use crate::compiler_frontend::type_coercion::diagnostics::argument_conversion_hint;
 use crate::return_rule_error;
 use crate::return_type_error;
 use rustc_hash::FxHashMap;
@@ -239,14 +240,8 @@ pub(crate) fn resolve_call_arguments(
             &argument.value.data_type,
             CompatibilityContext::Exact,
         ) {
-            let conversion_hint = if matches!(
-                (&expectation.data_type, &argument.value.data_type),
-                (DataType::Float, DataType::Int)
-            ) {
-                "Only Int + Float and Float + Int mix numeric types implicitly."
-            } else {
-                "Convert the argument to the expected type."
-            };
+            let conversion_hint =
+                argument_conversion_hint(&expectation.data_type, &argument.value.data_type);
             return_type_error!(
                 format!(
                     "Argument for parameter {} in function '{}' has incorrect type. Expected {}, but got {}. {}",

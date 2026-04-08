@@ -374,7 +374,9 @@ fn parse_collection_builtin_member(
 
     let mutating_receiver_required = matches!(
         builtin,
-        CollectionBuiltinMethod::Set | CollectionBuiltinMethod::Push | CollectionBuiltinMethod::Remove
+        CollectionBuiltinMethod::Set
+            | CollectionBuiltinMethod::Push
+            | CollectionBuiltinMethod::Remove
     );
 
     if receiver_access_mode == ReceiverAccessMode::Mutable && !mutating_receiver_required {
