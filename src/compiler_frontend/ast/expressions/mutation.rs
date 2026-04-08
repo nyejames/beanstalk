@@ -2,9 +2,8 @@ use crate::compiler_frontend::ast::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::{Expression, Operator};
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
-use crate::compiler_frontend::ast::field_access::{
-    ast_node_is_mutable_place, ast_node_is_place, parse_field_access,
-};
+use crate::compiler_frontend::ast::field_access::parse_field_access;
+use crate::compiler_frontend::ast::place_access::{ast_node_is_mutable_place, ast_node_is_place};
 use crate::compiler_frontend::builtins::BuiltinMethodKind;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;

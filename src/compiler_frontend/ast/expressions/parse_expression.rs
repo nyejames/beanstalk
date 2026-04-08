@@ -13,9 +13,9 @@ use crate::compiler_frontend::ast::expressions::expression::{
 use crate::compiler_frontend::ast::expressions::function_calls::parse_function_call;
 use crate::compiler_frontend::ast::expressions::struct_instance::parse_struct_constructor_expression;
 use crate::compiler_frontend::ast::field_access::{
-    ReceiverAccessMode, ast_node_is_place, parse_field_access_with_receiver_access,
-    parse_postfix_chain,
+    ReceiverAccessMode, parse_field_access_with_receiver_access, parse_postfix_chain,
 };
+use crate::compiler_frontend::ast::place_access::ast_node_is_place;
 use crate::compiler_frontend::ast::receiver_methods::free_function_receiver_method_call_error;
 use crate::compiler_frontend::ast::statements::choices::parse_choice_variant_value;
 use crate::compiler_frontend::ast::statements::declarations::create_reference;
@@ -850,7 +850,7 @@ enum ExpressionTokenStep {
     Continue,
     Advance,
     Break,
-    Return(Expression),
+    Return(Box<Expression>),
 }
 
 struct ExpressionDispatchState<'a> {
@@ -1095,7 +1095,7 @@ fn dispatch_expression_token(
                 state.ownership,
                 string_table,
             )? {
-                return Ok(ExpressionTokenStep::Return(template_expression));
+                return Ok(ExpressionTokenStep::Return(Box::new(template_expression)));
             }
 
             Ok(ExpressionTokenStep::Advance)
@@ -1170,7 +1170,7 @@ fn dispatch_expression_token(
                 &reference_ownership,
                 string_table,
             )?;
-            Ok(ExpressionTokenStep::Return(value))
+            Ok(ExpressionTokenStep::Return(Box::new(value)))
         }
 
         TokenKind::Add => {
@@ -1262,7 +1262,7 @@ fn dispatch_expression_token(
                     state.ownership,
                     string_table,
                 )?;
-                Ok(ExpressionTokenStep::Return(value))
+                Ok(ExpressionTokenStep::Return(Box::new(value)))
             }
 
             _ => {
@@ -1532,7 +1532,7 @@ pub(crate) fn create_expression_with_trailing_newline_policy(
             ExpressionTokenStep::Continue => continue,
             ExpressionTokenStep::Advance => token_stream.advance(),
             ExpressionTokenStep::Break => break,
-            ExpressionTokenStep::Return(value) => return Ok(value),
+            ExpressionTokenStep::Return(value) => return Ok(*value),
         }
     }
 
