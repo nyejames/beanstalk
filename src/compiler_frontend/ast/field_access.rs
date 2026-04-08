@@ -58,6 +58,19 @@ pub(crate) enum ReceiverAccessMode {
     Mutable,
 }
 
+/// Shared state for parsing one builtin receiver member in a postfix chain.
+///
+/// WHAT: captures the receiver/value/type metadata that both collection and error builtin parsing need.
+/// WHY: these helpers run in one tight parser loop and should avoid repeated wide argument lists.
+struct BuiltinMemberParseContext<'a> {
+    current_node: AstNode,
+    current_type: &'a DataType,
+    member_name: StringId,
+    member_location: SourceLocation,
+    receiver_access_mode: ReceiverAccessMode,
+    scope_context: &'a ScopeContext,
+}
+
 fn reference_base_node(
     reference_arg: &Declaration,
     context: &ScopeContext,
@@ -331,14 +344,18 @@ fn parse_builtin_method_args(
 
 fn parse_collection_builtin_member(
     token_stream: &mut FileTokens,
-    current_node: AstNode,
-    current_type: &DataType,
-    member_name: StringId,
-    member_location: SourceLocation,
-    receiver_access_mode: ReceiverAccessMode,
-    context: &ScopeContext,
+    context: BuiltinMemberParseContext<'_>,
     string_table: &mut StringTable,
 ) -> Result<Option<AstNode>, CompilerError> {
+    let BuiltinMemberParseContext {
+        current_node,
+        current_type,
+        member_name,
+        member_location,
+        receiver_access_mode,
+        scope_context,
+    } = context;
+
     let DataType::Collection(inner_type, _) = current_type else {
         return Ok(None);
     };
@@ -445,11 +462,12 @@ fn parse_collection_builtin_member(
             let args = parse_builtin_method_args(
                 token_stream,
                 &[DataType::Int],
-                context,
+                scope_context,
                 &member_location,
                 string_table,
             )?;
-            let error_type = resolve_builtin_error_type(context, &member_location, string_table)?;
+            let error_type =
+                resolve_builtin_error_type(scope_context, &member_location, string_table)?;
             let get_result_type = DataType::Result {
                 ok: Box::new(inner_type.as_ref().to_owned()),
                 err: Box::new(error_type),
@@ -460,7 +478,7 @@ fn parse_collection_builtin_member(
             let args = parse_builtin_method_args(
                 token_stream,
                 &[DataType::Int, inner_type.as_ref().to_owned()],
-                context,
+                scope_context,
                 &member_location,
                 string_table,
             )?;
@@ -470,7 +488,7 @@ fn parse_collection_builtin_member(
             let args = parse_builtin_method_args(
                 token_stream,
                 &[inner_type.as_ref().to_owned()],
-                context,
+                scope_context,
                 &member_location,
                 string_table,
             )?;
@@ -480,7 +498,7 @@ fn parse_collection_builtin_member(
             let args = parse_builtin_method_args(
                 token_stream,
                 &[DataType::Int],
-                context,
+                scope_context,
                 &member_location,
                 string_table,
             )?;
@@ -490,7 +508,7 @@ fn parse_collection_builtin_member(
             let args = parse_builtin_method_args(
                 token_stream,
                 &[],
-                context,
+                scope_context,
                 &member_location,
                 string_table,
             )?;
@@ -524,21 +542,25 @@ fn parse_collection_builtin_member(
             result_types,
             location: member_location.clone(),
         },
-        scope: context.scope.to_owned(),
+        scope: scope_context.scope.to_owned(),
         location: member_location,
     }))
 }
 
 fn parse_error_builtin_member(
     token_stream: &mut FileTokens,
-    current_node: AstNode,
-    current_type: &DataType,
-    member_name: StringId,
-    member_location: SourceLocation,
-    receiver_access_mode: ReceiverAccessMode,
-    context: &ScopeContext,
+    context: BuiltinMemberParseContext<'_>,
     string_table: &mut StringTable,
 ) -> Result<Option<AstNode>, CompilerError> {
+    let BuiltinMemberParseContext {
+        current_node,
+        current_type,
+        member_name,
+        member_location,
+        receiver_access_mode,
+        scope_context,
+    } = context;
+
     if !is_builtin_error_data_type(current_type, string_table) {
         return Ok(None);
     }
@@ -577,15 +599,15 @@ fn parse_error_builtin_member(
 
     token_stream.advance();
 
-    let error_type = resolve_builtin_error_type(context, &member_location, string_table)?;
+    let error_type = resolve_builtin_error_type(scope_context, &member_location, string_table)?;
     let (args, result_types) = match builtin {
         ErrorBuiltinMethod::WithLocation => {
             let location_type =
-                resolve_builtin_error_location_type(context, &member_location, string_table)?;
+                resolve_builtin_error_location_type(scope_context, &member_location, string_table)?;
             let args = parse_builtin_method_args(
                 token_stream,
                 &[location_type],
-                context,
+                scope_context,
                 &member_location,
                 string_table,
             )?;
@@ -593,11 +615,11 @@ fn parse_error_builtin_member(
         }
         ErrorBuiltinMethod::PushTrace => {
             let frame_type =
-                resolve_builtin_stack_frame_type(context, &member_location, string_table)?;
+                resolve_builtin_stack_frame_type(scope_context, &member_location, string_table)?;
             let args = parse_builtin_method_args(
                 token_stream,
                 &[frame_type],
-                context,
+                scope_context,
                 &member_location,
                 string_table,
             )?;
@@ -607,7 +629,7 @@ fn parse_error_builtin_member(
             let args = parse_builtin_method_args(
                 token_stream,
                 &[],
-                context,
+                scope_context,
                 &member_location,
                 string_table,
             )?;
@@ -625,7 +647,7 @@ fn parse_error_builtin_member(
             result_types,
             location: member_location.clone(),
         },
-        scope: context.scope.to_owned(),
+        scope: scope_context.scope.to_owned(),
         location: member_location,
     }))
 }
@@ -725,12 +747,14 @@ pub(crate) fn parse_postfix_chain(
 
         if let Some(collection_builtin_call) = parse_collection_builtin_member(
             token_stream,
-            current_node.to_owned(),
-            &current_type,
-            member_name,
-            member_location.clone(),
-            receiver_access_mode,
-            context,
+            BuiltinMemberParseContext {
+                current_node: current_node.to_owned(),
+                current_type: &current_type,
+                member_name,
+                member_location: member_location.clone(),
+                receiver_access_mode,
+                scope_context: context,
+            },
             string_table,
         )? {
             current_node = collection_builtin_call;
@@ -740,12 +764,14 @@ pub(crate) fn parse_postfix_chain(
 
         if let Some(error_builtin_call) = parse_error_builtin_member(
             token_stream,
-            current_node.to_owned(),
-            &current_type,
-            member_name,
-            member_location.clone(),
-            receiver_access_mode,
-            context,
+            BuiltinMemberParseContext {
+                current_node: current_node.to_owned(),
+                current_type: &current_type,
+                member_name,
+                member_location: member_location.clone(),
+                receiver_access_mode,
+                scope_context: context,
+            },
             string_table,
         )? {
             current_node = error_builtin_call;

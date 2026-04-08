@@ -12,8 +12,8 @@ use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::hir::hir_datatypes::{HirTypeKind, TypeId};
 use crate::compiler_frontend::hir::hir_nodes::{
-    HirExpression, HirExpressionKind, HirPlace, HirStatement, HirStatementKind, HirTerminator,
-    LocalId, ValueKind,
+    BlockId, HirExpression, HirExpressionKind, HirPlace, HirStatement, HirStatementKind,
+    HirTerminator, LocalId, ValueKind,
 };
 use crate::compiler_frontend::host_functions::CallTarget;
 use crate::compiler_frontend::host_functions::ERROR_BUBBLE_HOST_NAME;
@@ -22,6 +22,30 @@ use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::return_hir_transformation_error;
 
 use super::LoweredExpression;
+
+/// Shared handled-result call metadata used by branching lowering helpers.
+///
+/// WHAT: carries the resolved Result carrier types, handler policy, and location metadata.
+/// WHY: both helper layers need the same bundle, and passing one struct keeps signatures short.
+struct HandledResultBranchingContext<'a> {
+    result_types: &'a [DataType],
+    handling: &'a ResultCallHandling,
+    carrier_type: TypeId,
+    ok_type: TypeId,
+    err_type: TypeId,
+    value_required: bool,
+    location: &'a SourceLocation,
+}
+
+/// Branch-entry metadata once the call has already produced a result local.
+///
+/// WHAT: extends handled-result metadata with CFG entry block and temporary local identifiers.
+/// WHY: the carrier-branch helper should receive one coherent context instead of many scalars.
+struct ResultCarrierBranchingContext<'a> {
+    current_block: BlockId,
+    result_local: LocalId,
+    handled_result: HandledResultBranchingContext<'a>,
+}
 
 impl<'a> HirBuilder<'a> {
     pub(crate) fn lower_handled_result_expression(
@@ -74,17 +98,20 @@ impl<'a> HirBuilder<'a> {
         let result_local = self.allocate_temp_local(carrier_type, Some(location.to_owned()))?;
         self.emit_assign_local_statement(result_local, lowered.value, location)?;
 
-        self.lower_result_carrier_with_branching(
+        let result_types = self.extract_return_types_from_datatype(expr_type);
+        self.lower_result_carrier_with_branching(ResultCarrierBranchingContext {
             current_block,
             result_local,
-            &self.extract_return_types_from_datatype(expr_type),
-            handling,
-            carrier_type,
-            ok_type,
-            err_type,
-            true,
-            location,
-        )
+            handled_result: HandledResultBranchingContext {
+                result_types: &result_types,
+                handling,
+                carrier_type,
+                ok_type,
+                err_type,
+                value_required: true,
+                location,
+            },
+        })
     }
 
     pub(crate) fn lower_receiver_method_call_expression(
@@ -452,13 +479,15 @@ impl<'a> HirBuilder<'a> {
             return self.lower_result_handled_call_with_branching(
                 target,
                 args,
-                result_types,
-                handling,
-                carrier_type,
-                ok_type,
-                err_type,
-                value_required,
-                location,
+                HandledResultBranchingContext {
+                    result_types,
+                    handling,
+                    carrier_type,
+                    ok_type,
+                    err_type,
+                    value_required,
+                    location,
+                },
             );
         }
 
@@ -522,14 +551,17 @@ impl<'a> HirBuilder<'a> {
         &mut self,
         target: CallTarget,
         args: &[Expression],
-        result_types: &[DataType],
-        handling: &ResultCallHandling,
-        carrier_type: TypeId,
-        ok_type: TypeId,
-        err_type: TypeId,
-        value_required: bool,
-        location: &SourceLocation,
+        context: HandledResultBranchingContext<'_>,
     ) -> Result<LoweredExpression, CompilerError> {
+        let HandledResultBranchingContext {
+            result_types,
+            handling,
+            carrier_type,
+            ok_type,
+            err_type,
+            value_required,
+            location,
+        } = context;
         let current_block = self.current_block_id_or_error(location)?;
         let mut lowered_args = Vec::with_capacity(args.len());
 
@@ -554,9 +586,31 @@ impl<'a> HirBuilder<'a> {
         self.side_table.map_statement(location, &call_statement);
         self.emit_statement_to_current_block(call_statement, location)?;
 
-        self.lower_result_carrier_with_branching(
+        self.lower_result_carrier_with_branching(ResultCarrierBranchingContext {
             current_block,
             result_local,
+            handled_result: HandledResultBranchingContext {
+                result_types,
+                handling,
+                carrier_type,
+                ok_type,
+                err_type,
+                value_required,
+                location,
+            },
+        })
+    }
+
+    fn lower_result_carrier_with_branching(
+        &mut self,
+        context: ResultCarrierBranchingContext<'_>,
+    ) -> Result<LoweredExpression, CompilerError> {
+        let ResultCarrierBranchingContext {
+            current_block,
+            result_local,
+            handled_result,
+        } = context;
+        let HandledResultBranchingContext {
             result_types,
             handling,
             carrier_type,
@@ -564,21 +618,8 @@ impl<'a> HirBuilder<'a> {
             err_type,
             value_required,
             location,
-        )
-    }
+        } = handled_result;
 
-    fn lower_result_carrier_with_branching(
-        &mut self,
-        current_block: crate::compiler_frontend::hir::hir_nodes::BlockId,
-        result_local: LocalId,
-        result_types: &[DataType],
-        handling: &ResultCallHandling,
-        carrier_type: TypeId,
-        ok_type: TypeId,
-        err_type: TypeId,
-        value_required: bool,
-        location: &SourceLocation,
-    ) -> Result<LoweredExpression, CompilerError> {
         let region = self.current_region_or_error(location)?;
         let bool_type = self.intern_type_kind(HirTypeKind::Bool);
         let result_for_test =

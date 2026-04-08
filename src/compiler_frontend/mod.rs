@@ -48,11 +48,11 @@ pub(crate) mod test_support;
 use crate::compiler_frontend::analysis::borrow_checker::{
     BorrowCheckReport, check_borrows as run_borrow_checker,
 };
-use crate::compiler_frontend::ast::ast::Ast;
+use crate::compiler_frontend::ast::ast::{Ast, AstBuildContext};
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::headers::parse_file_headers::{
-    Header, Headers, TopLevelTemplateItem, parse_headers_with_path_resolver,
+    Header, HeaderParseOptions, Headers, TopLevelTemplateItem, parse_headers_with_path_resolver,
 };
 use crate::compiler_frontend::hir::hir_builder::lower_module;
 use crate::compiler_frontend::hir::hir_nodes::HirModule;
@@ -202,9 +202,11 @@ impl CompilerFrontend {
             &self.host_function_registry,
             warnings,
             entry_file_path,
-            entry_file_id,
-            self.project_path_resolver.clone(),
-            self.path_format_config.clone(),
+            HeaderParseOptions {
+                entry_file_id,
+                project_path_resolver: self.project_path_resolver.clone(),
+                path_format_config: self.path_format_config.clone(),
+            },
             &mut self.string_table,
         )
     }
@@ -249,13 +251,15 @@ impl CompilerFrontend {
         Ast::new(
             headers,
             top_level_template_items,
-            &self.host_function_registry,
-            &self.style_directives,
-            &mut self.string_table,
-            interned_entry_dir,
-            build_profile,
-            self.project_path_resolver.clone(),
-            self.path_format_config.clone(),
+            AstBuildContext {
+                host_registry: &self.host_function_registry,
+                style_directives: &self.style_directives,
+                string_table: &mut self.string_table,
+                entry_dir: interned_entry_dir,
+                build_profile,
+                project_path_resolver: self.project_path_resolver.clone(),
+                path_format_config: self.path_format_config.clone(),
+            },
         )
     }
 

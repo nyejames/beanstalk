@@ -51,6 +51,22 @@ pub(crate) struct HtmlWasmArtifacts {
     pub html: String,
 }
 
+/// Inputs required to emit final route artifacts for HTML+Wasm mode.
+///
+/// WHAT: groups backend outputs plus route/document metadata used during final emission.
+/// WHY: emission is called from one orchestration site and should avoid a long argument list.
+pub(crate) struct HtmlWasmArtifactEmitInput<'a> {
+    pub entry_fragment_html: &'a str,
+    pub string_table: &'a StringTable,
+    pub logical_html_output_path: &'a Path,
+    pub project_name: &'a str,
+    pub document_config: &'a HtmlDocumentConfig,
+    pub hir_module: &'a HirModule,
+    pub js_bundle: &'a str,
+    pub function_name_by_id: &'a std::collections::HashMap<FunctionId, String>,
+    pub wasm_bytes: Vec<u8>,
+}
+
 #[derive(Debug, Clone, Default)]
 pub(crate) struct HtmlWasmDebugOutputs {
     /// Builder-local export/runtime planning summary.
@@ -122,15 +138,17 @@ pub(crate) fn compile_html_module_wasm(
 
     let artifacts = emit_html_wasm_artifacts(
         &build_plan,
-        &entry_fragment_html,
-        string_table,
-        logical_html_output_path,
-        project_name,
-        document_config,
-        hir_module,
-        &js_module.source,
-        &js_module.function_name_by_id,
-        wasm_bytes,
+        HtmlWasmArtifactEmitInput {
+            entry_fragment_html: &entry_fragment_html,
+            string_table,
+            logical_html_output_path,
+            project_name,
+            document_config,
+            hir_module,
+            js_bundle: &js_module.source,
+            function_name_by_id: &js_module.function_name_by_id,
+            wasm_bytes,
+        },
     )
     .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;
     let debug_outputs = build_debug_outputs(
@@ -196,16 +214,20 @@ pub(crate) fn build_html_wasm_plan(
 /// WHY: keeping one emission function avoids path/policy drift across call sites.
 pub(crate) fn emit_html_wasm_artifacts(
     plan: &HtmlWasmBuildPlan,
-    entry_fragment_html: &str,
-    string_table: &StringTable,
-    logical_html_output_path: &Path,
-    project_name: &str,
-    document_config: &HtmlDocumentConfig,
-    hir_module: &HirModule,
-    js_bundle: &str,
-    function_name_by_id: &std::collections::HashMap<FunctionId, String>,
-    wasm_bytes: Vec<u8>,
+    input: HtmlWasmArtifactEmitInput<'_>,
 ) -> Result<HtmlWasmArtifacts, CompilerError> {
+    let HtmlWasmArtifactEmitInput {
+        entry_fragment_html,
+        string_table,
+        logical_html_output_path,
+        project_name,
+        document_config,
+        hir_module,
+        js_bundle,
+        function_name_by_id,
+        wasm_bytes,
+    } = input;
+
     let bootstrap_js = generate_wasm_bootstrap_js(
         hir_module,
         js_bundle,

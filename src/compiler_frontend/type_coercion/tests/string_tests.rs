@@ -36,11 +36,11 @@ fn int_folds_to_string() {
 #[test]
 fn float_folds_to_string() {
     let table = StringTable::new();
-    let result = fold_expression_kind_to_string(&ExpressionKind::Float(3.14), &table);
+    let result = fold_expression_kind_to_string(&ExpressionKind::Float(3.125), &table);
     let Some(FoldedStringPiece::Text(s)) = result else {
         panic!("expected Text piece for Float");
     };
-    assert!(s.contains("3.14"), "unexpected float string: {s}");
+    assert!(s.contains("3.125"), "unexpected float string: {s}");
 }
 
 #[test]

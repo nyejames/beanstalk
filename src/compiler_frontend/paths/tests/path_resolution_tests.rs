@@ -32,8 +32,7 @@ impl TestHarness {
         fs::write(project_root.join("src/index.bst"), b"").unwrap();
         fs::write(project_root.join("docs/readme.txt"), b"").unwrap();
 
-        let root_folder_paths: Vec<PathBuf> =
-            root_folders.iter().map(|s| PathBuf::from(s)).collect();
+        let root_folder_paths: Vec<PathBuf> = root_folders.iter().map(PathBuf::from).collect();
 
         let resolver =
             ProjectPathResolver::new(project_root.clone(), entry_root, &root_folder_paths)

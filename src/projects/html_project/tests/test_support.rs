@@ -96,16 +96,33 @@ pub(crate) fn interned_path(string_table: &mut StringTable, components: &[&str])
     path
 }
 
+/// Input parameters for constructing one rendered-path usage fixture.
+///
+/// WHAT: holds path semantics and source-location metadata for a single recorded usage.
+/// WHY: HTML builder tests create many usage fixtures, so one input struct keeps call sites clear.
+pub(crate) struct RenderedPathUsageInput<'a> {
+    pub source_path_components: &'a [&'a str],
+    pub public_path_components: &'a [&'a str],
+    pub filesystem_path: PathBuf,
+    pub base: CompileTimePathBase,
+    pub kind: CompileTimePathKind,
+    pub source_file_scope_components: &'a [&'a str],
+    pub line_number: i32,
+}
+
 pub(crate) fn rendered_path_usage(
     string_table: &mut StringTable,
-    source_path_components: &[&str],
-    public_path_components: &[&str],
-    filesystem_path: PathBuf,
-    base: CompileTimePathBase,
-    kind: CompileTimePathKind,
-    source_file_scope_components: &[&str],
-    line_number: i32,
+    input: RenderedPathUsageInput<'_>,
 ) -> RenderedPathUsage {
+    let RenderedPathUsageInput {
+        source_path_components,
+        public_path_components,
+        filesystem_path,
+        base,
+        kind,
+        source_file_scope_components,
+        line_number,
+    } = input;
     let scope = interned_path(string_table, source_file_scope_components);
     RenderedPathUsage {
         source_path: interned_path(string_table, source_path_components),

@@ -5,7 +5,7 @@ use crate::compiler_frontend::compiler_warnings::WarningKind;
 use crate::compiler_frontend::paths::path_resolution::{CompileTimePathBase, CompileTimePathKind};
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::projects::html_project::tests::test_support::{
-    create_test_module, expect_bytes_output, rendered_path_usage, temp_dir,
+    RenderedPathUsageInput, create_test_module, expect_bytes_output, rendered_path_usage, temp_dir,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -20,13 +20,15 @@ fn root_folder_asset_emits_site_relative_output_path() {
     let mut module = create_test_module(root.join("#page.bst"), &mut string_table);
     module.hir.rendered_path_usages.push(rendered_path_usage(
         &mut string_table,
-        &["assets", "logo.png"],
-        &["assets", "logo.png"],
-        root.join("assets/logo.png"),
-        CompileTimePathBase::ProjectRootFolder,
-        CompileTimePathKind::File,
-        &["#page.bst"],
-        1,
+        RenderedPathUsageInput {
+            source_path_components: &["assets", "logo.png"],
+            public_path_components: &["assets", "logo.png"],
+            filesystem_path: root.join("assets/logo.png"),
+            base: CompileTimePathBase::ProjectRootFolder,
+            kind: CompileTimePathKind::File,
+            source_file_scope_components: &["#page.bst"],
+            line_number: 1,
+        },
     ));
 
     let planned = plan_module_tracked_assets(&module, Path::new("index.html"), &mut string_table)
@@ -56,13 +58,15 @@ fn entry_root_asset_emits_visible_entry_root_path() {
     let mut module = create_test_module(root.join("src/#page.bst"), &mut string_table);
     module.hir.rendered_path_usages.push(rendered_path_usage(
         &mut string_table,
-        &["images", "logo.png"],
-        &["images", "logo.png"],
-        root.join("src/images/logo.png"),
-        CompileTimePathBase::EntryRoot,
-        CompileTimePathKind::File,
-        &["src", "#page.bst"],
-        1,
+        RenderedPathUsageInput {
+            source_path_components: &["images", "logo.png"],
+            public_path_components: &["images", "logo.png"],
+            filesystem_path: root.join("src/images/logo.png"),
+            base: CompileTimePathBase::EntryRoot,
+            kind: CompileTimePathKind::File,
+            source_file_scope_components: &["src", "#page.bst"],
+            line_number: 1,
+        },
     ));
 
     let planned = plan_module_tracked_assets(&module, Path::new("index.html"), &mut string_table)
@@ -90,13 +94,15 @@ fn relative_asset_emits_relative_to_final_page_directory() {
     let mut module = create_test_module(root.join("src/docs/guide/#page.bst"), &mut string_table);
     module.hir.rendered_path_usages.push(rendered_path_usage(
         &mut string_table,
-        &[".", "img", "logo.png"],
-        &[".", "img", "logo.png"],
-        root.join("src/docs/guide/img/logo.png"),
-        CompileTimePathBase::RelativeToFile,
-        CompileTimePathKind::File,
-        &["src", "docs", "guide", "#page.bst"],
-        3,
+        RenderedPathUsageInput {
+            source_path_components: &[".", "img", "logo.png"],
+            public_path_components: &[".", "img", "logo.png"],
+            filesystem_path: root.join("src/docs/guide/img/logo.png"),
+            base: CompileTimePathBase::RelativeToFile,
+            kind: CompileTimePathKind::File,
+            source_file_scope_components: &["src", "docs", "guide", "#page.bst"],
+            line_number: 3,
+        },
     ));
 
     let planned = plan_module_tracked_assets(
@@ -128,13 +134,15 @@ fn duplicate_same_source_and_output_dedupes_within_module() {
     let mut module = create_test_module(root.join("#page.bst"), &mut string_table);
     let usage = rendered_path_usage(
         &mut string_table,
-        &["assets", "logo.png"],
-        &["assets", "logo.png"],
-        root.join("assets/logo.png"),
-        CompileTimePathBase::ProjectRootFolder,
-        CompileTimePathKind::File,
-        &["#page.bst"],
-        1,
+        RenderedPathUsageInput {
+            source_path_components: &["assets", "logo.png"],
+            public_path_components: &["assets", "logo.png"],
+            filesystem_path: root.join("assets/logo.png"),
+            base: CompileTimePathBase::ProjectRootFolder,
+            kind: CompileTimePathKind::File,
+            source_file_scope_components: &["#page.bst"],
+            line_number: 1,
+        },
     );
     module.hir.rendered_path_usages.push(usage.clone());
     module.hir.rendered_path_usages.push(usage);
@@ -156,13 +164,15 @@ fn directory_usage_is_rejected() {
     let mut module = create_test_module(root.join("#page.bst"), &mut string_table);
     module.hir.rendered_path_usages.push(rendered_path_usage(
         &mut string_table,
-        &["assets", "icons"],
-        &["assets", "icons"],
-        root.join("assets/icons"),
-        CompileTimePathBase::ProjectRootFolder,
-        CompileTimePathKind::Directory,
-        &["#page.bst"],
-        4,
+        RenderedPathUsageInput {
+            source_path_components: &["assets", "icons"],
+            public_path_components: &["assets", "icons"],
+            filesystem_path: root.join("assets/icons"),
+            base: CompileTimePathBase::ProjectRootFolder,
+            kind: CompileTimePathKind::Directory,
+            source_file_scope_components: &["#page.bst"],
+            line_number: 4,
+        },
     ));
 
     let error = plan_module_tracked_assets(&module, Path::new("index.html"), &mut string_table)
@@ -185,13 +195,15 @@ fn public_root_directory_usage_is_ignored() {
     let mut module = create_test_module(root.join("src/#page.bst"), &mut string_table);
     module.hir.rendered_path_usages.push(rendered_path_usage(
         &mut string_table,
-        &[],
-        &[],
-        root.join("src"),
-        CompileTimePathBase::EntryRoot,
-        CompileTimePathKind::Directory,
-        &["src", "#page.bst"],
-        2,
+        RenderedPathUsageInput {
+            source_path_components: &[],
+            public_path_components: &[],
+            filesystem_path: root.join("src"),
+            base: CompileTimePathBase::EntryRoot,
+            kind: CompileTimePathKind::Directory,
+            source_file_scope_components: &["src", "#page.bst"],
+            line_number: 2,
+        },
     ));
 
     let planned = plan_module_tracked_assets(&module, Path::new("index.html"), &mut string_table)
@@ -212,13 +224,15 @@ fn non_asset_directory_link_is_ignored() {
     let mut module = create_test_module(root.join("src/docs/guide/#page.bst"), &mut string_table);
     module.hir.rendered_path_usages.push(rendered_path_usage(
         &mut string_table,
-        &[".", "subdir"],
-        &[".", "subdir"],
-        root.join("src/docs/guide/subdir"),
-        CompileTimePathBase::RelativeToFile,
-        CompileTimePathKind::Directory,
-        &["src", "docs", "guide", "#page.bst"],
-        5,
+        RenderedPathUsageInput {
+            source_path_components: &[".", "subdir"],
+            public_path_components: &[".", "subdir"],
+            filesystem_path: root.join("src/docs/guide/subdir"),
+            base: CompileTimePathBase::RelativeToFile,
+            kind: CompileTimePathKind::Directory,
+            source_file_scope_components: &["src", "docs", "guide", "#page.bst"],
+            line_number: 5,
+        },
     ));
 
     let planned = plan_module_tracked_assets(
@@ -248,23 +262,27 @@ fn large_asset_warning_dedupes_to_first_render_location() {
     let mut module = create_test_module(root.join("#page.bst"), &mut string_table);
     let first_usage = rendered_path_usage(
         &mut string_table,
-        &["assets", "video.mp4"],
-        &["assets", "video.mp4"],
-        root.join("assets/video.mp4"),
-        CompileTimePathBase::ProjectRootFolder,
-        CompileTimePathKind::File,
-        &["#page.bst"],
-        2,
+        RenderedPathUsageInput {
+            source_path_components: &["assets", "video.mp4"],
+            public_path_components: &["assets", "video.mp4"],
+            filesystem_path: root.join("assets/video.mp4"),
+            base: CompileTimePathBase::ProjectRootFolder,
+            kind: CompileTimePathKind::File,
+            source_file_scope_components: &["#page.bst"],
+            line_number: 2,
+        },
     );
     let second_usage = rendered_path_usage(
         &mut string_table,
-        &["assets", "video.mp4"],
-        &["assets", "video.mp4"],
-        root.join("assets/video.mp4"),
-        CompileTimePathBase::ProjectRootFolder,
-        CompileTimePathKind::File,
-        &["#page.bst"],
-        8,
+        RenderedPathUsageInput {
+            source_path_components: &["assets", "video.mp4"],
+            public_path_components: &["assets", "video.mp4"],
+            filesystem_path: root.join("assets/video.mp4"),
+            base: CompileTimePathBase::ProjectRootFolder,
+            kind: CompileTimePathKind::File,
+            source_file_scope_components: &["#page.bst"],
+            line_number: 8,
+        },
     );
     module.hir.rendered_path_usages.push(first_usage);
     module.hir.rendered_path_usages.push(second_usage);
@@ -292,13 +310,15 @@ fn emit_tracked_assets_reads_source_bytes_into_binary_outputs() {
     let mut module = create_test_module(root.join("#page.bst"), &mut string_table);
     module.hir.rendered_path_usages.push(rendered_path_usage(
         &mut string_table,
-        &["assets", "logo.png"],
-        &["assets", "logo.png"],
-        root.join("assets/logo.png"),
-        CompileTimePathBase::ProjectRootFolder,
-        CompileTimePathKind::File,
-        &["#page.bst"],
-        1,
+        RenderedPathUsageInput {
+            source_path_components: &["assets", "logo.png"],
+            public_path_components: &["assets", "logo.png"],
+            filesystem_path: root.join("assets/logo.png"),
+            base: CompileTimePathBase::ProjectRootFolder,
+            kind: CompileTimePathKind::File,
+            source_file_scope_components: &["#page.bst"],
+            line_number: 1,
+        },
     ));
     let planned = plan_module_tracked_assets(&module, Path::new("index.html"), &mut string_table)
         .expect("planning succeeds");

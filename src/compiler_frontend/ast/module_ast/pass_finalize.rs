@@ -50,6 +50,20 @@ pub struct Ast {
     pub warnings: Vec<CompilerWarning>,
 }
 
+/// Shared dependencies/configuration required to build one module AST.
+///
+/// WHAT: groups the long-lived frontend services and per-build settings used across all AST passes.
+/// WHY: `Ast::new` should describe its high-level inputs without a long parameter list.
+pub struct AstBuildContext<'a> {
+    pub host_registry: &'a HostRegistry,
+    pub style_directives: &'a StyleDirectiveRegistry,
+    pub string_table: &'a mut StringTable,
+    pub entry_dir: InternedPath,
+    pub build_profile: FrontendBuildProfile,
+    pub project_path_resolver: Option<ProjectPathResolver>,
+    pub path_format_config: PathStringFormatConfig,
+}
+
 impl<'a> AstBuildState<'a> {
     /// Pass 7: Assemble the final `Ast` from accumulated build state.
     pub(super) fn finalize(
@@ -109,14 +123,18 @@ impl Ast {
     pub fn new(
         sorted_headers: Vec<Header>,
         top_level_template_items: Vec<TopLevelTemplateItem>,
-        host_registry: &HostRegistry,
-        style_directives: &StyleDirectiveRegistry,
-        string_table: &mut StringTable,
-        entry_dir: InternedPath,
-        build_profile: FrontendBuildProfile,
-        project_path_resolver: Option<ProjectPathResolver>,
-        path_format_config: PathStringFormatConfig,
+        context: AstBuildContext<'_>,
     ) -> Result<Ast, CompilerMessages> {
+        let AstBuildContext {
+            host_registry,
+            style_directives,
+            string_table,
+            entry_dir,
+            build_profile,
+            project_path_resolver,
+            path_format_config,
+        } = context;
+
         let mut state = AstBuildState::new(
             host_registry,
             style_directives,

@@ -32,7 +32,7 @@ pub use crate::compiler_frontend::ast::templates::top_level_templates::{
     AstDocFragment, AstDocFragmentKind, AstStartTemplateItem,
 };
 #[allow(unused_imports)]
-pub use pass_finalize::{Ast, ModuleExport};
+pub use pass_finalize::{Ast, AstBuildContext, ModuleExport};
 pub use scope_context::{ContextKind, ScopeContext};
 #[allow(unused_imports)]
 pub(crate) use scope_context::{ReceiverMethodCatalog, ReceiverMethodEntry};

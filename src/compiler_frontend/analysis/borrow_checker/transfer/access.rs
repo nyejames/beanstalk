@@ -64,6 +64,21 @@ struct MutableAccessPolicy {
     strict_move_exclusivity: bool,
 }
 
+/// Shared assignment-transfer environment for one statement.
+///
+/// WHAT: packages the borrow-transfer diagnostics/layout/state bundle used by assignment writes.
+/// WHY: assignment transfer needs many correlated parameters, and bundling them keeps helpers clear.
+struct AssignTransferContext<'a, 'module> {
+    context: &'a BorrowTransferContext<'module>,
+    layout: &'a FunctionLayout,
+    state: &'a mut BorrowState,
+    block_id: BlockId,
+    current_order: i32,
+    tracker: &'a mut StatementAccessTracker,
+    location: SourceLocation,
+    stats: &'a mut BlockTransferStats,
+}
+
 pub(super) fn transfer_statement(
     context: &BorrowTransferContext<'_>,
     layout: &FunctionLayout,
@@ -111,14 +126,16 @@ pub(super) fn transfer_statement(
             }
 
             transfer_assign_target(
-                context,
-                layout,
-                state,
-                block_id,
-                statement_order,
-                &mut tracker,
-                location,
-                stats,
+                &mut AssignTransferContext {
+                    context,
+                    layout,
+                    state,
+                    block_id,
+                    current_order: statement_order,
+                    tracker: &mut tracker,
+                    location,
+                    stats,
+                },
                 target,
                 value,
             )?;
@@ -552,24 +569,26 @@ fn record_shared_reads_in_pattern(
 }
 
 fn transfer_assign_target(
-    context: &BorrowTransferContext<'_>,
-    layout: &FunctionLayout,
-    state: &mut BorrowState,
-    block_id: BlockId,
-    current_order: i32,
-    tracker: &mut StatementAccessTracker,
-    location: SourceLocation,
-    stats: &mut BlockTransferStats,
+    context: &mut AssignTransferContext<'_, '_>,
     target: &HirPlace,
     value: &HirExpression,
 ) -> Result<(), CompilerError> {
+    let transfer_context = context.context;
+    let layout = context.layout;
+    let state = &mut *context.state;
+    let block_id = context.block_id;
+    let current_order = context.current_order;
+    let tracker = &mut *context.tracker;
+    let location = context.location.clone();
+    let stats = &mut *context.stats;
+
     match target {
         HirPlace::Local(local_id) => {
             let Some(local_index) = layout.index_of(*local_id) else {
                 return_borrow_checker_error!(
                     format!(
                         "Assignment target local '{}' is not in the active function layout",
-                        context.diagnostics.local_name(*local_id)
+                        transfer_context.diagnostics.local_name(*local_id)
                     ),
                     location.clone(),
                     {
@@ -617,7 +636,7 @@ fn transfer_assign_target(
                         let target_is_mutable = layout.local_mutable[local_index];
                         if target_is_mutable && !rhs_roots.is_empty() {
                             let mut check = AccessCheckContext {
-                                context,
+                                context: transfer_context,
                                 layout,
                                 state: &*state,
                                 tracker,
@@ -663,7 +682,7 @@ fn transfer_assign_target(
             }
 
             let mut check = AccessCheckContext {
-                context,
+                context: transfer_context,
                 layout,
                 state: &*state,
                 tracker,
@@ -729,7 +748,7 @@ fn transfer_assign_target(
         _ => {
             let roots = roots_for_place(layout, state, target, location.clone())?;
             let mut check = AccessCheckContext {
-                context,
+                context: transfer_context,
                 layout,
                 state: &*state,
                 tracker,

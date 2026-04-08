@@ -9,9 +9,9 @@ use crate::compiler_frontend::hir::hir_nodes::{ConstStringId, FunctionId, StartF
 use crate::compiler_frontend::paths::path_resolution::{CompileTimePathBase, CompileTimePathKind};
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::projects::html_project::tests::test_support::{
-    assert_fragment_before_body_close, assert_has_basic_shell, collect_output_paths,
-    create_test_module, expect_bytes_output, expect_html_output, expect_js_output,
-    rendered_path_usage, temp_dir,
+    RenderedPathUsageInput, assert_fragment_before_body_close, assert_has_basic_shell,
+    collect_output_paths, create_test_module, expect_bytes_output, expect_html_output,
+    expect_js_output, rendered_path_usage, temp_dir,
 };
 use crate::projects::settings::Config;
 use std::fs;
@@ -420,26 +420,30 @@ fn build_backend_emits_tracked_assets_and_dedupes_same_source_output() {
     let mut homepage = create_test_module(canonical_root.join("#page.bst"), &mut string_table);
     homepage.hir.rendered_path_usages.push(rendered_path_usage(
         &mut string_table,
-        &["assets", "logo.png"],
-        &["assets", "logo.png"],
-        canonical_root.join("assets/logo.png"),
-        CompileTimePathBase::ProjectRootFolder,
-        CompileTimePathKind::File,
-        &["#page.bst"],
-        1,
+        RenderedPathUsageInput {
+            source_path_components: &["assets", "logo.png"],
+            public_path_components: &["assets", "logo.png"],
+            filesystem_path: canonical_root.join("assets/logo.png"),
+            base: CompileTimePathBase::ProjectRootFolder,
+            kind: CompileTimePathKind::File,
+            source_file_scope_components: &["#page.bst"],
+            line_number: 1,
+        },
     ));
 
     let mut docs_page =
         create_test_module(canonical_root.join("docs/#page.bst"), &mut string_table);
     docs_page.hir.rendered_path_usages.push(rendered_path_usage(
         &mut string_table,
-        &["assets", "logo.png"],
-        &["assets", "logo.png"],
-        canonical_root.join("assets/logo.png"),
-        CompileTimePathBase::ProjectRootFolder,
-        CompileTimePathKind::File,
-        &["docs", "#page.bst"],
-        1,
+        RenderedPathUsageInput {
+            source_path_components: &["assets", "logo.png"],
+            public_path_components: &["assets", "logo.png"],
+            filesystem_path: canonical_root.join("assets/logo.png"),
+            base: CompileTimePathBase::ProjectRootFolder,
+            kind: CompileTimePathKind::File,
+            source_file_scope_components: &["docs", "#page.bst"],
+            line_number: 1,
+        },
     ));
 
     let project = builder
@@ -480,13 +484,15 @@ fn build_backend_allows_same_source_file_to_emit_multiple_relative_outputs() {
     let mut homepage = create_test_module(canonical_root.join("#page.bst"), &mut string_table);
     homepage.hir.rendered_path_usages.push(rendered_path_usage(
         &mut string_table,
-        &[".", "logo.png"],
-        &[".", "logo.png"],
-        canonical_root.join("shared/logo.png"),
-        CompileTimePathBase::RelativeToFile,
-        CompileTimePathKind::File,
-        &["#page.bst"],
-        1,
+        RenderedPathUsageInput {
+            source_path_components: &[".", "logo.png"],
+            public_path_components: &[".", "logo.png"],
+            filesystem_path: canonical_root.join("shared/logo.png"),
+            base: CompileTimePathBase::RelativeToFile,
+            kind: CompileTimePathKind::File,
+            source_file_scope_components: &["#page.bst"],
+            line_number: 1,
+        },
     ));
 
     let mut blog_page = create_test_module(
@@ -495,13 +501,15 @@ fn build_backend_allows_same_source_file_to_emit_multiple_relative_outputs() {
     );
     blog_page.hir.rendered_path_usages.push(rendered_path_usage(
         &mut string_table,
-        &["..", "shared", "logo.png"],
-        &["..", "shared", "logo.png"],
-        canonical_root.join("shared/logo.png"),
-        CompileTimePathBase::RelativeToFile,
-        CompileTimePathKind::File,
-        &["blog", "post", "#page.bst"],
-        1,
+        RenderedPathUsageInput {
+            source_path_components: &["..", "shared", "logo.png"],
+            public_path_components: &["..", "shared", "logo.png"],
+            filesystem_path: canonical_root.join("shared/logo.png"),
+            base: CompileTimePathBase::RelativeToFile,
+            kind: CompileTimePathKind::File,
+            source_file_scope_components: &["blog", "post", "#page.bst"],
+            line_number: 1,
+        },
     ));
 
     let project = builder
@@ -536,26 +544,30 @@ fn build_backend_rejects_conflicting_tracked_asset_output_paths() {
     let mut homepage = create_test_module(canonical_root.join("#page.bst"), &mut string_table);
     homepage.hir.rendered_path_usages.push(rendered_path_usage(
         &mut string_table,
-        &["assets", "logo.png"],
-        &["assets", "logo.png"],
-        canonical_root.join("assets/logo-a.png"),
-        CompileTimePathBase::ProjectRootFolder,
-        CompileTimePathKind::File,
-        &["#page.bst"],
-        1,
+        RenderedPathUsageInput {
+            source_path_components: &["assets", "logo.png"],
+            public_path_components: &["assets", "logo.png"],
+            filesystem_path: canonical_root.join("assets/logo-a.png"),
+            base: CompileTimePathBase::ProjectRootFolder,
+            kind: CompileTimePathKind::File,
+            source_file_scope_components: &["#page.bst"],
+            line_number: 1,
+        },
     ));
 
     let mut docs_page =
         create_test_module(canonical_root.join("docs/#page.bst"), &mut string_table);
     docs_page.hir.rendered_path_usages.push(rendered_path_usage(
         &mut string_table,
-        &["assets", "logo.png"],
-        &["assets", "logo.png"],
-        canonical_root.join("assets/logo-b.png"),
-        CompileTimePathBase::ProjectRootFolder,
-        CompileTimePathKind::File,
-        &["docs", "#page.bst"],
-        1,
+        RenderedPathUsageInput {
+            source_path_components: &["assets", "logo.png"],
+            public_path_components: &["assets", "logo.png"],
+            filesystem_path: canonical_root.join("assets/logo-b.png"),
+            base: CompileTimePathBase::ProjectRootFolder,
+            kind: CompileTimePathKind::File,
+            source_file_scope_components: &["docs", "#page.bst"],
+            line_number: 1,
+        },
     ));
 
     let error =

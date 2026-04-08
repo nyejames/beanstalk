@@ -33,10 +33,7 @@ impl TestHarness {
         fs::write(project_root.join("src/docs/local.png"), b"local").expect("write local asset");
         fs::write(project_root.join("src/#page.bst"), b"").expect("write page");
 
-        let root_folder_paths: Vec<PathBuf> = root_folders
-            .iter()
-            .map(|folder| PathBuf::from(folder))
-            .collect();
+        let root_folder_paths: Vec<PathBuf> = root_folders.iter().map(PathBuf::from).collect();
         let resolver =
             ProjectPathResolver::new(project_root.clone(), entry_root, &root_folder_paths)
                 .expect("resolver should build");

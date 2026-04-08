@@ -12,7 +12,7 @@ use super::fixture::{
 };
 use super::{BackendId, EXPECT_FILE_NAME, GOLDEN_DIR_NAME, INPUT_DIR_NAME, MANIFEST_FILE_NAME};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 fn temp_dir(prefix: &str) -> PathBuf {
@@ -23,7 +23,7 @@ fn temp_dir(prefix: &str) -> PathBuf {
     std::env::temp_dir().join(format!("beanstalk_integration_runner_{prefix}_{unique}"))
 }
 
-fn write_success_fixture(root: &PathBuf, case_name: &str) {
+fn write_success_fixture(root: &Path, case_name: &str) {
     let case_root = root.join(case_name);
     let input_root = case_root.join(INPUT_DIR_NAME);
     fs::create_dir_all(&input_root).expect("should create fixture input directory");

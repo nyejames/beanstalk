@@ -36,6 +36,17 @@ pub struct Headers {
     pub top_level_template_items: Vec<TopLevelTemplateItem>,
 }
 
+/// Optional settings that affect module header parsing.
+///
+/// WHAT: bundles optional entry identity and path-resolution behavior for one parse invocation.
+/// WHY: the parser is called from both production and tests, and grouping these keeps the API concise.
+#[derive(Clone, Default)]
+pub struct HeaderParseOptions {
+    pub entry_file_id: Option<FileId>,
+    pub project_path_resolver: Option<ProjectPathResolver>,
+    pub path_format_config: PathStringFormatConfig,
+}
+
 struct HeaderParseContext<'a> {
     host_function_registry: &'a HostRegistry,
     warnings: &'a mut Vec<CompilerWarning>,
@@ -153,9 +164,7 @@ pub fn parse_headers(
         host_registry,
         warnings,
         entry_file_path,
-        None,
-        None,
-        PathStringFormatConfig::default(),
+        HeaderParseOptions::default(),
         string_table,
     )
 }
@@ -165,11 +174,15 @@ pub fn parse_headers_with_path_resolver(
     host_registry: &HostRegistry,
     warnings: &mut Vec<CompilerWarning>,
     entry_file_path: &Path,
-    entry_file_id: Option<FileId>,
-    project_path_resolver: Option<ProjectPathResolver>,
-    path_format_config: PathStringFormatConfig,
+    options: HeaderParseOptions,
     string_table: &mut StringTable,
 ) -> Result<Headers, Vec<CompilerError>> {
+    let HeaderParseOptions {
+        entry_file_id,
+        project_path_resolver,
+        path_format_config,
+    } = options;
+
     let mut headers: Vec<Header> = Vec::new();
     let mut errors: Vec<CompilerError> = Vec::new();
     let mut const_template_count = 0;

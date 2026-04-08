@@ -31,7 +31,7 @@ fn single_file_compiles_minimal_bst() {
 
     assert!(result.is_ok(), "expected Ok for minimal .bst file");
     assert_eq!(
-        result.ok().expect("checked above").len(),
+        result.expect("checked above").len(),
         1,
         "expected exactly one module"
     );
@@ -105,7 +105,7 @@ fn directory_project_compiles_single_entry_module() {
         "expected Ok for single-module directory project"
     );
     assert_eq!(
-        result.ok().expect("checked above").len(),
+        result.expect("checked above").len(),
         1,
         "expected exactly one module"
     );
@@ -132,7 +132,7 @@ fn directory_project_discovers_multiple_entry_modules() {
         "expected Ok for multi-module directory project"
     );
     assert_eq!(
-        result.ok().expect("checked above").len(),
+        result.expect("checked above").len(),
         2,
         "expected exactly two modules"
     );

@@ -6,11 +6,13 @@
 //! helper calls that can drift from production behavior.
 
 use crate::compiler_frontend::FrontendBuildProfile;
-use crate::compiler_frontend::ast::ast::Ast;
+use crate::compiler_frontend::ast::ast::{Ast, AstBuildContext};
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::headers::parse_file_headers::parse_headers_with_path_resolver;
+use crate::compiler_frontend::headers::parse_file_headers::{
+    HeaderParseOptions, parse_headers_with_path_resolver,
+};
 use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::module_dependencies::resolve_module_dependencies;
@@ -44,9 +46,11 @@ fn parse_single_file_ast_result(source: &str) -> Result<(Ast, StringTable), Comp
         &host_registry,
         &mut warnings,
         &std::path::PathBuf::from("#page.bst"),
-        None,
-        Some(test_project_path_resolver()),
-        PathStringFormatConfig::default(),
+        HeaderParseOptions {
+            entry_file_id: None,
+            project_path_resolver: Some(test_project_path_resolver()),
+            path_format_config: PathStringFormatConfig::default(),
+        },
         &mut string_table,
     )
     .map_err(|mut errors| errors.remove(0))?;
@@ -58,13 +62,15 @@ fn parse_single_file_ast_result(source: &str) -> Result<(Ast, StringTable), Comp
     let ast = Ast::new(
         sorted_headers,
         headers.top_level_template_items,
-        &host_registry,
-        &style_directives,
-        &mut string_table,
-        entry_path,
-        FrontendBuildProfile::Dev,
-        Some(test_project_path_resolver()),
-        PathStringFormatConfig::default(),
+        AstBuildContext {
+            host_registry: &host_registry,
+            style_directives: &style_directives,
+            string_table: &mut string_table,
+            entry_dir: entry_path,
+            build_profile: FrontendBuildProfile::Dev,
+            project_path_resolver: Some(test_project_path_resolver()),
+            path_format_config: PathStringFormatConfig::default(),
+        },
     )
     .map_err(|mut messages| messages.errors.remove(0))?;
 
