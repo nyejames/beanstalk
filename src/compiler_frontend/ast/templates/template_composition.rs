@@ -147,11 +147,38 @@ fn wrap_atom_in_child_template(
 // HEAD-CHAIN COMPOSITION
 // -------------------------
 
-/// Items in a pending head-chain composition. Each item is either a literal
-/// atom or a reference to a chain layer (wrapper template with fill content).
+/// Stores authored template atoms once while pending head-chain items refer
+/// to them by index.
+///
+/// WHY: pending composition items are routing metadata, not the final owned
+/// atom tree. Keeping atoms in a pool makes the intermediate graph smaller
+/// and clearer.
+#[derive(Clone, Debug, Default)]
+struct PendingAtomPool {
+    atoms: Vec<TemplateAtom>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+struct PendingAtomId(usize);
+
+impl PendingAtomPool {
+    fn push(&mut self, atom: TemplateAtom) -> PendingAtomId {
+        let id = PendingAtomId(self.atoms.len());
+        self.atoms.push(atom);
+        id
+    }
+
+    fn get(&self, id: PendingAtomId) -> &TemplateAtom {
+        &self.atoms[id.0]
+    }
+}
+
+/// Items in a pending head-chain composition. Each item is either a reference
+/// to a pooled atom or a reference to a chain layer (wrapper template with
+/// fill content).
 #[derive(Clone, Debug)]
 enum PendingChainItem {
-    Atom(TemplateAtom),
+    AtomRef(PendingAtomId),
     LayerRef {
         layer_index: usize,
         origin: TemplateSegmentOrigin,
@@ -197,6 +224,7 @@ pub(crate) fn compose_template_head_chain(
     let mut root_items = Vec::new();
     let mut layers = Vec::new();
     let mut active_layer: Option<usize> = None;
+    let mut atom_pool = PendingAtomPool::default();
 
     for atom in head_atoms {
         if let Some((receiver, origin)) = receiver_template_from_head_atom(&atom) {
@@ -224,27 +252,30 @@ pub(crate) fn compose_template_head_chain(
             continue;
         }
 
-        push_chain_item(
+        push_pending_atom(
             &mut root_items,
             &mut layers,
             active_layer,
-            PendingChainItem::Atom(atom),
+            &mut atom_pool,
+            atom,
         );
     }
 
     // Body atoms are appended after head parsing. If the head opened a receiving
     // chain, body atoms become contributions to the deepest active receiver.
     for atom in body_atoms {
-        push_chain_item(
+        push_pending_atom(
             &mut root_items,
             &mut layers,
             active_layer,
-            PendingChainItem::Atom(atom),
+            &mut atom_pool,
+            atom,
         );
     }
 
     let mut cache = rustc_hash::FxHashMap::default();
-    let atoms = resolve_pending_chain_items(&root_items, &layers, &mut cache, string_table)?;
+    let atoms =
+        resolve_pending_chain_items(&root_items, &layers, &atom_pool, &mut cache, string_table)?;
     Ok(TemplateContent { atoms })
 }
 
@@ -259,6 +290,19 @@ fn push_chain_item(
         Some(layer_index) => layers[layer_index].fill_items.push(item),
         None => root_items.push(item),
     }
+}
+
+/// Stores an atom in the pool and routes an `AtomRef` item to the root list
+/// or the active receiving layer.
+fn push_pending_atom(
+    root_items: &mut Vec<PendingChainItem>,
+    layers: &mut [ChainLayer],
+    active_layer: Option<usize>,
+    atom_pool: &mut PendingAtomPool,
+    atom: TemplateAtom,
+) {
+    let item = PendingChainItem::AtomRef(atom_pool.push(atom));
+    push_chain_item(root_items, layers, active_layer, item);
 }
 
 /// Checks if a head atom is a wrapper template (has unresolved slots) that
@@ -292,6 +336,7 @@ fn receiver_template_from_head_atom(
 fn resolve_pending_chain_items(
     items: &[PendingChainItem],
     layers: &[ChainLayer],
+    atom_pool: &PendingAtomPool,
     cache: &mut rustc_hash::FxHashMap<usize, Template>,
     string_table: &StringTable,
 ) -> Result<Vec<TemplateAtom>, CompilerError> {
@@ -299,13 +344,13 @@ fn resolve_pending_chain_items(
 
     for item in items {
         match item {
-            PendingChainItem::Atom(atom) => atoms.push(atom.to_owned()),
+            PendingChainItem::AtomRef(atom_id) => atoms.push(atom_pool.get(*atom_id).clone()),
             PendingChainItem::LayerRef {
                 layer_index,
                 origin,
             } => {
                 let resolved_layer =
-                    resolve_chain_layer(*layer_index, layers, cache, string_table)?;
+                    resolve_chain_layer(*layer_index, layers, atom_pool, cache, string_table)?;
                 atoms.push(TemplateAtom::Content(TemplateSegment::new(
                     Expression::template(resolved_layer, Ownership::ImmutableOwned),
                     *origin,
@@ -322,6 +367,7 @@ fn resolve_pending_chain_items(
 fn resolve_chain_layer(
     layer_index: usize,
     layers: &[ChainLayer],
+    atom_pool: &PendingAtomPool,
     cache: &mut rustc_hash::FxHashMap<usize, Template>,
     string_table: &StringTable,
 ) -> Result<Template, CompilerError> {
@@ -338,7 +384,7 @@ fn resolve_chain_layer(
     }
 
     let resolved_fill_atoms =
-        resolve_pending_chain_items(&layer.fill_items, layers, cache, string_table)?;
+        resolve_pending_chain_items(&layer.fill_items, layers, atom_pool, cache, string_table)?;
     let resolved_fill = TemplateContent {
         atoms: resolved_fill_atoms,
     };
