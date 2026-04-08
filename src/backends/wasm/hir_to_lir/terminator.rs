@@ -46,9 +46,9 @@ pub(crate) fn lower_terminator(
             })
         }
         HirTerminator::Panic { .. } => Ok(WasmLirTerminator::Trap),
-        HirTerminator::Loop { .. } | HirTerminator::Match { .. } => Err(
-            CompilerError::lir_transformation("Wasm lowering does not yet support this terminator"),
-        ),
+        HirTerminator::Match { .. } => Err(CompilerError::lir_transformation(
+            "Wasm lowering does not yet support this terminator",
+        )),
     }
 }
 

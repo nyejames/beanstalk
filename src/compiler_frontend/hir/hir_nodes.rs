@@ -200,33 +200,11 @@ impl HirModule {
 pub struct HirRegion {
     id: RegionId,
     parent: Option<RegionId>,
-    #[allow(dead_code)] // Planned: user-defined region arenas in future memory model phases.
-    kind: RegionKind,
-}
-
-#[derive(Debug, Clone)]
-enum RegionKind {
-    Lexical, // compiler-generated
-    #[allow(dead_code)] // Planned: explicit user arena regions.
-    UserArena,
 }
 
 impl HirRegion {
     pub(crate) fn lexical(id: RegionId, parent: Option<RegionId>) -> Self {
-        Self {
-            id,
-            parent,
-            kind: RegionKind::Lexical,
-        }
-    }
-
-    #[allow(dead_code)] // Planned: user arena region construction.
-    pub(crate) fn user_arena(id: RegionId, parent: Option<RegionId>) -> Self {
-        Self {
-            id,
-            parent,
-            kind: RegionKind::UserArena,
-        }
+        Self { id, parent }
     }
 
     pub fn id(&self) -> RegionId {
@@ -362,12 +340,6 @@ pub enum HirTerminator {
         arms: Vec<HirMatchArm>, // Each arm's body block must end with Jump or Return
     },
 
-    #[allow(dead_code)] // Planned: canonical loop terminator for structured loop lowering.
-    Loop {
-        body: BlockId,
-        break_target: BlockId, // Explicit break destination
-    },
-
     Break {
         target: BlockId,
     },
@@ -470,7 +442,6 @@ pub enum HirExpressionKind {
     ///Construct an Option value
     /// - Some variant: value must be Some(expr)
     /// - None variant: value must be None
-    #[allow(dead_code)] // Planned: Option value construction in HIR.
     OptionConstruct {
         variant: OptionVariant,
         value: Option<Box<HirExpression>>, // None for None variant, Some for Some variant
@@ -478,7 +449,6 @@ pub enum HirExpressionKind {
 
     /// Construct a Result value
     /// Example: Ok(42) or Err("error")
-    #[allow(dead_code)] // Planned: Result value construction in HIR.
     ResultConstruct {
         variant: ResultVariant,
         value: Box<HirExpression>, // The wrapped value
@@ -526,53 +496,13 @@ pub struct HirMatchArm {
 pub enum HirPattern {
     Literal(HirExpression),
     Wildcard,
-
-    #[allow(dead_code)] // Planned: binding patterns for match/destructuring support.
-    Binding {
-        local: LocalId,
-        subpattern: Option<Box<HirPattern>>,
-    },
-
-    #[allow(dead_code)] // Planned: struct destructuring patterns.
-    Struct {
-        struct_id: StructId,
-        fields: Vec<(FieldId, HirPattern)>,
-    },
-
-    /// Match tuples/multiple returns
-    /// Essential for destructuring multi-return in Option/Result
-    #[allow(dead_code)] // Planned: tuple destructuring patterns.
-    Tuple {
-        elements: Vec<HirPattern>,
-    },
-
-    /// Match Option<T>
-    #[allow(dead_code)] // Planned: Option pattern matching.
-    Option {
-        variant: OptionVariant,
-        inner_pattern: Option<Box<HirPattern>>, // Pattern for the Some value
-    },
-
-    /// Match Result<T, E>
-    #[allow(dead_code)] // Planned: Result pattern matching.
-    Result {
-        variant: ResultVariant,
-        inner_pattern: Option<Box<HirPattern>>, // Pattern for Ok/Err value
-    },
-
-    /// Match collections
-    #[allow(dead_code)] // Planned: collection destructuring patterns with rest capture.
-    Collection {
-        elements: Vec<HirPattern>,
-        rest: Option<LocalId>, // For [x, y, ..rest] patterns
-    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum OptionVariant {
-    #[allow(dead_code)] // Planned: Option::Some variant handling.
+    #[allow(dead_code)]
+    // Kept until alpha Option<T> lowering emits explicit Some carriers.
     Some,
-    #[allow(dead_code)] // Planned: Option::None variant handling.
     None,
 }
 
@@ -584,9 +514,7 @@ pub enum HirBuiltinCastKind {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ResultVariant {
-    #[allow(dead_code)] // Planned: Result::Ok variant handling.
     Ok,
-    #[allow(dead_code)] // Planned: Result::Err variant handling.
     Err,
 }
 

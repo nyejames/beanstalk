@@ -33,7 +33,4 @@ pub(crate) struct WasmStaticData {
 pub(crate) enum WasmStaticDataKind {
     /// UTF-8 encoded string payload.
     Utf8StringBytes,
-    /// Reserved for arbitrary binary payloads in later phases.
-    #[allow(dead_code)] // Planned: arbitrary binary static segments.
-    RawBytes,
 }

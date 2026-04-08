@@ -271,7 +271,7 @@ fn representative_text_location_for_run(run: &[RenderPiece]) -> SourceLocation {
             RenderPiece::DynamicExpression(dynamic_piece) => {
                 return dynamic_piece.expression.location.clone();
             }
-            RenderPiece::HeadContent(_) | RenderPiece::Slot(_) | RenderPiece::Omitted => {}
+            RenderPiece::HeadContent(_) | RenderPiece::Slot(_) => {}
         }
     }
 

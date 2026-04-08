@@ -700,10 +700,7 @@ fn synthesizes_export_wrappers_with_stable_names() {
         .expect("Wasm lowering should succeed");
 
     assert_eq!(result.lir_module.exports.len(), 1);
-    let wrapper_id = match result.lir_module.exports[0].kind {
-        WasmExportKind::Function(function_id) => function_id,
-        _ => panic!("expected function export"),
-    };
+    let WasmExportKind::Function(wrapper_id) = result.lir_module.exports[0].kind;
     assert_eq!(result.lir_module.exports[0].export_name, "main");
 
     let wrapper = result

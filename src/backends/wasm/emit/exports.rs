@@ -36,9 +36,6 @@ pub(crate) fn build_export_section(
                     function_index,
                 );
             }
-            WasmExportKind::Memory => {
-                section.export(export.export_name.as_str(), ExportKind::Memory, 0);
-            }
         }
     }
 

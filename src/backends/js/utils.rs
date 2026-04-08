@@ -101,7 +101,6 @@ impl<'hir> JsEmitter<'hir> {
                 ..
             } => vec![*then_block, *else_block],
             HirTerminator::Match { arms, .. } => arms.iter().map(|arm| arm.body).collect(),
-            HirTerminator::Loop { body, break_target } => vec![*body, *break_target],
             HirTerminator::Break { target } => vec![*target],
             HirTerminator::Continue { target } => vec![*target],
             HirTerminator::Return(_) | HirTerminator::Panic { .. } => vec![],

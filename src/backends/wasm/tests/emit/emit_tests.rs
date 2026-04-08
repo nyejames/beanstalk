@@ -3,7 +3,7 @@ use crate::backends::wasm::emit::module::emit_lir_to_wasm_module;
 use crate::backends::wasm::lir::function::{WasmLirBlock, WasmLirFunction, WasmLirFunctionOrigin};
 use crate::backends::wasm::lir::instructions::{WasmCalleeRef, WasmLirStmt, WasmLirTerminator};
 use crate::backends::wasm::lir::linkage::{
-    WasmExport, WasmExportKind, WasmFunctionLinkage, WasmImport, WasmImportKind, WasmMemoryImport,
+    WasmExport, WasmExportKind, WasmFunctionLinkage, WasmImport, WasmImportKind,
 };
 use crate::backends::wasm::lir::module::{WasmLirModule, WasmStaticData, WasmStaticDataKind};
 use crate::backends::wasm::lir::types::{
@@ -241,25 +241,6 @@ fn rejects_unsupported_cfg_lowering_strategy() {
     .expect_err("unsupported cfg strategy should fail");
     assert_eq!(error.errors[0].error_type, ErrorType::WasmGeneration);
     assert!(error.errors[0].msg.contains("dispatcher-loop"));
-}
-
-#[test]
-fn rejects_non_function_imports_in_phase2_emission() {
-    let mut module = build_manual_lir_module();
-    module.imports.push(WasmImport {
-        id: WasmImportId(99),
-        module_name: "env".to_owned(),
-        item_name: "memory".to_owned(),
-        kind: WasmImportKind::Memory(WasmMemoryImport {
-            min_pages: 1,
-            max_pages: None,
-        }),
-    });
-
-    let error = emit_lir_to_wasm_module(&module, &WasmBackendRequest::default())
-        .expect_err("memory/global imports are out of scope for phase-2");
-    assert_eq!(error.error_type, ErrorType::WasmGeneration);
-    assert!(error.msg.contains("non-function imports"));
 }
 
 #[test]

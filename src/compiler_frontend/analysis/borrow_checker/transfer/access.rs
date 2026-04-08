@@ -534,9 +534,7 @@ pub(super) fn transfer_terminator(
             }
         }
 
-        HirTerminator::Loop { .. }
-        | HirTerminator::Break { .. }
-        | HirTerminator::Continue { .. } => {}
+        HirTerminator::Break { .. } | HirTerminator::Continue { .. } => {}
     }
 
     stats.terminator_fact = Some((

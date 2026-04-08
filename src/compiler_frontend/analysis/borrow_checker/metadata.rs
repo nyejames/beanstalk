@@ -758,9 +758,7 @@ fn collect_terminator_loaded_locals(terminator: &HirTerminator, visitor: &mut im
                 collect_expression_loaded_locals(message, visitor);
             }
         }
-        HirTerminator::Loop { .. }
-        | HirTerminator::Break { .. }
-        | HirTerminator::Continue { .. } => {}
+        HirTerminator::Break { .. } | HirTerminator::Continue { .. } => {}
     }
 }
 

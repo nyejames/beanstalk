@@ -3,7 +3,7 @@
 //! WHAT: verifies how HIR records entry, imported-start, and generated-fragment function origins.
 //! WHY: backends rely on stable function-origin metadata when deciding which functions to emit and call.
 
-use crate::compiler_frontend::ast::ast::{Ast, AstStartTemplateItem, ModuleExport};
+use crate::compiler_frontend::ast::ast::{Ast, AstStartTemplateItem};
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind, SourceLocation};
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
@@ -49,7 +49,6 @@ fn build_ast(
         module_constants: vec![],
         doc_fragments: vec![],
         entry_path,
-        external_exports: Vec::<ModuleExport>::new(),
         start_template_items,
         rendered_path_usages: vec![],
         warnings: vec![],

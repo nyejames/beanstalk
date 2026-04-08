@@ -10,11 +10,12 @@ mod state;
 mod transfer;
 mod types;
 
-#[allow(unused_imports)]
 pub(crate) use types::{
     BorrowAnalysis, BorrowCheckReport, BorrowCheckStats, BorrowDropSite, BorrowDropSiteKind,
-    BorrowStateSnapshot, LocalBorrowSnapshot, LocalMode,
+    LocalMode,
 };
+#[cfg(test)]
+pub(crate) use types::{BorrowStateSnapshot, LocalBorrowSnapshot};
 pub(crate) type BorrowFacts = BorrowAnalysis;
 
 use crate::borrow_log;
@@ -535,8 +536,6 @@ fn successors(terminator: &HirTerminator) -> Vec<BlockId> {
         } => vec![*then_block, *else_block],
 
         HirTerminator::Match { arms, .. } => arms.iter().map(|arm| arm.body).collect::<Vec<_>>(),
-
-        HirTerminator::Loop { body, break_target } => vec![*body, *break_target],
 
         HirTerminator::Break { target } | HirTerminator::Continue { target } => vec![*target],
 

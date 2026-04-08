@@ -14,13 +14,3 @@ pub(crate) mod runtime;
 
 #[cfg(test)]
 mod tests;
-
-#[allow(unused_imports)]
-pub(crate) use backend::{lower_hir_to_wasm_lir, lower_hir_to_wasm_module};
-#[allow(unused_imports)]
-pub(crate) use request::{
-    WasmBackendRequest, WasmCfgLoweringStrategy, WasmDebugFlags, WasmEmitOptions, WasmExportPolicy,
-    WasmHelperExportPolicy, WasmTargetFeatures,
-};
-#[allow(unused_imports)]
-pub(crate) use result::{WasmDebugOutputs, WasmLirBackendResult};

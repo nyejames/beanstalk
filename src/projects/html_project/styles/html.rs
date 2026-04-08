@@ -23,8 +23,6 @@ struct HtmlValidationTemplateFormatter;
 
 pub(crate) fn html_validation_formatter() -> Formatter {
     Formatter {
-        id: "html",
-        skip_if_already_formatted: false,
         pre_format_whitespace_passes: Vec::new(),
         formatter: Arc::new(HtmlValidationTemplateFormatter),
         post_format_whitespace_passes: Vec::new(),

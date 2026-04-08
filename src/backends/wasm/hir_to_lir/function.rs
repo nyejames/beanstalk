@@ -251,7 +251,6 @@ fn block_successors(terminator: &HirTerminator) -> Vec<BlockId> {
             ..
         } => vec![*then_block, *else_block],
         HirTerminator::Match { arms, .. } => arms.iter().map(|arm| arm.body).collect(),
-        HirTerminator::Loop { body, break_target } => vec![*body, *break_target],
         HirTerminator::Return(_) | HirTerminator::Panic { .. } => Vec::new(),
     }
 }

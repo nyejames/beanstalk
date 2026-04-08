@@ -8,28 +8,7 @@
 
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
 use crate::compiler_frontend::ast::templates::template::TemplateType;
-use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::string_interning::StringTable;
-
-/// Returns true when values of `data_type` can be coerced to string content
-/// at a template boundary.
-///
-/// WHAT: the policy check for template-renderable types.
-/// WHY: callers in the template subsystem should ask this question here
-/// instead of maintaining their own list of renderable types.
-#[allow(dead_code)] // Planned: used by template parsing to validate expression types at head/body boundaries.
-pub(crate) fn is_renderable_string_input(data_type: &DataType) -> bool {
-    matches!(
-        data_type,
-        DataType::StringSlice
-            | DataType::Int
-            | DataType::Float
-            | DataType::Bool
-            | DataType::Char
-            | DataType::Template
-            | DataType::TemplateWrapper
-    )
-}
 
 /// Attempts to coerce a constant expression kind to its string representation
 /// for use in template folding.

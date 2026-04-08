@@ -187,9 +187,7 @@ impl<'hir> JsEmitter<'hir> {
                     }
                 }
 
-                HirTerminator::Loop { .. }
-                | HirTerminator::Break { .. }
-                | HirTerminator::Continue { .. } => {
+                HirTerminator::Break { .. } | HirTerminator::Continue { .. } => {
                     return Ok(ControlFlowStrategy::Dispatcher);
                 }
 
@@ -279,11 +277,11 @@ impl<'hir> JsEmitter<'hir> {
             HirTerminator::Return(expression) => self.emit_return_terminator(expression),
             HirTerminator::Panic { message } => self.emit_panic_terminator(message),
 
-            HirTerminator::Loop { .. }
-            | HirTerminator::Break { .. }
-            | HirTerminator::Continue { .. } => Err(CompilerError::compiler_error(
-                "JavaScript backend: structured lowering does not support Loop/Break/Continue terminators",
-            )),
+            HirTerminator::Break { .. } | HirTerminator::Continue { .. } => {
+                Err(CompilerError::compiler_error(
+                    "JavaScript backend: structured lowering does not support Break/Continue terminators",
+                ))
+            }
         }
     }
 

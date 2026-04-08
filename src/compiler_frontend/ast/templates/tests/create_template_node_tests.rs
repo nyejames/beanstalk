@@ -785,14 +785,7 @@ fn html_directive_sets_formatter_via_handler_behavior() {
         .expect("html template should parse");
 
     assert_eq!(template.style.id, "html");
-    assert_eq!(
-        template
-            .style
-            .formatter
-            .as_ref()
-            .map(|formatter| formatter.id),
-        Some("html")
-    );
+    assert!(template.style.formatter.is_some());
 }
 
 #[test]
@@ -813,14 +806,7 @@ fn css_directive_sets_style_and_formatter_identity() {
         .expect("css template should parse");
 
     assert_eq!(template.style.id, "css");
-    assert_eq!(
-        template
-            .style
-            .formatter
-            .as_ref()
-            .map(|formatter| formatter.id),
-        Some("css")
-    );
+    assert!(template.style.formatter.is_some());
 }
 
 #[test]
@@ -834,14 +820,7 @@ fn markdown_directive_sets_style_and_formatter_identity() {
         .expect("markdown template should parse");
 
     assert_eq!(template.style.id, "markdown");
-    assert_eq!(
-        template
-            .style
-            .formatter
-            .as_ref()
-            .map(|formatter| formatter.id),
-        Some("markdown")
-    );
+    assert!(template.style.formatter.is_some());
 }
 
 #[test]
@@ -854,14 +833,7 @@ fn code_directive_sets_style_and_formatter_identity() {
         .expect("code template should parse");
 
     assert_eq!(template.style.id, "code");
-    assert_eq!(
-        template
-            .style
-            .formatter
-            .as_ref()
-            .map(|formatter| formatter.id),
-        Some("code")
-    );
+    assert!(template.style.formatter.is_some());
 }
 
 #[test]
@@ -882,14 +854,7 @@ fn escape_html_directive_sets_style_and_formatter_identity() {
         .expect("escape_html template should parse");
 
     assert_eq!(template.style.id, "escape_html");
-    assert_eq!(
-        template
-            .style
-            .formatter
-            .as_ref()
-            .map(|formatter| formatter.id),
-        Some("escape_html")
-    );
+    assert!(template.style.formatter.is_some());
 }
 
 #[test]
@@ -1685,14 +1650,7 @@ fn css_without_argument_uses_css_formatter() {
         .expect("css template should parse");
 
     assert_eq!(template.style.id, "css");
-    assert_eq!(
-        template
-            .style
-            .formatter
-            .as_ref()
-            .map(|formatter| formatter.id),
-        Some("css")
-    );
+    assert!(template.style.formatter.is_some());
 }
 
 #[test]
@@ -1712,14 +1670,7 @@ fn css_inline_argument_parses_correctly() {
         .expect("inline css template should parse");
 
     assert_eq!(template.style.id, "css");
-    assert_eq!(
-        template
-            .style
-            .formatter
-            .as_ref()
-            .map(|formatter| formatter.id),
-        Some("css")
-    );
+    assert!(template.style.formatter.is_some());
 }
 
 #[test]

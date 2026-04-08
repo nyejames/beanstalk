@@ -16,7 +16,6 @@ use crate::compiler_frontend::ast::expressions::expression::{Expression, Express
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::string_interning::StringTable;
-use crate::compiler_frontend::type_coercion::CompatibilityContext;
 use crate::compiler_frontend::type_coercion::compatibility::is_type_compatible;
 use crate::compiler_frontend::type_coercion::diagnostics::{
     NUMERIC_MIX_HINT, expected_found_clause,
@@ -173,7 +172,7 @@ fn validate_expression_result_type(
     // that needs promotion — declarations, mutations, struct constructors,
     // collection literals — calls coerce_expression_to_declared_type itself
     // and passes DataType::Inferred here instead.
-    if is_type_compatible(expected_type, actual_type, CompatibilityContext::Exact) {
+    if is_type_compatible(expected_type, actual_type) {
         return Ok(());
     }
 

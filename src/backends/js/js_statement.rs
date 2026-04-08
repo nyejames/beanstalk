@@ -349,11 +349,6 @@ impl<'hir> JsEmitter<'hir> {
                 self.emit_line("continue;");
             }
 
-            HirTerminator::Loop { body, .. } => {
-                self.emit_line(&format!("{state_identifier} = {};", body.0));
-                self.emit_line("continue;");
-            }
-
             HirTerminator::Break { target } | HirTerminator::Continue { target } => {
                 self.emit_line(&format!("{state_identifier} = {};", target.0));
                 self.emit_line("continue;");
@@ -381,14 +376,7 @@ impl<'hir> JsEmitter<'hir> {
                 let literal = self.lower_expr(value)?;
                 format!("{scrutinee_expression} === {literal}")
             }
-
             HirPattern::Wildcard => "true".to_owned(),
-
-            unsupported => {
-                return Err(CompilerError::compiler_error(format!(
-                    "JavaScript backend: unsupported match pattern {unsupported:?}",
-                )));
-            }
         };
 
         if let Some(guard) = &arm.guard {

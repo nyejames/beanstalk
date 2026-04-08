@@ -68,7 +68,7 @@ pub struct SlotPlaceholder {
 }
 
 impl SlotPlaceholder {
-    #[allow(dead_code)] // Used only in tests
+    #[cfg(test)]
     pub fn new(key: SlotKey) -> Self {
         Self {
             key,
@@ -101,7 +101,7 @@ pub struct TemplateContent {
 }
 
 impl TemplateContent {
-    #[allow(dead_code)] // Used only in tests and planned constructors
+    #[cfg(test)]
     pub fn new(content: Vec<Expression>) -> TemplateContent {
         TemplateContent {
             atoms: content
@@ -286,15 +286,7 @@ impl std::fmt::Debug for dyn TemplateFormatter {
 }
 
 #[derive(Clone, Debug)]
-#[allow(dead_code)] // Some fields (id, skip_if_already_formatted) are planned but not yet read
 pub struct Formatter {
-    // Concrete formatter identity used by the formatting pipeline and tests.
-    // This is intentionally separate from `Style.id`, which is the template's
-    // semantic style label after directive application.
-    pub id: &'static str,
-
-    // This formatter will be skipped if there is already a formatter for the template
-    pub skip_if_already_formatted: bool,
     // Pre-format whitespace passes are run before parser-specific formatting.
     // This allows directive-owned formatters (for example, `$markdown`) to opt into
     // shared dedent/trim behavior while still operating over raw template body text.
@@ -327,7 +319,6 @@ pub struct FormatterResult {
 pub struct Style {
     // Semantic style label for this parsed template. Set by directive effects
     // (`StyleDirectiveEffects.style_id`) or built-in directive handlers.
-    // This is distinct from `Formatter.id`, which identifies the actual formatter.
     pub id: &'static str,
 
     // A callback function for how the string content of the template should be parsed

@@ -330,13 +330,6 @@ impl<'a> HirDisplayContext<'a> {
                 out.push('}');
                 out
             }
-            HirTerminator::Loop { body, break_target } => {
-                format!(
-                    "loop body: {} break: {}",
-                    self.block_label(*body),
-                    self.block_label(*break_target)
-                )
-            }
             HirTerminator::Break { target } => format!("break {}", self.block_label(*target)),
             HirTerminator::Continue { target } => {
                 format!("continue {}", self.block_label(*target))
@@ -492,75 +485,6 @@ impl<'a> HirDisplayContext<'a> {
         match pattern {
             HirPattern::Literal(expr) => self.render_expression(expr),
             HirPattern::Wildcard => "_".to_owned(),
-            HirPattern::Binding { local, subpattern } => match subpattern {
-                Some(inner) => {
-                    format!(
-                        "{} @ {}",
-                        self.local_label(*local),
-                        self.render_pattern(inner)
-                    )
-                }
-                None => self.local_label(*local),
-            },
-            HirPattern::Struct { struct_id, fields } => {
-                let mut out = String::new();
-                let _ = write!(out, "{} {{ ", self.struct_label(*struct_id));
-                for (idx, (field_id, field_pattern)) in fields.iter().enumerate() {
-                    if idx > 0 {
-                        out.push_str(", ");
-                    }
-                    let _ = write!(
-                        out,
-                        "{}: {}",
-                        self.field_label(*field_id),
-                        self.render_pattern(field_pattern)
-                    );
-                }
-                out.push_str(" }");
-                out
-            }
-            HirPattern::Tuple { elements } => {
-                let joined = elements
-                    .iter()
-                    .map(|element| self.render_pattern(element))
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                if elements.len() == 1 {
-                    format!("({joined},)")
-                } else {
-                    format!("({joined})")
-                }
-            }
-            HirPattern::Option {
-                variant,
-                inner_pattern,
-            } => match (variant, inner_pattern) {
-                (OptionVariant::Some, Some(pattern)) => {
-                    format!("Some({})", self.render_pattern(pattern))
-                }
-                (OptionVariant::None, None) => "None".to_owned(),
-                (OptionVariant::Some, None) => "Some(_)".to_owned(),
-                (OptionVariant::None, Some(_)) => "None(_)".to_owned(),
-            },
-            HirPattern::Result {
-                variant,
-                inner_pattern,
-            } => match inner_pattern {
-                Some(pattern) => format!("{}({})", variant, self.render_pattern(pattern)),
-                None => variant.to_string(),
-            },
-            HirPattern::Collection { elements, rest } => {
-                let mut parts = elements
-                    .iter()
-                    .map(|element| self.render_pattern(element))
-                    .collect::<Vec<_>>();
-
-                if let Some(rest_local) = rest {
-                    parts.push(format!("..{}", self.local_label(*rest_local)));
-                }
-
-                format!("[{}]", parts.join(", "))
-            }
         }
     }
 

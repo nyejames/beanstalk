@@ -20,6 +20,9 @@ pub mod projects {
     pub mod cli;
     pub mod dev_server;
     pub(crate) mod html_project;
+    // Kept intentionally in pre-alpha as the future CLI entrypoint for interactive
+    // template experimentation. This remains outside the default command surface.
+    pub(crate) mod repl;
     pub(crate) mod routing;
     pub mod settings;
 }

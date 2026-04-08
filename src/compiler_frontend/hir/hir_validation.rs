@@ -669,13 +669,6 @@ impl<'a> HirValidator<'a> {
                 }
             }
 
-            HirTerminator::Loop { body, break_target } => {
-                self.require_block_id(*body, anchor)?;
-                self.require_same_function_cfg_owner(block_id, *body, anchor)?;
-                self.require_block_id(*break_target, anchor)?;
-                self.require_same_function_cfg_owner(block_id, *break_target, anchor)?;
-            }
-
             HirTerminator::Break { target } | HirTerminator::Continue { target } => {
                 self.require_block_id(*target, anchor)?;
                 self.require_same_function_cfg_owner(block_id, *target, anchor)?;
@@ -729,43 +722,6 @@ impl<'a> HirValidator<'a> {
             }
 
             HirPattern::Wildcard => {}
-
-            HirPattern::Binding { local, subpattern } => {
-                self.require_local_id(*local, anchor)?;
-                if let Some(subpattern) = subpattern {
-                    self.validate_pattern(subpattern, anchor)?;
-                }
-            }
-
-            HirPattern::Struct { struct_id, fields } => {
-                self.require_struct_id(*struct_id, anchor)?;
-                for (field_id, subpattern) in fields {
-                    self.require_field_owned_by(*field_id, *struct_id, anchor)?;
-                    self.validate_pattern(subpattern, anchor)?;
-                }
-            }
-
-            HirPattern::Tuple { elements } => {
-                for element in elements {
-                    self.validate_pattern(element, anchor)?;
-                }
-            }
-
-            HirPattern::Option { inner_pattern, .. } | HirPattern::Result { inner_pattern, .. } => {
-                if let Some(inner_pattern) = inner_pattern {
-                    self.validate_pattern(inner_pattern, anchor)?;
-                }
-            }
-
-            HirPattern::Collection { elements, rest } => {
-                for element in elements {
-                    self.validate_pattern(element, anchor)?;
-                }
-
-                if let Some(rest_local) = rest {
-                    self.require_local_id(*rest_local, anchor)?;
-                }
-            }
         }
 
         Ok(())
@@ -1150,7 +1106,6 @@ fn terminator_targets(terminator: &HirTerminator) -> Vec<BlockId> {
             ..
         } => vec![*then_block, *else_block],
         HirTerminator::Match { arms, .. } => arms.iter().map(|arm| arm.body).collect(),
-        HirTerminator::Loop { body, break_target } => vec![*body, *break_target],
         HirTerminator::Break { target } | HirTerminator::Continue { target } => vec![*target],
         HirTerminator::Return(_) | HirTerminator::Panic { .. } => Vec::new(),
     }

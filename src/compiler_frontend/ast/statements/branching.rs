@@ -16,7 +16,6 @@ use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
-use crate::compiler_frontend::type_coercion::CompatibilityContext;
 use crate::compiler_frontend::type_coercion::compatibility::is_type_compatible;
 use crate::{ast_log, return_rule_error, return_syntax_error};
 use std::collections::HashSet;
@@ -675,11 +674,7 @@ fn parse_literal_pattern(
         }
     };
 
-    if !is_type_compatible(
-        subject_type,
-        &pattern.data_type,
-        CompatibilityContext::Exact,
-    ) {
+    if !is_type_compatible(subject_type, &pattern.data_type) {
         return_rule_error!(
             format!(
                 "Match arm literal type '{}' does not match scrutinee type '{}'.",

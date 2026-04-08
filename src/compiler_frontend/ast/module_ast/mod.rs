@@ -23,18 +23,15 @@ mod pass_import_bindings;
 mod pass_type_resolution;
 pub(crate) mod scope_context;
 
-// Public surface: re-export everything that callers currently import from this module.
-// WHY: these items are used by HIR, borrow-checker, and test code through the
-// `ast::ast::*` path. The linter cannot detect cross-file usage of pub re-exports,
-// so false-positive "unused" warnings are suppressed here.
-#[allow(unused_imports)]
+// Public AST surface consumed by later compiler stages.
+#[cfg(test)]
+pub use crate::compiler_frontend::ast::templates::top_level_templates::AstDocFragment;
 pub use crate::compiler_frontend::ast::templates::top_level_templates::{
-    AstDocFragment, AstDocFragmentKind, AstStartTemplateItem,
+    AstDocFragmentKind, AstStartTemplateItem,
 };
-#[allow(unused_imports)]
-pub use pass_finalize::{Ast, AstBuildContext, ModuleExport};
+pub use pass_finalize::{Ast, AstBuildContext};
 pub use scope_context::{ContextKind, ScopeContext};
-#[allow(unused_imports)]
+#[cfg(test)]
 pub(crate) use scope_context::{ReceiverMethodCatalog, ReceiverMethodEntry};
 
 use crate::compiler_frontend::headers::parse_file_headers::Header;

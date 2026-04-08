@@ -359,10 +359,6 @@ fn collect_reachable_blocks(
                     queue.push_back(arm.body);
                 }
             }
-            HirTerminator::Loop { body, break_target } => {
-                queue.push_back(*body);
-                queue.push_back(*break_target);
-            }
             HirTerminator::Break { target } | HirTerminator::Continue { target } => {
                 queue.push_back(*target);
             }
@@ -409,7 +405,6 @@ fn collect_terminator_values(terminator: &HirTerminator, out: &mut FxHashSet<Hir
             }
         }
         HirTerminator::Jump { .. }
-        | HirTerminator::Loop { .. }
         | HirTerminator::Break { .. }
         | HirTerminator::Continue { .. } => {}
     }

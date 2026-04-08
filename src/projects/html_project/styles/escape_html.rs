@@ -64,8 +64,6 @@ impl TemplateFormatter for EscapeHtmlTemplateFormatter {
 
 pub(crate) fn escape_html_formatter() -> Formatter {
     Formatter {
-        id: "escape_html",
-        skip_if_already_formatted: false,
         pre_format_whitespace_passes: Vec::new(),
         formatter: Arc::new(EscapeHtmlTemplateFormatter),
         post_format_whitespace_passes: Vec::new(),

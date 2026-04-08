@@ -3,7 +3,7 @@
 //! WHAT: exercises the post-lowering HIR validator against valid and intentionally broken modules.
 //! WHY: validator coverage needs focused tests that isolate invariants from the rest of lowering.
 
-use crate::compiler_frontend::ast::ast::{Ast, AstDocFragment, AstDocFragmentKind, ModuleExport};
+use crate::compiler_frontend::ast::ast::{Ast, AstDocFragment, AstDocFragmentKind};
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind, SourceLocation};
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::statements::functions::{
@@ -75,7 +75,6 @@ fn build_ast(nodes: Vec<AstNode>, entry_path: InternedPath) -> Ast {
         module_constants: vec![],
         doc_fragments: vec![],
         entry_path,
-        external_exports: Vec::<ModuleExport>::new(),
         start_template_items: vec![],
         rendered_path_usages: vec![],
         warnings: vec![],

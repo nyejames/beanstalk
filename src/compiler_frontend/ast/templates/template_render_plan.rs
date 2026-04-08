@@ -32,9 +32,6 @@ pub enum RenderPiece {
     DynamicExpression(RenderExpressionPiece),
     /// Unresolved slot placeholder that will be filled later.
     Slot(SlotPlaceholder),
-    #[allow(dead_code)] // Reserved for formatter pipelines that suppress pieces before final output
-    /// Comment or suppressed content.
-    Omitted,
 }
 
 #[derive(Debug, Clone)]
@@ -225,9 +222,6 @@ impl TemplateRenderPlan {
                 RenderPiece::Slot(placeholder) => {
                     atoms.push(TemplateAtom::Slot(placeholder.clone()));
                 }
-                RenderPiece::Omitted => {
-                    // Omitted content produces no AST representation
-                }
             }
         }
 
@@ -247,7 +241,7 @@ impl TemplateRenderPlan {
                 ),
                 RenderPiece::ChildTemplate(p) => Some(p.expression.clone()),
                 RenderPiece::DynamicExpression(p) => Some(p.expression.clone()),
-                RenderPiece::Slot(_) | RenderPiece::Omitted => None,
+                RenderPiece::Slot(_) => None,
             })
             .collect()
     }

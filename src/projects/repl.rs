@@ -8,7 +8,7 @@ use std::env;
 use std::io::{self, Write};
 
 /// Start the REPL session
-#[allow(dead_code)] // Planned: CLI wiring for interactive template REPL mode.
+#[allow(dead_code)] // Intentionally kept as pre-alpha placeholder for upcoming CLI REPL wiring.
 pub fn start_repl_session() {
     say!(Red "REPL not yet implemented.");
     say!("Beanstalk string template REPL");

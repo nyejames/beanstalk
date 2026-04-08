@@ -19,71 +19,6 @@ This phase is a deliberate cleanup and consolidation checkpoint before pushing f
 The goal is to reduce structural risk now, remove stale paths while the compiler is still prealpha,
 and make later feature work land into a tighter codebase.
 
-### PR - Prune dead scaffolding and pre-alpha placeholder surfaces
-
-Use a deliberate cleanup pass to remove placeholder scaffolding that is not earning its keep in the current pre-alpha codebase.
-
-At this stage the compiler should bias toward a tight, current-design codebase rather than carrying around speculative helpers, dead modules, or broad dead-code allowances just because they might be useful later.
-Some placeholders are justified.
-Some are not.
-This PR is about auditing that boundary and pruning what no longer belongs in the active compiler path.
-
-This is not about deleting future ideas from docs or design notes.
-It is about removing dead or premature implementation surface from the production codebase when it is not part of the current alpha path.
-
-**Scope**
-- Frontend, build-system, project, and backend code where dead scaffolding or placeholder code is present
-- `#[allow(dead_code)]` / similar allowances
-- Not-yet-wired modules and helpers
-- Clearly deferred enum variants or utility paths that are not part of the current supported surface
-- Keep code that is genuinely part of the active alpha path even if a small amount of future-proofing remains necessary
-
-**Primary goals**
-- Reduce mental overhead from dead or speculative implementation surface
-- Stop central types and modules from becoming storage for deferred ideas
-- Make dead-code allowances rare and justified rather than ambient
-- Keep the main compiler path focused on the current supported design
-
-**Checklist**
-- Audit `#[allow(dead_code)]` usage across the codebase and categorize each one as:
-  - justified current placeholder
-  - near-term planned and necessary
-  - removable now
-- Remove not-yet-wired modules or helpers that are not on the active alpha path and are not providing current value.
-- Re-check crate/module exports so removed placeholder code is not still being carried by public or crate-level module structure.
-- Audit central enums and core data-model types for deferred variants that are not part of the current supported alpha surface.
-- For each deferred variant or placeholder type helper, choose one of:
-  - remove it now
-  - move it behind a more appropriate boundary
-  - keep it with a clear WHY comment explaining why it must exist before the feature itself lands
-- Remove utility methods that only exist for hypothetical future refactors if they are not actually used.
-- Tighten or remove stale comments that describe old transitional behavior rather than the current design.
-- Re-check tests and fixtures for coverage that only exists to preserve dead compatibility or removed scaffolding paths.
-- Do not keep transitional wrappers just to preserve an older internal API shape.
-- Add WHAT/WHY comments only where a remaining placeholder is genuinely justified and should stay for the current roadmap.
-
-**Suggested implementation order**
-1. Inventory dead-code allowances and placeholder modules first.
-2. Remove obviously dead or not-wired project/helpers second.
-3. Audit central enums/types for speculative variants third.
-4. Remove stale helper methods and transitional wrappers fourth.
-5. Run a readability pass over touched files so the final shape is tighter, not just smaller.
-
-**Testing checklist**
-- Re-run focused unit/integration tests around every touched subsystem.
-- Remove or update tests that were only protecting dead scaffolding rather than supported behavior.
-- Add regression coverage if pruning reveals a real dependency that should remain deliberate.
-- Re-run:
-  - `cargo check`
-  - `cargo test`
-  - `cargo run tests`
-
-**Done when**
-- Dead-code allowances are exceptional rather than routine.
-- The active compiler path is carrying less speculative ballast.
-- Central enums/types/modules read more like the current compiler and less like a storage area for future ideas.
-- The codebase is tighter and easier to reason about before Alpha.
-
 ### PR - Run a style-guide and readability sweep across the touched areas
 
 Finish the checkpoint by making the newly-refactored code read like deliberate final code rather than churn aftermath.
@@ -94,7 +29,7 @@ Finish the checkpoint by making the newly-refactored code read like deliberate f
 - Remove any remaining low-value comments that only narrate syntax or restate code.
 - Re-check that touched files are not carrying avoidable inline imports, broad dead-code allowances, or mixed responsibilities.
 - Run the normal verification loop:
-  - `cargo check`
+  - `cargo clippy`
   - `cargo test`
   - `cargo run tests`
 
@@ -317,7 +252,7 @@ The goal is to eliminate those assumptions where malformed user syntax, reserved
 - Add targeted failure fixtures for any reserved/deferred syntax path normalized during this pass.
 - Ensure diagnostics remain specific enough to prove the correct failure reason.
 - Re-run:
-  - `cargo check`
+  - `cargo clippy`
   - `cargo test`
   - `cargo run tests`
 
@@ -339,6 +274,16 @@ Prevent obviously stupid or misleading variable names that collide with builtin 
 
 **Done when**
 - Users cannot create confusing pseudo-builtin identifiers.
+
+### PR - Dev server hardening
+The dev server current can hang when clicking links and sometimes takes a very long time to respond to file changes and perform a rebuild.
+
+A review of the code should also take place to make sure the code is well orgsanised, following the codebase style guide and has helpful comments.
+
+**Done when**
+- Dev server no longer hangs when a page is refreshed multiple times
+- Dev server is always snappy and responsive to source file changes and performs fast rebuilds
+- Dev server code is well organised, commented and concise
 
 ---
 

@@ -4,7 +4,7 @@
 //! WHY: statement lowering owns most CFG construction and benefits from targeted regression coverage.
 
 use crate::compiler_frontend::ast::ast::{
-    Ast, AstDocFragment, AstDocFragmentKind, AstStartTemplateItem, ModuleExport,
+    Ast, AstDocFragment, AstDocFragmentKind, AstStartTemplateItem,
 };
 use crate::compiler_frontend::ast::ast_nodes::{
     AstNode, Declaration, ForLoopRange, MultiBindTarget, MultiBindTargetKind, NodeKind,
@@ -119,7 +119,6 @@ fn build_ast(nodes: Vec<AstNode>, entry_path: InternedPath) -> Ast {
         module_constants: vec![],
         doc_fragments: vec![],
         entry_path,
-        external_exports: Vec::<ModuleExport>::new(),
         start_template_items: vec![],
         rendered_path_usages: vec![],
         warnings: vec![],

@@ -112,8 +112,6 @@ impl TemplateFormatter for CodeTemplateFormatter {
 
 pub(crate) fn code_formatter(language: CodeLanguage) -> Formatter {
     Formatter {
-        id: "code",
-        skip_if_already_formatted: false,
         pre_format_whitespace_passes: Vec::new(),
         formatter: Arc::new(CodeTemplateFormatter { language }),
         post_format_whitespace_passes: Vec::new(),

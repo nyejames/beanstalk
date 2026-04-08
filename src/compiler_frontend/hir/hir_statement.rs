@@ -42,10 +42,6 @@ impl<'a> HirBuilder<'a> {
 
             NodeKind::StructDefinition(_, _) => Ok(()),
 
-            NodeKind::Warning(_) | NodeKind::Empty | NodeKind::Newline | NodeKind::Spaces(_) => {
-                Ok(())
-            }
-
             NodeKind::Return(_) | NodeKind::ReturnError(_) => return_hir_transformation_error!(
                 "Top-level return is not valid during HIR lowering",
                 self.hir_error_location(&node.location)
@@ -188,11 +184,7 @@ impl<'a> HirBuilder<'a> {
                 self.lower_for_statement(binding, range, body, &node.location)
             }
 
-            NodeKind::Warning(_)
-            | NodeKind::Operator(_)
-            | NodeKind::Empty
-            | NodeKind::Newline
-            | NodeKind::Spaces(_) => Ok(()),
+            NodeKind::Operator(_) => Ok(()),
 
             _ => return_hir_transformation_error!(
                 format!(

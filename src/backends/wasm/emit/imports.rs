@@ -36,13 +36,6 @@ pub(crate) fn build_import_section(
                     EntityType::Function(type_index),
                 );
             }
-            WasmImportKind::Memory(_) | WasmImportKind::Global(_) => {
-                return Err(CompilerError::compiler_error(format!(
-                    "Phase-2 Wasm emission does not support non-function imports: {:?}",
-                    import.id
-                ))
-                .with_error_type(ErrorType::WasmGeneration));
-            }
         }
     }
 

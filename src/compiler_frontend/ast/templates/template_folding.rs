@@ -89,9 +89,9 @@ fn fold_plan(
             RenderPiece::HeadContent(p) => Some(ExpressionKind::StringSlice(p.text)),
             RenderPiece::ChildTemplate(p) => Some(p.expression.kind.clone()),
             RenderPiece::DynamicExpression(p) => Some(p.expression.kind.clone()),
-            RenderPiece::Slot(_) | RenderPiece::Omitted => {
-                // Unfilled slots and omitted content intentionally fold to empty — the
-                // surrounding authored content still renders.
+            RenderPiece::Slot(_) => {
+                // Unfilled slots intentionally fold to empty; the surrounding authored
+                // content still renders.
                 None
             }
         };

@@ -32,8 +32,6 @@ struct CssValidationTemplateFormatter {
 
 pub(crate) fn css_validation_formatter(mode: CssFormatterMode) -> Formatter {
     Formatter {
-        id: "css",
-        skip_if_already_formatted: false,
         pre_format_whitespace_passes: Vec::new(),
         formatter: Arc::new(CssValidationTemplateFormatter { mode }),
         post_format_whitespace_passes: Vec::new(),

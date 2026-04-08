@@ -16,13 +16,9 @@ use crate::compiler_frontend::string_interning::StringTable;
 /// Output path separator style.
 ///
 /// `Portable` uses forward slashes and is the default for web output.
-/// `Native` is scaffolding for future build systems that need platform
-/// separators.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OutputPathStyle {
     Portable,
-    #[allow(dead_code)] // Scaffolding for future backend-specific output
-    Native,
 }
 
 /// Configuration for path string formatting.
@@ -78,7 +74,6 @@ pub fn format_compile_time_path(
 
     match config.output_style {
         OutputPathStyle::Portable => formatted.replace('\\', "/"),
-        OutputPathStyle::Native => formatted,
     }
 }
 

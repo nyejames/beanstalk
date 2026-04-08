@@ -41,16 +41,10 @@ pub(crate) struct WasmEmitPlan {
     pub data_offsets: FxHashMap<WasmStaticDataId, u32>,
     /// Static-data segment lengths cached for literal helper calls.
     pub data_lengths: FxHashMap<WasmStaticDataId, u32>,
-    /// Deterministic static-data emission order.
-    #[allow(dead_code)] // Planned: deterministic static-data ordering introspection.
-    pub data_order: Vec<WasmStaticDataId>,
     /// First aligned address available for dynamic heap allocation.
     pub heap_base: u32,
     /// `heap_top` mutable global index when runtime helpers are emitted.
     pub heap_top_global_index: Option<u32>,
-    /// Indicates whether helper functions/global should be emitted at all.
-    #[allow(dead_code)] // Planned: helper emission toggle used by later runtime plans.
-    pub should_emit_helpers: bool,
 }
 
 pub(crate) fn build_emit_plan(
@@ -75,16 +69,7 @@ pub(crate) fn build_emit_plan(
     // WHY: this is required by the Wasm binary model and keeps call/export mapping stable.
     let mut next_function_index = 0u32;
     for import in imports {
-        let signature = match &import.kind {
-            WasmImportKind::Function(signature) => signature,
-            WasmImportKind::Memory(_) | WasmImportKind::Global(_) => {
-                return Err(CompilerError::compiler_error(format!(
-                    "Phase-2 Wasm emission does not yet support non-function imports: {:?}",
-                    import.id
-                ))
-                .with_error_type(ErrorType::WasmGeneration));
-            }
-        };
+        let WasmImportKind::Function(signature) = &import.kind;
 
         intern_signature(signature, &mut type_entries, &mut type_index_by_signature);
         import_function_indices.insert(import.id, next_function_index);
@@ -127,7 +112,6 @@ pub(crate) fn build_emit_plan(
     let StaticDataLayoutResult {
         data_offsets,
         data_lengths,
-        data_order,
         heap_base,
     } = plan_static_data_layout(module)?;
     let heap_top_global_index = should_emit_helpers.then_some(0);
@@ -142,10 +126,8 @@ pub(crate) fn build_emit_plan(
         defined_function_type_indices,
         data_offsets,
         data_lengths,
-        data_order,
         heap_base,
         heap_top_global_index,
-        should_emit_helpers,
     })
 }
 
@@ -369,7 +351,6 @@ fn module_uses_runtime_helpers(module: &WasmLirModule) -> bool {
 struct StaticDataLayoutResult {
     data_offsets: FxHashMap<WasmStaticDataId, u32>,
     data_lengths: FxHashMap<WasmStaticDataId, u32>,
-    data_order: Vec<WasmStaticDataId>,
     heap_base: u32,
 }
 
@@ -381,7 +362,6 @@ fn plan_static_data_layout(
     // handle/pointer alignment assumptions for runtime helpers.
     let mut data_offsets = FxHashMap::default();
     let mut data_lengths = FxHashMap::default();
-    let mut data_order = Vec::new();
 
     let mut static_data = module.static_data.iter().collect::<Vec<_>>();
     static_data.sort_by_key(|segment| segment.id.0);
@@ -391,7 +371,6 @@ fn plan_static_data_layout(
         cursor = align_to(cursor, 8);
         data_offsets.insert(segment.id, cursor);
         data_lengths.insert(segment.id, segment.bytes.len() as u32);
-        data_order.push(segment.id);
         cursor = cursor
             .checked_add(segment.bytes.len() as u32)
             .ok_or_else(|| {
@@ -405,7 +384,6 @@ fn plan_static_data_layout(
     Ok(StaticDataLayoutResult {
         data_offsets,
         data_lengths,
-        data_order,
         heap_base: align_to(cursor, 8),
     })
 }

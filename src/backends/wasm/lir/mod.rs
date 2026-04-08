@@ -5,5 +5,4 @@ pub(crate) mod function;
 pub(crate) mod instructions;
 pub(crate) mod linkage;
 pub(crate) mod module;
-pub(crate) mod runtime;
 pub(crate) mod types;

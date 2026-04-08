@@ -7,7 +7,6 @@
 use super::build_state::AstBuildState;
 use crate::compiler_frontend::FrontendBuildProfile;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
-use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::ast::templates::top_level_templates::{
     AstDocFragment, AstStartTemplateItem, collect_and_strip_comment_templates,
     synthesize_start_template_items,
@@ -21,15 +20,8 @@ use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::paths::rendered_path_usage::RenderedPathUsage;
-use crate::compiler_frontend::string_interning::{StringId, StringTable};
+use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
-
-#[allow(dead_code)] // Used only in tests
-/// Exported symbol metadata captured at AST construction time.
-pub struct ModuleExport {
-    pub id: StringId,
-    pub signature: FunctionSignature,
-}
 
 /// Unified AST output for all source files in one compilation unit.
 pub struct Ast {
@@ -40,11 +32,6 @@ pub struct Ast {
     // The path to the original entry point file.
     pub entry_path: InternedPath,
 
-    // Exported out of the final compiled wasm module.
-    // Functions must use explicit 'export' syntax Token::Export to be exported.
-    // The only exception is the Main function, which is the start function of the entry point file.
-    #[allow(dead_code)] // Used only in tests
-    pub external_exports: Vec<ModuleExport>,
     pub start_template_items: Vec<AstStartTemplateItem>,
     pub rendered_path_usages: Vec<RenderedPathUsage>,
     pub warnings: Vec<CompilerWarning>,
@@ -111,7 +98,6 @@ impl<'a> AstBuildState<'a> {
             module_constants: self.module_constants,
             doc_fragments,
             entry_path: entry_dir,
-            external_exports: Vec::new(),
             start_template_items,
             rendered_path_usages: std::mem::take(&mut *self.rendered_path_usages.borrow_mut()),
             warnings: self.warnings,

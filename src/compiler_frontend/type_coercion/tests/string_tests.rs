@@ -1,27 +1,10 @@
 //! String coercion policy tests for `type_coercion::string`.
 
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
-use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::type_coercion::string::{
-    FoldedStringPiece, fold_expression_kind_to_string, is_renderable_string_input,
+    FoldedStringPiece, fold_expression_kind_to_string,
 };
-
-#[test]
-fn renderable_scalar_types_are_accepted() {
-    assert!(is_renderable_string_input(&DataType::StringSlice));
-    assert!(is_renderable_string_input(&DataType::Int));
-    assert!(is_renderable_string_input(&DataType::Float));
-    assert!(is_renderable_string_input(&DataType::Bool));
-    assert!(is_renderable_string_input(&DataType::Char));
-    assert!(is_renderable_string_input(&DataType::Template));
-}
-
-#[test]
-fn non_renderable_types_are_rejected() {
-    assert!(!is_renderable_string_input(&DataType::Range));
-    assert!(!is_renderable_string_input(&DataType::Inferred));
-}
 
 #[test]
 fn int_folds_to_string() {

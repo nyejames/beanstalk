@@ -724,9 +724,7 @@ fn collect_references_from_ast_node(node: &AstNode, references: &mut FxHashSet<I
             }
         }
 
-        NodeKind::Rvalue(expression)
-        | NodeKind::Template(expression)
-        | NodeKind::TopLevelTemplate(expression) => {
+        NodeKind::Rvalue(expression) => {
             collect_references_from_expression(expression, references);
         }
 
@@ -786,15 +784,7 @@ fn collect_references_from_ast_node(node: &AstNode, references: &mut FxHashSet<I
             }
         }
 
-        NodeKind::Warning(_)
-        | NodeKind::Config(_)
-        | NodeKind::Break
-        | NodeKind::Continue
-        | NodeKind::Slot
-        | NodeKind::Empty
-        | NodeKind::Operator(_)
-        | NodeKind::Newline
-        | NodeKind::Spaces(_) => {}
+        NodeKind::Break | NodeKind::Continue | NodeKind::Operator(_) => {}
     }
 }
 

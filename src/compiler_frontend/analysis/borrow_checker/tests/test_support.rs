@@ -5,7 +5,7 @@
 //! exercising instead of repeating setup noise.
 
 use crate::compiler_frontend::analysis::borrow_checker::{BorrowCheckReport, check_borrows};
-use crate::compiler_frontend::ast::ast::{Ast, ModuleExport};
+use crate::compiler_frontend::ast::ast::Ast;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind, SourceLocation};
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
@@ -104,7 +104,6 @@ pub(crate) fn build_ast(nodes: Vec<AstNode>, entry_path: InternedPath) -> Ast {
         module_constants: vec![],
         doc_fragments: vec![],
         entry_path,
-        external_exports: Vec::<ModuleExport>::new(),
         start_template_items: vec![],
         rendered_path_usages: vec![],
         warnings: vec![],

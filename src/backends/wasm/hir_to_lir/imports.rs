@@ -99,12 +99,5 @@ fn host_function_signature(function: WasmHostFunction) -> WasmLirSignature {
             params: vec![WasmAbiType::Handle],
             results: vec![],
         },
-        WasmHostFunction::DomCreateText
-        | WasmHostFunction::DomSetText
-        | WasmHostFunction::DomSetHtml => WasmLirSignature {
-            // Placeholder signatures for upcoming DOM integration.
-            params: vec![WasmAbiType::Handle],
-            results: vec![],
-        },
     }
 }

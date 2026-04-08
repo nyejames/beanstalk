@@ -8,16 +8,10 @@ use crate::compiler_frontend::tokenizer::tokens::TokenStream;
 /// when a `\r` is encountered in the source stream.
 ///
 /// `NormalizeToLf` is the default and recommended mode for compiler stability.
-///
-/// `PreserveRaw` is an escape hatch for cases where the build system wants
-/// string/template bodies to retain the original source line-ending form.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum NewlineMode {
     #[default]
     NormalizeToLf,
-
-    #[allow(dead_code)] // Deferred: needed when the REPL is implemented.
-    PreserveRaw,
 }
 
 /// Consume a newline that started with `\r`.
@@ -40,14 +34,6 @@ pub fn consume_carriage_return_newline(stream: &mut TokenStream) -> &'static str
         stream.position.char_column = 0;
     }
 
-    match stream.newline_mode {
-        NewlineMode::NormalizeToLf => "\n",
-        NewlineMode::PreserveRaw => {
-            if has_following_lf {
-                "\r\n"
-            } else {
-                "\r"
-            }
-        }
-    }
+    let _ = stream.newline_mode;
+    "\n"
 }

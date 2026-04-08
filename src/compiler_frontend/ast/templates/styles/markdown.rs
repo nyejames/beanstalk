@@ -168,8 +168,6 @@ impl TemplateFormatter for MarkdownTemplateFormatter {
 
 pub fn markdown_formatter() -> Formatter {
     Formatter {
-        id: "markdown",
-        skip_if_already_formatted: false,
         // `$markdown` opts into the shared default body dedent/trim pass explicitly.
         pre_format_whitespace_passes: vec![TemplateWhitespacePassProfile::default_template_body()],
         formatter: Arc::new(MarkdownTemplateFormatter),
