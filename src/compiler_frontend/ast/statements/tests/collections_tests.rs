@@ -156,6 +156,45 @@ fn parses_collection_mutators_and_length_calls() {
 }
 
 #[test]
+fn parses_collection_mutators_with_explicit_receiver_tilde_prefix() {
+    let (ast, string_table) = parse_single_file_ast(
+        "values ~= {1, 2, 3}\n~values.push(4)\n~values.set(1, 9)\n~values.remove(2)\nsize = values.length()\n",
+    );
+    let body = start_function_body(&ast, &string_table);
+
+    let NodeKind::Rvalue(push_expr) = &body[1].kind else {
+        panic!("expected push(...) statement");
+    };
+    assert_eq!(
+        runtime_method_builtin_kind(push_expr),
+        BuiltinMethodKind::CollectionPush
+    );
+
+    let NodeKind::Rvalue(set_expr) = &body[2].kind else {
+        panic!("expected set(...) statement");
+    };
+    assert_eq!(
+        runtime_method_builtin_kind(set_expr),
+        BuiltinMethodKind::CollectionSet
+    );
+
+    let NodeKind::Rvalue(remove_expr) = &body[3].kind else {
+        panic!("expected remove(...) statement");
+    };
+    assert_eq!(
+        runtime_method_builtin_kind(remove_expr),
+        BuiltinMethodKind::CollectionRemove
+    );
+}
+
+#[test]
+fn rejects_mutating_collection_method_without_explicit_receiver_tilde() {
+    let error = parse_single_file_ast_error("values ~= {1, 2, 3}\nvalues.push(4)\n");
+    assert!(error.msg.contains("push"), "{}", error.msg);
+    assert!(error.msg.contains("~"), "{}", error.msg);
+}
+
+#[test]
 fn rejects_pull_method_and_guides_to_remove() {
     let error = parse_single_file_ast_error("values ~= {1, 2, 3}\nvalues.pull(1)\n");
     assert!(error.msg.contains("pull(...)"), "{}", error.msg);

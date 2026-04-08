@@ -4,6 +4,6 @@ warnings = "forbid"
 error_type = "Rule"
 message_contains = [
   "Function 'mutate'",
+  "received '~' on a non-place argument",
   "parameter 'value'",
-  "non-place expression",
 ]

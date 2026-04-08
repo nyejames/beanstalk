@@ -4,7 +4,6 @@ warnings = "forbid"
 error_type = "Rule"
 message_contains = [
   "Function 'increment'",
+  "requires explicit '~'",
   "parameter 'value'",
-  "expects mutable access",
-  "Call this with `value = ~x`",
 ]

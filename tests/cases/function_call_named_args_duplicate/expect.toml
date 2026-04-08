@@ -3,7 +3,6 @@ mode = "failure"
 warnings = "forbid"
 error_type = "Rule"
 message_contains = [
-  "Function 'sum'",
-  "parameter 'a'",
+  "Parameter 'a'",
   "provided more than once",
 ]

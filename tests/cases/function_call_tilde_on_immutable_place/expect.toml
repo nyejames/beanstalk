@@ -4,8 +4,6 @@ warnings = "forbid"
 error_type = "Rule"
 message_contains = [
   "Function 'mutate'",
+  "received '~' on an immutable place",
   "parameter 'value'",
-  "immutable place",
-  "x",
-  "Declare `x` as mutable or remove `~`",
 ]

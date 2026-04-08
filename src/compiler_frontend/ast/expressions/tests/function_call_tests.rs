@@ -188,3 +188,127 @@ fn rejects_tilde_on_left_side_of_named_arg() {
             .contains("Mutable marker '~' is only allowed on the value side")
     );
 }
+
+#[test]
+fn rejects_missing_tilde_for_mutable_positional_parameter() {
+    let error = parse_single_file_ast_error(
+        r#"
+mutate |value ~Int|:
+    value = 5
+;
+
+x ~= 1
+mutate(x)
+"#,
+    );
+
+    assert!(error.msg.contains("Function 'mutate'"), "{}", error.msg);
+    assert!(error.msg.contains("requires explicit '~'"), "{}", error.msg);
+    assert!(error.msg.contains("parameter 'value'"), "{}", error.msg);
+}
+
+#[test]
+fn rejects_tilde_on_immutable_place_argument() {
+    let error = parse_single_file_ast_error(
+        r#"
+mutate |value ~Int|:
+    value = 5
+;
+
+x = 1
+mutate(~x)
+"#,
+    );
+
+    assert!(error.msg.contains("Function 'mutate'"), "{}", error.msg);
+    assert!(
+        error.msg.contains("received '~' on an immutable place"),
+        "{}",
+        error.msg
+    );
+    assert!(error.msg.contains("parameter 'value'"), "{}", error.msg);
+}
+
+#[test]
+fn rejects_tilde_on_non_place_argument_expression() {
+    let error = parse_single_file_ast_error(
+        r#"
+mutate |value ~Int|:
+    value = 5
+;
+
+mutate(~(1 + 2))
+"#,
+    );
+
+    assert!(error.msg.contains("Function 'mutate'"), "{}", error.msg);
+    assert!(
+        error.msg.contains("received '~' on a non-place argument"),
+        "{}",
+        error.msg
+    );
+    assert!(error.msg.contains("parameter 'value'"), "{}", error.msg);
+}
+
+#[test]
+fn rejects_missing_tilde_for_mutable_named_parameter() {
+    let error = parse_single_file_ast_error(
+        r#"
+increment |value ~Int| -> Int:
+    value = value + 1
+    return value
+;
+
+x ~= 10
+result = increment(value = x)
+io(result)
+"#,
+    );
+
+    assert!(error.msg.contains("Function 'increment'"), "{}", error.msg);
+    assert!(error.msg.contains("requires explicit '~'"), "{}", error.msg);
+    assert!(error.msg.contains("parameter 'value'"), "{}", error.msg);
+}
+
+#[test]
+fn duplicate_named_parameter_uses_canonical_diagnostic_text() {
+    let error = parse_single_file_ast_error(
+        r#"
+sum |a Int, b Int| -> Int:
+    return a + b
+;
+
+sum(a = 1, a = 2)
+"#,
+    );
+
+    assert!(
+        error.msg.contains("Parameter 'a' was provided more than once"),
+        "{}",
+        error.msg
+    );
+}
+
+#[test]
+fn unknown_named_parameter_lists_known_parameter_hint() {
+    let error = parse_single_file_ast_error(
+        r#"
+sum |a Int, b Int| -> Int:
+    return a + b
+;
+
+sum(a = 1, typo = 2)
+"#,
+    );
+
+    assert!(
+        error.msg.contains("Function 'sum' has no parameter named 'typo'"),
+        "{}",
+        error.msg
+    );
+    assert!(
+        error.msg.contains("Known parameters: 'a', 'b'"),
+        "{}",
+        error.msg
+    );
+}

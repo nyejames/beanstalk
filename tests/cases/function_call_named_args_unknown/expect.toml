@@ -5,5 +5,5 @@ error_type = "Rule"
 message_contains = [
   "Function 'sum'",
   "no parameter named 'typo'",
-  "Use a declared parameter name",
+  "Known parameters: 'a', 'b'",
 ]
