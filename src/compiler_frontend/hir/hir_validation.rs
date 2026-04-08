@@ -1097,7 +1097,7 @@ impl<'a> HirValidator<'a> {
     }
 }
 
-fn terminator_targets(terminator: &HirTerminator) -> Vec<BlockId> {
+pub fn terminator_targets(terminator: &HirTerminator) -> Vec<BlockId> {
     match terminator {
         HirTerminator::Jump { target, .. } => vec![*target],
         HirTerminator::If {
