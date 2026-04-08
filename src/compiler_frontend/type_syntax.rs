@@ -90,6 +90,10 @@ fn parse_required_type(
             token_stream.advance();
             DataType::StringSlice
         }
+        TokenKind::DatatypeChar => {
+            token_stream.advance();
+            DataType::Char
+        }
         TokenKind::DatatypeNone => {
             let (message, stage, suggestion) = none_type_annotation_error(context);
             return_syntax_error!(
@@ -341,6 +345,7 @@ pub(crate) fn append_data_type_tokens(
         DataType::StringSlice => {
             tokens.push(Token::new(TokenKind::DatatypeString, location.clone()))
         }
+        DataType::Char => tokens.push(Token::new(TokenKind::DatatypeChar, location.clone())),
         DataType::NamedType(type_name) => {
             tokens.push(Token::new(TokenKind::Symbol(*type_name), location.clone()))
         }

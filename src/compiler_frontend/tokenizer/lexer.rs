@@ -724,6 +724,7 @@ pub(crate) fn keyword_or_variable(
             "Int" => return_token!(TokenKind::DatatypeInt, stream),
             "String" => return_token!(TokenKind::DatatypeString, stream),
             "Bool" => return_token!(TokenKind::DatatypeBool, stream),
+            "Char" => return_token!(TokenKind::DatatypeChar, stream),
 
             "None" => return_token!(TokenKind::DatatypeNone, stream),
             "none" => return_token!(TokenKind::NoneLiteral, stream),

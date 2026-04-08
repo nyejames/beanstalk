@@ -791,6 +791,7 @@ fn create_header(
         | TokenKind::DatatypeFloat
         | TokenKind::DatatypeBool
         | TokenKind::DatatypeString
+        | TokenKind::DatatypeChar
         | TokenKind::OpenCurly
         | TokenKind::Symbol(_) => {
             if exported {

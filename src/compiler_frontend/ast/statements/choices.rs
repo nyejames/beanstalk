@@ -45,6 +45,7 @@ fn starts_choice_payload_type(token: &TokenKind) -> bool {
             | TokenKind::DatatypeFloat
             | TokenKind::DatatypeBool
             | TokenKind::DatatypeString
+            | TokenKind::DatatypeChar
             | TokenKind::DatatypeNone
             | TokenKind::OpenCurly
             | TokenKind::Mutable

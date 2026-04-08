@@ -1368,3 +1368,28 @@ id = "int_declaration_from_float_rejected"
 path = "int_declaration_from_float_rejected"
 tags = ["integration", "type-coercion"]
 
+
+[[case]]
+id = "char_basic"
+path = "char_basic"
+tags = ["integration", "char"]
+
+[[case]]
+id = "char_equality"
+path = "char_equality"
+tags = ["integration", "char"]
+
+[[case]]
+id = "char_ordering"
+path = "char_ordering"
+tags = ["integration", "char"]
+
+[[case]]
+id = "char_receiver_method"
+path = "char_receiver_method"
+tags = ["integration", "char"]
+
+[[case]]
+id = "char_in_template"
+path = "char_in_template"
+tags = ["integration", "char"]

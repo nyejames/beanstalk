@@ -60,6 +60,7 @@ pub enum BuiltinScalarReceiver {
     Float,
     Bool,
     String,
+    Char,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -168,6 +169,7 @@ impl DataType {
             DataType::StringSlice => {
                 Some(ReceiverKey::BuiltinScalar(BuiltinScalarReceiver::String))
             }
+            DataType::Char => Some(ReceiverKey::BuiltinScalar(BuiltinScalarReceiver::Char)),
             _ => None,
         }
     }
@@ -355,6 +357,7 @@ impl PartialEq for DataType {
             (DataType::True, DataType::True) => true,
             (DataType::False, DataType::False) => true,
             (DataType::StringSlice, DataType::StringSlice) => true,
+            (DataType::Char, DataType::Char) => true,
             (DataType::BuiltinErrorKind, DataType::BuiltinErrorKind) => true,
             (DataType::Float, DataType::Float) => true,
             (DataType::Int, DataType::Int) => true,

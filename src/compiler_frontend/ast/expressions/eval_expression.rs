@@ -395,7 +395,15 @@ fn resolve_binary_operator_type(
             ) => Ok(DataType::Bool),
             (DataType::StringSlice, Operator::Add) => Ok(DataType::StringSlice),
             (DataType::StringSlice, Operator::Equality | Operator::NotEqual) => Ok(DataType::Bool),
-            (DataType::Char, Operator::Equality | Operator::NotEqual) => Ok(DataType::Bool),
+            (
+                DataType::Char,
+                Operator::Equality
+                | Operator::NotEqual
+                | Operator::LessThan
+                | Operator::LessThanOrEqual
+                | Operator::GreaterThan
+                | Operator::GreaterThanOrEqual,
+            ) => Ok(DataType::Bool),
             (DataType::Int, Operator::Range) => Ok(DataType::Range),
             _ => invalid_operator_types(lhs, rhs, op, location, string_table),
         };

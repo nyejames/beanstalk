@@ -96,6 +96,9 @@ impl<'a> HirBuilder<'a> {
                         ReceiverKey::BuiltinScalar(BuiltinScalarReceiver::String) => {
                             Ok(self.intern_type_kind(HirTypeKind::String))
                         }
+                        ReceiverKey::BuiltinScalar(BuiltinScalarReceiver::Char) => {
+                            Ok(self.intern_type_kind(HirTypeKind::Char))
+                        }
                     })
                     .transpose()?;
 

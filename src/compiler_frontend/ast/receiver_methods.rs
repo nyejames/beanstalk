@@ -42,6 +42,7 @@ pub(crate) fn receiver_kind_label(receiver: &ReceiverKey, string_table: &StringT
         ReceiverKey::BuiltinScalar(BuiltinScalarReceiver::Float) => String::from("Float"),
         ReceiverKey::BuiltinScalar(BuiltinScalarReceiver::Bool) => String::from("Bool"),
         ReceiverKey::BuiltinScalar(BuiltinScalarReceiver::String) => String::from("String"),
+        ReceiverKey::BuiltinScalar(BuiltinScalarReceiver::Char) => String::from("Char"),
     }
 }
 

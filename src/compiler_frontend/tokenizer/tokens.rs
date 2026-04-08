@@ -400,6 +400,7 @@ pub enum TokenKind {
     DatatypeTrue,
     DatatypeFalse,
     DatatypeString,
+    DatatypeChar,
 
     /// For Errors
     Bang,
@@ -479,6 +480,7 @@ impl TokenKind {
             TokenKind::DatatypeFloat => Some(DataType::Float),
             TokenKind::DatatypeBool => Some(DataType::Bool),
             TokenKind::DatatypeString => Some(DataType::StringSlice),
+            TokenKind::DatatypeChar => Some(DataType::Char),
             _ => None,
         }
     }

@@ -322,6 +322,7 @@ fn parse_symbol_statement(
             | Some(TokenKind::DatatypeFloat)
             | Some(TokenKind::DatatypeBool)
             | Some(TokenKind::DatatypeString)
+            | Some(TokenKind::DatatypeChar)
             | Some(TokenKind::Mutable) => {
                 return_rule_error!(
                     format!("Variable '{}' is already declared. Shadowing is not supported in Beanstalk. Use '=' to mutate its value or choose a different variable name", string_table.resolve(id)),

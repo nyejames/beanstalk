@@ -132,6 +132,7 @@ impl FunctionSignature {
             | TokenKind::DatatypeFloat
             | TokenKind::DatatypeBool
             | TokenKind::DatatypeString
+            | TokenKind::DatatypeChar
             | TokenKind::DatatypeNone
             | TokenKind::OpenCurly
             | TokenKind::Symbol(_) => {
