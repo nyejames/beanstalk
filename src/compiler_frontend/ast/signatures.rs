@@ -22,27 +22,25 @@ use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::compiler_frontend::type_syntax::{TypeAnnotationContext, parse_type_annotation};
 use crate::return_syntax_error;
 
-/// Parses a `| name [~]Type [= default], ... |` parameter/field list.
+/// Parses a `| name [~]Type [= default], ... |` member list.
 ///
 /// WHAT: shared parser for both function parameters and struct field declarations.
 /// WHY: both syntactic forms are identical; one parser serves both.
 ///
 /// Starts after the opening `|`. Stops when `TypeParameterBracket` (`|`) is reached, leaving
 /// the stream positioned on the closing `|`.
-pub fn parse_parameters(
+pub fn parse_signature_members(
     token_stream: &mut FileTokens,
-    pure: &mut bool,
     string_table: &mut StringTable,
-    _is_const: bool, // False for function definitions, true for struct definitions
     expression_context: &ScopeContext,
 ) -> Result<Vec<Declaration>, CompilerError> {
-    let mut args: Vec<Declaration> = Vec::with_capacity(1);
-    let mut next_in_list: bool = true;
+    let mut members = Vec::with_capacity(1);
+    let mut expecting_member = true;
 
     while token_stream.index < token_stream.tokens.len() {
         match token_stream.current_token_kind().to_owned() {
             TokenKind::TypeParameterBracket => {
-                return Ok(args);
+                return Ok(members);
             }
 
             TokenKind::End => {
@@ -70,7 +68,7 @@ pub fn parse_parameters(
             }
 
             TokenKind::Symbol(arg_name) => {
-                if !next_in_list {
+                if !expecting_member {
                     return_syntax_error!(
                         "Should have a comma to separate arguments",
                         token_stream.current_location(),
@@ -82,25 +80,21 @@ pub fn parse_parameters(
                     )
                 }
 
-                let argument = parse_signature_member_declaration(
+                let member = parse_signature_member(
                     token_stream,
                     token_stream.src_path.append(arg_name),
                     expression_context,
                     string_table,
                 )?;
 
-                if argument.value.ownership.is_mutable() {
-                    *pure = false;
-                }
+                members.push(member);
 
-                args.push(argument);
-
-                next_in_list = false;
+                expecting_member = false;
             }
 
             TokenKind::Comma => {
                 token_stream.advance();
-                next_in_list = true;
+                expecting_member = true;
             }
 
             TokenKind::Must | TokenKind::TraitThis => {
@@ -147,7 +141,7 @@ pub fn parse_parameters(
         }
     }
 
-    Ok(args)
+    Ok(members)
 }
 
 /// Parses a single `name [~]Type [= default]` member declaration inside a `| ... |` list.
@@ -157,7 +151,7 @@ pub fn parse_parameters(
 /// avoids drift between the two forms.
 ///
 /// Starts with the stream positioned on the name token (already matched by the caller).
-pub fn parse_signature_member_declaration(
+fn parse_signature_member(
     token_stream: &mut FileTokens,
     full_name: InternedPath,
     expression_context: &ScopeContext,

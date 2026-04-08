@@ -65,15 +65,15 @@ pub(super) fn parse_error_builtin_member(
     string_table: &mut StringTable,
 ) -> Result<Option<AstNode>, CompilerError> {
     let MemberStepContext {
-        current_node,
-        current_type,
+        receiver_node,
+        receiver_type,
         member_name,
         member_location,
         receiver_access_mode,
         scope_context,
     } = context;
 
-    if !is_builtin_error_data_type(current_type, string_table) {
+    if !is_builtin_error_data_type(receiver_type, string_table) {
         return Ok(None);
     }
 
@@ -151,7 +151,7 @@ pub(super) fn parse_error_builtin_member(
 
     Ok(Some(AstNode {
         kind: NodeKind::MethodCall {
-            receiver: Box::new(current_node),
+            receiver: Box::new(receiver_node),
             method_path: error_builtin_path(builtin, string_table),
             method: member_name,
             builtin: Some(error_builtin_kind(builtin)),

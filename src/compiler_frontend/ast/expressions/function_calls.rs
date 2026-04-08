@@ -1,3 +1,11 @@
+//! Function-call parsing and result-handling suffix integration.
+//!
+//! WHAT: parses raw call argument syntax, resolves user/host call signatures, and applies the
+//! `!` result-handling forms that can follow a call expression.
+//! WHY: call parsing sits at the boundary between general expression parsing and call-specific
+//! validation, so keeping that flow together makes the refactor seams easier to follow.
+
+use crate::compiler_frontend::ast::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
 use crate::compiler_frontend::ast::expressions::call_argument::{CallAccessMode, CallArgument};
 use crate::compiler_frontend::ast::expressions::call_validation::{
@@ -5,7 +13,6 @@ use crate::compiler_frontend::ast::expressions::call_validation::{
 };
 use crate::compiler_frontend::ast::expressions::expression::ResultCallHandling;
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
-use crate::compiler_frontend::ast::module_ast::ScopeContext;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::ast::statements::result_handling::{
     ResultHandledCall, is_result_propagation_boundary, parse_named_result_handler_call,
@@ -13,14 +20,13 @@ use crate::compiler_frontend::ast::statements::result_handling::{
 };
 use crate::compiler_frontend::compiler_errors::{CompilerError, SourceLocation};
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
-use crate::compiler_frontend::datatypes::DataType;
+use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::host_functions::HostFunctionDef;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::{ast_log, return_rule_error, return_syntax_error, return_type_error};
 
-// Built-in functions will do their own thing
 pub fn parse_function_call(
     token_stream: &mut FileTokens,
     id: &InternedPath,
@@ -30,8 +36,8 @@ pub fn parse_function_call(
     warnings: Option<&mut Vec<CompilerWarning>>,
     string_table: &mut StringTable,
 ) -> Result<AstNode, CompilerError> {
-    // Assumes we're starting at the first token after the name of the function call
-    // Check if it's a host function first
+    // Host calls share the same argument parser, but they reject named targets until
+    // host metadata carries stable public parameter names.
     if let Some(host_func) = &context
         .host_registry
         .get_function(id.name_str(string_table).unwrap_or(""))
@@ -39,9 +45,8 @@ pub fn parse_function_call(
         return parse_host_function_call(token_stream, host_func, context, string_table);
     }
 
-    // Create expressions until hitting a closed parenthesis
     let raw_args = parse_call_arguments(token_stream, context, string_table)?;
-    let args = validate_user_function_call_arguments(
+    let args = resolve_user_function_call_arguments(
         id,
         &raw_args,
         &signature.parameters,
@@ -171,15 +176,14 @@ pub fn parse_function_call(
     })
 }
 
+/// Parses the raw `(...)` argument list shared by all call-shaped syntax.
 pub fn parse_call_arguments(
     token_stream: &mut FileTokens,
     context: &ScopeContext,
     string_table: &mut StringTable,
 ) -> Result<Vec<CallArgument>, CompilerError> {
-    // Starts at the first token after the function name
     ast_log!("Creating function call arguments");
 
-    // make sure there is an open parenthesis
     if token_stream.current_token_kind() != &TokenKind::OpenParenthesis {
         return_syntax_error!(
             format!(
@@ -299,7 +303,7 @@ pub fn parse_call_arguments(
             token_stream,
             context,
             &mut DataType::Inferred,
-            &crate::compiler_frontend::datatypes::Ownership::ImmutableOwned,
+            &Ownership::ImmutableOwned,
             false,
             string_table,
         )?;
@@ -338,7 +342,7 @@ pub fn parse_call_arguments(
     Ok(args)
 }
 
-fn validate_user_function_call_arguments(
+fn resolve_user_function_call_arguments(
     function_name: &InternedPath,
     raw_args: &[CallArgument],
     parameters: &[Declaration],
@@ -355,7 +359,7 @@ fn validate_user_function_call_arguments(
     )
 }
 
-/// Parse a host function call
+/// Parses a host-function call using the shared argument resolver plus host-only validation.
 pub fn parse_host_function_call(
     token_stream: &mut FileTokens,
     host_func: &HostFunctionDef,
@@ -389,9 +393,8 @@ pub fn parse_host_function_call(
         location.clone(),
         string_table,
     )?;
-    validate_host_function_call(host_func, &args, location.clone(), string_table)?;
+    validate_host_specific_call_rules(host_func, &args, location.clone(), string_table)?;
 
-    // Create an interned path name from the name
     let name = InternedPath::from_single_str(host_func.name, string_table);
 
     Ok(AstNode {
@@ -408,73 +411,13 @@ pub fn parse_host_function_call(
     })
 }
 
-/// Validate host-only special call constraints.
-pub fn validate_host_function_call(
+/// Validates host-specific semantic rules that sit on top of shared call validation.
+fn validate_host_specific_call_rules(
     function: &HostFunctionDef,
     args: &[CallArgument],
     location: SourceLocation,
     string_table: &StringTable,
 ) -> Result<(), CompilerError> {
-    // Check argument count
-    if args.len() != function.parameters.len() {
-        let expected = function.parameters.len();
-        let got = args.len();
-
-        if expected == 0 {
-            return_type_error!(
-                format!(
-                    "Function '{}' doesn't take any arguments, but {} {} provided. Did you mean to call it without parentheses?",
-                    function.name,
-                    got,
-                    if got == 1 { "was" } else { "were" }
-                ),
-                location,
-                {
-                    CompilationStage => "Function Call Validation",
-                    PrimarySuggestion => "Remove the parentheses and arguments",
-                }
-            );
-        } else if got == 0 {
-            return_type_error!(
-                format!(
-                    "Function '{}' expects {} argument{}, but none were provided",
-                    function.name,
-                    expected,
-                    if expected == 1 { "" } else { "s" }
-                ),
-                location,
-                {
-                    CompilationStage => "Function Call Validation",
-                    PrimarySuggestion => "Add the required arguments to the function call",
-                }
-            );
-        } else {
-            return_type_error!(
-                format!(
-                    "Function '{}' expects {} argument{}, got {}. {}",
-                    function.name,
-                    expected,
-                    if expected == 1 { "" } else { "s" },
-                    got,
-                    if got > expected {
-                        "Too many arguments provided"
-                    } else {
-                        "Not enough arguments provided"
-                    }
-                ),
-                location,
-                {
-                    CompilationStage => "Function Call Validation",
-                    PrimarySuggestion => if got > expected {
-                        "Remove extra arguments"
-                    } else {
-                        "Add missing arguments"
-                    },
-                }
-            );
-        }
-    }
-
     if function.name == crate::compiler_frontend::host_functions::IO_FUNC_NAME {
         for (i, argument) in args.iter().enumerate() {
             if argument.value.data_type.is_result() {

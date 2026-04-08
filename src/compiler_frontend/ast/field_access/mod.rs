@@ -35,15 +35,15 @@ pub(crate) enum ReceiverAccessMode {
 /// WHY: each member handler needs the same context, and this keeps helper signatures compact.
 #[derive(Clone)]
 pub(super) struct MemberStepContext<'a> {
-    pub current_node: AstNode,
-    pub current_type: &'a DataType,
+    pub receiver_node: AstNode,
+    pub receiver_type: &'a DataType,
     pub member_name: StringId,
     pub member_location: SourceLocation,
     pub receiver_access_mode: ReceiverAccessMode,
     pub scope_context: &'a ScopeContext,
 }
 
-fn reference_base_node(
+fn receiver_reference_node(
     reference_arg: &Declaration,
     context: &ScopeContext,
     base_location: SourceLocation,
@@ -70,13 +70,13 @@ fn reference_base_node(
     }
 }
 
-fn current_node_type(node: &AstNode) -> Result<DataType, CompilerError> {
+fn receiver_node_type(node: &AstNode) -> Result<DataType, CompilerError> {
     Ok(node.get_expr()?.data_type)
 }
 
 pub(crate) fn parse_postfix_chain(
     token_stream: &mut FileTokens,
-    mut current_node: AstNode,
+    mut receiver_node: AstNode,
     receiver_access_mode: ReceiverAccessMode,
     context: &ScopeContext,
     string_table: &mut StringTable,
@@ -108,11 +108,11 @@ pub(crate) fn parse_postfix_chain(
         }
 
         let member_name = parse_member_name(token_stream, string_table)?;
-        let current_type = current_node_type(&current_node)?;
+        let receiver_type = receiver_node_type(&receiver_node)?;
         let member_location = token_stream.current_location();
         let member_context = MemberStepContext {
-            current_node: current_node.to_owned(),
-            current_type: &current_type,
+            receiver_node: receiver_node.to_owned(),
+            receiver_type: &receiver_type,
             member_name,
             member_location: member_location.clone(),
             receiver_access_mode,
@@ -122,14 +122,14 @@ pub(crate) fn parse_postfix_chain(
         if let Some(field_access) =
             parse_field_member_access(token_stream, member_context.to_owned(), string_table)?
         {
-            current_node = field_access;
+            receiver_node = field_access;
             continue;
         }
 
         if let Some(collection_builtin_call) =
             parse_collection_builtin_member(token_stream, member_context.to_owned(), string_table)?
         {
-            current_node = collection_builtin_call;
+            receiver_node = collection_builtin_call;
             saw_method_call = true;
             continue;
         }
@@ -137,7 +137,7 @@ pub(crate) fn parse_postfix_chain(
         if let Some(error_builtin_call) =
             parse_error_builtin_member(token_stream, member_context.to_owned(), string_table)?
         {
-            current_node = error_builtin_call;
+            receiver_node = error_builtin_call;
             saw_method_call = true;
             continue;
         }
@@ -145,7 +145,7 @@ pub(crate) fn parse_postfix_chain(
         if let Some(receiver_method_call) =
             parse_receiver_method_call(token_stream, member_context, string_table)?
         {
-            current_node = receiver_method_call;
+            receiver_node = receiver_method_call;
             saw_method_call = true;
             continue;
         }
@@ -154,7 +154,7 @@ pub(crate) fn parse_postfix_chain(
             format!(
                 "Property or method '{}' not found for '{}'.",
                 string_table.resolve(member_name),
-                current_type.display_with_table(string_table)
+                receiver_type.display_with_table(string_table)
             ),
             member_location,
             {
@@ -167,7 +167,7 @@ pub(crate) fn parse_postfix_chain(
     if receiver_access_mode == ReceiverAccessMode::Mutable && !saw_method_call {
         return_rule_error!(
             "Mutable receiver marker '~' is only valid for receiver method calls like '~value.method(...)'.",
-            current_node.location.clone(),
+            receiver_node.location.clone(),
             {
                 CompilationStage => "AST Construction",
                 PrimarySuggestion => "Apply '~' directly to a receiver method call",
@@ -175,7 +175,7 @@ pub(crate) fn parse_postfix_chain(
         );
     }
 
-    Ok(current_node)
+    Ok(receiver_node)
 }
 
 pub fn parse_field_access(
@@ -208,7 +208,7 @@ pub(crate) fn parse_field_access_with_receiver_access(
 
     parse_postfix_chain(
         token_stream,
-        reference_base_node(base_arg, context, base_location),
+        receiver_reference_node(base_arg, context, base_location),
         receiver_access_mode,
         context,
         string_table,

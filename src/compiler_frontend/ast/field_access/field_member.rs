@@ -14,8 +14,8 @@ use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::return_rule_error;
 
-fn field_member(current_type: &DataType, field_id: StringId) -> Option<Declaration> {
-    current_type.struct_fields().and_then(|fields| {
+fn field_member(receiver_type: &DataType, field_id: StringId) -> Option<Declaration> {
+    receiver_type.struct_fields().and_then(|fields| {
         fields
             .iter()
             .find(|field| field.id.name() == Some(field_id))
@@ -63,15 +63,15 @@ pub(super) fn parse_field_member_access(
     string_table: &StringTable,
 ) -> Result<Option<AstNode>, CompilerError> {
     let MemberStepContext {
-        current_node,
-        current_type,
+        receiver_node,
+        receiver_type,
         member_name,
         member_location,
         scope_context,
         ..
     } = context;
 
-    let Some(field) = field_member(current_type, member_name) else {
+    let Some(field) = field_member(receiver_type, member_name) else {
         return Ok(None);
     };
 
@@ -103,7 +103,7 @@ pub(super) fn parse_field_member_access(
     } else {
         AstNode {
             kind: NodeKind::FieldAccess {
-                base: Box::new(current_node),
+                base: Box::new(receiver_node),
                 field: member_name,
                 data_type: field.value.data_type,
                 ownership: field.value.ownership,

@@ -1,7 +1,13 @@
+//! Struct field-list parsing and default-value validation.
+//!
+//! WHAT: parses `Struct = | ... |` field declarations using the shared signature-member parser.
+//! WHY: struct defaults have extra compile-time constraints that should stay separate from the
+//! general shared `| ... |` parsing logic.
+
 use crate::compiler_frontend::ast::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
-use crate::compiler_frontend::ast::signatures::parse_parameters;
+use crate::compiler_frontend::ast::signatures::parse_signature_members;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::FileTokens;
@@ -12,18 +18,15 @@ pub fn create_struct_definition(
     context: &ScopeContext,
     string_table: &mut StringTable,
 ) -> Result<Vec<Declaration>, CompilerError> {
-    // Should start at the parameter bracket
-    // Need to skip it,
     token_stream.advance();
 
-    let arguments = parse_parameters(token_stream, &mut true, string_table, true, context)?;
+    let fields = parse_signature_members(token_stream, string_table, context)?;
 
-    // Skip the Parameters token
     token_stream.advance();
 
-    validate_struct_default_values(&arguments, string_table)?;
+    validate_struct_default_values(&fields, string_table)?;
 
-    Ok(arguments)
+    Ok(fields)
 }
 
 fn validate_struct_default_values(

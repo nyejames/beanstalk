@@ -1,3 +1,10 @@
+//! Shared call-argument normalization and validation.
+//!
+//! WHAT: resolves raw parsed arguments into slot-ordered call arguments and enforces the shared
+//! rules for named targets, defaults, type compatibility, and explicit access mode.
+//! WHY: function calls, struct constructors, receiver methods, and builtin members all need the
+//! same argument policy even though they build different AST nodes afterward.
+
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::call_argument::{CallAccessMode, CallArgument};
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
@@ -24,6 +31,7 @@ pub(crate) struct ParameterExpectation {
     pub default_value: Option<Expression>,
 }
 
+/// Builds one expectation per user-defined parameter declaration.
 pub(crate) fn expectations_from_user_parameters(
     parameters: &[Declaration],
 ) -> Vec<ParameterExpectation> {
@@ -69,8 +77,8 @@ pub(crate) fn expectations_from_struct_fields(fields: &[Declaration]) -> Vec<Par
         .map(|field| ParameterExpectation {
             name: field.id.name(),
             data_type: field.value.data_type.clone(),
-            // Constructor arguments are always passed by shared value; the field's own
-            // declared mutability applies after construction, not at the call site.
+            // Constructor arguments initialize a fresh value, so field mutability becomes
+            // relevant only after construction, not at the call site.
             access_mode: ExpectedAccessMode::Shared,
             default_value: match field.value.kind {
                 ExpressionKind::NoValue => None,
@@ -86,6 +94,10 @@ pub(crate) fn expectations_from_receiver_method_signature(
     expectations_from_user_parameters(parameters_excluding_receiver)
 }
 
+/// Resolves raw parsed call arguments into declaration-order slots.
+///
+/// WHAT: this is the shared normalization boundary for all call-shaped syntax.
+/// WHY: once one caller changes argument policy, every other caller should inherit it from here.
 pub(crate) fn resolve_call_arguments(
     call_name: &str,
     args: &[CallArgument],

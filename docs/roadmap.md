@@ -13,44 +13,7 @@ These are the non-negotiable conditions for starting Alpha.
 - Compiler diagnostics are useful, accurate, consistently formatted, and visually moving toward the Nushell-style goal.
 - Cross-platform output is stable enough that Windows and macOS do not produce avoidable golden drift.
 
-## Phase 1 - Code review checkpoint
-
-This phase is a deliberate cleanup and consolidation checkpoint before pushing further on language surface.
-The goal is to reduce structural risk now, remove stale paths while the compiler is still prealpha,
-and make later feature work land into a tighter codebase.
-
-### PR - Run a style-guide and readability sweep across the touched areas
-
-Finish the checkpoint by making the newly-refactored code read like deliberate final code rather than churn aftermath.
-
-**Checklist**
-- Add or tighten file-level docs and WHAT/WHY comments where the refactors introduced new seams.
-- Normalize naming and function boundaries to match `docs/codebase-style-guide.md`.
-- Remove any remaining low-value comments that only narrate syntax or restate code.
-- Re-check that touched files are not carrying avoidable inline imports, broad dead-code allowances, or mixed responsibilities.
-- Run the normal verification loop:
-  - `cargo clippy`
-  - `cargo test`
-  - `cargo run tests`
-
-**Done when**
-- The refactor checkpoint leaves the codebase clearer, not just differently arranged.
-- The touched subsystems read consistently with the style guide.
-- This phase ends with the compiler in a tighter shape for the next language-feature work.
-
 ## Phase 2 - close the core language feature gaps
-
-### PR - Consolidate Char across the frontend and backend surface
-
-Stop Char being a neglected primitive with uneven support.
-
-**Checklist**
-- Audit tokenizer, parser, AST typing, HIR typing, evaluation, lowering, and backend handling for Char.
-- Fill any missing type-checking or lowering gaps.
-- Add parser, type, runtime/backend, and integration coverage.
-
-**Done when**
-- Char behaves like a deliberate core datatype rather than a half-kept edge type.
 
 ### PR - Harden structs, records, and methods together
 

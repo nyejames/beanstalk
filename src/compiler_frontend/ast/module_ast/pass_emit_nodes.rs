@@ -206,7 +206,7 @@ impl<'a> AstBuildState<'a> {
                 HeaderKind::Constant { .. } | HeaderKind::Choice { .. } => {}
 
                 // --- Const templates ---
-                HeaderKind::ConstTemplate { .. } => {
+                HeaderKind::ConstTemplate => {
                     let mut template_tokens = header.tokens;
                     let context = ScopeContext::new(
                         ContextKind::Constant,

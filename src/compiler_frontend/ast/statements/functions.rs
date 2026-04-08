@@ -5,7 +5,7 @@
 
 use crate::compiler_frontend::ast::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
-use crate::compiler_frontend::ast::signatures::parse_parameters;
+use crate::compiler_frontend::ast::signatures::parse_signature_members;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::interned_path::InternedPath;
@@ -14,8 +14,7 @@ use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, To
 use crate::compiler_frontend::type_syntax::{TypeAnnotationContext, parse_type_annotation};
 use crate::{return_syntax_error, return_type_error};
 
-// Arg names and types are required
-// Can have default values
+/// One function return slot, either a concrete value type or a parameter-alias set.
 #[derive(Clone, Debug, PartialEq)]
 pub enum FunctionReturn {
     Value(DataType),
@@ -100,26 +99,17 @@ impl FunctionSignature {
         scope: &InternedPath,
         parent_context: &ScopeContext,
     ) -> Result<Self, CompilerError> {
-        // Should start at the Colon
-        // Need to skip it,
         token_stream.advance();
 
         let signature_context = ScopeContext::new_constant(scope.to_owned(), parent_context);
-        let parameters = parse_parameters(
-            token_stream,
-            &mut true,
-            string_table,
-            false,
-            &signature_context,
-        )?;
+        let parameters = parse_signature_members(token_stream, string_table, &signature_context)?;
         token_stream.advance();
 
-        // parse_parameters leaves us on the closing `|`,
-        // so we're now at the Arrow or Colon token
+        // The shared `| ... |` parser stops on the closing `|`,
+        // so the next token decides whether this signature has returns.
         match token_stream.current_token_kind() {
             TokenKind::Arrow => {}
 
-            // Function does not return anything
             TokenKind::Colon => {
                 token_stream.advance();
                 return Ok(FunctionSignature {

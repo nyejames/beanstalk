@@ -85,15 +85,15 @@ pub(super) fn parse_collection_builtin_member(
     string_table: &mut StringTable,
 ) -> Result<Option<AstNode>, CompilerError> {
     let MemberStepContext {
-        current_node,
-        current_type,
+        receiver_node,
+        receiver_type,
         member_name,
         member_location,
         receiver_access_mode,
         scope_context,
     } = context;
 
-    let DataType::Collection(inner_type, _) = current_type else {
+    let DataType::Collection(inner_type, _) = receiver_type else {
         return Ok(None);
     };
 
@@ -148,7 +148,7 @@ pub(super) fn parse_collection_builtin_member(
     }
 
     if mutating_receiver_required {
-        if !ast_node_is_place(&current_node) {
+        if !ast_node_is_place(&receiver_node) {
             return_rule_error!(
                 format!(
                     "Collection mutating method '{}(...)' requires a mutable place receiver.",
@@ -162,7 +162,7 @@ pub(super) fn parse_collection_builtin_member(
             );
         }
 
-        if !ast_node_is_mutable_place(&current_node) {
+        if !ast_node_is_mutable_place(&receiver_node) {
             return_rule_error!(
                 format!(
                     "Collection mutating method '{}(...)' requires a mutable collection receiver.",
@@ -181,7 +181,7 @@ pub(super) fn parse_collection_builtin_member(
                 format!(
                     "Collection mutating method '{}(...)' expects mutable access at the receiver call site. Call this with `~{}`.",
                     string_table.resolve(member_name),
-                    receiver_access_hint(&current_node, string_table)
+                    receiver_access_hint(&receiver_node, string_table)
                 ),
                 member_location,
                 {
@@ -271,7 +271,7 @@ pub(super) fn parse_collection_builtin_member(
 
     Ok(Some(AstNode {
         kind: NodeKind::MethodCall {
-            receiver: Box::new(current_node),
+            receiver: Box::new(receiver_node),
             method_path: collection_builtin_path(builtin, string_table),
             method: member_name,
             builtin: Some(collection_builtin_kind(builtin)),

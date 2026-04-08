@@ -1,3 +1,9 @@
+//! Function-body statement parsing and AST emission.
+//!
+//! WHAT: consumes one function/start-function body token stream and emits typed AST statements.
+//! WHY: this file owns statement-position rules, which differ from general expression parsing and
+//! need access to scope, return-slot, and top-level-template context.
+
 use super::ast_nodes::{Declaration, NodeKind};
 use crate::compiler_frontend::ast::ast_nodes::AstNode;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
@@ -586,14 +592,12 @@ pub fn function_body_to_ast(
         Vec::with_capacity(token_stream.length / settings::TOKEN_TO_NODE_RATIO);
 
     while token_stream.index < token_stream.length {
-        // This should be starting after the imports
         let current_token = token_stream.current_token_kind().to_owned();
 
         ast_log!("Parsing Token: ", #current_token);
 
         match current_token {
             TokenKind::ModuleStart => {
-                // Module start token is only used for naming; skip it.
                 token_stream.advance();
             }
 
@@ -605,7 +609,6 @@ pub fn function_body_to_ast(
                 string_table,
             )?,
 
-            // Control Flow
             TokenKind::Loop => {
                 token_stream.advance();
 
@@ -620,7 +623,6 @@ pub fn function_body_to_ast(
             TokenKind::If => {
                 token_stream.advance();
 
-                // This is extending as it might get folded into a vec of nodes
                 ast.extend(create_branch(
                     token_stream,
                     &mut context.new_child_control_flow(ContextKind::Branch, string_table),
@@ -630,7 +632,6 @@ pub fn function_body_to_ast(
             }
 
             TokenKind::Else => {
-                // If we are inside an if / match statement, break out
                 if context.kind == ContextKind::Branch {
                     break;
                 } else {
@@ -644,9 +645,7 @@ pub fn function_body_to_ast(
                 }
             }
 
-            // IGNORED TOKENS
             TokenKind::Newline => {
-                // Skip standalone newlines / empty tokens
                 token_stream.advance();
             }
 
@@ -877,36 +876,29 @@ pub fn function_body_to_ast(
                 token_stream.advance();
             }
 
-            TokenKind::End => {
-                // Check that this is a valid scope for a scope to close
-                // Module scope should not have an 'end' anywhere
-                match context.kind {
-                    ContextKind::Expression => {
-                        return_syntax_error!(
+            TokenKind::End => match context.kind {
+                ContextKind::Expression => {
+                    return_syntax_error!(
                             "Unexpected scope close. Expressions are not terminated like this.
                             Surround the expression with brackets if you need it to be multi-line. This might just be a compiler_frontend bug.",
                             token_stream.current_location()
                         );
-                    }
-                    ContextKind::Template => {
-                        return_syntax_error!(
+                }
+                ContextKind::Template => {
+                    return_syntax_error!(
                             "Unexpected use of ';' inside a template. Templates are not closed with ';'.
                             If you are seeing this error, this might be a compiler_frontend bug instead.",
                             token_stream.current_location()
                         )
-                    }
-                    _ => {
-                        // Consume the end token
-                        token_stream.advance();
-                        break;
-                    }
                 }
-            }
+                _ => {
+                    token_stream.advance();
+                    break;
+                }
+            },
 
             // String template at the top level of the start function.
             TokenKind::TemplateHead => {
-                // If this isn't the top level of the module, this should be an error
-                // Only top level scope can have top level templates
                 if context.kind != ContextKind::Module {
                     return_rule_error!(
                         "Templates can only be used like this at the top level. Not inside the body of a function",
@@ -954,7 +946,6 @@ pub fn function_body_to_ast(
                 });
             }
 
-            // Or stuff that hasn't been implemented yet
             _ => {
                 return Err(unexpected_function_body_token_error(
                     token_stream.current_token_kind(),

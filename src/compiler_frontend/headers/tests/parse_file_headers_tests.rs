@@ -321,7 +321,7 @@ fn top_level_const_template_tokens_keep_close_and_eof_for_ast_parser() {
     let const_template_header = headers
         .headers
         .iter()
-        .find(|header| matches!(header.kind, HeaderKind::ConstTemplate { .. }))
+        .find(|header| matches!(header.kind, HeaderKind::ConstTemplate))
         .expect("expected top-level const template header");
 
     assert!(

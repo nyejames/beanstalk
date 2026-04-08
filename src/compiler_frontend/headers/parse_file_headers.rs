@@ -1,4 +1,11 @@
-use crate::compiler_frontend::ast::module_ast::{ContextKind, ScopeContext};
+//! File-header parsing for the frontend pre-AST stage.
+//!
+//! WHAT: splits tokenized source files into function/struct/choice/constant/start-function headers
+//! plus ordered top-level template items.
+//! WHY: later AST passes need declaration-shaped inputs before body parsing, while still preserving
+//! file-local visibility, constant ordering, and entry-file template ordering.
+
+use crate::compiler_frontend::ast::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::ast::statements::choices::{
     ChoiceHeaderMetadata, parse_choice_header_payload,
 };
@@ -31,6 +38,7 @@ use std::collections::HashSet;
 use std::fmt::Display;
 use std::path::Path;
 
+/// Parsed headers for one module plus the ordered top-level template items from entry files.
 pub struct Headers {
     pub headers: Vec<Header>,
     pub top_level_template_items: Vec<TopLevelTemplateItem>,
@@ -47,6 +55,7 @@ pub struct HeaderParseOptions {
     pub path_format_config: PathStringFormatConfig,
 }
 
+// Shared file-level state that stays live while one source file is being split into headers.
 struct HeaderParseContext<'a> {
     host_function_registry: &'a HostRegistry,
     warnings: &'a mut Vec<CompilerWarning>,
@@ -59,6 +68,7 @@ struct HeaderParseContext<'a> {
     top_level_template_items: &'a mut Vec<TopLevelTemplateItem>,
 }
 
+// Shared per-header builder inputs that stay stable while one declaration is classified.
 struct HeaderBuildContext<'a> {
     host_function_registry: &'a HostRegistry,
     project_path_resolver: Option<ProjectPathResolver>,
@@ -83,37 +93,40 @@ pub enum TopLevelTemplateKind {
     RuntimeTemplate,
 }
 
-#[allow(dead_code)] // Planned: `ConstTemplate.file_order` is consumed by a later template pass.
 #[derive(Clone, Debug)]
 pub enum HeaderKind {
-    Function { signature: FunctionSignature },
+    Function {
+        signature: FunctionSignature,
+    },
 
-    Constant { metadata: ConstantHeaderMetadata },
-    Struct { metadata: StructHeaderMetadata },
-    Choice { metadata: ChoiceHeaderMetadata },
+    Constant {
+        metadata: ConstantHeaderMetadata,
+    },
+    Struct {
+        metadata: StructHeaderMetadata,
+    },
+    Choice {
+        metadata: ChoiceHeaderMetadata,
+    },
 
-    ConstTemplate { file_order: usize },
+    ConstTemplate,
 
-    // The top-level scope of regular files.
-    // Any other logic in the top level scope implicitly becomes a "start" function.
-    // This only runs when explicitly called from an import.
-    // Each .bst file can see and use these like normal functions.
-    // Start functions have no arguments or return values
-    // and are not visible to the host from the final wasm module.
-    // The build system will know which start function is the main function based on which file is the entry point of the module.
+    /// The implicit file-level start function for non-header top-level statements.
+    ///
+    /// WHAT: captures top-level executable statements that are not declarations.
+    /// WHY: imported files expose that body as a callable start function, while the build system
+    /// picks one entry-file start function as the module entry later on.
     StartFunction,
 }
 
-#[allow(dead_code)] // Planned: richer constant-header dependency diagnostics.
 #[derive(Clone, Debug)]
 pub struct ConstantHeaderMetadata {
     pub declaration_syntax: DeclarationSyntax,
+    #[allow(dead_code)] // Used by header-order assertions in unit and integration tests.
     pub file_constant_order: usize,
-    pub import_dependencies: HashSet<InternedPath>,
     pub symbol_dependencies: HashSet<InternedPath>,
 }
 
-#[allow(dead_code)] // Planned: struct default-value dependency diagnostics.
 #[derive(Clone, Debug)]
 pub struct StructHeaderMetadata {
     pub default_value_dependencies: HashSet<InternedPath>,
@@ -123,16 +136,11 @@ pub struct StructHeaderMetadata {
 pub struct Header {
     pub kind: HeaderKind,
     pub exported: bool,
-    // Which headers should be parsed before this one?
-    // And what does this header name this import? (last part of the path)
+    // Module-level dependency edges required before AST construction can lower this header.
     pub dependencies: HashSet<InternedPath>,
     pub name_location: SourceLocation,
 
-    // The actual content of the header to be parsed at the AST stage.
-    // And the full name / path
-    // The last part of the path is the name of the header
-    // It will also (MAYBE) have a special extension to indicate it's a header and not a file or directory
-    // Might not bother with this idea tho
+    // Header-local token stream consumed later by AST construction.
     pub tokens: FileTokens,
     pub source_file: InternedPath,
     pub file_imports: Vec<FileImport>,
@@ -150,8 +158,6 @@ pub struct FileImport {
     pub location: SourceLocation,
 }
 
-// This takes all the files in the module
-// and parses them into headers, with entry file detection.
 pub fn parse_headers(
     tokenized_files: Vec<FileTokens>,
     host_registry: &HostRegistry,
@@ -229,9 +235,8 @@ pub fn parse_headers_with_path_resolver(
     })
 }
 
-// Everything at the top level of a file is visible to the whole module.
-// This function splits up the file into each of its headers with entry point detection.
-// Each header is a function, struct, choice, constant declaration or part of the implicit main function (anything else in the top level scope).
+// Top-level declarations are module-visible; non-declaration statements are collected into the
+// implicit start-function header for that file.
 fn parse_headers_in_file(
     token_stream: &mut FileTokens,
     context: &mut HeaderParseContext<'_>,
@@ -241,34 +246,27 @@ fn parse_headers_in_file(
         MINIMUM_LIKELY_DECLARATIONS + (token_stream.tokens.len() / TOKEN_TO_DECLARATION_RATIO),
     );
 
-    // We only need to know IF a header is exported,
-    // So later on it can be added to the modules export section
     let mut next_statement_exported = false;
-    let mut main_function_body = Vec::new();
+    let mut start_function_body = Vec::new();
 
-    let mut main_function_dependencies: HashSet<InternedPath> = HashSet::new();
+    let mut start_function_dependencies: HashSet<InternedPath> = HashSet::new();
 
-    // We parse and track imports as we go,
-    // so we can check if the headers depend on those imports.
     let mut file_import_paths: HashSet<InternedPath> = HashSet::new();
     let mut file_imports: Vec<FileImport> = Vec::new();
     let mut file_constant_order = 0usize;
 
     loop {
         let current_token = token_stream.current_token();
-        // ast_log!("Parsing Header Token: {:?}", current_token);
         let current_location = token_stream.current_location();
         token_stream.advance();
 
         match current_token.kind.to_owned() {
-            // New Function, Struct, Choice, or Constant declaration
             TokenKind::Symbol(name_id) => {
                 if context
                     .host_function_registry
                     .get_function(context.string_table.resolve(name_id))
                     .is_none()
                 {
-                    // Reference to an existing symbol
                     if encountered_symbols.contains(&name_id) {
                         if starts_duplicate_top_level_header_declaration(
                             token_stream,
@@ -284,7 +282,6 @@ fn parse_headers_in_file(
                             )
                         }
 
-                        // If there was a hash before this, then error out as this is shadowing a constant
                         if next_statement_exported {
                             return_rule_error!(
                                 "There is already a constant, function or struct using this name. You can't shadow these. Choose a unique name",
@@ -296,23 +293,16 @@ fn parse_headers_in_file(
                             )
                         }
 
-                        // This is a reference, so it goes into the implicit main function
-                        main_function_body.push(current_token);
+                        start_function_body.push(current_token);
 
                         // Only imported symbols create inter-header dependency edges here.
-                        // Local variables declared in the start function are resolved in AST scope order
-                        // and should never be treated as module-level import dependencies.
+                        // Local start-function bindings are resolved later during AST construction.
                         if let Some(path) =
                             file_import_paths.iter().find(|f| f.name() == Some(name_id))
                         {
-                            main_function_dependencies.insert(path.to_owned());
+                            start_function_dependencies.insert(path.to_owned());
                         }
-
-                    // New symbol declaration
                     } else {
-                        // Every time we encounter a new symbol,
-                        // we check if it fits into one of the Header categories.
-                        // If not, it goes into the implicit main function.
                         let source_file = token_stream.src_path.to_owned();
                         let mut build_context = HeaderBuildContext {
                             host_function_registry: context.host_function_registry,
@@ -334,11 +324,11 @@ fn parse_headers_in_file(
 
                         match header.kind {
                             HeaderKind::StartFunction => {
-                                main_function_body.push(current_token);
+                                start_function_body.push(current_token);
                                 if let Some(path) =
                                     file_import_paths.iter().find(|f| f.name() == Some(name_id))
                                 {
-                                    main_function_dependencies.insert(path.to_owned());
+                                    start_function_dependencies.insert(path.to_owned());
                                 }
                             }
                             _ => {
@@ -349,12 +339,8 @@ fn parse_headers_in_file(
                         encountered_symbols.insert(name_id);
                         next_statement_exported = false;
                     };
-
-                // Host function reference
                 } else {
-                    // This is a reference to a host function, so it goes into the implicit main function
-                    // Does not need to be added as a dependency since host functions are globally available
-                    main_function_body.push(current_token);
+                    start_function_body.push(current_token);
                     if next_statement_exported {
                         next_statement_exported = false;
                         context.warnings.push(CompilerWarning::new(
@@ -394,7 +380,7 @@ fn parse_headers_in_file(
             }
 
             TokenKind::Eof => {
-                main_function_body.push(current_token);
+                start_function_body.push(current_token);
                 break;
             }
 
@@ -424,8 +410,6 @@ fn parse_headers_in_file(
                             }
                         );
                     }
-                    // Top-level const template
-                    // An 'exported' top-level template that must be evaluated at compile time
                     let source_file = token_stream.src_path.to_owned();
                     let mut build_context = HeaderBuildContext {
                         host_function_registry: context.host_function_registry,
@@ -459,7 +443,8 @@ fn parse_headers_in_file(
                     headers.push(header);
                     next_statement_exported = false;
                 } else {
-                    // Regular top-level templates just go into the start function
+                    // Runtime top-level templates stay in the start function body and are ordered
+                    // separately so AST finalization can reassemble them deterministically.
                     if context.is_entry_file {
                         context.top_level_template_items.push(TopLevelTemplateItem {
                             file_order: *context.top_level_template_order,
@@ -472,41 +457,38 @@ fn parse_headers_in_file(
                         current_token,
                         token_stream,
                         &file_import_paths,
-                        &mut main_function_dependencies,
-                        &mut main_function_body,
-                        context.string_table,
+                        &mut start_function_dependencies,
+                        &mut start_function_body,
                     )?;
                 }
             }
 
             _ => {
-                // Everything else is shoved into the main function body
-                main_function_body.push(current_token);
+                start_function_body.push(current_token);
             }
         }
     }
 
-    // The implicit main function also depends on other headers in this file.
-    // So it can use and call any functions or structs defined in this file.
+    // The implicit start function must see declarations from the same file plus any file imports.
     for header in headers.iter() {
         header_log!(#header.tokens.src_path);
 
-        if !matches!(header.kind, HeaderKind::ConstTemplate { .. }) {
-            main_function_dependencies.insert(header.tokens.src_path.to_owned());
+        if !matches!(header.kind, HeaderKind::ConstTemplate) {
+            start_function_dependencies.insert(header.tokens.src_path.to_owned());
         }
     }
 
     let mut start_tokens = FileTokens::new_with_file_id(
         token_stream.src_path.to_owned(),
         token_stream.file_id,
-        main_function_body,
+        start_function_body,
     );
     start_tokens.canonical_os_path = token_stream.canonical_os_path.clone();
 
     headers.push(Header {
         kind: HeaderKind::StartFunction,
         exported: next_statement_exported,
-        dependencies: main_function_dependencies,
+        dependencies: start_function_dependencies,
         name_location: SourceLocation::default(),
         tokens: start_tokens,
         source_file: token_stream.src_path.to_owned(),
@@ -594,7 +576,7 @@ fn normalize_import_dependency_path(
     Ok(InternedPath::from_components(resolved_components))
 }
 
-// Split a top-level declaration into a concrete header payload.
+// Splits one top-level declaration into the concrete header payload that later AST passes consume.
 fn create_header(
     full_name: InternedPath,
     exported: bool,
@@ -602,19 +584,13 @@ fn create_header(
     name_location: SourceLocation,
     context: &mut HeaderBuildContext<'_>,
 ) -> Result<Header, CompilerError> {
-    // We only need to know what imports this header is actually using.
-    // So only track symbols matching this file's imports to add to the dependencies.
+    // Only imported symbols become inter-header dependency edges here.
     let mut dependencies: HashSet<InternedPath> = HashSet::new();
     let mut kind: HeaderKind = HeaderKind::StartFunction;
-
-    // This 10 comes straight out of my ass
-    let mut body = Vec::with_capacity(10);
-
-    // Starts at the first token after the declaration symbol
+    let mut body = Vec::new();
     let current_token = token_stream.current_token_kind().to_owned();
 
     match current_token {
-        // FUNCTIONS
         TokenKind::TypeParameterBracket => {
             let signature_context = ScopeContext::new(
                 ContextKind::ConstantHeader,
@@ -636,8 +612,8 @@ fn create_header(
             let mut scopes_opened = 1;
             let mut scopes_closed = 0;
 
-            // FunctionSignature::new leaves us at the first token of the function body
-            // Don't advance before the first iteration
+            // `FunctionSignature::new` stops on the first body token, so the first loop
+            // iteration must inspect the current token before advancing.
             while scopes_opened > scopes_closed {
                 match token_stream.current_token_kind() {
                     TokenKind::End => {
@@ -710,9 +686,7 @@ fn create_header(
             ));
         }
 
-        // Could be a struct
         TokenKind::Assign => {
-            // Type parameter bracket is a new struct
             if let Some(TokenKind::TypeParameterBracket) = token_stream.peek_next_token() {
                 token_stream.advance();
                 let mut seen_opening_bracket = false;
@@ -780,12 +754,8 @@ fn create_header(
                     metadata: constant_header.metadata,
                 };
             }
-
-            // Anything else just goes into the start function
         }
 
-        // Explicit declaration forms that are not immediate '='.
-        // Example: '# page String = ...' and '# item ~ Foo = ...'
         TokenKind::Mutable
         | TokenKind::DatatypeInt
         | TokenKind::DatatypeFloat
@@ -808,11 +778,7 @@ fn create_header(
             }
         }
 
-        // Should be a choice declaration
-        // Choice :: Option1, Option2, Option3;
         TokenKind::DoubleColon => {
-            // Delegate full choice grammar parsing to the dedicated choice parser module so
-            // header classification stays focused and future choice forms land in one place.
             let choice_header = parse_choice_header_payload(token_stream, context.string_table)?;
             body = choice_header.body;
             kind = HeaderKind::Choice {
@@ -820,7 +786,6 @@ fn create_header(
             };
         }
 
-        // Ignored, going into the start function
         _ => {}
     }
 
@@ -869,12 +834,10 @@ fn create_constant_header_payload(
         }
     }
 
-    let import_dependencies = dependencies.clone();
     let symbol_dependencies = collect_constant_symbol_dependencies(&declaration_syntax, context);
     let metadata = ConstantHeaderMetadata {
         declaration_syntax,
         file_constant_order: *context.file_constant_order,
-        import_dependencies,
         symbol_dependencies,
     };
     *context.file_constant_order += 1;
@@ -1060,9 +1023,7 @@ fn create_top_level_const_template(
     template_tokens.canonical_os_path = token_stream.canonical_os_path.clone();
 
     Ok(Header {
-        kind: HeaderKind::ConstTemplate {
-            file_order: const_template_number,
-        },
+        kind: HeaderKind::ConstTemplate,
         exported: true,
         dependencies,
         name_location,
@@ -1076,11 +1037,10 @@ fn push_runtime_template_tokens_to_start_function(
     opening_template_token: Token,
     token_stream: &mut FileTokens,
     file_imports: &HashSet<InternedPath>,
-    main_function_dependencies: &mut HashSet<InternedPath>,
-    main_function_body: &mut Vec<Token>,
-    _string_table: &StringTable,
+    start_function_dependencies: &mut HashSet<InternedPath>,
+    start_function_body: &mut Vec<Token>,
 ) -> Result<(), CompilerError> {
-    main_function_body.push(opening_template_token);
+    start_function_body.push(opening_template_token);
 
     consume_balanced_template_region(
         token_stream,
@@ -1088,9 +1048,9 @@ fn push_runtime_template_tokens_to_start_function(
             if let TokenKind::Symbol(name_id) = token_kind
                 && let Some(path) = file_imports.iter().find(|path| path.name() == Some(*name_id))
             {
-                main_function_dependencies.insert(path.to_owned());
+                start_function_dependencies.insert(path.to_owned());
             }
-            main_function_body.push(token);
+            start_function_body.push(token);
         },
         |location| {
             CompilerError::new_rule_error(
