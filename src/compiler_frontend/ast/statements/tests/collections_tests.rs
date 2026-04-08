@@ -103,7 +103,7 @@ fn parses_collection_get_with_fallback_handler_and_propagation() {
 #[test]
 fn parses_collection_mutators_and_length_calls() {
     let (ast, string_table) = parse_single_file_ast(
-        "values ~= {1, 2, 3}\nvalues.set(1, 9)\nvalues.get(0) = 7\nvalues.push(4)\nvalues.remove(2)\nsize = values.length()\n",
+        "values ~= {1, 2, 3}\n~values.set(1, 9)\nvalues.get(0) = 7\n~values.push(4)\n~values.remove(2)\nsize = values.length()\n",
     );
     let body = start_function_body(&ast, &string_table);
 

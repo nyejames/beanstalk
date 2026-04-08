@@ -941,7 +941,8 @@ pub fn function_body_to_ast(
             | TokenKind::StringSliceLiteral(_)
             | TokenKind::BoolLiteral(_)
             | TokenKind::CharLiteral(_)
-            | TokenKind::Copy => {
+            | TokenKind::Copy
+            | TokenKind::Mutable => {
                 let expr =
                     parse_expression_statement_candidate(token_stream, &context, string_table)?;
 

@@ -250,6 +250,54 @@ fn rejects_mutable_receiver_methods_on_temporaries() {
 }
 
 #[test]
+fn parses_mutable_receiver_methods_with_explicit_receiver_tilde() {
+    let (ast, string_table) = parse_single_file_ast(
+        "Point = |\n    x Int = 0,\n|\n\nreset |this ~Point|:\n    this.x = 0\n;\n\npoint ~= Point()\n~point.reset()\n",
+    );
+
+    let body = start_function_body(&ast, &string_table);
+    let NodeKind::Rvalue(call_expr) = &body[1].kind else {
+        panic!("expected receiver method statement");
+    };
+    let ExpressionKind::Runtime(nodes) = &call_expr.kind else {
+        panic!("expected runtime receiver call expression");
+    };
+    assert!(
+        matches!(nodes[0].kind, NodeKind::MethodCall { builtin: None, .. }),
+        "expected user-defined receiver method call node"
+    );
+}
+
+#[test]
+fn rejects_mutable_receiver_methods_without_explicit_receiver_tilde() {
+    let error = parse_single_file_ast_error(
+        "Point = |\n    x Int = 0,\n|\n\nreset |this ~Point|:\n    this.x = 0\n;\n\npoint ~= Point()\npoint.reset()\n",
+    );
+
+    assert!(
+        error.msg.contains("expects mutable access at the receiver call site"),
+        "{}",
+        error.msg
+    );
+    assert!(error.msg.contains("~point"), "{}", error.msg);
+}
+
+#[test]
+fn rejects_explicit_receiver_tilde_for_shared_receiver_methods() {
+    let error = parse_single_file_ast_error(
+        "Point = |\n    x Int = 0,\n|\n\nlength |this Point| -> Int:\n    return this.x\n;\n\npoint ~= Point()\nvalue = ~point.length()\n",
+    );
+
+    assert!(
+        error
+            .msg
+            .contains("does not accept explicit mutable access marker '~'"),
+        "{}",
+        error.msg
+    );
+}
+
+#[test]
 fn parses_result_propagation_call_in_expression_position() {
     let (ast, string_table) = parse_single_file_ast(
         "can_error |value String| -> String, Error!:\n    return value\n;\n\nforward |value String| -> String, Error!:\n    return can_error(value)!\n;\n",

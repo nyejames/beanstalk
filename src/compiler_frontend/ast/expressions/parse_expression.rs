@@ -12,7 +12,10 @@ use crate::compiler_frontend::ast::expressions::expression::{
 };
 use crate::compiler_frontend::ast::expressions::function_calls::parse_function_call;
 use crate::compiler_frontend::ast::expressions::struct_instance::parse_struct_constructor_expression;
-use crate::compiler_frontend::ast::field_access::{ast_node_is_place, parse_postfix_chain};
+use crate::compiler_frontend::ast::field_access::{
+    ReceiverAccessMode, ast_node_is_place, parse_field_access_with_receiver_access,
+    parse_postfix_chain,
+};
 use crate::compiler_frontend::ast::receiver_methods::free_function_receiver_method_call_error;
 use crate::compiler_frontend::ast::statements::choices::parse_choice_variant_value;
 use crate::compiler_frontend::ast::statements::declarations::create_reference;
@@ -50,7 +53,13 @@ fn push_expression_node(
     let node = if token_stream.index < token_stream.length
         && token_stream.current_token_kind() == &TokenKind::Dot
     {
-        parse_postfix_chain(token_stream, node, context, string_table)?
+        parse_postfix_chain(
+            token_stream,
+            node,
+            ReceiverAccessMode::Shared,
+            context,
+            string_table,
+        )?
     } else {
         node
     };
@@ -509,6 +518,62 @@ fn parse_identifier_or_call(
             PrimarySuggestion => "Declare the variable before using it in this expression",
         }
     )
+}
+
+fn parse_mutable_receiver_expression(
+    token_stream: &mut FileTokens,
+    context: &ScopeContext,
+    expression: &mut Vec<AstNode>,
+    string_table: &mut StringTable,
+) -> Result<(), CompilerError> {
+    let marker_location = token_stream.current_location();
+    token_stream.advance();
+
+    let TokenKind::Symbol(id) = token_stream.current_token_kind().to_owned() else {
+        return_rule_error!(
+            "Mutable receiver marker '~' must be followed by a receiver symbol.",
+            marker_location,
+            {
+                CompilationStage => "Expression Parsing",
+                PrimarySuggestion => "Use receiver-call syntax like '~value.method(...)'",
+            }
+        );
+    };
+
+    let Some(reference_arg) = context.get_reference(&id) else {
+        return_rule_error!(
+            format!(
+                "Undefined variable '{}'. Mutable receiver calls require a declared receiver place.",
+                string_table.resolve(id)
+            ),
+            token_stream.current_location(),
+            {
+                CompilationStage => "Expression Parsing",
+                PrimarySuggestion => "Declare this receiver variable before using '~receiver.method(...)'",
+            }
+        );
+    };
+
+    if token_stream.peek_next_token() != Some(&TokenKind::Dot) {
+        return_rule_error!(
+            "Mutable receiver marker '~' is only valid for receiver method calls like '~value.method(...)'.",
+            marker_location,
+            {
+                CompilationStage => "Expression Parsing",
+                PrimarySuggestion => "Apply '~' directly to a receiver method call",
+            }
+        );
+    }
+
+    token_stream.advance();
+    let receiver_node = parse_field_access_with_receiver_access(
+        token_stream,
+        reference_arg,
+        context,
+        ReceiverAccessMode::Mutable,
+        string_table,
+    )?;
+    push_expression_node(token_stream, context, string_table, expression, receiver_node)
 }
 
 fn parse_literal_expression(
@@ -984,6 +1049,16 @@ fn dispatch_expression_token(
 
         TokenKind::Symbol(..) => {
             parse_identifier_or_call(token_stream, context, state.expression, string_table)?;
+            Ok(ExpressionTokenStep::Continue)
+        }
+
+        TokenKind::Mutable => {
+            parse_mutable_receiver_expression(
+                token_stream,
+                context,
+                state.expression,
+                string_table,
+            )?;
             Ok(ExpressionTokenStep::Continue)
         }
 

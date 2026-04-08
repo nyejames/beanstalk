@@ -52,6 +52,12 @@ enum ErrorBuiltinMethod {
     Bubble,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ReceiverAccessMode {
+    Shared,
+    Mutable,
+}
+
 fn reference_base_node(
     reference_arg: &Declaration,
     context: &ScopeContext,
@@ -121,6 +127,26 @@ pub(crate) fn ast_node_is_mutable_place(node: &AstNode) -> bool {
             ..
         } => ast_node_is_mutable_place(receiver),
         _ => false,
+    }
+}
+
+fn receiver_access_hint(node: &AstNode, string_table: &StringTable) -> String {
+    match &node.kind {
+        NodeKind::Rvalue(expr) => match &expr.kind {
+            ExpressionKind::Reference(path) => path
+                .name_str(string_table)
+                .map(str::to_owned)
+                .unwrap_or_else(|| path.to_string(string_table)),
+            _ => String::from("receiver"),
+        },
+        NodeKind::FieldAccess { base, field, .. } => {
+            format!(
+                "{}.{}",
+                receiver_access_hint(base, string_table),
+                string_table.resolve(*field)
+            )
+        }
+        _ => String::from("receiver"),
     }
 }
 
@@ -309,6 +335,7 @@ fn parse_collection_builtin_member(
     current_type: &DataType,
     member_name: StringId,
     member_location: SourceLocation,
+    receiver_access_mode: ReceiverAccessMode,
     context: &ScopeContext,
     string_table: &mut StringTable,
 ) -> Result<Option<AstNode>, CompilerError> {
@@ -345,16 +372,68 @@ fn parse_collection_builtin_member(
         );
     }
 
-    if matches!(builtin, CollectionBuiltinMethod::Set) && !ast_node_is_mutable_place(&current_node)
-    {
+    let mutating_receiver_required = matches!(
+        builtin,
+        CollectionBuiltinMethod::Set | CollectionBuiltinMethod::Push | CollectionBuiltinMethod::Remove
+    );
+
+    if receiver_access_mode == ReceiverAccessMode::Mutable && !mutating_receiver_required {
         return_rule_error!(
-            "Collection 'set(index, value)' requires a mutable collection receiver.",
+            format!(
+                "Collection method '{}(...)' does not accept explicit mutable access marker '~'.",
+                string_table.resolve(member_name)
+            ),
             member_location,
             {
                 CompilationStage => "AST Construction",
-                PrimarySuggestion => "Call 'set' on a mutable collection variable or mutable field path",
+                PrimarySuggestion => "Remove '~' from this receiver call",
             }
         );
+    }
+
+    if mutating_receiver_required {
+        if !ast_node_is_place(&current_node) {
+            return_rule_error!(
+                format!(
+                    "Collection mutating method '{}(...)' requires a mutable place receiver.",
+                    string_table.resolve(member_name)
+                ),
+                member_location,
+                {
+                    CompilationStage => "AST Construction",
+                    PrimarySuggestion => "Call this method on a mutable variable or mutable field path, not on a temporary expression",
+                }
+            );
+        }
+
+        if !ast_node_is_mutable_place(&current_node) {
+            return_rule_error!(
+                format!(
+                    "Collection mutating method '{}(...)' requires a mutable collection receiver.",
+                    string_table.resolve(member_name)
+                ),
+                member_location,
+                {
+                    CompilationStage => "AST Construction",
+                    PrimarySuggestion => "Use a mutable receiver place for this mutating collection method",
+                }
+            );
+        }
+
+        if receiver_access_mode == ReceiverAccessMode::Shared {
+            return_rule_error!(
+                format!(
+                    "Collection mutating method '{}(...)' expects mutable access at the receiver call site. Call this with `~{}`.",
+                    string_table.resolve(member_name),
+                    receiver_access_hint(&current_node, string_table)
+                ),
+                member_location,
+                {
+                    CompilationStage => "AST Construction",
+                    PrimarySuggestion => "Prefix the receiver with '~' for this mutating collection call",
+                }
+            );
+        }
     }
 
     token_stream.advance();
@@ -454,6 +533,7 @@ fn parse_error_builtin_member(
     current_type: &DataType,
     member_name: StringId,
     member_location: SourceLocation,
+    receiver_access_mode: ReceiverAccessMode,
     context: &ScopeContext,
     string_table: &mut StringTable,
 ) -> Result<Option<AstNode>, CompilerError> {
@@ -475,6 +555,20 @@ fn parse_error_builtin_member(
             {
                 CompilationStage => "AST Construction",
                 PrimarySuggestion => "Call this builtin error helper with '(...)'",
+            }
+        );
+    }
+
+    if receiver_access_mode == ReceiverAccessMode::Mutable {
+        return_rule_error!(
+            format!(
+                "Builtin error method '{}(...)' does not accept explicit mutable access marker '~'.",
+                string_table.resolve(member_name)
+            ),
+            member_location,
+            {
+                CompilationStage => "AST Construction",
+                PrimarySuggestion => "Remove '~' from this receiver call",
             }
         );
     }
@@ -537,12 +631,15 @@ fn parse_error_builtin_member(
 pub(crate) fn parse_postfix_chain(
     token_stream: &mut FileTokens,
     mut current_node: AstNode,
+    receiver_access_mode: ReceiverAccessMode,
     context: &ScopeContext,
     string_table: &mut StringTable,
 ) -> Result<AstNode, CompilerError> {
     // WHAT: parses chained postfix member access and receiver method calls (`a.b.c(...)`).
     // WHY: assignment parsing, expression parsing, and mutation all share the same postfix rules,
     //      so one parser keeps mutable-place checks and receiver lookup consistent.
+    let mut saw_method_call = false;
+
     while token_stream.index < token_stream.length
         && token_stream.current_token_kind() == &TokenKind::Dot
     {
@@ -630,10 +727,12 @@ pub(crate) fn parse_postfix_chain(
             &current_type,
             member_name,
             member_location.clone(),
+            receiver_access_mode,
             context,
             string_table,
         )? {
             current_node = collection_builtin_call;
+            saw_method_call = true;
             continue;
         }
 
@@ -643,10 +742,12 @@ pub(crate) fn parse_postfix_chain(
             &current_type,
             member_name,
             member_location.clone(),
+            receiver_access_mode,
             context,
             string_table,
         )? {
             current_node = error_builtin_call;
+            saw_method_call = true;
             continue;
         }
 
@@ -695,17 +796,63 @@ pub(crate) fn parse_postfix_chain(
 
         token_stream.advance();
 
-        if method_entry.receiver_mutable && !ast_node_is_mutable_place(&current_node) {
+        if method_entry.receiver_mutable {
+            if !ast_node_is_place(&current_node) {
+                return_rule_error!(
+                    format!(
+                        "Mutable receiver method '{}.{}(...)' requires a mutable place receiver.",
+                        current_type.display_with_table(string_table),
+                        string_table.resolve(member_name)
+                    ),
+                    member_location,
+                    {
+                        CompilationStage => "AST Construction",
+                        PrimarySuggestion => "Call this mutable method on a mutable variable or mutable field path, not on a temporary expression",
+                    }
+                );
+            }
+
+            if !ast_node_is_mutable_place(&current_node) {
+                return_rule_error!(
+                    format!(
+                        "Mutable receiver method '{}.{}(...)' requires a mutable place receiver.",
+                        current_type.display_with_table(string_table),
+                        string_table.resolve(member_name)
+                    ),
+                    member_location,
+                    {
+                        CompilationStage => "AST Construction",
+                        PrimarySuggestion => "Use a mutable receiver place for this mutable receiver call",
+                    }
+                );
+            }
+
+            if receiver_access_mode == ReceiverAccessMode::Shared {
+                return_rule_error!(
+                    format!(
+                        "Mutable receiver method '{}.{}(...)' expects mutable access at the receiver call site. Call this with `~{}`.",
+                        current_type.display_with_table(string_table),
+                        string_table.resolve(member_name),
+                        receiver_access_hint(&current_node, string_table)
+                    ),
+                    member_location,
+                    {
+                        CompilationStage => "AST Construction",
+                        PrimarySuggestion => "Prefix the receiver with '~' when calling mutable receiver methods",
+                    }
+                );
+            }
+        } else if receiver_access_mode == ReceiverAccessMode::Mutable {
             return_rule_error!(
                 format!(
-                    "Mutable receiver method '{}.{}(...)' requires a mutable place receiver.",
+                    "Receiver method '{}.{}(...)' does not accept explicit mutable access marker '~'.",
                     current_type.display_with_table(string_table),
                     string_table.resolve(member_name)
                 ),
                 member_location,
                 {
                     CompilationStage => "AST Construction",
-                    PrimarySuggestion => "Call this mutable method on a mutable variable or mutable field path, not on a temporary or immutable value",
+                    PrimarySuggestion => "Remove '~' from this receiver call",
                 }
             );
         }
@@ -735,6 +882,18 @@ pub(crate) fn parse_postfix_chain(
             scope: context.scope.to_owned(),
             location: member_location,
         };
+        saw_method_call = true;
+    }
+
+    if receiver_access_mode == ReceiverAccessMode::Mutable && !saw_method_call {
+        return_rule_error!(
+            "Mutable receiver marker '~' is only valid for receiver method calls like '~value.method(...)'.",
+            current_node.location.clone(),
+            {
+                CompilationStage => "AST Construction",
+                PrimarySuggestion => "Apply '~' directly to a receiver method call",
+            }
+        );
     }
 
     Ok(current_node)
@@ -746,6 +905,22 @@ pub fn parse_field_access(
     context: &ScopeContext,
     string_table: &mut StringTable,
 ) -> Result<AstNode, CompilerError> {
+    parse_field_access_with_receiver_access(
+        token_stream,
+        base_arg,
+        context,
+        ReceiverAccessMode::Shared,
+        string_table,
+    )
+}
+
+pub(crate) fn parse_field_access_with_receiver_access(
+    token_stream: &mut FileTokens,
+    base_arg: &Declaration,
+    context: &ScopeContext,
+    receiver_access_mode: ReceiverAccessMode,
+    string_table: &mut StringTable,
+) -> Result<AstNode, CompilerError> {
     let base_location = if token_stream.index > 0 {
         token_stream.tokens[token_stream.index - 1].location.clone()
     } else {
@@ -755,6 +930,7 @@ pub fn parse_field_access(
     parse_postfix_chain(
         token_stream,
         reference_base_node(base_arg, context, base_location),
+        receiver_access_mode,
         context,
         string_table,
     )

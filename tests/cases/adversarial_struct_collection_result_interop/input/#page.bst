@@ -9,7 +9,7 @@ load_index |items ~{Int}, idx Int| -> Int, Error!:
 
 point = Point(1, 2)
 values ~= {point.x, point.y, 3}
-values.set(2, 8)
+~values.set(2, 8)
 selected = load_index(~values, 1) ! 0
 
 io(selected)

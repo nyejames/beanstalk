@@ -330,7 +330,7 @@ fn compiles_collection_builtins_and_error_propagation_through_borrow_check() {
     let mut project = FrontendProject::new(
         &[(
             "src/#page.bst",
-            "first_or_error |values {Int}, idx Int| -> Int, Error!:\n    return values.get(idx)!\n;\n\nmutate_and_length || -> Int:\n    values ~= {1, 2, 3}\n    values.set(0, 9)\n    values.get(1) = 8\n    values.push(4)\n    values.remove(0)\n    return values.length()\n;\n\ntotal = mutate_and_length()\npicked = first_or_error({10, 20}, 1) ! 0\nio(total)\nio(picked)\n",
+            "first_or_error |values {Int}, idx Int| -> Int, Error!:\n    return values.get(idx)!\n;\n\nmutate_and_length || -> Int:\n    values ~= {1, 2, 3}\n    ~values.set(0, 9)\n    values.get(1) = 8\n    ~values.push(4)\n    ~values.remove(0)\n    return values.length()\n;\n\ntotal = mutate_and_length()\npicked = first_or_error({10, 20}, 1) ! 0\nio(total)\nio(picked)\n",
         )],
         "src/#page.bst",
     );
