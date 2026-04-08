@@ -1,5 +1,4 @@
-// EARLY SCAFFOLDING FOR INTERPRETER, dead code is fine for now
-#![allow(dead_code, unused_variables)]
+#![allow(dead_code)] // While this backend is unused - remove once wired in
 
 //! Rust interpreter backend entry points.
 //!

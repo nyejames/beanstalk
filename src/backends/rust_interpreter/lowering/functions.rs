@@ -14,7 +14,7 @@ use crate::backends::rust_interpreter::lowering::statements::lower_block_stateme
 use crate::backends::rust_interpreter::lowering::terminators::lower_block_terminator;
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
 use crate::compiler_frontend::hir::hir_nodes::{BlockId, HirBlock, HirFunction, HirLocal, LocalId};
-use crate::compiler_frontend::hir::hir_validation::terminator_targets;
+use crate::compiler_frontend::hir::utils::terminator_targets;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::collections::VecDeque;
 

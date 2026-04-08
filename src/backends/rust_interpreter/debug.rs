@@ -38,11 +38,34 @@ pub(crate) fn build_debug_outputs(
 
 fn build_lowering_plan_text(exec_program: &ExecProgram) -> String {
     let function_count = exec_program.module.functions.len();
+    let block_count = exec_program
+        .module
+        .functions
+        .iter()
+        .map(|function| function.blocks.len())
+        .sum::<usize>();
+    let local_count = exec_program
+        .module
+        .functions
+        .iter()
+        .map(|function| function.locals.len())
+        .sum::<usize>();
+    let instruction_count = exec_program
+        .module
+        .functions
+        .iter()
+        .flat_map(|function| function.blocks.iter())
+        .map(|block| block.instructions.len())
+        .sum::<usize>();
     let constant_count = exec_program.module.constants.len();
 
     format!(
-        "Rust interpreter lowering produced {} function shell(s) and {} constant shell(s).",
-        function_count, constant_count
+        "Rust interpreter lowering produced an Exec IR program with {} function(s), {} block(s), {} local slot(s), {} instruction(s), and {} constant(s).",
+        function_count,
+        block_count,
+        local_count,
+        instruction_count,
+        constant_count,
     )
 }
 

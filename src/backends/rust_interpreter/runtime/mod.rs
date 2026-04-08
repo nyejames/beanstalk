@@ -3,14 +3,20 @@
 //! WHAT: defines the core runtime containers used by the interpreter engine.
 //! WHY: the runtime state should stay separate from lowering so CTFE can reuse the same engine later.
 
+mod lookups;
+
 use crate::backends::rust_interpreter::error::InterpreterBackendError;
 use crate::backends::rust_interpreter::exec_ir::{
-    ExecBlock, ExecBlockId, ExecConstId, ExecConstValue, ExecFunction, ExecFunctionId,
-    ExecInstruction, ExecProgram, ExecTerminator,
+    ExecBlockId, ExecConstId, ExecConstValue, ExecFunctionId, ExecInstruction, ExecLocalId,
+    ExecProgram, ExecTerminator,
 };
 use crate::backends::rust_interpreter::heap::{Heap, HeapObject, StringObject};
 pub(crate) use crate::backends::rust_interpreter::request::InterpreterExecutionPolicy as ExecutionPolicy;
+use crate::backends::rust_interpreter::runtime::lookups::{
+    build_block_index, build_const_index, build_function_index,
+};
 use crate::backends::rust_interpreter::value::Value;
+use rustc_hash::FxHashMap;
 
 #[derive(Debug, Clone)]
 pub(crate) struct RuntimeEngine {
@@ -18,15 +24,25 @@ pub(crate) struct RuntimeEngine {
     pub heap: Heap,
     pub policy: ExecutionPolicy,
     pub stack: FrameStack,
+    function_index_by_id: FxHashMap<ExecFunctionId, usize>,
+    block_index_by_function: FxHashMap<ExecFunctionId, FxHashMap<ExecBlockId, usize>>,
+    const_index_by_id: FxHashMap<ExecConstId, usize>,
 }
 
 impl RuntimeEngine {
     pub(crate) fn new(program: ExecProgram, policy: ExecutionPolicy) -> Self {
+        let function_index_by_id = build_function_index(&program);
+        let block_index_by_function = build_block_index(&program);
+        let const_index_by_id = build_const_index(&program);
+
         Self {
             program,
             heap: Heap::new(),
             policy,
             stack: FrameStack::default(),
+            function_index_by_id,
+            block_index_by_function,
+            const_index_by_id,
         }
     }
 
@@ -44,35 +60,52 @@ impl RuntimeEngine {
         &mut self,
         function_id: ExecFunctionId,
     ) -> Result<Value, InterpreterBackendError> {
-        let function = self.function_by_id(function_id)?.clone();
+        let (entry_block, local_count, has_parameters, function_debug_name) = {
+            let function = self.function_by_id(function_id)?;
+            (
+                function.entry_block,
+                function.locals.len(),
+                !function.parameter_slots.is_empty(),
+                function.debug_name.clone(),
+            )
+        };
 
-        if !function.parameter_slots.is_empty() {
+        if has_parameters {
             return Err(InterpreterBackendError::Execution {
                 message: format!(
                     "Rust interpreter runtime cannot execute function '{}' with parameters yet",
-                    function.debug_name
+                    function_debug_name
                 ),
             });
         }
 
         self.stack.frames.push(CallFrame {
             function_id,
-            block_id: function.entry_block,
-            locals: LocalStorage::with_slot_count(function.locals.len()),
+            block_id: entry_block,
+            locals: LocalStorage::with_slot_count(local_count),
         });
 
         loop {
-            let current_block_id = self.current_frame()?.block_id;
-            let block = block_by_id(&function, current_block_id)?.clone();
+            let (current_function_id, current_block_id) = {
+                let frame = self.current_frame()?;
+                (frame.function_id, frame.block_id)
+            };
 
-            for instruction in &block.instructions {
+            let (instructions, terminator) = {
+                let block = self
+                    .block_by_ids(current_function_id, current_block_id)?
+                    .clone();
+                (block.instructions.clone(), block.terminator.clone())
+            };
+
+            for instruction in &instructions {
                 self.execute_instruction(instruction)?;
             }
 
-            match &block.terminator {
+            match terminator {
                 ExecTerminator::Return { value } => {
                     let result = match value {
-                        Some(local_id) => self.read_local(*local_id)?,
+                        Some(local_id) => self.read_local(local_id)?,
                         None => Value::Unit,
                     };
 
@@ -81,7 +114,7 @@ impl RuntimeEngine {
                 }
 
                 ExecTerminator::Jump { target } => {
-                    self.current_frame_mut()?.block_id = *target;
+                    self.current_frame_mut()?.block_id = target;
                 }
 
                 ExecTerminator::BranchBool {
@@ -89,10 +122,10 @@ impl RuntimeEngine {
                     then_block,
                     else_block,
                 } => {
-                    let condition_value = self.read_local(*condition)?;
+                    let condition_value = self.read_local(condition)?;
                     let branch_target = match condition_value {
-                        Value::Bool(true) => *then_block,
-                        Value::Bool(false) => *else_block,
+                        Value::Bool(true) => then_block,
+                        Value::Bool(false) => else_block,
                         other => {
                             return Err(InterpreterBackendError::Execution {
                                 message: format!(
@@ -169,7 +202,7 @@ impl RuntimeEngine {
 
     fn copy_local_value(
         &mut self,
-        local_id: crate::backends::rust_interpreter::exec_ir::ExecLocalId,
+        local_id: ExecLocalId,
     ) -> Result<Value, InterpreterBackendError> {
         let value = self.read_local(local_id)?;
 
@@ -184,41 +217,6 @@ impl RuntimeEngine {
                     .to_owned(),
             }),
         }
-    }
-
-    fn function_by_id(
-        &self,
-        function_id: ExecFunctionId,
-    ) -> Result<&ExecFunction, InterpreterBackendError> {
-        self.program
-            .module
-            .functions
-            .iter()
-            .find(|function| function.id == function_id)
-            .ok_or_else(|| InterpreterBackendError::Execution {
-                message: format!(
-                    "Rust interpreter runtime could not resolve function {:?}",
-                    function_id
-                ),
-            })
-    }
-
-    fn const_value_by_id(
-        &self,
-        const_id: ExecConstId,
-    ) -> Result<&ExecConstValue, InterpreterBackendError> {
-        self.program
-            .module
-            .constants
-            .iter()
-            .find(|constant| constant.id == const_id)
-            .map(|constant| &constant.value)
-            .ok_or_else(|| InterpreterBackendError::Execution {
-                message: format!(
-                    "Rust interpreter runtime could not resolve constant {:?}",
-                    const_id
-                ),
-            })
     }
 
     fn current_frame(&self) -> Result<&CallFrame, InterpreterBackendError> {
@@ -239,10 +237,7 @@ impl RuntimeEngine {
             })
     }
 
-    fn read_local(
-        &self,
-        local_id: crate::backends::rust_interpreter::exec_ir::ExecLocalId,
-    ) -> Result<Value, InterpreterBackendError> {
+    fn read_local(&self, local_id: ExecLocalId) -> Result<Value, InterpreterBackendError> {
         let frame = self.current_frame()?;
         frame
             .locals
@@ -259,7 +254,7 @@ impl RuntimeEngine {
 
     fn write_local(
         &mut self,
-        local_id: crate::backends::rust_interpreter::exec_ir::ExecLocalId,
+        local_id: ExecLocalId,
         value: Value,
     ) -> Result<(), InterpreterBackendError> {
         let frame = self.current_frame_mut()?;
@@ -300,20 +295,4 @@ impl LocalStorage {
             slots: vec![Value::Unit; slot_count],
         }
     }
-}
-
-fn block_by_id(
-    function: &ExecFunction,
-    block_id: ExecBlockId,
-) -> Result<&ExecBlock, InterpreterBackendError> {
-    function
-        .blocks
-        .iter()
-        .find(|block| block.id == block_id)
-        .ok_or_else(|| InterpreterBackendError::Execution {
-            message: format!(
-                "Rust interpreter runtime could not resolve block {:?} in function '{}'",
-                block_id, function.debug_name
-            ),
-        })
 }

@@ -12,7 +12,8 @@ pub(crate) mod hir_display;
 mod hir_expression;
 mod hir_statement;
 mod hir_structs;
-pub(crate) mod hir_validation;
+mod hir_validation;
+pub(crate) mod utils;
 
 #[cfg(test)]
 mod tests;

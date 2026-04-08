@@ -12,6 +12,7 @@ use crate::compiler_frontend::hir::hir_nodes::{
     ValueKind,
 };
 use crate::compiler_frontend::hir::hir_side_table::HirLocation;
+use crate::compiler_frontend::hir::utils::terminator_targets;
 use crate::compiler_frontend::string_interning::StringTable;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::collections::VecDeque;
@@ -1094,19 +1095,5 @@ impl<'a> HirValidator<'a> {
             .hir_source_location_for_hir(location)
             .or_else(|| self.module.side_table.ast_location_for_hir(location))
             .cloned()
-    }
-}
-
-pub fn terminator_targets(terminator: &HirTerminator) -> Vec<BlockId> {
-    match terminator {
-        HirTerminator::Jump { target, .. } => vec![*target],
-        HirTerminator::If {
-            then_block,
-            else_block,
-            ..
-        } => vec![*then_block, *else_block],
-        HirTerminator::Match { arms, .. } => arms.iter().map(|arm| arm.body).collect(),
-        HirTerminator::Break { target } | HirTerminator::Continue { target } => vec![*target],
-        HirTerminator::Return(_) | HirTerminator::Panic { .. } => Vec::new(),
     }
 }
