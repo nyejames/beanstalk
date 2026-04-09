@@ -1,5 +1,6 @@
 use super::*;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
+use crate::compiler_frontend::ast::test_support::parse_single_file_ast;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::statements::functions::{
     FunctionReturn, FunctionSignature, ReturnSlot,
@@ -111,6 +112,14 @@ fn assignment_node(
     }
 }
 
+fn return_node(values: Vec<Expression>, location: SourceLocation, scope: InternedPath) -> AstNode {
+    AstNode {
+        kind: NodeKind::Return(values),
+        location,
+        scope,
+    }
+}
+
 fn find_function<'a>(ast_nodes: &'a [AstNode], name: &InternedPath) -> &'a AstNode {
     ast_nodes
         .iter()
@@ -153,6 +162,148 @@ fn collect_and_strip_comment_templates_for_tests(
         &PathStringFormatConfig::default(),
         string_table,
     )
+}
+
+#[test]
+fn single_dynamic_runtime_template_is_lifted_into_runtime_fragment() {
+    let source = r#"
+rhs_capture |calls ~Int| -> Bool:
+    calls = calls + 1
+    return true
+;
+
+lhs = false
+calls ~= 0
+value = lhs and rhs_capture(~calls)
+
+[:short_circuit_mutable_rhs_later_runtime_capture calls=[calls]]
+"#;
+
+    let (ast, mut string_table) = parse_single_file_ast(source);
+
+    assert!(
+        ast.start_template_items.iter().any(|item| matches!(
+            item,
+            AstStartTemplateItem::RuntimeStringFunction { .. }
+        )),
+        "single dynamic top-level template should lower into a runtime fragment"
+    );
+
+    let start_name = ast
+        .entry_path
+        .join_str(IMPLICIT_START_FUNC_NAME, &mut string_table);
+    let start_function = find_function(&ast.nodes, &start_name);
+    let NodeKind::Function(_, _, start_body) = &start_function.kind else {
+        panic!("entry start function should exist");
+    };
+
+    assert!(
+        !start_body.iter().any(|statement| matches!(
+            &statement.kind,
+            NodeKind::VariableDeclaration(declaration)
+                if declaration
+                    .id
+                    .name_str(&string_table)
+                    .is_some_and(|name| name == TOP_LEVEL_TEMPLATE_NAME)
+        )),
+        "entry start body should not retain top-level runtime template declarations"
+    );
+}
+
+#[test]
+fn extracts_runtime_template_returns_and_builds_runtime_fragment_wrapper() {
+    let mut string_table = StringTable::new();
+    let entry_dir = InternedPath::from_single_str("main.bst", &mut string_table);
+    let entry_scope = entry_dir.to_owned();
+
+    let value_name = InternedPath::from_single_str("value", &mut string_table);
+    let value_location = test_location(2);
+    let template_location = test_location(3);
+    let fallback_return_location = test_location(4);
+    let empty_string = string_table.get_or_intern(String::new());
+
+    let value_declaration = variable_declaration_node(
+        value_name.to_owned(),
+        Expression::int(7, value_location.to_owned(), Ownership::ImmutableOwned),
+        value_location.to_owned(),
+        entry_scope.to_owned(),
+    );
+
+    let runtime_template_return = return_node(
+        vec![
+            top_level_template_declaration(
+                vec![Expression::reference(
+                    value_name.to_owned(),
+                    DataType::Int,
+                    template_location.to_owned(),
+                    Ownership::ImmutableReference,
+                )],
+                TemplateType::StringFunction,
+                template_location.to_owned(),
+                &mut string_table,
+            )
+            .value,
+        ],
+        template_location.to_owned(),
+        entry_scope.to_owned(),
+    );
+
+    let fallback_empty_return = return_node(
+        vec![Expression::string_slice(
+            empty_string,
+            fallback_return_location.to_owned(),
+            Ownership::ImmutableOwned,
+        )],
+        fallback_return_location.to_owned(),
+        entry_scope.to_owned(),
+    );
+
+    let mut ast_nodes = vec![start_function_node(
+        &entry_dir,
+        vec![
+            value_declaration,
+            runtime_template_return,
+            fallback_empty_return.to_owned(),
+        ],
+        test_location(1),
+        &mut string_table,
+    )];
+
+    let start_items = synthesize_start_template_items_for_tests(
+        &mut ast_nodes,
+        &entry_dir,
+        &[],
+        &FxHashMap::default(),
+        &mut string_table,
+    )
+    .expect("runtime template return synthesis should succeed");
+
+    assert_eq!(start_items.len(), 1);
+    let generated_fragment_name = match &start_items[0] {
+        AstStartTemplateItem::RuntimeStringFunction { function, .. } => function.to_owned(),
+        _ => panic!("expected runtime fragment item"),
+    };
+
+    let entry_start_name = entry_dir.join_str(IMPLICIT_START_FUNC_NAME, &mut string_table);
+    let entry_start = find_function(&ast_nodes, &entry_start_name);
+    let NodeKind::Function(_, _, entry_body) = &entry_start.kind else {
+        panic!("entry start node should be a function");
+    };
+
+    assert_eq!(entry_body.len(), 1);
+    assert!(matches!(entry_body[0].kind, NodeKind::Return(_)));
+
+    let generated_fragment = find_function(&ast_nodes, &generated_fragment_name);
+    let NodeKind::Function(_, _, generated_body) = &generated_fragment.kind else {
+        panic!("generated fragment should be a function");
+    };
+
+    assert_eq!(generated_body.len(), 2);
+    assert!(matches!(
+        generated_body[0].kind,
+        NodeKind::VariableDeclaration(_)
+    ));
+    assert!(matches!(generated_body[1].kind, NodeKind::Return(_)));
 }
 
 #[test]
@@ -218,11 +369,9 @@ fn extracts_runtime_template_declarations_and_builds_runtime_fragment_wrapper() 
         panic!("entry start node should be a function");
     };
 
-    assert_eq!(entry_body.len(), 1);
-    assert!(matches!(
-        entry_body[0].kind,
-        NodeKind::VariableDeclaration(_)
-    ));
+    // Template-only captured declarations are pruned from start so wrapper hydration
+    // owns the only execution path for runtime-fragment captures.
+    assert!(entry_body.is_empty());
     assert!(!entry_body.iter().any(|statement| {
         matches!(
             &statement.kind,
@@ -245,6 +394,94 @@ fn extracts_runtime_template_declarations_and_builds_runtime_fragment_wrapper() 
         NodeKind::VariableDeclaration(_)
     ));
     assert!(matches!(generated_body[1].kind, NodeKind::Return(_)));
+}
+
+#[test]
+fn keeps_captured_declaration_when_later_non_template_statement_uses_it() {
+    let mut string_table = StringTable::new();
+    let entry_dir = InternedPath::from_single_str("main.bst", &mut string_table);
+    let entry_scope = entry_dir.to_owned();
+
+    let value_name = InternedPath::from_single_str("value", &mut string_table);
+    let sink_name = InternedPath::from_single_str("sink", &mut string_table);
+    let value_location = test_location(2);
+    let sink_location = test_location(3);
+    let template_location = test_location(4);
+
+    let value_declaration = variable_declaration_node(
+        value_name.to_owned(),
+        Expression::int(7, value_location.to_owned(), Ownership::ImmutableOwned),
+        value_location.to_owned(),
+        entry_scope.to_owned(),
+    );
+    let sink_declaration = variable_declaration_node(
+        sink_name,
+        Expression::reference(
+            value_name.to_owned(),
+            DataType::Int,
+            sink_location.to_owned(),
+            Ownership::ImmutableReference,
+        ),
+        sink_location.to_owned(),
+        entry_scope.to_owned(),
+    );
+    let runtime_template_declaration = variable_declaration_node(
+        InternedPath::from_single_str(TOP_LEVEL_TEMPLATE_NAME, &mut string_table),
+        top_level_template_declaration(
+            vec![Expression::reference(
+                value_name,
+                DataType::Int,
+                template_location.to_owned(),
+                Ownership::ImmutableReference,
+            )],
+            TemplateType::StringFunction,
+            template_location.to_owned(),
+            &mut string_table,
+        )
+        .value,
+        template_location.to_owned(),
+        entry_scope.to_owned(),
+    );
+
+    let mut ast_nodes = vec![start_function_node(
+        &entry_dir,
+        vec![
+            value_declaration,
+            sink_declaration,
+            runtime_template_declaration,
+        ],
+        test_location(1),
+        &mut string_table,
+    )];
+
+    let start_items = synthesize_start_template_items_for_tests(
+        &mut ast_nodes,
+        &entry_dir,
+        &[],
+        &FxHashMap::default(),
+        &mut string_table,
+    )
+    .expect("runtime template synthesis should succeed");
+
+    assert_eq!(start_items.len(), 1);
+
+    let entry_start_name = entry_dir.join_str(IMPLICIT_START_FUNC_NAME, &mut string_table);
+    let entry_start = find_function(&ast_nodes, &entry_start_name);
+    let NodeKind::Function(_, _, entry_body) = &entry_start.kind else {
+        panic!("entry start node should be a function");
+    };
+
+    // `value` is captured by the runtime fragment, but it is also required by
+    // a later non-template declaration (`sink = value`), so it must remain.
+    assert_eq!(entry_body.len(), 2);
+    assert!(matches!(
+        entry_body[0].kind,
+        NodeKind::VariableDeclaration(_)
+    ));
+    assert!(matches!(
+        entry_body[1].kind,
+        NodeKind::VariableDeclaration(_)
+    ));
 }
 
 #[test]

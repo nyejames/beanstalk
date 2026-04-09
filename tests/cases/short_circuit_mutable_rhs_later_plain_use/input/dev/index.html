@@ -454,12 +454,12 @@ body {
         return { tag: "err", value: __bs_make_error("Parse", "float.parse_invalid_format", "Float(...) only accepts Int, Float, or string values", null, null) };
     }
 
-    function bst_rhs_or_fn0(bst_calls_l0) {
+    function bst_rhs_plain_fn0(bst_calls_l0) {
         
         bst_calls_l0 = __bs_param_binding(bst_calls_l0);
         
         __bs_assign_value(bst_calls_l0, (__bs_read(bst_calls_l0) + 1));
-        return false;
+        return true;
     }
 
     function bst_start_fn1() {
@@ -473,47 +473,49 @@ body {
         let bst_value_l3 = __bs_binding(undefined);
         let bst___hir_tmp_0_l4 = __bs_binding(undefined);
         let bst___hir_tmp_1_l5 = __bs_binding(undefined);
-        let bst___hir_tmp_2_l11 = __bs_binding(undefined);
-        let bst___hir_tmp_3_l13 = __bs_binding(undefined);
-        let bst___hir_tmp_4_l14 = __bs_binding(undefined);
+        let bst_after_l6 = __bs_binding(undefined);
+        let bst___hir_tmp_2_l12 = __bs_binding(undefined);
+        let bst___hir_tmp_3_l14 = __bs_binding(undefined);
+        let bst___hir_tmp_4_l15 = __bs_binding(undefined);
         
-        __bs_assign_value(bst_lhs_l1, true);
+        __bs_assign_value(bst_lhs_l1, false);
         __bs_assign_value(bst_calls_l2, 0);
         if (__bs_read(bst_lhs_l1)) {
-            __bs_assign_value(bst___hir_tmp_0_l4, true);
-        } else {
-            __bs_assign_value(bst___hir_tmp_1_l5, bst_rhs_or_fn0(bst_calls_l2));
+            __bs_assign_value(bst___hir_tmp_1_l5, bst_rhs_plain_fn0(bst_calls_l2));
             __bs_assign_value(bst___hir_tmp_0_l4, __bs_clone_value(__bs_read(bst___hir_tmp_1_l5)));
+        } else {
+            __bs_assign_value(bst___hir_tmp_0_l4, false);
         }
         __bs_assign_borrow(bst_value_l3, bst___hir_tmp_0_l4);
-        __bs_assign_value(bst___hir_tmp_2_l11, bst___template_fn_1_fn4(bst_value_l3));
-        __bs_assign_value(bst___hir_tmp_3_l13, bst___template_fn_2_fn5(bst_calls_l2));
-        __bs_assign_value(bst___hir_tmp_4_l14, bst___template_fn_0_fn3(__bs_binding("logical_short_circuit_or value="), bst___hir_tmp_2_l11, __bs_binding(" calls="), bst___hir_tmp_3_l13));
-        return __bs_clone_value(__bs_read(bst___hir_tmp_4_l14));
+        __bs_assign_borrow(bst_after_l6, bst_calls_l2);
+        __bs_assign_value(bst___hir_tmp_2_l12, bst___template_fn_1_fn4(bst_value_l3));
+        __bs_assign_value(bst___hir_tmp_3_l14, bst___template_fn_2_fn5(bst_after_l6));
+        __bs_assign_value(bst___hir_tmp_4_l15, bst___template_fn_0_fn3(__bs_binding("short_circuit_mutable_rhs_later_plain_use value="), bst___hir_tmp_2_l12, __bs_binding(" after="), bst___hir_tmp_3_l14));
+        return __bs_clone_value(__bs_read(bst___hir_tmp_4_l15));
     }
 
-    function bst___template_fn_0_fn3(bst_chunk_0_l6, bst_chunk_1_l7, bst_chunk_2_l8, bst_chunk_3_l9) {
+    function bst___template_fn_0_fn3(bst_chunk_0_l7, bst_chunk_1_l8, bst_chunk_2_l9, bst_chunk_3_l10) {
         
-        bst_chunk_0_l6 = __bs_param_binding(bst_chunk_0_l6);
-        bst_chunk_1_l7 = __bs_param_binding(bst_chunk_1_l7);
-        bst_chunk_2_l8 = __bs_param_binding(bst_chunk_2_l8);
-        bst_chunk_3_l9 = __bs_param_binding(bst_chunk_3_l9);
+        bst_chunk_0_l7 = __bs_param_binding(bst_chunk_0_l7);
+        bst_chunk_1_l8 = __bs_param_binding(bst_chunk_1_l8);
+        bst_chunk_2_l9 = __bs_param_binding(bst_chunk_2_l9);
+        bst_chunk_3_l10 = __bs_param_binding(bst_chunk_3_l10);
         
-        return (((("" + __bs_read(bst_chunk_0_l6)) + __bs_read(bst_chunk_1_l7)) + __bs_read(bst_chunk_2_l8)) + __bs_read(bst_chunk_3_l9));
+        return (((("" + __bs_read(bst_chunk_0_l7)) + __bs_read(bst_chunk_1_l8)) + __bs_read(bst_chunk_2_l9)) + __bs_read(bst_chunk_3_l10));
     }
 
-    function bst___template_fn_1_fn4(bst_chunk_0_l10) {
+    function bst___template_fn_1_fn4(bst_chunk_0_l11) {
         
-        bst_chunk_0_l10 = __bs_param_binding(bst_chunk_0_l10);
+        bst_chunk_0_l11 = __bs_param_binding(bst_chunk_0_l11);
         
-        return ("" + ("" + __bs_read(bst_chunk_0_l10)));
+        return ("" + ("" + __bs_read(bst_chunk_0_l11)));
     }
 
-    function bst___template_fn_2_fn5(bst_chunk_0_l12) {
+    function bst___template_fn_2_fn5(bst_chunk_0_l13) {
         
-        bst_chunk_0_l12 = __bs_param_binding(bst_chunk_0_l12);
+        bst_chunk_0_l13 = __bs_param_binding(bst_chunk_0_l13);
         
-        return ("" + ("" + __bs_read(bst_chunk_0_l12)));
+        return ("" + ("" + __bs_read(bst_chunk_0_l13)));
     }
 
     </script>

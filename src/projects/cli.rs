@@ -20,6 +20,8 @@ use std::{
     io::{self, Write},
     process,
 };
+use std::time::Instant;
+use crate::build_system::build::BuildResult;
 
 #[derive(Debug, PartialEq, Eq)]
 enum Command {
@@ -95,6 +97,7 @@ pub fn start_cli() {
         }
 
         Command::Build(path) => {
+            let start = Instant::now();
             let project_builder = build::ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
             match build::build_project(&project_builder, &path, &flags) {
                 Ok(build_result) => {
@@ -127,11 +130,8 @@ pub fn start_cli() {
 
                     match write_result {
                         Ok(()) => {
-                            print_compiler_messages(CompilerMessages {
-                                errors: Vec::new(),
-                                warnings: build_result.warnings,
-                                string_table: build_result.string_table,
-                            });
+                            let duration = start.elapsed();
+                            print_build_message(build_result, duration);
                         }
                         Err(mut messages) => {
                             messages.warnings.extend(build_result.warnings);
@@ -449,6 +449,21 @@ fn print_help(commands_only: bool) {
     say!("  --host <host>            (default: 127.0.0.1)");
     say!("  --port <port>            (default: 6342)");
     say!("  --poll-interval-ms <ms>  (default: 300)");
+}
+
+fn print_build_message(build_result: BuildResult, duration: std::time::Duration) {
+    say!(
+        "\nBuilt ",
+        Blue build_result.project.output_files.len(),
+        Reset " files successfully in: ",
+        Green Bold #duration
+    );
+    
+    print_compiler_messages(CompilerMessages {
+        errors: Vec::new(),
+        warnings: build_result.warnings,
+        string_table: build_result.string_table,
+    });
 }
 
 #[cfg(test)]

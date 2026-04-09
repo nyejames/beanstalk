@@ -1555,6 +1555,26 @@ path = "logical_short_circuit_or"
 tags = ["integration", "control-flow"]
 
 [[case]]
+id = "short_circuit_mutable_rhs_later_plain_use"
+path = "short_circuit_mutable_rhs_later_plain_use"
+tags = ["integration", "control-flow", "borrows"]
+
+[[case]]
+id = "short_circuit_mutable_rhs_later_runtime_capture"
+path = "short_circuit_mutable_rhs_later_runtime_capture"
+tags = ["integration", "control-flow", "borrows", "templates"]
+
+[[case]]
+id = "short_circuit_mutable_rhs_runtime_capture_dual"
+path = "short_circuit_mutable_rhs_runtime_capture_dual"
+tags = ["integration", "control-flow", "borrows", "templates"]
+
+[[case]]
+id = "short_circuit_mutable_rhs_no_later_use_inconsistent"
+path = "short_circuit_mutable_rhs_no_later_use_inconsistent"
+tags = ["integration", "control-flow", "borrows", "diagnostics"]
+
+[[case]]
 id = "if_condition_requires_bool"
 path = "if_condition_requires_bool"
 tags = ["integration", "control-flow", "diagnostics"]

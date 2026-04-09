@@ -19,11 +19,9 @@ use crate::compiler_frontend::hir::hir_nodes::HirModule;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::style_directives::{StyleDirectiveRegistry, StyleDirectiveSpec};
 use crate::projects::settings::Config;
-use saying::say;
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::time::Instant;
 
 const FILE_MIN_UNIQUE_SYMBOLS_CAPACITY: usize = 32;
 
@@ -187,8 +185,6 @@ pub fn build_project(
     let valid_path = check_if_valid_path(entry_path, &mut path_string_table)
         .map_err(|error| CompilerMessages::from_error(error, path_string_table))?;
 
-    say!("\nCompiling Project");
-
     // --------------------------------------------
     //   PERFORM THE CORE COMPILER FRONTEND BUILD
     // --------------------------------------------
@@ -207,22 +203,13 @@ pub fn build_project(
     // --------------------------------------------
     // BUILD PROJECT USING THE APPROPRIATE BUILDER
     // --------------------------------------------
-    let start = Instant::now();
+
     let project =
         match project_builder
             .backend
             .build_backend(modules, &config, flags, &mut string_table)
         {
-            Ok(project) => {
-                let duration = start.elapsed();
-                say!(
-                    "\nBuilt ",
-                    Blue project.output_files.len(),
-                    Reset " files successfully in: ",
-                    Green Bold #duration
-                );
-                project
-            }
+            Ok(project) => project,
             Err(mut compiler_messages) => {
                 compiler_messages.string_table = string_table;
                 return Err(compiler_messages);

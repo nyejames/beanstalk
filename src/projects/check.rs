@@ -45,7 +45,7 @@ pub fn run_check(path: &str, options: CheckOptions) {
 
     if error_count == 0 && warning_count == 0 {
         say!(Dark White "---------------------");
-        say!(Green success_message(outcome.duration));
+        say!(success_message(outcome.duration));
         say!(Bold Green "No errors or warnings");
     } else {
         print_compiler_messages(outcome.messages);

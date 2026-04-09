@@ -10,7 +10,7 @@ use crate::compiler_frontend::analysis::borrow_checker::tests::test_support::{
 };
 use crate::compiler_frontend::ast::ast_nodes::NodeKind;
 use crate::compiler_frontend::ast::expressions::call_argument::{CallAccessMode, CallArgument};
-use crate::compiler_frontend::ast::expressions::expression::Expression;
+use crate::compiler_frontend::ast::expressions::expression::{Expression, Operator};
 use crate::compiler_frontend::ast::statements::functions::{
     FunctionReturn, FunctionSignature, ReturnSlot,
 };
@@ -874,4 +874,157 @@ fn same_line_mutable_call_then_reuse_uses_order_keys() {
     run_borrow_checker(&hir, &host_registry, &string_table).expect(
         "same-line mutable call + later reuse should borrow (not move) when ordered by statement",
     );
+}
+
+#[test]
+fn short_circuit_rhs_mutable_call_with_later_merge_use_borrows_instead_of_moving() {
+    let mut string_table = StringTable::new();
+    let (entry_path, start_name) = entry_and_start(&mut string_table);
+    let host_registry = default_host_registry(&mut string_table);
+
+    let rhs_name = symbol("rhs_short", &mut string_table);
+    let calls = symbol("calls", &mut string_table);
+    let lhs = symbol("lhs", &mut string_table);
+    let value = symbol("value", &mut string_table);
+    let sink = symbol("sink", &mut string_table);
+    let param_calls = symbol("param_calls", &mut string_table);
+
+    let rhs_function = function_node(
+        rhs_name.clone(),
+        FunctionSignature {
+            parameters: vec![param(
+                param_calls.clone(),
+                DataType::Int,
+                true,
+                location(1),
+            )],
+            returns: fresh_returns(vec![DataType::Bool]),
+        },
+        vec![
+            node(
+                NodeKind::Assignment {
+                    target: Box::new(assignment_target(
+                        param_calls.clone(),
+                        DataType::Int,
+                        location(2),
+                    )),
+                    value: Expression::runtime(
+                        vec![
+                            node(
+                                NodeKind::Rvalue(Expression::reference(
+                                    param_calls,
+                                    DataType::Int,
+                                    location(2),
+                                    Ownership::MutableOwned,
+                                )),
+                                location(2),
+                            ),
+                            node(
+                                NodeKind::Rvalue(Expression::int(
+                                    1,
+                                    location(2),
+                                    Ownership::ImmutableOwned,
+                                )),
+                                location(2),
+                            ),
+                            node(NodeKind::Operator(Operator::Add), location(2)),
+                        ],
+                        DataType::Int,
+                        location(2),
+                        Ownership::MutableOwned,
+                    ),
+                },
+                location(2),
+            ),
+            node(
+                NodeKind::Return(vec![Expression::bool(
+                    true,
+                    location(3),
+                    Ownership::ImmutableOwned,
+                )]),
+                location(3),
+            ),
+        ],
+        location(1),
+    );
+
+    let short_circuit_value = Expression::runtime(
+        vec![
+            node(
+                NodeKind::Rvalue(Expression::reference(
+                    lhs.clone(),
+                    DataType::Bool,
+                    location(11),
+                    Ownership::ImmutableOwned,
+                )),
+                location(11),
+            ),
+            node(
+                NodeKind::Rvalue(Expression::function_call(
+                    rhs_name,
+                    vec![Expression::reference(
+                        calls.clone(),
+                        DataType::Int,
+                        location(11),
+                        Ownership::MutableOwned,
+                    )],
+                    vec![DataType::Bool],
+                    location(11),
+                )),
+                location(11),
+            ),
+            node(NodeKind::Operator(Operator::And), location(11)),
+        ],
+        DataType::Bool,
+        location(11),
+        Ownership::ImmutableOwned,
+    );
+
+    let start_function = function_node(
+        start_name,
+        FunctionSignature {
+            parameters: vec![],
+            returns: vec![],
+        },
+        vec![
+            node(
+                NodeKind::VariableDeclaration(make_test_variable(
+                    lhs,
+                    Expression::bool(false, location(10), Ownership::ImmutableOwned),
+                )),
+                location(10),
+            ),
+            node(
+                NodeKind::VariableDeclaration(make_test_variable(
+                    calls.clone(),
+                    Expression::int(0, location(10), Ownership::MutableOwned),
+                )),
+                location(10),
+            ),
+            node(
+                NodeKind::VariableDeclaration(make_test_variable(value, short_circuit_value)),
+                location(11),
+            ),
+            node(
+                NodeKind::VariableDeclaration(make_test_variable(
+                    sink,
+                    Expression::reference(
+                        calls,
+                        DataType::Int,
+                        location(12),
+                        Ownership::ImmutableReference,
+                    ),
+                )),
+                location(12),
+            ),
+        ],
+        location(10),
+    );
+
+    let hir = lower_hir(
+        build_ast(vec![rhs_function, start_function], entry_path),
+        &mut string_table,
+    );
+    run_borrow_checker(&hir, &host_registry, &string_table)
+        .expect("rhs-only mutable short-circuit call with later merge use should stay borrowed");
 }

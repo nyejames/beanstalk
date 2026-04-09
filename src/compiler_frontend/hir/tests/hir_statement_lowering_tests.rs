@@ -855,6 +855,107 @@ fn lowers_ast_start_template_items_into_ordered_hir_fragments() {
 }
 
 #[test]
+fn runtime_start_fragment_wrapper_passes_captured_locals_via_call_arguments() {
+    let mut string_table = StringTable::new();
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
+    let fragment_name = entry_path.join_str("__bst_frag_0", &mut string_table);
+    let captured_name = super::symbol("captured_value", &mut string_table);
+    let literal = string_table.intern("ok");
+
+    let fragment_fn = function_node(
+        fragment_name.clone(),
+        FunctionSignature {
+            parameters: vec![],
+            returns: fresh_returns(vec![DataType::StringSlice]),
+        },
+        vec![
+            node(
+                NodeKind::VariableDeclaration(make_test_variable(
+                    captured_name.to_owned(),
+                    Expression::int(42, test_location(2), Ownership::ImmutableOwned),
+                )),
+                test_location(2),
+            ),
+            node(
+                NodeKind::Return(vec![runtime_template_expression(
+                    test_location(3),
+                    vec![Expression::reference(
+                        captured_name,
+                        DataType::Int,
+                        test_location(3),
+                        Ownership::ImmutableReference,
+                    )],
+                )]),
+                test_location(3),
+            ),
+        ],
+        test_location(2),
+    );
+
+    let start_function = function_node(
+        start_name,
+        FunctionSignature {
+            parameters: vec![],
+            returns: fresh_returns(vec![DataType::StringSlice]),
+        },
+        vec![node(
+            NodeKind::Return(vec![Expression::string_slice(
+                literal,
+                test_location(1),
+                Ownership::ImmutableOwned,
+            )]),
+            test_location(1),
+        )],
+        test_location(1),
+    );
+
+    let mut ast = build_ast(vec![fragment_fn, start_function], entry_path);
+    ast.start_template_items = vec![AstStartTemplateItem::RuntimeStringFunction {
+        function: fragment_name.clone(),
+        location: test_location(10),
+    }];
+
+    let module = lower_ast(ast, &mut string_table).expect("HIR lowering should succeed");
+    let fragment_id = module
+        .functions
+        .iter()
+        .find_map(|function| {
+            module
+                .side_table
+                .function_name_path(function.id)
+                .filter(|name| **name == fragment_name)
+                .map(|_| function.id)
+        })
+        .expect("runtime fragment function should be present");
+    let fragment_function = module
+        .functions
+        .iter()
+        .find(|function| function.id == fragment_id)
+        .expect("runtime fragment function metadata should exist");
+    let fragment_entry = module
+        .blocks
+        .iter()
+        .find(|block| block.id == fragment_function.entry)
+        .expect("runtime fragment entry block should exist");
+
+    let call_statement = fragment_entry
+        .statements
+        .iter()
+        .find_map(|statement| match &statement.kind {
+            HirStatementKind::Call {
+                target: CallTarget::UserFunction(_),
+                args,
+                ..
+            } => Some(args),
+            _ => None,
+        })
+        .expect("runtime fragment wrapper should call a synthesized template helper");
+
+    assert_eq!(call_statement.len(), 1);
+    assert!(matches!(call_statement[0].kind, HirExpressionKind::Load(_)));
+}
+
+#[test]
 fn lowers_ast_doc_fragments_into_hir_doc_metadata() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);

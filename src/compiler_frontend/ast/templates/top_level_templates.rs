@@ -6,6 +6,7 @@
 //! - runtime templates become generated `__bst_frag_N` functions
 
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
+use crate::compiler_frontend::ast::expressions::call_argument::{CallAccessMode, CallArgument};
 use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, ResultCallHandling,
 };
@@ -15,7 +16,7 @@ use crate::compiler_frontend::ast::statements::functions::{
 use crate::compiler_frontend::ast::templates::template::{CommentDirectiveKind, TemplateType};
 use crate::compiler_frontend::ast::templates::template_folding::TemplateFoldContext;
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::datatypes::DataType;
+use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::headers::parse_file_headers::{
     TopLevelTemplateItem, TopLevelTemplateKind,
 };
@@ -54,10 +55,23 @@ pub struct AstDocFragment {
 
 #[derive(Clone)]
 struct RuntimeTemplateCandidate {
-    declaration: Declaration,
+    template_expression: Expression,
     location: SourceLocation,
     scope: InternedPath,
+    source_index: usize,
     preceding_statements: Vec<AstNode>,
+}
+
+#[derive(Clone)]
+struct RuntimeTemplateExtraction {
+    runtime_candidates: Vec<RuntimeTemplateCandidate>,
+    entry_scope: InternedPath,
+    non_template_body: Vec<AstNode>,
+}
+
+struct RuntimeFragmentCapturePlan {
+    fragment_body: Vec<AstNode>,
+    captured_symbols: FxHashSet<InternedPath>,
 }
 
 pub(crate) fn synthesize_start_template_items(
@@ -84,7 +98,11 @@ pub(crate) fn synthesize_start_template_items(
         )));
     };
 
-    let (runtime_candidates, entry_scope) =
+    let RuntimeTemplateExtraction {
+        runtime_candidates,
+        entry_scope,
+        non_template_body,
+    } =
         extract_runtime_template_candidates(ast_nodes, entry_start_index, string_table)?;
 
     // Phase 2: collect const/runtime fragment sources and order them by source location.
@@ -94,6 +112,7 @@ pub(crate) fn synthesize_start_template_items(
     let mut next_fragment_index = 0usize;
     let mut ordered_fragment_sources: Vec<OrderedFragmentSource> =
         Vec::with_capacity(ordered_header_items.len() + runtime_candidates.len());
+    let mut captured_runtime_symbols = FxHashSet::default();
 
     for template_item in ordered_header_items {
         if let TopLevelTemplateKind::ConstTemplate { header_path } = template_item.kind {
@@ -127,9 +146,9 @@ pub(crate) fn synthesize_start_template_items(
             }
 
             OrderedFragmentSource::Runtime(candidate) => {
-                let ExpressionKind::Template(template) = &candidate.declaration.value.kind else {
+                let ExpressionKind::Template(template) = &candidate.template_expression.kind else {
                     return Err(CompilerError::compiler_error(
-                        "Top-level runtime template candidate was not parsed as a template expression.",
+                        "Top-level runtime template candidate expression was not parsed as a template.",
                     ));
                 };
 
@@ -154,9 +173,11 @@ pub(crate) fn synthesize_start_template_items(
                     entry_dir.join_str(&format!("__bst_frag_{next_fragment_index}"), string_table);
                 next_fragment_index += 1;
 
-                let mut fragment_body = build_runtime_fragment_body(&candidate, string_table)?;
+                let capture_plan = build_runtime_fragment_capture_plan(&candidate)?;
+                captured_runtime_symbols.extend(capture_plan.captured_symbols);
+                let mut fragment_body = capture_plan.fragment_body;
                 fragment_body.push(AstNode {
-                    kind: NodeKind::Return(vec![candidate.declaration.value.to_owned()]),
+                    kind: NodeKind::Return(vec![candidate.template_expression.to_owned()]),
                     location: candidate.location.to_owned(),
                     scope: candidate.scope.to_owned(),
                 });
@@ -183,6 +204,10 @@ pub(crate) fn synthesize_start_template_items(
             }
         }
     }
+
+    let pruned_start_body =
+        prune_template_only_captured_declarations(non_template_body, &captured_runtime_symbols);
+    replace_entry_start_body(ast_nodes, entry_start_index, pruned_start_body)?;
 
     Ok(start_template_items)
 }
@@ -325,6 +350,7 @@ fn compare_fragment_locations(
                 .char_column
                 .cmp(&rhs_location.start_pos.char_column),
         )
+        .then(fragment_source_index(lhs).cmp(&fragment_source_index(rhs)))
 }
 
 fn fragment_source_location(source: &OrderedFragmentSource) -> &SourceLocation {
@@ -334,11 +360,18 @@ fn fragment_source_location(source: &OrderedFragmentSource) -> &SourceLocation {
     }
 }
 
+fn fragment_source_index(source: &OrderedFragmentSource) -> usize {
+    match source {
+        OrderedFragmentSource::Const { .. } => usize::MAX,
+        OrderedFragmentSource::Runtime(candidate) => candidate.source_index,
+    }
+}
+
 fn extract_runtime_template_candidates(
     ast_nodes: &mut [AstNode],
     entry_start_index: usize,
     string_table: &StringTable,
-) -> Result<(Vec<RuntimeTemplateCandidate>, InternedPath), CompilerError> {
+) -> Result<RuntimeTemplateExtraction, CompilerError> {
     let Some(entry_start_node) = ast_nodes.get_mut(entry_start_index) else {
         return Err(CompilerError::compiler_error(
             "Entry start function index is out of bounds while extracting runtime templates.",
@@ -355,14 +388,15 @@ fn extract_runtime_template_candidates(
     // Work on a snapshot so extraction is independent of in-place mutation.
     let original_body = body.to_owned();
     let mut runtime_candidates = Vec::new();
-    let mut filtered_body = Vec::with_capacity(original_body.len());
+    let mut non_template_body = Vec::with_capacity(original_body.len());
 
     for (index, node) in original_body.iter().enumerate() {
         if let Some(declaration) = as_top_level_template_declaration(node, string_table) {
             runtime_candidates.push(RuntimeTemplateCandidate {
-                declaration: declaration.to_owned(),
+                template_expression: declaration.value.to_owned(),
                 location: node.location.to_owned(),
                 scope: node.scope.to_owned(),
+                source_index: index,
                 preceding_statements: original_body[..index]
                     .iter()
                     .filter(|statement| {
@@ -374,11 +408,150 @@ fn extract_runtime_template_candidates(
             continue;
         }
 
-        filtered_body.push(node.to_owned());
+        if let Some(template_expression) = as_top_level_template_return_expression(node) {
+            runtime_candidates.push(RuntimeTemplateCandidate {
+                template_expression: template_expression.to_owned(),
+                location: node.location.to_owned(),
+                scope: node.scope.to_owned(),
+                source_index: index,
+                preceding_statements: original_body[..index]
+                    .iter()
+                    .filter(|statement| {
+                        as_top_level_template_declaration(statement, string_table).is_none()
+                            && as_top_level_template_return_expression(statement).is_none()
+                    })
+                    .map(ToOwned::to_owned)
+                    .collect(),
+            });
+            continue;
+        }
+
+        non_template_body.push(node.to_owned());
     }
 
-    *body = filtered_body;
-    Ok((runtime_candidates, entry_scope))
+    Ok(RuntimeTemplateExtraction {
+        runtime_candidates,
+        entry_scope,
+        non_template_body,
+    })
+}
+
+fn replace_entry_start_body(
+    ast_nodes: &mut [AstNode],
+    entry_start_index: usize,
+    body: Vec<AstNode>,
+) -> Result<(), CompilerError> {
+    let Some(entry_start_node) = ast_nodes.get_mut(entry_start_index) else {
+        return Err(CompilerError::compiler_error(
+            "Entry start function index is out of bounds while rewriting captured declarations.",
+        ));
+    };
+
+    let NodeKind::Function(_, _, start_body) = &mut entry_start_node.kind else {
+        return Err(CompilerError::compiler_error(
+            "Entry start function node is not a function while rewriting captured declarations.",
+        ));
+    };
+
+    *start_body = body;
+    Ok(())
+}
+
+fn prune_template_only_captured_declarations(
+    start_body: Vec<AstNode>,
+    captured_symbols: &FxHashSet<InternedPath>,
+) -> Vec<AstNode> {
+    if captured_symbols.is_empty() {
+        return start_body;
+    }
+
+    let prunable_symbols = start_body
+        .iter()
+        .filter_map(|statement| {
+            let NodeKind::VariableDeclaration(declaration) = &statement.kind else {
+                return None;
+            };
+
+            captured_symbols
+                .contains(&declaration.id)
+                .then_some(declaration.id.to_owned())
+        })
+        .collect::<FxHashSet<_>>();
+
+    if prunable_symbols.is_empty() {
+        return start_body;
+    }
+
+    let declaration_values = start_body
+        .iter()
+        .filter_map(|statement| {
+            let NodeKind::VariableDeclaration(declaration) = &statement.kind else {
+                return None;
+            };
+
+            prunable_symbols
+                .contains(&declaration.id)
+                .then_some((declaration.id.to_owned(), declaration.value.to_owned()))
+        })
+        .collect::<FxHashMap<_, _>>();
+
+    // Keep declarations that feed non-template start semantics, then keep their
+    // transitive declaration dependencies inside the same prunable set.
+    let mut required_symbols = FxHashSet::default();
+    for statement in &start_body {
+        if let NodeKind::VariableDeclaration(declaration) = &statement.kind
+            && prunable_symbols.contains(&declaration.id)
+        {
+            continue;
+        }
+
+        collect_references_from_ast_node(statement, &mut required_symbols);
+    }
+
+    let mut kept_symbols = FxHashSet::default();
+    let mut pending = required_symbols
+        .into_iter()
+        .filter(|symbol| prunable_symbols.contains(symbol))
+        .collect::<Vec<_>>();
+
+    while let Some(symbol) = pending.pop() {
+        if !kept_symbols.insert(symbol.to_owned()) {
+            continue;
+        }
+
+        let Some(value) = declaration_values.get(&symbol) else {
+            continue;
+        };
+
+        let mut dependencies = FxHashSet::default();
+        collect_references_from_expression(value, &mut dependencies);
+
+        for dependency in dependencies {
+            if prunable_symbols.contains(&dependency) && !kept_symbols.contains(&dependency) {
+                pending.push(dependency);
+            }
+        }
+    }
+
+    let pruned_symbols = prunable_symbols
+        .difference(&kept_symbols)
+        .cloned()
+        .collect::<FxHashSet<_>>();
+
+    if pruned_symbols.is_empty() {
+        return start_body;
+    }
+
+    start_body
+        .into_iter()
+        .filter(|statement| {
+            !matches!(
+                &statement.kind,
+                NodeKind::VariableDeclaration(declaration)
+                    if pruned_symbols.contains(&declaration.id)
+            )
+        })
+        .collect()
 }
 
 fn as_top_level_template_declaration<'a>(
@@ -405,14 +578,23 @@ fn as_top_level_template_declaration<'a>(
     Some(declaration)
 }
 
-fn build_runtime_fragment_body(
+fn as_top_level_template_return_expression(node: &AstNode) -> Option<&Expression> {
+    let NodeKind::Return(values) = &node.kind else {
+        return None;
+    };
+
+    (values.len() == 1).then_some(())?;
+    let expression = &values[0];
+    matches!(expression.kind, ExpressionKind::Template(_)).then_some(expression)
+}
+
+fn build_runtime_fragment_capture_plan(
     candidate: &RuntimeTemplateCandidate,
-    _string_table: &StringTable,
-) -> Result<Vec<AstNode>, CompilerError> {
+) -> Result<RuntimeFragmentCapturePlan, CompilerError> {
     // 1) Collect all referenced symbols in the template expression.
     // 2) Pull in only the declaration statements needed to evaluate that expression.
     let mut required_symbols = FxHashSet::default();
-    collect_references_from_expression(&candidate.declaration.value, &mut required_symbols);
+    collect_references_from_expression(&candidate.template_expression, &mut required_symbols);
 
     let declaration_lookup = candidate
         .preceding_statements
@@ -437,6 +619,12 @@ fn build_runtime_fragment_body(
             &mut visiting,
         )?;
     }
+
+    include_mutation_dependencies(
+        &declaration_lookup,
+        &mut included_declarations,
+        &mut visiting,
+    )?;
 
     let included_symbols = included_declarations
         .iter()
@@ -490,7 +678,375 @@ fn build_runtime_fragment_body(
         fragment_body.push(statement);
     }
 
-    Ok(fragment_body)
+    Ok(RuntimeFragmentCapturePlan {
+        fragment_body,
+        captured_symbols: included_symbols,
+    })
+}
+
+fn include_mutation_dependencies(
+    declaration_lookup: &FxHashMap<InternedPath, (usize, &Declaration)>,
+    included_declarations: &mut FxHashSet<usize>,
+    visiting: &mut FxHashSet<InternedPath>,
+) -> Result<(), CompilerError> {
+    loop {
+        let tracked_symbols = declaration_lookup
+            .iter()
+            .filter_map(|(symbol, (index, _))| {
+                included_declarations
+                    .contains(index)
+                    .then_some(symbol.to_owned())
+            })
+            .collect::<FxHashSet<_>>();
+
+        if tracked_symbols.is_empty() {
+            break;
+        }
+
+        let mut symbols_to_include = Vec::new();
+        for (symbol, (index, declaration)) in declaration_lookup {
+            if included_declarations.contains(index) {
+                continue;
+            }
+
+            if expression_may_mutate_tracked_symbols(&declaration.value, &tracked_symbols) {
+                symbols_to_include.push(symbol.to_owned());
+            }
+        }
+
+        if symbols_to_include.is_empty() {
+            break;
+        }
+
+        let previous_len = included_declarations.len();
+        for symbol in symbols_to_include {
+            include_declaration_dependencies(
+                &symbol,
+                declaration_lookup,
+                included_declarations,
+                visiting,
+            )?;
+        }
+
+        if included_declarations.len() == previous_len {
+            break;
+        }
+    }
+
+    Ok(())
+}
+
+fn expression_may_mutate_tracked_symbols(
+    expression: &Expression,
+    tracked_symbols: &FxHashSet<InternedPath>,
+) -> bool {
+    match &expression.kind {
+        ExpressionKind::FunctionCall(_, args)
+        | ExpressionKind::HostFunctionCall(_, args)
+        | ExpressionKind::Collection(args) => {
+            call_arguments_mutate_tracked_symbols(args, tracked_symbols)
+                || args
+                    .iter()
+                    .any(|argument| expression_may_mutate_tracked_symbols(argument, tracked_symbols))
+        }
+
+        ExpressionKind::ResultHandledFunctionCall { args, handling, .. } => {
+            if call_arguments_mutate_tracked_symbols(args, tracked_symbols) {
+                return true;
+            }
+
+            if args
+                .iter()
+                .any(|argument| expression_may_mutate_tracked_symbols(argument, tracked_symbols))
+            {
+                return true;
+            }
+
+            match handling {
+                ResultCallHandling::Fallback(fallback_values) => fallback_values.iter().any(
+                    |fallback| expression_may_mutate_tracked_symbols(fallback, tracked_symbols),
+                ),
+                ResultCallHandling::Handler { fallback, body, .. } => {
+                    fallback.as_ref().is_some_and(|fallback_values| {
+                        fallback_values.iter().any(|fallback| {
+                            expression_may_mutate_tracked_symbols(fallback, tracked_symbols)
+                        })
+                    }) || body.iter().any(|node| {
+                        ast_node_may_mutate_tracked_symbols(node, tracked_symbols)
+                    })
+                }
+                ResultCallHandling::Propagate => false,
+            }
+        }
+
+        ExpressionKind::Runtime(nodes) => nodes
+            .iter()
+            .any(|node| ast_node_may_mutate_tracked_symbols(node, tracked_symbols)),
+
+        ExpressionKind::Template(template) => template
+            .content
+            .flatten_expressions()
+            .into_iter()
+            .any(|value| expression_may_mutate_tracked_symbols(&value, tracked_symbols)),
+
+        ExpressionKind::StructDefinition(arguments) | ExpressionKind::StructInstance(arguments) => {
+            arguments
+                .iter()
+                .any(|argument| expression_may_mutate_tracked_symbols(&argument.value, tracked_symbols))
+        }
+
+        ExpressionKind::Range(lower, upper) => {
+            expression_may_mutate_tracked_symbols(lower, tracked_symbols)
+                || expression_may_mutate_tracked_symbols(upper, tracked_symbols)
+        }
+
+        ExpressionKind::Function(_, body) => body
+            .iter()
+            .any(|node| ast_node_may_mutate_tracked_symbols(node, tracked_symbols)),
+
+        ExpressionKind::BuiltinCast { value, .. }
+        | ExpressionKind::ResultConstruct { value, .. }
+        | ExpressionKind::Coerced { value, .. } => {
+            expression_may_mutate_tracked_symbols(value, tracked_symbols)
+        }
+
+        ExpressionKind::HandledResult { value, handling } => {
+            if expression_may_mutate_tracked_symbols(value, tracked_symbols) {
+                return true;
+            }
+
+            match handling {
+                ResultCallHandling::Fallback(fallback_values) => fallback_values.iter().any(
+                    |fallback| expression_may_mutate_tracked_symbols(fallback, tracked_symbols),
+                ),
+                ResultCallHandling::Handler { fallback, body, .. } => {
+                    fallback.as_ref().is_some_and(|fallback_values| {
+                        fallback_values.iter().any(|fallback| {
+                            expression_may_mutate_tracked_symbols(fallback, tracked_symbols)
+                        })
+                    }) || body.iter().any(|node| {
+                        ast_node_may_mutate_tracked_symbols(node, tracked_symbols)
+                    })
+                }
+                ResultCallHandling::Propagate => false,
+            }
+        }
+
+        ExpressionKind::Copy(place) => ast_node_may_mutate_tracked_symbols(place, tracked_symbols),
+
+        ExpressionKind::Reference(_)
+        | ExpressionKind::NoValue
+        | ExpressionKind::OptionNone
+        | ExpressionKind::Int(_)
+        | ExpressionKind::Float(_)
+        | ExpressionKind::StringSlice(_)
+        | ExpressionKind::Bool(_)
+        | ExpressionKind::Char(_)
+        | ExpressionKind::Path(_) => false,
+    }
+}
+
+fn ast_node_may_mutate_tracked_symbols(
+    node: &AstNode,
+    tracked_symbols: &FxHashSet<InternedPath>,
+) -> bool {
+    match &node.kind {
+        NodeKind::VariableDeclaration(declaration) => {
+            expression_may_mutate_tracked_symbols(&declaration.value, tracked_symbols)
+        }
+
+        NodeKind::Assignment { target, value } => {
+            ast_node_references_tracked_symbols(target, tracked_symbols)
+                || expression_may_mutate_tracked_symbols(value, tracked_symbols)
+        }
+
+        NodeKind::MethodCall { receiver, args, .. } => {
+            ast_node_references_tracked_symbols(receiver, tracked_symbols)
+                || call_named_arguments_mutate_tracked_symbols(args, tracked_symbols)
+                || args.iter().any(|argument| {
+                    expression_may_mutate_tracked_symbols(&argument.value, tracked_symbols)
+                })
+        }
+
+        NodeKind::FunctionCall { args, .. } | NodeKind::HostFunctionCall { args, .. } => {
+            call_named_arguments_mutate_tracked_symbols(args, tracked_symbols)
+                || args.iter().any(|argument| {
+                    expression_may_mutate_tracked_symbols(&argument.value, tracked_symbols)
+                })
+        }
+
+        NodeKind::ResultHandledFunctionCall { args, handling, .. } => {
+            if call_named_arguments_mutate_tracked_symbols(args, tracked_symbols) {
+                return true;
+            }
+
+            if args.iter().any(|argument| {
+                expression_may_mutate_tracked_symbols(&argument.value, tracked_symbols)
+            }) {
+                return true;
+            }
+
+            match handling {
+                ResultCallHandling::Fallback(fallback_values) => fallback_values.iter().any(
+                    |fallback| expression_may_mutate_tracked_symbols(fallback, tracked_symbols),
+                ),
+                ResultCallHandling::Handler { fallback, body, .. } => {
+                    fallback.as_ref().is_some_and(|fallback_values| {
+                        fallback_values.iter().any(|fallback| {
+                            expression_may_mutate_tracked_symbols(fallback, tracked_symbols)
+                        })
+                    }) || body.iter().any(|statement| {
+                        ast_node_may_mutate_tracked_symbols(statement, tracked_symbols)
+                    })
+                }
+                ResultCallHandling::Propagate => false,
+            }
+        }
+
+        NodeKind::Rvalue(expression) => {
+            expression_may_mutate_tracked_symbols(expression, tracked_symbols)
+        }
+
+        NodeKind::Return(values) => values
+            .iter()
+            .any(|value| expression_may_mutate_tracked_symbols(value, tracked_symbols)),
+
+        NodeKind::ReturnError(value) => expression_may_mutate_tracked_symbols(value, tracked_symbols),
+
+        NodeKind::If(condition, then_body, else_body) => {
+            expression_may_mutate_tracked_symbols(condition, tracked_symbols)
+                || then_body
+                    .iter()
+                    .any(|statement| ast_node_may_mutate_tracked_symbols(statement, tracked_symbols))
+                || else_body.as_ref().is_some_and(|body| {
+                    body.iter().any(|statement| {
+                        ast_node_may_mutate_tracked_symbols(statement, tracked_symbols)
+                    })
+                })
+        }
+
+        NodeKind::Match(scrutinee, arms, default) => {
+            if expression_may_mutate_tracked_symbols(scrutinee, tracked_symbols) {
+                return true;
+            }
+
+            if arms.iter().any(|arm| {
+                expression_may_mutate_tracked_symbols(&arm.condition, tracked_symbols)
+                    || arm.body.iter().any(|statement| {
+                        ast_node_may_mutate_tracked_symbols(statement, tracked_symbols)
+                    })
+            }) {
+                return true;
+            }
+
+            default.as_ref().is_some_and(|body| {
+                body.iter().any(|statement| {
+                    ast_node_may_mutate_tracked_symbols(statement, tracked_symbols)
+                })
+            })
+        }
+
+        NodeKind::RangeLoop {
+            bindings,
+            range,
+            body,
+        } => {
+            bindings.item.as_ref().is_some_and(|binding| {
+                expression_may_mutate_tracked_symbols(&binding.value, tracked_symbols)
+            }) || bindings.index.as_ref().is_some_and(|binding| {
+                expression_may_mutate_tracked_symbols(&binding.value, tracked_symbols)
+            }) || expression_may_mutate_tracked_symbols(&range.start, tracked_symbols)
+                || expression_may_mutate_tracked_symbols(&range.end, tracked_symbols)
+                || range.step.as_ref().is_some_and(|step| {
+                    expression_may_mutate_tracked_symbols(step, tracked_symbols)
+                })
+                || body.iter().any(|statement| {
+                    ast_node_may_mutate_tracked_symbols(statement, tracked_symbols)
+                })
+        }
+
+        NodeKind::CollectionLoop {
+            bindings,
+            iterable,
+            body,
+        } => {
+            bindings.item.as_ref().is_some_and(|binding| {
+                expression_may_mutate_tracked_symbols(&binding.value, tracked_symbols)
+            }) || bindings.index.as_ref().is_some_and(|binding| {
+                expression_may_mutate_tracked_symbols(&binding.value, tracked_symbols)
+            }) || expression_may_mutate_tracked_symbols(iterable, tracked_symbols)
+                || body.iter().any(|statement| {
+                    ast_node_may_mutate_tracked_symbols(statement, tracked_symbols)
+                })
+        }
+
+        NodeKind::WhileLoop(condition, body) => {
+            expression_may_mutate_tracked_symbols(condition, tracked_symbols)
+                || body.iter().any(|statement| {
+                    ast_node_may_mutate_tracked_symbols(statement, tracked_symbols)
+                })
+        }
+
+        NodeKind::FieldAccess { base, .. } => {
+            ast_node_may_mutate_tracked_symbols(base, tracked_symbols)
+        }
+
+        NodeKind::MultiBind { value, .. } => {
+            expression_may_mutate_tracked_symbols(value, tracked_symbols)
+        }
+
+        NodeKind::StructDefinition(_, fields) => fields.iter().any(|field| {
+            expression_may_mutate_tracked_symbols(&field.value, tracked_symbols)
+        }),
+
+        NodeKind::Function(_, _, body) => body
+            .iter()
+            .any(|statement| ast_node_may_mutate_tracked_symbols(statement, tracked_symbols)),
+
+        NodeKind::Break | NodeKind::Continue | NodeKind::Operator(_) => false,
+    }
+}
+
+fn call_arguments_mutate_tracked_symbols(
+    args: &[Expression],
+    tracked_symbols: &FxHashSet<InternedPath>,
+) -> bool {
+    args.iter().any(|argument| {
+        argument.ownership == Ownership::MutableOwned
+            && expression_references_tracked_symbols(argument, tracked_symbols)
+    })
+}
+
+fn call_named_arguments_mutate_tracked_symbols(
+    args: &[CallArgument],
+    tracked_symbols: &FxHashSet<InternedPath>,
+) -> bool {
+    args.iter().any(|argument| {
+        argument.access_mode == CallAccessMode::Mutable
+            && expression_references_tracked_symbols(&argument.value, tracked_symbols)
+    })
+}
+
+fn ast_node_references_tracked_symbols(
+    node: &AstNode,
+    tracked_symbols: &FxHashSet<InternedPath>,
+) -> bool {
+    let mut references = FxHashSet::default();
+    collect_references_from_ast_node(node, &mut references);
+    references
+        .into_iter()
+        .any(|symbol| tracked_symbols.contains(&symbol))
+}
+
+fn expression_references_tracked_symbols(
+    expression: &Expression,
+    tracked_symbols: &FxHashSet<InternedPath>,
+) -> bool {
+    let mut references = FxHashSet::default();
+    collect_references_from_expression(expression, &mut references);
+    references
+        .into_iter()
+        .any(|symbol| tracked_symbols.contains(&symbol))
 }
 
 fn include_declaration_dependencies(
