@@ -879,9 +879,24 @@ path = "literal_match_with_else_success"
 tags = ["integration","control-flow"]
 
 [[case]]
+id = "loop_bare_iteration_bindings"
+path = "loop_bare_iteration_bindings"
+tags = ["integration","control-flow"]
+
+[[case]]
 id = "loop_break_continue_control_flow"
 path = "loop_break_continue_control_flow"
 tags = ["integration","control-flow"]
+
+[[case]]
+id = "loop_collection_iteration"
+path = "loop_collection_iteration"
+tags = ["integration","control-flow","collections"]
+
+[[case]]
+id = "loop_collection_iteration_with_index"
+path = "loop_collection_iteration_with_index"
+tags = ["integration","control-flow","collections"]
 
 [[case]]
 id = "loop_conditional_and_range"
@@ -889,14 +904,49 @@ path = "loop_conditional_and_range"
 tags = ["integration","control-flow"]
 
 [[case]]
+id = "loop_float_range_requires_by"
+path = "loop_float_range_requires_by"
+tags = ["integration","control-flow","diagnostics"]
+
+[[case]]
 id = "loop_float_range_with_by"
 path = "loop_float_range_with_by"
+tags = ["integration","control-flow"]
+
+[[case]]
+id = "loop_invalid_bindings"
+path = "loop_invalid_bindings"
+tags = ["integration","control-flow","diagnostics"]
+
+[[case]]
+id = "loop_invalid_collection_source"
+path = "loop_invalid_collection_source"
+tags = ["integration","control-flow","diagnostics"]
+
+[[case]]
+id = "loop_invalid_condition_type"
+path = "loop_invalid_condition_type"
+tags = ["integration","control-flow","diagnostics"]
+
+[[case]]
+id = "loop_missing_range_end"
+path = "loop_missing_range_end"
+tags = ["integration","control-flow","diagnostics"]
+
+[[case]]
+id = "loop_nested_break_continue"
+path = "loop_nested_break_continue"
 tags = ["integration","control-flow"]
 
 [[case]]
 id = "loop_range_direction_and_step"
 path = "loop_range_direction_and_step"
 tags = ["integration","control-flow"]
+
+[[case]]
+id = "loop_zero_step"
+path = "loop_zero_step"
+tags = ["integration","control-flow","diagnostics"]
 
 [[case]]
 id = "malformed_print_statement"

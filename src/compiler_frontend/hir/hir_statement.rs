@@ -4,7 +4,7 @@
 //! terminators.
 
 use crate::compiler_frontend::ast::ast_nodes::{
-    AstNode, Declaration, ForLoopRange, MultiBindTarget, MultiBindTargetKind, NodeKind,
+    AstNode, LoopBindings, MultiBindTarget, MultiBindTargetKind, NodeKind, RangeLoopSpec,
     SourceLocation,
 };
 use crate::compiler_frontend::ast::expressions::call_argument::normalize_call_argument_values;
@@ -28,7 +28,7 @@ use crate::hir_log;
 
 mod control_flow;
 mod declarations;
-mod for_loop_lowering;
+mod loop_lowering;
 
 impl<'a> HirBuilder<'a> {
     // WHAT: routes one top-level AST node into the HIR lowering path that owns it.
@@ -180,9 +180,17 @@ impl<'a> HirBuilder<'a> {
                 self.lower_match_statement(scrutinee, arms, default.as_deref(), &node.location)
             }
 
-            NodeKind::ForLoop(binding, range, body) => {
-                self.lower_for_statement(binding, range, body, &node.location)
-            }
+            NodeKind::RangeLoop {
+                bindings,
+                range,
+                body,
+            } => self.lower_range_loop_statement(bindings, range, body, &node.location),
+
+            NodeKind::CollectionLoop {
+                bindings,
+                iterable,
+                body,
+            } => self.lower_collection_loop_statement(bindings, iterable, body, &node.location),
 
             NodeKind::Operator(_) => Ok(()),
 
@@ -537,16 +545,26 @@ impl<'a> HirBuilder<'a> {
         self.emit_statement_kind(HirStatementKind::Expr(lowered.value), location)
     }
 
-    fn lower_for_statement(
+    fn lower_range_loop_statement(
         &mut self,
-        binding: &Declaration,
-        range: &ForLoopRange,
+        bindings: &LoopBindings,
+        range: &RangeLoopSpec,
         body: &[AstNode],
         location: &SourceLocation,
     ) -> Result<(), CompilerError> {
-        // For-loop lowering is intentionally split into a dedicated submodule to keep this file
+        // Loop lowering is intentionally split into a dedicated submodule to keep this file
         // focused on statement dispatch and shared lowering helpers.
-        self.lower_for_statement_impl(binding, range, body, location)
+        self.lower_range_loop_statement_impl(bindings, range, body, location)
+    }
+
+    fn lower_collection_loop_statement(
+        &mut self,
+        bindings: &LoopBindings,
+        iterable: &Expression,
+        body: &[AstNode],
+        location: &SourceLocation,
+    ) -> Result<(), CompilerError> {
+        self.lower_collection_loop_statement_impl(bindings, iterable, body, location)
     }
 
     fn emit_statement_kind(

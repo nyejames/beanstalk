@@ -1,22 +1,47 @@
 //! Loop parsing regression tests.
 //!
-//! WHAT: validates conditional and range-loop AST shapes.
-//! WHY: loop lowering depends on the parser preserving range bounds, inclusivity, and steps.
+//! WHAT: validates conditional/range/collection loop AST shapes and loop-header diagnostics.
+//! WHY: loop lowering depends on parser output staying stable across the new loop header syntax.
 
 use super::*;
+use crate::compiler_frontend::ast::ast::Ast;
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
-use crate::compiler_frontend::ast::test_support::{parse_single_file_ast, parse_single_file_ast_error};
-use crate::compiler_frontend::ast::test_support::start_function_body;
+use crate::compiler_frontend::ast::test_support::{
+    function_body_by_name, parse_single_file_ast, parse_single_file_ast_error,
+};
+use crate::compiler_frontend::compiler_errors::CompilerError;
+
+fn loop_fixture_source(loop_body_source: &str) -> String {
+    let indented_body = loop_body_source
+        .lines()
+        .map(|line| format!("    {line}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    format!("loop_test ||:\n{indented_body}\n;\n\nloop_test()\n")
+}
+
+fn parse_loop_fixture(loop_body_source: &str) -> (Ast, StringTable) {
+    parse_single_file_ast(&loop_fixture_source(loop_body_source))
+}
+
+fn parse_loop_fixture_error(loop_body_source: &str) -> CompilerError {
+    parse_single_file_ast_error(&loop_fixture_source(loop_body_source))
+}
+
+fn loop_function_body<'a>(ast: &'a Ast, string_table: &StringTable) -> &'a [AstNode] {
+    function_body_by_name(ast, string_table, "loop_test")
+}
 
 #[test]
-fn parses_boolean_conditional_loops() {
+fn parses_conditional_loop_without_bindings() {
     let (ast, string_table) =
-        parse_single_file_ast("counter ~= 0\nloop counter < 3:\n    counter = counter + 1\n;\n");
+        parse_loop_fixture("counter ~= 0\nloop counter < 3:\n    counter = counter + 1\n;");
 
-    let body = start_function_body(&ast, &string_table);
+    let body = loop_function_body(&ast, &string_table);
 
     let NodeKind::WhileLoop(condition, loop_body) = &body[1].kind else {
-        panic!("expected conditional loop in start body");
+        panic!("expected conditional loop in function body");
     };
 
     assert!(matches!(condition.data_type, DataType::Bool));
@@ -25,17 +50,23 @@ fn parses_boolean_conditional_loops() {
 }
 
 #[test]
-fn parses_range_loops_with_inclusive_end_and_step() {
+fn parses_range_loop_with_bracketed_binding() {
     let (ast, string_table) =
-        parse_single_file_ast("sum ~= 0\nloop i in 1 upto 5 by 2:\n    sum = sum + i\n;\n");
+        parse_loop_fixture("sum ~= 0\nloop 1 upto 5 by 2 |i|:\n    sum = sum + i\n;");
 
-    let body = start_function_body(&ast, &string_table);
+    let body = loop_function_body(&ast, &string_table);
 
-    let NodeKind::ForLoop(binder, range, loop_body) = &body[1].kind else {
-        panic!("expected range for-loop in start body");
+    let NodeKind::RangeLoop {
+        bindings,
+        range,
+        body: loop_body,
+    } = &body[1].kind
+    else {
+        panic!("expected range loop in function body");
     };
 
-    assert_eq!(binder.id.name_str(&string_table), Some("i"));
+    assert_eq!(bindings.item.id.name_str(&string_table), Some("i"));
+    assert!(bindings.index.is_none());
     assert_eq!(range.end_kind, RangeEndKind::Inclusive);
     assert!(matches!(range.start.kind, ExpressionKind::Int(1)));
     assert!(matches!(range.end.kind, ExpressionKind::Int(5)));
@@ -47,13 +78,278 @@ fn parses_range_loops_with_inclusive_end_and_step() {
 }
 
 #[test]
-fn rejects_keyword_shadow_loop_binder_names() {
-    let error = parse_single_file_ast_error("sum ~= 0\nloop _if in 0 to 3:\n    sum = sum + 1\n;\n");
+fn parses_range_loop_with_bare_binding() {
+    let (ast, string_table) = parse_loop_fixture("sum ~= 0\nloop 1 to 4 i:\n    sum = sum + i\n;");
+
+    let body = loop_function_body(&ast, &string_table);
+
+    let NodeKind::RangeLoop { bindings, .. } = &body[1].kind else {
+        panic!("expected range loop in function body");
+    };
+
+    assert_eq!(bindings.item.id.name_str(&string_table), Some("i"));
+    assert!(bindings.index.is_none());
+}
+
+#[test]
+fn parses_range_loop_with_value_and_index_bindings() {
+    let (ast, string_table) =
+        parse_loop_fixture("sum ~= 0\nloop 0 to 4 |value, index|:\n    sum = sum + value\n;");
+
+    let body = loop_function_body(&ast, &string_table);
+
+    let NodeKind::RangeLoop { bindings, .. } = &body[1].kind else {
+        panic!("expected range loop in function body");
+    };
+
+    assert_eq!(bindings.item.id.name_str(&string_table), Some("value"));
+    assert_eq!(
+        bindings
+            .index
+            .as_ref()
+            .and_then(|binding| binding.id.name_str(&string_table)),
+        Some("index")
+    );
+}
+
+#[test]
+fn parses_collection_loop_with_bracketed_item_binding() {
+    let (ast, string_table) =
+        parse_loop_fixture("items = {1, 2, 3}\nloop items |item|:\n    io(item)\n;");
+
+    let body = loop_function_body(&ast, &string_table);
+
+    let NodeKind::CollectionLoop {
+        bindings,
+        iterable,
+        body: loop_body,
+    } = &body[1].kind
+    else {
+        panic!("expected collection loop in function body");
+    };
+
+    assert_eq!(bindings.item.id.name_str(&string_table), Some("item"));
+    assert!(bindings.index.is_none());
+    assert!(matches!(iterable.kind, ExpressionKind::Reference(_)));
+    assert!(matches!(
+        iterable.data_type,
+        DataType::Collection(_, _) | DataType::Reference(_)
+    ));
+    assert_eq!(loop_body.len(), 1);
+}
+
+#[test]
+fn parses_collection_loop_with_bare_item_binding() {
+    let (ast, string_table) =
+        parse_loop_fixture("items = {1, 2, 3}\nloop items item:\n    io(item)\n;");
+
+    let body = loop_function_body(&ast, &string_table);
+
+    let NodeKind::CollectionLoop { bindings, .. } = &body[1].kind else {
+        panic!("expected collection loop in function body");
+    };
+
+    assert_eq!(bindings.item.id.name_str(&string_table), Some("item"));
+    assert!(bindings.index.is_none());
+}
+
+#[test]
+fn parses_collection_loop_with_item_and_index_bindings() {
+    let (ast, string_table) =
+        parse_loop_fixture("items = {1, 2, 3}\nloop items item, index:\n    io(item)\n;");
+
+    let body = loop_function_body(&ast, &string_table);
+
+    let NodeKind::CollectionLoop { bindings, .. } = &body[1].kind else {
+        panic!("expected collection loop in function body");
+    };
+
+    assert_eq!(bindings.item.id.name_str(&string_table), Some("item"));
+    assert_eq!(
+        bindings
+            .index
+            .as_ref()
+            .and_then(|binding| binding.id.name_str(&string_table)),
+        Some("index")
+    );
+}
+
+#[test]
+fn range_index_binding_has_int_type() {
+    let (ast, string_table) =
+        parse_loop_fixture("sum ~= 0\nloop 0 to 4 |value, index|:\n    sum = sum + value\n;");
+    let body = loop_function_body(&ast, &string_table);
+
+    let NodeKind::RangeLoop { bindings, .. } = &body[1].kind else {
+        panic!("expected range loop in function body");
+    };
+
+    assert!(matches!(
+        bindings
+            .index
+            .as_ref()
+            .map(|binding| &binding.value.data_type),
+        Some(DataType::Int)
+    ));
+}
+
+#[test]
+fn collection_index_binding_has_int_type() {
+    let (ast, string_table) =
+        parse_loop_fixture("items = {1, 2, 3}\nloop items |item, index|:\n    io(item)\n;");
+    let body = loop_function_body(&ast, &string_table);
+
+    let NodeKind::CollectionLoop { bindings, .. } = &body[1].kind else {
+        panic!("expected collection loop in function body");
+    };
+
+    assert!(matches!(
+        bindings
+            .index
+            .as_ref()
+            .map(|binding| &binding.value.data_type),
+        Some(DataType::Int)
+    ));
+}
+
+#[test]
+fn rejects_old_in_loop_syntax_with_migration_error() {
+    let error = parse_loop_fixture_error("loop i in 0 to 3:\n    io(i)\n;");
     assert!(
         error
             .msg
-            .contains("Identifier '_if' is reserved because it visually shadows language keyword 'if'"),
+            .contains("Old loop syntax 'loop <binder> in ...' was removed"),
         "{}",
         error.msg
     );
+}
+
+#[test]
+fn rejects_missing_iteration_binding_for_collection_loop() {
+    let error = parse_loop_fixture_error("items = {1, 2, 3}\nloop items:\n    io(items)\n;");
+    assert!(
+        error
+            .msg
+            .contains("Iteration loops require at least one binding")
+    );
+}
+
+#[test]
+fn rejects_missing_iteration_binding_for_range_loop() {
+    let error = parse_loop_fixture_error("loop 0 to 10:\n    io(1)\n;");
+    assert!(
+        error
+            .msg
+            .contains("Iteration loops require at least one binding")
+    );
+}
+
+#[test]
+fn rejects_empty_loop_binding_list() {
+    let error = parse_loop_fixture_error("items = {1, 2, 3}\nloop items ||:\n    io(items)\n;");
+    assert!(error.msg.contains("Loop binding list cannot be empty"));
+}
+
+#[test]
+fn rejects_more_than_two_loop_bindings() {
+    let error = parse_loop_fixture_error("items = {1, 2, 3}\nloop items |a, b, c|:\n    io(a)\n;");
+    assert!(
+        error
+            .msg
+            .contains("Loop bindings support at most two names")
+    );
+}
+
+#[test]
+fn rejects_duplicate_loop_binding_names() {
+    let error =
+        parse_loop_fixture_error("items = {1, 2, 3}\nloop items |item, item|:\n    io(item)\n;");
+    assert!(error.msg.contains("Duplicate loop binding name"));
+}
+
+#[test]
+fn rejects_loop_binding_shadowing_existing_name() {
+    let error = parse_loop_fixture_error(
+        "items = {1, 2, 3}\nitem = 0\nloop items |item|:\n    io(item)\n;",
+    );
+    assert!(error.msg.contains("already declared in this scope"));
+}
+
+#[test]
+fn rejects_keyword_shadow_loop_binding_names() {
+    let error = parse_loop_fixture_error("items = {1, 2, 3}\nloop items |_if|:\n    io(items)\n;");
+    assert!(
+        error.msg.contains(
+            "Identifier '_if' is reserved because it visually shadows language keyword 'if'"
+        ),
+        "{}",
+        error.msg
+    );
+}
+
+#[test]
+fn rejects_collection_loop_on_non_collection_expression() {
+    let error = parse_loop_fixture_error("value = 3\nloop value |item|:\n    io(item)\n;");
+    assert!(
+        error
+            .msg
+            .contains("Collection loop source must be a collection"),
+        "{}",
+        error.msg
+    );
+}
+
+#[test]
+fn rejects_non_boolean_conditional_loop_condition() {
+    let error = parse_loop_fixture_error("loop 1 + 2:\n    io(1)\n;");
+    assert!(
+        error
+            .msg
+            .contains("Loop condition must be a boolean expression")
+    );
+}
+
+#[test]
+fn rejects_range_loop_missing_end_bound() {
+    let error = parse_loop_fixture_error("loop 0 to |i|:\n    io(i)\n;");
+    assert!(error.msg.contains("Range loop is missing an end bound"));
+}
+
+#[test]
+fn rejects_range_loop_by_without_step() {
+    let error = parse_loop_fixture_error("loop 0 to 10 by |i|:\n    io(i)\n;");
+    assert!(error.msg.contains("uses 'by' without a step value"));
+}
+
+#[test]
+fn rejects_zero_step_literal() {
+    let error = parse_loop_fixture_error("loop 0 to 10 by 0 |i|:\n    io(i)\n;");
+    assert!(error.msg.contains("Range step cannot be zero"));
+}
+
+#[test]
+fn rejects_float_range_without_by() {
+    let error = parse_loop_fixture_error("loop 0.0 to 1.0 |t|:\n    io(t)\n;");
+    assert!(
+        error
+            .msg
+            .contains("Float ranges require an explicit 'by' step")
+    );
+}
+
+#[test]
+fn rejects_missing_comma_between_dual_bare_bindings() {
+    let error =
+        parse_loop_fixture_error("items = {1, 2, 3}\nloop items item index:\n    io(item)\n;");
+    assert!(
+        error
+            .msg
+            .contains("Missing comma between bare loop bindings")
+    );
+}
+
+#[test]
+fn rejects_missing_closing_pipe_in_loop_bindings() {
+    let error = parse_loop_fixture_error("items = {1, 2, 3}\nloop items |item:\n    io(item)\n;");
+    assert!(error.msg.contains("Missing closing pipe in loop bindings"));
 }

@@ -1,9 +1,18 @@
+//! Loop statement parsing helpers.
+//!
+//! WHAT: parses the three loop header forms (conditional, range, collection) and builds
+//! fully-typed AST loop nodes with validated bindings.
+//! WHY: loop headers now support richer syntax than the legacy `loop <binder> in ...` shape,
+//! so parsing/validation needs one dedicated module with explicit helpers.
+
 use crate::compiler_frontend::ast::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::{
-    AstNode, Declaration, ForLoopRange, NodeKind, RangeEndKind,
+    AstNode, Declaration, LoopBindings, NodeKind, RangeEndKind, RangeLoopSpec,
 };
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
-use crate::compiler_frontend::ast::expressions::parse_expression::create_expression_until;
+use crate::compiler_frontend::ast::expressions::parse_expression::{
+    create_expression, create_expression_until,
+};
 use crate::compiler_frontend::ast::function_body_to_ast::function_body_to_ast;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
@@ -11,10 +20,47 @@ use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::identifier_policy::{
     IdentifierNamingKind, ensure_not_keyword_shadow_identifier, naming_warning_for_identifier,
 };
-use crate::compiler_frontend::string_interning::StringTable;
-use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
+use crate::compiler_frontend::string_interning::{StringId, StringTable};
+use crate::compiler_frontend::token_scan::NestingDepth;
+use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
 use crate::compiler_frontend::traits::ContainsReferences;
 use crate::{ast_log, return_syntax_error};
+
+const LOOP_PARSING_STAGE: &str = "Loop Parsing";
+
+#[derive(Debug, Clone)]
+struct ParsedBindingName {
+    id: StringId,
+    location: SourceLocation,
+}
+
+#[derive(Debug, Clone)]
+struct ParsedBindingNames {
+    item: ParsedBindingName,
+    index: Option<ParsedBindingName>,
+}
+
+#[derive(Debug, Clone)]
+#[allow(clippy::large_enum_variant)]
+enum ParsedLoopHeader {
+    Conditional {
+        condition: Expression,
+    },
+    Range {
+        bindings: LoopBindings,
+        range: RangeLoopSpec,
+    },
+    Collection {
+        bindings: LoopBindings,
+        iterable: Expression,
+    },
+}
+
+#[derive(Debug, Clone)]
+struct BindingSuffixSplit {
+    core_tokens: Vec<Token>,
+    bindings: ParsedBindingNames,
+}
 
 pub fn create_loop(
     token_stream: &mut FileTokens,
@@ -24,192 +70,737 @@ pub fn create_loop(
 ) -> Result<AstNode, CompilerError> {
     ast_log!("Creating a Loop");
 
-    // `loop <symbol> in ...` is the only iteration header shape for now.
-    // Every other header is parsed as a boolean conditional loop.
-    if let TokenKind::Symbol(name) = token_stream.current_token_kind().to_owned()
-        && token_stream.peek_next_token() == Some(&TokenKind::In)
-    {
-        return create_iteration_loop(token_stream, context, warnings, string_table, name);
-    }
-
-    create_conditional_loop(token_stream, context, warnings, string_table)
-}
-
-fn create_conditional_loop(
-    token_stream: &mut FileTokens,
-    context: ScopeContext,
-    warnings: &mut Vec<CompilerWarning>,
-    string_table: &mut StringTable,
-) -> Result<AstNode, CompilerError> {
     let location = token_stream.current_location();
     let scope = context.scope.clone();
+    let colon_index = find_loop_header_colon_index(token_stream)?;
 
-    let mut condition_type = DataType::Bool;
-    let condition = create_expression_until(
-        token_stream,
-        &context,
-        &mut condition_type,
-        &Ownership::ImmutableOwned,
-        &[TokenKind::Colon],
-        string_table,
-    )?;
+    let mut header_tokens = token_stream.tokens[token_stream.index..colon_index].to_vec();
+    trim_edge_newlines(&mut header_tokens);
 
-    if !condition.is_boolean() {
-        let found_type = condition.data_type.display_with_table(string_table);
+    if header_tokens.is_empty() {
         return_syntax_error!(
-            format!(
-                "Loop condition must be a boolean expression. Found '{}'",
-                condition.data_type.display_with_table(string_table)
-            ),
-            token_stream.current_location(),
+            "Loop header is empty. Expected a condition or iteration source after 'loop'",
+            location.clone(),
             {
-                FoundType => found_type,
-                ExpectedType => "Bool",
-                CompilationStage => "Loop Parsing",
-                PrimarySuggestion => "Use a boolean expression after 'loop', e.g. loop is_ready():",
+                CompilationStage => LOOP_PARSING_STAGE,
+                PrimarySuggestion => "Use syntax like 'loop is_ready():' or 'loop items |item|:'",
             }
         );
     }
 
-    if token_stream.current_token_kind() != &TokenKind::Colon {
-        return_syntax_error!(
-            "A loop must have ':' after the loop header",
-            token_stream.current_location(),
-            {
-                CompilationStage => "Loop Parsing",
-                PrimarySuggestion => "Add ':' after the loop condition",
-                SuggestedInsertion => ":",
-            }
-        );
-    }
+    let (parsed_header, body_context) =
+        parse_loop_header(&header_tokens, context, warnings, string_table)?;
 
-    token_stream.advance();
+    token_stream.index = colon_index + 1;
+    let body = function_body_to_ast(token_stream, body_context, warnings, string_table)?;
+
+    let kind = match parsed_header {
+        ParsedLoopHeader::Conditional { condition } => NodeKind::WhileLoop(condition, body),
+        ParsedLoopHeader::Range { bindings, range } => NodeKind::RangeLoop {
+            bindings,
+            range,
+            body,
+        },
+        ParsedLoopHeader::Collection { bindings, iterable } => NodeKind::CollectionLoop {
+            bindings,
+            iterable,
+            body,
+        },
+    };
 
     Ok(AstNode {
-        kind: NodeKind::WhileLoop(
-            condition,
-            function_body_to_ast(token_stream, context, warnings, string_table)?,
-        ),
+        kind,
         location,
         scope,
     })
 }
 
-fn create_iteration_loop(
-    token_stream: &mut FileTokens,
+fn find_loop_header_colon_index(token_stream: &FileTokens) -> Result<usize, CompilerError> {
+    let mut depth = NestingDepth::default();
+    let mut index = token_stream.index;
+
+    while index < token_stream.length {
+        let token = &token_stream.tokens[index];
+        let at_top_level = depth.is_top_level();
+
+        if at_top_level && matches!(token.kind, TokenKind::Colon) {
+            return Ok(index);
+        }
+
+        if at_top_level && matches!(token.kind, TokenKind::End | TokenKind::Eof) {
+            return_syntax_error!(
+                "A loop must have ':' after the loop header",
+                token.location.clone(),
+                {
+                    CompilationStage => LOOP_PARSING_STAGE,
+                    PrimarySuggestion => "Add ':' after the loop condition or iteration header",
+                    SuggestedInsertion => ":",
+                }
+            );
+        }
+
+        depth.step(&token.kind);
+        index += 1;
+    }
+
+    return_syntax_error!(
+        "A loop must have ':' after the loop header",
+        token_stream.current_location(),
+        {
+            CompilationStage => LOOP_PARSING_STAGE,
+            PrimarySuggestion => "Add ':' after the loop condition or iteration header",
+            SuggestedInsertion => ":",
+        }
+    )
+}
+
+fn parse_loop_header(
+    header_tokens: &[Token],
     mut context: ScopeContext,
     warnings: &mut Vec<CompilerWarning>,
     string_table: &mut StringTable,
-    binder_name: crate::compiler_frontend::string_interning::StringId,
-) -> Result<AstNode, CompilerError> {
-    let location = token_stream.current_location();
-    let binder_name_text = string_table.resolve(binder_name).to_owned();
+) -> Result<(ParsedLoopHeader, ScopeContext), CompilerError> {
+    reject_removed_in_loop_syntax(header_tokens, string_table)?;
 
-    ensure_not_keyword_shadow_identifier(
-        &binder_name_text,
-        location.to_owned(),
-        "Loop Parsing",
-    )?;
-    if let Some(warning) = naming_warning_for_identifier(
-        &binder_name_text,
-        location.to_owned(),
-        IdentifierNamingKind::ValueLike,
-    ) {
-        warnings.push(warning);
+    if has_top_level_range_marker(header_tokens) {
+        let parsed = parse_range_loop_header(header_tokens, &mut context, warnings, string_table)?;
+        return Ok((parsed, context));
     }
 
-    if context.get_reference(&binder_name).is_some() {
+    let parsed = parse_non_range_loop_header(header_tokens, &mut context, warnings, string_table)?;
+    Ok((parsed, context))
+}
+
+fn parse_range_loop_header(
+    header_tokens: &[Token],
+    context: &mut ScopeContext,
+    warnings: &mut Vec<CompilerWarning>,
+    string_table: &mut StringTable,
+) -> Result<ParsedLoopHeader, CompilerError> {
+    if let Some(pipe_split) = parse_pipe_binding_suffix(header_tokens, string_table)? {
+        let range =
+            parse_range_loop_spec_from_tokens(&pipe_split.core_tokens, context, string_table)?;
+        let binding_type = range_binding_type(&range, string_table)?;
+        let bindings = declare_loop_bindings(
+            pipe_split.bindings,
+            binding_type,
+            context,
+            warnings,
+            string_table,
+        )?;
+
+        return Ok(ParsedLoopHeader::Range { bindings, range });
+    }
+
+    if has_trailing_dual_symbol_without_comma(header_tokens) {
+        return_syntax_error!(
+            "Missing comma between bare loop bindings",
+            header_tokens[header_tokens.len() - 1].location.clone(),
+            {
+                CompilationStage => LOOP_PARSING_STAGE,
+                PrimarySuggestion => "Use two bare bindings as 'value, index' or pipe form '|value, index|'",
+            }
+        );
+    }
+
+    if let Some(dual_bare_split) = split_bare_dual_binding_suffix(header_tokens)
+        && let Ok(range) =
+            parse_range_loop_spec_from_tokens(&dual_bare_split.core_tokens, context, string_table)
+    {
+        let binding_type = range_binding_type(&range, string_table)?;
+        let bindings = declare_loop_bindings(
+            dual_bare_split.bindings,
+            binding_type,
+            context,
+            warnings,
+            string_table,
+        )?;
+
+        return Ok(ParsedLoopHeader::Range { bindings, range });
+    }
+
+    if let Some(single_bare_split) = split_bare_single_binding_suffix(header_tokens)
+        && let Ok(range) =
+            parse_range_loop_spec_from_tokens(&single_bare_split.core_tokens, context, string_table)
+    {
+        let binding_type = range_binding_type(&range, string_table)?;
+        let bindings = declare_loop_bindings(
+            single_bare_split.bindings,
+            binding_type,
+            context,
+            warnings,
+            string_table,
+        )?;
+
+        return Ok(ParsedLoopHeader::Range { bindings, range });
+    }
+
+    if parse_range_loop_spec_from_tokens(header_tokens, context, string_table).is_ok() {
+        return_syntax_error!(
+            "Iteration loops require at least one binding",
+            header_tokens[0].location.clone(),
+            {
+                CompilationStage => LOOP_PARSING_STAGE,
+                PrimarySuggestion => "Add a binding, for example 'loop 0 to 10 |i|:' or 'loop 0 to 10 i:'",
+            }
+        );
+    }
+
+    // Re-run once to surface the detailed range-header parse error.
+    let _ = parse_range_loop_spec_from_tokens(header_tokens, context, string_table)?;
+
+    unreachable!("range header parse should always return or error")
+}
+
+fn parse_non_range_loop_header(
+    header_tokens: &[Token],
+    context: &mut ScopeContext,
+    warnings: &mut Vec<CompilerWarning>,
+    string_table: &mut StringTable,
+) -> Result<ParsedLoopHeader, CompilerError> {
+    if let Some(pipe_split) = parse_pipe_binding_suffix(header_tokens, string_table)? {
+        let (iterable, item_type) =
+            parse_collection_iterable_from_tokens(&pipe_split.core_tokens, context, string_table)?;
+        let bindings = declare_loop_bindings(
+            pipe_split.bindings,
+            item_type,
+            context,
+            warnings,
+            string_table,
+        )?;
+
+        return Ok(ParsedLoopHeader::Collection { bindings, iterable });
+    }
+
+    let full_expression = parse_expression_from_tokens(
+        header_tokens,
+        context,
+        &Ownership::ImmutableOwned,
+        string_table,
+    );
+
+    if let Ok(condition) = &full_expression
+        && condition.is_boolean()
+    {
+        return Ok(ParsedLoopHeader::Conditional {
+            condition: condition.to_owned(),
+        });
+    }
+
+    if has_trailing_dual_symbol_without_comma(header_tokens) {
+        return_syntax_error!(
+            "Missing comma between bare loop bindings",
+            header_tokens[header_tokens.len() - 1].location.clone(),
+            {
+                CompilationStage => LOOP_PARSING_STAGE,
+                PrimarySuggestion => "Use two bare bindings as 'item, index' or pipe form '|item, index|'",
+            }
+        );
+    }
+
+    if let Some(dual_bare_split) = split_bare_dual_binding_suffix(header_tokens)
+        && let Ok((iterable, item_type)) = parse_collection_iterable_from_tokens(
+            &dual_bare_split.core_tokens,
+            context,
+            string_table,
+        )
+    {
+        let bindings = declare_loop_bindings(
+            dual_bare_split.bindings,
+            item_type,
+            context,
+            warnings,
+            string_table,
+        )?;
+
+        return Ok(ParsedLoopHeader::Collection { bindings, iterable });
+    }
+
+    if let Some(single_bare_split) = split_bare_single_binding_suffix(header_tokens)
+        && let Ok((iterable, item_type)) = parse_collection_iterable_from_tokens(
+            &single_bare_split.core_tokens,
+            context,
+            string_table,
+        )
+    {
+        let bindings = declare_loop_bindings(
+            single_bare_split.bindings,
+            item_type,
+            context,
+            warnings,
+            string_table,
+        )?;
+
+        return Ok(ParsedLoopHeader::Collection { bindings, iterable });
+    }
+
+    match full_expression {
+        Ok(expression) => {
+            if collection_element_type(&expression.data_type).is_some() {
+                return_syntax_error!(
+                    "Iteration loops require at least one binding",
+                    expression.location.clone(),
+                    {
+                        CompilationStage => LOOP_PARSING_STAGE,
+                        PrimarySuggestion => "Add a binding, for example 'loop items |item|:' or 'loop items item:'",
+                    }
+                );
+            }
+
+            return_syntax_error!(
+                format!(
+                    "Loop condition must be a boolean expression. Found '{}'",
+                    expression.data_type.display_with_table(string_table)
+                ),
+                expression.location.clone(),
+                {
+                    FoundType => expression.data_type.display_with_table(string_table),
+                    ExpectedType => "Bool",
+                    CompilationStage => LOOP_PARSING_STAGE,
+                    PrimarySuggestion => "Use a boolean expression after 'loop', e.g. loop is_ready():",
+                }
+            )
+        }
+        Err(error) => Err(error),
+    }
+}
+
+fn reject_removed_in_loop_syntax(
+    header_tokens: &[Token],
+    string_table: &StringTable,
+) -> Result<(), CompilerError> {
+    if header_tokens.len() < 3 {
+        return Ok(());
+    }
+
+    let TokenKind::Symbol(_) = header_tokens[0].kind else {
+        return Ok(());
+    };
+
+    let TokenKind::Symbol(second_symbol) = header_tokens[1].kind else {
+        return Ok(());
+    };
+
+    if string_table.resolve(second_symbol) != "in" {
+        return Ok(());
+    }
+
+    return_syntax_error!(
+        "Old loop syntax 'loop <binder> in ...' was removed. Use 'loop 0 to 10 |i|:' or 'loop items |item|:'",
+        header_tokens[1].location.clone(),
+        {
+            CompilationStage => LOOP_PARSING_STAGE,
+            PrimarySuggestion => "Replace 'in' loops with the new header format: 'loop <condition> |bindings|:'",
+        }
+    )
+}
+
+fn parse_pipe_binding_suffix(
+    header_tokens: &[Token],
+    string_table: &StringTable,
+) -> Result<Option<BindingSuffixSplit>, CompilerError> {
+    let top_level_pipe_indexes = collect_top_level_token_indexes(header_tokens, |token| {
+        matches!(token, TokenKind::TypeParameterBracket)
+    });
+
+    if top_level_pipe_indexes.is_empty() {
+        return Ok(None);
+    }
+
+    if header_tokens
+        .last()
+        .is_none_or(|token| !matches!(token.kind, TokenKind::TypeParameterBracket))
+    {
+        return_syntax_error!(
+            "Missing closing pipe in loop bindings",
+            header_tokens[header_tokens.len() - 1].location.clone(),
+            {
+                CompilationStage => LOOP_PARSING_STAGE,
+                PrimarySuggestion => "Close loop bindings with '|', for example 'loop items |item|:'",
+                SuggestedInsertion => "|",
+            }
+        );
+    }
+
+    if top_level_pipe_indexes.len() != 2 {
+        return_syntax_error!(
+            "Malformed loop binding pipes",
+            header_tokens[top_level_pipe_indexes[0]].location.clone(),
+            {
+                CompilationStage => LOOP_PARSING_STAGE,
+                PrimarySuggestion => "Use exactly one loop binding group, for example '|item|' or '|item, index|'",
+            }
+        );
+    }
+
+    let open_pipe_index = top_level_pipe_indexes[0];
+    let close_pipe_index = top_level_pipe_indexes[1];
+
+    if close_pipe_index <= open_pipe_index {
+        return_syntax_error!(
+            "Malformed loop binding pipes",
+            header_tokens[open_pipe_index].location.clone(),
+            {
+                CompilationStage => LOOP_PARSING_STAGE,
+                PrimarySuggestion => "Use loop bindings as '|item|' or '|item, index|'",
+            }
+        );
+    }
+
+    let core_tokens = header_tokens[..open_pipe_index].to_vec();
+    let binding_tokens = header_tokens[open_pipe_index + 1..close_pipe_index].to_vec();
+
+    if core_tokens.is_empty() {
+        return_syntax_error!(
+            "Loop header is missing a condition or iteration source before bindings",
+            header_tokens[open_pipe_index].location.clone(),
+            {
+                CompilationStage => LOOP_PARSING_STAGE,
+                PrimarySuggestion => "Write the loop source before bindings, for example 'loop items |item|:'",
+            }
+        );
+    }
+
+    let bindings = parse_binding_tokens(&binding_tokens, string_table)?;
+
+    Ok(Some(BindingSuffixSplit {
+        core_tokens,
+        bindings,
+    }))
+}
+
+fn parse_binding_tokens(
+    binding_tokens: &[Token],
+    _string_table: &StringTable,
+) -> Result<ParsedBindingNames, CompilerError> {
+    let filtered_tokens = binding_tokens
+        .iter()
+        .filter(|token| !matches!(token.kind, TokenKind::Newline))
+        .cloned()
+        .collect::<Vec<_>>();
+
+    if filtered_tokens.is_empty() {
+        return_syntax_error!(
+            "Loop binding list cannot be empty",
+            binding_tokens
+                .first()
+                .map(|token| token.location.clone())
+                .unwrap_or_default(),
+            {
+                CompilationStage => LOOP_PARSING_STAGE,
+                PrimarySuggestion => "Add one or two bindings, for example '|item|' or '|item, index|'",
+            }
+        );
+    }
+
+    let mut names = Vec::with_capacity(2);
+    let mut cursor = 0;
+
+    while cursor < filtered_tokens.len() {
+        let token = &filtered_tokens[cursor];
+        let TokenKind::Symbol(symbol_id) = token.kind else {
+            return_syntax_error!(
+                "Loop bindings must be symbol names",
+                token.location.clone(),
+                {
+                    CompilationStage => LOOP_PARSING_STAGE,
+                    PrimarySuggestion => "Use symbol bindings like '|item|' or '|item, index|'",
+                }
+            );
+        };
+
+        names.push(ParsedBindingName {
+            id: symbol_id,
+            location: token.location.clone(),
+        });
+        cursor += 1;
+
+        if cursor >= filtered_tokens.len() {
+            break;
+        }
+
+        if !matches!(filtered_tokens[cursor].kind, TokenKind::Comma) {
+            return_syntax_error!(
+                "Missing comma between loop bindings",
+                filtered_tokens[cursor].location.clone(),
+                {
+                    CompilationStage => LOOP_PARSING_STAGE,
+                    PrimarySuggestion => "Separate loop bindings with commas, for example '|item, index|'",
+                }
+            );
+        }
+
+        cursor += 1;
+        if cursor >= filtered_tokens.len() {
+            return_syntax_error!(
+                "Loop binding list cannot end with a comma",
+                filtered_tokens[cursor - 1].location.clone(),
+                {
+                    CompilationStage => LOOP_PARSING_STAGE,
+                    PrimarySuggestion => "Remove the trailing comma or add a second binding name",
+                }
+            );
+        }
+    }
+
+    build_binding_name_pair(names)
+}
+
+fn split_bare_dual_binding_suffix(header_tokens: &[Token]) -> Option<BindingSuffixSplit> {
+    if header_tokens.len() < 3 {
+        return None;
+    }
+
+    let TokenKind::Symbol(index_id) = header_tokens[header_tokens.len() - 1].kind else {
+        return None;
+    };
+
+    if !matches!(
+        header_tokens[header_tokens.len() - 2].kind,
+        TokenKind::Comma
+    ) {
+        return None;
+    }
+
+    let TokenKind::Symbol(item_id) = header_tokens[header_tokens.len() - 3].kind else {
+        return None;
+    };
+
+    let core_tokens = header_tokens[..header_tokens.len() - 3].to_vec();
+    if core_tokens.is_empty() {
+        return None;
+    }
+
+    let bindings = ParsedBindingNames {
+        item: ParsedBindingName {
+            id: item_id,
+            location: header_tokens[header_tokens.len() - 3].location.clone(),
+        },
+        index: Some(ParsedBindingName {
+            id: index_id,
+            location: header_tokens[header_tokens.len() - 1].location.clone(),
+        }),
+    };
+
+    Some(BindingSuffixSplit {
+        core_tokens,
+        bindings,
+    })
+}
+
+fn split_bare_single_binding_suffix(header_tokens: &[Token]) -> Option<BindingSuffixSplit> {
+    let TokenKind::Symbol(item_id) = header_tokens.last()?.kind else {
+        return None;
+    };
+
+    let core_tokens = header_tokens[..header_tokens.len() - 1].to_vec();
+    if core_tokens.is_empty() {
+        return None;
+    }
+
+    if matches!(
+        header_tokens[header_tokens.len() - 2].kind,
+        TokenKind::Comma
+    ) {
+        return None;
+    }
+
+    let bindings = ParsedBindingNames {
+        item: ParsedBindingName {
+            id: item_id,
+            location: header_tokens[header_tokens.len() - 1].location.clone(),
+        },
+        index: None,
+    };
+
+    Some(BindingSuffixSplit {
+        core_tokens,
+        bindings,
+    })
+}
+
+fn has_trailing_dual_symbol_without_comma(header_tokens: &[Token]) -> bool {
+    if header_tokens.len() < 3 {
+        return false;
+    }
+
+    matches!(
+        (
+            &header_tokens[header_tokens.len() - 3].kind,
+            &header_tokens[header_tokens.len() - 2].kind,
+            &header_tokens[header_tokens.len() - 1].kind,
+        ),
+        (first, TokenKind::Symbol(_), TokenKind::Symbol(_)) if !matches!(first, TokenKind::Comma)
+    )
+}
+
+fn build_binding_name_pair(
+    names: Vec<ParsedBindingName>,
+) -> Result<ParsedBindingNames, CompilerError> {
+    if names.len() > 2 {
+        return_syntax_error!(
+            "Loop bindings support at most two names",
+            names[2].location.clone(),
+            {
+                CompilationStage => LOOP_PARSING_STAGE,
+                PrimarySuggestion => "Use one binding for item/counter, or two for item/counter and index",
+            }
+        );
+    }
+
+    let Some(item) = names.first().cloned() else {
+        return_syntax_error!(
+            "Loop binding list cannot be empty",
+            SourceLocation::default(),
+            {
+                CompilationStage => LOOP_PARSING_STAGE,
+                PrimarySuggestion => "Add one or two loop bindings",
+            }
+        );
+    };
+
+    let index = names.get(1).cloned();
+
+    if let Some(index_binding) = &index
+        && index_binding.id == item.id
+    {
+        return_syntax_error!(
+            "Duplicate loop binding name in the same loop header",
+            index_binding.location.clone(),
+            {
+                CompilationStage => LOOP_PARSING_STAGE,
+                PrimarySuggestion => "Use unique names for value and index bindings",
+            }
+        );
+    }
+
+    Ok(ParsedBindingNames { item, index })
+}
+
+fn parse_collection_iterable_from_tokens(
+    iterable_tokens: &[Token],
+    context: &ScopeContext,
+    string_table: &mut StringTable,
+) -> Result<(Expression, DataType), CompilerError> {
+    let iterable = parse_expression_from_tokens(
+        iterable_tokens,
+        context,
+        &Ownership::ImmutableReference,
+        string_table,
+    )?;
+
+    let Some(item_type) = collection_element_type(&iterable.data_type) else {
         return_syntax_error!(
             format!(
-                "Loop binder '{}' is already declared in this scope",
-                binder_name_text
+                "Collection loop source must be a collection. Found '{}'",
+                iterable.data_type.display_with_table(string_table)
             ),
-            token_stream.current_location(),
+            iterable.location.clone(),
             {
-                CompilationStage => "Loop Parsing",
-                PrimarySuggestion => "Use a new binder name for the loop item",
+                CompilationStage => LOOP_PARSING_STAGE,
+                FoundType => iterable.data_type.display_with_table(string_table),
+                ExpectedType => "Collection",
+                PrimarySuggestion => "Use a collection expression before loop bindings, for example 'loop items |item|:'",
             }
         );
-    }
+    };
 
-    token_stream.advance();
-    if token_stream.current_token_kind() != &TokenKind::In {
-        return_syntax_error!(
-            "Iteration loops must include 'in' after the binder name",
-            token_stream.current_location(),
-            {
-                CompilationStage => "Loop Parsing",
-                PrimarySuggestion => "Use syntax like: loop i in 0 to 10:",
-                SuggestedInsertion => "in",
-            }
-        );
-    }
+    Ok((iterable, item_type))
+}
 
-    token_stream.advance();
+fn parse_range_loop_spec_from_tokens(
+    range_tokens: &[Token],
+    context: &ScopeContext,
+    string_table: &mut StringTable,
+) -> Result<RangeLoopSpec, CompilerError> {
+    let mut range_stream = token_stream_with_eof(range_tokens)?;
 
-    // Parse header as: `start (to|upto) end [by step] :`
     let mut start_type = DataType::Inferred;
     let start = create_expression_until(
-        token_stream,
-        &context,
+        &mut range_stream,
+        context,
         &mut start_type,
         &Ownership::ImmutableReference,
         &[
             TokenKind::ExclusiveRange,
             TokenKind::InclusiveRange,
-            TokenKind::Colon,
+            TokenKind::Eof,
         ],
         string_table,
     )?;
 
-    let end_kind = match token_stream.current_token_kind() {
+    let end_kind = match range_stream.current_token_kind() {
         TokenKind::ExclusiveRange => RangeEndKind::Exclusive,
         TokenKind::InclusiveRange => RangeEndKind::Inclusive,
-        TokenKind::Colon => {
+        TokenKind::Eof => {
             return_syntax_error!(
-                "Collection iteration is not implemented yet; use a range loop with 'to' or 'upto'",
-                token_stream.current_location(),
+                "Range loops must include 'to' or 'upto' between bounds",
+                start.location.clone(),
                 {
-                    CompilationStage => "Loop Parsing",
-                    PrimarySuggestion => "Use range syntax like: loop i in 0 to 10:",
+                    CompilationStage => LOOP_PARSING_STAGE,
+                    PrimarySuggestion => "Use syntax like: loop 0 to 10 |i|:",
+                    AlternativeSuggestion => "Use 'upto' for an inclusive end bound",
                 }
             );
         }
         _ => {
             return_syntax_error!(
                 "Range loops must include 'to' or 'upto' between bounds",
-                token_stream.current_location(),
+                range_stream.current_location(),
                 {
-                    CompilationStage => "Loop Parsing",
-                    PrimarySuggestion => "Use syntax like: loop i in start to end:",
-                    AlternativeSuggestion => "Use 'upto' for inclusive end bounds",
+                    CompilationStage => LOOP_PARSING_STAGE,
+                    PrimarySuggestion => "Use syntax like: loop 0 to 10 |i|:",
+                    AlternativeSuggestion => "Use 'upto' for an inclusive end bound",
                 }
             );
         }
     };
 
-    token_stream.advance();
+    range_stream.advance();
+
+    if matches!(range_stream.current_token_kind(), TokenKind::Eof) {
+        return_syntax_error!(
+            "Range loop is missing an end bound",
+            start.location.clone(),
+            {
+                CompilationStage => LOOP_PARSING_STAGE,
+                PrimarySuggestion => "Provide an end bound after 'to' or 'upto', for example 'loop 0 to 10 |i|:'",
+            }
+        );
+    }
 
     let mut end_type = DataType::Inferred;
     let end = create_expression_until(
-        token_stream,
-        &context,
+        &mut range_stream,
+        context,
         &mut end_type,
         &Ownership::ImmutableReference,
-        &[TokenKind::By, TokenKind::Colon],
+        &[TokenKind::By, TokenKind::Eof],
         string_table,
     )?;
 
-    let step = if token_stream.current_token_kind() == &TokenKind::By {
-        token_stream.advance();
+    let step = if matches!(range_stream.current_token_kind(), TokenKind::By) {
+        let by_location = range_stream.current_location();
+        range_stream.advance();
+
+        if matches!(range_stream.current_token_kind(), TokenKind::Eof) {
+            return_syntax_error!(
+                "Range loop uses 'by' without a step value",
+                by_location,
+                {
+                    CompilationStage => LOOP_PARSING_STAGE,
+                    PrimarySuggestion => "Add a step after 'by', for example 'loop 0 to 10 by 2 |i|:'",
+                }
+            );
+        }
 
         let mut step_type = DataType::Inferred;
         Some(create_expression_until(
-            token_stream,
-            &context,
+            &mut range_stream,
+            context,
             &mut step_type,
             &Ownership::ImmutableReference,
-            &[TokenKind::Colon],
+            &[TokenKind::Eof],
             string_table,
         )?)
     } else {
@@ -218,22 +809,31 @@ fn create_iteration_loop(
 
     let start_numeric = numeric_type_for_expression(&start).ok_or_else(|| {
         CompilerError::new_syntax_error(
-            "Range start must be numeric (Int or Float)",
-            token_stream.current_location(),
+            format!(
+                "Range start must be numeric (Int or Float). Found '{}'",
+                start.data_type.display_with_table(string_table)
+            ),
+            start.location.clone(),
         )
     })?;
     let end_numeric = numeric_type_for_expression(&end).ok_or_else(|| {
         CompilerError::new_syntax_error(
-            "Range end must be numeric (Int or Float)",
-            token_stream.current_location(),
+            format!(
+                "Range end must be numeric (Int or Float). Found '{}'",
+                end.data_type.display_with_table(string_table)
+            ),
+            end.location.clone(),
         )
     })?;
 
     let step_numeric = if let Some(step_expr) = &step {
         Some(numeric_type_for_expression(step_expr).ok_or_else(|| {
             CompilerError::new_syntax_error(
-                "Range step must be numeric (Int or Float)",
-                token_stream.current_location(),
+                format!(
+                    "Range step must be numeric (Int or Float). Found '{}'",
+                    step_expr.data_type.display_with_table(string_table)
+                ),
+                step_expr.location.clone(),
             )
         })?)
     } else {
@@ -244,14 +844,13 @@ fn create_iteration_loop(
         || matches!(end_numeric, DataType::Float)
         || matches!(step_numeric, Some(DataType::Float));
 
-    // Float ranges require explicit step to avoid accidental non-terminating loops.
     if uses_float && step.is_none() {
         return_syntax_error!(
             "Float ranges require an explicit 'by' step",
-            token_stream.current_location(),
+            end.location.clone(),
             {
-                CompilationStage => "Loop Parsing",
-                PrimarySuggestion => "Add an explicit step, e.g. loop t in 0.0 to 1.0 by 0.1:",
+                CompilationStage => LOOP_PARSING_STAGE,
+                PrimarySuggestion => "Add an explicit step, for example 'loop 0.0 to 1.0 by 0.1 |t|:'",
             }
         );
     }
@@ -261,59 +860,245 @@ fn create_iteration_loop(
     {
         return_syntax_error!(
             "Range step cannot be zero",
-            token_stream.current_location(),
+            step_expr.location.clone(),
             {
-                CompilationStage => "Loop Parsing",
+                CompilationStage => LOOP_PARSING_STAGE,
                 PrimarySuggestion => "Use a non-zero step value after 'by'",
             }
         );
     }
 
-    if token_stream.current_token_kind() != &TokenKind::Colon {
+    Ok(RangeLoopSpec {
+        start,
+        end,
+        end_kind,
+        step,
+    })
+}
+
+fn range_binding_type(
+    range: &RangeLoopSpec,
+    string_table: &StringTable,
+) -> Result<DataType, CompilerError> {
+    let start_numeric = numeric_type_for_expression(&range.start).ok_or_else(|| {
+        CompilerError::new_syntax_error(
+            format!(
+                "Range start must be numeric (Int or Float). Found '{}'",
+                range.start.data_type.display_with_table(string_table)
+            ),
+            range.start.location.clone(),
+        )
+    })?;
+
+    let end_numeric = numeric_type_for_expression(&range.end).ok_or_else(|| {
+        CompilerError::new_syntax_error(
+            format!(
+                "Range end must be numeric (Int or Float). Found '{}'",
+                range.end.data_type.display_with_table(string_table)
+            ),
+            range.end.location.clone(),
+        )
+    })?;
+
+    let step_numeric = if let Some(step_expr) = &range.step {
+        Some(numeric_type_for_expression(step_expr).ok_or_else(|| {
+            CompilerError::new_syntax_error(
+                format!(
+                    "Range step must be numeric (Int or Float). Found '{}'",
+                    step_expr.data_type.display_with_table(string_table)
+                ),
+                step_expr.location.clone(),
+            )
+        })?)
+    } else {
+        None
+    };
+
+    let uses_float = matches!(start_numeric, DataType::Float)
+        || matches!(end_numeric, DataType::Float)
+        || matches!(step_numeric, Some(DataType::Float));
+
+    Ok(if uses_float {
+        DataType::Float
+    } else {
+        DataType::Int
+    })
+}
+
+fn declare_loop_bindings(
+    names: ParsedBindingNames,
+    item_data_type: DataType,
+    context: &mut ScopeContext,
+    warnings: &mut Vec<CompilerWarning>,
+    string_table: &mut StringTable,
+) -> Result<LoopBindings, CompilerError> {
+    let item = declare_loop_binding(&names.item, item_data_type, context, warnings, string_table)?;
+
+    let index = if let Some(index_name) = &names.index {
+        Some(declare_loop_binding(
+            index_name,
+            DataType::Int,
+            context,
+            warnings,
+            string_table,
+        )?)
+    } else {
+        None
+    };
+
+    Ok(LoopBindings { item, index })
+}
+
+fn declare_loop_binding(
+    name: &ParsedBindingName,
+    data_type: DataType,
+    context: &mut ScopeContext,
+    warnings: &mut Vec<CompilerWarning>,
+    string_table: &mut StringTable,
+) -> Result<Declaration, CompilerError> {
+    let binding_name_text = string_table.resolve(name.id).to_owned();
+
+    ensure_not_keyword_shadow_identifier(
+        &binding_name_text,
+        name.location.clone(),
+        LOOP_PARSING_STAGE,
+    )?;
+
+    if context.get_reference(&name.id).is_some() {
         return_syntax_error!(
-            "A loop must have ':' after the loop header",
-            token_stream.current_location(),
+            format!(
+                "Loop binding '{}' is already declared in this scope",
+                binding_name_text
+            ),
+            name.location.clone(),
             {
-                CompilationStage => "Loop Parsing",
-                PrimarySuggestion => "Add ':' after the loop header",
-                SuggestedInsertion => ":",
+                CompilationStage => LOOP_PARSING_STAGE,
+                PrimarySuggestion => "Use a different binding name. Shadowing is not supported",
             }
         );
     }
 
-    let binding_type = if uses_float {
-        DataType::Float
-    } else {
-        DataType::Int
-    };
+    if let Some(warning) = naming_warning_for_identifier(
+        &binding_name_text,
+        name.location.clone(),
+        IdentifierNamingKind::ValueLike,
+    ) {
+        warnings.push(warning);
+    }
 
-    let loop_binding = Declaration {
-        id: context.scope.append(binder_name),
+    let declaration = Declaration {
+        id: context.scope.append(name.id),
         value: Expression::new(
             ExpressionKind::NoValue,
-            location.clone(),
-            binding_type,
+            name.location.clone(),
+            data_type,
             Ownership::ImmutableOwned,
         ),
     };
-    context.add_var(loop_binding.to_owned());
 
-    token_stream.advance();
+    context.add_var(declaration.to_owned());
+    Ok(declaration)
+}
 
-    Ok(AstNode {
-        scope: context.scope.to_owned(),
-        kind: NodeKind::ForLoop(
-            Box::new(loop_binding),
-            ForLoopRange {
-                start,
-                end,
-                end_kind,
-                step,
-            },
-            function_body_to_ast(token_stream, context, warnings, string_table)?,
-        ),
-        location,
-    })
+fn parse_expression_from_tokens(
+    expression_tokens: &[Token],
+    context: &ScopeContext,
+    ownership: &Ownership,
+    string_table: &mut StringTable,
+) -> Result<Expression, CompilerError> {
+    let mut scoped_stream = token_stream_with_eof(expression_tokens)?;
+    let mut inferred_type = DataType::Inferred;
+
+    create_expression(
+        &mut scoped_stream,
+        context,
+        &mut inferred_type,
+        ownership,
+        false,
+        string_table,
+    )
+}
+
+fn token_stream_with_eof(tokens: &[Token]) -> Result<FileTokens, CompilerError> {
+    if tokens.is_empty() {
+        return_syntax_error!(
+            "Expected an expression in loop header",
+            SourceLocation::default(),
+            {
+                CompilationStage => LOOP_PARSING_STAGE,
+                PrimarySuggestion => "Add a condition or iteration source after 'loop'",
+            }
+        );
+    }
+
+    let mut scoped_tokens = tokens.to_vec();
+    let eof_location = tokens[tokens.len() - 1].location.clone();
+    let src_path = tokens[0].location.scope.clone();
+
+    scoped_tokens.push(Token::new(TokenKind::Eof, eof_location));
+
+    Ok(FileTokens::new(src_path, scoped_tokens))
+}
+
+fn collection_element_type(data_type: &DataType) -> Option<DataType> {
+    match data_type {
+        DataType::Collection(inner, _) => Some((**inner).clone()),
+        DataType::Reference(inner) => collection_element_type(inner),
+        _ => None,
+    }
+}
+
+fn has_top_level_range_marker(tokens: &[Token]) -> bool {
+    let mut depth = NestingDepth::default();
+
+    for token in tokens {
+        if depth.is_top_level()
+            && matches!(
+                token.kind,
+                TokenKind::ExclusiveRange | TokenKind::InclusiveRange
+            )
+        {
+            return true;
+        }
+
+        depth.step(&token.kind);
+    }
+
+    false
+}
+
+fn collect_top_level_token_indexes(
+    tokens: &[Token],
+    matches_token: impl Fn(&TokenKind) -> bool,
+) -> Vec<usize> {
+    let mut depth = NestingDepth::default();
+    let mut indexes = Vec::new();
+
+    for (index, token) in tokens.iter().enumerate() {
+        if depth.is_top_level() && matches_token(&token.kind) {
+            indexes.push(index);
+        }
+
+        depth.step(&token.kind);
+    }
+
+    indexes
+}
+
+fn trim_edge_newlines(tokens: &mut Vec<Token>) {
+    while tokens
+        .first()
+        .is_some_and(|token| matches!(token.kind, TokenKind::Newline))
+    {
+        tokens.remove(0);
+    }
+
+    while tokens
+        .last()
+        .is_some_and(|token| matches!(token.kind, TokenKind::Newline))
+    {
+        tokens.pop();
+    }
 }
 
 fn numeric_type_for_expression(expression: &Expression) -> Option<DataType> {

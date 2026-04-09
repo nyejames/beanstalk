@@ -707,7 +707,6 @@ pub(crate) fn keyword_or_variable(
 
             // Loops
             "loop" => return_token!(TokenKind::Loop, stream),
-            "in" => return_token!(TokenKind::In, stream),
             "to" => return_token!(TokenKind::ExclusiveRange, stream),
             "upto" => return_token!(TokenKind::InclusiveRange, stream),
             "by" => return_token!(TokenKind::By, stream),

@@ -1159,20 +1159,6 @@ fn dispatch_expression_token(
             Ok(ExpressionTokenStep::Advance)
         }
 
-        TokenKind::In => {
-            token_stream.advance();
-            let mut range_type = DataType::Range;
-            let reference_ownership = state.ownership.get_reference();
-            let value = evaluate_expression(
-                context,
-                std::mem::take(state.expression),
-                &mut range_type,
-                &reference_ownership,
-                string_table,
-            )?;
-            Ok(ExpressionTokenStep::Return(Box::new(value)))
-        }
-
         TokenKind::Add => {
             push_operator_node(
                 state.expression,
@@ -1360,7 +1346,7 @@ fn dispatch_expression_token(
 
         TokenKind::TypeParameterBracket => {
             let mut error = CompilerError::new_syntax_error(
-                "Unexpected '|' in expression. This token is only valid in function signatures and struct definitions.",
+                "Unexpected '|' in expression. This token is only valid in signatures/struct definitions or in loop header bindings.",
                 token_stream.current_location(),
             );
             error.new_metadata_entry(
@@ -1369,7 +1355,9 @@ fn dispatch_expression_token(
             );
             error.new_metadata_entry(
                 ErrorMetaDataKey::PrimarySuggestion,
-                String::from("Remove the stray '|' or move it into a declaration signature"),
+                String::from(
+                    "Remove the stray '|' or move it into a valid declaration or loop header",
+                ),
             );
             Err(error)
         }

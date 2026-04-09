@@ -395,15 +395,22 @@ else
 Beanstalk uses a **single** loop keyword: `loop`.
 
 * **`to` / `upto`** select range semantics (exclusive vs inclusive)
-* **Range loops yield the counter**
-* **Collection loops yield elements**
-* **No enumeration syntax yet**
-* **No `reverse` keyword**; direction inferred from bounds
+* **Range loops can bind the current counter**
+* **Collection loops can bind the current item**
+* **An optional second binding provides the zero-based index**
+* **No `reverse` keyword**; direction is inferred from the bounds
 * **`by`** controls step size and works with both directions
+* **Loop bindings use `|...|` and come after the loop condition**
+* **The binding brackets are optional** when the current item / counter is not needed
 
 Loops come in two forms:
 
 1. **Conditional loops** (repeat while a condition is true)
+2. **Iteration loops** (iterate over a collection or a numeric range)
+
+### Conditional loops
+
+A conditional loop repeats for as long as its condition stays true.
 
 ```beanstalk
 loop is_connected():
@@ -411,34 +418,55 @@ loop is_connected():
 ;
 ```
 
-2. **Iteration loops** (iterate over a collection or a numeric range)
+Conditional loops usually do not need bindings, so the parameter brackets are normally omitted.
 
-Iteration loops bind a value each iteration and step through either:
+### Iteration loops
 
-* a **collection** (yielding elements), or
-* a **range** (yielding a counter)
+Iteration loops evaluate the loop condition as an iterable source and optionally bind values for each iteration.
+
+Iteration can step through either:
+
+* a **collection** (yielding the current item), or
+* a **range** (yielding the current counter)
+
+The loop bindings are written after the loop condition using `|...|`.
 
 ```beanstalk
-loop item in items:
+loop items |item|:
     io(item.to_string())
 ;
 ```
 
-The form is determined entirely by the loop header:
-
-* If the header contains **`to`** or **`upto`**, it is a **range loop**.
-* Otherwise, it is treated as a **conditional loop**.
-
-* `to` for **exclusive** end bounds
-* `upto` for **inclusive** end bounds
+A second binding can be added to receive the current zero-based index:
 
 ```beanstalk
-loop i in 0 to 10:
+loop items |item, index|:
+    io([index]: [item])
+;
+```
+
+If the current item or counter is not needed, the binding brackets can be skipped:
+
+```beanstalk
+loop items:
+    io("next item")
+;
+```
+
+### Range loops
+
+If the loop header contains **`to`** or **`upto`**, it is a range loop.
+
+* `to` uses an **exclusive** end bound
+* `upto` uses an **inclusive** end bound
+
+```beanstalk
+loop 0 to 10 |i|:
     io(i.to_string())
 ;
 -- yields: 0, 1, 2, 3, 4, 5, 6, 7, 8, 9
 
-loop i in 0 upto 10:
+loop 0 upto 10 |i|:
     io(i.to_string())
 ;
 -- yields: 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
@@ -447,23 +475,31 @@ loop i in 0 upto 10:
 You can specify a step using `by`.
 
 ```beanstalk
-loop i in 0 to 10 by 2:
+loop 0 to 10 by 2 |i|:
     io(i.to_string())
 ;
 -- yields: 0, 2, 4, 6, 8
+```
+
+The binding is optional here too:
+
+```beanstalk
+loop 0 to 3:
+    io("tick")
+;
 ```
 
 ### Direction is inferred from bounds
 
 Beanstalk automatically determines the iteration direction from the bounds:
 
-* If `start < end`, the default direction is ascending.
-* If `start > end`, the default direction is descending.
+* If `start < end`, the default direction is ascending
+* If `start > end`, the default direction is descending
 
 With no `by`, the default step is `+1` for ascending ranges and `-1` for descending ranges.
 
 ```beanstalk
-loop i in 10 to 0:
+loop 10 to 0 |i|:
     io(i.to_string())
 ;
 -- yields: 10, 9, 8, 7, 6, 5, 4, 3, 2, 1
@@ -472,19 +508,19 @@ loop i in 10 to 0:
 You can also supply an explicit step:
 
 ```beanstalk
-loop i in 10 upto 0 by 2:
+loop 10 upto 0 by 2 |i|:
     io(i.to_string())
 ;
 -- yields: 10, 8, 6, 4, 2, 0
 ```
 
-- When bounds imply descending iteration, `by` is treated as a magnitude (the compiler will apply the correct sign based on direction).
-- A step of `0` is invalid.
+* When the bounds imply descending iteration, `by` is treated as a magnitude and the compiler applies the correct sign automatically.
+* A step of `0` is invalid.
 
-Float ranges are supported, but **`by` should be considered required** to prevent ambiguous or non-terminating loops.
+Float ranges are supported, but **`by` should be considered required** to avoid ambiguous or non-terminating loops.
 
 ```beanstalk
-loop t in 0.0 to 1.0 by 0.1:
+loop 0.0 to 1.0 by 0.1 |t|:
     io(t.to_string())
 ;
 ```

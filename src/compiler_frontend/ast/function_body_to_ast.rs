@@ -469,7 +469,7 @@ fn unexpected_function_body_token_error(
 
         TokenKind::TypeParameterBracket => {
             let mut error = CompilerError::new_syntax_error(
-                "Unexpected '|' in function body. '|' is only used in function signatures and struct field/type declarations.",
+                "Unexpected '|' in function body. '|' is valid in function signatures, struct field/type declarations, and loop binding headers.",
                 token_stream.current_location(),
             );
             error.new_metadata_entry(
@@ -478,7 +478,9 @@ fn unexpected_function_body_token_error(
             );
             error.new_metadata_entry(
                 ErrorMetaDataKey::PrimarySuggestion,
-                String::from("Remove the stray '|' or move it into a declaration signature"),
+                String::from(
+                    "Remove the stray '|' or place it in a valid signature or loop header binding list",
+                ),
             );
             error
         }

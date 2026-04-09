@@ -31,15 +31,22 @@ import @styles/docs {navbar, title, section, palette, table, data, codeblock, co
     Beanstalk uses a **single** loop keyword: [codesnippet: loop].
 
     - **[$code("bst"):to] / [$code("bst"):upto]** select range semantics (exclusive vs inclusive)
-    - **Range loops yield the counter**
-    - **Collection loops yield elements**
-    - **No enumeration syntax yet**
-    - **No [$code("bst"):reverse] keyword**; direction inferred from bounds
-    - **[$code("bst"): by]** controls step size and works with both directions
+    - **Range loops can bind the current counter**
+    - **Collection loops can bind the current item**
+    - **An optional second binding provides the zero-based iteration index**
+    - **Loop bindings are written after the loop condition**
+    - **Binding brackets can be written as [$code("bst"):|item, index|] or skipped entirely**
+    - **No [$code("bst"):reverse] keyword**; direction is inferred from the bounds
+    - **[$code("bst"):by]** controls step size and works with both directions
 
     Loops come in two forms:
 
     1. **Conditional loops** (repeat while a condition is true)
+    2. **Iteration loops** (iterate over a collection or a numeric range)
+
+    ### Conditional loops
+
+    A conditional loop repeats for as long as its condition stays true.
 
     [codeblock, $code("bst"):
         loop is_connected():
@@ -47,43 +54,81 @@ import @styles/docs {navbar, title, section, palette, table, data, codeblock, co
         ;
     ]
 
-    2. **Iteration loops** (iterate over a collection or a numeric range)
+    Conditional loops usually do not need bindings.
 
-    Iteration loops bind a value each iteration and step through either:
+    ### Iteration loops
 
-    - a **collection** (yielding elements), or
-    - a **range** (yielding a counter)
+    Iteration loops evaluate the loop header as an iterable source and can optionally bind values for each iteration.
+
+    Iteration can step through either:
+
+    - a **collection** (yielding the current item), or
+    - a **range** (yielding the current counter)
+
+    Bindings are written after the loop condition. They can be wrapped in brackets for consistency, or written directly without them.
 
     [codeblock, $code("bst"):
-        loop item in items:
+        loop items |item|:
             io(item.to_string())
+        ;
+
+        loop items item:
+            io(item.to_string())
+        ;
+    ]
+
+    A second binding can be added to receive the current zero-based index:
+
+    [codeblock, $code("bst"):
+        loop items |item, index|:
+            io([index]: [item])
+        ;
+
+        loop items item, index:
+            io([index]: [item])
         ;
     ]
 
     The form is determined entirely by the loop header:
 
     - If the header contains **`to`** or **`upto`**, it is a **range loop**.
+    - Otherwise, if the header ends with loop bindings, it is a **collection loop**.
     - Otherwise, it is treated as a **conditional loop**.
 
-    - `to` for **exclusive** end bounds
-    - `upto` for **inclusive** end bounds
+    ### Range loops
+
+    - `to` uses an **exclusive** end bound
+    - `upto` uses an **inclusive** end bound
 
     [codeblock, $code("bst"):
-        loop i in 0 to 10:
+        loop 0 to 10 |i|:
             io(i.to_string())
         ;
         -- yields: 0, 1, 2, 3, 4, 5, 6, 7, 8, 9
 
-        loop i in 0 upto 10:
+        loop 0 upto 10 i:
             io(i.to_string())
         ;
         -- yields: 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
     ]
 
+    Range loops can also bind a zero-based iteration index:
+
+    [codeblock, $code("bst"):
+        loop 10 to 15 |value, index|:
+            io([index]: [value])
+        ;
+        -- yields: 0: 10
+        -- yields: 1: 11
+        -- yields: 2: 12
+        -- yields: 3: 13
+        -- yields: 4: 14
+    ]
+
     You can specify a step using `by`.
 
     [codeblock, $code("bst"):
-        loop i in 0 to 10 by 2:
+        loop 0 to 10 by 2 |i|:
             io(i.to_string())
         ;
         -- yields: 0, 2, 4, 6, 8
@@ -99,7 +144,7 @@ import @styles/docs {navbar, title, section, palette, table, data, codeblock, co
     With no `by`, the default step is `+1` for ascending ranges and `-1` for descending ranges.
 
     [codeblock, $code("bst"):
-        loop i in 10 to 0:
+        loop 10 to 0 |i|:
             io(i.to_string())
         ;
         -- yields: 10, 9, 8, 7, 6, 5, 4, 3, 2, 1
@@ -108,19 +153,19 @@ import @styles/docs {navbar, title, section, palette, table, data, codeblock, co
     You can also supply an explicit step:
 
     [codeblock, $code("bst"):
-        loop i in 10 upto 0 by 2:
+        loop 10 upto 0 by 2 i:
             io(i.to_string())
         ;
         -- yields: 10, 8, 6, 4, 2, 0
     ]
 
-    - When bounds imply descending iteration, `by` is treated as a magnitude (the compiler will apply the correct sign based on direction).
+    - When bounds imply descending iteration, `by` is treated as a magnitude and the compiler applies the correct sign automatically.
     - A step of `0` is invalid.
 
     Float ranges are supported, but **`by` should be considered required** to prevent ambiguous or non-terminating loops.
 
     [codeblock, $code("bst"):
-        loop t in 0.0 to 1.0 by 0.1:
+        loop 0.0 to 1.0 by 0.1 |t|:
             io(t.to_string())
         ;
     ]

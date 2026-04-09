@@ -765,13 +765,35 @@ fn collect_references_from_ast_node(node: &AstNode, references: &mut FxHashSet<I
             }
         }
 
-        NodeKind::ForLoop(binding, range, body) => {
-            collect_references_from_expression(&binding.value, references);
+        NodeKind::RangeLoop {
+            bindings,
+            range,
+            body,
+        } => {
+            collect_references_from_expression(&bindings.item.value, references);
+            if let Some(index_binding) = &bindings.index {
+                collect_references_from_expression(&index_binding.value, references);
+            }
             collect_references_from_expression(&range.start, references);
             collect_references_from_expression(&range.end, references);
             if let Some(step) = &range.step {
                 collect_references_from_expression(step, references);
             }
+            for statement in body {
+                collect_references_from_ast_node(statement, references);
+            }
+        }
+
+        NodeKind::CollectionLoop {
+            bindings,
+            iterable,
+            body,
+        } => {
+            collect_references_from_expression(&bindings.item.value, references);
+            if let Some(index_binding) = &bindings.index {
+                collect_references_from_expression(&index_binding.value, references);
+            }
+            collect_references_from_expression(iterable, references);
             for statement in body {
                 collect_references_from_ast_node(statement, references);
             }

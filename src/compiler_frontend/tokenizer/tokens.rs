@@ -448,7 +448,6 @@ pub enum TokenKind {
 
     // Loops
     Loop,
-    In,
     By,
     Break,
     Continue,

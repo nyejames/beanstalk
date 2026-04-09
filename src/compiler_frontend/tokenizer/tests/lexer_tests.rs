@@ -116,6 +116,77 @@ fn tokenizes_standalone_underscore_as_wildcard_but_prefixed_names_as_symbols() {
 }
 
 #[test]
+fn tokenizes_in_as_symbol_after_loop_syntax_removal() {
+    let (file_tokens, string_table) = tokenize_source("in\n");
+
+    assert!(
+        matches!(file_tokens.tokens[1].kind, TokenKind::Symbol(id) if string_table.resolve(id) == "in"),
+        "expected 'in' to tokenize as a normal symbol after loop-syntax removal"
+    );
+}
+
+#[test]
+fn tokenizes_pipe_bindings_in_loop_headers() {
+    let (file_tokens, string_table) = tokenize_source("loop items |item, index|:\n;\n");
+
+    let loop_index = find_token_index(&file_tokens.tokens, |kind| matches!(kind, TokenKind::Loop));
+    let items_index = find_token_index(
+        &file_tokens.tokens,
+        |kind| matches!(kind, TokenKind::Symbol(id) if string_table.resolve(*id) == "items"),
+    );
+    let item_index = find_token_index(
+        &file_tokens.tokens,
+        |kind| matches!(kind, TokenKind::Symbol(id) if string_table.resolve(*id) == "item"),
+    );
+    let index_index = find_token_index(
+        &file_tokens.tokens,
+        |kind| matches!(kind, TokenKind::Symbol(id) if string_table.resolve(*id) == "index"),
+    );
+    let first_pipe = find_token_index(&file_tokens.tokens, |kind| {
+        matches!(kind, TokenKind::TypeParameterBracket)
+    });
+    let second_pipe = file_tokens
+        .tokens
+        .iter()
+        .enumerate()
+        .skip(first_pipe + 1)
+        .find_map(|(idx, token)| {
+            matches!(token.kind, TokenKind::TypeParameterBracket).then_some(idx)
+        })
+        .expect("expected closing pipe token");
+
+    assert!(loop_index < items_index);
+    assert!(items_index < first_pipe);
+    assert!(first_pipe < item_index);
+    assert!(item_index < index_index);
+    assert!(index_index < second_pipe);
+}
+
+#[test]
+fn tokenizes_bare_loop_bindings_without_special_keyword_support() {
+    let (file_tokens, string_table) = tokenize_source("loop items item, index:\n;\n");
+
+    let items_index = find_token_index(
+        &file_tokens.tokens,
+        |kind| matches!(kind, TokenKind::Symbol(id) if string_table.resolve(*id) == "items"),
+    );
+    let item_index = find_token_index(
+        &file_tokens.tokens,
+        |kind| matches!(kind, TokenKind::Symbol(id) if string_table.resolve(*id) == "item"),
+    );
+    let comma_index =
+        find_token_index(&file_tokens.tokens, |kind| matches!(kind, TokenKind::Comma));
+    let index_index = find_token_index(
+        &file_tokens.tokens,
+        |kind| matches!(kind, TokenKind::Symbol(id) if string_table.resolve(*id) == "index"),
+    );
+
+    assert!(items_index < item_index);
+    assert!(item_index < comma_index);
+    assert!(comma_index < index_index);
+}
+
+#[test]
 fn tokenizes_none_question_mark_and_bang_markers() {
     let (file_tokens, _string_table) =
         tokenize_source("value String? = none\npersist()!\nrecover = may_fail() ! \"\"\n");

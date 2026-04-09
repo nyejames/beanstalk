@@ -49,7 +49,13 @@ pub enum RangeEndKind {
 }
 
 #[derive(Debug, Clone)]
-pub struct ForLoopRange {
+pub struct LoopBindings {
+    pub item: Declaration,
+    pub index: Option<Declaration>,
+}
+
+#[derive(Debug, Clone)]
+pub struct RangeLoopSpec {
     pub start: Expression,
     pub end: Expression,
     pub end_kind: RangeEndKind,
@@ -70,8 +76,17 @@ pub enum NodeKind {
         Option<Vec<AstNode>>, // for the wildcard/else case
     ),
 
-    ForLoop(Box<Declaration>, ForLoopRange, Vec<AstNode>), // Item, Range, Body,
-    WhileLoop(Expression, Vec<AstNode>),                   // Condition, Body,
+    RangeLoop {
+        bindings: LoopBindings,
+        range: RangeLoopSpec,
+        body: Vec<AstNode>,
+    },
+    CollectionLoop {
+        bindings: LoopBindings,
+        iterable: Expression,
+        body: Vec<AstNode>,
+    },
+    WhileLoop(Expression, Vec<AstNode>), // Condition, Body,
     Break,
     Continue,
 
