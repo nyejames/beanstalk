@@ -1,8 +1,15 @@
+//! Core AST node declarations and shared expression-ordering helpers.
+//!
+//! WHAT: defines statement/expression node shapes plus operator precedence metadata used by
+//! expression evaluation.
+//! WHY: parser output, type checking, and constant folding need one authoritative AST surface and
+//! one precedence table so behavior stays deterministic across frontend stages.
+
 use crate::compiler_frontend::ast::expressions::call_argument::{
     CallArgument, normalize_call_argument_values,
 };
 use crate::compiler_frontend::ast::expressions::expression::{
-    Expression, ExpressionKind, Operator, ResultCallHandling,
+    Expression, Operator, ResultCallHandling,
 };
 use crate::compiler_frontend::ast::statements::branching::MatchArm;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
@@ -10,9 +17,9 @@ use crate::compiler_frontend::builtins::BuiltinMethodKind;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::string_interning::{StringId, StringTable};
+use crate::compiler_frontend::string_interning::StringId;
 pub(crate) use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
-use crate::{return_compiler_error, return_type_error};
+use crate::return_compiler_error;
 
 #[derive(Debug, Clone)]
 pub struct Declaration {
@@ -237,50 +244,6 @@ impl AstNode {
                 );
             }
         }
-    }
-
-    // If this is a boolean value, flip it to the opposite value
-    pub fn flip(&mut self, _string_table: &StringTable) -> Result<bool, CompilerError> {
-        if let NodeKind::Rvalue(value) = &mut self.kind {
-            match value.kind {
-                ExpressionKind::Bool(val) => {
-                    value.kind = ExpressionKind::Bool(!val);
-                    return Ok(true);
-                }
-                ExpressionKind::Runtime(_) => {
-                    if !value.ownership.is_mutable() {
-                        return_type_error!(
-                            "Tried to use the 'not' operator on a non-mutable value",
-                            self.location.to_owned(), {
-                                ExpectedType => "Boolean",
-                                BorrowKind => "Shared",
-                                LifetimeHint => "This value is borrowed",
-                            }
-                        )
-                    } else {
-                        return_type_error!(
-                            format!(
-                                "Tried to use the 'not' operator on value of type {:?}",
-                                value.data_type
-                            ),
-                            self.location.to_owned(), {
-                                ExpectedType => "Boolean",
-                                BorrowKind => "Shared",
-                                LifetimeHint => "This value is borrowed",
-                            }
-                        )
-                    }
-                }
-                _ => {}
-            }
-        }
-
-        return_type_error!(
-            format!("Tried to use the 'not' operator on a non-boolean: {:?}", self.kind),
-            self.location.to_owned(), {
-                ExpectedType => "Boolean",
-            }
-        );
     }
 
     pub fn get_precedence(&self) -> u32 {

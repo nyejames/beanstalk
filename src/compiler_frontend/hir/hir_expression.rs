@@ -3,7 +3,6 @@
 //! Lowers typed AST expressions into HIR expressions and statement preludes.
 //! This file contains the high-level dispatcher and shared expression utilities on `HirBuilder`.
 
-use crate::compiler_frontend::ast::ast_nodes::AstNode;
 use crate::compiler_frontend::ast::expressions::expression::{
     BuiltinCastKind, Expression, ExpressionKind, ResultVariant as AstResultVariant,
 };
@@ -484,26 +483,6 @@ impl<'a> HirBuilder<'a> {
                 .with_side_table(&self.side_table)
                 .with_type_context(&self.type_context),
             )
-        ));
-    }
-
-    fn log_rpn_step(&self, _stage: &str, _node: &AstNode, _stack: &[HirExpression]) {
-        hir_log!(format!(
-            "[HIR][RPN] {} node={:?} stack=[{}]",
-            _stage,
-            _node.kind,
-            {
-                let display = crate::compiler_frontend::hir::hir_display::HirDisplayContext::new(
-                    self.string_table,
-                )
-                .with_side_table(&self.side_table)
-                .with_type_context(&self.type_context);
-                _stack
-                    .iter()
-                    .map(|expr| expr.display_with_context(&display))
-                    .collect::<Vec<_>>()
-                    .join(" | ")
-            }
         ));
     }
 

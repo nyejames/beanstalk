@@ -247,6 +247,9 @@ impl<'hir> JsEmitter<'hir> {
             HirBinOp::Le => "<=",
             HirBinOp::Gt => ">",
             HirBinOp::Ge => ">=",
+            // Short-circuit runtime semantics are guaranteed by HIR CFG lowering:
+            // `and`/`or` may arrive here as plain BinOp only when both operands are side-effect
+            // free at expression level. Branch-gated RHS evaluation is lowered earlier.
             HirBinOp::And => "&&",
             HirBinOp::Or => "||",
             HirBinOp::Exponent => "**",

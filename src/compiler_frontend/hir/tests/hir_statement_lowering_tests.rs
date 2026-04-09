@@ -11,7 +11,7 @@ use crate::compiler_frontend::ast::ast_nodes::{
 };
 use crate::compiler_frontend::ast::expressions::call_argument::{CallAccessMode, CallArgument};
 use crate::compiler_frontend::ast::expressions::expression::{
-    Expression, ExpressionKind, ResultCallHandling,
+    Expression, ExpressionKind, Operator, ResultCallHandling,
 };
 use crate::compiler_frontend::ast::statements::branching::MatchArm;
 use crate::compiler_frontend::ast::statements::functions::{
@@ -23,10 +23,11 @@ use crate::compiler_frontend::compiler_errors::{CompilerMessages, ErrorType};
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::hir::hir_nodes::{
-    HirConstValue, HirDocFragmentKind, HirExpressionKind, HirModule, HirPattern, HirStatementKind,
-    HirTerminator, StartFragment,
+    FunctionId, HirConstValue, HirDocFragmentKind, HirExpressionKind, HirModule, HirPattern,
+    HirStatementKind, HirTerminator, StartFragment,
 };
 use crate::compiler_frontend::hir::tests::hir_expression_lowering_tests::location;
+use crate::compiler_frontend::host_functions::CallTarget;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::string_interning::StringTable;
@@ -92,6 +93,26 @@ fn runtime_template_expression(location: SourceLocation, content: Vec<Expression
     }
 
     Expression::template(template, Ownership::ImmutableOwned)
+}
+
+fn runtime_function_call_node(
+    name: InternedPath,
+    result_types: Vec<DataType>,
+    location: SourceLocation,
+) -> AstNode {
+    node(
+        NodeKind::FunctionCall {
+            name,
+            args: vec![],
+            result_types,
+            location: location.clone(),
+        },
+        location,
+    )
+}
+
+fn runtime_operator_node(operator: Operator, location: SourceLocation) -> AstNode {
+    node(NodeKind::Operator(operator), location)
 }
 
 fn build_ast(nodes: Vec<AstNode>, entry_path: InternedPath) -> Ast {
@@ -1348,6 +1369,341 @@ fn lowers_if_to_then_else_merge_blocks() {
         module.blocks[else_block.0 as usize].terminator,
         HirTerminator::Jump { .. }
     ));
+}
+
+fn blocks_with_user_function_call(module: &HirModule, function_id: FunctionId) -> Vec<usize> {
+    module
+        .blocks
+        .iter()
+        .enumerate()
+        .filter_map(|(index, block)| {
+            let has_call = block.statements.iter().any(|statement| {
+                matches!(
+                    statement.kind,
+                    HirStatementKind::Call {
+                        target: CallTarget::UserFunction(target_id),
+                        ..
+                    } if target_id == function_id
+                )
+            });
+            if has_call { Some(index) } else { None }
+        })
+        .collect()
+}
+
+#[test]
+fn short_circuit_and_keeps_rhs_call_off_always_run_path() {
+    let mut string_table = StringTable::new();
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
+    let rhs_name = super::symbol("rhs_and", &mut string_table);
+    let location = test_location(30);
+
+    let rhs_fn = function_node(
+        rhs_name.clone(),
+        FunctionSignature {
+            parameters: vec![],
+            returns: fresh_returns(vec![DataType::Bool]),
+        },
+        vec![node(
+            NodeKind::Return(vec![Expression::bool(
+                true,
+                location.clone(),
+                Ownership::ImmutableOwned,
+            )]),
+            location.clone(),
+        )],
+        location.clone(),
+    );
+
+    let condition = Expression::runtime(
+        vec![
+            node(
+                NodeKind::Rvalue(Expression::bool(
+                    false,
+                    location.clone(),
+                    Ownership::ImmutableOwned,
+                )),
+                location.clone(),
+            ),
+            runtime_function_call_node(rhs_name.clone(), vec![DataType::Bool], location.clone()),
+            runtime_operator_node(Operator::And, location.clone()),
+        ],
+        DataType::Bool,
+        location.clone(),
+        Ownership::MutableOwned,
+    );
+
+    let start_fn = function_node(
+        start_name,
+        FunctionSignature {
+            parameters: vec![],
+            returns: vec![],
+        },
+        vec![node(
+            NodeKind::If(
+                condition,
+                vec![node(
+                    NodeKind::Rvalue(Expression::int(
+                        1,
+                        location.clone(),
+                        Ownership::ImmutableOwned,
+                    )),
+                    location.clone(),
+                )],
+                None,
+            ),
+            location.clone(),
+        )],
+        location.clone(),
+    );
+
+    let module = lower_ast(
+        build_ast(vec![rhs_fn, start_fn], entry_path),
+        &mut string_table,
+    )
+    .expect("short-circuit and lowering should succeed");
+    let rhs_function_id = module
+        .functions
+        .iter()
+        .find(|function| function.id != module.start_function)
+        .expect("rhs function should be present")
+        .id;
+    let start_function = module
+        .functions
+        .iter()
+        .find(|function| function.id == module.start_function)
+        .expect("start function should exist");
+    let start_entry_index = start_function.entry.0 as usize;
+    let start_entry_block = &module.blocks[start_entry_index];
+
+    let (then_block, else_block) = match start_entry_block.terminator {
+        HirTerminator::If {
+            then_block,
+            else_block,
+            ..
+        } => (then_block, else_block),
+        _ => panic!("expected short-circuit dispatcher if terminator in entry block"),
+    };
+
+    assert!(
+        start_entry_block
+            .statements
+            .iter()
+            .all(|statement| !matches!(statement.kind, HirStatementKind::Call { .. })),
+        "entry block should not eagerly execute rhs calls before short-circuit dispatch"
+    );
+
+    let call_blocks = blocks_with_user_function_call(&module, rhs_function_id);
+    assert_eq!(
+        call_blocks.len(),
+        1,
+        "rhs function call should appear in exactly one guarded branch"
+    );
+    assert_eq!(call_blocks[0], then_block.0 as usize);
+    assert_ne!(call_blocks[0], else_block.0 as usize);
+}
+
+#[test]
+fn short_circuit_or_keeps_rhs_call_off_true_short_path() {
+    let mut string_table = StringTable::new();
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
+    let rhs_name = super::symbol("rhs_or", &mut string_table);
+    let location = test_location(40);
+
+    let rhs_fn = function_node(
+        rhs_name.clone(),
+        FunctionSignature {
+            parameters: vec![],
+            returns: fresh_returns(vec![DataType::Bool]),
+        },
+        vec![node(
+            NodeKind::Return(vec![Expression::bool(
+                false,
+                location.clone(),
+                Ownership::ImmutableOwned,
+            )]),
+            location.clone(),
+        )],
+        location.clone(),
+    );
+
+    let condition = Expression::runtime(
+        vec![
+            node(
+                NodeKind::Rvalue(Expression::bool(
+                    true,
+                    location.clone(),
+                    Ownership::ImmutableOwned,
+                )),
+                location.clone(),
+            ),
+            runtime_function_call_node(rhs_name.clone(), vec![DataType::Bool], location.clone()),
+            runtime_operator_node(Operator::Or, location.clone()),
+        ],
+        DataType::Bool,
+        location.clone(),
+        Ownership::MutableOwned,
+    );
+
+    let start_fn = function_node(
+        start_name,
+        FunctionSignature {
+            parameters: vec![],
+            returns: vec![],
+        },
+        vec![node(
+            NodeKind::If(
+                condition,
+                vec![node(
+                    NodeKind::Rvalue(Expression::int(
+                        1,
+                        location.clone(),
+                        Ownership::ImmutableOwned,
+                    )),
+                    location.clone(),
+                )],
+                None,
+            ),
+            location.clone(),
+        )],
+        location.clone(),
+    );
+
+    let module = lower_ast(
+        build_ast(vec![rhs_fn, start_fn], entry_path),
+        &mut string_table,
+    )
+    .expect("short-circuit or lowering should succeed");
+    let rhs_function_id = module
+        .functions
+        .iter()
+        .find(|function| function.id != module.start_function)
+        .expect("rhs function should be present")
+        .id;
+    let start_function = module
+        .functions
+        .iter()
+        .find(|function| function.id == module.start_function)
+        .expect("start function should exist");
+    let start_entry_index = start_function.entry.0 as usize;
+    let start_entry_block = &module.blocks[start_entry_index];
+
+    let (then_block, else_block) = match start_entry_block.terminator {
+        HirTerminator::If {
+            then_block,
+            else_block,
+            ..
+        } => (then_block, else_block),
+        _ => panic!("expected short-circuit dispatcher if terminator in entry block"),
+    };
+
+    let call_blocks = blocks_with_user_function_call(&module, rhs_function_id);
+    assert_eq!(
+        call_blocks.len(),
+        1,
+        "rhs function call should appear in exactly one guarded branch"
+    );
+    assert_eq!(call_blocks[0], else_block.0 as usize);
+    assert_ne!(call_blocks[0], then_block.0 as usize);
+}
+
+#[test]
+fn if_condition_with_runtime_logical_expression_lowers_to_two_stage_cfg() {
+    let mut string_table = StringTable::new();
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
+    let rhs_name = super::symbol("rhs_if_condition", &mut string_table);
+    let location = test_location(50);
+
+    let rhs_fn = function_node(
+        rhs_name.clone(),
+        FunctionSignature {
+            parameters: vec![],
+            returns: fresh_returns(vec![DataType::Bool]),
+        },
+        vec![node(
+            NodeKind::Return(vec![Expression::bool(
+                true,
+                location.clone(),
+                Ownership::ImmutableOwned,
+            )]),
+            location.clone(),
+        )],
+        location.clone(),
+    );
+
+    let condition = Expression::runtime(
+        vec![
+            node(
+                NodeKind::Rvalue(Expression::int(
+                    1,
+                    location.clone(),
+                    Ownership::ImmutableOwned,
+                )),
+                location.clone(),
+            ),
+            node(
+                NodeKind::Rvalue(Expression::int(
+                    2,
+                    location.clone(),
+                    Ownership::ImmutableOwned,
+                )),
+                location.clone(),
+            ),
+            runtime_operator_node(Operator::LessThan, location.clone()),
+            runtime_function_call_node(rhs_name, vec![DataType::Bool], location.clone()),
+            runtime_operator_node(Operator::And, location.clone()),
+        ],
+        DataType::Bool,
+        location.clone(),
+        Ownership::MutableOwned,
+    );
+
+    let start_fn = function_node(
+        start_name,
+        FunctionSignature {
+            parameters: vec![],
+            returns: vec![],
+        },
+        vec![node(
+            NodeKind::If(
+                condition,
+                vec![node(
+                    NodeKind::Rvalue(Expression::int(
+                        1,
+                        location.clone(),
+                        Ownership::ImmutableOwned,
+                    )),
+                    location.clone(),
+                )],
+                Some(vec![node(
+                    NodeKind::Rvalue(Expression::int(
+                        2,
+                        location.clone(),
+                        Ownership::ImmutableOwned,
+                    )),
+                    location.clone(),
+                )]),
+            ),
+            location.clone(),
+        )],
+        location.clone(),
+    );
+
+    let module = lower_ast(
+        build_ast(vec![rhs_fn, start_fn], entry_path),
+        &mut string_table,
+    )
+    .expect("if condition lowering should succeed");
+
+    let if_terminator_count = module
+        .blocks
+        .iter()
+        .filter(|block| matches!(block.terminator, HirTerminator::If { .. }))
+        .count();
+    assert!(
+        if_terminator_count >= 2,
+        "expected separate if terminators for short-circuit dispatch and statement branching"
+    );
 }
 
 #[test]

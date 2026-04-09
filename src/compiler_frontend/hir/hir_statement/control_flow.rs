@@ -166,12 +166,12 @@ impl<'a> HirBuilder<'a> {
         else_body: Option<&[AstNode]>,
         location: &SourceLocation,
     ) -> Result<(), CompilerError> {
-        let current_block = self.current_block_id_or_error(location)?;
         let condition_lowered = self.lower_expression(condition)?;
 
         for prelude in condition_lowered.prelude {
             self.emit_statement_to_current_block(prelude, location)?;
         }
+        let condition_block = self.current_block_id_or_error(location)?;
 
         let parent_region = self.current_region_or_error(location)?;
         let then_region = self.create_child_region(parent_region);
@@ -180,7 +180,7 @@ impl<'a> HirBuilder<'a> {
         let else_block = self.create_block(else_region, location, "if-else")?;
 
         self.emit_terminator(
-            current_block,
+            condition_block,
             HirTerminator::If {
                 condition: condition_lowered.value,
                 then_block,
@@ -189,8 +189,8 @@ impl<'a> HirBuilder<'a> {
             location,
         )?;
 
-        self.log_control_flow_edge(current_block, then_block, "if.true");
-        self.log_control_flow_edge(current_block, else_block, "if.false");
+        self.log_control_flow_edge(condition_block, then_block, "if.true");
+        self.log_control_flow_edge(condition_block, else_block, "if.false");
 
         let mut terminated_anchor: Option<BlockId> = None;
 
@@ -288,9 +288,10 @@ impl<'a> HirBuilder<'a> {
         for prelude in lowered_condition.prelude {
             self.emit_statement_to_current_block(prelude, location)?;
         }
+        let condition_block = self.current_block_id_or_error(location)?;
 
         self.emit_terminator(
-            header_block,
+            condition_block,
             HirTerminator::If {
                 condition: lowered_condition.value,
                 then_block: body_block,
@@ -299,8 +300,8 @@ impl<'a> HirBuilder<'a> {
             location,
         )?;
 
-        self.log_control_flow_edge(header_block, body_block, "while.true");
-        self.log_control_flow_edge(header_block, exit_block, "while.false");
+        self.log_control_flow_edge(condition_block, body_block, "while.true");
+        self.log_control_flow_edge(condition_block, exit_block, "while.false");
 
         self.set_current_block(body_block, location)?;
         self.push_loop_targets(exit_block, header_block);
@@ -330,12 +331,11 @@ impl<'a> HirBuilder<'a> {
         default: Option<&[AstNode]>,
         location: &SourceLocation,
     ) -> Result<(), CompilerError> {
-        let current_block = self.current_block_id_or_error(location)?;
-
         let lowered_scrutinee = self.lower_expression(scrutinee)?;
         for prelude in lowered_scrutinee.prelude {
             self.emit_statement_to_current_block(prelude, location)?;
         }
+        let current_block = self.current_block_id_or_error(location)?;
 
         let parent_region = self.current_region_or_error(location)?;
         let mut arm_blocks = Vec::with_capacity(arms.len());

@@ -1,15 +1,15 @@
 //! # Constant Folding Optimizer
 //!
-//! This module implements compile-time constant folding for Beanstalk expressions.
-//! It evaluates constant expressions during AST construction to reduce runtime overhead
-//! and enable further optimizations.
+//! WHAT: folds fully compile-time expression fragments during AST construction.
+//! WHY: conservative folding keeps runtime semantics stable while still collapsing obvious
+//! literal operations before HIR lowering.
 //!
 //! ## Algorithm
 //!
 //! The constant folder operates on expressions in Reverse Polish Notation (RPN) order:
 //! 1. **Stack-Based Evaluation**: Processes operands and operators in RPN order
-//! 2. **Immediate Folding**: Evaluates operations on constant operands immediately
-//! 3. **Runtime Preservation**: Preserves non-constant expressions for runtime evaluation
+//! 2. **Immediate Folding**: Evaluates operations only when required operands are foldable literals
+//! 3. **Runtime Preservation**: Keeps non-foldable expressions in runtime RPN form
 //!
 //! ## Supported Operations
 //!
@@ -18,12 +18,6 @@
 //! - **Comparison**: Equality, inequality, relational comparisons
 //! - **Type Coercion**: Automatic promotion between compatible numeric types
 //!
-//! ## Benefits
-//!
-//! - **Performance**: Eliminates runtime calculations for constant expressions
-//! - **Code Size**: Reduces generated WASM by pre-computing known values
-//! - **Optimization**: Enables dead code elimination and further optimizations
-
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::{
     BuiltinCastKind, Expression, ExpressionKind, Operator, ResultCallHandling, ResultVariant,
@@ -33,7 +27,7 @@ use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::{return_rule_error, return_syntax_error};
 
-/// Perform constant folding on an expression in RPN order
+/// Perform conservative constant folding on an expression in RPN order.
 ///
 /// Takes a stack of AST nodes representing an expression in Reverse Polish Notation
 /// and evaluates all constant sub-expressions at compile time. Returns a simplified
@@ -44,7 +38,7 @@ use crate::{return_rule_error, return_syntax_error};
 /// 1. **Process RPN Stack**: Iterate through nodes in RPN order
 /// 2. **Accumulate Operands**: Push operands onto evaluation stack
 /// 3. **Evaluate Operators**: When encountering operators, attempt to fold with constant operands
-/// 4. **Preserve Runtime**: Non-constant expressions are preserved for runtime evaluation
+/// 4. **Preserve Runtime**: Non-foldable operations are preserved for runtime evaluation
 ///
 /// ## Error Handling
 ///
@@ -88,14 +82,27 @@ pub fn constant_fold(
                 }
 
                 if matches!(op, Operator::Not) {
-                    let mut boolean = stack
+                    let operand = stack
                         .pop()
                         .expect("unary NOT should have one operand after the stack-length guard");
-                    if !boolean.flip(string_table)? {
-                        stack.push(boolean);
-                        stack.push(node.to_owned());
+
+                    if let NodeKind::Rvalue(expression) = &operand.kind
+                        && let ExpressionKind::Bool(value) = expression.kind
+                    {
+                        let folded = AstNode {
+                            kind: NodeKind::Rvalue(Expression::bool(
+                                !value,
+                                expression.location.clone(),
+                                expression.ownership.to_owned(),
+                            )),
+                            location: operand.location.to_owned(),
+                            scope: operand.scope.clone(),
+                        };
+                        stack.push(folded);
                     } else {
-                        stack.push(boolean)
+                        // Keep unary-not as runtime RPN when operand is not a boolean literal.
+                        stack.push(operand);
+                        stack.push(node.to_owned());
                     }
 
                     continue;

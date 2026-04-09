@@ -11,6 +11,7 @@ use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
 use crate::compiler_frontend::ast::function_body_to_ast::function_body_to_ast;
+use crate::compiler_frontend::ast::statements::condition_validation::ensure_boolean_condition;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
@@ -62,19 +63,14 @@ pub fn create_branch(
         return Ok(vec![match_statement]);
     }
 
-    if !then_condition.is_boolean() {
-        let found_type = then_condition.data_type.display_with_table(string_table);
-        return_rule_error!(
-            format!("If condition must be a boolean expression. Found '{}'", found_type),
-            token_stream.current_location(),
-            {
-                CompilationStage => "If Statement Parsing",
-                PrimarySuggestion => "Use a boolean expression in the if condition (for example 'value is 0' or 'flag')",
-                FoundType => found_type,
-                ExpectedType => "Bool",
-            }
-        )
-    }
+    ensure_boolean_condition(
+        &then_condition,
+        "If statement condition",
+        &then_condition.location,
+        "If Statement Parsing",
+        "Use a boolean expression in the if condition (for example 'value is 0' or 'flag')",
+        string_table,
+    )?;
 
     ast_log!("Creating If Statement");
     if token_stream.current_token_kind() != &TokenKind::Colon {

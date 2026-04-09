@@ -1,0 +1,13 @@
+[backends.html]
+mode = "success"
+warnings = "forbid"
+
+[[backends.html.artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain = [
+    "function bst_rhs_and_fn",
+    "rhs-and-called",
+    "if (__bs_read(bst_lhs_l0))",
+    "and-done",
+]

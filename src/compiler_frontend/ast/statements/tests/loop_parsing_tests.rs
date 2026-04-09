@@ -9,7 +9,7 @@ use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
 use crate::compiler_frontend::ast::test_support::{
     function_body_by_name, parse_single_file_ast, parse_single_file_ast_error,
 };
-use crate::compiler_frontend::compiler_errors::CompilerError;
+use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorMetaDataKey, ErrorType};
 
 fn loop_fixture_source(loop_body_source: &str) -> String {
     let indented_body = loop_body_source
@@ -345,10 +345,27 @@ fn rejects_collection_loop_on_non_collection_expression() {
 #[test]
 fn rejects_non_boolean_conditional_loop_condition() {
     let error = parse_loop_fixture_error("loop 1 + 2:\n    io(1)\n;");
+    assert_eq!(error.error_type, ErrorType::Type);
     assert!(
         error
             .msg
-            .contains("Loop condition must be a boolean expression")
+            .contains("Loop condition requires a Bool condition"),
+        "{}",
+        error.msg
+    );
+    assert_eq!(
+        error
+            .metadata
+            .get(&ErrorMetaDataKey::ExpectedType)
+            .map(String::as_str),
+        Some("Bool")
+    );
+    assert_eq!(
+        error
+            .metadata
+            .get(&ErrorMetaDataKey::FoundType)
+            .map(String::as_str),
+        Some("Int")
     );
 }
 

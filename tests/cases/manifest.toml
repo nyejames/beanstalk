@@ -1523,3 +1523,43 @@ tags = ["integration", "diagnostics"]
 id = "identifier_keyword_shadow_ast_error"
 path = "identifier_keyword_shadow_ast_error"
 tags = ["integration", "diagnostics"]
+
+[[case]]
+id = "if_logical_precedence"
+path = "if_logical_precedence"
+tags = ["integration", "control-flow"]
+
+[[case]]
+id = "if_nested_boolean_conditions"
+path = "if_nested_boolean_conditions"
+tags = ["integration", "control-flow"]
+
+[[case]]
+id = "logical_parenthesized_grouping"
+path = "logical_parenthesized_grouping"
+tags = ["integration", "control-flow"]
+
+[[case]]
+id = "logical_short_circuit_and"
+path = "logical_short_circuit_and"
+tags = ["integration", "control-flow"]
+
+[[case]]
+id = "logical_short_circuit_or"
+path = "logical_short_circuit_or"
+tags = ["integration", "control-flow"]
+
+[[case]]
+id = "if_condition_requires_bool"
+path = "if_condition_requires_bool"
+tags = ["integration", "control-flow", "diagnostics"]
+
+[[case]]
+id = "logical_invalid_operand_types"
+path = "logical_invalid_operand_types"
+tags = ["integration", "diagnostics"]
+
+[[case]]
+id = "not_requires_bool"
+path = "not_requires_bool"
+tags = ["integration", "diagnostics"]

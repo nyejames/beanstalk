@@ -3,6 +3,10 @@ use crate::compiler_frontend::ast::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::Operator;
 use crate::compiler_frontend::ast::templates::template_types::Template;
+use crate::compiler_frontend::ast::test_support::{
+    parse_single_file_ast, parse_single_file_ast_error,
+};
+use crate::compiler_frontend::compiler_errors::{ErrorMetaDataKey, ErrorType};
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
@@ -136,4 +140,188 @@ fn ordinary_expression_rejects_path_string_concatenation() {
 
     let recorded = context.take_rendered_path_usages();
     assert!(recorded.is_empty());
+}
+
+#[test]
+fn unary_not_requires_boolean_operand() {
+    let error = parse_single_file_ast_error("value = not 1\n");
+    assert_eq!(error.error_type, ErrorType::Type);
+    assert!(
+        error
+            .msg
+            .contains("Unary operator 'not' requires Bool, found 'Int'"),
+        "{}",
+        error.msg
+    );
+    assert_eq!(
+        error
+            .metadata
+            .get(&ErrorMetaDataKey::ExpectedType)
+            .map(String::as_str),
+        Some("Bool")
+    );
+    assert_eq!(
+        error
+            .metadata
+            .get(&ErrorMetaDataKey::FoundType)
+            .map(String::as_str),
+        Some("Int")
+    );
+}
+
+#[test]
+fn logical_and_requires_bool_operands() {
+    let error = parse_single_file_ast_error("value = true and 1\n");
+    assert_eq!(error.error_type, ErrorType::Type);
+    assert!(
+        error
+            .msg
+            .contains("Logical operator 'and' requires Bool operands"),
+        "{}",
+        error.msg
+    );
+    assert_eq!(
+        error
+            .metadata
+            .get(&ErrorMetaDataKey::ExpectedType)
+            .map(String::as_str),
+        Some("Bool and Bool")
+    );
+    assert_eq!(
+        error
+            .metadata
+            .get(&ErrorMetaDataKey::FoundType)
+            .map(String::as_str),
+        Some("Bool and Int")
+    );
+}
+
+#[test]
+fn logical_and_reports_found_types_in_operand_order() {
+    let error = parse_single_file_ast_error("value = 1 and true\n");
+    assert_eq!(error.error_type, ErrorType::Type);
+    assert_eq!(
+        error
+            .metadata
+            .get(&ErrorMetaDataKey::FoundType)
+            .map(String::as_str),
+        Some("Int and Bool")
+    );
+}
+
+#[test]
+fn logical_or_rejects_string_operands() {
+    let error = parse_single_file_ast_error("value = \"a\" or \"b\"\n");
+    assert_eq!(error.error_type, ErrorType::Type);
+    assert!(
+        error
+            .msg
+            .contains("Logical operator 'or' requires Bool operands"),
+        "{}",
+        error.msg
+    );
+    assert_eq!(
+        error
+            .metadata
+            .get(&ErrorMetaDataKey::FoundType)
+            .map(String::as_str),
+        Some("String and String")
+    );
+}
+
+#[test]
+fn logical_mix_rejects_non_bool_rhs_after_comparison() {
+    let error = parse_single_file_ast_error("value = 1 < 2 and 3\n");
+    assert_eq!(error.error_type, ErrorType::Type);
+    assert!(
+        error
+            .msg
+            .contains("Logical operator 'and' requires Bool operands"),
+        "{}",
+        error.msg
+    );
+    assert_eq!(
+        error
+            .metadata
+            .get(&ErrorMetaDataKey::FoundType)
+            .map(String::as_str),
+        Some("Bool and Int")
+    );
+}
+
+#[test]
+fn ordinary_operators_reject_result_operands_without_handler() {
+    let error = parse_single_file_ast_error("value = Int(\"1\") is 1\n");
+    assert_eq!(error.error_type, ErrorType::Type);
+    assert!(
+        error
+            .msg
+            .contains("does not implicitly unwrap Result values"),
+        "{}",
+        error.msg
+    );
+}
+
+#[test]
+fn logical_operator_rejects_option_operands_with_precise_found_type() {
+    let error = parse_single_file_ast_error("maybe String? = none\nvalue = maybe or true\n");
+    assert_eq!(error.error_type, ErrorType::Type);
+    assert!(
+        error
+            .msg
+            .contains("Logical operator 'or' requires Bool operands"),
+        "{}",
+        error.msg
+    );
+    assert_eq!(
+        error
+            .metadata
+            .get(&ErrorMetaDataKey::FoundType)
+            .map(String::as_str),
+        Some("Option(String) and Bool")
+    );
+}
+
+#[test]
+fn comparison_operator_rejects_option_to_scalar_comparison() {
+    let error = parse_single_file_ast_error("maybe String? = none\nvalue = maybe is \"x\"\n");
+    assert_eq!(error.error_type, ErrorType::Type);
+    assert!(
+        error
+            .msg
+            .contains("Comparison operator 'is' cannot compare"),
+        "{}",
+        error.msg
+    );
+    assert_eq!(
+        error
+            .metadata
+            .get(&ErrorMetaDataKey::FoundType)
+            .map(String::as_str),
+        Some("Option(String) and String")
+    );
+}
+
+#[test]
+fn fully_constant_boolean_and_comparison_expressions_fold() {
+    let (ast, _string_table) = parse_single_file_ast("flag = not (1 < 2) or (3 < 4 and false)\n");
+    let start_function = ast
+        .nodes
+        .iter()
+        .find(|node| matches!(node.kind, NodeKind::Function(_, _, _)))
+        .expect("start function should exist");
+
+    let NodeKind::Function(_, _, body) = &start_function.kind else {
+        panic!("expected start function body");
+    };
+    let NodeKind::VariableDeclaration(declaration) = &body[0].kind else {
+        panic!("expected folded declaration");
+    };
+
+    assert!(
+        matches!(declaration.value.kind, ExpressionKind::Bool(false)),
+        "expected fully-folded boolean/comparison expression to collapse to Bool(false), got {:?}",
+        declaration.value.kind
+    );
+    assert_eq!(declaration.value.data_type, DataType::Bool);
 }

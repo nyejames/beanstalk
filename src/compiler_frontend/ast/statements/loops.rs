@@ -14,6 +14,7 @@ use crate::compiler_frontend::ast::expressions::parse_expression::{
     create_expression, create_expression_until,
 };
 use crate::compiler_frontend::ast::function_body_to_ast::function_body_to_ast;
+use crate::compiler_frontend::ast::statements::condition_validation::ensure_boolean_condition;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
@@ -274,14 +275,6 @@ fn parse_non_range_loop_header(
         string_table,
     );
 
-    if let Ok(condition) = &full_expression
-        && condition.is_boolean()
-    {
-        return Ok(ParsedLoopHeader::Conditional {
-            condition: condition.to_owned(),
-        });
-    }
-
     if let Some(dual_bare_split) = split_bare_dual_binding_suffix(header_tokens)
         && let Ok((iterable, item_type)) = parse_collection_iterable_from_tokens(
             &dual_bare_split.core_tokens,
@@ -340,19 +333,18 @@ fn parse_non_range_loop_header(
                 });
             }
 
-            return_syntax_error!(
-                format!(
-                    "Loop condition must be a boolean expression. Found '{}'",
-                    expression.data_type.display_with_table(string_table)
-                ),
-                expression.location.clone(),
-                {
-                    FoundType => expression.data_type.display_with_table(string_table),
-                    ExpectedType => "Bool",
-                    CompilationStage => LOOP_PARSING_STAGE,
-                    PrimarySuggestion => "Use a boolean expression after 'loop', e.g. loop is_ready():",
-                }
-            )
+            ensure_boolean_condition(
+                &expression,
+                "Loop condition",
+                &expression.location,
+                LOOP_PARSING_STAGE,
+                "Use a boolean expression after 'loop', e.g. loop is_ready():",
+                string_table,
+            )?;
+
+            Ok(ParsedLoopHeader::Conditional {
+                condition: expression,
+            })
         }
         Err(error) => Err(error),
     }

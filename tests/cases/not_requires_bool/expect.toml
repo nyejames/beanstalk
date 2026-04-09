@@ -2,4 +2,4 @@
 mode = "failure"
 warnings = "forbid"
 error_type = "Type"
-message_contains = ["Loop condition requires a Bool condition"]
+message_contains = ["Unary operator 'not' requires Bool", "found 'Int'"]

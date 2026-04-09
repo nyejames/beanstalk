@@ -296,16 +296,19 @@ fn resolve_unary_operator_type(
             if operand == &DataType::Bool {
                 Ok(DataType::Bool)
             } else {
+                let found_type = operand.display_with_table(string_table);
                 return_type_error!(
                     format!(
-                        "Operator '{}' requires Bool, found '{}'.",
+                        "Unary operator '{}' requires Bool, found '{}'.",
                         op.to_str(),
-                        operand.display_with_table(string_table)
+                        found_type
                     ),
                     location.clone(),
                     {
                         CompilationStage => "Expression Evaluation",
                         PrimarySuggestion => "Use 'not' only with Bool values",
+                        ExpectedType => "Bool",
+                        FoundType => found_type,
                     }
                 )
             }
@@ -340,11 +343,25 @@ fn resolve_binary_operator_type(
             {
                 CompilationStage => "Expression Evaluation",
                 PrimarySuggestion => "Handle the Result with '!' syntax before using it in an ordinary expression",
+                ExpectedType => "Non-Result operands",
+                FoundType => format!(
+                    "{} and {}",
+                    lhs.display_with_table(string_table),
+                    rhs.display_with_table(string_table)
+                ),
             }
         );
     }
 
     use crate::compiler_frontend::ast::expressions::expression::Operator;
+
+    if matches!(op, Operator::And | Operator::Or) {
+        return resolve_logical_operator_type(lhs, rhs, op, location, string_table);
+    }
+
+    if is_comparison_operator(op) {
+        return resolve_comparison_operator_type(lhs, rhs, op, location, string_table);
+    }
 
     if lhs == rhs {
         // Same-type operator handling stays explicit so broad "compatible" types cannot quietly
@@ -380,30 +397,7 @@ fn resolve_binary_operator_type(
                 | Operator::Exponent
                 | Operator::Root,
             ) => Ok(DataType::Decimal),
-            (
-                DataType::Int | DataType::Float | DataType::Decimal,
-                Operator::Equality
-                | Operator::NotEqual
-                | Operator::GreaterThan
-                | Operator::GreaterThanOrEqual
-                | Operator::LessThan
-                | Operator::LessThanOrEqual,
-            ) => Ok(DataType::Bool),
-            (
-                DataType::Bool,
-                Operator::And | Operator::Or | Operator::Equality | Operator::NotEqual,
-            ) => Ok(DataType::Bool),
             (DataType::StringSlice, Operator::Add) => Ok(DataType::StringSlice),
-            (DataType::StringSlice, Operator::Equality | Operator::NotEqual) => Ok(DataType::Bool),
-            (
-                DataType::Char,
-                Operator::Equality
-                | Operator::NotEqual
-                | Operator::LessThan
-                | Operator::LessThanOrEqual
-                | Operator::GreaterThan
-                | Operator::GreaterThanOrEqual,
-            ) => Ok(DataType::Bool),
             (DataType::Int, Operator::Range) => Ok(DataType::Range),
             _ => invalid_operator_types(lhs, rhs, op, location, string_table),
         };
@@ -436,6 +430,135 @@ fn resolve_binary_operator_type(
     invalid_operator_types(lhs, rhs, op, location, string_table)
 }
 
+fn resolve_logical_operator_type(
+    lhs: &DataType,
+    rhs: &DataType,
+    op: &crate::compiler_frontend::ast::expressions::expression::Operator,
+    location: &SourceLocation,
+    string_table: &StringTable,
+) -> Result<DataType, CompilerError> {
+    if lhs == &DataType::Bool && rhs == &DataType::Bool {
+        return Ok(DataType::Bool);
+    }
+
+    let found_type = format!(
+        "{} and {}",
+        lhs.display_with_table(string_table),
+        rhs.display_with_table(string_table)
+    );
+    let suggestion = if is_optional_like(lhs) || is_optional_like(rhs) {
+        "Handle the optional value first before using logical operators"
+    } else {
+        "Use Bool operands on both sides of this logical operator"
+    };
+
+    return_type_error!(
+        format!(
+            "Logical operator '{}' requires Bool operands, found '{}'.",
+            op.to_str(),
+            found_type
+        ),
+        location.clone(),
+        {
+            CompilationStage => "Expression Evaluation",
+            ExpectedType => "Bool and Bool",
+            FoundType => found_type,
+            PrimarySuggestion => suggestion,
+        }
+    )
+}
+
+fn resolve_comparison_operator_type(
+    lhs: &DataType,
+    rhs: &DataType,
+    op: &crate::compiler_frontend::ast::expressions::expression::Operator,
+    location: &SourceLocation,
+    string_table: &StringTable,
+) -> Result<DataType, CompilerError> {
+    use crate::compiler_frontend::ast::expressions::expression::Operator;
+
+    if lhs == rhs {
+        return match (lhs, op) {
+            (
+                DataType::Int | DataType::Float | DataType::Decimal,
+                Operator::Equality
+                | Operator::NotEqual
+                | Operator::GreaterThan
+                | Operator::GreaterThanOrEqual
+                | Operator::LessThan
+                | Operator::LessThanOrEqual,
+            ) => Ok(DataType::Bool),
+            (DataType::Bool, Operator::Equality | Operator::NotEqual) => Ok(DataType::Bool),
+            (DataType::StringSlice, Operator::Equality | Operator::NotEqual) => Ok(DataType::Bool),
+            (
+                DataType::Char,
+                Operator::Equality
+                | Operator::NotEqual
+                | Operator::LessThan
+                | Operator::LessThanOrEqual
+                | Operator::GreaterThan
+                | Operator::GreaterThanOrEqual,
+            ) => Ok(DataType::Bool),
+            _ => invalid_comparison_types(lhs, rhs, op, location, string_table),
+        };
+    }
+
+    if matches!(
+        (lhs, rhs),
+        (DataType::Int, DataType::Float) | (DataType::Float, DataType::Int)
+    ) {
+        return Ok(DataType::Bool);
+    }
+
+    invalid_comparison_types(lhs, rhs, op, location, string_table)
+}
+
+fn invalid_comparison_types(
+    lhs: &DataType,
+    rhs: &DataType,
+    op: &crate::compiler_frontend::ast::expressions::expression::Operator,
+    location: &SourceLocation,
+    string_table: &StringTable,
+) -> Result<DataType, CompilerError> {
+    let found_type = format!(
+        "{} and {}",
+        lhs.display_with_table(string_table),
+        rhs.display_with_table(string_table)
+    );
+
+    let (expected_type, suggestion) = if is_relational_operator(op) {
+        (
+            "Matching numeric or Char operands (<, <=, >, >=). Int/Float mixed comparisons are also supported",
+            "Compare values with compatible ordering types or cast first",
+        )
+    } else if is_optional_like(lhs) || is_optional_like(rhs) {
+        (
+            "Matching scalar operands (Bool, Int, Float, Decimal, Char, or String)",
+            "Handle the optional value first, then compare scalar payload values",
+        )
+    } else {
+        (
+            "Matching scalar operands (Bool, Int, Float, Decimal, Char, or String)",
+            "Use compatible scalar operand types for this comparison",
+        )
+    };
+
+    return_type_error!(
+        format!(
+            "Comparison operator '{}' cannot compare '{}'.",
+            op.to_str(),
+            found_type
+        ),
+        location.clone(),
+        {
+            CompilationStage => "Expression Evaluation",
+            ExpectedType => expected_type,
+            FoundType => found_type,
+            PrimarySuggestion => suggestion,
+        }
+    )
+}
+
 fn invalid_operator_types(
     lhs: &DataType,
     rhs: &DataType,
@@ -443,22 +566,99 @@ fn invalid_operator_types(
     location: &SourceLocation,
     string_table: &StringTable,
 ) -> Result<DataType, CompilerError> {
-    // Keep the mixed-type diagnostic centralized so every invalid operator path points users at
-    // the same strict-expression rule instead of scattering slightly different wording.
+    use crate::compiler_frontend::ast::expressions::expression::Operator;
+
+    let found_type = format!(
+        "{} and {}",
+        lhs.display_with_table(string_table),
+        rhs.display_with_table(string_table)
+    );
+
+    let (expected_type, suggestion, numeric_hint) = match op {
+        Operator::Add
+        | Operator::Subtract
+        | Operator::Multiply
+        | Operator::Divide
+        | Operator::Modulus
+        | Operator::Exponent
+        | Operator::Root => (
+            "Numeric operands (Int, Float, or Decimal). '+' also supports String + String",
+            "Use compatible numeric operands or cast explicitly before this operation",
+            Some(NUMERIC_MIX_HINT),
+        ),
+        Operator::Range => (
+            "Int and Int",
+            "Use integer bounds for range expressions",
+            None,
+        ),
+        _ => (
+            "Compatible operands for this operator",
+            "Use matching operand types or add an explicit cast first",
+            None,
+        ),
+    };
+
+    let hint_suffix = numeric_hint
+        .map(|hint| format!(" {hint}"))
+        .unwrap_or_default();
+
+    let operator_category = if matches!(op, Operator::Range) {
+        "Range"
+    } else {
+        "Operator"
+    };
+
     return_type_error!(
         format!(
-            "Operator '{}' cannot be applied to '{}' and '{}'. {}",
+            "{operator_category} '{}' cannot be applied to '{}'.{}",
             op.to_str(),
-            lhs.display_with_table(string_table),
-            rhs.display_with_table(string_table),
-            NUMERIC_MIX_HINT
+            found_type,
+            hint_suffix
         ),
         location.clone(),
         {
             CompilationStage => "Expression Evaluation",
-            PrimarySuggestion => "Use matching operand types or add an explicit cast first",
+            ExpectedType => expected_type,
+            FoundType => found_type,
+            PrimarySuggestion => suggestion,
         }
     )
+}
+
+fn is_comparison_operator(
+    op: &crate::compiler_frontend::ast::expressions::expression::Operator,
+) -> bool {
+    use crate::compiler_frontend::ast::expressions::expression::Operator;
+    matches!(
+        op,
+        Operator::Equality
+            | Operator::NotEqual
+            | Operator::GreaterThan
+            | Operator::GreaterThanOrEqual
+            | Operator::LessThan
+            | Operator::LessThanOrEqual
+    )
+}
+
+fn is_relational_operator(
+    op: &crate::compiler_frontend::ast::expressions::expression::Operator,
+) -> bool {
+    use crate::compiler_frontend::ast::expressions::expression::Operator;
+    matches!(
+        op,
+        Operator::GreaterThan
+            | Operator::GreaterThanOrEqual
+            | Operator::LessThan
+            | Operator::LessThanOrEqual
+    )
+}
+
+fn is_optional_like(data_type: &DataType) -> bool {
+    match data_type {
+        DataType::Option(_) => true,
+        DataType::Reference(inner) => is_optional_like(inner.as_ref()),
+        _ => false,
+    }
 }
 
 fn pop_higher_precedence(

@@ -13,25 +13,6 @@ These are the non-negotiable conditions for starting Alpha.
 - Compiler diagnostics are useful, accurate, consistently formatted, and visually moving toward the Nushell-style goal.
 - Cross-platform output is stable enough that Windows and macOS do not produce avoidable golden drift.
 
-## Phase 2 - close the core language feature gaps
-
-### PR - Harden basic if expressions and logical expressions
-
-Make these small core expression features boring and reliable.
-
-**Checklist**
-- Audit expression parsing, type checking, constant folding, and lowering.
-- Add focused integration cases for boolean combinations, nesting, precedence, and invalid type combinations.
-- Improve error messages for non-boolean logic misuse.
-
-**Done when**
-- These features no longer feel like edge behavior.
-
-### PR - Finalize loops
-
-Loop syntax and implementation is incomplete.
-
-
 ## Phase 3 - expand integration coverage across the full Alpha surface
 
 ### PR - Create a language-surface integration matrix
@@ -53,7 +34,7 @@ Track what supported language features have canonical end-to-end coverage.
   - paths/imports
   - html project builds
   - logical expressions
-  - if expressions
+  - if statements/conditions
   - char
   - named arguments (`parameter = value`, with call-site `~` on the value expression)
 - Mark gaps explicitly.
@@ -87,7 +68,7 @@ Broaden the suite away from being overly concentrated on current recent work.
 - Add templates/style directive stability cases.
 - Add structs/records/methods cases.
 - Add arrays and array diagnostics.
-- Add logical and if-expression cases.
+- Add logical and if-condition cases.
 - Add Char cases.
 
 **Done when**
