@@ -598,6 +598,14 @@ impl Expression {
             ExpressionKind::Coerced { value, .. } => value.const_value_kind(),
         }
     }
+
+    pub(crate) fn is_boolean(&self) -> bool {
+        match &self.data_type {
+            DataType::Bool => true,
+            DataType::Reference(inner) => matches!(inner.as_ref(), DataType::Bool),
+            _ => false,
+        }
+    }
 }
 #[derive(Clone, Debug)]
 pub enum ExpressionKind {

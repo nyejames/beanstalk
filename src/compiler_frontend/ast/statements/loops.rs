@@ -51,7 +51,7 @@ fn create_conditional_loop(
         string_table,
     )?;
 
-    if !is_boolean_expression(&condition) {
+    if !condition.is_boolean() {
         let found_type = condition.data_type.display_with_table(string_table);
         return_syntax_error!(
             format!(
@@ -297,14 +297,6 @@ fn create_iteration_loop(
         ),
         location,
     })
-}
-
-fn is_boolean_expression(expression: &Expression) -> bool {
-    match &expression.data_type {
-        DataType::Bool => true,
-        DataType::Reference(inner) => matches!(inner.as_ref(), DataType::Bool),
-        _ => false,
-    }
 }
 
 fn numeric_type_for_expression(expression: &Expression) -> Option<DataType> {

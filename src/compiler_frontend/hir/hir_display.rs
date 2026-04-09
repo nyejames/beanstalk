@@ -784,53 +784,24 @@ impl HirMatchArm {
 // Simple Token Displays
 // ============================================================================
 
-impl Display for BlockId {
-    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        write!(f, "bb{}", self.0)
-    }
+macro_rules! impl_hir_id_display {
+    ($type:ty, $prefix:literal) => {
+        impl Display for $type {
+            fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+                write!(f, concat!($prefix, "{}"), self.0)
+            }
+        }
+    };
 }
 
-impl Display for FunctionId {
-    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        write!(f, "fn{}", self.0)
-    }
-}
-
-impl Display for StructId {
-    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        write!(f, "struct{}", self.0)
-    }
-}
-
-impl Display for FieldId {
-    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        write!(f, "field{}", self.0)
-    }
-}
-
-impl Display for LocalId {
-    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        write!(f, "l{}", self.0)
-    }
-}
-
-impl Display for RegionId {
-    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        write!(f, "r{}", self.0)
-    }
-}
-
-impl Display for HirNodeId {
-    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        write!(f, "n{}", self.0)
-    }
-}
-
-impl Display for HirValueId {
-    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        write!(f, "v{}", self.0)
-    }
-}
+impl_hir_id_display!(BlockId, "bb");
+impl_hir_id_display!(FunctionId, "fn");
+impl_hir_id_display!(StructId, "struct");
+impl_hir_id_display!(FieldId, "field");
+impl_hir_id_display!(LocalId, "l");
+impl_hir_id_display!(RegionId, "r");
+impl_hir_id_display!(HirNodeId, "n");
+impl_hir_id_display!(HirValueId, "v");
 
 impl Display for HirBinOp {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {

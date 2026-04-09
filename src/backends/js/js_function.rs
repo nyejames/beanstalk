@@ -8,6 +8,7 @@ use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
 use crate::compiler_frontend::hir::hir_nodes::{
     BlockId, HirFunction, HirMatchArm, HirPattern, HirTerminator,
 };
+use crate::compiler_frontend::hir::utils::terminator_targets;
 use std::collections::HashSet;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -216,7 +217,7 @@ impl<'hir> JsEmitter<'hir> {
             visiting.insert(block_id);
 
             let block = emitter.block_by_id(block_id)?;
-            for successor in JsEmitter::terminator_successors(&block.terminator) {
+            for successor in terminator_targets(&block.terminator) {
                 if dfs(emitter, successor, visiting, visited)? {
                     return Ok(true);
                 }

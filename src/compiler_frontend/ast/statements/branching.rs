@@ -62,7 +62,7 @@ pub fn create_branch(
         return Ok(vec![match_statement]);
     }
 
-    if !is_boolean_expression(&then_condition) {
+    if !then_condition.is_boolean() {
         let found_type = then_condition.data_type.display_with_table(string_table);
         return_rule_error!(
             format!("If condition must be a boolean expression. Found '{}'", found_type),
@@ -119,14 +119,6 @@ pub fn create_branch(
         location: token_stream.current_location(),
         scope: then_context.scope,
     }])
-}
-
-fn is_boolean_expression(expression: &Expression) -> bool {
-    match &expression.data_type {
-        DataType::Bool => true,
-        DataType::Reference(inner) => matches!(inner.as_ref(), DataType::Bool),
-        _ => false,
-    }
 }
 
 /// Parse a complete `if <subject> is:` match statement into a `NodeKind::Match`.

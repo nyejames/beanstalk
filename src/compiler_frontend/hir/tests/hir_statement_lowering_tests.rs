@@ -31,7 +31,7 @@ use crate::compiler_frontend::hir::tests::hir_expression_lowering_tests::locatio
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::string_interning::StringTable;
-use crate::projects::settings::{IMPLICIT_START_FUNC_NAME, TOP_LEVEL_TEMPLATE_NAME};
+use crate::projects::settings::TOP_LEVEL_TEMPLATE_NAME;
 
 fn test_location(line: i32) -> SourceLocation {
     location(line)
@@ -74,10 +74,6 @@ fn function_node(
     location: SourceLocation,
 ) -> AstNode {
     node(NodeKind::Function(name, signature, body), location)
-}
-
-fn symbol(name: &str, string_table: &mut StringTable) -> InternedPath {
-    InternedPath::from_single_str(name, string_table)
 }
 
 fn fresh_returns(result_types: Vec<DataType>) -> Vec<ReturnSlot> {
@@ -125,13 +121,6 @@ fn build_ast(nodes: Vec<AstNode>, entry_path: InternedPath) -> Ast {
     }
 }
 
-fn entry_path_and_start_name(string_table: &mut StringTable) -> (InternedPath, InternedPath) {
-    let entry_path = InternedPath::from_single_str("main.bst", string_table);
-    let start_name = entry_path.join_str(IMPLICIT_START_FUNC_NAME, string_table);
-
-    (entry_path, start_name)
-}
-
 fn lower_ast(ast: Ast, string_table: &mut StringTable) -> Result<HirModule, CompilerMessages> {
     HirBuilder::new(
         string_table,
@@ -154,8 +143,8 @@ fn assert_no_placeholder_terminators(module: &HirModule) {
 #[test]
 fn statement_result_propagation_with_unit_success_emits_runtime_propagate_expression() {
     let mut string_table = StringTable::new();
-    let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
-    let can_fail_name = symbol("can_fail", &mut string_table);
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
+    let can_fail_name = super::symbol("can_fail", &mut string_table);
     let location = test_location(1);
 
     let can_fail_function = function_node(
@@ -230,8 +219,8 @@ fn statement_result_propagation_with_unit_success_emits_runtime_propagate_expres
 #[test]
 fn statement_named_handler_lowering_builds_explicit_result_branching() {
     let mut string_table = StringTable::new();
-    let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
-    let can_fail_name = symbol("can_fail", &mut string_table);
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
+    let can_fail_name = super::symbol("can_fail", &mut string_table);
     let location = test_location(10);
     let error_name = string_table.intern("err");
     let error_binding = start_name.join_str("err", &mut string_table);
@@ -330,8 +319,8 @@ fn statement_named_handler_lowering_builds_explicit_result_branching() {
 #[test]
 fn multi_bind_lowering_projects_tuple_slots_from_single_rhs_call() {
     let mut string_table = StringTable::new();
-    let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
-    let pair_name = symbol("pair", &mut string_table);
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
+    let pair_name = super::symbol("pair", &mut string_table);
     let location = test_location(20);
 
     let pair_function = function_node(
@@ -436,9 +425,9 @@ fn multi_bind_lowering_projects_tuple_slots_from_single_rhs_call() {
 #[test]
 fn registers_declarations_and_resolves_start_function() {
     let mut string_table = StringTable::new();
-    let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
 
-    let struct_name = symbol("MyStruct", &mut string_table);
+    let struct_name = super::symbol("MyStruct", &mut string_table);
     let field_name = struct_name.append(string_table.intern("field"));
 
     let struct_node = node(
@@ -484,7 +473,7 @@ fn registers_declarations_and_resolves_start_function() {
 #[test]
 fn lowers_module_constants_into_hir_const_pool() {
     let mut string_table = StringTable::new();
-    let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
 
     let start_function = function_node(
         start_name,
@@ -497,7 +486,7 @@ fn lowers_module_constants_into_hir_const_pool() {
     );
 
     let mut ast = build_ast(vec![start_function], entry_path);
-    let const_name = symbol("SITE_NAME", &mut string_table);
+    let const_name = super::symbol("SITE_NAME", &mut string_table);
     ast.module_constants.push(make_test_variable(
         const_name,
         Expression::string_slice(
@@ -521,8 +510,8 @@ fn lowers_module_constants_into_hir_const_pool() {
 #[test]
 fn start_function_can_reference_module_constant() {
     let mut string_table = StringTable::new();
-    let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
-    let third_const = symbol("third_const", &mut string_table);
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
+    let third_const = super::symbol("third_const", &mut string_table);
 
     let start_function = function_node(
         start_name,
@@ -567,7 +556,7 @@ fn start_function_can_reference_module_constant() {
 #[test]
 fn omits_unresolved_slot_wrapper_constants_from_hir_const_pool() {
     let mut string_table = StringTable::new();
-    let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
 
     let start_function = function_node(
         start_name,
@@ -600,11 +589,11 @@ fn omits_unresolved_slot_wrapper_constants_from_hir_const_pool() {
 
     let mut ast = build_ast(vec![start_function], entry_path);
     ast.module_constants.push(make_test_variable(
-        symbol("WRAPPER", &mut string_table),
+        super::symbol("WRAPPER", &mut string_table),
         Expression::template(wrapper_template, Ownership::ImmutableOwned),
     ));
     ast.module_constants.push(make_test_variable(
-        symbol("READY", &mut string_table),
+        super::symbol("READY", &mut string_table),
         Expression::string_slice(
             string_table.intern("materialized"),
             test_location(3),
@@ -627,7 +616,7 @@ fn omits_unresolved_slot_wrapper_constants_from_hir_const_pool() {
 #[test]
 fn omits_nested_struct_constants_with_unresolved_template_helpers_from_hir_const_pool() {
     let mut string_table = StringTable::new();
-    let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
 
     let start_function = function_node(
         start_name,
@@ -658,14 +647,14 @@ fn omits_nested_struct_constants_with_unresolved_template_helpers_from_hir_const
         Ownership::ImmutableOwned,
     ));
 
-    let page_const_name = symbol("PAGE", &mut string_table);
+    let page_const_name = super::symbol("PAGE", &mut string_table);
     let body_field = page_const_name.append(string_table.intern("body"));
 
     let mut ast = build_ast(vec![start_function], entry_path);
     ast.module_constants.push(make_test_variable(
         page_const_name,
         Expression::struct_instance(
-            symbol("Page", &mut string_table),
+            super::symbol("Page", &mut string_table),
             vec![make_test_variable(
                 body_field,
                 Expression::template(wrapper_template, Ownership::ImmutableOwned),
@@ -676,7 +665,7 @@ fn omits_nested_struct_constants_with_unresolved_template_helpers_from_hir_const
         ),
     ));
     ast.module_constants.push(make_test_variable(
-        symbol("READY", &mut string_table),
+        super::symbol("READY", &mut string_table),
         Expression::string_slice(
             string_table.intern("materialized"),
             test_location(3),
@@ -699,8 +688,8 @@ fn omits_nested_struct_constants_with_unresolved_template_helpers_from_hir_const
 #[test]
 fn lowers_struct_module_constant_into_record_with_ordered_fields() {
     let mut string_table = StringTable::new();
-    let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
-    let struct_name = symbol("Point", &mut string_table);
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
+    let struct_name = super::symbol("Point", &mut string_table);
     let x_field = struct_name.append(string_table.intern("x"));
     let y_field = struct_name.append(string_table.intern("y"));
 
@@ -742,12 +731,12 @@ fn lowers_struct_module_constant_into_record_with_ordered_fields() {
     );
 
     let mut ast = build_ast(vec![struct_node, start_function], entry_path);
-    let const_name = symbol("POINT", &mut string_table);
+    let const_name = super::symbol("POINT", &mut string_table);
 
     ast.module_constants.push(make_test_variable(
         const_name,
         Expression::struct_instance(
-            symbol("Point", &mut string_table),
+            super::symbol("Point", &mut string_table),
             vec![
                 make_test_variable(
                     x_field,
@@ -793,7 +782,7 @@ fn lowers_struct_module_constant_into_record_with_ordered_fields() {
 #[test]
 fn lowers_ast_start_template_items_into_ordered_hir_fragments() {
     let mut string_table = StringTable::new();
-    let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
     let fragment_name = entry_path.join_str("__bst_frag_0", &mut string_table);
     let const_string = string_table.intern("<meta charset=\"utf-8\">");
 
@@ -862,7 +851,7 @@ fn lowers_ast_start_template_items_into_ordered_hir_fragments() {
 #[test]
 fn lowers_ast_doc_fragments_into_hir_doc_metadata() {
     let mut string_table = StringTable::new();
-    let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
     let first_doc = string_table.intern("First doc");
     let second_doc = string_table.intern("Second doc");
 
@@ -909,8 +898,8 @@ fn lowers_ast_doc_fragments_into_hir_doc_metadata() {
 #[test]
 fn allocates_parameter_locals_and_binds_names() {
     let mut string_table = StringTable::new();
-    let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
-    let x = symbol("x", &mut string_table);
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
+    let x = super::symbol("x", &mut string_table);
 
     let body = vec![node(
         NodeKind::Return(vec![Expression::reference(
@@ -951,8 +940,8 @@ fn allocates_parameter_locals_and_binds_names() {
 #[test]
 fn variable_declaration_emits_local_and_assign_statement() {
     let mut string_table = StringTable::new();
-    let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
-    let x = symbol("x", &mut string_table);
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
+    let x = super::symbol("x", &mut string_table);
 
     let start_function = function_node(
         start_name,
@@ -988,7 +977,7 @@ fn variable_declaration_emits_local_and_assign_statement() {
 #[test]
 fn start_function_with_no_template_declaration_returns_empty_string() {
     let mut string_table = StringTable::new();
-    let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
     let empty = string_table.intern("");
 
     let start_function = function_node(
@@ -1024,8 +1013,8 @@ fn start_function_with_no_template_declaration_returns_empty_string() {
 #[test]
 fn top_level_template_declarations_require_unique_symbols() {
     let mut string_table = StringTable::new();
-    let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
-    let template_name = symbol(TOP_LEVEL_TEMPLATE_NAME, &mut string_table);
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
+    let template_name = super::symbol(TOP_LEVEL_TEMPLATE_NAME, &mut string_table);
     let one = string_table.intern("One");
     let two = string_table.intern("Two");
 
@@ -1088,9 +1077,9 @@ fn top_level_template_declarations_require_unique_symbols() {
 #[test]
 fn assignment_lowers_value_prelude_before_assign() {
     let mut string_table = StringTable::new();
-    let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
-    let x = symbol("x", &mut string_table);
-    let helper = symbol("helper", &mut string_table);
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
+    let x = super::symbol("x", &mut string_table);
+    let helper = super::symbol("helper", &mut string_table);
 
     let helper_fn = function_node(
         helper.clone(),
@@ -1159,9 +1148,9 @@ fn assignment_lowers_value_prelude_before_assign() {
 #[test]
 fn call_statements_emit_without_result_binding() {
     let mut string_table = StringTable::new();
-    let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
-    let callee = symbol("callee", &mut string_table);
-    let alloc = symbol("alloc", &mut string_table);
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
+    let callee = super::symbol("callee", &mut string_table);
+    let alloc = super::symbol("alloc", &mut string_table);
 
     let callee_fn = function_node(
         callee.clone(),
@@ -1234,9 +1223,9 @@ fn call_statements_emit_without_result_binding() {
 #[test]
 fn return_lowering_handles_zero_one_and_many_values() {
     let mut string_table = StringTable::new();
-    let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
-    let one_name = symbol("one", &mut string_table);
-    let many_name = symbol("many", &mut string_table);
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
+    let one_name = super::symbol("one", &mut string_table);
+    let many_name = super::symbol("many", &mut string_table);
 
     let start_fn = function_node(
         start_name,
@@ -1316,9 +1305,9 @@ fn return_lowering_handles_zero_one_and_many_values() {
 #[test]
 fn lowers_if_to_then_else_merge_blocks() {
     let mut string_table = StringTable::new();
-    let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
-    let x = symbol("x", &mut string_table);
-    let y = symbol("y", &mut string_table);
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
+    let x = super::symbol("x", &mut string_table);
+    let y = super::symbol("y", &mut string_table);
 
     let if_node = node(
         NodeKind::If(
@@ -1379,8 +1368,8 @@ fn lowers_if_to_then_else_merge_blocks() {
 #[test]
 fn non_unit_function_with_terminal_if_does_not_report_fallthrough() {
     let mut string_table = StringTable::new();
-    let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
-    let chooser = symbol("chooser", &mut string_table);
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
+    let chooser = super::symbol("chooser", &mut string_table);
 
     let chooser_fn = function_node(
         chooser,
@@ -1435,7 +1424,7 @@ fn non_unit_function_with_terminal_if_does_not_report_fallthrough() {
 #[test]
 fn lowers_while_to_header_body_exit_shape() {
     let mut string_table = StringTable::new();
-    let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
 
     let while_node = node(
         NodeKind::WhileLoop(
@@ -1491,7 +1480,7 @@ fn lowers_while_to_header_body_exit_shape() {
 #[test]
 fn break_in_while_targets_loop_exit_block() {
     let mut string_table = StringTable::new();
-    let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
 
     let while_node = node(
         NodeKind::WhileLoop(
@@ -1539,8 +1528,8 @@ fn break_in_while_targets_loop_exit_block() {
 #[test]
 fn continue_in_for_targets_step_block() {
     let mut string_table = StringTable::new();
-    let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
-    let i = symbol("i", &mut string_table);
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
+    let i = super::symbol("i", &mut string_table);
 
     let for_node = node(
         NodeKind::ForLoop(
@@ -1623,9 +1612,9 @@ fn continue_in_for_targets_step_block() {
 #[test]
 fn non_unit_function_with_terminal_match_default_does_not_report_fallthrough() {
     let mut string_table = StringTable::new();
-    let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
-    let chooser = symbol("choose_match", &mut string_table);
-    let x = symbol("x", &mut string_table);
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
+    let chooser = super::symbol("choose_match", &mut string_table);
+    let x = super::symbol("x", &mut string_table);
 
     let chooser_fn = function_node(
         chooser,
@@ -1691,8 +1680,8 @@ fn non_unit_function_with_terminal_match_default_does_not_report_fallthrough() {
 #[test]
 fn lowers_match_with_literal_arms_and_synthesized_wildcard_default() {
     let mut string_table = StringTable::new();
-    let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
-    let x = symbol("x", &mut string_table);
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
+    let x = super::symbol("x", &mut string_table);
 
     let match_node = node(
         NodeKind::Match(
@@ -1761,8 +1750,8 @@ fn lowers_match_with_literal_arms_and_synthesized_wildcard_default() {
 #[test]
 fn match_rejects_non_literal_pattern_expressions() {
     let mut string_table = StringTable::new();
-    let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
-    let x = symbol("x", &mut string_table);
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
+    let x = super::symbol("x", &mut string_table);
 
     let start_fn = function_node(
         start_name,
@@ -1811,8 +1800,8 @@ fn match_rejects_non_literal_pattern_expressions() {
 #[test]
 fn for_loop_lowers_to_header_body_step_exit_shape() {
     let mut string_table = StringTable::new();
-    let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
-    let i = symbol("i", &mut string_table);
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
+    let i = super::symbol("i", &mut string_table);
 
     let for_loop = node(
         NodeKind::ForLoop(
@@ -1905,8 +1894,8 @@ fn for_loop_lowers_to_header_body_step_exit_shape() {
 #[test]
 fn inclusive_range_header_uses_less_equal_comparison() {
     let mut string_table = StringTable::new();
-    let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
-    let i = symbol("i", &mut string_table);
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
+    let i = super::symbol("i", &mut string_table);
 
     let for_loop = node(
         NodeKind::ForLoop(
@@ -1979,8 +1968,8 @@ fn inclusive_range_header_uses_less_equal_comparison() {
 #[test]
 fn descending_range_with_positive_step_normalizes_to_negative_delta() {
     let mut string_table = StringTable::new();
-    let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
-    let i = symbol("i", &mut string_table);
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
+    let i = super::symbol("i", &mut string_table);
 
     let for_loop = node(
         NodeKind::ForLoop(
@@ -2060,7 +2049,7 @@ fn descending_range_with_positive_step_normalizes_to_negative_delta() {
 #[test]
 fn break_outside_loop_reports_hir_transformation_error() {
     let mut string_table = StringTable::new();
-    let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
 
     let start_fn = function_node(
         start_name,
@@ -2081,7 +2070,7 @@ fn break_outside_loop_reports_hir_transformation_error() {
 #[test]
 fn continue_outside_loop_reports_hir_transformation_error() {
     let mut string_table = StringTable::new();
-    let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
 
     let start_fn = function_node(
         start_name,
@@ -2102,7 +2091,7 @@ fn continue_outside_loop_reports_hir_transformation_error() {
 #[test]
 fn top_level_return_reports_hir_transformation_error() {
     let mut string_table = StringTable::new();
-    let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
 
     let start_fn = function_node(
         start_name,
@@ -2126,8 +2115,8 @@ fn top_level_return_reports_hir_transformation_error() {
 #[test]
 fn enforces_non_unit_fallthrough_and_unit_implicit_return() {
     let mut string_table = StringTable::new();
-    let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
-    let non_unit_name = symbol("non_unit", &mut string_table);
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
+    let non_unit_name = super::symbol("non_unit", &mut string_table);
 
     let start_fn = function_node(
         start_name,
@@ -2164,8 +2153,8 @@ fn enforces_non_unit_fallthrough_and_unit_implicit_return() {
 #[test]
 fn side_table_maps_statement_and_terminator_locations() {
     let mut string_table = StringTable::new();
-    let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
-    let x = symbol("x", &mut string_table);
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
+    let x = super::symbol("x", &mut string_table);
 
     let decl_loc = test_location(4);
     let ret_loc = test_location(5);

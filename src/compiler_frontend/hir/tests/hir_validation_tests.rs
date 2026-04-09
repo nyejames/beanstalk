@@ -20,7 +20,6 @@ use crate::compiler_frontend::hir::tests::hir_expression_lowering_tests::locatio
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::string_interning::StringTable;
-use crate::projects::settings::IMPLICIT_START_FUNC_NAME;
 
 fn test_location(line: i32) -> SourceLocation {
     location(line)
@@ -65,10 +64,6 @@ fn function_node(
     node(NodeKind::Function(name, signature, body), location)
 }
 
-fn symbol(name: &str, string_table: &mut StringTable) -> InternedPath {
-    InternedPath::from_single_str(name, string_table)
-}
-
 fn build_ast(nodes: Vec<AstNode>, entry_path: InternedPath) -> Ast {
     Ast {
         nodes,
@@ -79,13 +74,6 @@ fn build_ast(nodes: Vec<AstNode>, entry_path: InternedPath) -> Ast {
         rendered_path_usages: vec![],
         warnings: vec![],
     }
-}
-
-fn entry_path_and_start_name(string_table: &mut StringTable) -> (InternedPath, InternedPath) {
-    let entry_path = InternedPath::from_single_str("main.bst", string_table);
-    let start_name = entry_path.join_str(IMPLICIT_START_FUNC_NAME, string_table);
-
-    (entry_path, start_name)
 }
 
 fn lower_ast(
@@ -103,7 +91,7 @@ fn lower_ast(
 #[test]
 fn valid_module_passes_explicit_validation() {
     let mut string_table = StringTable::new();
-    let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
 
     let start_fn = function_node(
         start_name,
@@ -124,7 +112,7 @@ fn valid_module_passes_explicit_validation() {
 #[test]
 fn validator_rejects_invalid_jump_target() {
     let mut string_table = StringTable::new();
-    let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
 
     let start_fn = function_node(
         start_name,
@@ -153,8 +141,8 @@ fn validator_rejects_invalid_jump_target() {
 #[test]
 fn validator_rejects_non_literal_match_pattern() {
     let mut string_table = StringTable::new();
-    let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
-    let x = symbol("x", &mut string_table);
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
+    let x = super::symbol("x", &mut string_table);
 
     let start_fn = function_node(
         start_name,
@@ -214,8 +202,8 @@ fn validator_rejects_non_literal_match_pattern() {
 #[test]
 fn validator_rejects_missing_side_table_mappings() {
     let mut string_table = StringTable::new();
-    let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
-    let x = symbol("x", &mut string_table);
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
+    let x = super::symbol("x", &mut string_table);
 
     let start_fn = function_node(
         start_name,
@@ -249,7 +237,7 @@ fn validator_rejects_missing_side_table_mappings() {
 #[test]
 fn validator_rejects_invalid_doc_fragment_location() {
     let mut string_table = StringTable::new();
-    let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
 
     let start_fn = function_node(
         start_name,
@@ -283,7 +271,7 @@ fn validator_rejects_invalid_doc_fragment_location() {
 #[test]
 fn validator_rejects_placeholder_terminator() {
     let mut string_table = StringTable::new();
-    let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
 
     let start_fn = function_node(
         start_name,
@@ -309,7 +297,7 @@ fn validator_rejects_placeholder_terminator() {
 #[test]
 fn validator_rejects_region_cycle() {
     let mut string_table = StringTable::new();
-    let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
 
     let start_fn = function_node(
         start_name,
@@ -335,7 +323,7 @@ fn validator_rejects_region_cycle() {
 #[test]
 fn validator_rejects_missing_region_parent() {
     let mut string_table = StringTable::new();
-    let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
 
     let start_fn = function_node(
         start_name,
@@ -361,8 +349,8 @@ fn validator_rejects_missing_region_parent() {
 #[test]
 fn validator_rejects_out_of_range_return_alias_metadata() {
     let mut string_table = StringTable::new();
-    let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
-    let p = symbol("p", &mut string_table);
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
+    let p = super::symbol("p", &mut string_table);
 
     let start_fn = function_node(
         start_name,
@@ -396,8 +384,8 @@ fn validator_rejects_out_of_range_return_alias_metadata() {
 #[test]
 fn validator_rejects_cross_function_cfg_edges() {
     let mut string_table = StringTable::new();
-    let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
-    let helper_name = symbol("helper", &mut string_table);
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
+    let helper_name = super::symbol("helper", &mut string_table);
 
     let helper = function_node(
         helper_name,
@@ -444,8 +432,8 @@ fn validator_rejects_cross_function_cfg_edges() {
 #[test]
 fn lowering_errors_preserve_string_table_context() {
     let mut string_table = StringTable::new();
-    let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
-    let missing_function = symbol("missing_fn", &mut string_table);
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
+    let missing_function = super::symbol("missing_fn", &mut string_table);
 
     let mut call_location = test_location(2);
     call_location.scope = entry_path.clone();

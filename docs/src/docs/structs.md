@@ -35,7 +35,7 @@ Structs can be assigned with default arguments, these can be any constant expres
     ;
 
     vec = Vector2(12, 87)
-    vec.reset()
+    ~vec.reset()
 ```
 
 ## Methods

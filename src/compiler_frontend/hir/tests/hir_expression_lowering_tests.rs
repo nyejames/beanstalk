@@ -98,10 +98,6 @@ fn register_runtime_struct_nominal(
     }
 }
 
-fn symbol(name: &str, string_table: &mut StringTable) -> InternedPath {
-    InternedPath::from_single_str(name, string_table)
-}
-
 fn field_symbol(
     parent: &InternedPath,
     field_name: &str,
@@ -281,7 +277,7 @@ fn lowers_primitive_literals() {
 #[test]
 fn lowers_reference_to_registered_local() {
     let mut string_table = StringTable::new();
-    let x = symbol("x", &mut string_table);
+    let x = super::symbol("x", &mut string_table);
     let location = location(2);
     let mut builder = setup_builder(&mut string_table);
 
@@ -314,7 +310,7 @@ fn lowers_reference_to_registered_local() {
 #[test]
 fn lowers_reference_to_module_constant_when_local_is_missing() {
     let mut string_table = StringTable::new();
-    let third_const = symbol("third_const", &mut string_table);
+    let third_const = super::symbol("third_const", &mut string_table);
     let location = location(3);
     let mut builder = setup_builder(&mut string_table);
 
@@ -341,8 +337,8 @@ fn lowers_reference_to_module_constant_when_local_is_missing() {
 #[test]
 fn rejects_cyclic_module_constant_dependencies() {
     let mut string_table = StringTable::new();
-    let const_a = symbol("const_a", &mut string_table);
-    let const_b = symbol("const_b", &mut string_table);
+    let const_a = super::symbol("const_a", &mut string_table);
+    let const_b = super::symbol("const_b", &mut string_table);
     let location = location(4);
     let mut builder = setup_builder(&mut string_table);
 
@@ -381,8 +377,8 @@ fn rejects_cyclic_module_constant_dependencies() {
 #[test]
 fn lowers_runtime_rpn_arithmetic_stack_correctly() {
     let mut string_table = StringTable::new();
-    let x = symbol("x", &mut string_table);
-    let y = symbol("y", &mut string_table);
+    let x = super::symbol("x", &mut string_table);
+    let y = super::symbol("y", &mut string_table);
     let location = location(3);
     let mut builder = setup_builder(&mut string_table);
 
@@ -516,7 +512,7 @@ fn lowers_range_operator_in_runtime_rpn() {
 #[test]
 fn lowers_function_call_to_call_statement_and_temp_load() {
     let mut string_table = StringTable::new();
-    let function_name = symbol("sum", &mut string_table);
+    let function_name = super::symbol("sum", &mut string_table);
     let location = location(6);
     let mut builder = setup_builder(&mut string_table);
     builder.test_register_function_name(function_name.clone(), FunctionId(2));
@@ -562,10 +558,10 @@ fn lowers_function_call_to_call_statement_and_temp_load() {
 #[test]
 fn lowers_receiver_method_call_with_receiver_as_first_argument() {
     let mut string_table = StringTable::new();
-    let method_path = symbol("Vector2/reset", &mut string_table);
+    let method_path = super::symbol("Vector2/reset", &mut string_table);
     let method_name = string_table.intern("reset");
-    let receiver_name = symbol("vec", &mut string_table);
-    let receiver_struct = symbol("Vector2", &mut string_table);
+    let receiver_name = super::symbol("vec", &mut string_table);
+    let receiver_struct = super::symbol("Vector2", &mut string_table);
     let location = location(6);
     let mut builder = setup_builder(&mut string_table);
 
@@ -632,9 +628,9 @@ fn lowers_receiver_method_call_with_receiver_as_first_argument() {
 #[test]
 fn lowers_builtin_scalar_receiver_method_call_with_receiver_as_first_argument() {
     let mut string_table = StringTable::new();
-    let method_path = symbol("Int/double", &mut string_table);
+    let method_path = super::symbol("Int/double", &mut string_table);
     let method_name = string_table.intern("double");
-    let receiver_name = symbol("value", &mut string_table);
+    let receiver_name = super::symbol("value", &mut string_table);
     let location = location(12);
     let mut builder = setup_builder(&mut string_table);
 
@@ -694,12 +690,12 @@ fn lowers_builtin_error_with_location_and_push_trace_methods_to_host_calls() {
     let mut string_table = StringTable::new();
     let location = location(13);
     let (error_type, location_type, frame_type) = builtin_error_related_types(&mut string_table);
-    let error_name = symbol("err_value", &mut string_table);
-    let location_name = symbol("err_location", &mut string_table);
-    let frame_name = symbol("err_frame", &mut string_table);
-    let with_location_path = symbol("__bs_error_with_location", &mut string_table);
+    let error_name = super::symbol("err_value", &mut string_table);
+    let location_name = super::symbol("err_location", &mut string_table);
+    let frame_name = super::symbol("err_frame", &mut string_table);
+    let with_location_path = super::symbol("__bs_error_with_location", &mut string_table);
     let with_location_name = string_table.intern("with_location");
-    let push_trace_path = symbol("__bs_error_push_trace", &mut string_table);
+    let push_trace_path = super::symbol("__bs_error_push_trace", &mut string_table);
     let push_trace_name = string_table.intern("push_trace");
 
     let mut builder = setup_builder(&mut string_table);
@@ -823,10 +819,10 @@ fn lowers_builtin_error_with_location_and_push_trace_methods_to_host_calls() {
 fn lowers_builtin_error_bubble_with_compiler_supplied_context_args() {
     let mut string_table = StringTable::new();
     let mut call_location = location(14);
-    call_location.scope = symbol("tests/cases/example/main.bst", &mut string_table);
+    call_location.scope = super::symbol("tests/cases/example/main.bst", &mut string_table);
     let (error_type, _, _) = builtin_error_related_types(&mut string_table);
-    let error_name = symbol("err_value", &mut string_table);
-    let bubble_path = symbol("__bs_error_bubble", &mut string_table);
+    let error_name = super::symbol("err_value", &mut string_table);
+    let bubble_path = super::symbol("__bs_error_bubble", &mut string_table);
     let bubble_name = string_table.intern("bubble");
 
     let mut builder = setup_builder(&mut string_table);
@@ -891,7 +887,7 @@ fn lowers_builtin_error_bubble_with_compiler_supplied_context_args() {
 fn lowers_host_call_expression_with_host_target() {
     let mut string_table = StringTable::new();
     let literal_x = string_table.intern("x");
-    let io = symbol("io", &mut string_table);
+    let io = super::symbol("io", &mut string_table);
     let location = location(7);
     let mut builder = setup_builder(&mut string_table);
 
@@ -920,9 +916,9 @@ fn lowers_host_call_expression_with_host_target() {
 #[test]
 fn preserves_left_to_right_call_prelude_order_in_nested_call_args() {
     let mut string_table = StringTable::new();
-    let first = symbol("first", &mut string_table);
-    let second = symbol("second", &mut string_table);
-    let outer = symbol("outer", &mut string_table);
+    let first = super::symbol("first", &mut string_table);
+    let second = super::symbol("second", &mut string_table);
+    let outer = super::symbol("outer", &mut string_table);
     let location = location(8);
     let mut builder = setup_builder(&mut string_table);
 
@@ -1215,7 +1211,7 @@ fn local_resolution_uses_full_path_identity_not_leaf_name() {
 fn nominal_struct_identity_uses_field_parent_path() {
     let mut string_table = StringTable::new();
     let location = location(11);
-    let struct_path = symbol("MyStruct", &mut string_table);
+    let struct_path = super::symbol("MyStruct", &mut string_table);
     let field_path = field_symbol(&struct_path, "value", &mut string_table);
     let mut builder = setup_builder(&mut string_table);
     let int_type = builder
@@ -1257,8 +1253,8 @@ fn nominal_struct_identity_uses_field_parent_path() {
 #[test]
 fn temp_locals_are_not_resolvable_as_user_symbols() {
     let mut string_table = StringTable::new();
-    let callee = symbol("callee", &mut string_table);
-    let temp_name = symbol("__hir_tmp_0", &mut string_table);
+    let callee = super::symbol("callee", &mut string_table);
+    let temp_name = super::symbol("__hir_tmp_0", &mut string_table);
     let location = location(12);
     let mut builder = setup_builder(&mut string_table);
 
@@ -1298,12 +1294,12 @@ fn temp_locals_are_not_resolvable_as_user_symbols() {
 fn field_access_uses_base_struct_identity_not_global_leaf_lookup() {
     let mut string_table = StringTable::new();
     let location = location(13);
-    let struct_a = symbol("StructA", &mut string_table);
-    let struct_b = symbol("StructB", &mut string_table);
+    let struct_a = super::symbol("StructA", &mut string_table);
+    let struct_b = super::symbol("StructB", &mut string_table);
     let field_leaf = string_table.intern("value");
     let field_a = struct_a.append(field_leaf);
     let field_b = struct_b.append(field_leaf);
-    let local_name = symbol("my_struct", &mut string_table);
+    let local_name = super::symbol("my_struct", &mut string_table);
     let mut builder = setup_builder(&mut string_table);
     let int_type = builder
         .lower_data_type(&DataType::Int, &location)
@@ -1378,8 +1374,8 @@ fn field_access_uses_base_struct_identity_not_global_leaf_lookup() {
 fn field_access_from_module_constant_base_materializes_temp_place() {
     let mut string_table = StringTable::new();
     let location = location(14);
-    let format_name = symbol("format", &mut string_table);
-    let format_struct = symbol("Format", &mut string_table);
+    let format_name = super::symbol("format", &mut string_table);
+    let format_struct = super::symbol("Format", &mut string_table);
     let center_leaf = string_table.intern("center");
     let center_field = format_struct.append(center_leaf);
     let before = string_table.intern("<div>");

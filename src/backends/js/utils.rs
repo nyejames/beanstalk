@@ -4,9 +4,8 @@
 
 use crate::backends::js::JsEmitter;
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
-use crate::compiler_frontend::hir::hir_nodes::{
-    BlockId, FieldId, FunctionId, HirBlock, HirTerminator, LocalId,
-};
+use crate::compiler_frontend::hir::hir_nodes::{BlockId, FieldId, FunctionId, HirBlock, LocalId};
+use crate::compiler_frontend::hir::utils::terminator_targets;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use std::collections::{HashSet, VecDeque};
 
@@ -83,28 +82,13 @@ impl<'hir> JsEmitter<'hir> {
             let block = self.block_by_id(block_id)?;
             order.push(block_id);
 
-            for successor in Self::terminator_successors(&block.terminator) {
+            for successor in terminator_targets(&block.terminator) {
                 queue.push_back(successor);
             }
         }
 
         order.sort_by_key(|block_id| block_id.0);
         Ok(order)
-    }
-
-    pub(crate) fn terminator_successors(terminator: &HirTerminator) -> Vec<BlockId> {
-        match terminator {
-            HirTerminator::Jump { target, .. } => vec![*target],
-            HirTerminator::If {
-                then_block,
-                else_block,
-                ..
-            } => vec![*then_block, *else_block],
-            HirTerminator::Match { arms, .. } => arms.iter().map(|arm| arm.body).collect(),
-            HirTerminator::Break { target } => vec![*target],
-            HirTerminator::Continue { target } => vec![*target],
-            HirTerminator::Return(_) | HirTerminator::Panic { .. } => vec![],
-        }
     }
 
     pub(crate) fn emit_line(&mut self, line: &str) {

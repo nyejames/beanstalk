@@ -5,8 +5,9 @@
 
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::hir::hir_nodes::{
-    BlockId, FunctionId, HirModule, HirStatementKind, HirTerminator, StartFragment,
+    BlockId, FunctionId, HirModule, HirStatementKind, StartFragment,
 };
+use crate::compiler_frontend::hir::utils::terminator_targets;
 use crate::compiler_frontend::host_functions::CallTarget;
 use rustc_hash::FxHashSet;
 use std::collections::VecDeque;
@@ -144,7 +145,7 @@ fn collect_reachable_entry_blocks(hir_module: &HirModule) -> Result<Vec<BlockId>
         }
 
         let block = block_by_id_or_error(hir_module, block_id)?;
-        for successor in terminator_successors(&block.terminator) {
+        for successor in terminator_targets(&block.terminator) {
             queue.push_back(successor);
         }
     }
@@ -152,22 +153,6 @@ fn collect_reachable_entry_blocks(hir_module: &HirModule) -> Result<Vec<BlockId>
     let mut block_ids = visited.into_iter().collect::<Vec<_>>();
     block_ids.sort_by_key(|block_id| block_id.0);
     Ok(block_ids)
-}
-
-fn terminator_successors(terminator: &HirTerminator) -> Vec<BlockId> {
-    // Keep CFG successor expansion in one place so traversal rules stay consistent.
-    match terminator {
-        HirTerminator::Jump { target, .. }
-        | HirTerminator::Break { target }
-        | HirTerminator::Continue { target } => vec![*target],
-        HirTerminator::If {
-            then_block,
-            else_block,
-            ..
-        } => vec![*then_block, *else_block],
-        HirTerminator::Match { arms, .. } => arms.iter().map(|arm| arm.body).collect(),
-        HirTerminator::Return(_) | HirTerminator::Panic { .. } => Vec::new(),
-    }
 }
 
 fn block_by_id_or_error(
