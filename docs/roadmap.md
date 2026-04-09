@@ -15,24 +15,6 @@ These are the non-negotiable conditions for starting Alpha.
 - Compiler diagnostics are useful, accurate, consistently formatted, and visually moving toward the Nushell-style goal.
 - Cross-platform output is stable enough that Windows and macOS do not produce avoidable golden drift.
 
-## Phase 3 - expand integration coverage across the full Alpha surface
-
-### PR - Add backend-facing integration checks for runtime-heavy features
-
-Make sure JS/backend semantics are being checked where language behavior depends on runtime lowering.
-
-**Checklist**
-- Add cases for alias-sensitive behavior where relevant.
-- Add cases for template runtime fragment insertion behavior.
-- Add cases for result propagation/fallback through generated outputs.
-- Add cases for arrays and casts where backend behavior matters.
-- Expand artifact assertions where goldens alone are too brittle or too vague.
-
-**Done when**
-- Runtime semantics are not being trusted blindly.
-
----
-
 ## Phase 4 - diagnostics and compiler UX hardening
 
 ### PR - Standardize unsupported/incomplete-feature diagnostics
