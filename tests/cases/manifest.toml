@@ -884,9 +884,19 @@ path = "loop_bare_iteration_bindings"
 tags = ["integration","control-flow"]
 
 [[case]]
+id = "loop_bindingless_iteration"
+path = "loop_bindingless_iteration"
+tags = ["integration","control-flow"]
+
+[[case]]
 id = "loop_break_continue_control_flow"
 path = "loop_break_continue_control_flow"
 tags = ["integration","control-flow"]
+
+[[case]]
+id = "loop_borrow_mutation_conflict"
+path = "loop_borrow_mutation_conflict"
+tags = ["integration","control-flow","borrows","diagnostics"]
 
 [[case]]
 id = "loop_collection_iteration"

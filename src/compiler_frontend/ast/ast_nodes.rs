@@ -50,7 +50,7 @@ pub enum RangeEndKind {
 
 #[derive(Debug, Clone)]
 pub struct LoopBindings {
-    pub item: Declaration,
+    pub item: Option<Declaration>,
     pub index: Option<Declaration>,
 }
 

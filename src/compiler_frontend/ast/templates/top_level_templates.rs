@@ -770,7 +770,9 @@ fn collect_references_from_ast_node(node: &AstNode, references: &mut FxHashSet<I
             range,
             body,
         } => {
-            collect_references_from_expression(&bindings.item.value, references);
+            if let Some(item_binding) = &bindings.item {
+                collect_references_from_expression(&item_binding.value, references);
+            }
             if let Some(index_binding) = &bindings.index {
                 collect_references_from_expression(&index_binding.value, references);
             }
@@ -789,7 +791,9 @@ fn collect_references_from_ast_node(node: &AstNode, references: &mut FxHashSet<I
             iterable,
             body,
         } => {
-            collect_references_from_expression(&bindings.item.value, references);
+            if let Some(item_binding) = &bindings.item {
+                collect_references_from_expression(&item_binding.value, references);
+            }
             if let Some(index_binding) = &bindings.index {
                 collect_references_from_expression(&index_binding.value, references);
             }

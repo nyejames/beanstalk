@@ -162,6 +162,8 @@ fn parse_loop_header(
 ) -> Result<(ParsedLoopHeader, ScopeContext), CompilerError> {
     reject_removed_in_loop_syntax(header_tokens, string_table)?;
 
+    // Range markers are syntax-defining for loop kind, so we dispatch range parsing first.
+    // Non-range headers are then resolved as either conditional (`Bool`) or collection loops.
     if has_top_level_range_marker(header_tokens) {
         let parsed = parse_range_loop_header(header_tokens, &mut context, warnings, string_table)?;
         return Ok((parsed, context));
@@ -177,12 +179,45 @@ fn parse_range_loop_header(
     warnings: &mut Vec<CompilerWarning>,
     string_table: &mut StringTable,
 ) -> Result<ParsedLoopHeader, CompilerError> {
+    // Try explicit binding suffixes first so diagnostics can point at malformed binding tails.
     if let Some(pipe_split) = parse_pipe_binding_suffix(header_tokens, string_table)? {
         let range =
             parse_range_loop_spec_from_tokens(&pipe_split.core_tokens, context, string_table)?;
         let binding_type = range_binding_type(&range, string_table)?;
         let bindings = declare_loop_bindings(
-            pipe_split.bindings,
+            Some(pipe_split.bindings),
+            binding_type,
+            context,
+            warnings,
+            string_table,
+        )?;
+
+        return Ok(ParsedLoopHeader::Range { bindings, range });
+    }
+
+    if let Some(dual_bare_split) = split_bare_dual_binding_suffix(header_tokens)
+        && let Ok(range) =
+            parse_range_loop_spec_from_tokens(&dual_bare_split.core_tokens, context, string_table)
+    {
+        let binding_type = range_binding_type(&range, string_table)?;
+        let bindings = declare_loop_bindings(
+            Some(dual_bare_split.bindings),
+            binding_type,
+            context,
+            warnings,
+            string_table,
+        )?;
+
+        return Ok(ParsedLoopHeader::Range { bindings, range });
+    }
+
+    if let Some(single_bare_split) = split_bare_single_binding_suffix(header_tokens)
+        && let Ok(range) =
+            parse_range_loop_spec_from_tokens(&single_bare_split.core_tokens, context, string_table)
+    {
+        let binding_type = range_binding_type(&range, string_table)?;
+        let bindings = declare_loop_bindings(
+            Some(single_bare_split.bindings),
             binding_type,
             context,
             warnings,
@@ -203,53 +238,10 @@ fn parse_range_loop_header(
         );
     }
 
-    if let Some(dual_bare_split) = split_bare_dual_binding_suffix(header_tokens)
-        && let Ok(range) =
-            parse_range_loop_spec_from_tokens(&dual_bare_split.core_tokens, context, string_table)
-    {
-        let binding_type = range_binding_type(&range, string_table)?;
-        let bindings = declare_loop_bindings(
-            dual_bare_split.bindings,
-            binding_type,
-            context,
-            warnings,
-            string_table,
-        )?;
-
-        return Ok(ParsedLoopHeader::Range { bindings, range });
-    }
-
-    if let Some(single_bare_split) = split_bare_single_binding_suffix(header_tokens)
-        && let Ok(range) =
-            parse_range_loop_spec_from_tokens(&single_bare_split.core_tokens, context, string_table)
-    {
-        let binding_type = range_binding_type(&range, string_table)?;
-        let bindings = declare_loop_bindings(
-            single_bare_split.bindings,
-            binding_type,
-            context,
-            warnings,
-            string_table,
-        )?;
-
-        return Ok(ParsedLoopHeader::Range { bindings, range });
-    }
-
-    if parse_range_loop_spec_from_tokens(header_tokens, context, string_table).is_ok() {
-        return_syntax_error!(
-            "Iteration loops require at least one binding",
-            header_tokens[0].location.clone(),
-            {
-                CompilationStage => LOOP_PARSING_STAGE,
-                PrimarySuggestion => "Add a binding, for example 'loop 0 to 10 |i|:' or 'loop 0 to 10 i:'",
-            }
-        );
-    }
-
-    // Re-run once to surface the detailed range-header parse error.
-    let _ = parse_range_loop_spec_from_tokens(header_tokens, context, string_table)?;
-
-    unreachable!("range header parse should always return or error")
+    let range = parse_range_loop_spec_from_tokens(header_tokens, context, string_table)?;
+    let binding_type = range_binding_type(&range, string_table)?;
+    let bindings = declare_loop_bindings(None, binding_type, context, warnings, string_table)?;
+    Ok(ParsedLoopHeader::Range { bindings, range })
 }
 
 fn parse_non_range_loop_header(
@@ -258,11 +250,14 @@ fn parse_non_range_loop_header(
     warnings: &mut Vec<CompilerWarning>,
     string_table: &mut StringTable,
 ) -> Result<ParsedLoopHeader, CompilerError> {
+    // Conditional loops are distinguished by a full-header boolean expression with no binding
+    // suffix. We still probe binding suffixes first so malformed binding tails get targeted
+    // diagnostics instead of a generic expression parse error.
     if let Some(pipe_split) = parse_pipe_binding_suffix(header_tokens, string_table)? {
         let (iterable, item_type) =
             parse_collection_iterable_from_tokens(&pipe_split.core_tokens, context, string_table)?;
         let bindings = declare_loop_bindings(
-            pipe_split.bindings,
+            Some(pipe_split.bindings),
             item_type,
             context,
             warnings,
@@ -287,6 +282,24 @@ fn parse_non_range_loop_header(
         });
     }
 
+    if let Some(dual_bare_split) = split_bare_dual_binding_suffix(header_tokens)
+        && let Ok((iterable, item_type)) = parse_collection_iterable_from_tokens(
+            &dual_bare_split.core_tokens,
+            context,
+            string_table,
+        )
+    {
+        let bindings = declare_loop_bindings(
+            Some(dual_bare_split.bindings),
+            item_type,
+            context,
+            warnings,
+            string_table,
+        )?;
+
+        return Ok(ParsedLoopHeader::Collection { bindings, iterable });
+    }
+
     if has_trailing_dual_symbol_without_comma(header_tokens) {
         return_syntax_error!(
             "Missing comma between bare loop bindings",
@@ -298,24 +311,6 @@ fn parse_non_range_loop_header(
         );
     }
 
-    if let Some(dual_bare_split) = split_bare_dual_binding_suffix(header_tokens)
-        && let Ok((iterable, item_type)) = parse_collection_iterable_from_tokens(
-            &dual_bare_split.core_tokens,
-            context,
-            string_table,
-        )
-    {
-        let bindings = declare_loop_bindings(
-            dual_bare_split.bindings,
-            item_type,
-            context,
-            warnings,
-            string_table,
-        )?;
-
-        return Ok(ParsedLoopHeader::Collection { bindings, iterable });
-    }
-
     if let Some(single_bare_split) = split_bare_single_binding_suffix(header_tokens)
         && let Ok((iterable, item_type)) = parse_collection_iterable_from_tokens(
             &single_bare_split.core_tokens,
@@ -324,7 +319,7 @@ fn parse_non_range_loop_header(
         )
     {
         let bindings = declare_loop_bindings(
-            single_bare_split.bindings,
+            Some(single_bare_split.bindings),
             item_type,
             context,
             warnings,
@@ -336,15 +331,13 @@ fn parse_non_range_loop_header(
 
     match full_expression {
         Ok(expression) => {
-            if collection_element_type(&expression.data_type).is_some() {
-                return_syntax_error!(
-                    "Iteration loops require at least one binding",
-                    expression.location.clone(),
-                    {
-                        CompilationStage => LOOP_PARSING_STAGE,
-                        PrimarySuggestion => "Add a binding, for example 'loop items |item|:' or 'loop items item:'",
-                    }
-                );
+            if let Some(item_type) = collection_element_type(&expression.data_type) {
+                let bindings =
+                    declare_loop_bindings(None, item_type, context, warnings, string_table)?;
+                return Ok(ParsedLoopHeader::Collection {
+                    bindings,
+                    iterable: expression,
+                });
             }
 
             return_syntax_error!(
@@ -547,6 +540,7 @@ fn parse_binding_tokens(
 }
 
 fn split_bare_dual_binding_suffix(header_tokens: &[Token]) -> Option<BindingSuffixSplit> {
+    // Bare dual form is intentionally strict: only `..., <item>, <index>` at header tail.
     if header_tokens.len() < 3 {
         return None;
     }
@@ -589,6 +583,7 @@ fn split_bare_dual_binding_suffix(header_tokens: &[Token]) -> Option<BindingSuff
 }
 
 fn split_bare_single_binding_suffix(header_tokens: &[Token]) -> Option<BindingSuffixSplit> {
+    // Bare single form accepts one trailing symbol and leaves all preceding tokens as header core.
     let TokenKind::Symbol(item_id) = header_tokens.last()?.kind else {
         return None;
     };
@@ -624,13 +619,19 @@ fn has_trailing_dual_symbol_without_comma(header_tokens: &[Token]) -> bool {
         return false;
     }
 
+    // Bare dual bindings must be `item, index`. This catches `item index` tails while avoiding
+    // operator/field/call tails like `a + b value` and `thing.other value`.
     matches!(
         (
             &header_tokens[header_tokens.len() - 3].kind,
             &header_tokens[header_tokens.len() - 2].kind,
             &header_tokens[header_tokens.len() - 1].kind,
         ),
-        (first, TokenKind::Symbol(_), TokenKind::Symbol(_)) if !matches!(first, TokenKind::Comma)
+        (
+            TokenKind::Symbol(_),
+            TokenKind::Symbol(_),
+            TokenKind::Symbol(_)
+        )
     )
 }
 
@@ -926,25 +927,34 @@ fn range_binding_type(
 }
 
 fn declare_loop_bindings(
-    names: ParsedBindingNames,
+    names: Option<ParsedBindingNames>,
     item_data_type: DataType,
     context: &mut ScopeContext,
     warnings: &mut Vec<CompilerWarning>,
     string_table: &mut StringTable,
 ) -> Result<LoopBindings, CompilerError> {
-    let item = declare_loop_binding(&names.item, item_data_type, context, warnings, string_table)?;
-
-    let index = if let Some(index_name) = &names.index {
-        Some(declare_loop_binding(
-            index_name,
-            DataType::Int,
-            context,
-            warnings,
-            string_table,
-        )?)
-    } else {
-        None
+    let Some(names) = names else {
+        return Ok(LoopBindings {
+            item: None,
+            index: None,
+        });
     };
+
+    let item = Some(declare_loop_binding(
+        &names.item,
+        item_data_type,
+        context,
+        warnings,
+        string_table,
+    )?);
+
+    let index = names
+        .index
+        .as_ref()
+        .map(|index_name| {
+            declare_loop_binding(index_name, DataType::Int, context, warnings, string_table)
+        })
+        .transpose()?;
 
     Ok(LoopBindings { item, index })
 }

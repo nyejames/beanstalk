@@ -57,7 +57,7 @@ impl<'a> HirBuilder<'a> {
         let step_block = self.create_block(parent_region, location, "for-step")?;
         let exit_block = self.create_block(parent_region, location, "for-exit")?;
 
-        let binding_type = self.lower_data_type(&bindings.item.value.data_type, location)?;
+        let binding_type = self.range_iteration_type(bindings, range, location)?;
         if !matches!(
             self.type_context.get(binding_type).kind,
             HirTypeKind::Int | HirTypeKind::Float
@@ -601,34 +601,38 @@ impl<'a> HirBuilder<'a> {
         self.log_control_flow_edge(header_descending_block, exit_block, "for.desc.false");
 
         self.set_current_block(body_block, location)?;
-        let binding_local = self.allocate_named_local(
-            bindings.item.id.clone(),
-            binding_type,
-            true,
-            Some(location.clone()),
-        )?;
         let body_region_id = self.current_region_or_error(location)?;
-        let body_current_value = self.make_expression(
-            location,
-            HirExpressionKind::Load(crate::compiler_frontend::hir::hir_nodes::HirPlace::Local(
-                current_local,
-            )),
-            binding_type,
-            ValueKind::Place,
-            body_region_id,
-        );
-        self.emit_statement_kind(
-            HirStatementKind::Assign {
-                target: crate::compiler_frontend::hir::hir_nodes::HirPlace::Local(binding_local),
-                value: body_current_value,
-            },
-            location,
-        )?;
+        if let Some(item_binding) = &bindings.item {
+            let binding_local = self.allocate_named_local(
+                item_binding.id.clone(),
+                binding_type,
+                false,
+                Some(location.clone()),
+            )?;
+            let body_current_value = self.make_expression(
+                location,
+                HirExpressionKind::Load(crate::compiler_frontend::hir::hir_nodes::HirPlace::Local(
+                    current_local,
+                )),
+                binding_type,
+                ValueKind::Place,
+                body_region_id,
+            );
+            self.emit_statement_kind(
+                HirStatementKind::Assign {
+                    target: crate::compiler_frontend::hir::hir_nodes::HirPlace::Local(
+                        binding_local,
+                    ),
+                    value: body_current_value,
+                },
+                location,
+            )?;
+        }
         if let Some(index_binding) = &bindings.index {
             let index_local = self.allocate_named_local(
                 index_binding.id.clone(),
                 int_ty,
-                true,
+                false,
                 Some(location.clone()),
             )?;
             let index_value = self.make_expression(
@@ -747,16 +751,7 @@ impl<'a> HirBuilder<'a> {
         let step_block = self.create_block(parent_region, location, "loop-collection-step")?;
         let exit_block = self.create_block(parent_region, location, "loop-collection-exit")?;
 
-        let iterable_type = self.lower_data_type(&iterable.data_type, location)?;
-        let element_type = match self.type_context.get(iterable_type).kind {
-            HirTypeKind::Collection { element } => element,
-            _ => {
-                return_hir_transformation_error!(
-                    "Collection loop iterable did not lower to a collection HIR type",
-                    self.hir_error_location(location)
-                );
-            }
-        };
+        let (iterable_type, element_type) = self.collection_iteration_types(iterable, location)?;
 
         let bool_ty = self.intern_type_kind(HirTypeKind::Bool);
         let int_ty: TypeId = self.intern_type_kind(HirTypeKind::Int);
@@ -858,43 +853,45 @@ impl<'a> HirBuilder<'a> {
 
         self.set_current_block(body_block, location)?;
         let body_region_id = self.current_region_or_error(location)?;
-        let item_local = self.allocate_named_local(
-            bindings.item.id.clone(),
-            element_type,
-            true,
-            Some(location.to_owned()),
-        )?;
-        let item_index = self.make_expression(
-            location,
-            HirExpressionKind::Load(HirPlace::Local(iteration_index_local)),
-            int_ty,
-            ValueKind::Place,
-            body_region_id,
-        );
-        let item_place = HirPlace::Index {
-            base: Box::new(HirPlace::Local(iterable_local)),
-            index: Box::new(item_index),
-        };
-        let item_value = self.make_expression(
-            location,
-            HirExpressionKind::Load(item_place),
-            element_type,
-            ValueKind::Place,
-            body_region_id,
-        );
-        self.emit_statement_kind(
-            HirStatementKind::Assign {
-                target: HirPlace::Local(item_local),
-                value: item_value,
-            },
-            location,
-        )?;
+        if let Some(item_binding) = &bindings.item {
+            let item_local = self.allocate_named_local(
+                item_binding.id.clone(),
+                element_type,
+                false,
+                Some(location.to_owned()),
+            )?;
+            let item_index = self.make_expression(
+                location,
+                HirExpressionKind::Load(HirPlace::Local(iteration_index_local)),
+                int_ty,
+                ValueKind::Place,
+                body_region_id,
+            );
+            let item_place = HirPlace::Index {
+                base: Box::new(HirPlace::Local(iterable_local)),
+                index: Box::new(item_index),
+            };
+            let item_value = self.make_expression(
+                location,
+                HirExpressionKind::Load(item_place),
+                element_type,
+                ValueKind::Place,
+                body_region_id,
+            );
+            self.emit_statement_kind(
+                HirStatementKind::Assign {
+                    target: HirPlace::Local(item_local),
+                    value: item_value,
+                },
+                location,
+            )?;
+        }
 
         if let Some(index_binding) = &bindings.index {
             let user_index_local = self.allocate_named_local(
                 index_binding.id.clone(),
                 int_ty,
-                true,
+                false,
                 Some(location.to_owned()),
             )?;
             let user_index_value = self.make_expression(
@@ -969,5 +966,76 @@ impl<'a> HirBuilder<'a> {
         )?;
 
         self.set_current_block(exit_block, location)
+    }
+
+    fn range_iteration_type(
+        &mut self,
+        bindings: &LoopBindings,
+        range: &RangeLoopSpec,
+        location: &SourceLocation,
+    ) -> Result<TypeId, CompilerError> {
+        if let Some(item_binding) = &bindings.item {
+            return self.lower_data_type(&item_binding.value.data_type, location);
+        }
+
+        let start_ty = self.lower_data_type(&range.start.data_type, location)?;
+        let end_ty = self.lower_data_type(&range.end.data_type, location)?;
+        let step_ty = range
+            .step
+            .as_ref()
+            .map(|step| self.lower_data_type(&step.data_type, location))
+            .transpose()?;
+
+        let is_numeric = |ty: TypeId, this: &Self| {
+            matches!(
+                this.type_context.get(ty).kind,
+                HirTypeKind::Int | HirTypeKind::Float
+            )
+        };
+
+        if !is_numeric(start_ty, self) || !is_numeric(end_ty, self) {
+            return_hir_transformation_error!(
+                "Range loop bounds must lower to numeric HIR types",
+                self.hir_error_location(location)
+            );
+        }
+
+        if let Some(step_ty) = step_ty
+            && !is_numeric(step_ty, self)
+        {
+            return_hir_transformation_error!(
+                "Range loop step must lower to a numeric HIR type",
+                self.hir_error_location(location)
+            );
+        }
+
+        let uses_float = matches!(self.type_context.get(start_ty).kind, HirTypeKind::Float)
+            || matches!(self.type_context.get(end_ty).kind, HirTypeKind::Float)
+            || step_ty
+                .is_some_and(|ty| matches!(self.type_context.get(ty).kind, HirTypeKind::Float));
+
+        Ok(if uses_float {
+            self.intern_type_kind(HirTypeKind::Float)
+        } else {
+            self.intern_type_kind(HirTypeKind::Int)
+        })
+    }
+
+    fn collection_iteration_types(
+        &mut self,
+        iterable: &Expression,
+        location: &SourceLocation,
+    ) -> Result<(TypeId, TypeId), CompilerError> {
+        // `lower_data_type` canonicalizes away frontend reference wrappers, so collection loops
+        // accept either direct collections or shared references to collections uniformly.
+        let iterable_type = self.lower_data_type(&iterable.data_type, location)?;
+        let HirTypeKind::Collection { element } = self.type_context.get(iterable_type).kind else {
+            return_hir_transformation_error!(
+                "Collection loop iterable did not lower to a collection HIR type",
+                self.hir_error_location(location)
+            );
+        };
+
+        Ok((iterable_type, element))
     }
 }

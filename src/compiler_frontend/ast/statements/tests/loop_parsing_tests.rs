@@ -65,7 +65,13 @@ fn parses_range_loop_with_bracketed_binding() {
         panic!("expected range loop in function body");
     };
 
-    assert_eq!(bindings.item.id.name_str(&string_table), Some("i"));
+    assert_eq!(
+        bindings
+            .item
+            .as_ref()
+            .and_then(|binding| binding.id.name_str(&string_table)),
+        Some("i")
+    );
     assert!(bindings.index.is_none());
     assert_eq!(range.end_kind, RangeEndKind::Inclusive);
     assert!(matches!(range.start.kind, ExpressionKind::Int(1)));
@@ -87,7 +93,13 @@ fn parses_range_loop_with_bare_binding() {
         panic!("expected range loop in function body");
     };
 
-    assert_eq!(bindings.item.id.name_str(&string_table), Some("i"));
+    assert_eq!(
+        bindings
+            .item
+            .as_ref()
+            .and_then(|binding| binding.id.name_str(&string_table)),
+        Some("i")
+    );
     assert!(bindings.index.is_none());
 }
 
@@ -102,7 +114,13 @@ fn parses_range_loop_with_value_and_index_bindings() {
         panic!("expected range loop in function body");
     };
 
-    assert_eq!(bindings.item.id.name_str(&string_table), Some("value"));
+    assert_eq!(
+        bindings
+            .item
+            .as_ref()
+            .and_then(|binding| binding.id.name_str(&string_table)),
+        Some("value")
+    );
     assert_eq!(
         bindings
             .index
@@ -128,7 +146,13 @@ fn parses_collection_loop_with_bracketed_item_binding() {
         panic!("expected collection loop in function body");
     };
 
-    assert_eq!(bindings.item.id.name_str(&string_table), Some("item"));
+    assert_eq!(
+        bindings
+            .item
+            .as_ref()
+            .and_then(|binding| binding.id.name_str(&string_table)),
+        Some("item")
+    );
     assert!(bindings.index.is_none());
     assert!(matches!(iterable.kind, ExpressionKind::Reference(_)));
     assert!(matches!(
@@ -149,7 +173,13 @@ fn parses_collection_loop_with_bare_item_binding() {
         panic!("expected collection loop in function body");
     };
 
-    assert_eq!(bindings.item.id.name_str(&string_table), Some("item"));
+    assert_eq!(
+        bindings
+            .item
+            .as_ref()
+            .and_then(|binding| binding.id.name_str(&string_table)),
+        Some("item")
+    );
     assert!(bindings.index.is_none());
 }
 
@@ -164,7 +194,13 @@ fn parses_collection_loop_with_item_and_index_bindings() {
         panic!("expected collection loop in function body");
     };
 
-    assert_eq!(bindings.item.id.name_str(&string_table), Some("item"));
+    assert_eq!(
+        bindings
+            .item
+            .as_ref()
+            .and_then(|binding| binding.id.name_str(&string_table)),
+        Some("item")
+    );
     assert_eq!(
         bindings
             .index
@@ -225,23 +261,30 @@ fn rejects_old_in_loop_syntax_with_migration_error() {
 }
 
 #[test]
-fn rejects_missing_iteration_binding_for_collection_loop() {
-    let error = parse_loop_fixture_error("items = {1, 2, 3}\nloop items:\n    io(items)\n;");
-    assert!(
-        error
-            .msg
-            .contains("Iteration loops require at least one binding")
-    );
+fn parses_collection_loop_without_bindings() {
+    let (ast, string_table) =
+        parse_loop_fixture("count ~= 0\nitems = {1, 2, 3}\nloop items:\n    count = count + 1\n;");
+    let body = loop_function_body(&ast, &string_table);
+
+    let NodeKind::CollectionLoop { bindings, .. } = &body[2].kind else {
+        panic!("expected collection loop in function body");
+    };
+
+    assert!(bindings.item.is_none());
+    assert!(bindings.index.is_none());
 }
 
 #[test]
-fn rejects_missing_iteration_binding_for_range_loop() {
-    let error = parse_loop_fixture_error("loop 0 to 10:\n    io(1)\n;");
-    assert!(
-        error
-            .msg
-            .contains("Iteration loops require at least one binding")
-    );
+fn parses_range_loop_without_bindings() {
+    let (ast, string_table) = parse_loop_fixture("loop 0 to 10:\n    io(1)\n;");
+    let body = loop_function_body(&ast, &string_table);
+
+    let NodeKind::RangeLoop { bindings, .. } = &body[0].kind else {
+        panic!("expected range loop in function body");
+    };
+
+    assert!(bindings.item.is_none());
+    assert!(bindings.index.is_none());
 }
 
 #[test]
@@ -352,4 +395,43 @@ fn rejects_missing_comma_between_dual_bare_bindings() {
 fn rejects_missing_closing_pipe_in_loop_bindings() {
     let error = parse_loop_fixture_error("items = {1, 2, 3}\nloop items |item:\n    io(item)\n;");
     assert!(error.msg.contains("Missing closing pipe in loop bindings"));
+}
+
+#[test]
+fn parses_range_loop_with_bare_binding_after_complex_step_expression() {
+    let (ast, string_table) = parse_loop_fixture(
+        "limit = 8\nstep = 2\nsum ~= 0\nloop 0 to limit by step i:\n    sum = sum + i\n;",
+    );
+    let body = loop_function_body(&ast, &string_table);
+
+    let NodeKind::RangeLoop {
+        bindings, range, ..
+    } = &body[3].kind
+    else {
+        panic!("expected range loop in function body");
+    };
+
+    assert_eq!(
+        bindings
+            .item
+            .as_ref()
+            .and_then(|binding| binding.id.name_str(&string_table)),
+        Some("i")
+    );
+    assert!(matches!(
+        range.step.as_ref().map(|expr| &expr.kind),
+        Some(ExpressionKind::Reference(_))
+    ));
+}
+
+#[test]
+fn operator_tail_does_not_trigger_missing_comma_bare_binding_diagnostic() {
+    let error = parse_loop_fixture_error("a = 1\nb = 2\nloop a + b value:\n    io(1)\n;");
+    assert!(
+        !error
+            .msg
+            .contains("Missing comma between bare loop bindings"),
+        "{}",
+        error.msg
+    );
 }

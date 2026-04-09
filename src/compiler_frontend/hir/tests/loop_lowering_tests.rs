@@ -147,6 +147,10 @@ fn collection_literal(location: SourceLocation) -> Expression {
     )
 }
 
+fn int_collection_type() -> DataType {
+    DataType::Collection(Box::new(DataType::Int), Ownership::ImmutableOwned)
+}
+
 #[test]
 fn lowers_range_loop_with_new_syntax() {
     let mut string_table = StringTable::new();
@@ -156,7 +160,7 @@ fn lowers_range_loop_with_new_syntax() {
     let range_loop = node(
         NodeKind::RangeLoop {
             bindings: LoopBindings {
-                item: loop_binding("value", DataType::Int, &mut string_table),
+                item: Some(loop_binding("value", DataType::Int, &mut string_table)),
                 index: None,
             },
             range: range_loop_spec(
@@ -212,6 +216,55 @@ fn lowers_range_loop_with_new_syntax() {
 }
 
 #[test]
+fn lowers_range_loop_without_user_bindings() {
+    let mut string_table = StringTable::new();
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
+    let location = test_location(6);
+
+    let range_loop = node(
+        NodeKind::RangeLoop {
+            bindings: LoopBindings {
+                item: None,
+                index: None,
+            },
+            range: range_loop_spec(
+                Expression::int(0, location.clone(), Ownership::ImmutableOwned),
+                Expression::int(3, location.clone(), Ownership::ImmutableOwned),
+                RangeEndKind::Exclusive,
+                None,
+            ),
+            body: vec![],
+        },
+        location,
+    );
+
+    let start_fn = function_node(
+        start_name,
+        FunctionSignature {
+            parameters: vec![],
+            returns: vec![],
+        },
+        vec![range_loop],
+        test_location(5),
+    );
+
+    let module = lower_ast(build_ast(vec![start_fn], entry_path), &mut string_table)
+        .expect("range loop lowering without user bindings should succeed");
+
+    let (_, _, header_ascending_block, _, _) = range_loop_cfg_blocks(&module);
+    let body_block = match module.blocks[header_ascending_block.0 as usize].terminator {
+        HirTerminator::If { then_block, .. } => then_block,
+        _ => panic!("expected ascending header branch"),
+    };
+
+    let body_locals = &module.blocks[body_block.0 as usize].locals;
+    assert!(
+        body_locals.is_empty(),
+        "binding-less range loops should not allocate user binding locals"
+    );
+}
+
+#[test]
 fn lowers_range_loop_with_index_binding() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
@@ -220,7 +273,7 @@ fn lowers_range_loop_with_index_binding() {
     let range_loop = node(
         NodeKind::RangeLoop {
             bindings: LoopBindings {
-                item: loop_binding("value", DataType::Int, &mut string_table),
+                item: Some(loop_binding("value", DataType::Int, &mut string_table)),
                 index: Some(loop_binding("index", DataType::Int, &mut string_table)),
             },
             range: range_loop_spec(
@@ -309,7 +362,7 @@ fn preserves_runtime_zero_step_guard_for_dynamic_step() {
     let range_loop = node(
         NodeKind::RangeLoop {
             bindings: LoopBindings {
-                item: loop_binding("value", DataType::Int, &mut string_table),
+                item: Some(loop_binding("value", DataType::Int, &mut string_table)),
                 index: None,
             },
             range: range_loop_spec(
@@ -363,7 +416,7 @@ fn lowers_collection_loop_to_explicit_cfg() {
     let collection_loop = node(
         NodeKind::CollectionLoop {
             bindings: LoopBindings {
-                item: loop_binding("item", DataType::Int, &mut string_table),
+                item: Some(loop_binding("item", DataType::Int, &mut string_table)),
                 index: None,
             },
             iterable: collection_literal(location.clone()),
@@ -417,6 +470,101 @@ fn lowers_collection_loop_to_explicit_cfg() {
 }
 
 #[test]
+fn lowers_collection_loop_without_user_bindings() {
+    let mut string_table = StringTable::new();
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
+    let location = test_location(35);
+
+    let collection_loop = node(
+        NodeKind::CollectionLoop {
+            bindings: LoopBindings {
+                item: None,
+                index: None,
+            },
+            iterable: collection_literal(location.clone()),
+            body: vec![],
+        },
+        location,
+    );
+
+    let start_fn = function_node(
+        start_name,
+        FunctionSignature {
+            parameters: vec![],
+            returns: vec![],
+        },
+        vec![collection_loop],
+        test_location(34),
+    );
+
+    let module = lower_ast(build_ast(vec![start_fn], entry_path), &mut string_table)
+        .expect("collection loop lowering without user bindings should succeed");
+
+    let start = &module.functions[module.start_function.0 as usize];
+    let entry_block = &module.blocks[start.entry.0 as usize];
+    let header_block = match entry_block.terminator {
+        HirTerminator::Jump { target, .. } => target,
+        _ => panic!("expected jump to collection header"),
+    };
+    let body_block = match module.blocks[header_block.0 as usize].terminator {
+        HirTerminator::If { then_block, .. } => then_block,
+        _ => panic!("expected collection loop header conditional"),
+    };
+
+    assert!(
+        module.blocks[body_block.0 as usize].locals.is_empty(),
+        "binding-less collection loops should not allocate user binding locals"
+    );
+}
+
+#[test]
+fn lowers_collection_loop_with_reference_typed_iterable_expression() {
+    let mut string_table = StringTable::new();
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
+    let location = test_location(37);
+    let items_symbol = super::symbol("items", &mut string_table);
+
+    let items_decl = node(
+        NodeKind::VariableDeclaration(Declaration {
+            id: items_symbol.clone(),
+            value: collection_literal(location.clone()),
+        }),
+        location.clone(),
+    );
+
+    let collection_loop = node(
+        NodeKind::CollectionLoop {
+            bindings: LoopBindings {
+                item: Some(loop_binding("item", DataType::Int, &mut string_table)),
+                index: None,
+            },
+            iterable: Expression::reference(
+                items_symbol,
+                DataType::Reference(Box::new(int_collection_type())),
+                location.clone(),
+                Ownership::ImmutableReference,
+            ),
+            body: vec![],
+        },
+        location,
+    );
+
+    let start_fn = function_node(
+        start_name,
+        FunctionSignature {
+            parameters: vec![],
+            returns: vec![],
+        },
+        vec![items_decl, collection_loop],
+        test_location(36),
+    );
+
+    let module = lower_ast(build_ast(vec![start_fn], entry_path), &mut string_table)
+        .expect("collection loop lowering should normalize reference-typed iterables");
+    assert_no_placeholder_terminators(&module);
+}
+
+#[test]
 fn lowers_collection_loop_item_binding_from_indexed_place() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
@@ -425,7 +573,7 @@ fn lowers_collection_loop_item_binding_from_indexed_place() {
     let collection_loop = node(
         NodeKind::CollectionLoop {
             bindings: LoopBindings {
-                item: loop_binding("item", DataType::Int, &mut string_table),
+                item: Some(loop_binding("item", DataType::Int, &mut string_table)),
                 index: None,
             },
             iterable: collection_literal(location.clone()),
@@ -490,7 +638,7 @@ fn lowers_collection_loop_optional_index_binding() {
     let collection_loop = node(
         NodeKind::CollectionLoop {
             bindings: LoopBindings {
-                item: loop_binding("item", DataType::Int, &mut string_table),
+                item: Some(loop_binding("item", DataType::Int, &mut string_table)),
                 index: Some(loop_binding("index", DataType::Int, &mut string_table)),
             },
             iterable: collection_literal(location.clone()),
@@ -554,6 +702,104 @@ fn lowers_collection_loop_optional_index_binding() {
 }
 
 #[test]
+fn lowers_range_loop_user_bindings_as_immutable_locals() {
+    let mut string_table = StringTable::new();
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
+    let location = test_location(55);
+
+    let range_loop = node(
+        NodeKind::RangeLoop {
+            bindings: LoopBindings {
+                item: Some(loop_binding("value", DataType::Int, &mut string_table)),
+                index: Some(loop_binding("index", DataType::Int, &mut string_table)),
+            },
+            range: range_loop_spec(
+                Expression::int(0, location.clone(), Ownership::ImmutableOwned),
+                Expression::int(4, location.clone(), Ownership::ImmutableOwned),
+                RangeEndKind::Exclusive,
+                None,
+            ),
+            body: vec![],
+        },
+        location,
+    );
+
+    let start_fn = function_node(
+        start_name,
+        FunctionSignature {
+            parameters: vec![],
+            returns: vec![],
+        },
+        vec![range_loop],
+        test_location(54),
+    );
+
+    let module = lower_ast(build_ast(vec![start_fn], entry_path), &mut string_table)
+        .expect("range loop lowering should succeed");
+
+    let (_, _, header_ascending_block, _, _) = range_loop_cfg_blocks(&module);
+    let body_block = match module.blocks[header_ascending_block.0 as usize].terminator {
+        HirTerminator::If { then_block, .. } => then_block,
+        _ => panic!("expected ascending header branch"),
+    };
+
+    let body_locals = &module.blocks[body_block.0 as usize].locals;
+    assert!(
+        !body_locals.is_empty() && body_locals.iter().all(|local| !local.mutable),
+        "range loop user binding locals should be immutable"
+    );
+}
+
+#[test]
+fn lowers_collection_loop_user_bindings_as_immutable_locals() {
+    let mut string_table = StringTable::new();
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
+    let location = test_location(56);
+
+    let collection_loop = node(
+        NodeKind::CollectionLoop {
+            bindings: LoopBindings {
+                item: Some(loop_binding("item", DataType::Int, &mut string_table)),
+                index: Some(loop_binding("index", DataType::Int, &mut string_table)),
+            },
+            iterable: collection_literal(location.clone()),
+            body: vec![],
+        },
+        location,
+    );
+
+    let start_fn = function_node(
+        start_name,
+        FunctionSignature {
+            parameters: vec![],
+            returns: vec![],
+        },
+        vec![collection_loop],
+        test_location(55),
+    );
+
+    let module = lower_ast(build_ast(vec![start_fn], entry_path), &mut string_table)
+        .expect("collection loop lowering should succeed");
+
+    let start = &module.functions[module.start_function.0 as usize];
+    let entry_block = &module.blocks[start.entry.0 as usize];
+    let header_block = match entry_block.terminator {
+        HirTerminator::Jump { target, .. } => target,
+        _ => panic!("expected jump to collection header"),
+    };
+    let body_block = match module.blocks[header_block.0 as usize].terminator {
+        HirTerminator::If { then_block, .. } => then_block,
+        _ => panic!("expected collection loop header conditional"),
+    };
+
+    let body_locals = &module.blocks[body_block.0 as usize].locals;
+    assert!(
+        !body_locals.is_empty() && body_locals.iter().all(|local| !local.mutable),
+        "collection loop user binding locals should be immutable"
+    );
+}
+
+#[test]
 fn break_targets_exit_block_in_collection_loop() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
@@ -562,7 +808,7 @@ fn break_targets_exit_block_in_collection_loop() {
     let collection_loop = node(
         NodeKind::CollectionLoop {
             bindings: LoopBindings {
-                item: loop_binding("item", DataType::Int, &mut string_table),
+                item: Some(loop_binding("item", DataType::Int, &mut string_table)),
                 index: None,
             },
             iterable: collection_literal(location.clone()),
@@ -629,7 +875,7 @@ fn continue_targets_step_block_in_collection_loop() {
     let collection_loop = node(
         NodeKind::CollectionLoop {
             bindings: LoopBindings {
-                item: loop_binding("item", DataType::Int, &mut string_table),
+                item: Some(loop_binding("item", DataType::Int, &mut string_table)),
                 index: None,
             },
             iterable: collection_literal(location.clone()),
@@ -683,7 +929,7 @@ fn nested_loop_targets_remain_correct() {
     let inner_loop = node(
         NodeKind::CollectionLoop {
             bindings: LoopBindings {
-                item: loop_binding("inner_item", DataType::Int, &mut string_table),
+                item: Some(loop_binding("inner_item", DataType::Int, &mut string_table)),
                 index: None,
             },
             iterable: collection_literal(location.clone()),
@@ -695,7 +941,7 @@ fn nested_loop_targets_remain_correct() {
     let outer_loop = node(
         NodeKind::CollectionLoop {
             bindings: LoopBindings {
-                item: loop_binding("outer_item", DataType::Int, &mut string_table),
+                item: Some(loop_binding("outer_item", DataType::Int, &mut string_table)),
                 index: None,
             },
             iterable: collection_literal(location.clone()),
