@@ -18,3 +18,6 @@ pub(crate) mod request;
 pub(crate) mod result;
 pub(crate) mod runtime;
 pub(crate) mod value;
+
+#[cfg(test)]
+mod tests;

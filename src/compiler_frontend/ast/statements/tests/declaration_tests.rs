@@ -74,9 +74,9 @@ fn rejects_struct_redefinition_of_reserved_error_symbol() {
 fn rejects_keyword_shadow_variable_declarations() {
     let error = parse_single_file_ast_error("_true = 1\n");
     assert!(
-        error
-            .msg
-            .contains("Identifier '_true' is reserved because it visually shadows language keyword 'true'"),
+        error.msg.contains(
+            "Identifier '_true' is reserved because it visually shadows language keyword 'true'"
+        ),
         "{}",
         error.msg
     );

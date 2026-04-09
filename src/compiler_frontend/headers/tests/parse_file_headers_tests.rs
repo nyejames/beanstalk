@@ -41,7 +41,10 @@ fn parse_single_file_headers(source: &str) -> Headers {
 
 fn parse_single_file_headers_with_warnings(
     source: &str,
-) -> (Headers, Vec<crate::compiler_frontend::compiler_warnings::CompilerWarning>) {
+) -> (
+    Headers,
+    Vec<crate::compiler_frontend::compiler_warnings::CompilerWarning>,
+) {
     let mut string_table = StringTable::new();
     let style_directives = StyleDirectiveRegistry::built_ins();
     let file_path = PathBuf::from("src/#page.bst");
@@ -677,8 +680,9 @@ fn choice_headers_reject_payload_variant_forms_for_alpha() {
 
 #[test]
 fn header_parsing_emits_naming_warnings_for_non_camel_type_like_symbols() {
-    let (headers, warnings) =
-        parse_single_file_headers_with_warnings("#SITE_TITLE = \"Beanstalk\"\nStatus_type :: bad_variant;\n");
+    let (headers, warnings) = parse_single_file_headers_with_warnings(
+        "#SITE_TITLE = \"Beanstalk\"\nStatus_type :: bad_variant;\n",
+    );
 
     assert!(
         headers

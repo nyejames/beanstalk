@@ -16,10 +16,10 @@ use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::{CompilerWarning, WarningKind};
 use crate::compiler_frontend::host_functions::HostRegistry;
-use crate::compiler_frontend::identity::FileId;
 use crate::compiler_frontend::identifier_policy::{
     IdentifierNamingKind, ensure_not_keyword_shadow_identifier, naming_warning_for_identifier,
 };
+use crate::compiler_frontend::identity::FileId;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::const_paths::parse_import_clause_tokens;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;

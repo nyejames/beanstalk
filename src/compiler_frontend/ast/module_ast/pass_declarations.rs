@@ -47,7 +47,10 @@ impl<'a> AstBuildState<'a> {
                 if is_reserved_builtin_symbol(&symbol_name_text) {
                     return Err(self.error_messages(
                         CompilerError::new_rule_error(
-                            format!("'{}' is reserved as a builtin language type.", symbol_name_text),
+                            format!(
+                                "'{}' is reserved as a builtin language type.",
+                                symbol_name_text
+                            ),
                             header.name_location.to_owned(),
                         ),
                         string_table,

@@ -415,17 +415,11 @@ fn validate_named_result_handler_binding(
     compilation_stage: &str,
     warnings: &mut Vec<CompilerWarning>,
 ) -> Result<(), CompilerError> {
-    ensure_not_keyword_shadow_identifier(
-        handler_name,
-        location.to_owned(),
-        compilation_stage,
-    )?;
+    ensure_not_keyword_shadow_identifier(handler_name, location.to_owned(), compilation_stage)?;
 
-    if let Some(warning) = naming_warning_for_identifier(
-        handler_name,
-        location,
-        IdentifierNamingKind::ValueLike,
-    ) {
+    if let Some(warning) =
+        naming_warning_for_identifier(handler_name, location, IdentifierNamingKind::ValueLike)
+    {
         warnings.push(warning);
     }
 
