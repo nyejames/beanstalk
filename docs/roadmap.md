@@ -2,6 +2,8 @@
 
 This is a working execution plan for getting the compiler to a credible first alpha.
 
+Use the language surface integration matrix as a reference for what is currently implemented: `docs/language-surface-integration-matrix.md`
+
 ## Release gates
 
 These are the non-negotiable conditions for starting Alpha.
@@ -15,52 +17,11 @@ These are the non-negotiable conditions for starting Alpha.
 
 ## Phase 3 - expand integration coverage across the full Alpha surface
 
-### PR - Create a language-surface integration matrix
-
-Track what supported language features have canonical end-to-end coverage.
-
-**Checklist**
-- Add a simple feature-to-case mapping section or helper doc.
-- Enumerate the Alpha surface:
-  - control flow
-  - functions/calls
-  - templates/style directives
-  - structs/records/methods
-  - choices
-  - pattern matching
-  - arrays
-  - results/options/multiple returns/multiple assignment
-  - type checking
-  - paths/imports
-  - html project builds
-  - logical expressions
-  - if statements/conditions
-  - char
-  - named arguments (`parameter = value`, with call-site `~` on the value expression)
-- Mark gaps explicitly.
-
-For every feature, mark:
-- implementation status
-- parser/unit coverage
-- integration coverage
-- backend/runtime coverage if relevant
-
-Distinguish “reserved but deferred” from “implemented but incomplete”
-
-Include compiler-owned builtins and method-like surfaces in the matrix:
-- collection methods
-- error helper methods
-- receiver methods
-- result suffix handling
-
-Include cross-platform coverage flags for golden-sensitive features
-
-**Done when**
-- Missing integration coverage is visible immediately.
-
 ### PR - Add integration coverage for the neglected language areas
 
 Broaden the suite away from being overly concentrated on current recent work.
+
+Expand which tests are golden sensitive and prefer top level template outputs into the final HTML artifact for testing expressions / control flow etc.
 
 **Checklist**
 - Add success and failure cases for basic control flow.
@@ -70,6 +31,8 @@ Broaden the suite away from being overly concentrated on current recent work.
 - Add arrays and array diagnostics.
 - Add logical and if-condition cases.
 - Add Char cases.
+- Add goldens for tests with golden output gaps
+- ALL goldens have tests that affect the shape of the final artefact
 
 **Done when**
 - The canonical integration suite represents the supported language rather than mostly paths/results/assets.
