@@ -1,15 +1,15 @@
--- Simple if statement test for WASM control flow
+-- Validate simple branch selection and nested branch semantics.
 
--- Basic if statement
 condition = true
+result ~= 0
 if condition:
     result = 42
 else
     result = 0
 ;
 
--- Simple nested if
 x = 10
+nested_result ~= -1
 if x > 5:
     if x > 8:
         nested_result = 1
@@ -19,3 +19,5 @@ if x > 5:
 else
     nested_result = 0
 ;
+
+[:simple_if result=[result] nested=[nested_result]]

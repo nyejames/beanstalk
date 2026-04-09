@@ -1,13 +1,12 @@
-rhs_or || -> Bool:
-    io("rhs-or-called")
+-- Prove short-circuit behavior by surfacing RHS invocation count.
+
+rhs_or |calls ~Int| -> Bool:
+    calls = calls + 1
     return false
 ;
 
 lhs = true
-value = lhs or rhs_or()
+calls ~= 0
+value = lhs or rhs_or(~calls)
 
-if value:
-    io("or-true")
-;
-
-io("or-done")
+[:logical_short_circuit_or value=[value] calls=[calls]]

@@ -5,10 +5,14 @@ c = false
 grouped = (a or b) and c
 ungrouped = a or b and c
 
+grouped_taken ~= 0
 if grouped:
-    io("grouped")
+    grouped_taken = 1
 ;
 
+ungrouped_taken ~= 0
 if ungrouped:
-    io("ungrouped")
+    ungrouped_taken = 1
 ;
+
+[:logical_grouping grouped=[grouped] ungrouped=[ungrouped] taken=[grouped_taken]-[ungrouped_taken]]

@@ -1,13 +1,12 @@
-rhs_and || -> Bool:
-    io("rhs-and-called")
+-- Prove short-circuit behavior by surfacing RHS invocation count.
+
+rhs_and |calls ~Int| -> Bool:
+    calls = calls + 1
     return true
 ;
 
 lhs = false
-value = lhs and rhs_and()
+calls ~= 0
+value = lhs and rhs_and(~calls)
 
-if value:
-    io("and-true")
-;
-
-io("and-done")
+[:logical_short_circuit_and value=[value] calls=[calls]]

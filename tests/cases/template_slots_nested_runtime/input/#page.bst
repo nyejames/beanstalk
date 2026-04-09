@@ -16,4 +16,4 @@ using_runtime_slots = [runtime_wrapper:
     [$insert("second"): second]
 ]
 
-io(using_runtime_slots)
+[:template_slots_nested_runtime [using_runtime_slots]]

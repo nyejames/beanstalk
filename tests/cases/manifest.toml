@@ -244,6 +244,11 @@ path = "collection_literal_smoke"
 tags = ["integration","collections"]
 
 [[case]]
+id = "collection_methods_backend_contract"
+path = "collection_methods_backend_contract"
+tags = ["integration","collections","js-backend"]
+
+[[case]]
 id = "collection_methods_end_to_end"
 path = "collection_methods_end_to_end"
 tags = ["integration","collections"]

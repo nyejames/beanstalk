@@ -1,5 +1,4 @@
--- Test structs and collection literals in JavaScript backend.
--- Struct field reads/writes are exercised here; collection indexing remains covered by lower-level JS tests.
+-- Validate struct/collection semantics through rendered values.
 
 Point = |
     x Int,
@@ -11,30 +10,25 @@ Person = |
     age Int,
 |
 
--- Test struct construction
-p1 = Point(10, 20)
-io([: Point: ([p1.x], [p1.y])])
+render_structs_and_collections || -> String:
+    p1 = Point(10, 20)
+    person = Person("Alice", 30)
 
--- Test struct with strings
-person = Person("Alice", 30)
-io([: Person: [person.name], age [person.age]])
+    p2 ~= Point(0, 0)
+    p2.x = 5
+    p2.y = 10
 
--- Test field assignment
-p2 ~= Point(0, 0)
-p2.x = 5
-p2.y = 10
-io([: Updated point: ([p2.x], [p2.y])])
+    empty = {}
+    numbers = {1, 2, 3, 4, 5}
+    names = {"Alice", "Bob", "Charlie"}
+    matrix = {{1, 2}, {3, 4}}
 
--- Test empty collection literal
-empty = {}
+    empty_len = empty.length()
+    numbers_len = numbers.length()
+    first_name = names.get(0) ! "none"
+    matrix_rows = matrix.length()
 
--- Test collection literals with elements
-numbers = {1, 2, 3, 4, 5}
+    return [:structs_and_collections p1=[p1.x]-[p1.y] person=[person.name]-[person.age] p2=[p2.x]-[p2.y] lens=[empty_len]-[numbers_len]-[matrix_rows] first_name=[first_name]]
+;
 
--- Test collection of strings
-names = {"Alice", "Bob", "Charlie"}
-
--- Test nested collections
-matrix = {{1, 2}, {3, 4}}
-
-io("Struct and collection tests passed")
+[:[render_structs_and_collections()]]

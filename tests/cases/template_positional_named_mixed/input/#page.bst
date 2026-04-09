@@ -1,7 +1,7 @@
 # wrapper = [:
-[$slot("title")]
-Positional 1: [$slot(1)]
-Default: [$slot]
+title=[$slot("title")]
+positional=[$slot(1)]
+default=[$slot]
 ]
 
 [wrapper, "P1":

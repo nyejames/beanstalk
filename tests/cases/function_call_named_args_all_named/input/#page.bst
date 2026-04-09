@@ -1,5 +1,6 @@
 greet |name String, greeting String| -> String:
-    return greeting
+    return greeting + " " + name
 ;
 
-io(greet(name = "world", greeting = "hello"))
+result = greet(name = "world", greeting = "hello")
+[:function_call_named_args_all_named result=[result]]

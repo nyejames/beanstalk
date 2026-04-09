@@ -2,4 +2,5 @@ pick |left String, right String| -> String:
     return right
 ;
 
-io(pick("a", right = "b"))
+result = pick("a", right = "b")
+[:function_call_named_args_success result=[result]]

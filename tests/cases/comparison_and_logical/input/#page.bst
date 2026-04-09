@@ -1,66 +1,24 @@
--- Test comparison and logical operations in JavaScript backend
--- Validates all comparison operators and boolean logic
+-- Validate comparison and logical semantics through rendered values.
 
--- Test equality
 a = 5
 b = 5
 c = 10
 
-if a is b:
-    io("5 == 5: true")
-;
+is_equal = a is b
+is_not_equal = a is not c
+is_less = a < c
+is_greater = c > a
+is_less_or_equal = a <= b
+is_greater_or_equal = c >= a
 
-if a is not c:
-    io("5 != 10: true")
-;
-
--- Test comparison operators
-if a < c:
-    io("5 < 10: true")
-;
-
-if c > a:
-    io("10 > 5: true")
-;
-
-if a <= b:
-    io("5 <= 5: true")
-;
-
-if c >= a:
-    io("10 >= 5: true")
-;
-
--- Test logical AND
 x = true
 y = false
 
-if x and x:
-    io("true AND true: true")
-;
+and_true = x and x
+and_false = x and y
+or_true = x or y
+or_false = y or y
+not_y = not y
+complex = (a < c) and (c > a)
 
-if not (x and y):
-    io("true AND false: false")
-;
-
--- Test logical OR
-if x or y:
-    io("true OR false: true")
-;
-
-if not (y or y):
-    io("false OR false: false")
-;
-
--- Test logical NOT
-if not y:
-    io("NOT false: true")
-;
-
--- Test complex expressions
-result = (a < c) and (c > a)
-if result:
-    io("Complex expression: true")
-;
-
-io("Comparison and logical tests passed")
+[:comparison logical eq=[is_equal] ne=[is_not_equal] lt=[is_less] gt=[is_greater] le=[is_less_or_equal] ge=[is_greater_or_equal] and_t=[and_true] and_f=[and_false] or_t=[or_true] or_f=[or_false] not_y=[not_y] complex=[complex]]

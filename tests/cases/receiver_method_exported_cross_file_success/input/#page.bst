@@ -2,4 +2,4 @@ import @helper/Counter
 import @helper/tick
 
 c = Counter(41)
-io(c.tick())
+[:receiver_method_exported_cross_file_success value=[c.tick()]]

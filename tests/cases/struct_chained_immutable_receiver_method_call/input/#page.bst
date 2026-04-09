@@ -7,4 +7,4 @@ bumped |this Counter| -> Counter:
 ;
 
 c = Counter(1)
-io(c.bumped().bumped().count)
+[:struct_chained_immutable_receiver_method_call value=[c.bumped().bumped().count]]

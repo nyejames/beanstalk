@@ -1,3 +1,2 @@
 #single_slot = [: before [$slot] after]
-
-io(single_slot)
+[:template_slot_wrapper_runtime [single_slot]]

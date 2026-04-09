@@ -1,9 +1,3 @@
 [backends.html]
 mode = "success"
 warnings = "forbid"
-
-[[backends.html.artifact_assertions]]
-path = "index.html"
-kind = "html"
-must_contain = ["if (", "__bs_assign_value"]
-must_not_contain = ["while (true)", "switch ("]

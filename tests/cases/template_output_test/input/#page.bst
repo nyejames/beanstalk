@@ -6,5 +6,4 @@ test || -> String:
 ;
 
 temp3 = [test(): temp2]
-
-io(temp3)
+[:template_output_test [temp3]]

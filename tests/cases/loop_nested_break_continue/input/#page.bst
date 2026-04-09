@@ -1,4 +1,3 @@
--- Nested collection loops with break/continue targets
 outer = {1, 2, 3}
 inner = {1, 2, 3}
 total ~= 0
@@ -21,4 +20,4 @@ loop outer |outer_item, outer_index|:
     ;
 ;
 
-io([: nested_total = [total] ])
+[:loop_nested_break_continue total=[total]]

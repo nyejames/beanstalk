@@ -1,6 +1,4 @@
--- Test function definitions and calls in JavaScript backend
--- Validates that the JS backend correctly handles function
--- declarations, parameters, return values, and recursion
+-- Validate function declarations/calls by rendering computed results.
 
 add |x Int, y Int| -> Int:
     return x + y
@@ -21,19 +19,9 @@ factorial |n Int| -> Int:
     return n * factorial(n - 1)
 ;
 
--- Test simple function calls
 sum = add(5, 3)
-io([: 5 + 3 = [sum]])
-
 product = multiply(4, 6)
-io([: 4 * 6 = [product]])
-
--- Test string function
 message = greet("World")
-io(message)
-
--- Test recursive function
 fact5 = factorial(5)
-io([: 5! = [fact5]])
 
-io("Function tests passed")
+[:functions sum=[sum] product=[product] message=[message] fact5=[fact5]]

@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light dark">
+    <title></title>
+    <style>
+@charset "UTF-8";
+/*!
+  BS CSS CORE (absolute basics CSS reset)
+  This is inspired by Pico.css, but is an even more minimal reset.
+
+  Actual style systems are intended to be built on top of this easily.
+*/
+
+:root {
+  color-scheme: light dark;
+
+  --bst-font-size: 100%;
+
+  /* Default Background Colours */
+  --bst-bg-lightmode: #fff;
+  --bst-bg-darkmode: #13171f;
+  --bst-text-lightmode: #373c44;
+  --bst-text-darkmode: #e0e3e7;
+
+  --bst-font-family-emoji: "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  --bst-font-family-sans-serif: system-ui, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, Helvetica, Arial, "Helvetica Neue", sans-serif, var(--bst-font-family-emoji);
+  --bst-font-family-monospace: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace, var(--bst-font-family-emoji);
+  --bst-font-family: var(--bst-font-family-sans-serif);
+
+  --bst-line-height: 1.5;
+  --bst-font-weight: 400;
+  --bst-font-size: 100%;
+  --bst-text-underline-offset: 0.1rem;
+  --bst-border-radius: 0.25rem;
+  --bst-border-width: 0.0625rem;
+  --bst-outline-width: 0.125rem;
+  --bst-transition: 0.2s ease-in-out;
+
+  --bst-spacing: 1rem;
+  --bst-spacing-small: 0.5rem;
+
+  /* Code block colours */
+  --comment-dark: #838c86;
+  --comment-light: #759061;
+  --keyword-dark: #ea943e;
+  --keyword-light: #ad590e;
+  --string-dark: #4fba11;
+  --string-light: #007130;
+  --number-dark: #96b5ed;
+  --number-light: #073f85;
+  --operator-dark: #9ec1ff;
+  --operator-light: #2b476a;
+  --struct-dark: #a17fbd;
+  --struct-light: #ac2187;
+  --type-dark: #54c5d3;
+  --type-light: #0d8db3;
+  --parenthesis-dark: #bcac52;
+  --parenthesis-light: #ad7e0d;
+}
+
+/* where: is used here for less specificity, allowing easier overriding */
+:where(:root) {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  -moz-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  font-weight: var(--bst-font-weight);
+  font-size: var(--bst-font-size);
+  line-height: var(--bst-line-height);
+  font-family: var(--bst-font-family);
+  text-underline-offset: var(--bst-text-underline-offset);
+  text-rendering: optimizeLegibility;
+  overflow-wrap: break-word;
+  -moz-tab-size: 4;
+  -o-tab-size: 4;
+  tab-size: 4;
+
+}
+
+@media (min-width: 576px) {
+  :root {
+    --bst-font-size: 106.25%;
+  }
+}
+@media (min-width: 768px) {
+  :root {
+    --bst-font-size: 112.5%;
+  }
+}
+@media (min-width: 1024px) {
+  :root {
+    --bst-font-size: 118.75%;
+  }
+}
+@media (min-width: 1280px) {
+  :root {
+    --bst-font-size: 125%;
+  }
+}
+@media (min-width: 1536px) {
+  :root {
+    --bst-font-size: 131.25%;
+  }
+}
+
+body {
+  width: 100%;
+  margin: 0;
+}
+
+/* Code Style */
+.codeblock {
+  color: #222222;
+  color: light-dark(#222222, #ddd);
+  font-family: var(--bst-font-family-monospace);
+  white-space: break-spaces;
+  tab-size: 4;
+}
+.bs-code-comment,
+.bst-code-comment {
+  color: var(--comment-light);
+  color:light-dark(var(--comment-light), var(--comment-dark))
+}
+.bs-code-keyword,
+.bst-code-keyword {
+  color: var(--keyword-light);
+  color:light-dark( var(--keyword-light), var(--keyword-dark))
+}
+.bs-code-string,
+.bst-code-string {
+  color: var(--string-light);
+  color:light-dark( var(--string-light), var(--string-dark))
+}
+.bs-code-number,
+.bst-code-number {
+  color: var(--number-light);
+  color:light-dark( var(--number-light), var(--number-dark))
+}
+.bs-code-operator,
+.bst-code-operator {
+  color: var(--operator-light);
+  color:light-dark( var(--operator-light), var(--operator-dark))
+}
+.bs-code-struct,
+.bst-code-struct {
+  color: var(--struct-light);
+  color:light-dark( var(--struct-light), var(--struct-dark))
+}
+.bs-code-type,
+.bst-code-type {
+  color: var(--type-light);
+  color:light-dark( var(--type-light), var(--type-dark))
+}
+.bs-code-parenthesis,
+.bst-code-parenthesis {
+  color: var(--parenthesis-light);
+  color:light-dark( var(--parenthesis-light), var(--parenthesis-dark))
+}
+
+/* BASIC CSS RESET STUFF */
+
+/**
+ * Document
+ * Content-box & Responsive typography
+*/
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  background-repeat: no-repeat;
+}
+
+::before,
+::after {
+  text-decoration: inherit;
+  vertical-align: inherit;
+}
+    </style>
+  </head>
+  <body style="">
+    <div id="bst-slot-0"></div>
+    <script>
+    function __bs_is_ref(value) {
+        return value !== null && typeof value === "object" && value.__bs_ref === true;
+    }
+
+    function __bs_binding(value) {
+        return { __bs_ref: true, __bs_kind: "binding", __bs_mode: "slot", __bs_slot: { value }, __bs_target: null };
+    }
+
+    function __bs_param_binding(value) {
+        if (!__bs_is_ref(value)) {
+            return __bs_binding(value);
+        }
+        if (value.__bs_kind === "binding") {
+            return value;
+        }
+        const binding = __bs_binding(undefined);
+        binding.__bs_mode = "alias";
+        binding.__bs_target = value;
+        return binding;
+    }
+
+    function __bs_resolve(ref) {
+        while (ref.__bs_kind === "binding" && ref.__bs_mode === "alias") {
+            ref = ref.__bs_target;
+        }
+        return ref;
+    }
+
+    function __bs_read(ref) {
+        const resolved = __bs_resolve(ref);
+        return resolved.__bs_kind === "binding" ? resolved.__bs_slot.value : resolved.__bs_get();
+    }
+
+    function __bs_write(ref, value) {
+        const resolved = __bs_resolve(ref);
+        if (resolved.__bs_kind === "binding") {
+            resolved.__bs_slot.value = value;
+        } else {
+            resolved.__bs_set(value);
+        }
+        return value;
+    }
+
+    function __bs_assign_borrow(binding, ref) {
+        if (binding.__bs_mode === "alias") {
+            return __bs_write(binding, __bs_read(ref));
+        }
+        binding.__bs_mode = "alias";
+        binding.__bs_target = ref;
+        return binding;
+    }
+
+    function __bs_assign_value(binding, value) {
+        if (binding.__bs_mode === "alias") {
+            return __bs_write(binding, value);
+        }
+        binding.__bs_mode = "slot";
+        binding.__bs_target = null;
+        binding.__bs_slot.value = value;
+        return binding;
+    }
+
+    function __bs_field(baseRef, field) {
+        return {
+            __bs_ref: true,
+            __bs_kind: "computed",
+            __bs_get() {
+                return __bs_read(baseRef)[field];
+            },
+            __bs_set(value) {
+                __bs_read(baseRef)[field] = value;
+            }
+        };
+    }
+
+    function __bs_index(baseRef, index) {
+        return {
+            __bs_ref: true,
+            __bs_kind: "computed",
+            __bs_get() {
+                return __bs_read(baseRef)[index];
+            },
+            __bs_set(value) {
+                __bs_read(baseRef)[index] = value;
+            }
+        };
+    }
+
+    function __bs_clone_value(value) {
+        if (Array.isArray(value)) {
+            return value.map(__bs_clone_value);
+        }
+        if (value !== null && typeof value === "object") {
+            const result = {};
+            for (const key of Object.keys(value)) {
+                result[key] = __bs_clone_value(value[key]);
+            }
+            return result;
+        }
+        return value;
+    }
+
+    function __bs_error_normalize_file(file) {
+        if (typeof file !== "string") {
+            return "";
+        }
+        if (file.startsWith("/")) {
+            const parts = file.split(/[\\/]/).filter(Boolean);
+            return parts.length > 0 ? parts[parts.length - 1] : file;
+        }
+        if (/^[A-Za-z]:[\\/]/.test(file)) {
+            const parts = file.split(/[\\/]/).filter(Boolean);
+            return parts.length > 0 ? parts[parts.length - 1] : file;
+        }
+        return file;
+    }
+
+    function __bs_make_error(kind, code, message, location, trace) {
+        return {
+            kind,
+            code,
+            message,
+            location: location ?? null,
+            trace: trace ?? null
+        };
+    }
+
+    function __bs_error_with_location(error, location) {
+        return __bs_make_error(error.kind, error.code, error.message, location, error.trace);
+    }
+
+    function __bs_error_push_trace(error, frame) {
+        const nextTrace = error.trace ? error.trace.concat([frame]) : [frame];
+        return __bs_make_error(error.kind, error.code, error.message, error.location, nextTrace);
+    }
+
+    function __bs_error_bubble(error, file, line, column, functionName) {
+        const safeFunction = typeof functionName === "string" && functionName.length > 0 ? functionName : "<unknown>";
+        const location = {
+            file: __bs_error_normalize_file(file),
+            line,
+            column,
+            function: safeFunction === "<unknown>" ? null : safeFunction
+        };
+        const frame = { function: safeFunction, location };
+        const nextLocation = error.location ?? location;
+        const located = __bs_error_with_location(error, nextLocation);
+        return __bs_error_push_trace(located, frame);
+    }
+
+    function __bs_result_propagate(result) {
+        if (result && result.tag === "ok") {
+            return result.value;
+        }
+        if (result && result.tag === "err") {
+            throw { __bs_result_propagate: true, value: result.value };
+        }
+        throw new Error("Expected internal Result carrier during propagation");
+    }
+
+    function __bs_result_fallback(result, fallback) {
+        if (result && result.tag === "ok") {
+            return result.value;
+        }
+        if (result && result.tag === "err") {
+            return fallback();
+        }
+        throw new Error("Expected internal Result carrier during fallback handling");
+    }
+
+    function __bs_collection_get(collectionRef, index) {
+        const collection = __bs_read(collectionRef);
+        if (!Array.isArray(collection)) {
+            const err = __bs_make_error("InvalidArgument", "collection.expected_ordered_collection", "Collection get(...) expects an ordered collection", null, null);
+            return { tag: "err", value: err };
+        }
+        if (!Number.isInteger(index) || index < 0 || index >= collection.length) {
+            const err = __bs_make_error("OutOfBounds", "collection.index_out_of_bounds", "Collection index out of bounds", null, null);
+            return { tag: "err", value: err };
+        }
+        return { tag: "ok", value: collection[index] };
+    }
+
+    function __bs_collection_push(collectionRef, value) {
+        const collection = __bs_read(collectionRef);
+        if (Array.isArray(collection)) {
+            collection.push(value);
+        }
+    }
+
+    function __bs_collection_remove(collectionRef, index) {
+        const collection = __bs_read(collectionRef);
+        if (Array.isArray(collection) && Number.isInteger(index) && index >= 0 && index < collection.length) {
+            collection.splice(index, 1);
+        }
+    }
+
+    function __bs_collection_length(collectionRef) {
+        const collection = __bs_read(collectionRef);
+        if (!Array.isArray(collection)) {
+            return 0;
+        }
+        return collection.length;
+    }
+
+    function __bs_value_to_string(value) {
+        if (value === undefined || value === null) {
+            return "";
+        }
+        return String(value);
+    }
+
+    function __bs_io(value) {
+        console.log(__bs_value_to_string(value));
+    }
+
+    function __bs_normalize_numeric_text(value) {
+        return value.trim().replace(/_/g, "");
+    }
+
+    function __bs_cast_int(value) {
+        if (typeof value === "number") {
+            if (!Number.isFinite(value) || !Number.isSafeInteger(value)) {
+                return { tag: "err", value: __bs_make_error("Parse", "int.parse_out_of_range", "Int value is out of supported range", null, null) };
+            }
+            if (Number.isInteger(value)) {
+                return { tag: "ok", value };
+            }
+            return { tag: "err", value: __bs_make_error("Parse", "int.parse_invalid_format", "Float value is not an exact integer", null, null) };
+        }
+        if (typeof value === "string") {
+            const normalized = __bs_normalize_numeric_text(value);
+            if (/^[+-]?[0-9]+$/.test(normalized)) {
+                const parsed = Number.parseInt(normalized, 10);
+                if (!Number.isSafeInteger(parsed)) {
+                    return { tag: "err", value: __bs_make_error("Parse", "int.parse_out_of_range", "Int value is out of supported range", null, null) };
+                }
+                return { tag: "ok", value: parsed };
+            }
+            if (/^[+-]?[0-9]+\.[0-9]+$/.test(normalized)) {
+                const parsed = Number.parseFloat(normalized);
+                if (Number.isInteger(parsed) && Number.isSafeInteger(parsed)) {
+                    return { tag: "ok", value: parsed };
+                }
+            }
+            return { tag: "err", value: __bs_make_error("Parse", "int.parse_invalid_format", "Cannot parse Int from text", null, null) };
+        }
+        return { tag: "err", value: __bs_make_error("Parse", "int.parse_invalid_format", "Int(...) only accepts Int, Float, or string values", null, null) };
+    }
+
+    function __bs_cast_float(value) {
+        if (typeof value === "number") {
+            if (!Number.isFinite(value)) {
+                return { tag: "err", value: __bs_make_error("Parse", "float.parse_out_of_range", "Float value is out of supported range", null, null) };
+            }
+            return { tag: "ok", value };
+        }
+        if (typeof value === "string") {
+            const normalized = __bs_normalize_numeric_text(value);
+            if (/^[+-]?[0-9]+$/.test(normalized) || /^[+-]?[0-9]+\.[0-9]+$/.test(normalized)) {
+                const parsed = Number.parseFloat(normalized);
+                if (!Number.isFinite(parsed)) {
+                    return { tag: "err", value: __bs_make_error("Parse", "float.parse_out_of_range", "Float value is out of supported range", null, null) };
+                }
+                return { tag: "ok", value: parsed };
+            }
+            return { tag: "err", value: __bs_make_error("Parse", "float.parse_invalid_format", "Cannot parse Float from text", null, null) };
+        }
+        return { tag: "err", value: __bs_make_error("Parse", "float.parse_invalid_format", "Float(...) only accepts Int, Float, or string values", null, null) };
+    }
+
+    function bst_bumped_fn0(bst_this_l0) {
+        
+        bst_this_l0 = __bs_param_binding(bst_this_l0);
+        
+        return { bst_count_fld11: (__bs_read(__bs_field(bst_this_l0, "bst_count_fld11")) + 1) };
+    }
+
+    function bst_start_fn1() {
+        let bst_c_l1 = __bs_binding(undefined);
+        
+        __bs_assign_value(bst_c_l1, { bst_count_fld11: 1 });
+        return "";
+    }
+
+    function bst___bst_frag_0_fn2() {
+        let bst_c_l2 = __bs_binding(undefined);
+        let bst___hir_tmp_0_l6 = __bs_binding(undefined);
+        let bst___hir_tmp_1_l7 = __bs_binding(undefined);
+        let bst___hir_tmp_2_l8 = __bs_binding(undefined);
+        let bst___hir_tmp_3_l9 = __bs_binding(undefined);
+        
+        __bs_assign_value(bst_c_l2, { bst_count_fld11: 1 });
+        __bs_assign_value(bst___hir_tmp_0_l6, bst_bumped_fn0(bst_c_l2));
+        __bs_assign_value(bst___hir_tmp_1_l7, bst_bumped_fn0(bst___hir_tmp_0_l6));
+        __bs_assign_value(bst___hir_tmp_2_l8, bst___template_fn_1_fn4(__bs_field(bst___hir_tmp_1_l7, "bst_count_fld11")));
+        __bs_assign_value(bst___hir_tmp_3_l9, bst___template_fn_0_fn3(__bs_binding("struct_chained_immutable_receiver_method_call value="), bst___hir_tmp_2_l8));
+        return __bs_clone_value(__bs_read(bst___hir_tmp_3_l9));
+    }
+
+    function bst___template_fn_0_fn3(bst_chunk_0_l3, bst_chunk_1_l4) {
+        
+        bst_chunk_0_l3 = __bs_param_binding(bst_chunk_0_l3);
+        bst_chunk_1_l4 = __bs_param_binding(bst_chunk_1_l4);
+        
+        return (("" + __bs_read(bst_chunk_0_l3)) + __bs_read(bst_chunk_1_l4));
+    }
+
+    function bst___template_fn_1_fn4(bst_chunk_0_l5) {
+        
+        bst_chunk_0_l5 = __bs_param_binding(bst_chunk_0_l5);
+        
+        return ("" + ("" + __bs_read(bst_chunk_0_l5)));
+    }
+
+    </script>
+    <script>
+    (function () {
+      const slots = [
+        ["bst-slot-0", bst___bst_frag_0_fn2],
+      ];
+
+      for (const [id, fn] of slots) {
+        const el = document.getElementById(id);
+        if (!el) throw new Error("Missing runtime mount slot: " + id);
+        el.insertAdjacentHTML("beforeend", fn());
+      }
+
+      // start() remains the lifecycle entrypoint and runs after fragment hydration.
+      if (typeof bst_start_fn1 === "function") bst_start_fn1();
+    })();
+    </script>
+  </body>
+</html>

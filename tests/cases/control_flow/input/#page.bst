@@ -1,42 +1,41 @@
--- Test control flow structures in JavaScript backend
--- Validates if-else, loops, and pattern matching
+-- Exercise control-flow semantics and surface outcomes in the final HTML artifact.
 
--- Test if-else
 x = 10
+if_result ~= "unset"
 if x > 5:
-    io("x is greater than 5")
+    if_result = "gt5"
 else
-    io("x is not greater than 5")
+    if_result = "le5"
 ;
 
--- Test nested if
 y = 15
+nested_result ~= "unset"
 if y > 10:
     if y < 20:
-        io("y is between 10 and 20")
+        nested_result = "between"
+    else
+        nested_result = "outside"
     ;
+else
+    nested_result = "below"
 ;
 
--- Test pattern matching
 value = 42
+match_result ~= "unset"
 if value is:
-    case 0 => io("zero");
-    case 42 => io("forty-two");
-    else => io("other");
+    case 0 => match_result = "zero";
+    case 42 => match_result = "forty-two";
+    else => match_result = "other";
 ;
 
--- Test loop
 sum ~= 0
 loop 1 to 5 |i|:
     sum = sum + i
 ;
-io([: Sum 1-5 = [sum]])
 
--- Secondary loop pass
 total ~= 0
 loop 1 to 5 |num|:
     total = total + num
 ;
-io([: Total = [total]])
 
-io("Control flow tests passed")
+[:control_flow if=[if_result] nested=[nested_result] match=[match_result] sum=[sum] total=[total]]

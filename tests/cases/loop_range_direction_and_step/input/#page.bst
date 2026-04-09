@@ -1,18 +1,18 @@
--- Descending inference and explicit step normalization
+-- Validate descending inference and explicit step semantics.
+
 count_desc ~= 0
 loop 5 to 0 |i|:
     count_desc = count_desc + 1
 ;
-io([: descending_count = [count_desc] ])
 
 sum_even_desc ~= 0
 loop 10 upto 0 by 2 |i|:
     sum_even_desc = sum_even_desc + i
 ;
-io([: descending_even_sum = [sum_even_desc] ])
 
 sum_even_desc_negative ~= 0
 loop 10 upto 0 by -2 |i|:
     sum_even_desc_negative = sum_even_desc_negative + i
 ;
-io([: descending_even_sum_negative = [sum_even_desc_negative] ])
+
+[:loop_range_direction_and_step count_desc=[count_desc] sum_even_desc=[sum_even_desc] sum_even_desc_negative=[sum_even_desc_negative]]

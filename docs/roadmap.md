@@ -37,6 +37,56 @@ Expand which tests are golden sensitive and prefer top level template outputs in
 **Done when**
 - The canonical integration suite represents the supported language rather than mostly paths/results/assets.
 
+**Implementation notes (artifact-shaped fixture policy + audit)**
+
+Fixture authoring rules used in this PR:
+- Prefer top-level template output for semantic success fixtures.
+- Use const top-level templates for compile-time foldable values.
+- Use non-const top-level templates for runtime-dependent values.
+- Use `io()` only for host/logging/lowering/runtime interop intent.
+- For semantic language tests, `index.html` is the primary assertion surface.
+- Success goldens must reflect meaningful final-artifact content changes.
+- JS/Wasm artifact assertions stay complementary for backend/runtime contracts.
+
+Fixture audit snapshot (neglected-area success fixtures):
+
+| Fixture(s) | Language area | Current validation style | Target validation style | Migrate now / leave later |
+| --- | --- | --- | --- | --- |
+| `control_flow`, `simple_if_test`, `dynamic_if_test` | control flow | `io()` and/or emitted-shape assertions | rendered branch/loop results + `golden/html/index.html` | Migrate now |
+| `comparison_and_logical`, `if_logical_precedence`, `logical_parenthesized_grouping` | logical expressions | `io()` + code-shape assertions | rendered boolean/preference results + html golden | Migrate now |
+| `logical_short_circuit_and`, `logical_short_circuit_or` | logical short-circuit | backend-shape oriented | rendered short-circuit outcomes + html golden | Migrate now |
+| `loop_conditional_and_range`, `loop_float_range_with_by`, `loop_range_direction_and_step` | loops | code-shape assertions | rendered totals/counts + html golden | Migrate now |
+| `loop_bindingless_iteration`, `loop_collection_iteration`, `loop_collection_iteration_with_index`, `loop_nested_break_continue` | loops/collections | baseline + `io()` | rendered iteration outcomes + html golden | Migrate now |
+| `literal_match_with_else_success`, `choice_match_exhaustive_success` | match/choice | baseline + `io()` | rendered arm-selection results + html golden | Migrate now |
+| `function_calls`, `function_single_call_smoke`, `function_return_smoke`, `functions` | functions/calls | code-shape and/or `io()` | rendered call/return outputs + html golden | Migrate now |
+| `function_call_named_args_success`, `function_call_named_args_all_named`, `function_call_named_args_default_skip`, `function_call_named_args_mutable_success` | named args | baseline + `io()` | rendered named-arg semantics + html golden | Migrate now |
+| `structs_and_collections`, `struct_constructor_all_defaults`, `struct_nested_field_mutation_success`, `struct_chained_immutable_receiver_method_call`, `receiver_method_exported_cross_file_success` | structs/records/methods | baseline and/or code-shape, often `io()` | rendered field/method/mutation outcomes + html golden | Migrate now |
+| `collection_literal_smoke`, `collection_get_out_of_bounds`, `collection_indexed_write_end_to_end` | collections | weak/baseline + `io()` | rendered collection semantics + html golden | Migrate now |
+| `collection_methods_end_to_end` | collections | helper-shape assertions | semantic artifact fixture + html golden | Migrate now |
+| `char_basic`, `char_equality`, `char_ordering`, `char_receiver_method`, `char_in_template` | char | baseline + `io()` | rendered char semantics + html golden | Migrate now |
+| `template_output_test`, `template_slot_wrapper_runtime`, `template_slots_nested_runtime`, `template_positional_named_mixed` | templates | baseline or `io()` | artifact-shaped template composition + html golden | Migrate now |
+| `top_level_const_template_multiple_ordered` | templates | minimal assertion | semantic ordering golden | Migrate now |
+| `host_function_integration`, `host_function_with_control_flow`, `js_function_param_passing`, `js_structured_if_no_dispatcher`, `io_single_statement_smoke`, `io_coerce_to_string`, `html_wasm_*` runtime contract fixtures | backend/interop contracts | backend/lowering contract checks | keep artifact assertions as primary contract surface | Leave as backend-contract bucket |
+
+Migration output summary:
+- Reworked neglected-area semantic fixtures to emit observable results through final HTML output.
+- Added/updated semantic `golden/html/index.html` files for migrated success fixtures.
+- Split collection helper-contract coverage into a dedicated case:
+  - `collection_methods_end_to_end` (semantic artifact fixture)
+  - `collection_methods_backend_contract` (helper-shape backend contract assertions)
+
+Fallout summary (intentional strict-fixture output):
+- Machine triage report: `target/test-reports/integration_failure_triage.json`
+- Current strict semantic fallout:
+  - **Control-flow/logical + borrow checker**:
+    - `logical_short_circuit_and [html]`
+    - `logical_short_circuit_or [html]`
+  - Failure reason:
+    - Borrow checker reports inconsistent ownership outcomes for `calls` across short-circuit paths.
+- Scope policy:
+  - Keep these fixtures and failures visible in this PR.
+  - Do not scope-expand into compiler fixes in this PR.
+
 ### PR - Add backend-facing integration checks for runtime-heavy features
 
 Make sure JS/backend semantics are being checked where language behavior depends on runtime lowering.

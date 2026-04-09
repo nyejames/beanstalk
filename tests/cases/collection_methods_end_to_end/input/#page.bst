@@ -1,13 +1,13 @@
--- Exercises all five collection built-in methods through the full pipeline.
+-- Semantic collection-method coverage surfaced through final artifact output.
 
-mutate_and_read || -> Int:
+render_collection_methods || -> String:
     values ~= {10, 20, 30}
     ~values.push(40)
     ~values.set(0, 99)
     ~values.remove(1)
     first = values.get(0) ! 0
-    return values.length()
+    len = values.length()
+    return [:collection_methods_end_to_end first=[first] len=[len]]
 ;
 
-total = mutate_and_read()
-io(total)
+[:[render_collection_methods()]]

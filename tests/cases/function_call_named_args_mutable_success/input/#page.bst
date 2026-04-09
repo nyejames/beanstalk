@@ -5,4 +5,4 @@ increment |value ~Int| -> Int:
 
 x ~= 10
 result = increment(value = ~x)
-io(result)
+[:function_call_named_args_mutable_success result=[result] x=[x]]

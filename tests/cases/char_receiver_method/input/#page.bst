@@ -1,6 +1,3 @@
--- Test user-defined receiver method on Char.
--- This verifies that the Char receiver infrastructure routes correctly.
-
 is_letter_a |this Char| -> Bool:
     return this is 'a'
 ;
@@ -8,5 +5,4 @@ is_letter_a |this Char| -> Bool:
 c = 'a'
 d = 'b'
 
-io(c.is_letter_a())
-io(d.is_letter_a())
+[:char_receiver_method c=[c.is_letter_a()] d=[d.is_letter_a()]]

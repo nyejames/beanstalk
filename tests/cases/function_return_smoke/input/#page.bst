@@ -1,7 +1,6 @@
--- Test function with return
 simple_function |value String| -> String:
-    io(value)
     return value
 ;
 
-simple_function("beans")
+result = simple_function("beans")
+[:function_return_smoke result=[result]]
