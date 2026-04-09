@@ -503,10 +503,7 @@ fn lowers_string_literal_to_exec_const_string() {
         .constants
         .iter()
         .all(|c| !matches!(&c.value, ExecConstValue::Unit));
-    assert!(
-        no_handle_in_constants || true,
-        "no fake Unit constants expected"
-    );
+    assert!(no_handle_in_constants, "no fake Unit constants expected");
 }
 
 // ============================================================
