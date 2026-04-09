@@ -1,5 +1,3 @@
-entry = "."
-
 [backends.html]
 mode = "success"
 warnings = "forbid"
@@ -7,4 +5,4 @@ warnings = "forbid"
 [[backends.html.artifact_assertions]]
 path = "index.html"
 kind = "html"
-must_contain = ["console.log", "mutable_param_reassignment"]
+must_contain = ["__bs_error_bubble"]

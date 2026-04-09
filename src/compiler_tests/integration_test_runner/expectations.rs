@@ -59,6 +59,10 @@ struct ArtifactAssertionToml {
     #[serde(default)]
     must_not_contain: Vec<String>,
     #[serde(default)]
+    must_contain_in_order: Vec<String>,
+    #[serde(default)]
+    must_contain_exactly_once: Vec<String>,
+    #[serde(default)]
     validate_wasm: bool,
     #[serde(default)]
     must_export: Vec<String>,
@@ -190,6 +194,8 @@ fn parse_artifact_assertions(
             kind,
             must_contain: assertion.must_contain.clone(),
             must_not_contain: assertion.must_not_contain.clone(),
+            must_contain_in_order: assertion.must_contain_in_order.clone(),
+            must_contain_exactly_once: assertion.must_contain_exactly_once.clone(),
             validate_wasm: assertion.validate_wasm,
             must_export: assertion.must_export.clone(),
             must_import: assertion.must_import.clone(),
@@ -215,6 +221,8 @@ fn validate_artifact_assertion_fields(
     for (field_name, values) in [
         ("must_contain", &assertion.must_contain),
         ("must_not_contain", &assertion.must_not_contain),
+        ("must_contain_in_order", &assertion.must_contain_in_order),
+        ("must_contain_exactly_once", &assertion.must_contain_exactly_once),
         ("must_export", &assertion.must_export),
         ("must_import", &assertion.must_import),
     ] {
@@ -242,16 +250,24 @@ fn validate_artifact_assertion_shape(
                     assertion_label
                 ));
             }
-            if assertion.must_contain.is_empty() && assertion.must_not_contain.is_empty() {
+            if assertion.must_contain.is_empty()
+                && assertion.must_not_contain.is_empty()
+                && assertion.must_contain_in_order.is_empty()
+                && assertion.must_contain_exactly_once.is_empty()
+            {
                 return Err(format!(
-                    "Expectation file '{}' {} must define 'must_contain' and/or 'must_not_contain' for text artifacts.",
+                    "Expectation file '{}' {} must define at least one of 'must_contain', 'must_not_contain', 'must_contain_in_order', or 'must_contain_exactly_once' for text artifacts.",
                     path.display(),
                     assertion_label
                 ));
             }
         }
         ArtifactKind::Wasm => {
-            if !assertion.must_contain.is_empty() || !assertion.must_not_contain.is_empty() {
+            if !assertion.must_contain.is_empty()
+                || !assertion.must_not_contain.is_empty()
+                || !assertion.must_contain_in_order.is_empty()
+                || !assertion.must_contain_exactly_once.is_empty()
+            {
                 return Err(format!(
                     "Expectation file '{}' {} uses text-only fields on a wasm artifact assertion.",
                     path.display(),
@@ -272,6 +288,8 @@ fn validate_artifact_assertion_shape(
         ArtifactKind::Binary => {
             if !assertion.must_contain.is_empty()
                 || !assertion.must_not_contain.is_empty()
+                || !assertion.must_contain_in_order.is_empty()
+                || !assertion.must_contain_exactly_once.is_empty()
                 || assertion.validate_wasm
                 || !assertion.must_export.is_empty()
                 || !assertion.must_import.is_empty()

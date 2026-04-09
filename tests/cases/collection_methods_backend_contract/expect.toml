@@ -5,4 +5,10 @@ warnings = "forbid"
 [[backends.html.artifact_assertions]]
 path = "index.html"
 kind = "html"
-must_contain = ["__bs_collection_get", "__bs_collection_push", "__bs_collection_remove", "__bs_collection_length"]
+must_contain = [
+    "__bs_collection_get",
+    "__bs_collection_push",
+    "__bs_collection_remove",
+    "__bs_collection_length",
+    "collection_methods_backend_contract",
+]

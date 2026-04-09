@@ -249,6 +249,25 @@ fn validate_single_artifact_assertion(
                     ));
                 }
             }
+
+            if !assertion.must_contain_in_order.is_empty()
+                && !contains_ordered_substrings(text, &assertion.must_contain_in_order)
+            {
+                return Some(format!(
+                    "Artifact '{}' did not contain required ordered fragments {:?}.",
+                    assertion.path, assertion.must_contain_in_order
+                ));
+            }
+
+            for required_once in &assertion.must_contain_exactly_once {
+                let count = count_occurrences(text, required_once);
+                if count != 1 {
+                    return Some(format!(
+                        "Artifact '{}' expected fragment '{}' exactly once, but found {} time(s).",
+                        assertion.path, required_once, count
+                    ));
+                }
+            }
         }
         ArtifactKind::Wasm => {
             let Some(bytes) = output_wasm_bytes(output) else {
@@ -654,4 +673,16 @@ fn contains_ordered_substrings(text: &str, substrings: &[String]) -> bool {
     }
 
     true
+}
+
+fn count_occurrences(text: &str, needle: &str) -> usize {
+    let mut count = 0;
+    let mut offset = 0;
+
+    while let Some(position) = text[offset..].find(needle) {
+        count += 1;
+        offset += position + needle.len();
+    }
+
+    count
 }

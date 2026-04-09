@@ -118,6 +118,12 @@ pub(crate) struct ArtifactAssertion {
     pub must_contain: Vec<String>,
     /// Forbidden text fragments for text artifacts (`html`/`js`).
     pub must_not_contain: Vec<String>,
+    /// Required text fragments in order for text artifacts (`html`/`js`).
+    ///
+    /// Each element must appear in the artifact after the previous one.
+    pub must_contain_in_order: Vec<String>,
+    /// Text fragments that must appear exactly once in text artifacts (`html`/`js`).
+    pub must_contain_exactly_once: Vec<String>,
     /// Enables wasmparser validation for `wasm` artifacts.
     pub validate_wasm: bool,
     /// Required export names for `wasm` artifacts.

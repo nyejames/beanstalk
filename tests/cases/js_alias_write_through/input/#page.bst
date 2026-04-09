@@ -1,6 +1,16 @@
--- Test that implicit borrow creates an alias and write-through works.
--- Validates that __bs_assign_borrow and __bs_read are used for alias semantics.
+-- Prove write-through alias semantics: struct field mutation is observable through
+-- an alias created after the write, demonstrating __bs_write, __bs_assign_borrow, and __bs_read.
 
-x ~= 10
-ref = x
-io(ref)
+Counter = |
+    value Int,
+|
+
+render_write_through || -> String:
+    c ~= Counter(10)
+    c.value = c.value + 5  -- triggers __bs_write on the computed field place
+    alias = c              -- triggers __bs_assign_borrow
+    -- Both reads route through __bs_read
+    return [:write_through value=[c.value] alias_value=[alias.value]]
+;
+
+[:[render_write_through()]]

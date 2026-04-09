@@ -254,6 +254,26 @@ path = "collection_methods_end_to_end"
 tags = ["integration","collections"]
 
 [[case]]
+id = "cast_float_from_string_runtime_output"
+path = "cast_float_from_string_runtime_output"
+tags = ["integration","js-backend"]
+
+[[case]]
+id = "cast_float_invalid_format_fallback"
+path = "cast_float_invalid_format_fallback"
+tags = ["integration","js-backend","results"]
+
+[[case]]
+id = "cast_int_from_string_runtime_output"
+path = "cast_int_from_string_runtime_output"
+tags = ["integration","js-backend"]
+
+[[case]]
+id = "cast_int_invalid_format_fallback"
+path = "cast_int_invalid_format_fallback"
+tags = ["integration","js-backend","results"]
+
+[[case]]
 id = "collection_mutating_method_requires_explicit_receiver_tilde"
 path = "collection_mutating_method_requires_explicit_receiver_tilde"
 tags = ["integration","collections","diagnostics"]
@@ -452,6 +472,21 @@ tags = ["integration","control-flow"]
 id = "error_field_access_in_handler"
 path = "error_field_access_in_handler"
 tags = ["integration","diagnostics"]
+
+[[case]]
+id = "error_helper_bubble_runtime_contract"
+path = "error_helper_bubble_runtime_contract"
+tags = ["integration","js-backend","results","diagnostics"]
+
+[[case]]
+id = "error_helper_push_trace_runtime_contract"
+path = "error_helper_push_trace_runtime_contract"
+tags = ["integration","js-backend","results","diagnostics"]
+
+[[case]]
+id = "error_helper_with_location_runtime_contract"
+path = "error_helper_with_location_runtime_contract"
+tags = ["integration","js-backend","results","diagnostics"]
 
 [[case]]
 id = "float_literal_malformed"
@@ -714,9 +749,19 @@ path = "html_wasm_logging"
 tags = ["integration","html-wasm"]
 
 [[case]]
+id = "html_wasm_const_runtime_const_interleave"
+path = "html_wasm_const_runtime_const_interleave"
+tags = ["integration","html-wasm","templates"]
+
+[[case]]
 id = "html_wasm_multi_fragment_string"
 path = "html_wasm_multi_fragment_string"
 tags = ["integration","html-wasm"]
+
+[[case]]
+id = "html_wasm_multiple_runtime_fragments_order"
+path = "html_wasm_multiple_runtime_fragments_order"
+tags = ["integration","html-wasm","templates"]
 
 [[case]]
 id = "html_wasm_runtime_template"
@@ -1204,9 +1249,19 @@ path = "result_named_handler_scope_bubbles_error"
 tags = ["integration","results","diagnostics"]
 
 [[case]]
+id = "result_collection_get_fallback_output"
+path = "result_collection_get_fallback_output"
+tags = ["integration","results","collections","js-backend"]
+
+[[case]]
 id = "result_named_handler_scope_with_fallback"
 path = "result_named_handler_scope_with_fallback"
 tags = ["integration","results"]
+
+[[case]]
+id = "result_propagation_nested_template_output"
+path = "result_propagation_nested_template_output"
+tags = ["integration","results","templates","js-backend"]
 
 [[case]]
 id = "return_without_correct_signature_type"

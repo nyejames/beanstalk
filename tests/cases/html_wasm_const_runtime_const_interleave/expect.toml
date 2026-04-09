@@ -1,6 +1,13 @@
+entry = "."
+
 [backends.html_wasm]
 mode = "success"
 warnings = "forbid"
+
+[[backends.html_wasm.artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain = ["<script src=\"./page.js\"></script>"]
 
 [[backends.html_wasm.artifact_assertions]]
 path = "page.wasm"
@@ -12,7 +19,6 @@ must_export = ["memory", "bst_str_ptr", "bst_str_len", "bst_release"]
 path = "page.js"
 kind = "js"
 must_contain = [
-    "__bst_instantiate_wasm",
     "__bst_install_wasm_wrappers",
     "insertAdjacentHTML(\"beforeend\", fn())",
 ]

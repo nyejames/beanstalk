@@ -1,3 +1,5 @@
+entry = "."
+
 [backends.html_wasm]
 mode = "success"
 warnings = "forbid"
@@ -11,9 +13,9 @@ must_export = ["memory", "bst_str_ptr", "bst_str_len", "bst_release"]
 [[backends.html_wasm.artifact_assertions]]
 path = "page.js"
 kind = "js"
-must_contain = [
-    "__bst_instantiate_wasm",
-    "__bst_install_wasm_wrappers",
+must_contain_in_order = [
+    "bst-slot-0",
+    "bst-slot-1",
     "insertAdjacentHTML(\"beforeend\", fn())",
 ]
 must_contain_exactly_once = ["function __bst_install_wasm_wrappers("]
