@@ -1,3 +1,5 @@
 [backends.html]
-mode = "success"
+mode = "failure"
 warnings = "forbid"
+error_type = "Syntax"
+message_contains = ["Loop bindings must use `|item, index|` form."]

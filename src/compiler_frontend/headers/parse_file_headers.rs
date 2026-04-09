@@ -271,6 +271,19 @@ fn parse_headers_in_file(
                     .get_function(context.string_table.resolve(name_id))
                     .is_none()
                 {
+                    // Only symbols that begin a top-level statement can start a header
+                    // declaration. Symbols in expression positions (for example loop bindings)
+                    // must stay in the implicit start-function body.
+                    if !symbol_is_at_top_level_statement_start(token_stream) {
+                        start_function_body.push(current_token);
+                        if let Some(path) =
+                            file_import_paths.iter().find(|f| f.name() == Some(name_id))
+                        {
+                            start_function_dependencies.insert(path.to_owned());
+                        }
+                        continue;
+                    }
+
                     if encountered_symbols.contains(&name_id) {
                         if starts_duplicate_top_level_header_declaration(
                             token_stream,
@@ -547,7 +560,7 @@ fn symbol_is_at_top_level_statement_start(token_stream: &FileTokens) -> bool {
 
     matches!(
         token_stream.tokens[token_stream.index - 2].kind,
-        TokenKind::Newline | TokenKind::End | TokenKind::ModuleStart
+        TokenKind::Newline | TokenKind::End | TokenKind::ModuleStart | TokenKind::Hash
     )
 }
 

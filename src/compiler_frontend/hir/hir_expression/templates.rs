@@ -2,6 +2,10 @@
 //!
 //! WHAT: lowers AST templates that survive constant folding into runtime HIR fragments and calls.
 //! WHY: template lowering has enough control-flow and naming detail to warrant its own focused module.
+//!
+//! Boundary note: AST owns normal template parsing/folding. This module keeps a narrow
+//! transitional fallback for already-constant lowering paths so constant contexts stay
+//! statement-free while frontend cleanup work converges on the final boundary.
 
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::compiler_errors::CompilerError;
@@ -21,7 +25,8 @@ use super::LoweredExpression;
 
 impl<'a> HirBuilder<'a> {
     // WHAT: Lowers template expressions to either folded constants or runtime helper calls.
-    // WHY: HIR must preserve template semantics without embedding AST template machinery.
+    // WHY: HIR keeps only runtime call lowering plus a transitional constant fallback for
+    //      already-constant contexts that cannot emit runtime statements.
     pub(crate) fn lower_runtime_template_expression(
         &mut self,
         template: &Template,

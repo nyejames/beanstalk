@@ -229,6 +229,8 @@ Generic expression evaluation determines the natural type of an expression and s
 - Templates requiring runtime evaluation are lowered into **explicit template functions**.
 - Top-level const templates are fully folded (or throw a rule error).
 - Entry-file top-level templates become ordered `start_template_items` so HIR can build canonical start fragments.
+- AST owns normal template parsing and folding boundaries. HIR still keeps a narrow transitional
+  constant-lowering fallback for template values that arrive in already-constant contexts.
 
 **Runtime Expressions**: When expressions cannot be folded at compile time:
 - Variables, function calls or complex operations become `ExpressionKind::Runtime(Vec<AstNode>)`
@@ -247,7 +249,9 @@ Generic expression evaluation determines the natural type of an expression and s
 
 ## Stage 5: HIR Generation (`src/compiler_frontend/hir/`)
 HIR (High-Level IR) is Beanstalk’s semantic lowering stage.
-It converts the fully typed AST into a linear, control-flow-explicit representation suitable for last-use analysis and ownership reasoning. HIR never performs template parsing or folding.
+It converts the fully typed AST into the first backend-facing semantic IR.
+HIR makes control flow, locals, regions, and call structure explicit while still allowing nested expression trees for normal value construction and operators.
+Normal template parsing/folding belongs to AST; HIR only has a narrow transitional constant-template fallback for already-constant lowering paths.
 
 HIR is the first stage where resource lifetime semantics are made explicit, but ownership is not fully resolved yet.
 
@@ -261,8 +265,8 @@ HIR is the first stage where resource lifetime semantics are made explicit, but 
 
 ### Key Features
 **Linear Control Flow**
-- HIR contains no nested expressions or implicit scopes
 - All control-flow is explicit via blocks, jumps and terminators
+- Expression trees remain nested for ordinary operators and value construction
 
 **Start Fragment Stream**
 - HIR exposes `start_fragments` for project builders.

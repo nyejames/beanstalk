@@ -149,7 +149,7 @@ import @styles/docs {navbar, title, section, palette, table, codeblock, theme_he
     [codeblock, $code("bst"):
         [head_of_element: content of element that renders as text (markdown / metadata / alt tag / code ..etc)]
 
-        [ loop text in text_array: 
+        [ loop text_array |text|:
             [text]
         ]
 

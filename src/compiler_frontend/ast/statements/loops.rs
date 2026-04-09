@@ -63,6 +63,19 @@ struct BindingSuffixSplit {
     bindings: ParsedBindingNames,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BareLoopBindingKind {
+    Single,
+    Dual,
+}
+
+#[derive(Debug, Clone)]
+struct BareLoopBindingSuffix {
+    core_tokens: Vec<Token>,
+    location: SourceLocation,
+    kind: BareLoopBindingKind,
+}
+
 pub fn create_loop(
     token_stream: &mut FileTokens,
     context: ScopeContext,
@@ -180,7 +193,8 @@ fn parse_range_loop_header(
     warnings: &mut Vec<CompilerWarning>,
     string_table: &mut StringTable,
 ) -> Result<ParsedLoopHeader, CompilerError> {
-    // Try explicit binding suffixes first so diagnostics can point at malformed binding tails.
+    // Parse explicit `|...|` bindings first, then reject bare binding tails with a targeted
+    // diagnostic before falling back to no-binding range parsing.
     if let Some(pipe_split) = parse_pipe_binding_suffix(header_tokens, string_table)? {
         let range =
             parse_range_loop_spec_from_tokens(&pipe_split.core_tokens, context, string_table)?;
@@ -196,47 +210,11 @@ fn parse_range_loop_header(
         return Ok(ParsedLoopHeader::Range { bindings, range });
     }
 
-    if let Some(dual_bare_split) = split_bare_dual_binding_suffix(header_tokens)
-        && let Ok(range) =
-            parse_range_loop_spec_from_tokens(&dual_bare_split.core_tokens, context, string_table)
+    if let Some(bare_suffix) = detect_bare_loop_binding_suffix(header_tokens)
+        && parse_range_loop_spec_from_tokens(&bare_suffix.core_tokens, context, string_table)
+            .is_ok()
     {
-        let binding_type = range_binding_type(&range, string_table)?;
-        let bindings = declare_loop_bindings(
-            Some(dual_bare_split.bindings),
-            binding_type,
-            context,
-            warnings,
-            string_table,
-        )?;
-
-        return Ok(ParsedLoopHeader::Range { bindings, range });
-    }
-
-    if let Some(single_bare_split) = split_bare_single_binding_suffix(header_tokens)
-        && let Ok(range) =
-            parse_range_loop_spec_from_tokens(&single_bare_split.core_tokens, context, string_table)
-    {
-        let binding_type = range_binding_type(&range, string_table)?;
-        let bindings = declare_loop_bindings(
-            Some(single_bare_split.bindings),
-            binding_type,
-            context,
-            warnings,
-            string_table,
-        )?;
-
-        return Ok(ParsedLoopHeader::Range { bindings, range });
-    }
-
-    if has_trailing_dual_symbol_without_comma(header_tokens) {
-        return_syntax_error!(
-            "Missing comma between bare loop bindings",
-            header_tokens[header_tokens.len() - 1].location.clone(),
-            {
-                CompilationStage => LOOP_PARSING_STAGE,
-                PrimarySuggestion => "Use two bare bindings as 'value, index' or pipe form '|value, index|'",
-            }
-        );
+        return bare_loop_binding_syntax_error(&bare_suffix);
     }
 
     let range = parse_range_loop_spec_from_tokens(header_tokens, context, string_table)?;
@@ -252,8 +230,8 @@ fn parse_non_range_loop_header(
     string_table: &mut StringTable,
 ) -> Result<ParsedLoopHeader, CompilerError> {
     // Conditional loops are distinguished by a full-header boolean expression with no binding
-    // suffix. We still probe binding suffixes first so malformed binding tails get targeted
-    // diagnostics instead of a generic expression parse error.
+    // suffix. Parse explicit `|...|` bindings first, then reject bare binding tails with a
+    // targeted diagnostic before evaluating conditional/collection fallback.
     if let Some(pipe_split) = parse_pipe_binding_suffix(header_tokens, string_table)? {
         let (iterable, item_type) =
             parse_collection_iterable_from_tokens(&pipe_split.core_tokens, context, string_table)?;
@@ -268,59 +246,18 @@ fn parse_non_range_loop_header(
         return Ok(ParsedLoopHeader::Collection { bindings, iterable });
     }
 
+    if let Some(bare_suffix) = detect_bare_loop_binding_suffix(header_tokens)
+        && parses_as_collection_iterable(&bare_suffix.core_tokens, context, string_table)
+    {
+        return bare_loop_binding_syntax_error(&bare_suffix);
+    }
+
     let full_expression = parse_expression_from_tokens(
         header_tokens,
         context,
         &Ownership::ImmutableOwned,
         string_table,
     );
-
-    if let Some(dual_bare_split) = split_bare_dual_binding_suffix(header_tokens)
-        && let Ok((iterable, item_type)) = parse_collection_iterable_from_tokens(
-            &dual_bare_split.core_tokens,
-            context,
-            string_table,
-        )
-    {
-        let bindings = declare_loop_bindings(
-            Some(dual_bare_split.bindings),
-            item_type,
-            context,
-            warnings,
-            string_table,
-        )?;
-
-        return Ok(ParsedLoopHeader::Collection { bindings, iterable });
-    }
-
-    if has_trailing_dual_symbol_without_comma(header_tokens) {
-        return_syntax_error!(
-            "Missing comma between bare loop bindings",
-            header_tokens[header_tokens.len() - 1].location.clone(),
-            {
-                CompilationStage => LOOP_PARSING_STAGE,
-                PrimarySuggestion => "Use two bare bindings as 'item, index' or pipe form '|item, index|'",
-            }
-        );
-    }
-
-    if let Some(single_bare_split) = split_bare_single_binding_suffix(header_tokens)
-        && let Ok((iterable, item_type)) = parse_collection_iterable_from_tokens(
-            &single_bare_split.core_tokens,
-            context,
-            string_table,
-        )
-    {
-        let bindings = declare_loop_bindings(
-            Some(single_bare_split.bindings),
-            item_type,
-            context,
-            warnings,
-            string_table,
-        )?;
-
-        return Ok(ParsedLoopHeader::Collection { bindings, iterable });
-    }
 
     match full_expression {
         Ok(expression) => {
@@ -531,100 +468,103 @@ fn parse_binding_tokens(
     build_binding_name_pair(names)
 }
 
-fn split_bare_dual_binding_suffix(header_tokens: &[Token]) -> Option<BindingSuffixSplit> {
-    // Bare dual form is intentionally strict: only `..., <item>, <index>` at header tail.
-    if header_tokens.len() < 3 {
+fn detect_bare_loop_binding_suffix(header_tokens: &[Token]) -> Option<BareLoopBindingSuffix> {
+    let top_level_indexes = collect_top_level_token_indexes(header_tokens, |token| {
+        !matches!(token, TokenKind::Newline)
+    });
+    if top_level_indexes.len() < 2 {
         return None;
     }
 
-    let TokenKind::Symbol(index_id) = header_tokens[header_tokens.len() - 1].kind else {
-        return None;
-    };
+    if top_level_indexes.len() >= 3 {
+        let first_index = top_level_indexes[top_level_indexes.len() - 3];
+        let separator_index = top_level_indexes[top_level_indexes.len() - 2];
+        let second_index = top_level_indexes[top_level_indexes.len() - 1];
 
-    if !matches!(
-        header_tokens[header_tokens.len() - 2].kind,
-        TokenKind::Comma
-    ) {
-        return None;
+        if matches!(header_tokens[first_index].kind, TokenKind::Symbol(_))
+            && matches!(header_tokens[separator_index].kind, TokenKind::Comma)
+            && matches!(header_tokens[second_index].kind, TokenKind::Symbol(_))
+            && first_index > 0
+        {
+            return Some(BareLoopBindingSuffix {
+                core_tokens: header_tokens[..first_index].to_vec(),
+                location: header_tokens[first_index].location.clone(),
+                kind: BareLoopBindingKind::Dual,
+            });
+        }
+
+        if matches!(header_tokens[first_index].kind, TokenKind::Symbol(_))
+            && matches!(header_tokens[separator_index].kind, TokenKind::Symbol(_))
+            && matches!(header_tokens[second_index].kind, TokenKind::Symbol(_))
+            && separator_index > 0
+        {
+            return Some(BareLoopBindingSuffix {
+                core_tokens: header_tokens[..separator_index].to_vec(),
+                location: header_tokens[separator_index].location.clone(),
+                kind: BareLoopBindingKind::Dual,
+            });
+        }
     }
 
-    let TokenKind::Symbol(item_id) = header_tokens[header_tokens.len() - 3].kind else {
-        return None;
-    };
+    let binding_index = *top_level_indexes.last()?;
+    let core_tail_index = top_level_indexes[top_level_indexes.len() - 2];
 
-    let core_tokens = header_tokens[..header_tokens.len() - 3].to_vec();
-    if core_tokens.is_empty() {
-        return None;
+    if matches!(header_tokens[binding_index].kind, TokenKind::Symbol(_))
+        && !matches!(header_tokens[core_tail_index].kind, TokenKind::Comma)
+    {
+        return Some(BareLoopBindingSuffix {
+            core_tokens: header_tokens[..binding_index].to_vec(),
+            location: header_tokens[binding_index].location.clone(),
+            kind: BareLoopBindingKind::Single,
+        });
     }
 
-    let bindings = ParsedBindingNames {
-        item: ParsedBindingName {
-            id: item_id,
-            location: header_tokens[header_tokens.len() - 3].location.clone(),
-        },
-        index: Some(ParsedBindingName {
-            id: index_id,
-            location: header_tokens[header_tokens.len() - 1].location.clone(),
-        }),
-    };
-
-    Some(BindingSuffixSplit {
-        core_tokens,
-        bindings,
-    })
+    None
 }
 
-fn split_bare_single_binding_suffix(header_tokens: &[Token]) -> Option<BindingSuffixSplit> {
-    // Bare single form accepts one trailing symbol and leaves all preceding tokens as header core.
-    let TokenKind::Symbol(item_id) = header_tokens.last()?.kind else {
-        return None;
-    };
-
-    let core_tokens = header_tokens[..header_tokens.len() - 1].to_vec();
-    if core_tokens.is_empty() {
-        return None;
-    }
-
-    if matches!(
-        header_tokens[header_tokens.len() - 2].kind,
-        TokenKind::Comma
-    ) {
-        return None;
-    }
-
-    let bindings = ParsedBindingNames {
-        item: ParsedBindingName {
-            id: item_id,
-            location: header_tokens[header_tokens.len() - 1].location.clone(),
-        },
-        index: None,
-    };
-
-    Some(BindingSuffixSplit {
-        core_tokens,
-        bindings,
-    })
-}
-
-fn has_trailing_dual_symbol_without_comma(header_tokens: &[Token]) -> bool {
-    if header_tokens.len() < 3 {
+fn parses_as_collection_iterable(
+    iterable_tokens: &[Token],
+    context: &ScopeContext,
+    string_table: &mut StringTable,
+) -> bool {
+    let Ok(iterable_expression) = parse_expression_from_tokens(
+        iterable_tokens,
+        context,
+        &Ownership::ImmutableReference,
+        string_table,
+    ) else {
         return false;
-    }
+    };
 
-    // Bare dual bindings must be `item, index`. This catches `item index` tails while avoiding
-    // operator/field/call tails like `a + b value` and `thing.other value`.
-    matches!(
-        (
-            &header_tokens[header_tokens.len() - 3].kind,
-            &header_tokens[header_tokens.len() - 2].kind,
-            &header_tokens[header_tokens.len() - 1].kind,
-        ),
-        (
-            TokenKind::Symbol(_),
-            TokenKind::Symbol(_),
-            TokenKind::Symbol(_)
-        )
-    )
+    collection_element_type(&iterable_expression.data_type).is_some()
+}
+
+fn bare_loop_binding_syntax_error<T>(
+    bare_binding: &BareLoopBindingSuffix,
+) -> Result<T, CompilerError> {
+    match bare_binding.kind {
+        BareLoopBindingKind::Single => {
+            return_syntax_error!(
+                "Loop bindings must use `|...|` after the loop source or range.",
+                bare_binding.location.clone(),
+                {
+                    CompilationStage => LOOP_PARSING_STAGE,
+                    PrimarySuggestion => "Use syntax like `loop items |item|:` or `loop 0 to 10 |i|:`",
+                }
+            )
+        }
+        BareLoopBindingKind::Dual => {
+            return_syntax_error!(
+                "Loop bindings must use `|item, index|` form.",
+                bare_binding.location.clone(),
+                {
+                    CompilationStage => LOOP_PARSING_STAGE,
+                    PrimarySuggestion => "Write `loop items |item, index|:` instead of bare trailing names.",
+                    AlternativeSuggestion => "Range loops use the same shape, e.g. `loop 0 to 10 |value, index|:`",
+                }
+            )
+        }
+    }
 }
 
 fn build_binding_name_pair(

@@ -2,4 +2,4 @@
 mode = "failure"
 warnings = "forbid"
 error_type = "Syntax"
-message_contains = ["Expected a parameter type declaration"]
+message_contains = ["Expected '=' after declaration type"]

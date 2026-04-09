@@ -15,6 +15,6 @@ else
 ;
 
 -- Test loop
-loop 0 to 3 i:
+loop 0 to 3 |i|:
     io(i)
 ;

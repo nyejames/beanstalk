@@ -445,7 +445,7 @@ loop items |item, index|:
 ;
 ```
 
-If the current item or counter is not needed, the binding brackets can be skipped:
+If the current item or counter is not needed, omit bindings entirely:
 
 ```beanstalk
 loop items:

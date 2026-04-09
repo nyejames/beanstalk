@@ -27,14 +27,14 @@ if value is:
 
 -- Test loop
 sum ~= 0
-loop 1 to 5 i:
+loop 1 to 5 |i|:
     sum = sum + i
 ;
 io([: Sum 1-5 = [sum]])
 
 -- Secondary loop pass
 total ~= 0
-loop 1 to 5 num:
+loop 1 to 5 |num|:
     total = total + num
 ;
 io([: Total = [total]])

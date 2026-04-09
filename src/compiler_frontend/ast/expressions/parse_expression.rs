@@ -1123,8 +1123,16 @@ fn dispatch_expression_token(
         }
 
         TokenKind::Must | TokenKind::TraitThis => {
-            let keyword = reserved_trait_keyword(token_stream.current_token_kind())
-                .expect("reserved trait token should map to a keyword");
+            let Some(keyword) = reserved_trait_keyword(token_stream.current_token_kind()) else {
+                return_compiler_error!(
+                    "Reserved trait token dispatch mismatch in expression parsing: {:?}",
+                    token_stream.current_token_kind();
+                    {
+                        CompilationStage => "Expression Parsing",
+                        PrimarySuggestion => "This indicates parser dispatch drift. Please report this compiler bug.",
+                    }
+                );
+            };
 
             Err(reserved_trait_keyword_error(
                 keyword,
@@ -1609,8 +1617,16 @@ fn parse_copy_place_expression(
         }
 
         TokenKind::Must | TokenKind::TraitThis => {
-            let keyword = reserved_trait_keyword(token_stream.current_token_kind())
-                .expect("reserved trait token should map to a keyword");
+            let Some(keyword) = reserved_trait_keyword(token_stream.current_token_kind()) else {
+                return_compiler_error!(
+                    "Reserved trait token dispatch mismatch in copy-place parsing: {:?}",
+                    token_stream.current_token_kind();
+                    {
+                        CompilationStage => "Expression Parsing",
+                        PrimarySuggestion => "This indicates parser dispatch drift. Please report this compiler bug.",
+                    }
+                );
+            };
 
             Err(reserved_trait_keyword_error(
                 keyword,

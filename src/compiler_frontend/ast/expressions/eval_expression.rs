@@ -280,6 +280,7 @@ fn resolve_expression_result_type(
         );
     }
 
+    // Invariant: we return early unless exactly one resolved type remains on the stack.
     Ok(stack
         .pop()
         .expect("validated expression typing stack should contain one result type"))
@@ -679,6 +680,7 @@ fn pop_higher_precedence(
         };
 
         if should_pop {
+            // Invariant: `last()` returned `Some`, so a matching `pop()` must succeed.
             output_queue.push(
                 operators_stack
                     .pop()

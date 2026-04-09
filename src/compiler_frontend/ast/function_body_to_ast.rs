@@ -486,8 +486,11 @@ fn unexpected_function_body_token_error(
         }
 
         TokenKind::Must | TokenKind::TraitThis => {
-            let keyword = reserved_trait_keyword(token)
-                .expect("reserved trait token should map to a keyword");
+            let Some(keyword) = reserved_trait_keyword(token) else {
+                return CompilerError::compiler_error(
+                    "Reserved trait token dispatch mismatch in function-body statement parsing.",
+                );
+            };
 
             reserved_trait_keyword_error(
                 keyword,

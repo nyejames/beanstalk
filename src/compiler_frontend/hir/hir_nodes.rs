@@ -1,16 +1,17 @@
 //! ============================================================
 //!                         HIR Nodes
 //! ============================================================
-//! A Fully resolved, canonical semantic representation of Beanstalk programs.
-//!  - All symbols are resolved to stable IDs
-//!  - All expressions fully typed
-//!  - Explicit locals and regions
-//!  - No AST artefacts
-//!  - No inference remnants
+//! This module defines the frontend HIR data model.
 //!
-//! This module defines the High-Level Intermediate Representation (HIR) for Beanstalk.
-//! HIR is a structured, semantically rich IR designed for borrow checking, move analysis,
-//! and preparing code for reliable lowering to multiple backends.
+//! HIR is Beanstalk's typed semantic IR between AST and backend lowering:
+//! - control flow is explicit via blocks/statements/terminators
+//! - locals, regions, and symbols are keyed by stable IDs
+//! - source/name/type metadata is carried through side tables
+//! - expression trees are still allowed for normal operators/value construction
+//!
+//! HIR strips AST parsing-only machinery from normal lowering paths.
+//! Template parsing/folding belongs to AST; HIR still retains a narrow transitional
+//! constant-template fallback used only when lowering already-constant contexts.
 //!
 //! ============================================================
 //!                     Memory Semantics
@@ -22,8 +23,8 @@
 //!   - RegionId for lifetime analysis
 //!   - Mutability flags for exclusivity checking
 //!
-//! Ownership analysis runs as a separate pass keyed by HIR IDs.
-//! See: docs/Beanstalk Memory Management.md
+//! Ownership/borrow analysis runs as a separate pass keyed by HIR IDs.
+//! See: docs/memory-management-design.md
 //! The analysis phases AFTER the HIR creation are responsible for giving the project builder
 //! info about where it could insert possible_drops, drops, or other optimisations.
 //!
@@ -279,7 +280,6 @@ pub enum HirPlace {
         field: FieldId,
     },
 
-    #[allow(dead_code)] // Planned: indexed place projections for collection/tuple accesses.
     Index {
         base: Box<HirPlace>,
         index: Box<HirExpression>,

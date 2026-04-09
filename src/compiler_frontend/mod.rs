@@ -267,13 +267,16 @@ impl CompilerFrontend {
     /// -----------------------------
     /// HIR GENERATION
     /// -----------------------------
-    /// Generate HIR from AST nodes, linearizing expressions and creating
-    /// a place-based representation suitable for borrow checking analysis.
+    /// Generate HIR from AST nodes, making control flow explicit and preserving typed
+    /// expression trees where appropriate for backend-facing semantic lowering.
+    ///
+    /// HIR does not own general template parsing/folding. A project path resolver is still
+    /// required here for a narrow transitional constant-template fallback during lowering.
     pub fn generate_hir(&mut self, ast: Ast) -> Result<HirModule, CompilerMessages> {
         let Some(project_path_resolver) = self.project_path_resolver.clone() else {
             return Err(CompilerMessages::from_error_ref(
                 CompilerError::compiler_error(
-                    "HIR generation requires a project path resolver for template folding.",
+                    "HIR generation requires a project path resolver for transitional constant-template lowering.",
                 ),
                 &self.string_table,
             ));

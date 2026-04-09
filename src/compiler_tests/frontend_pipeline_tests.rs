@@ -292,7 +292,7 @@ fn compiles_single_file_program_through_borrow_check() {
     let mut project = FrontendProject::new(
         &[(
             "src/#page.bst",
-            "Point = |\n    value Int,\n|\npoint = Point(1)\nloop 0 to 2 i:\n    io(point.value)\n;\n",
+            "Point = |\n    value Int,\n|\npoint = Point(1)\nloop 0 to 2 |i|:\n    io(point.value)\n;\n",
         )],
         "src/#page.bst",
     );

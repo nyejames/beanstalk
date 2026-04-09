@@ -98,7 +98,7 @@ import @styles/docs {navbar, title, section, palette, table, codeblock, theme_he
                 total += value
             ;
 
-            loop v in values:
+            loop values |v|:
                 apply(v)
             ;
 
@@ -125,14 +125,14 @@ import @styles/docs {navbar, title, section, palette, table, codeblock, theme_he
     [codeblock, $code("bst"):
         map |items {Int}, f Fn(Int -> Int)| -> {Int}:
             result ~= {}
-            loop item in items:
+            loop items |item|:
                 result.push(f(item))
             ;
             return result
         ;
 
         each |items {Int}, f Fn(Int)|:
-            loop item in items:
+            loop items |item|:
                 f(item)
             ;
         ;

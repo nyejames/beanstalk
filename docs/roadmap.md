@@ -246,9 +246,7 @@ Verify that the JS backend behavior matches the intended Alpha language rules fo
 - Audit runtime helpers involved in aliasing, copying, arrays, result propagation, casts, and builtin helpers.
 - Add or expand integration tests where behavior depends on emitted JS runtime logic.
 - Fix any semantics that are currently “working by accident”.
-- PullDeprecated enum variant (src/compiler_frontend/ast/field_access.rs:176, 189, 387): A deprecated CollectionBuiltinMethod variant guarded by three unreachable!() calls.
-- Audit collection builtin lowering from AST member syntax through backend-visible call semantics
-- Remove deprecated collection builtin compatibility paths instead of preserving them behind unreachable guards
+- Re-check collection builtin lowering in `src/compiler_frontend/ast/field_access/collection_builtin.rs` and remove any compatibility-only branches that drift from current frontend semantics.
 - Confirm builtins using synthetic/fake parameter declarations are either removed or intentionally retained with clear justification
 - Add backend-facing tests for:
   - collection get/set/push/remove/length

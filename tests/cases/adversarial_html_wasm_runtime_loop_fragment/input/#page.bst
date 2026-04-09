@@ -1,6 +1,6 @@
 value ~= 0
 
-loop 0 to 3 i:
+loop 0 to 3 |i|:
     value = value + i
 ;
 

@@ -35,7 +35,7 @@ import @styles/docs {navbar, title, section, palette, table, data, codeblock, co
     - **Collection loops can bind the current item**
     - **An optional second binding provides the zero-based iteration index**
     - **Loop bindings are written after the loop condition**
-    - **Binding brackets can be written as [$code("bst"):|item, index|] or skipped entirely**
+    - **When bindings exist, they always use [$code("bst"):|...|] syntax**
     - **No [$code("bst"):reverse] keyword**; direction is inferred from the bounds
     - **[$code("bst"):by]** controls step size and works with both directions
 
@@ -65,14 +65,10 @@ import @styles/docs {navbar, title, section, palette, table, data, codeblock, co
     - a **collection** (yielding the current item), or
     - a **range** (yielding the current counter)
 
-    Bindings are written after the loop condition. They can be wrapped in brackets for consistency, or written directly without them.
+    Bindings are written after the loop condition using `|...|`.
 
     [codeblock, $code("bst"):
         loop items |item|:
-            io(item.to_string())
-        ;
-
-        loop items item:
             io(item.to_string())
         ;
     ]
@@ -81,10 +77,6 @@ import @styles/docs {navbar, title, section, palette, table, data, codeblock, co
 
     [codeblock, $code("bst"):
         loop items |item, index|:
-            io([index]: [item])
-        ;
-
-        loop items item, index:
             io([index]: [item])
         ;
     ]
@@ -106,7 +98,7 @@ import @styles/docs {navbar, title, section, palette, table, data, codeblock, co
         ;
         -- yields: 0, 1, 2, 3, 4, 5, 6, 7, 8, 9
 
-        loop 0 upto 10 i:
+        loop 0 upto 10 |i|:
             io(i.to_string())
         ;
         -- yields: 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
@@ -153,7 +145,7 @@ import @styles/docs {navbar, title, section, palette, table, data, codeblock, co
     You can also supply an explicit step:
 
     [codeblock, $code("bst"):
-        loop 10 upto 0 by 2 i:
+        loop 10 upto 0 by 2 |i|:
             io(i.to_string())
         ;
         -- yields: 10, 8, 6, 4, 2, 0

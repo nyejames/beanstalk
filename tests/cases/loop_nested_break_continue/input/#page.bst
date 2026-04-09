@@ -3,8 +3,8 @@ outer = {1, 2, 3}
 inner = {1, 2, 3}
 total ~= 0
 
-loop outer outer_item, outer_index:
-    loop inner inner_item, inner_index:
+loop outer |outer_item, outer_index|:
+    loop inner |inner_item, inner_index|:
         if inner_index < 1:
             continue
         ;

@@ -105,3 +105,30 @@ fn reports_reserved_this_keyword_in_declaration_type_position() {
     assert!(error.msg.contains("'This' is reserved for traits"));
     assert!(error.msg.contains("not implemented yet in Alpha"));
 }
+
+#[test]
+fn reports_reserved_must_keyword_in_expression_position() {
+    let error = parse_single_file_ast_error("value = must\n");
+
+    assert_eq!(error.error_type, ErrorType::Rule);
+    assert!(error.msg.contains("'must' is reserved for traits"));
+    assert!(error.msg.contains("not implemented yet in Alpha"));
+}
+
+#[test]
+fn reports_reserved_this_keyword_in_expression_position() {
+    let error = parse_single_file_ast_error("value = This\n");
+
+    assert_eq!(error.error_type, ErrorType::Rule);
+    assert!(error.msg.contains("'This' is reserved for traits"));
+    assert!(error.msg.contains("not implemented yet in Alpha"));
+}
+
+#[test]
+fn reports_reserved_must_keyword_in_copy_place_position() {
+    let error = parse_single_file_ast_error("value = copy must\n");
+
+    assert_eq!(error.error_type, ErrorType::Rule);
+    assert!(error.msg.contains("'must' is reserved for traits"));
+    assert!(error.msg.contains("not implemented yet in Alpha"));
+}

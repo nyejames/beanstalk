@@ -50,7 +50,7 @@ fn parses_conditional_loop_without_bindings() {
 }
 
 #[test]
-fn parses_range_loop_with_bracketed_binding() {
+fn parses_range_loop_with_pipe_binding() {
     let (ast, string_table) =
         parse_loop_fixture("sum ~= 0\nloop 1 upto 5 by 2 |i|:\n    sum = sum + i\n;");
 
@@ -84,26 +84,6 @@ fn parses_range_loop_with_bracketed_binding() {
 }
 
 #[test]
-fn parses_range_loop_with_bare_binding() {
-    let (ast, string_table) = parse_loop_fixture("sum ~= 0\nloop 1 to 4 i:\n    sum = sum + i\n;");
-
-    let body = loop_function_body(&ast, &string_table);
-
-    let NodeKind::RangeLoop { bindings, .. } = &body[1].kind else {
-        panic!("expected range loop in function body");
-    };
-
-    assert_eq!(
-        bindings
-            .item
-            .as_ref()
-            .and_then(|binding| binding.id.name_str(&string_table)),
-        Some("i")
-    );
-    assert!(bindings.index.is_none());
-}
-
-#[test]
 fn parses_range_loop_with_value_and_index_bindings() {
     let (ast, string_table) =
         parse_loop_fixture("sum ~= 0\nloop 0 to 4 |value, index|:\n    sum = sum + value\n;");
@@ -131,7 +111,7 @@ fn parses_range_loop_with_value_and_index_bindings() {
 }
 
 #[test]
-fn parses_collection_loop_with_bracketed_item_binding() {
+fn parses_collection_loop_with_pipe_item_binding() {
     let (ast, string_table) =
         parse_loop_fixture("items = {1, 2, 3}\nloop items |item|:\n    io(item)\n;");
 
@@ -163,30 +143,9 @@ fn parses_collection_loop_with_bracketed_item_binding() {
 }
 
 #[test]
-fn parses_collection_loop_with_bare_item_binding() {
+fn parses_collection_loop_with_item_and_index_pipe_bindings() {
     let (ast, string_table) =
-        parse_loop_fixture("items = {1, 2, 3}\nloop items item:\n    io(item)\n;");
-
-    let body = loop_function_body(&ast, &string_table);
-
-    let NodeKind::CollectionLoop { bindings, .. } = &body[1].kind else {
-        panic!("expected collection loop in function body");
-    };
-
-    assert_eq!(
-        bindings
-            .item
-            .as_ref()
-            .and_then(|binding| binding.id.name_str(&string_table)),
-        Some("item")
-    );
-    assert!(bindings.index.is_none());
-}
-
-#[test]
-fn parses_collection_loop_with_item_and_index_bindings() {
-    let (ast, string_table) =
-        parse_loop_fixture("items = {1, 2, 3}\nloop items item, index:\n    io(item)\n;");
+        parse_loop_fixture("items = {1, 2, 3}\nloop items |item, index|:\n    io(item)\n;");
 
     let body = loop_function_body(&ast, &string_table);
 
@@ -257,6 +216,79 @@ fn rejects_old_in_loop_syntax_with_migration_error() {
             .contains("Old loop syntax 'loop <binder> in ...' was removed"),
         "{}",
         error.msg
+    );
+}
+
+#[test]
+fn rejects_collection_loop_with_bare_single_binding() {
+    let error = parse_loop_fixture_error("items = {1, 2, 3}\nloop items item:\n    io(item)\n;");
+    assert!(
+        error.msg.contains("Loop bindings must use `|...|`"),
+        "{}",
+        error.msg
+    );
+    assert_eq!(
+        error
+            .metadata
+            .get(&ErrorMetaDataKey::PrimarySuggestion)
+            .map(String::as_str),
+        Some("Use syntax like `loop items |item|:` or `loop 0 to 10 |i|:`")
+    );
+}
+
+#[test]
+fn rejects_collection_loop_with_bare_dual_bindings() {
+    let error =
+        parse_loop_fixture_error("items = {1, 2, 3}\nloop items item, index:\n    io(item)\n;");
+    assert!(
+        error
+            .msg
+            .contains("Loop bindings must use `|item, index|` form."),
+        "{}",
+        error.msg
+    );
+    assert_eq!(
+        error
+            .metadata
+            .get(&ErrorMetaDataKey::PrimarySuggestion)
+            .map(String::as_str),
+        Some("Write `loop items |item, index|:` instead of bare trailing names.")
+    );
+}
+
+#[test]
+fn rejects_range_loop_with_bare_single_binding() {
+    let error = parse_loop_fixture_error("loop 0 to 10 i:\n    io(i)\n;");
+    assert!(
+        error.msg.contains("Loop bindings must use `|...|`"),
+        "{}",
+        error.msg
+    );
+    assert_eq!(
+        error
+            .metadata
+            .get(&ErrorMetaDataKey::PrimarySuggestion)
+            .map(String::as_str),
+        Some("Use syntax like `loop items |item|:` or `loop 0 to 10 |i|:`")
+    );
+}
+
+#[test]
+fn rejects_range_loop_with_bare_dual_bindings() {
+    let error = parse_loop_fixture_error("loop 0 to 10 i, index:\n    io(i)\n;");
+    assert!(
+        error
+            .msg
+            .contains("Loop bindings must use `|item, index|` form."),
+        "{}",
+        error.msg
+    );
+    assert_eq!(
+        error
+            .metadata
+            .get(&ErrorMetaDataKey::PrimarySuggestion)
+            .map(String::as_str),
+        Some("Write `loop items |item, index|:` instead of bare trailing names.")
     );
 }
 
@@ -398,13 +430,13 @@ fn rejects_float_range_without_by() {
 }
 
 #[test]
-fn rejects_missing_comma_between_dual_bare_bindings() {
+fn rejects_missing_comma_between_bare_dual_bindings() {
     let error =
         parse_loop_fixture_error("items = {1, 2, 3}\nloop items item index:\n    io(item)\n;");
     assert!(
         error
             .msg
-            .contains("Missing comma between bare loop bindings")
+            .contains("Loop bindings must use `|item, index|` form.")
     );
 }
 
@@ -415,39 +447,22 @@ fn rejects_missing_closing_pipe_in_loop_bindings() {
 }
 
 #[test]
-fn parses_range_loop_with_bare_binding_after_complex_step_expression() {
-    let (ast, string_table) = parse_loop_fixture(
+fn rejects_range_loop_with_bare_binding_after_complex_step_expression() {
+    let error = parse_loop_fixture_error(
         "limit = 8\nstep = 2\nsum ~= 0\nloop 0 to limit by step i:\n    sum = sum + i\n;",
     );
-    let body = loop_function_body(&ast, &string_table);
-
-    let NodeKind::RangeLoop {
-        bindings, range, ..
-    } = &body[3].kind
-    else {
-        panic!("expected range loop in function body");
-    };
-
-    assert_eq!(
-        bindings
-            .item
-            .as_ref()
-            .and_then(|binding| binding.id.name_str(&string_table)),
-        Some("i")
+    assert!(
+        error.msg.contains("Loop bindings must use `|...|`"),
+        "{}",
+        error.msg
     );
-    assert!(matches!(
-        range.step.as_ref().map(|expr| &expr.kind),
-        Some(ExpressionKind::Reference(_))
-    ));
 }
 
 #[test]
-fn operator_tail_does_not_trigger_missing_comma_bare_binding_diagnostic() {
+fn operator_tail_does_not_trigger_bare_loop_binding_diagnostic() {
     let error = parse_loop_fixture_error("a = 1\nb = 2\nloop a + b value:\n    io(1)\n;");
     assert!(
-        !error
-            .msg
-            .contains("Missing comma between bare loop bindings"),
+        !error.msg.contains("Loop bindings must use"),
         "{}",
         error.msg
     );

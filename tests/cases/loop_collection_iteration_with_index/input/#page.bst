@@ -2,7 +2,7 @@
 items = {10, 20, 30}
 weighted ~= 0
 
-loop items item, index:
+loop items |item, index|:
     weighted = weighted + item + index
 ;
 
