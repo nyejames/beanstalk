@@ -13,6 +13,9 @@ use crate::compiler_frontend::ast::expressions::expression::{Expression, Express
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::identifier_policy::{
+    IdentifierNamingKind, ensure_not_keyword_shadow_identifier, naming_warning_for_identifier,
+};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::reserved_trait_syntax::{
     reserved_trait_keyword, reserved_trait_keyword_error,
@@ -157,6 +160,23 @@ fn parse_signature_member(
     expression_context: &ScopeContext,
     string_table: &mut StringTable,
 ) -> Result<Declaration, CompilerError> {
+    let member_name = full_name
+        .name()
+        .map(|id| string_table.resolve(id).to_owned())
+        .unwrap_or_else(|| String::from("<unknown>"));
+    ensure_not_keyword_shadow_identifier(
+        &member_name,
+        token_stream.current_location(),
+        "Struct/Parameter Parsing",
+    )?;
+    if let Some(warning) = naming_warning_for_identifier(
+        &member_name,
+        token_stream.current_location(),
+        IdentifierNamingKind::ValueLike,
+    ) {
+        expression_context.emit_warning(warning);
+    }
+
     // Move past the name.
     token_stream.advance();
 

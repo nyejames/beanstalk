@@ -19,6 +19,7 @@ use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::headers::parse_file_headers::{Header, HeaderKind};
+use crate::compiler_frontend::identifier_policy::ensure_not_keyword_shadow_identifier;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::projects::settings::IMPLICIT_START_FUNC_NAME;
 
@@ -33,19 +34,25 @@ impl<'a> AstBuildState<'a> {
         string_table: &mut StringTable,
     ) -> Result<(), CompilerMessages> {
         for header in sorted_headers {
-            if let Some(symbol_name) = header.tokens.src_path.name()
-                && is_reserved_builtin_symbol(string_table.resolve(symbol_name))
-            {
-                return Err(self.error_messages(
-                    CompilerError::new_rule_error(
-                        format!(
-                            "'{}' is reserved as a builtin language type.",
-                            string_table.resolve(symbol_name)
+            if let Some(symbol_name) = header.tokens.src_path.name() {
+                let symbol_name_text = string_table.resolve(symbol_name).to_owned();
+
+                ensure_not_keyword_shadow_identifier(
+                    &symbol_name_text,
+                    header.name_location.to_owned(),
+                    "Module Declaration Collection",
+                )
+                .map_err(|error| self.error_messages(error, string_table))?;
+
+                if is_reserved_builtin_symbol(&symbol_name_text) {
+                    return Err(self.error_messages(
+                        CompilerError::new_rule_error(
+                            format!("'{}' is reserved as a builtin language type.", symbol_name_text),
+                            header.name_location.to_owned(),
                         ),
-                        header.name_location.to_owned(),
-                    ),
-                    string_table,
-                ));
+                        string_table,
+                    ));
+                }
             }
 
             self.module_file_paths.insert(header.source_file.to_owned());

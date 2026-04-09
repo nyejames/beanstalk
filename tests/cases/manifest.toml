@@ -1448,3 +1448,18 @@ tags = ["integration", "receiver-methods", "imports"]
 id = "struct_unknown_field_access_diagnostic"
 path = "struct_unknown_field_access_diagnostic"
 tags = ["integration", "structs", "diagnostics"]
+
+[[case]]
+id = "identifier_naming_warnings_mixed"
+path = "identifier_naming_warnings_mixed"
+tags = ["integration", "diagnostics"]
+
+[[case]]
+id = "identifier_keyword_shadow_header_error"
+path = "identifier_keyword_shadow_header_error"
+tags = ["integration", "diagnostics"]
+
+[[case]]
+id = "identifier_keyword_shadow_ast_error"
+path = "identifier_keyword_shadow_ast_error"
+tags = ["integration", "diagnostics"]

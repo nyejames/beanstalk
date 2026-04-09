@@ -215,29 +215,6 @@ The goal is to eliminate those assumptions where malformed user syntax, reserved
 - Remaining panic-only paths are clearly internal compiler invariants rather than user-input validation shortcuts.
 - The compiler is closer to Alpha release-gate expectations for clean unsupported-syntax handling.
 
-### PR - Add warnings for incorrect variable naming format
-
-**Checklist**
-- Compiler should generate warnings for structs/choices/traits that don't use CamelCase. Underscores should be a warning here too.
-- Compiler should generate warnings for non structs/choices/traits that are not all lowercase (plus underscores)
-- Fully capitalised names should be allowed for constant variables only for now (preceded by a hash)
-
-### PR - Add variable-name ban list / reserved near-builtins
-
-Prevent obviously stupid or misleading variable names that collide with builtin semantics.
-
-**Checklist**
-- Define a ban/reservation policy for misleading names such as `_true`, `FALSE`, and too-close builtins.
-- Enforce it in parsing/name-resolution/type stages as appropriate.
-- Produce good diagnostics explaining why the name is reserved.
-- Add integration tests.
-
-**Notes**
-For now, anything that shadows a keyword (but just with any or all of the same letters capitalised or with n underscores in front of it) will be a hard error.
-
-**Done when**
-- Users cannot create confusing pseudo-builtin identifiers.
-
 ### PR - Dev server hardening
 The dev server current can hang when clicking links and sometimes takes a very long time to respond to file changes and perform a rebuild.
 

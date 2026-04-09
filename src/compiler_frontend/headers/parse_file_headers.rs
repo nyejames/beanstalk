@@ -17,6 +17,9 @@ use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::{CompilerWarning, WarningKind};
 use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::identity::FileId;
+use crate::compiler_frontend::identifier_policy::{
+    IdentifierNamingKind, ensure_not_keyword_shadow_identifier, naming_warning_for_identifier,
+};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::const_paths::parse_import_clause_tokens;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
@@ -71,6 +74,7 @@ struct HeaderParseContext<'a> {
 // Shared per-header builder inputs that stay stable while one declaration is classified.
 struct HeaderBuildContext<'a> {
     host_function_registry: &'a HostRegistry,
+    warnings: &'a mut Vec<CompilerWarning>,
     project_path_resolver: Option<ProjectPathResolver>,
     path_format_config: PathStringFormatConfig,
     source_file: &'a InternedPath,
@@ -306,6 +310,7 @@ fn parse_headers_in_file(
                         let source_file = token_stream.src_path.to_owned();
                         let mut build_context = HeaderBuildContext {
                             host_function_registry: context.host_function_registry,
+                            warnings: context.warnings,
                             project_path_resolver: context.project_path_resolver.clone(),
                             path_format_config: context.path_format_config.clone(),
                             source_file: &source_file,
@@ -413,6 +418,7 @@ fn parse_headers_in_file(
                     let source_file = token_stream.src_path.to_owned();
                     let mut build_context = HeaderBuildContext {
                         host_function_registry: context.host_function_registry,
+                        warnings: context.warnings,
                         project_path_resolver: context.project_path_resolver.clone(),
                         path_format_config: context.path_format_config.clone(),
                         source_file: &source_file,
@@ -584,6 +590,13 @@ fn create_header(
     name_location: SourceLocation,
     context: &mut HeaderBuildContext<'_>,
 ) -> Result<Header, CompilerError> {
+    let Some(declaration_name) = full_name.name() else {
+        return Err(CompilerError::compiler_error(
+            "Header declaration path is missing its declaration name.",
+        ));
+    };
+    let declaration_name_text = context.string_table.resolve(declaration_name);
+
     // Only imported symbols become inter-header dependency edges here.
     let mut dependencies: HashSet<InternedPath> = HashSet::new();
     let mut kind: HeaderKind = HeaderKind::StartFunction;
@@ -592,6 +605,18 @@ fn create_header(
 
     match current_token {
         TokenKind::TypeParameterBracket => {
+            ensure_not_keyword_shadow_identifier(
+                declaration_name_text,
+                name_location.to_owned(),
+                "Header Parsing",
+            )?;
+            emit_header_naming_warning(
+                context.warnings,
+                declaration_name_text,
+                name_location.to_owned(),
+                IdentifierNamingKind::ValueLike,
+            );
+
             let signature_context = ScopeContext::new(
                 ContextKind::ConstantHeader,
                 full_name.to_owned(),
@@ -604,6 +629,7 @@ fn create_header(
             .with_path_format_config(context.path_format_config.clone());
             let signature = FunctionSignature::new(
                 token_stream,
+                context.warnings,
                 context.string_table,
                 &full_name,
                 &signature_context,
@@ -688,6 +714,18 @@ fn create_header(
 
         TokenKind::Assign => {
             if let Some(TokenKind::TypeParameterBracket) = token_stream.peek_next_token() {
+                ensure_not_keyword_shadow_identifier(
+                    declaration_name_text,
+                    name_location.to_owned(),
+                    "Header Parsing",
+                )?;
+                emit_header_naming_warning(
+                    context.warnings,
+                    declaration_name_text,
+                    name_location.to_owned(),
+                    IdentifierNamingKind::TypeLike,
+                );
+
                 token_stream.advance();
                 let mut seen_opening_bracket = false;
 
@@ -743,6 +781,18 @@ fn create_header(
                     },
                 };
             } else if exported {
+                ensure_not_keyword_shadow_identifier(
+                    declaration_name_text,
+                    name_location.to_owned(),
+                    "Header Parsing",
+                )?;
+                emit_header_naming_warning(
+                    context.warnings,
+                    declaration_name_text,
+                    name_location.to_owned(),
+                    IdentifierNamingKind::TopLevelConstant,
+                );
+
                 let constant_header = create_constant_header_payload(
                     &full_name,
                     token_stream,
@@ -765,6 +815,18 @@ fn create_header(
         | TokenKind::OpenCurly
         | TokenKind::Symbol(_) => {
             if exported {
+                ensure_not_keyword_shadow_identifier(
+                    declaration_name_text,
+                    name_location.to_owned(),
+                    "Header Parsing",
+                )?;
+                emit_header_naming_warning(
+                    context.warnings,
+                    declaration_name_text,
+                    name_location.to_owned(),
+                    IdentifierNamingKind::TopLevelConstant,
+                );
+
                 let constant_header = create_constant_header_payload(
                     &full_name,
                     token_stream,
@@ -779,7 +841,20 @@ fn create_header(
         }
 
         TokenKind::DoubleColon => {
-            let choice_header = parse_choice_header_payload(token_stream, context.string_table)?;
+            ensure_not_keyword_shadow_identifier(
+                declaration_name_text,
+                name_location.to_owned(),
+                "Header Parsing",
+            )?;
+            emit_header_naming_warning(
+                context.warnings,
+                declaration_name_text,
+                name_location.to_owned(),
+                IdentifierNamingKind::TypeLike,
+            );
+
+            let choice_header =
+                parse_choice_header_payload(token_stream, context.string_table, context.warnings)?;
             body = choice_header.body;
             kind = HeaderKind::Choice {
                 metadata: choice_header.metadata,
@@ -801,6 +876,17 @@ fn create_header(
         source_file: context.source_file.to_owned(),
         file_imports: context.file_import_entries.to_vec(),
     })
+}
+
+fn emit_header_naming_warning(
+    warnings: &mut Vec<CompilerWarning>,
+    identifier: &str,
+    location: SourceLocation,
+    naming_kind: IdentifierNamingKind,
+) {
+    if let Some(warning) = naming_warning_for_identifier(identifier, location, naming_kind) {
+        warnings.push(warning);
+    }
 }
 
 struct ConstantHeaderPayload {

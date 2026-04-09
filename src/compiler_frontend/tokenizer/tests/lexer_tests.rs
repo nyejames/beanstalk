@@ -98,6 +98,24 @@ fn tokenizes_reserved_trait_keywords_as_reserved_tokens() {
 }
 
 #[test]
+fn tokenizes_standalone_underscore_as_wildcard_but_prefixed_names_as_symbols() {
+    let (file_tokens, string_table) = tokenize_source("_ _true __value\n");
+
+    assert!(
+        matches!(file_tokens.tokens[1].kind, TokenKind::Wildcard),
+        "expected standalone '_' to remain wildcard"
+    );
+    assert!(
+        matches!(file_tokens.tokens[2].kind, TokenKind::Symbol(id) if string_table.resolve(id) == "_true"),
+        "expected '_true' to tokenize as a symbol identifier"
+    );
+    assert!(
+        matches!(file_tokens.tokens[3].kind, TokenKind::Symbol(id) if string_table.resolve(id) == "__value"),
+        "expected '__value' to tokenize as a symbol identifier"
+    );
+}
+
+#[test]
 fn tokenizes_none_question_mark_and_bang_markers() {
     let (file_tokens, _string_table) =
         tokenize_source("value String? = none\npersist()!\nrecover = may_fail() ! \"\"\n");

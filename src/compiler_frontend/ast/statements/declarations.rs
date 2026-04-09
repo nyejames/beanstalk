@@ -16,6 +16,9 @@ use crate::compiler_frontend::builtins::error_type::is_reserved_builtin_symbol;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::identifier_policy::{
+    IdentifierNamingKind, ensure_not_keyword_shadow_identifier, naming_warning_for_identifier,
+};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, Token, TokenKind};
@@ -62,11 +65,18 @@ pub fn new_declaration(
     warnings: &mut Vec<CompilerWarning>,
     string_table: &mut StringTable,
 ) -> Result<Declaration, CompilerError> {
-    if is_reserved_builtin_symbol(string_table.resolve(id)) {
+    let declaration_name = string_table.resolve(id).to_owned();
+    ensure_not_keyword_shadow_identifier(
+        &declaration_name,
+        token_stream.current_location(),
+        "Variable Declaration",
+    )?;
+
+    if is_reserved_builtin_symbol(&declaration_name) {
         return_rule_error!(
             format!(
                 "'{}' is reserved as a builtin language type.",
-                string_table.resolve(id)
+                declaration_name
             ),
             token_stream.current_location(),
             {
@@ -84,7 +94,16 @@ pub fn new_declaration(
     // Function declarations are parsed eagerly here because they use
     // a dedicated signature/body syntax that does not fit value declarations.
     if token_stream.current_token_kind() == &TokenKind::TypeParameterBracket {
-        let func_sig = FunctionSignature::new(token_stream, string_table, &full_name, context)?;
+        if let Some(warning) = naming_warning_for_identifier(
+            &declaration_name,
+            token_stream.current_location(),
+            IdentifierNamingKind::ValueLike,
+        ) {
+            context.emit_warning(warning);
+        }
+
+        let func_sig =
+            FunctionSignature::new(token_stream, warnings, string_table, &full_name, context)?;
         let func_context = context.new_child_function(id, func_sig.to_owned(), string_table);
 
         let function_body = function_body_to_ast(
@@ -106,6 +125,25 @@ pub fn new_declaration(
     }
 
     let declaration_syntax = parse_declaration_syntax(token_stream, id, string_table)?;
+    let naming_kind = if matches!(
+        declaration_syntax
+            .initializer_tokens
+            .first()
+            .map(|token| &token.kind),
+        Some(TokenKind::TypeParameterBracket)
+    ) {
+        IdentifierNamingKind::TypeLike
+    } else {
+        IdentifierNamingKind::ValueLike
+    };
+    if let Some(warning) = naming_warning_for_identifier(
+        &declaration_name,
+        declaration_syntax.location.to_owned(),
+        naming_kind,
+    ) {
+        context.emit_warning(warning);
+    }
+
     resolve_declaration_syntax(declaration_syntax, full_name, context, string_table)
 }
 

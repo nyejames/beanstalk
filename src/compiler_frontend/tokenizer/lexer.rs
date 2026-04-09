@@ -518,6 +518,13 @@ pub fn get_token_kind(
 
     // Wildcard for pattern matching
     if current_char == '_' {
+        if let Some(next_char) = stream.peek()
+            && is_valid_var_char(next_char)
+        {
+            token_value.push(current_char);
+            return keyword_or_variable(&mut token_value, stream, string_table);
+        }
+
         return_token!(TokenKind::Wildcard, stream);
     }
 

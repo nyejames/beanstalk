@@ -166,6 +166,9 @@ pub fn print_formatted_warning(warning: CompilerWarning, string_table: &StringTa
             warning.msg
         ),
         WarningKind::LargeTrackedAsset => println!("{}", warning.msg),
+        WarningKind::IdentifierNamingConvention => {
+            println!("Identifier naming convention: {}", warning.msg)
+        }
     }
 }
 
@@ -405,6 +408,7 @@ fn terse_warning_kind_name(warning_kind: &WarningKind) -> &'static str {
         WarningKind::MalformedHtmlTemplate => "malformed_html_template",
         WarningKind::BstFilePathInTemplateOutput => "bst_file_path_in_template_output",
         WarningKind::LargeTrackedAsset => "large_tracked_asset",
+        WarningKind::IdentifierNamingConvention => "identifier_naming_convention",
     }
 }
 

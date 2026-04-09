@@ -39,6 +39,39 @@ fn parse_single_file_headers(source: &str) -> Headers {
     .expect("headers should parse")
 }
 
+fn parse_single_file_headers_with_warnings(
+    source: &str,
+) -> (Headers, Vec<crate::compiler_frontend::compiler_warnings::CompilerWarning>) {
+    let mut string_table = StringTable::new();
+    let style_directives = StyleDirectiveRegistry::built_ins();
+    let file_path = PathBuf::from("src/#page.bst");
+    let interned_path = InternedPath::from_path_buf(&file_path, &mut string_table);
+    let file_tokens = tokenize(
+        source,
+        &interned_path,
+        TokenizeMode::Normal,
+        NewlineMode::NormalizeToLf,
+        &style_directives,
+        &mut string_table,
+        None,
+    )
+    .expect("tokenization should succeed");
+
+    let host_registry = HostRegistry::new();
+    let mut warnings = Vec::new();
+
+    let headers = parse_headers(
+        vec![file_tokens],
+        &host_registry,
+        &mut warnings,
+        &file_path,
+        &mut string_table,
+    )
+    .expect("headers should parse");
+
+    (headers, warnings)
+}
+
 fn parse_single_file_headers_with_table(source: &str) -> (Headers, StringTable) {
     let mut string_table = StringTable::new();
     let style_directives = StyleDirectiveRegistry::built_ins();
@@ -639,6 +672,53 @@ fn choice_headers_reject_payload_variant_forms_for_alpha() {
         error
             .msg
             .contains("Tagged choice variant bodies using '| ... |' are deferred for Alpha")
+    }));
+}
+
+#[test]
+fn header_parsing_emits_naming_warnings_for_non_camel_type_like_symbols() {
+    let (headers, warnings) =
+        parse_single_file_headers_with_warnings("#SITE_TITLE = \"Beanstalk\"\nStatus_type :: bad_variant;\n");
+
+    assert!(
+        headers
+            .headers
+            .iter()
+            .any(|header| matches!(header.kind, HeaderKind::Choice { .. })),
+        "fixture should still parse a choice header"
+    );
+    assert_eq!(
+        warnings.len(),
+        2,
+        "expected warnings for choice name and variant only; uppercase constant should be allowed"
+    );
+    assert!(warnings.iter().any(|warning| {
+        warning.msg.contains("Status_type") && warning.msg.contains("CamelCase")
+    }));
+    assert!(warnings.iter().any(|warning| {
+        warning.msg.contains("bad_variant") && warning.msg.contains("CamelCase")
+    }));
+    assert!(
+        warnings
+            .iter()
+            .all(|warning| !warning.msg.contains("SITE_TITLE")),
+        "UPPER_CASE top-level constants should not emit naming warnings"
+    );
+}
+
+#[test]
+fn header_parsing_rejects_keyword_shadow_constant_name() {
+    let result =
+        parse_single_file_headers_with_entry("#FALSE = 1\n", "src/#page.bst", "src/#page.bst");
+    assert!(
+        result.is_err(),
+        "keyword-shadow top-level constants must fail during header parsing"
+    );
+    let errors = result.err().expect("expected parse errors");
+
+    assert!(errors.iter().any(|error| {
+        error.msg.contains("Identifier 'FALSE' is reserved")
+            && error.msg.contains("shadows language keyword 'false'")
     }));
 }
 

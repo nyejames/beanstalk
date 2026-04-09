@@ -16,6 +16,9 @@ use crate::compiler_frontend::ast::statements::declaration_syntax::{
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::identifier_policy::{
+    IdentifierNamingKind, ensure_not_keyword_shadow_identifier, naming_warning_for_identifier,
+};
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::token_scan::has_top_level_comma_before_statement_end;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
@@ -43,6 +46,7 @@ pub(crate) fn parse_multi_bind_statement(
     };
 
     validate_unique_target_names(&parsed_targets, string_table)?;
+    validate_multi_bind_target_identifiers(&parsed_targets, context, string_table)?;
     let rhs_expression = parse_multi_bind_rhs_expression(token_stream, context, string_table)?;
     let rhs_slots = extract_rhs_slot_types(&rhs_expression)?;
 
@@ -73,6 +77,33 @@ pub(crate) fn parse_multi_bind_statement(
         location: token_stream.current_location(),
         scope: context.scope.clone(),
     }))
+}
+
+fn validate_multi_bind_target_identifiers(
+    parsed_targets: &[BindingTargetSyntax],
+    context: &ScopeContext,
+    string_table: &StringTable,
+) -> Result<(), CompilerError> {
+    for target in parsed_targets {
+        let target_name = string_table.resolve(target.name).to_owned();
+        ensure_not_keyword_shadow_identifier(
+            &target_name,
+            target.location.to_owned(),
+            "AST Construction",
+        )?;
+
+        if context.get_reference(&target.name).is_none()
+            && let Some(warning) = naming_warning_for_identifier(
+                &target_name,
+                target.location.to_owned(),
+                IdentifierNamingKind::ValueLike,
+            )
+        {
+            context.emit_warning(warning);
+        }
+    }
+
+    Ok(())
 }
 
 fn parse_target_list(

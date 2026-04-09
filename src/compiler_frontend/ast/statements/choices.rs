@@ -8,7 +8,11 @@
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::compiler_errors::CompilerError;
+use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::identifier_policy::{
+    IdentifierNamingKind, ensure_not_keyword_shadow_identifier, naming_warning_for_identifier,
+};
 use crate::compiler_frontend::reserved_trait_syntax::{
     reserved_trait_keyword, reserved_trait_keyword_error,
 };
@@ -62,6 +66,7 @@ fn starts_choice_payload_type(token: &TokenKind) -> bool {
 pub(crate) fn parse_choice_header_payload(
     token_stream: &mut FileTokens,
     string_table: &StringTable,
+    warnings: &mut Vec<CompilerWarning>,
 ) -> Result<ParsedChoiceHeaderPayload, CompilerError> {
     let mut body = Vec::new();
     let mut variants = Vec::new();
@@ -89,6 +94,12 @@ pub(crate) fn parse_choice_header_payload(
             }
 
             TokenKind::Symbol(variant_name) => {
+                ensure_not_keyword_shadow_identifier(
+                    string_table.resolve(variant_name),
+                    current_location.to_owned(),
+                    "Header Parsing",
+                )?;
+
                 if !seen_variants.insert(variant_name) {
                     return_rule_error!(
                         format!(
@@ -102,6 +113,14 @@ pub(crate) fn parse_choice_header_payload(
                             PrimarySuggestion => "Rename the duplicate variant so each choice variant name is unique",
                         }
                     );
+                }
+
+                if let Some(warning) = naming_warning_for_identifier(
+                    string_table.resolve(variant_name),
+                    current_location.to_owned(),
+                    IdentifierNamingKind::TypeLike,
+                ) {
+                    warnings.push(warning);
                 }
 
                 variants.push(ChoiceVariantMetadata {

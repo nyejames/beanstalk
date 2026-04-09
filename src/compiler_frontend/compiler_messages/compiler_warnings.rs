@@ -33,4 +33,5 @@ pub enum WarningKind {
     MalformedHtmlTemplate,
     BstFilePathInTemplateOutput,
     LargeTrackedAsset,
+    IdentifierNamingConvention,
 }

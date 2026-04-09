@@ -69,3 +69,15 @@ fn rejects_struct_redefinition_of_reserved_error_symbol() {
     assert!(error.msg.contains("reserved"), "{}", error.msg);
     assert!(error.msg.contains("Error"), "{}", error.msg);
 }
+
+#[test]
+fn rejects_keyword_shadow_variable_declarations() {
+    let error = parse_single_file_ast_error("_true = 1\n");
+    assert!(
+        error
+            .msg
+            .contains("Identifier '_true' is reserved because it visually shadows language keyword 'true'"),
+        "{}",
+        error.msg
+    );
+}

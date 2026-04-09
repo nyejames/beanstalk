@@ -14,6 +14,9 @@ use crate::compiler_frontend::ast::function_body_to_ast::function_body_to_ast;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::identifier_policy::{
+    IdentifierNamingKind, ensure_not_keyword_shadow_identifier, naming_warning_for_identifier,
+};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
@@ -202,6 +205,21 @@ pub(crate) fn parse_named_result_handler_call(
     let TokenKind::Symbol(handler_name) = token_stream.current_token_kind().to_owned() else {
         unreachable!("named handler parsing must start at the handler symbol");
     };
+    let handler_name_location = token_stream.current_location();
+    let handler_name_text = string_table.resolve(handler_name).to_owned();
+
+    let mut local_handler_warnings: Vec<CompilerWarning> = Vec::new();
+    let warnings = match warnings {
+        Some(warnings) => warnings,
+        None => &mut local_handler_warnings,
+    };
+
+    validate_named_result_handler_binding(
+        &handler_name_text,
+        handler_name_location.to_owned(),
+        "Function Call Parsing",
+        warnings,
+    )?;
 
     if context.get_reference(&handler_name).is_some() {
         return_rule_error!(
@@ -219,7 +237,6 @@ pub(crate) fn parse_named_result_handler_call(
 
     token_stream.advance();
     token_stream.advance();
-    let handler_name_text = string_table.resolve(handler_name).to_owned();
 
     let handler_fallback = parse_named_handler_fallback(
         token_stream,
@@ -253,11 +270,6 @@ pub(crate) fn parse_named_result_handler_call(
         ),
     });
 
-    let mut local_handler_warnings: Vec<CompilerWarning> = Vec::new();
-    let warnings = match warnings {
-        Some(warnings) => warnings,
-        None => &mut local_handler_warnings,
-    };
     let handler_body = function_body_to_ast(token_stream, handler_context, warnings, string_table)?;
 
     // WHAT: rejects handler bodies that can simply fall through when the call expression must
@@ -303,6 +315,21 @@ fn parse_named_result_handler_expression(
     let TokenKind::Symbol(handler_name) = token_stream.current_token_kind().to_owned() else {
         unreachable!("named handler parsing must start at the handler symbol");
     };
+    let handler_name_location = token_stream.current_location();
+    let handler_name_text = string_table.resolve(handler_name).to_owned();
+
+    let mut local_handler_warnings: Vec<CompilerWarning> = Vec::new();
+    let warnings = match warnings {
+        Some(warnings) => warnings,
+        None => &mut local_handler_warnings,
+    };
+
+    validate_named_result_handler_binding(
+        &handler_name_text,
+        handler_name_location.to_owned(),
+        "Expression Parsing",
+        warnings,
+    )?;
 
     if context.get_reference(&handler_name).is_some() {
         return_rule_error!(
@@ -320,7 +347,6 @@ fn parse_named_result_handler_expression(
 
     token_stream.advance();
     token_stream.advance();
-    let handler_name_text = string_table.resolve(handler_name).to_owned();
     let success_result_types = result_success_types(&value.data_type);
     let handler_fallback = parse_named_handler_fallback(
         token_stream,
@@ -354,11 +380,6 @@ fn parse_named_result_handler_expression(
         ),
     });
 
-    let mut local_handler_warnings: Vec<CompilerWarning> = Vec::new();
-    let warnings = match warnings {
-        Some(warnings) => warnings,
-        None => &mut local_handler_warnings,
-    };
     let handler_body = function_body_to_ast(token_stream, handler_context, warnings, string_table)?;
 
     if handler_fallback.is_none()
@@ -386,6 +407,29 @@ fn parse_named_result_handler_expression(
         },
         token_stream.current_location(),
     ))
+}
+
+fn validate_named_result_handler_binding(
+    handler_name: &str,
+    location: SourceLocation,
+    compilation_stage: &str,
+    warnings: &mut Vec<CompilerWarning>,
+) -> Result<(), CompilerError> {
+    ensure_not_keyword_shadow_identifier(
+        handler_name,
+        location.to_owned(),
+        compilation_stage,
+    )?;
+
+    if let Some(warning) = naming_warning_for_identifier(
+        handler_name,
+        location,
+        IdentifierNamingKind::ValueLike,
+    ) {
+        warnings.push(warning);
+    }
+
+    Ok(())
 }
 
 pub(crate) fn is_result_propagation_boundary(token: &TokenKind) -> bool {

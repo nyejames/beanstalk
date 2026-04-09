@@ -5,7 +5,7 @@
 
 use super::*;
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
-use crate::compiler_frontend::ast::test_support::parse_single_file_ast;
+use crate::compiler_frontend::ast::test_support::{parse_single_file_ast, parse_single_file_ast_error};
 use crate::compiler_frontend::ast::test_support::start_function_body;
 
 #[test]
@@ -44,4 +44,16 @@ fn parses_range_loops_with_inclusive_end_and_step() {
         Some(ExpressionKind::Int(2))
     ));
     assert_eq!(loop_body.len(), 1);
+}
+
+#[test]
+fn rejects_keyword_shadow_loop_binder_names() {
+    let error = parse_single_file_ast_error("sum ~= 0\nloop _if in 0 to 3:\n    sum = sum + 1\n;\n");
+    assert!(
+        error
+            .msg
+            .contains("Identifier '_if' is reserved because it visually shadows language keyword 'if'"),
+        "{}",
+        error.msg
+    );
 }

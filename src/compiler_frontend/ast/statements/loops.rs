@@ -8,6 +8,9 @@ use crate::compiler_frontend::ast::function_body_to_ast::function_body_to_ast;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::identifier_policy::{
+    IdentifierNamingKind, ensure_not_keyword_shadow_identifier, naming_warning_for_identifier,
+};
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::compiler_frontend::traits::ContainsReferences;
@@ -100,12 +103,26 @@ fn create_iteration_loop(
     binder_name: crate::compiler_frontend::string_interning::StringId,
 ) -> Result<AstNode, CompilerError> {
     let location = token_stream.current_location();
+    let binder_name_text = string_table.resolve(binder_name).to_owned();
+
+    ensure_not_keyword_shadow_identifier(
+        &binder_name_text,
+        location.to_owned(),
+        "Loop Parsing",
+    )?;
+    if let Some(warning) = naming_warning_for_identifier(
+        &binder_name_text,
+        location.to_owned(),
+        IdentifierNamingKind::ValueLike,
+    ) {
+        warnings.push(warning);
+    }
 
     if context.get_reference(&binder_name).is_some() {
         return_syntax_error!(
             format!(
                 "Loop binder '{}' is already declared in this scope",
-                string_table.resolve(binder_name)
+                binder_name_text
             ),
             token_stream.current_location(),
             {
