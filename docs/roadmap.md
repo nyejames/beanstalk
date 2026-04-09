@@ -15,19 +15,6 @@ These are the non-negotiable conditions for starting Alpha.
 
 ## Phase 2 - close the core language feature gaps
 
-### PR - Harden structs, records, and methods together
-
-Close the loop on struct/record/method behavior as one language slice.
-
-**Checklist**
-- Audit runtime structs and const records against current docs/scope.
-- Confirm methods resolve cleanly, especially receiver methods and same-file/export visibility.
-- Add missing integration tests for declaration, construction, defaults, methods, field access, mutation, and diagnostics.
-- Tighten any remaining semantic rough edges.
-
-**Done when**
-- Structs and records feel Alpha-ready as a practical feature, not a partially assembled one.
-
 ### PR - Harden basic if expressions and logical expressions
 
 Make these small core expression features boring and reliable.
@@ -40,7 +27,10 @@ Make these small core expression features boring and reliable.
 **Done when**
 - These features no longer feel like edge behavior.
 
----
+### PR - Finalize loops
+
+Loop syntax and implementation is incomplete.
+
 
 ## Phase 3 - expand integration coverage across the full Alpha surface
 
@@ -244,8 +234,6 @@ Prevent obviously stupid or misleading variable names that collide with builtin 
 
 **Notes**
 For now, anything that shadows a keyword (but just with any or all of the same letters capitalised or with n underscores in front of it) will be a hard error.
-
-
 
 **Done when**
 - Users cannot create confusing pseudo-builtin identifiers.

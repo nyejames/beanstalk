@@ -6,7 +6,7 @@ Point = |
     y Int,
 |
 
-p = Point(1, 2)
+p ~= Point(1, 2)
 p.x = 10
 p.y = 20
 io([: Point: ([p.x], [p.y])])

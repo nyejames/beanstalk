@@ -61,11 +61,7 @@ fn build_lowering_plan_text(exec_program: &ExecProgram) -> String {
 
     format!(
         "Rust interpreter lowering produced an Exec IR program with {} function(s), {} block(s), {} local slot(s), {} instruction(s), and {} constant(s).",
-        function_count,
-        block_count,
-        local_count,
-        instruction_count,
-        constant_count,
+        function_count, block_count, local_count, instruction_count, constant_count,
     )
 }
 

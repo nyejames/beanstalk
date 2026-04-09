@@ -3,7 +3,7 @@
 //! WHAT: parses compiler-owned collection members (`get/set/push/remove/length`).
 //! WHY: collection builtin policy should stay separate from user field/method dispatch.
 
-use super::builtin_call_args::{is_assignment_operator, parse_builtin_method_args};
+use super::builtin_call_args::parse_builtin_method_args;
 use super::{MemberStepContext, ReceiverAccessMode};
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::place_access::{
@@ -257,7 +257,7 @@ pub(super) fn parse_collection_builtin_member(
         && token_stream.current_token_kind() != &TokenKind::Bang
         && !(matches!(token_stream.current_token_kind(), TokenKind::Symbol(_))
             && token_stream.peek_next_token() == Some(&TokenKind::Bang))
-        && !is_assignment_operator(token_stream.current_token_kind())
+        && !token_stream.current_token_kind().is_assignment_operator()
     {
         return_rule_error!(
             "Calls to collection 'get(index)' must be explicitly handled with '!' syntax.",

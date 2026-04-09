@@ -47,19 +47,6 @@ fn is_return_terminator(token: &TokenKind) -> bool {
     matches!(token, TokenKind::Newline | TokenKind::End | TokenKind::Eof)
 }
 
-fn is_assignment_operator(token: &TokenKind) -> bool {
-    matches!(
-        token,
-        TokenKind::Assign
-            | TokenKind::AddAssign
-            | TokenKind::SubtractAssign
-            | TokenKind::MultiplyAssign
-            | TokenKind::DivideAssign
-            | TokenKind::ExponentAssign
-            | TokenKind::RootAssign
-    )
-}
-
 fn is_expression_statement(expr: &Expression) -> bool {
     match &expr.kind {
         ExpressionKind::FunctionCall(..)
@@ -286,13 +273,7 @@ fn parse_symbol_statement(
 
     if let Some(arg) = context.get_reference(&id) {
         match token_stream.peek_next_token() {
-            Some(TokenKind::Assign)
-            | Some(TokenKind::AddAssign)
-            | Some(TokenKind::SubtractAssign)
-            | Some(TokenKind::MultiplyAssign)
-            | Some(TokenKind::DivideAssign)
-            | Some(TokenKind::ExponentAssign)
-            | Some(TokenKind::RootAssign) => {
+            Some(next_token) if next_token.is_assignment_operator() => {
                 token_stream.advance();
                 ast.push(handle_mutation(token_stream, arg, context, string_table)?);
                 return Ok(());
@@ -302,7 +283,7 @@ fn parse_symbol_statement(
                 token_stream.advance();
                 let accessed = parse_field_access(token_stream, arg, context, string_table)?;
 
-                if is_assignment_operator(token_stream.current_token_kind()) {
+                if token_stream.current_token_kind().is_assignment_operator() {
                     ast.push(handle_mutation_target(
                         token_stream,
                         arg,

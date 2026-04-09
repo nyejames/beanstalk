@@ -474,6 +474,20 @@ pub enum TokenKind {
 }
 
 impl TokenKind {
+    /// Returns true when this token is a supported assignment operator in statement/write position.
+    pub fn is_assignment_operator(&self) -> bool {
+        matches!(
+            self,
+            TokenKind::Assign
+                | TokenKind::AddAssign
+                | TokenKind::SubtractAssign
+                | TokenKind::MultiplyAssign
+                | TokenKind::DivideAssign
+                | TokenKind::ExponentAssign
+                | TokenKind::RootAssign
+        )
+    }
+
     pub fn to_datatype(&self) -> Option<DataType> {
         match self {
             TokenKind::DatatypeInt => Some(DataType::Int),

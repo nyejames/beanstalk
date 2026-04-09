@@ -262,26 +262,17 @@ impl DataType {
             }
             DataType::Struct {
                 nominal_path,
-                fields: args,
                 const_record,
                 ..
             } => {
-                let mut arg_str = String::new();
-                for arg in args {
-                    let name = arg.id.to_string(string_table);
-                    arg_str.push_str(&format!(
-                        "{}: {}, ",
-                        name,
-                        arg.value.data_type.display_with_table(string_table)
-                    ));
+                let bare_name = nominal_path
+                    .name_str(string_table)
+                    .unwrap_or("<anonymous struct>");
+                if *const_record {
+                    format!("#{bare_name}")
+                } else {
+                    bare_name.to_owned()
                 }
-                let const_prefix = if *const_record { "#" } else { "" };
-                format!(
-                    "{}Struct({}: {})",
-                    const_prefix,
-                    nominal_path.to_string(string_table),
-                    arg_str
-                )
             }
             DataType::Returns(returns) => {
                 let mut returns_string = String::new();

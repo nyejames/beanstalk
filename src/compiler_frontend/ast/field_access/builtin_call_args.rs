@@ -15,20 +15,6 @@ use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
 use crate::return_rule_error;
 
-/// Returns true for assignment operators that can legally follow `.get(index)` in write position.
-pub(super) fn is_assignment_operator(token: &TokenKind) -> bool {
-    matches!(
-        token,
-        TokenKind::Assign
-            | TokenKind::AddAssign
-            | TokenKind::SubtractAssign
-            | TokenKind::MultiplyAssign
-            | TokenKind::DivideAssign
-            | TokenKind::ExponentAssign
-            | TokenKind::RootAssign
-    )
-}
-
 /// Parses builtin receiver-method arguments using positional-only policy.
 pub(super) fn parse_builtin_method_args(
     token_stream: &mut FileTokens,

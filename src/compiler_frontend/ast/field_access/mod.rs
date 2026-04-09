@@ -17,6 +17,7 @@ use self::receiver_calls::parse_receiver_method_call;
 use crate::compiler_frontend::ast::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::Expression;
+use crate::compiler_frontend::ast::place_access::ast_node_is_place;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
@@ -160,6 +161,23 @@ pub(crate) fn parse_postfix_chain(
             {
                 CompilationStage => "AST Construction",
                 PrimarySuggestion => "Check the available fields and receiver methods for this type",
+            }
+        );
+    }
+
+    if token_stream.current_token_kind().is_assignment_operator()
+        && !ast_node_is_place(&receiver_node)
+    {
+        let receiver_type = receiver_node_type(&receiver_node)?;
+        return_rule_error!(
+            format!(
+                "Field assignment requires a mutable place receiver. '{}' is a temporary expression, not a mutable place.",
+                receiver_type.display_with_table(string_table)
+            ),
+            receiver_node.location.clone(),
+            {
+                CompilationStage => "AST Construction",
+                PrimarySuggestion => "Bind this value to a mutable variable first, then assign through that variable's field path",
             }
         );
     }

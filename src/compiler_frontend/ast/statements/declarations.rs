@@ -1,6 +1,6 @@
 use crate::compiler_frontend::ast::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::AstNode;
-use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
+use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::expressions::function_calls::parse_function_call;
 use crate::compiler_frontend::ast::field_access::parse_field_access;
 use crate::compiler_frontend::ast::function_body_to_ast::function_body_to_ast;
@@ -213,10 +213,12 @@ pub fn resolve_declaration_syntax(
         }
     };
 
-    // Declaration mutability is determined by the left-hand marker (`~=`) for direct references.
-    if matches!(parsed_expr.kind, ExpressionKind::Reference(_)) {
-        parsed_expr.ownership = ownership.to_owned();
-    }
+    // WHAT: the binding marker (`~=` / `=`) is the single source of truth for whether the
+    // stored declaration is a mutable place.
+    // WHY: rvalue initializers (for example struct literals and collections) inherit ownership
+    // from type defaults; preserving that ownership would incorrectly allow writes through
+    // immutable bindings and mutable receiver calls.
+    parsed_expr.ownership = ownership.to_owned();
 
     ast_log!(
         "Created new ",

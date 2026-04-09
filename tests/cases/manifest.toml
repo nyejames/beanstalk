@@ -1393,3 +1393,58 @@ tags = ["integration", "char"]
 id = "char_in_template"
 path = "char_in_template"
 tags = ["integration", "char"]
+
+[[case]]
+id = "struct_field_mutation_immutable_binding_rejected"
+path = "struct_field_mutation_immutable_binding_rejected"
+tags = ["integration", "structs", "diagnostics"]
+
+[[case]]
+id = "struct_mutable_receiver_immutable_binding_rejected"
+path = "struct_mutable_receiver_immutable_binding_rejected"
+tags = ["integration", "structs", "receiver-methods", "diagnostics"]
+
+[[case]]
+id = "struct_field_mutation_through_temporary_rejected"
+path = "struct_field_mutation_through_temporary_rejected"
+tags = ["integration", "structs", "diagnostics"]
+
+[[case]]
+id = "struct_constructor_all_defaults"
+path = "struct_constructor_all_defaults"
+tags = ["integration", "structs"]
+
+[[case]]
+id = "struct_nominal_type_mismatch_rejected"
+path = "struct_nominal_type_mismatch_rejected"
+tags = ["integration", "structs", "diagnostics"]
+
+[[case]]
+id = "receiver_this_not_first_parameter_rejected"
+path = "receiver_this_not_first_parameter_rejected"
+tags = ["integration", "receiver-methods", "diagnostics"]
+
+[[case]]
+id = "receiver_unsupported_receiver_type_rejected"
+path = "receiver_unsupported_receiver_type_rejected"
+tags = ["integration", "receiver-methods", "diagnostics"]
+
+[[case]]
+id = "struct_nested_field_mutation_success"
+path = "struct_nested_field_mutation_success"
+tags = ["integration", "structs"]
+
+[[case]]
+id = "struct_chained_immutable_receiver_method_call"
+path = "struct_chained_immutable_receiver_method_call"
+tags = ["integration", "structs", "receiver-methods"]
+
+[[case]]
+id = "receiver_method_exported_cross_file_success"
+path = "receiver_method_exported_cross_file_success"
+tags = ["integration", "receiver-methods", "imports"]
+
+[[case]]
+id = "struct_unknown_field_access_diagnostic"
+path = "struct_unknown_field_access_diagnostic"
+tags = ["integration", "structs", "diagnostics"]

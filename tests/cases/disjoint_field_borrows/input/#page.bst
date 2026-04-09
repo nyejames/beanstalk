@@ -1,12 +1,14 @@
--- Test file: Disjoint variable borrows (should pass)
+Pair = |
+    x Int,
+    y Int,
+|
 
--- Create separate variables
-x_value ~= 10
-y_value ~= 20
+pair ~= Pair(10, 20)
 
--- Borrow different variables - this should be allowed
-x_ref = x_value
-y_ref = y_value
-
--- Use both references - should work fine
+x_ref = pair.x
+y_ref = pair.y
 sum = x_ref + y_ref
+
+pair.x = sum
+pair.y = pair.y + 1
+io([: [pair.x] [pair.y]])

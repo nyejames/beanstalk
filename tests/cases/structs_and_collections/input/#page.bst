@@ -20,7 +20,7 @@ person = Person("Alice", 30)
 io([: Person: [person.name], age [person.age]])
 
 -- Test field assignment
-p2 = Point(0, 0)
+p2 ~= Point(0, 0)
 p2.x = 5
 p2.y = 10
 io([: Updated point: ([p2.x], [p2.y])])
