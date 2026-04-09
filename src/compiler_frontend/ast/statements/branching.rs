@@ -10,7 +10,7 @@ use crate::compiler_frontend::ast::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
-use crate::compiler_frontend::ast::function_body_to_ast::function_body_to_ast;
+use crate::compiler_frontend::ast::function_body_to_ast;
 use crate::compiler_frontend::ast::statements::condition_validation::ensure_boolean_condition;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;

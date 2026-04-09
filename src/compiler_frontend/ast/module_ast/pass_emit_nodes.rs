@@ -9,7 +9,7 @@ use super::build_state::AstBuildState;
 use super::canonical_source_file_for_header;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::Expression;
-use crate::compiler_frontend::ast::function_body_to_ast::function_body_to_ast;
+use crate::compiler_frontend::ast::function_body_to_ast;
 use crate::compiler_frontend::ast::import_bindings::FileImportBindings;
 use crate::compiler_frontend::ast::module_ast::scope_context::{
     ContextKind, ReceiverMethodCatalog, ScopeContext,

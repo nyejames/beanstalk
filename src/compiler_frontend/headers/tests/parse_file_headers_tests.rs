@@ -150,6 +150,41 @@ fn first_function_signature(headers: &Headers) -> &FunctionSignature {
         .expect("expected function header")
 }
 
+fn start_function_header(headers: &Headers) -> &Header {
+    headers
+        .headers
+        .iter()
+        .find(|header| matches!(header.kind, HeaderKind::StartFunction))
+        .expect("expected start function header")
+}
+
+fn non_start_header_names(headers: &Headers, string_table: &StringTable) -> Vec<String> {
+    headers
+        .headers
+        .iter()
+        .filter(|header| !matches!(header.kind, HeaderKind::StartFunction))
+        .filter_map(|header| {
+            header
+                .tokens
+                .src_path
+                .name()
+                .map(|name| string_table.resolve(name).to_owned())
+        })
+        .collect()
+}
+
+fn symbol_tokens_in_header_body(header: &Header, string_table: &StringTable) -> Vec<String> {
+    header
+        .tokens
+        .tokens
+        .iter()
+        .filter_map(|token| match token.kind {
+            TokenKind::Symbol(symbol) => Some(string_table.resolve(symbol).to_owned()),
+            _ => None,
+        })
+        .collect()
+}
+
 #[test]
 fn import_paths_are_captured_for_start_function_dependencies() {
     let headers = parse_single_file_headers("import @libs/html/basic\n[basic]\n");
@@ -411,6 +446,151 @@ fn start_function_local_references_do_not_create_module_dependencies() {
     assert!(
         start_header.dependencies.is_empty(),
         "local start-function symbols must not be tracked as inter-header/module dependencies"
+    );
+}
+
+#[test]
+fn loop_binding_symbols_remain_in_start_function_body() {
+    let (headers, string_table) = parse_single_file_headers_with_table(
+        "items = {1, 2, 3}\n\
+         \n\
+         loop items |item, index|:\n\
+             io(item)\n\
+         ;\n",
+    );
+
+    assert_eq!(
+        headers.headers.len(),
+        1,
+        "loop-only top-level files should emit only the implicit start header"
+    );
+    assert!(matches!(headers.headers[0].kind, HeaderKind::StartFunction));
+
+    let start_header = start_function_header(&headers);
+    let start_symbols = symbol_tokens_in_header_body(start_header, &string_table);
+    let header_names = non_start_header_names(&headers, &string_table);
+
+    assert!(
+        start_symbols.iter().any(|symbol| symbol == "item"),
+        "loop item binding should stay in the implicit start body token stream"
+    );
+    assert!(
+        start_symbols.iter().any(|symbol| symbol == "index"),
+        "loop index binding should stay in the implicit start body token stream"
+    );
+    assert!(
+        start_header
+            .tokens
+            .tokens
+            .iter()
+            .any(|token| matches!(token.kind, TokenKind::Loop)),
+        "start header should preserve the top-level loop statement tokens"
+    );
+    assert!(
+        !header_names
+            .iter()
+            .any(|name| name == "item" || name == "index"),
+        "loop binding names must never be elevated into headers"
+    );
+}
+
+#[test]
+fn top_level_expression_symbols_stay_in_implicit_start_body() {
+    let (headers, string_table) = parse_single_file_headers_with_table(
+        "import @libs/html/basic\n\
+         items = {1, 2, 3}\n\
+         loop items |item, index|:\n\
+             io(item)\n\
+         ;\n\
+         [basic]\n\
+         basic()\n\
+         items\n",
+    );
+
+    assert_eq!(
+        headers.headers.len(),
+        1,
+        "imports and top-level expressions should still collapse into one start header here"
+    );
+    assert!(matches!(headers.headers[0].kind, HeaderKind::StartFunction));
+
+    let start_header = start_function_header(&headers);
+    let start_symbols = symbol_tokens_in_header_body(start_header, &string_table);
+    let header_names = non_start_header_names(&headers, &string_table);
+
+    assert!(
+        start_symbols.iter().any(|symbol| symbol == "basic"),
+        "imported symbol usage in expression/template position should stay in start body"
+    );
+    assert!(
+        start_symbols.iter().any(|symbol| symbol == "item")
+            && start_symbols.iter().any(|symbol| symbol == "index"),
+        "loop binding symbols inside top-level loops should remain start-body tokens"
+    );
+    assert!(
+        start_header
+            .tokens
+            .tokens
+            .iter()
+            .any(|token| matches!(token.kind, TokenKind::TemplateHead)),
+        "runtime top-level templates should remain in the start-function token stream"
+    );
+    assert!(
+        !header_names
+            .iter()
+            .any(|name| name == "basic" || name == "items" || name == "item" || name == "index"),
+        "expression-position symbols must not be misclassified as top-level declaration headers"
+    );
+}
+
+#[test]
+fn hash_prefixed_declarations_still_parse_as_headers_without_elevating_body_symbols() {
+    let (headers, string_table) = parse_single_file_headers_with_table(
+        "#theme = \"dark\"\n\
+         items = {theme}\n\
+         loop items |item, index|:\n\
+             io(item)\n\
+         ;\n\
+         [theme]\n\
+         theme\n",
+    );
+
+    let header_names = non_start_header_names(&headers, &string_table);
+    assert_eq!(
+        header_names,
+        vec![String::from("theme")],
+        "the '#theme = ...' declaration should remain a real top-level constant header"
+    );
+    assert_eq!(
+        headers.headers.len(),
+        2,
+        "expected one exported constant header plus the implicit start header"
+    );
+    assert!(
+        headers
+            .headers
+            .iter()
+            .any(|header| matches!(header.kind, HeaderKind::Constant { .. })),
+        "exported declaration after '#' should still classify as a constant header"
+    );
+
+    let start_header = start_function_header(&headers);
+    let start_symbols = symbol_tokens_in_header_body(start_header, &string_table);
+
+    assert!(
+        start_symbols.iter().any(|symbol| symbol == "theme"),
+        "same-name symbol uses later in top-level expressions should stay in start body"
+    );
+    assert!(
+        start_symbols.iter().any(|symbol| symbol == "item")
+            && start_symbols.iter().any(|symbol| symbol == "index"),
+        "loop-binding symbols in start-body statements must not become headers"
+    );
+    assert!(
+        !header_names
+            .iter()
+            .any(|name| name == "items" || name == "item" || name == "index"),
+        "only legitimate '#'-prefixed declarations should become headers"
     );
 }
 

@@ -13,7 +13,7 @@ use crate::compiler_frontend::ast::expressions::expression::{Expression, Express
 use crate::compiler_frontend::ast::expressions::parse_expression::{
     create_expression, create_expression_until,
 };
-use crate::compiler_frontend::ast::function_body_to_ast::function_body_to_ast;
+use crate::compiler_frontend::ast::function_body_to_ast;
 use crate::compiler_frontend::ast::statements::condition_validation::ensure_boolean_condition;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
