@@ -92,6 +92,18 @@ post = create_post("Boring Title", date, [$markdown:
 
 <div align="center">
 
+## LLM Aware design
+Beanstalk is designed with future LLM workflows in mind: 
+
+Humans validate, review and write the more declarative and "fun" parts of the codebase (where string templates shine). 
+This is one reason why readability is the primary goal of the language.
+
+LLMs can write code with with a strict compiler and snappy tooling that enables it to iterate fast and avoid bad patterns due to Beanstalk being opinionated, memory safe and panic avoidant. The language is simple and terse which is ideal for context limits.
+
+Even the way compiler errors are designed is to provide good metadata for LLMs right from the start, not just pretty human readable ones.
+
+Beanstalk not being saturated in LLM training data actually gives it the long term advantage of having a smaller, higher quality data set to work from as the language is used for real work.
+
 ## Documentation
 
 </div>
@@ -126,9 +138,8 @@ post = create_post("Boring Title", date, [$markdown:
 
 Here is the current <a href="https://github.com/nyejames/beanstalk/blob/main/docs/roadmap.md">Roadmap to the first alpha release</a>.
 
-The syntax and some constructs (e.g. closures, interfaces, async, pattern matching) will still evolve in their design during the alpha stage. Not everything is completely set in stone.
+The language is nearly at the first alpha stage, but already has a broad set of tooling, build system work and backend scaffolding already done. The upcoming alpha will be about taking an already powerful set of tools and language and making it stable and usable.
 
-The Wasm backend scaffolding is in place but needs a lot of work before it is stable enough for regular projects.
-Wasm backend stability is also a goal once the lanaguge is at the Alpha stage.
+The syntax and some constructs (e.g. closures, async) are not implemented at all yet and will evolve in their design during the alpha stage. Not everything is completely set in stone so some things can be figured out based on how the language feels to use in real projects.
 
 <br>
