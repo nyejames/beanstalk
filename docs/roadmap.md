@@ -165,6 +165,53 @@ Remove avoidable Windows/macOS golden drift from source normalization and emitte
 **Done when**
 - Golden outputs are stable across normal Windows/macOS workflows.
 
+### PR - Add normalized artifact assertion mode to reduce non-semantic golden churn
+
+Full `index.html` snapshots currently include generated JS details such as line-number-derived symbols
+and temporary names (`bst___hir_tmp_*`) that change even when runtime behavior does not.
+That makes integration goldens brittle and increases PR noise/risk when frontend lowering shape changes.
+
+This PR should make integration assertions more robust without weakening semantic checks.
+
+**Fits with other PRs**
+- Extends the Phase 3 integration-checks goal to use stronger assertions where byte-for-byte goldens are too brittle.
+- Should land before Phase 6 backend/html stabilization so those audits can use less brittle assertions.
+
+**Checklist**
+- Extend the integration runner expectation model with an explicit normalized-assertion mode for text artifacts.
+- Implement deterministic normalization for generated HTML/JS assertion comparisons, focused on unstable compiler-generated identifiers and irrelevant formatting drift.
+- Keep strict byte-for-byte golden checks available for cases where exact output shape is intentionally contractual.
+- Add fixture-level documentation/examples showing when to choose strict goldens vs normalized assertions.
+- Migrate the known brittle runtime-fragment cases (including the recent function/collection/char/receiver-method drift set) to the appropriate assertion style.
+- Add runner tests proving normalization is stable and does not mask real semantic regressions.
+
+**Done when**
+- Non-semantic generator-shape churn no longer causes broad golden failures.
+- Semantic changes still fail with clear, targeted integration diffs.
+
+### PR - Add rendered-output assertions for runtime-fragment semantics
+
+Some integration behaviors are fundamentally about rendered output, not emitted JS text layout.
+For runtime-fragment-heavy cases, asserting rendered slot output provides stronger semantic confidence
+than snapshotting compiler-generated temporary symbols.
+
+**Fits with other PRs**
+- Builds on the normalized-assertion work above.
+- Supports the Phase 6 JS backend semantic audit with behavior-first checks.
+
+**Checklist**
+- Add an optional integration assertion mode that executes generated HTML+JS in a deterministic test harness and compares rendered runtime-slot output.
+- Keep this mode focused on semantic surfaces (runtime fragments, call/lowering paths, collection/read flows) where emitted-text snapshots are noisy.
+- Ensure harness failures distinguish:
+  - test harness limitations/infrastructure errors
+  - actual rendered-output mismatches
+- Add targeted cases that currently rely on brittle full-file goldens but are really asserting rendered text behavior.
+- Document expectation-writing guidance so new cases choose rendered assertions when appropriate.
+
+**Done when**
+- Runtime-fragment semantics are asserted directly at rendered-output level where needed.
+- Integration failures are lower-noise and more actionable during backend/lowering changes.
+
 ### PR - Fix remaining Windows test-runner stability issues
 
 Remove test-runner and lock-poisoning rough edges that still make Windows less reliable.

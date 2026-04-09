@@ -455,6 +455,11 @@ body {
     }
 
     function bst_start_fn0() {
+        
+        return "";
+    }
+
+    function bst___bst_frag_0_fn1() {
         let bst_nums_l0 = __bs_binding(undefined);
         let bst_first_l1 = __bs_binding(undefined);
         let bst___hir_tmp_0_l2 = __bs_binding(undefined);
@@ -462,6 +467,9 @@ body {
         let bst___hir_tmp_2_l4 = __bs_binding(undefined);
         let bst_len_l5 = __bs_binding(undefined);
         let bst___hir_tmp_3_l6 = __bs_binding(undefined);
+        let bst___hir_tmp_4_l12 = __bs_binding(undefined);
+        let bst___hir_tmp_5_l14 = __bs_binding(undefined);
+        let bst___hir_tmp_6_l15 = __bs_binding(undefined);
         
         __bs_assign_value(bst_nums_l0, [10, 20, 30]);
         __bs_assign_value(bst___hir_tmp_0_l2, __bs_collection_get(__bs_read(bst_nums_l0), 0));
@@ -474,60 +482,34 @@ body {
         __bs_assign_borrow(bst_first_l1, bst___hir_tmp_2_l4);
         __bs_assign_value(bst___hir_tmp_3_l6, __bs_collection_length(__bs_read(bst_nums_l0)));
         __bs_assign_borrow(bst_len_l5, bst___hir_tmp_3_l6);
-        return "";
+        __bs_assign_value(bst___hir_tmp_4_l12, bst___template_fn_1_fn3(bst_first_l1));
+        __bs_assign_value(bst___hir_tmp_5_l14, bst___template_fn_2_fn4(bst_len_l5));
+        __bs_assign_value(bst___hir_tmp_6_l15, bst___template_fn_0_fn2(__bs_binding("collection_literal_smoke first="), bst___hir_tmp_4_l12, __bs_binding(" len="), bst___hir_tmp_5_l14));
+        return __bs_clone_value(__bs_read(bst___hir_tmp_6_l15));
     }
 
-    function bst___bst_frag_0_fn1() {
-        let bst_nums_l7 = __bs_binding(undefined);
-        let bst_first_l8 = __bs_binding(undefined);
-        let bst___hir_tmp_4_l9 = __bs_binding(undefined);
-        let bst___hir_tmp_5_l10 = __bs_binding(undefined);
-        let bst___hir_tmp_6_l11 = __bs_binding(undefined);
-        let bst_len_l12 = __bs_binding(undefined);
-        let bst___hir_tmp_7_l13 = __bs_binding(undefined);
-        let bst___hir_tmp_8_l19 = __bs_binding(undefined);
-        let bst___hir_tmp_9_l21 = __bs_binding(undefined);
-        let bst___hir_tmp_10_l22 = __bs_binding(undefined);
+    function bst___template_fn_0_fn2(bst_chunk_0_l7, bst_chunk_1_l8, bst_chunk_2_l9, bst_chunk_3_l10) {
         
-        __bs_assign_value(bst_nums_l7, [10, 20, 30]);
-        __bs_assign_value(bst___hir_tmp_4_l9, __bs_collection_get(__bs_read(bst_nums_l7), 0));
-        __bs_assign_borrow(bst___hir_tmp_5_l10, bst___hir_tmp_4_l9);
-        if (((__bs_read(bst___hir_tmp_5_l10)).tag === "ok")) {
-            __bs_assign_value(bst___hir_tmp_6_l11, ((__bs_read(bst___hir_tmp_5_l10)).value));
-        } else {
-            __bs_assign_value(bst___hir_tmp_6_l11, 0);
-        }
-        __bs_assign_borrow(bst_first_l8, bst___hir_tmp_6_l11);
-        __bs_assign_value(bst___hir_tmp_7_l13, __bs_collection_length(__bs_read(bst_nums_l7)));
-        __bs_assign_borrow(bst_len_l12, bst___hir_tmp_7_l13);
-        __bs_assign_value(bst___hir_tmp_8_l19, bst___template_fn_1_fn3(bst_first_l8));
-        __bs_assign_value(bst___hir_tmp_9_l21, bst___template_fn_2_fn4(bst_len_l12));
-        __bs_assign_value(bst___hir_tmp_10_l22, bst___template_fn_0_fn2(__bs_binding("collection_literal_smoke first="), bst___hir_tmp_8_l19, __bs_binding(" len="), bst___hir_tmp_9_l21));
-        return __bs_clone_value(__bs_read(bst___hir_tmp_10_l22));
+        bst_chunk_0_l7 = __bs_param_binding(bst_chunk_0_l7);
+        bst_chunk_1_l8 = __bs_param_binding(bst_chunk_1_l8);
+        bst_chunk_2_l9 = __bs_param_binding(bst_chunk_2_l9);
+        bst_chunk_3_l10 = __bs_param_binding(bst_chunk_3_l10);
+        
+        return (((("" + __bs_read(bst_chunk_0_l7)) + __bs_read(bst_chunk_1_l8)) + __bs_read(bst_chunk_2_l9)) + __bs_read(bst_chunk_3_l10));
     }
 
-    function bst___template_fn_0_fn2(bst_chunk_0_l14, bst_chunk_1_l15, bst_chunk_2_l16, bst_chunk_3_l17) {
+    function bst___template_fn_1_fn3(bst_chunk_0_l11) {
         
-        bst_chunk_0_l14 = __bs_param_binding(bst_chunk_0_l14);
-        bst_chunk_1_l15 = __bs_param_binding(bst_chunk_1_l15);
-        bst_chunk_2_l16 = __bs_param_binding(bst_chunk_2_l16);
-        bst_chunk_3_l17 = __bs_param_binding(bst_chunk_3_l17);
+        bst_chunk_0_l11 = __bs_param_binding(bst_chunk_0_l11);
         
-        return (((("" + __bs_read(bst_chunk_0_l14)) + __bs_read(bst_chunk_1_l15)) + __bs_read(bst_chunk_2_l16)) + __bs_read(bst_chunk_3_l17));
+        return ("" + ("" + __bs_read(bst_chunk_0_l11)));
     }
 
-    function bst___template_fn_1_fn3(bst_chunk_0_l18) {
+    function bst___template_fn_2_fn4(bst_chunk_0_l13) {
         
-        bst_chunk_0_l18 = __bs_param_binding(bst_chunk_0_l18);
+        bst_chunk_0_l13 = __bs_param_binding(bst_chunk_0_l13);
         
-        return ("" + ("" + __bs_read(bst_chunk_0_l18)));
-    }
-
-    function bst___template_fn_2_fn4(bst_chunk_0_l20) {
-        
-        bst_chunk_0_l20 = __bs_param_binding(bst_chunk_0_l20);
-        
-        return ("" + ("" + __bs_read(bst_chunk_0_l20)));
+        return ("" + ("" + __bs_read(bst_chunk_0_l13)));
     }
 
     </script>
