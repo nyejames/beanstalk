@@ -1,42 +1,25 @@
 import @lib/html {format, style}
 import @styles/docs {navbar, title, section, palette, table, data, codeblock, codesnippet, theme_head}
 
-# page_title = "Language Basics"
-# page_description = "Core language syntax and semantics in Beanstalk."
+# page_title = "Loops"
+# page_description = "Loops in Beanstalk"
 # page_head = theme_head
 
 #[navbar]
-#[title, style.center: CONTROL FLOW]
+#[title, style.center: LOOPS]
 
 #[section, $markdown:
-    ## If Statements
-
-    [codeblock, $code("bst"):
-        v = 1
-
-        if v is not 1:
-            io("nope")
-        else
-            io("yep")
-        ;
-
-        io(msg) -- prints "nope"
-    ]
-]
-
-#[section, $markdown:
-    # Loops
-    ### Loops in Beanstalk
+    ## Loops Syntax
 
     Beanstalk uses a **single** loop keyword: [codesnippet: loop].
 
     - **[$code("bst"):to] / [$code("bst"):upto]** select range semantics (exclusive vs inclusive)
-    - **Range loops can bind the current counter**
-    - **Collection loops can bind the current item**
-    - **An optional second binding provides the zero-based iteration index**
-    - **Loop bindings are written after the loop condition**
-    - **When bindings exist, they always use [$code("bst"):|...|] syntax**
-    - **No [$code("bst"):reverse] keyword**; direction is inferred from the bounds
+    - Range loops can bind the current counter
+    - Collection loops can bind the current item
+    - An optional second binding provides the zero-based iteration index
+    - Loop bindings are written after the loop condition
+    - When bindings exist, they always use [$code("bst"):|...|] syntax
+    - No **[$code("bst"):reverse]** keyword; direction is inferred from the bounds
     - **[$code("bst"):by]** controls step size and works with both directions
 
     Loops come in two forms:

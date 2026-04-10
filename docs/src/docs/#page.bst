@@ -22,7 +22,14 @@ import @styles/docs {navbar, title, section, palette, codeblock, theme_head}
     ## Documentation
     The documentation is currently being written in Beanstalk one file at a time.
 
+    ### Introduction
     - @./basics (Basics)
-    - @./functions (Functions)
+
+    ### Core Language Features
     - @./templates (Templates)
+    - @./functions (Functions)
+    - @./if-statements (If Statements)
+    - @./loops (Loops)
+    - @./collections (Collections)
+    - @./pattern-matching (Pattern Matching)
 ]

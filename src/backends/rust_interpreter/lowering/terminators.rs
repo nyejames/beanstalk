@@ -20,8 +20,7 @@ pub(crate) fn lower_block_terminator(
         | HirTerminator::Continue { target } => {
             let Some(exec_target) = layout.exec_block_by_hir_block.get(target).copied() else {
                 return Err(CompilerError::compiler_error(format!(
-                    "Rust interpreter lowering could not resolve jump target block {:?}",
-                    target
+                    "Rust interpreter lowering could not resolve jump target block {target:?}"
                 )));
             };
 
@@ -46,16 +45,14 @@ pub(crate) fn lower_block_terminator(
             let Some(exec_then_block) = layout.exec_block_by_hir_block.get(then_block).copied()
             else {
                 return Err(CompilerError::compiler_error(format!(
-                    "Rust interpreter lowering could not resolve then-block {:?}",
-                    then_block
+                    "Rust interpreter lowering could not resolve then-block {then_block:?}"
                 )));
             };
 
             let Some(exec_else_block) = layout.exec_block_by_hir_block.get(else_block).copied()
             else {
                 return Err(CompilerError::compiler_error(format!(
-                    "Rust interpreter lowering could not resolve else-block {:?}",
-                    else_block
+                    "Rust interpreter lowering could not resolve else-block {else_block:?}"
                 )));
             };
 

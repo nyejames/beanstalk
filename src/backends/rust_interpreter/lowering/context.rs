@@ -41,8 +41,7 @@ impl<'a> LoweringContext<'a> {
     pub(crate) fn hir_block_by_id(&self, block_id: BlockId) -> Result<&HirBlock, CompilerError> {
         let Some(index) = self.block_index_by_id.get(&block_id).copied() else {
             return Err(CompilerError::compiler_error(format!(
-                "Rust interpreter lowering could not resolve HIR block {:?}",
-                block_id
+                "Rust interpreter lowering could not resolve HIR block {block_id:?}"
             )));
         };
 

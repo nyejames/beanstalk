@@ -1,4 +1,7 @@
-use super::{MarkdownTemplateFormatter, to_markdown};
+use super::MarkdownTemplateFormatter;
+use crate::compiler_frontend::ast::templates::styles::markdown::{
+    render_markdown_stream, split_text_into_lines,
+};
 use crate::compiler_frontend::ast::templates::template::TemplateFormatter;
 use crate::compiler_frontend::ast::templates::template_render_plan::{
     FormatterAnchorId, FormatterInput, FormatterInputPiece, FormatterOpaqueKind,
@@ -26,6 +29,21 @@ fn formatter_text_piece(text: &str, string_table: &mut StringTable) -> Formatter
         text: string_table.intern(text),
         location: SourceLocation::default(),
     })
+}
+
+fn to_markdown(content: &str, default_tag: &str) -> String {
+    let lines = split_text_into_lines(content);
+    let pieces = render_markdown_stream(&lines, default_tag);
+
+    pieces
+        .into_iter()
+        .map(|piece| match piece {
+            FormatterOutputPiece::Text(text) => text,
+            FormatterOutputPiece::Opaque(_) => {
+                unreachable!("plain-text markdown helper should never emit opaque anchors")
+            }
+        })
+        .collect()
 }
 
 fn markdown_formatter_output_from_text_and_anchors(

@@ -73,8 +73,7 @@ impl RuntimeEngine {
         if has_parameters {
             return Err(InterpreterBackendError::Execution {
                 message: format!(
-                    "Rust interpreter runtime cannot execute function '{}' with parameters yet",
-                    function_debug_name
+                    "Rust interpreter runtime cannot execute function '{function_debug_name}' with parameters yet"
                 ),
             });
         }
@@ -246,8 +245,7 @@ impl RuntimeEngine {
             .cloned()
             .ok_or_else(|| InterpreterBackendError::Execution {
                 message: format!(
-                    "Rust interpreter runtime local slot {:?} is out of bounds",
-                    local_id
+                    "Rust interpreter runtime local slot {local_id:?} is out of bounds",
                 ),
             })
     }
@@ -261,8 +259,7 @@ impl RuntimeEngine {
         let Some(slot) = frame.locals.slots.get_mut(local_id.0 as usize) else {
             return Err(InterpreterBackendError::Execution {
                 message: format!(
-                    "Rust interpreter runtime local slot {:?} is out of bounds",
-                    local_id
+                    "Rust interpreter runtime local slot {local_id:?} is out of bounds",
                 ),
             });
         };

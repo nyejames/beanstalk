@@ -19,8 +19,7 @@ impl RuntimeEngine {
         let Some(index) = self.function_index_by_id.get(&function_id).copied() else {
             return Err(InterpreterBackendError::Execution {
                 message: format!(
-                    "Rust interpreter runtime could not resolve function {:?}",
-                    function_id
+                    "Rust interpreter runtime could not resolve function {function_id:?}"
                 ),
             });
         };
@@ -31,8 +30,7 @@ impl RuntimeEngine {
             .get(index)
             .ok_or_else(|| InterpreterBackendError::InternalInvariant {
                 message: format!(
-                    "Rust interpreter runtime function index map points outside function table for {:?}",
-                    function_id
+                    "Rust interpreter runtime function index map points outside function table for {function_id:?}"
                 ),
             })
     }
@@ -45,8 +43,7 @@ impl RuntimeEngine {
         let Some(block_index_by_id) = self.block_index_by_function.get(&function_id) else {
             return Err(InterpreterBackendError::Execution {
                 message: format!(
-                    "Rust interpreter runtime has no block index for function {:?}",
-                    function_id
+                    "Rust interpreter runtime has no block index for function {function_id:?}"
                 ),
             });
         };
@@ -54,8 +51,7 @@ impl RuntimeEngine {
         let Some(index) = block_index_by_id.get(&block_id).copied() else {
             return Err(InterpreterBackendError::Execution {
                 message: format!(
-                    "Rust interpreter runtime could not resolve block {:?} in function {:?}",
-                    block_id, function_id
+                    "Rust interpreter runtime could not resolve block {block_id:?} in function {function_id:?}"
                 ),
             });
         };
@@ -64,8 +60,7 @@ impl RuntimeEngine {
         function.blocks.get(index).ok_or_else(|| {
             InterpreterBackendError::InternalInvariant {
                 message: format!(
-                    "Rust interpreter runtime block index map points outside block table for function {:?}, block {:?}",
-                    function_id, block_id
+                    "Rust interpreter runtime block index map points outside block table for function {function_id:?}, block {block_id:?}"
                 ),
             }
         })
@@ -78,8 +73,7 @@ impl RuntimeEngine {
         let Some(index) = self.const_index_by_id.get(&const_id).copied() else {
             return Err(InterpreterBackendError::Execution {
                 message: format!(
-                    "Rust interpreter runtime could not resolve constant {:?}",
-                    const_id
+                    "Rust interpreter runtime could not resolve constant {const_id:?}"
                 ),
             });
         };
@@ -91,8 +85,7 @@ impl RuntimeEngine {
             .map(|constant| &constant.value)
             .ok_or_else(|| InterpreterBackendError::InternalInvariant {
                 message: format!(
-                    "Rust interpreter runtime constant index map points outside constant table for {:?}",
-                    const_id
+                    "Rust interpreter runtime constant index map points outside constant table for {const_id:?}",
                 ),
             })
     }
