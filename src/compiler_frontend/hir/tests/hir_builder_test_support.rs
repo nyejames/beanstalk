@@ -16,9 +16,9 @@ use crate::compiler_frontend::string_interning::StringTable;
 
 pub(crate) fn validate_module_for_tests(
     module: &HirModule,
-    string_table: &StringTable,
+    _string_table: &StringTable,
 ) -> Result<(), CompilerError> {
-    super::validate_hir_module(module, string_table)
+    super::validate_hir_module(module)
 }
 
 impl<'a> HirBuilder<'a> {

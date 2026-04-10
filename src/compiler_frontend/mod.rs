@@ -306,11 +306,16 @@ impl CompilerFrontend {
         }
     }
 
-    // Planned: dedicated last-use analysis pass (memory-management design "Last-Use Analysis").
-    // Provides a list of places that possible_drops can be inserted for heap managed values
-    // pub fn last_use_analysis()
+    // Planned: dedicated last-use analysis pass (memory-management-design.md §Last-Use Analysis).
+    // WHY: required before any backend can insert `possible_drop` sites for heap-managed values.
+    // pub fn last_use_analysis(&self, hir_module: &HirModule) -> LastUseReport
 
-    // Other phases (might be wrapped into the previous phase)
-    // - Determine which functions can be statically dispatched with guaranteed drops or no drops at all
-    // - Determine inlining opportunities
+    // Planned: static dispatch analysis (memory-management-design.md §Unified ABI).
+    // WHY: identifies which call sites can guarantee drop/no-drop at compile time, avoiding
+    // runtime ownership-flag checks for those calls.
+    // pub fn static_dispatch_analysis(&self, hir_module: &HirModule) -> StaticDispatchReport
+
+    // Planned: inlining analysis.
+    // WHY: small functions called from a single site can be inlined after static dispatch is known,
+    // reducing call overhead and enabling better constant folding across function boundaries.
 }

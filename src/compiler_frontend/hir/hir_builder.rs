@@ -126,6 +126,20 @@ pub struct HirBuilder<'a> {
     pub(super) loop_targets: Vec<LoopTargets>,
 }
 
+// WHAT: generates a typed `allocate_*_id` method for each HIR entity kind.
+// WHY: all nine allocators share identical logic — bump a u32 counter, wrap in a newtype, return.
+//      A module-level macro eliminates the repetition without changing the public API.
+//      To add a new entity type: add the counter field to HirBuilder, then invoke this macro.
+macro_rules! allocate_id {
+    ($method:ident, $counter_field:ident, $id_type:ident) => {
+        pub(crate) fn $method(&mut self) -> $id_type {
+            let id = $id_type(self.$counter_field);
+            self.$counter_field += 1;
+            id
+        }
+    };
+}
+
 impl<'a> HirBuilder<'a> {
     // -----------
     // Constructor
@@ -239,7 +253,7 @@ impl<'a> HirBuilder<'a> {
         self.module.type_context = self.type_context;
         self.module.side_table = self.side_table;
 
-        if let Err(error) = validate_hir_module(&self.module, self.string_table) {
+        if let Err(error) = validate_hir_module(&self.module) {
             return Err(CompilerMessages::from_error_with_warnings(
                 error,
                 warnings,
@@ -361,59 +375,15 @@ impl<'a> HirBuilder<'a> {
         self.lower_top_level_node(node)
     }
 
-    pub(crate) fn allocate_block_id(&mut self) -> BlockId {
-        let id = BlockId(self.next_block_id);
-        self.next_block_id += 1;
-        id
-    }
-
-    pub(crate) fn allocate_function_id(&mut self) -> FunctionId {
-        let id = FunctionId(self.next_function_id);
-        self.next_function_id += 1;
-        id
-    }
-
-    pub(crate) fn allocate_region_id(&mut self) -> RegionId {
-        let id = RegionId(self.next_region_id);
-        self.next_region_id += 1;
-        id
-    }
-
-    pub(crate) fn allocate_local_id(&mut self) -> LocalId {
-        let id = LocalId(self.next_local_id);
-        self.next_local_id += 1;
-        id
-    }
-
-    pub(crate) fn allocate_node_id(&mut self) -> HirNodeId {
-        let id = HirNodeId(self.next_node_id);
-        self.next_node_id += 1;
-        id
-    }
-
-    pub(crate) fn allocate_value_id(&mut self) -> HirValueId {
-        let id = HirValueId(self.next_value_id);
-        self.next_value_id += 1;
-        id
-    }
-
-    pub(crate) fn allocate_struct_id(&mut self) -> StructId {
-        let id = StructId(self.next_struct_id);
-        self.next_struct_id += 1;
-        id
-    }
-
-    pub(crate) fn allocate_field_id(&mut self) -> FieldId {
-        let id = FieldId(self.next_field_id);
-        self.next_field_id += 1;
-        id
-    }
-
-    pub(crate) fn allocate_const_id(&mut self) -> HirConstId {
-        let id = HirConstId(self.next_const_id);
-        self.next_const_id += 1;
-        id
-    }
+    allocate_id!(allocate_block_id, next_block_id, BlockId);
+    allocate_id!(allocate_function_id, next_function_id, FunctionId);
+    allocate_id!(allocate_region_id, next_region_id, RegionId);
+    allocate_id!(allocate_local_id, next_local_id, LocalId);
+    allocate_id!(allocate_node_id, next_node_id, HirNodeId);
+    allocate_id!(allocate_value_id, next_value_id, HirValueId);
+    allocate_id!(allocate_struct_id, next_struct_id, StructId);
+    allocate_id!(allocate_field_id, next_field_id, FieldId);
+    allocate_id!(allocate_const_id, next_const_id, HirConstId);
 
     #[cfg(test)]
     fn advance_counter_past(next_counter: &mut u32, used_id: u32) {

@@ -13,14 +13,10 @@ use crate::compiler_frontend::hir::hir_nodes::{
 };
 use crate::compiler_frontend::hir::hir_side_table::HirLocation;
 use crate::compiler_frontend::hir::utils::terminator_targets;
-use crate::compiler_frontend::string_interning::StringTable;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::collections::VecDeque;
 
-pub(crate) fn validate_hir_module(
-    module: &HirModule,
-    _string_table: &StringTable,
-) -> Result<(), CompilerError> {
+pub(crate) fn validate_hir_module(module: &HirModule) -> Result<(), CompilerError> {
     let mut validator = HirValidator::new(module);
     validator.validate()
 }

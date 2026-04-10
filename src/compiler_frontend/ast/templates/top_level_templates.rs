@@ -587,6 +587,14 @@ fn as_top_level_template_return_expression(node: &AstNode) -> Option<&Expression
     matches!(expression.kind, ExpressionKind::Template(_)).then_some(expression)
 }
 
+/// WHAT: determines which preceding declarations must be copied into a runtime fragment function
+/// so the template can evaluate correctly at the call site.
+///
+/// WHY: a runtime template fragment is lowered into a standalone function (e.g. `__bst_frag_0`).
+/// That function cannot access the parent scope at runtime, so any declaration it references must
+/// be captured explicitly. This function walks the template expression's references, resolves
+/// transitive declaration dependencies, rejects mutable reassignment (not yet supported), and
+/// returns the minimal ordered set of statements to prepend to the fragment body.
 fn build_runtime_fragment_capture_plan(
     candidate: &RuntimeTemplateCandidate,
 ) -> Result<RuntimeFragmentCapturePlan, CompilerError> {
@@ -683,6 +691,13 @@ fn build_runtime_fragment_capture_plan(
     })
 }
 
+/// WHAT: expands the captured declaration set to include any declaration whose value expression
+/// may mutate a symbol that is already captured.
+///
+/// WHY: consider `x = 5; y = mutate(x); [template using y]`. The direct reference walk captures
+/// `y`, but `x` is not directly referenced by the template — only by `y`'s initializer, which
+/// mutates it. This function iterates to a fixed point, pulling in declarations that could
+/// affect already-captured state, so the fragment snapshot remains consistent.
 fn include_mutation_dependencies(
     declaration_lookup: &FxHashMap<InternedPath, (usize, &Declaration)>,
     included_declarations: &mut FxHashSet<usize>,
@@ -735,6 +750,59 @@ fn include_mutation_dependencies(
     Ok(())
 }
 
+/// WHAT: checks whether any branch of a result-call handler may mutate tracked symbols.
+/// WHY: the same three-arm match on `ResultCallHandling` appears in every result-handling
+/// expression variant across both mutation-analysis functions. Centralising it here
+/// eliminates the repetition without adding any new recursive calls.
+fn handling_may_mutate_tracked_symbols(
+    handling: &ResultCallHandling,
+    tracked_symbols: &FxHashSet<InternedPath>,
+) -> bool {
+    match handling {
+        ResultCallHandling::Fallback(fallback_values) => fallback_values
+            .iter()
+            .any(|fallback| expression_may_mutate_tracked_symbols(fallback, tracked_symbols)),
+        ResultCallHandling::Handler { fallback, body, .. } => {
+            fallback.as_ref().is_some_and(|fallback_values| {
+                fallback_values
+                    .iter()
+                    .any(|fallback| expression_may_mutate_tracked_symbols(fallback, tracked_symbols))
+            }) || body
+                .iter()
+                .any(|node| ast_node_may_mutate_tracked_symbols(node, tracked_symbols))
+        }
+        ResultCallHandling::Propagate => false,
+    }
+}
+
+/// WHAT: walks all branches of a result-call handler and adds any referenced symbol names.
+/// WHY: the same three-arm match on `ResultCallHandling` is repeated in every result-handling
+/// expression variant across both reference-collection functions. Centralising it here
+/// eliminates the repetition.
+fn collect_references_from_result_handling(
+    handling: &ResultCallHandling,
+    references: &mut FxHashSet<InternedPath>,
+) {
+    match handling {
+        ResultCallHandling::Fallback(fallback_values) => {
+            for fallback in fallback_values {
+                collect_references_from_expression(fallback, references);
+            }
+        }
+        ResultCallHandling::Handler { fallback, body, .. } => {
+            if let Some(fallback_values) = fallback {
+                for fallback in fallback_values {
+                    collect_references_from_expression(fallback, references);
+                }
+            }
+            for node in body {
+                collect_references_from_ast_node(node, references);
+            }
+        }
+        ResultCallHandling::Propagate => {}
+    }
+}
+
 fn expression_may_mutate_tracked_symbols(
     expression: &Expression,
     tracked_symbols: &FxHashSet<InternedPath>,
@@ -761,23 +829,7 @@ fn expression_may_mutate_tracked_symbols(
                 return true;
             }
 
-            match handling {
-                ResultCallHandling::Fallback(fallback_values) => {
-                    fallback_values.iter().any(|fallback| {
-                        expression_may_mutate_tracked_symbols(fallback, tracked_symbols)
-                    })
-                }
-                ResultCallHandling::Handler { fallback, body, .. } => {
-                    fallback.as_ref().is_some_and(|fallback_values| {
-                        fallback_values.iter().any(|fallback| {
-                            expression_may_mutate_tracked_symbols(fallback, tracked_symbols)
-                        })
-                    }) || body
-                        .iter()
-                        .any(|node| ast_node_may_mutate_tracked_symbols(node, tracked_symbols))
-                }
-                ResultCallHandling::Propagate => false,
-            }
+            handling_may_mutate_tracked_symbols(handling, tracked_symbols)
         }
 
         ExpressionKind::Runtime(nodes) => nodes
@@ -812,27 +864,8 @@ fn expression_may_mutate_tracked_symbols(
         }
 
         ExpressionKind::HandledResult { value, handling } => {
-            if expression_may_mutate_tracked_symbols(value, tracked_symbols) {
-                return true;
-            }
-
-            match handling {
-                ResultCallHandling::Fallback(fallback_values) => {
-                    fallback_values.iter().any(|fallback| {
-                        expression_may_mutate_tracked_symbols(fallback, tracked_symbols)
-                    })
-                }
-                ResultCallHandling::Handler { fallback, body, .. } => {
-                    fallback.as_ref().is_some_and(|fallback_values| {
-                        fallback_values.iter().any(|fallback| {
-                            expression_may_mutate_tracked_symbols(fallback, tracked_symbols)
-                        })
-                    }) || body
-                        .iter()
-                        .any(|node| ast_node_may_mutate_tracked_symbols(node, tracked_symbols))
-                }
-                ResultCallHandling::Propagate => false,
-            }
+            expression_may_mutate_tracked_symbols(value, tracked_symbols)
+                || handling_may_mutate_tracked_symbols(handling, tracked_symbols)
         }
 
         ExpressionKind::Copy(place) => ast_node_may_mutate_tracked_symbols(place, tracked_symbols),
@@ -889,23 +922,7 @@ fn ast_node_may_mutate_tracked_symbols(
                 return true;
             }
 
-            match handling {
-                ResultCallHandling::Fallback(fallback_values) => {
-                    fallback_values.iter().any(|fallback| {
-                        expression_may_mutate_tracked_symbols(fallback, tracked_symbols)
-                    })
-                }
-                ResultCallHandling::Handler { fallback, body, .. } => {
-                    fallback.as_ref().is_some_and(|fallback_values| {
-                        fallback_values.iter().any(|fallback| {
-                            expression_may_mutate_tracked_symbols(fallback, tracked_symbols)
-                        })
-                    }) || body.iter().any(|statement| {
-                        ast_node_may_mutate_tracked_symbols(statement, tracked_symbols)
-                    })
-                }
-                ResultCallHandling::Propagate => false,
-            }
+            handling_may_mutate_tracked_symbols(handling, tracked_symbols)
         }
 
         NodeKind::Rvalue(expression) => {
@@ -1125,26 +1142,7 @@ fn collect_references_from_expression(
             for argument in args {
                 collect_references_from_expression(argument, references);
             }
-
-            match handling {
-                ResultCallHandling::Fallback(fallback_values) => {
-                    for fallback in fallback_values {
-                        collect_references_from_expression(fallback, references);
-                    }
-                }
-                ResultCallHandling::Handler { fallback, body, .. } => {
-                    if let Some(fallback_values) = fallback {
-                        for fallback in fallback_values {
-                            collect_references_from_expression(fallback, references);
-                        }
-                    }
-
-                    for node in body {
-                        collect_references_from_ast_node(node, references);
-                    }
-                }
-                ResultCallHandling::Propagate => {}
-            }
+            collect_references_from_result_handling(handling, references);
         }
 
         ExpressionKind::BuiltinCast { value, .. } => {
@@ -1157,26 +1155,7 @@ fn collect_references_from_expression(
 
         ExpressionKind::HandledResult { value, handling } => {
             collect_references_from_expression(value, references);
-
-            match handling {
-                ResultCallHandling::Fallback(fallback_values) => {
-                    for fallback in fallback_values {
-                        collect_references_from_expression(fallback, references);
-                    }
-                }
-                ResultCallHandling::Handler { fallback, body, .. } => {
-                    if let Some(fallback_values) = fallback {
-                        for fallback in fallback_values {
-                            collect_references_from_expression(fallback, references);
-                        }
-                    }
-
-                    for node in body {
-                        collect_references_from_ast_node(node, references);
-                    }
-                }
-                ResultCallHandling::Propagate => {}
-            }
+            collect_references_from_result_handling(handling, references);
         }
 
         ExpressionKind::Template(template) => {
@@ -1249,26 +1228,7 @@ fn collect_references_from_ast_node(node: &AstNode, references: &mut FxHashSet<I
             for argument in args {
                 collect_references_from_expression(&argument.value, references);
             }
-
-            match handling {
-                ResultCallHandling::Fallback(fallback_values) => {
-                    for fallback in fallback_values {
-                        collect_references_from_expression(fallback, references);
-                    }
-                }
-                ResultCallHandling::Handler { fallback, body, .. } => {
-                    if let Some(fallback_values) = fallback {
-                        for fallback in fallback_values {
-                            collect_references_from_expression(fallback, references);
-                        }
-                    }
-
-                    for node in body {
-                        collect_references_from_ast_node(node, references);
-                    }
-                }
-                ResultCallHandling::Propagate => {}
-            }
+            collect_references_from_result_handling(handling, references);
         }
 
         NodeKind::MultiBind { targets: _, value } => {

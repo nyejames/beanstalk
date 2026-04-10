@@ -566,6 +566,17 @@ fn record_shared_reads_in_pattern(
     Ok(())
 }
 
+/// WHAT: updates borrow state for a single assignment target, checking exclusivity invariants
+/// before committing the new state.
+///
+/// WHY: assignments are the primary write site in the borrow model. Before writing, this function
+/// must verify:
+/// - no conflicting shared borrow of the target place exists (shared/mutable conflict)
+/// - no conflicting mutable borrow exists (multiple-mutable-borrows conflict)
+/// - for field/index places: the base object's borrow state is valid for the narrower access
+///
+/// After verification, it records the assignment fact and transitions the local's state to
+/// reflect the new ownership/borrow status of the written value.
 fn transfer_assign_target(
     context: &mut AssignTransferContext<'_, '_>,
     target: &HirPlace,

@@ -76,6 +76,10 @@ pub fn get_token_kind(
     style_directives: &StyleDirectiveRegistry,
     string_table: &mut StringTable,
 ) -> Result<Token, CompilerError> {
+    // WHY: comments don't produce a token; a labeled loop here lets the comment handler
+    // restart tokenization with `continue` instead of a recursive tail call, preventing
+    // unbounded stack growth in files with many consecutive comment lines.
+    'next_token: loop {
     let mut current_char = match stream.next() {
         Some(ch) => ch,
         None => return_token!(TokenKind::Eof, stream),
@@ -362,8 +366,8 @@ pub fn get_token_kind(
                 stream.next();
             }
 
-            // Do not add any token to the stream, call this function again
-            return get_token_kind(stream, style_directives, string_table);
+            // Comments do not produce a token; loop back to lex the next one.
+            continue 'next_token;
         }
 
         // Subtraction / Negative / Return / Subtract Assign
@@ -525,122 +529,7 @@ pub fn get_token_kind(
 
     // Numbers
     if current_char.is_numeric() {
-        token_value.push(current_char);
-        let mut has_decimal_point = false;
-        let mut saw_digit_after_decimal = false;
-        let mut last_segment_was_digit = true;
-
-        while let Some(&next_char) = stream.peek() {
-            if next_char == '_' {
-                if !last_segment_was_digit {
-                    return_syntax_error!(
-                        "Numeric separators must appear between digits",
-                        stream.new_location(),
-                        {
-                            CompilationStage => "Tokenization",
-                            PrimarySuggestion => "Place underscores only between digits in numeric literals",
-                        }
-                    )
-                }
-
-                let _ = stream.next();
-                last_segment_was_digit = false;
-                continue;
-            }
-
-            if next_char == '.' {
-                // Planned: handle range tokenization here without look-behind/backtracking
-                // and without consuming extra dots.
-
-                if has_decimal_point {
-                    return_syntax_error!(
-                        "Can't have more than one decimal point in a number",
-                        stream.new_location(),
-                        {
-                            CompilationStage => "Tokenization",
-                            PrimarySuggestion => "Remove extra decimal points from the number",
-                        }
-                    )
-                }
-
-                if !last_segment_was_digit {
-                    return_syntax_error!(
-                        "A decimal point must follow a digit",
-                        stream.new_location(),
-                        {
-                            CompilationStage => "Tokenization",
-                            PrimarySuggestion => "Remove the separator before the decimal point",
-                        }
-                    )
-                }
-
-                has_decimal_point = true;
-                last_segment_was_digit = false;
-
-                let Some(dot) = stream.next() else {
-                    return Err(CompilerError::compiler_error(
-                        "Tokenizer peeked a decimal point but could not advance the stream.",
-                    ));
-                };
-                token_value.push(dot);
-                continue;
-            }
-
-            if next_char.is_numeric() {
-                let Some(digit) = stream.next() else {
-                    return Err(CompilerError::compiler_error(
-                        "Tokenizer peeked a numeric character but could not advance the stream.",
-                    ));
-                };
-                token_value.push(digit);
-                last_segment_was_digit = true;
-                if has_decimal_point {
-                    saw_digit_after_decimal = true;
-                }
-            } else {
-                break;
-            }
-        }
-
-        if !last_segment_was_digit {
-            return_syntax_error!(
-                "Number literals must end with a digit",
-                stream.new_location(),
-                {
-                    CompilationStage => "Tokenization",
-                    PrimarySuggestion => "Remove the trailing separator or add a digit after the decimal point",
-                }
-            )
-        }
-
-        if has_decimal_point && !saw_digit_after_decimal {
-            return_syntax_error!(
-                "Float literals must include digits after the decimal point",
-                stream.new_location(),
-                {
-                    CompilationStage => "Tokenization",
-                    PrimarySuggestion => "Add at least one digit after the decimal point",
-                }
-            )
-        }
-
-        if !has_decimal_point {
-            let parsed_value = token_value.parse::<i64>().map_err(|error| {
-                CompilerError::new_syntax_error(
-                    format!("Invalid integer literal '{token_value}': {error}"),
-                    stream.new_location(),
-                )
-            })?;
-            return_token!(TokenKind::IntLiteral(parsed_value), stream);
-        }
-
-        let parsed_value = token_value.parse::<f64>().map_err(|error| {
-            CompilerError::new_syntax_error(
-                format!("Invalid float literal '{token_value}': {error}"),
-                stream.new_location(),
-            )
-        })?;
-        return_token!(TokenKind::FloatLiteral(parsed_value), stream);
+        return tokenize_numeric_literal(current_char, stream);
     }
 
     if current_char.is_alphabetic() {
@@ -656,6 +545,7 @@ pub fn get_token_kind(
             PrimarySuggestion => "Check for typos or unsupported characters",
         }
     )
+    } // 'next_token loop
 }
 
 pub(crate) fn keyword_or_variable(
@@ -749,6 +639,135 @@ pub(crate) fn keyword_or_variable(
             )
         }
     }
+}
+
+/// Tokenize an integer or float literal starting with `first_digit`.
+///
+/// WHAT: consumes digits (with optional `_` separators and one `.` for floats) from the stream
+/// and returns an `IntLiteral` or `FloatLiteral` token.
+/// WHY: extracted from `get_token_kind` to keep the main dispatch function focused on routing
+/// rather than numeric-parsing logic.
+fn tokenize_numeric_literal(
+    first_digit: char,
+    stream: &mut TokenStream<'_>,
+) -> Result<Token, CompilerError> {
+    let mut token_value = String::new();
+    token_value.push(first_digit);
+    let mut has_decimal_point = false;
+    let mut saw_digit_after_decimal = false;
+    let mut last_segment_was_digit = true;
+
+    while let Some(&next_char) = stream.peek() {
+        if next_char == '_' {
+            if !last_segment_was_digit {
+                return_syntax_error!(
+                    "Numeric separators must appear between digits",
+                    stream.new_location(),
+                    {
+                        CompilationStage => "Tokenization",
+                        PrimarySuggestion => "Place underscores only between digits in numeric literals",
+                    }
+                )
+            }
+
+            let _ = stream.next();
+            last_segment_was_digit = false;
+            continue;
+        }
+
+        if next_char == '.' {
+            // Planned: handle range tokenization here without look-behind/backtracking
+            // and without consuming extra dots.
+
+            if has_decimal_point {
+                return_syntax_error!(
+                    "Can't have more than one decimal point in a number",
+                    stream.new_location(),
+                    {
+                        CompilationStage => "Tokenization",
+                        PrimarySuggestion => "Remove extra decimal points from the number",
+                    }
+                )
+            }
+
+            if !last_segment_was_digit {
+                return_syntax_error!(
+                    "A decimal point must follow a digit",
+                    stream.new_location(),
+                    {
+                        CompilationStage => "Tokenization",
+                        PrimarySuggestion => "Remove the separator before the decimal point",
+                    }
+                )
+            }
+
+            has_decimal_point = true;
+            last_segment_was_digit = false;
+
+            let Some(dot) = stream.next() else {
+                return Err(CompilerError::compiler_error(
+                    "Tokenizer peeked a decimal point but could not advance the stream.",
+                ));
+            };
+            token_value.push(dot);
+            continue;
+        }
+
+        if next_char.is_numeric() {
+            let Some(digit) = stream.next() else {
+                return Err(CompilerError::compiler_error(
+                    "Tokenizer peeked a numeric character but could not advance the stream.",
+                ));
+            };
+            token_value.push(digit);
+            last_segment_was_digit = true;
+            if has_decimal_point {
+                saw_digit_after_decimal = true;
+            }
+        } else {
+            break;
+        }
+    }
+
+    if !last_segment_was_digit {
+        return_syntax_error!(
+            "Number literals must end with a digit",
+            stream.new_location(),
+            {
+                CompilationStage => "Tokenization",
+                PrimarySuggestion => "Remove the trailing separator or add a digit after the decimal point",
+            }
+        )
+    }
+
+    if has_decimal_point && !saw_digit_after_decimal {
+        return_syntax_error!(
+            "Float literals must include digits after the decimal point",
+            stream.new_location(),
+            {
+                CompilationStage => "Tokenization",
+                PrimarySuggestion => "Add at least one digit after the decimal point",
+            }
+        )
+    }
+
+    if !has_decimal_point {
+        let parsed_value = token_value.parse::<i64>().map_err(|error| {
+            CompilerError::new_syntax_error(
+                format!("Invalid integer literal '{token_value}': {error}"),
+                stream.new_location(),
+            )
+        })?;
+        return_token!(TokenKind::IntLiteral(parsed_value), stream);
+    }
+
+    let parsed_value = token_value.parse::<f64>().map_err(|error| {
+        CompilerError::new_syntax_error(
+            format!("Invalid float literal '{token_value}': {error}"),
+            stream.new_location(),
+        )
+    })?;
+    return_token!(TokenKind::FloatLiteral(parsed_value), stream);
 }
 
 // Checking if the variable name is valid

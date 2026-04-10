@@ -595,7 +595,20 @@ fn normalize_import_dependency_path(
     Ok(InternedPath::from_components(resolved_components))
 }
 
-// Splits one top-level declaration into the concrete header payload that later AST passes consume.
+// WHAT: classifies one top-level declaration by its leading token and builds the concrete header
+// payload (kind + body token slice + dependency set) that later AST passes consume.
+//
+// WHY: every declaration kind (function, struct, choice/union, constant) has a different leading
+// token pattern. This function dispatches on that token and delegates to kind-specific helpers
+// where they exist, or captures body tokens directly for simpler cases.
+//
+// Dispatch summary:
+//   `|`  (TypeParameterBracket)  → function signature + body token capture
+//   `=`  (Assign)                → struct `= |fields|` or exported constant `= <expr>`
+//   `::`  (DoubleColon)          → choice/union variant list
+//   type tokens / `~`            → exported constant with implicit `=` already consumed
+//   `must` / `This`              → reserved trait syntax, error
+//   anything else                → no header created (e.g. start-template body lines)
 fn create_header(
     full_name: InternedPath,
     exported: bool,
@@ -617,6 +630,7 @@ fn create_header(
     let current_token = token_stream.current_token_kind().to_owned();
 
     match current_token {
+        // Function declaration: `name |params| -> return_type : body ;`
         TokenKind::TypeParameterBracket => {
             ensure_not_keyword_shadow_identifier(
                 declaration_name_text,
@@ -648,74 +662,24 @@ fn create_header(
                 &signature_context,
             )?;
 
-            let mut scopes_opened = 1;
-            let mut scopes_closed = 0;
-
-            // `FunctionSignature::new` stops on the first body token, so the first loop
-            // iteration must inspect the current token before advancing.
-            while scopes_opened > scopes_closed {
-                match token_stream.current_token_kind() {
-                    TokenKind::End => {
-                        scopes_closed += 1;
-                        if scopes_opened > scopes_closed {
-                            body.push(token_stream.current_token());
-                        }
-                    }
-
-                    // Colons used in templates parse into a different token (EndTemplateHead),
-                    // so there isn't any issue with templates creating a colon imbalance.
-                    // But all features in the language MUST otherwise follow the rule that all colons are closed with semicolons.
-                    // The only violations of this rule have to be parsed differently in the tokenizer,
-                    // but it's better from a language design POV for colons to only mean one thing as much as possible anyway.
-                    TokenKind::Colon => {
-                        scopes_opened += 1;
-                        body.push(token_stream.current_token());
-                    }
-
-                    // `::` is an expression/operator token (for example `Choice::Variant`) and
-                    // must not affect function-scope balancing here.
-                    TokenKind::DoubleColon => {
-                        body.push(token_stream.current_token());
-                    }
-
-                    TokenKind::Eof => {
-                        return_rule_error!(
-                            "Unexpected end of file while parsing function body. Missing ';' to close this scope.",
-                            token_stream.current_location(),
-                            {
-                                PrimarySuggestion => "Close the function body with ';'",
-                                SuggestedInsertion => ";",
-                            }
-                        )
-                    }
-
-                    TokenKind::Symbol(name_id) => {
-                        if let Some(path) = context
-                            .file_imports
-                            .iter()
-                            .find(|f| f.name() == Some(*name_id))
-                        {
-                            dependencies.insert(path.to_owned());
-                        }
-                        body.push(token_stream.current_token());
-                    }
-                    _ => {
-                        body.push(token_stream.current_token());
-                    }
-                }
-
-                token_stream.advance();
-            }
+            capture_function_body_tokens(
+                token_stream,
+                context.file_imports,
+                &mut body,
+                &mut dependencies,
+            )?;
 
             kind = HeaderKind::Function { signature };
         }
 
+        // `must` keyword: reserved for future trait implementation syntax.
         TokenKind::Must => {
             return Err(reserved_trait_declaration_error(
                 token_stream.current_location(),
             ));
         }
 
+        // `This` keyword: reserved for future trait `This` self-type syntax.
         TokenKind::TraitThis => {
             return Err(reserved_trait_keyword_error(
                 ReservedTraitKeyword::This,
@@ -725,6 +689,8 @@ fn create_header(
             ));
         }
 
+        // `=` (Assign): either `name = |fields|` (struct) or `#name = <expr>` (exported constant).
+        // Peek ahead: if the next token is `|`, this is a struct definition; otherwise a constant.
         TokenKind::Assign => {
             if let Some(TokenKind::TypeParameterBracket) = token_stream.peek_next_token() {
                 ensure_not_keyword_shadow_identifier(
@@ -740,51 +706,13 @@ fn create_header(
                 );
 
                 token_stream.advance();
-                let mut seen_opening_bracket = false;
 
-                loop {
-                    match token_stream.current_token_kind() {
-                        TokenKind::TypeParameterBracket => {
-                            body.push(token_stream.current_token());
-
-                            if seen_opening_bracket {
-                                token_stream.advance();
-                                break;
-                            }
-
-                            seen_opening_bracket = true;
-                        }
-
-                        TokenKind::Eof => {
-                            return_rule_error!(
-                                "Unexpected end of file while parsing struct definition. Missing closing '|'.",
-                                token_stream.current_location(),
-                                {
-                                    PrimarySuggestion => "Close the struct fields with a final '|'",
-                                    SuggestedInsertion => "|",
-                                }
-                            )
-                        }
-
-                        TokenKind::Symbol(name_id) => {
-                            body.push(token_stream.current_token());
-
-                            if let Some(path) = context
-                                .file_imports
-                                .iter()
-                                .find(|f| f.name() == Some(*name_id))
-                            {
-                                dependencies.insert(path.to_owned());
-                            }
-                        }
-
-                        _ => {
-                            body.push(token_stream.current_token());
-                        }
-                    }
-
-                    token_stream.advance();
-                }
+                capture_struct_field_tokens(
+                    token_stream,
+                    context.file_imports,
+                    &mut body,
+                    &mut dependencies,
+                )?;
 
                 let default_value_dependencies =
                     collect_struct_default_dependencies(&body, context);
@@ -819,6 +747,9 @@ fn create_header(
             }
         }
 
+        // Type-starting tokens: `#name ~Type`, `#name Int`, `#name {collection}`, etc.
+        // These only produce a header if the declaration is exported (`#`). Non-exported
+        // declarations starting with a type are top-level template or body lines, not headers.
         TokenKind::Mutable
         | TokenKind::DatatypeInt
         | TokenKind::DatatypeFloat
@@ -853,6 +784,7 @@ fn create_header(
             }
         }
 
+        // `::` (DoubleColon): choice/union declaration `name :: VariantA | VariantB | ...`
         TokenKind::DoubleColon => {
             ensure_not_keyword_shadow_identifier(
                 declaration_name_text,
@@ -900,6 +832,134 @@ fn emit_header_naming_warning(
     if let Some(warning) = naming_warning_for_identifier(identifier, location, naming_kind) {
         warnings.push(warning);
     }
+}
+
+// WHAT: collects all tokens that make up a function body (`:` … `;`) into `body`,
+// tracking scope depth to handle nested scopes (inner `if`/`loop`/etc.) correctly.
+// Also records any symbol references that match known file imports as dependency edges.
+//
+// WHY: extracted from `create_header` to reduce its length and make the scope-balancing
+// contract explicit. The token stream must already be positioned on the first body token
+// (i.e. `FunctionSignature::new` has already consumed the signature).
+fn capture_function_body_tokens(
+    token_stream: &mut FileTokens,
+    file_imports: &HashSet<InternedPath>,
+    body: &mut Vec<Token>,
+    dependencies: &mut HashSet<InternedPath>,
+) -> Result<(), CompilerError> {
+    let mut scopes_opened = 1;
+    let mut scopes_closed = 0;
+
+    // `FunctionSignature::new` stops on the first body token, so the first loop
+    // iteration must inspect the current token before advancing.
+    while scopes_opened > scopes_closed {
+        match token_stream.current_token_kind() {
+            TokenKind::End => {
+                scopes_closed += 1;
+                if scopes_opened > scopes_closed {
+                    body.push(token_stream.current_token());
+                }
+            }
+
+            // Colons used in templates parse into a different token (StartTemplateBody),
+            // so there is no risk of templates creating a colon imbalance here.
+            // All other language constructs follow the invariant: every `:` is closed by `;`.
+            TokenKind::Colon => {
+                scopes_opened += 1;
+                body.push(token_stream.current_token());
+            }
+
+            // `::` is an expression/operator token (e.g. `Choice::Variant`) and must not
+            // affect function-scope depth balancing.
+            TokenKind::DoubleColon => {
+                body.push(token_stream.current_token());
+            }
+
+            TokenKind::Eof => {
+                return_rule_error!(
+                    "Unexpected end of file while parsing function body. Missing ';' to close this scope.",
+                    token_stream.current_location(),
+                    {
+                        PrimarySuggestion => "Close the function body with ';'",
+                        SuggestedInsertion => ";",
+                    }
+                )
+            }
+
+            TokenKind::Symbol(name_id) => {
+                if let Some(path) = file_imports.iter().find(|f| f.name() == Some(*name_id)) {
+                    dependencies.insert(path.to_owned());
+                }
+                body.push(token_stream.current_token());
+            }
+
+            _ => {
+                body.push(token_stream.current_token());
+            }
+        }
+
+        token_stream.advance();
+    }
+
+    Ok(())
+}
+
+// WHAT: collects all tokens that make up a struct field list (`|fields|`) into `body`,
+// tracking the opening and closing `|` (TypeParameterBracket) delimiters.
+// Also records any symbol references that match known file imports as dependency edges.
+//
+// WHY: extracted from `create_header` to reduce its length and make the struct-body
+// boundary contract explicit. The token stream must be positioned on the first token
+// inside or at the opening `|` (the caller has already advanced past `=`).
+fn capture_struct_field_tokens(
+    token_stream: &mut FileTokens,
+    file_imports: &HashSet<InternedPath>,
+    body: &mut Vec<Token>,
+    dependencies: &mut HashSet<InternedPath>,
+) -> Result<(), CompilerError> {
+    let mut seen_opening_bracket = false;
+
+    loop {
+        match token_stream.current_token_kind() {
+            TokenKind::TypeParameterBracket => {
+                body.push(token_stream.current_token());
+
+                if seen_opening_bracket {
+                    token_stream.advance();
+                    break;
+                }
+
+                seen_opening_bracket = true;
+            }
+
+            TokenKind::Eof => {
+                return_rule_error!(
+                    "Unexpected end of file while parsing struct definition. Missing closing '|'.",
+                    token_stream.current_location(),
+                    {
+                        PrimarySuggestion => "Close the struct fields with a final '|'",
+                        SuggestedInsertion => "|",
+                    }
+                )
+            }
+
+            TokenKind::Symbol(name_id) => {
+                body.push(token_stream.current_token());
+
+                if let Some(path) = file_imports.iter().find(|f| f.name() == Some(*name_id)) {
+                    dependencies.insert(path.to_owned());
+                }
+            }
+
+            _ => {
+                body.push(token_stream.current_token());
+            }
+        }
+
+        token_stream.advance();
+    }
+
+    Ok(())
 }
 
 struct ConstantHeaderPayload {

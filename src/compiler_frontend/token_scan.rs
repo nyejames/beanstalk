@@ -43,8 +43,8 @@ impl NestingDepth {
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) struct ExpressionBoundaryDepth {
-    parenthesis: i32,
-    curly: i32,
+    parenthesis: usize,
+    curly: usize,
 }
 
 impl ExpressionBoundaryDepth {
@@ -54,10 +54,10 @@ impl ExpressionBoundaryDepth {
 
     pub(crate) fn step(&mut self, token_kind: &TokenKind) {
         match token_kind {
-            TokenKind::OpenParenthesis => self.parenthesis += 1,
-            TokenKind::CloseParenthesis if self.parenthesis > 0 => self.parenthesis -= 1,
-            TokenKind::OpenCurly => self.curly += 1,
-            TokenKind::CloseCurly if self.curly > 0 => self.curly -= 1,
+            TokenKind::OpenParenthesis => self.parenthesis = self.parenthesis.saturating_add(1),
+            TokenKind::CloseParenthesis => self.parenthesis = self.parenthesis.saturating_sub(1),
+            TokenKind::OpenCurly => self.curly = self.curly.saturating_add(1),
+            TokenKind::CloseCurly => self.curly = self.curly.saturating_sub(1),
             _ => {}
         }
     }
