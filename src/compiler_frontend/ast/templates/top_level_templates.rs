@@ -764,9 +764,9 @@ fn handling_may_mutate_tracked_symbols(
             .any(|fallback| expression_may_mutate_tracked_symbols(fallback, tracked_symbols)),
         ResultCallHandling::Handler { fallback, body, .. } => {
             fallback.as_ref().is_some_and(|fallback_values| {
-                fallback_values
-                    .iter()
-                    .any(|fallback| expression_may_mutate_tracked_symbols(fallback, tracked_symbols))
+                fallback_values.iter().any(|fallback| {
+                    expression_may_mutate_tracked_symbols(fallback, tracked_symbols)
+                })
             }) || body
                 .iter()
                 .any(|node| ast_node_may_mutate_tracked_symbols(node, tracked_symbols))

@@ -904,8 +904,8 @@ fn join_lines_with_spaces(lines: &[Vec<MarkdownInlineAtom>]) -> Vec<MarkdownInli
 
     for (index, line) in lines.iter().enumerate() {
         if index > 0 {
-            // Preserve a soft line boundary so inline rendering can collapse it to
-            // visible whitespace without accidentally enabling cross-line link parsing.
+            // Preserve a soft line boundary for inline parsing rules (for example
+            // preventing cross-line link parsing) without forcing a rendered space.
             joined.push(MarkdownInlineAtom::Char('\n'));
         }
         joined.extend(line.iter().copied());

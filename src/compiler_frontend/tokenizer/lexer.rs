@@ -80,471 +80,471 @@ pub fn get_token_kind(
     // restart tokenization with `continue` instead of a recursive tail call, preventing
     // unbounded stack growth in files with many consecutive comment lines.
     'next_token: loop {
-    let mut current_char = match stream.next() {
-        Some(ch) => ch,
-        None => return_token!(TokenKind::Eof, stream),
-    };
-
-    let mut token_value: String = String::new();
-
-    // Template bodies are intentionally tokenized as "mostly raw text" so the body
-    // parser can treat everything between delimiters as string content unless a new
-    // nested template begins or the current template closes.
-    if stream.mode == TokenizeMode::TemplateBody {
-        match stream.current_template_body_mode() {
-            TemplateBodyMode::Balanced => {
-                return tokenize_code_template_body(current_char, stream, string_table);
-            }
-            TemplateBodyMode::DiscardBalanced => {
-                return tokenize_discard_template_body(current_char, stream);
-            }
-            TemplateBodyMode::Normal => {
-                if current_char != ']' && current_char != '[' {
-                    return tokenize_template_body(current_char, stream, string_table);
-                }
-            }
-        }
-    }
-
-    // Check for raw strings (backticks)
-    // Also used in templates for raw outputs
-    if current_char == '`' {
-        while let Some(ch) = stream.next() {
-            if ch == '`' {
-                let interned_string = string_table.intern(&token_value);
-                return_token!(TokenKind::RawStringLiteral(interned_string), stream);
-            }
-
-            token_value.push(ch);
-        }
-
-        // If we reach here, the raw string was not terminated
-        return_syntax_error!(
-            "Unterminated raw string literal - missing closing backtick",
-            stream.new_location(),
-            {
-                CompilationStage => "Tokenization",
-                PrimarySuggestion => "Add closing backtick at the end of the raw string",
-                SuggestedInsertion => "`",
-                SuggestedLocation => "at end of raw string",
-            }
-        )
-    }
-
-    // Whitespace
-    while current_char.is_whitespace() {
-        if current_char == '\n' {
-            // Skip any whitespace after this before returning it to save on tokens.
-            // There is no semantic reason that the parser needs to distinguish multiple newlines.
-            // Scene Bodies are already parsed separately above this.
-            // Same goes for carriage returns, but those are handled in their own function to properly handle CRLF pairs and different newline modes.
-            consume_all_whitespace(stream);
-
-            return_token!(TokenKind::Newline, stream);
-        } else if current_char == '\r' {
-            let _ = consume_carriage_return_newline(stream);
-            consume_all_whitespace(stream);
-            return_token!(TokenKind::Newline, stream);
-        } else {
-            current_char = match stream.next() {
-                Some(ch) => ch,
-                None => return_token!(TokenKind::Eof, stream),
-            };
-        }
-    }
-
-    // To ignore leading whitespace for the next token position
-    stream.update_start_position();
-
-    if current_char == '[' {
-        // Start a fresh nested template and remember that we are now parsing
-        // that nested template's head.
-        stream.push_template_mode(TokenizeMode::TemplateHead);
-        return_token!(TokenKind::TemplateHead, stream);
-    }
-
-    if current_char == ']' {
-        // Closing a template restores whatever mode the parent template was in
-        // (normal code, template head, or template body).
-        stream.pop_template_mode();
-        return_token!(TokenKind::TemplateClose, stream);
-    }
-
-    // Check if going into the template body
-    if current_char == ':' {
-        if stream.mode == TokenizeMode::TemplateHead {
-            stream.set_current_template_mode(TokenizeMode::TemplateBody);
-
-            return_token!(TokenKind::StartTemplateBody, stream);
-        }
-
-        // ::
-        if let Some(&next_char) = stream.peek()
-            && next_char == ':'
-        {
-            stream.next();
-
-            return_token!(TokenKind::DoubleColon, stream);
-        }
-
-        return_token!(TokenKind::Colon, stream);
-    }
-
-    if current_char == '$' {
-        if stream.mode != TokenizeMode::TemplateHead {
-            return_syntax_error!(
-                "The '$' style directive syntax is only valid inside template heads.",
-                stream.new_location(),
-                {
-                    CompilationStage => "Tokenization",
-                    PrimarySuggestion => "Move this '$' directive into a template head or remove it",
-                }
-            )
-        }
-
-        let Some(&first_char) = stream.peek() else {
-            return_syntax_error!(
-                "Expected a style directive name after '$'.",
-                stream.new_location(),
-                {
-                    CompilationStage => "Tokenization",
-                    PrimarySuggestion => "Use one of the registered style directives in the template head",
-                }
-            )
+        let mut current_char = match stream.next() {
+            Some(ch) => ch,
+            None => return_token!(TokenKind::Eof, stream),
         };
 
-        if !first_char.is_alphabetic() && first_char != '_' {
+        let mut token_value: String = String::new();
+
+        // Template bodies are intentionally tokenized as "mostly raw text" so the body
+        // parser can treat everything between delimiters as string content unless a new
+        // nested template begins or the current template closes.
+        if stream.mode == TokenizeMode::TemplateBody {
+            match stream.current_template_body_mode() {
+                TemplateBodyMode::Balanced => {
+                    return tokenize_code_template_body(current_char, stream, string_table);
+                }
+                TemplateBodyMode::DiscardBalanced => {
+                    return tokenize_discard_template_body(current_char, stream);
+                }
+                TemplateBodyMode::Normal => {
+                    if current_char != ']' && current_char != '[' {
+                        return tokenize_template_body(current_char, stream, string_table);
+                    }
+                }
+            }
+        }
+
+        // Check for raw strings (backticks)
+        // Also used in templates for raw outputs
+        if current_char == '`' {
+            while let Some(ch) = stream.next() {
+                if ch == '`' {
+                    let interned_string = string_table.intern(&token_value);
+                    return_token!(TokenKind::RawStringLiteral(interned_string), stream);
+                }
+
+                token_value.push(ch);
+            }
+
+            // If we reach here, the raw string was not terminated
             return_syntax_error!(
-                "Expected a style directive name immediately after '$'.",
+                "Unterminated raw string literal - missing closing backtick",
                 stream.new_location(),
                 {
                     CompilationStage => "Tokenization",
-                    PrimarySuggestion => "Write the directive without whitespace, for example '$markdown'",
+                    PrimarySuggestion => "Add closing backtick at the end of the raw string",
+                    SuggestedInsertion => "`",
+                    SuggestedLocation => "at end of raw string",
                 }
             )
         }
 
-        token_value.push(
-            stream
-                .next()
-                .expect("validated style directive should still expose its first identifier char"),
-        );
+        // Whitespace
+        while current_char.is_whitespace() {
+            if current_char == '\n' {
+                // Skip any whitespace after this before returning it to save on tokens.
+                // There is no semantic reason that the parser needs to distinguish multiple newlines.
+                // Scene Bodies are already parsed separately above this.
+                // Same goes for carriage returns, but those are handled in their own function to properly handle CRLF pairs and different newline modes.
+                consume_all_whitespace(stream);
 
-        while let Some(&next_char) = stream.peek() {
-            if !is_valid_var_char(&next_char) {
-                break;
+                return_token!(TokenKind::Newline, stream);
+            } else if current_char == '\r' {
+                let _ = consume_carriage_return_newline(stream);
+                consume_all_whitespace(stream);
+                return_token!(TokenKind::Newline, stream);
+            } else {
+                current_char = match stream.next() {
+                    Some(ch) => ch,
+                    None => return_token!(TokenKind::Eof, stream),
+                };
+            }
+        }
+
+        // To ignore leading whitespace for the next token position
+        stream.update_start_position();
+
+        if current_char == '[' {
+            // Start a fresh nested template and remember that we are now parsing
+            // that nested template's head.
+            stream.push_template_mode(TokenizeMode::TemplateHead);
+            return_token!(TokenKind::TemplateHead, stream);
+        }
+
+        if current_char == ']' {
+            // Closing a template restores whatever mode the parent template was in
+            // (normal code, template head, or template body).
+            stream.pop_template_mode();
+            return_token!(TokenKind::TemplateClose, stream);
+        }
+
+        // Check if going into the template body
+        if current_char == ':' {
+            if stream.mode == TokenizeMode::TemplateHead {
+                stream.set_current_template_mode(TokenizeMode::TemplateBody);
+
+                return_token!(TokenKind::StartTemplateBody, stream);
+            }
+
+            // ::
+            if let Some(&next_char) = stream.peek()
+                && next_char == ':'
+            {
+                stream.next();
+
+                return_token!(TokenKind::DoubleColon, stream);
+            }
+
+            return_token!(TokenKind::Colon, stream);
+        }
+
+        if current_char == '$' {
+            if stream.mode != TokenizeMode::TemplateHead {
+                return_syntax_error!(
+                    "The '$' style directive syntax is only valid inside template heads.",
+                    stream.new_location(),
+                    {
+                        CompilationStage => "Tokenization",
+                        PrimarySuggestion => "Move this '$' directive into a template head or remove it",
+                    }
+                )
+            }
+
+            let Some(&first_char) = stream.peek() else {
+                return_syntax_error!(
+                    "Expected a style directive name after '$'.",
+                    stream.new_location(),
+                    {
+                        CompilationStage => "Tokenization",
+                        PrimarySuggestion => "Use one of the registered style directives in the template head",
+                    }
+                )
+            };
+
+            if !first_char.is_alphabetic() && first_char != '_' {
+                return_syntax_error!(
+                    "Expected a style directive name immediately after '$'.",
+                    stream.new_location(),
+                    {
+                        CompilationStage => "Tokenization",
+                        PrimarySuggestion => "Write the directive without whitespace, for example '$markdown'",
+                    }
+                )
             }
 
             token_value.push(
-                stream
-                    .next()
-                    .expect("peeked style directive character should remain available"),
+                stream.next().expect(
+                    "validated style directive should still expose its first identifier char",
+                ),
             );
-        }
 
-        let directive = string_table.intern(&token_value);
-        let Some(body_mode) = style_directives.body_mode_for(&token_value) else {
-            return Err(unsupported_style_directive_syntax_error(
-                &token_value,
-                &style_directives.supported_directives_for_diagnostic(),
-                stream.new_location(),
-                "Tokenization",
-            ));
-        };
-
-        stream.mark_current_template_body_mode(body_mode);
-        return_token!(TokenKind::StyleDirective(directive), stream);
-    }
-
-    if current_char == END_SCOPE_CHAR {
-        return_token!(TokenKind::End, stream);
-    }
-
-    // Check for string literals
-    if current_char == '"' {
-        return tokenize_string(stream, string_table);
-    }
-
-    // Check for character literals
-    if current_char == '\'' {
-        if let Some(c) = stream.next()
-            && let Some(&char_after_next) = stream.peek()
-            && char_after_next == '\''
-        {
-            stream.next(); // Consume the closing quote
-            return_token!(TokenKind::CharLiteral(c), stream);
-        };
-
-        // If not correct declaration of char
-        return_syntax_error!(
-            format!("Expected a character after the single quote in a char literal. Found {current_char}"),
-            stream.new_location(),
-            {
-                CompilationStage => "Tokenization",
-                PrimarySuggestion => "Character literals must be exactly one character between single quotes",
-                SuggestedReplacement => "'x'",
-            }
-        )
-    }
-
-    // Functions and grouping expressions
-    if current_char == '(' {
-        return_token!(TokenKind::OpenParenthesis, stream);
-    }
-
-    if current_char == ')' {
-        return_token!(TokenKind::CloseParenthesis, stream);
-    }
-
-    // Context Free Grammars
-    if current_char == '=' {
-        // =>
-        if let Some(&next_char) = stream.peek()
-            && next_char == '>'
-        {
-            stream.next();
-            return_token!(TokenKind::FatArrow, stream);
-        }
-
-        return_token!(TokenKind::Assign, stream);
-    }
-
-    if current_char == ',' {
-        return_token!(TokenKind::Comma, stream);
-    }
-
-    if current_char == '.' {
-        // Check if variadic
-        if let Some(&peeked_char) = stream.peek()
-            && peeked_char == '.'
-        {
-            stream.next();
-
-            return_token!(TokenKind::Variadic, stream);
-        }
-
-        return_token!(TokenKind::Dot, stream);
-    }
-
-    // Collections
-    if current_char == '{' {
-        return_token!(TokenKind::OpenCurly, stream);
-    }
-
-    if current_char == '}' {
-        return_token!(TokenKind::CloseCurly, stream);
-    }
-
-    // Structs
-    if current_char == '|' {
-        return_token!(TokenKind::TypeParameterBracket, stream);
-    }
-
-    // Currently not using bangs
-    if current_char == '!' {
-        return_token!(TokenKind::Bang, stream);
-    }
-
-    // Option type
-    if current_char == '?' {
-        return_token!(TokenKind::QuestionMark, stream);
-    }
-
-    // Comments / Subtraction / Negative / Scene Head / Arrow
-    if current_char == '-'
-        && let Some(&next_char) = stream.peek()
-    {
-        // Comments
-        if next_char == '-' {
-            stream.next();
-
-            while let Some(ch) = stream.peek() {
-                if ch == &'\n' || ch == &'\r' {
+            while let Some(&next_char) = stream.peek() {
+                if !is_valid_var_char(&next_char) {
                     break;
                 }
 
-                stream.next();
+                token_value.push(
+                    stream
+                        .next()
+                        .expect("peeked style directive character should remain available"),
+                );
             }
 
-            // Comments do not produce a token; loop back to lex the next one.
-            continue 'next_token;
+            let directive = string_table.intern(&token_value);
+            let Some(body_mode) = style_directives.body_mode_for(&token_value) else {
+                return Err(unsupported_style_directive_syntax_error(
+                    &token_value,
+                    &style_directives.supported_directives_for_diagnostic(),
+                    stream.new_location(),
+                    "Tokenization",
+                ));
+            };
+
+            stream.mark_current_template_body_mode(body_mode);
+            return_token!(TokenKind::StyleDirective(directive), stream);
         }
 
-        // Subtraction / Negative / Return / Subtract Assign
-        if next_char == '=' {
-            stream.next();
-            return_token!(TokenKind::SubtractAssign, stream);
+        if current_char == END_SCOPE_CHAR {
+            return_token!(TokenKind::End, stream);
         }
 
-        if next_char == '>' {
-            stream.next();
-            return_token!(TokenKind::Arrow, stream);
+        // Check for string literals
+        if current_char == '"' {
+            return tokenize_string(stream, string_table);
         }
 
-        if next_char.is_numeric() {
-            return_token!(TokenKind::Negative, stream);
-        }
+        // Check for character literals
+        if current_char == '\'' {
+            if let Some(c) = stream.next()
+                && let Some(&char_after_next) = stream.peek()
+                && char_after_next == '\''
+            {
+                stream.next(); // Consume the closing quote
+                return_token!(TokenKind::CharLiteral(c), stream);
+            };
 
-        return_token!(TokenKind::Subtract, stream);
-    }
-
-    // Mathematical operators
-    // must peak ahead to check for exponentiation (**) or roots (//) and assign variations
-    if current_char == '+' {
-        if let Some(&next_char) = stream.peek()
-            && next_char == '='
-        {
-            stream.next();
-            return_token!(TokenKind::AddAssign, stream);
-        }
-
-        return_token!(TokenKind::Add, stream);
-    }
-
-    if current_char == '*' {
-        if let Some(&next_char) = stream.peek()
-            && next_char == '='
-        {
-            stream.next();
-            return_token!(TokenKind::MultiplyAssign, stream);
-        }
-
-        return_token!(TokenKind::Multiply, stream);
-    }
-
-    if current_char == '/' {
-        if let Some(&next_char) = stream.peek() {
-            if next_char == '/' {
-                stream.next();
-
-                if let Some(&next_next_char) = stream.peek()
-                    && next_next_char == '='
+            // If not correct declaration of char
+            return_syntax_error!(
+                format!("Expected a character after the single quote in a char literal. Found {current_char}"),
+                stream.new_location(),
                 {
-                    stream.next();
-                    return_token!(TokenKind::RootAssign, stream);
+                    CompilationStage => "Tokenization",
+                    PrimarySuggestion => "Character literals must be exactly one character between single quotes",
+                    SuggestedReplacement => "'x'",
                 }
-                return_token!(TokenKind::Root, stream);
-            }
-
-            if next_char == '=' {
-                stream.next();
-                return_token!(TokenKind::DivideAssign, stream);
-            }
+            )
         }
 
-        return_token!(TokenKind::Divide, stream);
-    }
-
-    if current_char == '%' {
-        if let Some(&next_char) = stream.peek() {
-            if next_char == '=' {
-                stream.next();
-                return_token!(TokenKind::ModulusAssign, stream);
-            }
-
-            if next_char == '%' {
-                stream.next();
-                if let Some(&next_next_char) = stream.peek()
-                    && next_next_char == '='
-                {
-                    stream.next();
-                    return_token!(TokenKind::RemainderAssign, stream);
-                }
-                return_token!(TokenKind::Remainder, stream);
-            }
+        // Functions and grouping expressions
+        if current_char == '(' {
+            return_token!(TokenKind::OpenParenthesis, stream);
         }
 
-        return_token!(TokenKind::Modulus, stream);
-    }
+        if current_char == ')' {
+            return_token!(TokenKind::CloseParenthesis, stream);
+        }
 
-    if current_char == '^' {
-        if let Some(&next_char) = stream.peek()
-            && next_char == '='
+        // Context Free Grammars
+        if current_char == '=' {
+            // =>
+            if let Some(&next_char) = stream.peek()
+                && next_char == '>'
+            {
+                stream.next();
+                return_token!(TokenKind::FatArrow, stream);
+            }
+
+            return_token!(TokenKind::Assign, stream);
+        }
+
+        if current_char == ',' {
+            return_token!(TokenKind::Comma, stream);
+        }
+
+        if current_char == '.' {
+            // Check if variadic
+            if let Some(&peeked_char) = stream.peek()
+                && peeked_char == '.'
+            {
+                stream.next();
+
+                return_token!(TokenKind::Variadic, stream);
+            }
+
+            return_token!(TokenKind::Dot, stream);
+        }
+
+        // Collections
+        if current_char == '{' {
+            return_token!(TokenKind::OpenCurly, stream);
+        }
+
+        if current_char == '}' {
+            return_token!(TokenKind::CloseCurly, stream);
+        }
+
+        // Structs
+        if current_char == '|' {
+            return_token!(TokenKind::TypeParameterBracket, stream);
+        }
+
+        // Currently not using bangs
+        if current_char == '!' {
+            return_token!(TokenKind::Bang, stream);
+        }
+
+        // Option type
+        if current_char == '?' {
+            return_token!(TokenKind::QuestionMark, stream);
+        }
+
+        // Comments / Subtraction / Negative / Scene Head / Arrow
+        if current_char == '-'
+            && let Some(&next_char) = stream.peek()
         {
-            stream.next();
-            return_token!(TokenKind::ExponentAssign, stream);
-        }
+            // Comments
+            if next_char == '-' {
+                stream.next();
 
-        return_token!(TokenKind::Exponent, stream);
-    }
+                while let Some(ch) = stream.peek() {
+                    if ch == &'\n' || ch == &'\r' {
+                        break;
+                    }
 
-    // Check for greater than and Less than logic operators
-    // must also peak ahead to check it's not also equal to
-    if current_char == '>' {
-        if let Some(&next_char) = stream.peek() {
+                    stream.next();
+                }
+
+                // Comments do not produce a token; loop back to lex the next one.
+                continue 'next_token;
+            }
+
+            // Subtraction / Negative / Return / Subtract Assign
             if next_char == '=' {
                 stream.next();
-                return_token!(TokenKind::GreaterThanOrEqual, stream);
+                return_token!(TokenKind::SubtractAssign, stream);
             }
 
             if next_char == '>' {
                 stream.next();
-                return_token!(TokenKind::ChannelSend, stream);
+                return_token!(TokenKind::Arrow, stream);
             }
+
+            if next_char.is_numeric() {
+                return_token!(TokenKind::Negative, stream);
+            }
+
+            return_token!(TokenKind::Subtract, stream);
         }
 
-        return_token!(TokenKind::GreaterThan, stream);
-    }
-
-    if current_char == '<' {
-        if let Some(&next_char) = stream.peek() {
-            if next_char == '=' {
+        // Mathematical operators
+        // must peak ahead to check for exponentiation (**) or roots (//) and assign variations
+        if current_char == '+' {
+            if let Some(&next_char) = stream.peek()
+                && next_char == '='
+            {
                 stream.next();
-                return_token!(TokenKind::LessThanOrEqual, stream);
+                return_token!(TokenKind::AddAssign, stream);
             }
 
-            if next_char == '<' {
-                stream.next();
-                return_token!(TokenKind::ChannelReceive, stream);
-            }
+            return_token!(TokenKind::Add, stream);
         }
 
-        return_token!(TokenKind::LessThan, stream);
-    }
+        if current_char == '*' {
+            if let Some(&next_char) = stream.peek()
+                && next_char == '='
+            {
+                stream.next();
+                return_token!(TokenKind::MultiplyAssign, stream);
+            }
 
-    if current_char == '~' {
-        return_token!(TokenKind::Mutable, stream);
-    }
+            return_token!(TokenKind::Multiply, stream);
+        }
 
-    if current_char == '#' {
-        return_token!(TokenKind::Hash, stream);
-    }
+        if current_char == '/' {
+            if let Some(&next_char) = stream.peek() {
+                if next_char == '/' {
+                    stream.next();
 
-    // Path
-    if current_char == '@' {
-        return parse_file_path(stream, string_table);
-    }
+                    if let Some(&next_next_char) = stream.peek()
+                        && next_next_char == '='
+                    {
+                        stream.next();
+                        return_token!(TokenKind::RootAssign, stream);
+                    }
+                    return_token!(TokenKind::Root, stream);
+                }
 
-    // Wildcard for pattern matching
-    if current_char == '_' {
-        if let Some(next_char) = stream.peek()
-            && is_valid_var_char(next_char)
-        {
+                if next_char == '=' {
+                    stream.next();
+                    return_token!(TokenKind::DivideAssign, stream);
+                }
+            }
+
+            return_token!(TokenKind::Divide, stream);
+        }
+
+        if current_char == '%' {
+            if let Some(&next_char) = stream.peek() {
+                if next_char == '=' {
+                    stream.next();
+                    return_token!(TokenKind::ModulusAssign, stream);
+                }
+
+                if next_char == '%' {
+                    stream.next();
+                    if let Some(&next_next_char) = stream.peek()
+                        && next_next_char == '='
+                    {
+                        stream.next();
+                        return_token!(TokenKind::RemainderAssign, stream);
+                    }
+                    return_token!(TokenKind::Remainder, stream);
+                }
+            }
+
+            return_token!(TokenKind::Modulus, stream);
+        }
+
+        if current_char == '^' {
+            if let Some(&next_char) = stream.peek()
+                && next_char == '='
+            {
+                stream.next();
+                return_token!(TokenKind::ExponentAssign, stream);
+            }
+
+            return_token!(TokenKind::Exponent, stream);
+        }
+
+        // Check for greater than and Less than logic operators
+        // must also peak ahead to check it's not also equal to
+        if current_char == '>' {
+            if let Some(&next_char) = stream.peek() {
+                if next_char == '=' {
+                    stream.next();
+                    return_token!(TokenKind::GreaterThanOrEqual, stream);
+                }
+
+                if next_char == '>' {
+                    stream.next();
+                    return_token!(TokenKind::ChannelSend, stream);
+                }
+            }
+
+            return_token!(TokenKind::GreaterThan, stream);
+        }
+
+        if current_char == '<' {
+            if let Some(&next_char) = stream.peek() {
+                if next_char == '=' {
+                    stream.next();
+                    return_token!(TokenKind::LessThanOrEqual, stream);
+                }
+
+                if next_char == '<' {
+                    stream.next();
+                    return_token!(TokenKind::ChannelReceive, stream);
+                }
+            }
+
+            return_token!(TokenKind::LessThan, stream);
+        }
+
+        if current_char == '~' {
+            return_token!(TokenKind::Mutable, stream);
+        }
+
+        if current_char == '#' {
+            return_token!(TokenKind::Hash, stream);
+        }
+
+        // Path
+        if current_char == '@' {
+            return parse_file_path(stream, string_table);
+        }
+
+        // Wildcard for pattern matching
+        if current_char == '_' {
+            if let Some(next_char) = stream.peek()
+                && is_valid_var_char(next_char)
+            {
+                token_value.push(current_char);
+                return keyword_or_variable(&mut token_value, stream, string_table);
+            }
+
+            return_token!(TokenKind::Wildcard, stream);
+        }
+
+        // Numbers
+        if current_char.is_numeric() {
+            return tokenize_numeric_literal(current_char, stream);
+        }
+
+        if current_char.is_alphabetic() {
             token_value.push(current_char);
             return keyword_or_variable(&mut token_value, stream, string_table);
         }
 
-        return_token!(TokenKind::Wildcard, stream);
-    }
-
-    // Numbers
-    if current_char.is_numeric() {
-        return tokenize_numeric_literal(current_char, stream);
-    }
-
-    if current_char.is_alphabetic() {
-        token_value.push(current_char);
-        return keyword_or_variable(&mut token_value, stream, string_table);
-    }
-
-    return_syntax_error!(
-        format!("Invalid Token Used: '{}' this is not recognised or supported by the compiler_frontend", current_char),
-        stream.new_location(),
-        {
-            CompilationStage => "Tokenization",
-            PrimarySuggestion => "Check for typos or unsupported characters",
-        }
-    )
+        return_syntax_error!(
+            format!("Invalid Token Used: '{}' this is not recognised or supported by the compiler_frontend", current_char),
+            stream.new_location(),
+            {
+                CompilationStage => "Tokenization",
+                PrimarySuggestion => "Check for typos or unsupported characters",
+            }
+        )
     } // 'next_token loop
 }
 

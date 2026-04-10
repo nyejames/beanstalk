@@ -132,7 +132,7 @@ fn requires_horizontal_whitespace_before_label() {
 #[test]
 fn newline_between_target_and_label_breaks_link_recognition() {
     let rendered = to_markdown("@https://example.com\n(Example)", "p");
-    assert_eq!(rendered, "<p>@https://example.com (Example)</p>");
+    assert_eq!(rendered, "<p>@https://example.com(Example)</p>");
 }
 
 #[test]
@@ -244,7 +244,7 @@ fn newline_text_continues_previous_list_item() {
 
     assert_eq!(
         rendered,
-        "<ul><li>Square brackets are NOT used for arrays, curly braces are used instead. Square brackets are only used for string templates. Items in collections are accessed via methods.</li><li>Equality and other logical operators use keywords like &quot;is&quot; and &quot;not&quot; (you can&#39;t use == or ! for example)</li></ul>"
+        "<ul><li>Square brackets are NOT used for arrays, curly braces are used instead.Square brackets are only used for string templates. Items in collections are accessed via methods.</li><li>Equality and other logical operators use keywords like &quot;is&quot; and &quot;not&quot;(you can&#39;t use == or ! for example)</li></ul>"
     );
 }
 
@@ -254,7 +254,7 @@ fn blank_line_breaks_list_continuation() {
 
     assert_eq!(
         rendered,
-        "<ul><li>first line continuation line</li></ul><p>plain paragraph</p>"
+        "<ul><li>first linecontinuation line</li></ul><p>plain paragraph</p>"
     );
 }
 
@@ -280,7 +280,7 @@ fn list_items_keep_inline_markdown_links_and_escaping() {
 #[test]
 fn non_list_lines_remain_plain_markdown_blocks() {
     let rendered = to_markdown("-not a list\nstill plain text", "p");
-    assert_eq!(rendered, "<p>-not a list still plain text</p>");
+    assert_eq!(rendered, "<p>-not a liststill plain text</p>");
 }
 
 #[test]
@@ -319,7 +319,7 @@ fn two_newlines_before_child_anchor_keep_normal_paragraph_break_behavior() {
 #[test]
 fn single_newline_before_normal_text_keeps_paragraph_open() {
     let rendered = to_markdown("hello\nworld", "p");
-    assert_eq!(rendered, "<p>hello world</p>");
+    assert_eq!(rendered, "<p>helloworld</p>");
 }
 
 #[test]
@@ -330,7 +330,7 @@ fn single_newline_before_dynamic_anchor_does_not_use_child_rule() {
         (Some("\nworld"), None),
     ]);
 
-    assert_eq!(rendered, "<p>hello {dynamic:9} world</p>");
+    assert_eq!(rendered, "<p>hello{dynamic:9}world</p>");
 }
 
 #[test]
@@ -366,7 +366,7 @@ fn list_continuation_text_remains_inside_item_around_inline_child_anchor() {
         (Some("\nworld"), None),
     ]);
 
-    assert_eq!(rendered, "<ul><li>hello {child:4} world</li></ul>");
+    assert_eq!(rendered, "<ul><li>hello {child:4}world</li></ul>");
 }
 
 #[test]

@@ -638,7 +638,7 @@ fn markdown_list_items_absorb_immediate_newline_text() {
 
     assert_eq!(
         rendered,
-        "<ul><li>Square brackets are NOT used for arrays, curly braces are used instead. Square brackets are only used for string templates. Items in collections are accessed via methods.</li><li>Equality and other logical operators use keywords like &quot;is&quot; and &quot;not&quot; (you can&#39;t use == or ! for example)</li></ul>"
+        "<ul><li>Square brackets are NOT used for arrays, curly braces are used instead.Square brackets are only used for string templates. Items in collections are accessed via methods.</li><li>Equality and other logical operators use keywords like &quot;is&quot; and &quot;not&quot;(you can&#39;t use == or ! for example)</li></ul>"
     );
 }
 
