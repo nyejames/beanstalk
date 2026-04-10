@@ -124,7 +124,3 @@ impl NumericalParsing for char {
         matches!(self, '(' | ')' | '{' | '}' | '[' | ']')
     }
 }
-
-pub fn remove_newlines(input: &mut String) {
-    input.retain(|c| c != '\n' && c != '\r');
-}

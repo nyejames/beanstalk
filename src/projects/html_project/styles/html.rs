@@ -11,7 +11,6 @@ use crate::compiler_frontend::ast::templates::template::{
     Formatter, FormatterResult, TemplateFormatter,
 };
 use crate::compiler_frontend::ast::templates::template_render_plan::FormatterInput;
-use crate::compiler_frontend::basic_utility_functions::remove_newlines;
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::compiler_warnings::WarningKind;
 use crate::compiler_frontend::string_interning::StringTable;
@@ -45,14 +44,12 @@ impl TemplateFormatter for HtmlValidationTemplateFormatter {
         input: FormatterInput,
         string_table: &mut StringTable,
     ) -> Result<FormatterResult, CompilerMessages> {
-        let mut flattened_input = PassThroughFormatterInput::from_input(input, string_table);
+        let flattened_input = PassThroughFormatterInput::from_input(input, string_table);
         let warnings = flattened_input.map_warnings(
             validate_html_source(&flattened_input.flattened_source),
             WarningKind::MalformedHtmlTemplate,
             string_table,
         );
-
-        remove_newlines(&mut flattened_input.flattened_source);
 
         Ok(flattened_input.into_formatter_result(warnings))
     }
