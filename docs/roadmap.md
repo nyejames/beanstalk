@@ -15,10 +15,410 @@ These are the non-negotiable conditions for starting Alpha.
 - Compiler diagnostics are useful, accurate, consistently formatted, and visually moving toward the Nushell-style goal.
 - Cross-platform output is stable enough that Windows and macOS do not produce avoidable golden drift.
 
-### PR - Review runtime template code
+## Phase 0: Tidy Up Tasks
 
-Review captures and code organisation inside `top_level_templates.rs` and check it against the style guide.
+### PR - Refactor and harden result-handling parsing and handler control-flow validation
 
+The recent result/error-flow work has made `src/compiler_frontend/ast/statements/result_handling.rs` one of the most syntax-dense frontend files.
+
+It now owns:
+- fallback parsing
+- named-handler parsing
+- handler binding validation
+- conflict/shadow checks
+- propagation-boundary rules
+- handler-body parsing
+- partial control-flow validation for whether a handler body can fall through
+
+The feature direction is right, but the implementation is starting to concentrate too many responsibilities into one place and contains duplicated parsing paths for handled calls vs handled expressions.
+
+This PR is a cleanup and hardening pass to make result handling easier to extend safely before Alpha.
+
+**Why now**
+- Result handling is now a real supported language slice rather than an experiment.
+- This file is already doing both parsing and semantic validation, which raises drift risk.
+- The current handler fallthrough checks should be reviewed carefully before more syntax is added around `Result` / error handling.
+
+**Primary repo targets**
+- `src/compiler_frontend/ast/statements/result_handling.rs`
+- any parser/AST callsites that construct `ResultCallHandling`
+- related unit tests and integration fixtures covering named handlers, fallback values, and propagation
+
+**Primary goals**
+- Remove duplicated named-handler parsing flow between call and expression paths.
+- Separate parsing concerns from semantic/control-flow validation concerns.
+- Re-check syntax-adjacent invariant assumptions in this area and convert user-reachable ones into structured diagnostics.
+- Make handler fallthrough rules explicit, correct, and well tested.
+
+**Checklist**
+- Split `result_handling.rs` into smaller focused modules or helpers, likely around:
+  - fallback parsing
+  - named-handler parsing
+  - validation helpers
+  - handler control-flow / termination checks
+- Remove duplicated logic between:
+  - named result-handler parsing for function calls
+  - named result-handler parsing for handled expressions
+- Audit `scope_guarantees_exit` / related helpers and verify they truly model the intended rule rather than a weaker approximation.
+- Make the “value required + no fallback + non-terminating handler body” rule explicit in one place.
+- Re-check variable-shadow/conflict validation for named error bindings and ensure diagnostics stay specific.
+- Re-check propagation-boundary behavior and fallback arity checks for:
+  - zero success values
+  - single success value
+  - multi-value success returns
+- Audit `unreachable!`, `expect`, and similar assumptions in this path and convert any syntax-adjacent ones to structured compiler errors.
+- Add or tighten WHAT/WHY comments around the remaining preserved invariants.
+
+**Testing checklist**
+- Add focused parser/unit tests for:
+  - named handler with fallback
+  - named handler without fallback but guaranteed `return`
+  - named handler without fallback and non-terminating body
+  - handler-name conflicts with visible declarations
+  - fallback arity mismatch against multi-value success returns
+  - invalid bare `err!` forms
+- Add integration tests for:
+  - propagation vs local fallback behavior
+  - nested handler control flow
+  - handler bodies containing `if` / `match`
+- Re-run:
+  - `cargo clippy`
+  - `cargo test`
+  - `cargo run tests`
+
+**Done when**
+- Result-handling parsing is clearly split by responsibility.
+- Call and expression handled-result parsing no longer duplicate the same logic in parallel.
+- Handler fallthrough validation is explicit, justified, and covered by targeted tests.
+- Syntax errors in this area fail through structured diagnostics rather than parser-shape assumptions.
+
+### PR - Refactor runtime expression lowering and isolate short-circuit CFG construction
+
+The recent boolean-condition and logical-operator work improved the frontend/HIR boundary substantially, especially in `src/compiler_frontend/hir/hir_expression/runtime.rs`.
+
+That file now handles:
+- AST runtime RPN tree construction
+- generic runtime expression lowering
+- special short-circuit lowering for `and` / `or`
+- temporary-local materialization
+- block/merge CFG orchestration
+- alias-protection logic for merged branch results
+
+The implementation direction is good, but this file is becoming too broad and too semantically important to remain as one dense lowering unit.
+
+This PR isolates the runtime lowering responsibilities so short-circuit behavior is easier to reason about and safer to extend.
+
+**Why now**
+- Logical operators now depend on explicit CFG lowering rather than accidental evaluation order.
+- This is now one of the highest-risk backend-facing semantic files in the frontend.
+- Additional runtime-heavy expression features will become harder to land cleanly if this stays monolithic.
+
+**Primary repo targets**
+- `src/compiler_frontend/hir/hir_expression/runtime.rs`
+- related HIR node / builder helpers used for temp locals, blocks, and terminators
+- tests covering logical operators, short-circuiting, and runtime expressions
+
+**Primary goals**
+- Separate expression-tree construction from lowering.
+- Isolate short-circuit CFG generation from generic unary/binary expression lowering.
+- Make alias-detachment / branch-merge temp behavior explicit and documented.
+- Keep runtime expression lowering readable enough that future backend audits can trust it.
+
+**Checklist**
+- Split runtime lowering into smaller focused units, likely around:
+  - RPN tree construction
+  - generic runtime tree lowering
+  - short-circuit branch lowering
+  - temp-local assignment/materialization helpers
+- Keep `and` / `or` lowering as explicit CFG construction rather than folding them back into generic binary-op lowering.
+- Review the branch-merge temp assignment path and document why place loads are materialized before assignment.
+- Re-check whether short-circuit result temps should remain plain locals or deserve their own helper abstraction.
+- Make the block/region naming and control-flow shape easier to follow in diagnostics and debug output.
+- Re-check whether any lowering helpers are starting to mix HIR construction with semantic validation that belongs earlier in AST typing.
+
+**Testing checklist**
+- Add or strengthen tests for:
+  - `and` short-circuit with RHS side effects
+  - `or` short-circuit with RHS side effects
+  - nested logical expressions with grouping
+  - interaction between comparisons and logical operators
+  - branch-merge temp behavior when operands are places rather than pure values
+- Ensure both unit/HIR-shape tests and integration semantic tests exist where useful.
+- Re-run:
+  - `cargo clippy`
+  - `cargo test`
+  - `cargo run tests`
+
+**Done when**
+- Runtime expression lowering is split into clearer submodules/helpers.
+- Short-circuit semantics are easy to audit in isolation.
+- The HIR lowering path for runtime expressions is easier to read and less likely to accumulate ad-hoc branching logic.
+
+### PR - Consolidate AST operator typing and boolean-condition policy
+
+The recent changes around logical expressions, comparison typing, and bool-only conditions improved correctness, but they also increased the policy density inside `src/compiler_frontend/ast/expressions/eval_expression.rs`.
+
+That file currently owns:
+- shunting-yard ordering
+- expression result-type resolution
+- unary operator typing
+- logical operator typing
+- comparison typing
+- arithmetic operator typing
+- some contextual diagnostics
+- the final compile-time vs runtime expression split
+
+This is the correct stage for these rules, but the implementation is now broad enough that it should be reorganized before more operator or coercion work lands.
+
+This PR is a policy consolidation pass, not a semantic redesign.
+
+**Why now**
+- AST is the intended owner of operator typing and natural-expression strictness.
+- This file is at risk of becoming the dumping ground for every operator and coercion rule.
+- The new condition-validation helper direction is good and should be extended rather than reversed.
+
+**Primary repo targets**
+- `src/compiler_frontend/ast/expressions/eval_expression.rs`
+- `src/compiler_frontend/ast/statements/condition_validation.rs`
+- any nearby type-coercion and diagnostics helpers used by expression evaluation
+- tests for logical/comparison/arithmetic typing
+
+**Primary goals**
+- Split operator-family rules into clearer units without changing intended language behavior.
+- Keep boolean-condition policy in one obvious place and avoid reintroducing duplicated checks.
+- Make diagnostics easier to maintain as more type/cast/result features land.
+
+**Checklist**
+- Refactor `eval_expression.rs` into smaller internal modules/helpers, likely around:
+  - ordering/shunting-yard
+  - result-type resolution
+  - arithmetic operator policy
+  - logical operator policy
+  - comparison operator policy
+  - shared diagnostics helpers
+- Keep “strict natural expression typing before contextual coercion” explicit and well documented.
+- Re-check mixed numeric behavior and ensure the current `Int`/`Float` implicit mix rules are intentionally centralized.
+- Re-check `Result` rejection in ordinary operators and ensure it stays consistent with handled-result syntax.
+- Extend the condition-validation helper pattern where appropriate instead of re-embedding bool checks into multiple statement parsers.
+- Tighten WHAT/WHY comments around:
+  - why AST owns operator typing
+  - why logical operators are typed in AST but lowered specially in HIR
+  - why contextual numeric coercions are not handled here by default
+
+**Testing checklist**
+- Add or tighten tests for:
+  - invalid logical operand types
+  - valid/invalid comparisons across scalar types
+  - mixed `Int`/`Float` arithmetic and comparisons
+  - `Result` misuse inside ordinary operators
+  - condition expressions that should fail for non-`Bool` types
+- Re-check whether any current tests are duplicating the same policy at both unit and integration levels without adding value.
+- Re-run:
+  - `cargo clippy`
+  - `cargo test`
+  - `cargo run tests`
+
+**Done when**
+- Operator typing policy is easier to navigate and modify.
+- Bool-condition validation remains centralized rather than repeated.
+- New operator or coercion work can land without making one file keep growing into a policy grab-bag.
+
+### PR - Add normalized and rendered semantic assertion modes to the integration runner
+
+The integration suite has improved a lot, but some of the recent runtime-heavy cases still rely too much on full artifact snapshots where the real contract is semantic behavior rather than emitted temporary names or generator layout.
+
+This is now especially visible in areas touched by:
+- runtime fragment insertion
+- short-circuit lowering
+- result propagation / fallback lowering
+- collection builtin lowering
+- backend-generated temporaries and helper names
+
+This PR upgrades the integration runner so runtime-heavy language behavior can be asserted more directly and with less non-semantic churn.
+
+**Why now**
+- The recent increase in integration coverage is good, but some assertions are still more brittle than informative.
+- The roadmap already aims toward normalized artifact checks and rendered-output checks; this should now become a concrete implementation pass.
+- A stronger integration harness will make later backend/html-builder hardening much less noisy.
+
+**Primary repo targets**
+- the integration runner expectation model and artifact assertion helpers
+- existing runtime-heavy fixtures currently relying on brittle full-file goldens
+- documentation/guidance for writing new integration expectations
+
+**Primary goals**
+- Preserve strict byte-for-byte goldens where exact output shape is contractual.
+- Add a normalized text assertion mode for unstable generated identifiers and irrelevant formatting drift.
+- Add a rendered-output assertion mode for cases where runtime semantics matter more than emitted source layout.
+- Migrate the known brittle runtime-heavy fixtures to the appropriate assertion surface.
+
+**Checklist**
+- Extend the integration expectation model with an explicit normalized-text assertion mode.
+- Implement deterministic normalization for unstable compiler-generated names and formatting-only drift.
+- Add a rendered-output assertion mode focused on runtime semantic surfaces.
+- Ensure failures distinguish:
+  - strict golden mismatch
+  - normalized semantic mismatch
+  - rendered-output mismatch
+  - harness/infrastructure failure
+- Document when to choose:
+  - strict golden
+  - normalized text
+  - rendered output
+- Migrate recent brittle runtime-heavy fixtures away from raw full-file goldens where that gives better signal.
+
+**Suggested fixture migration targets**
+- logical/short-circuit runtime cases
+- runtime fragment insertion behavior
+- result fallback / propagation behavior through generated outputs
+- collection builtin read/write flows where emitted JS layout is noisy but behavior is clear
+
+**Testing checklist**
+- Add runner-level tests proving normalization is deterministic and does not mask real regressions.
+- Add at least a small set of rendered-output fixtures for runtime semantics that are currently awkward to assert via raw emitted files.
+- Re-run:
+  - `cargo test`
+  - `cargo run tests`
+
+**Done when**
+- Runtime-heavy semantic regressions fail clearly without broad golden churn.
+- Integration review noise is lower during frontend/HIR/backend lowering changes.
+- New fixtures have a clearer expectation-writing path than “snapshot the whole file and hope it stays stable”.
+
+### PR - Re-audit collection builtin semantics and remove compatibility drift
+
+`src/compiler_frontend/ast/field_access/collection_builtin.rs` is now enforcing more intentional language rules for collection receiver methods, including:
+- explicit mutable receiver access for mutating methods
+- explicit `!` handling for `get(index)`
+- rejection of removed compatibility syntax such as `pull(...)`
+
+That direction is correct and should now be finished cleanly across the frontend and backend.
+
+This PR is a semantic cleanup pass to ensure collection builtins are not still “working by accident” through legacy branches or backend behavior that no longer matches the intended language model.
+
+**Why now**
+- Collection builtins are already important enough to deserve backend-facing trust checks.
+- This file now encodes several current language rules clearly; the rest of the compiler should match them.
+- The roadmap already calls out collection builtin cleanup and backend-facing tests as alpha work.
+
+**Primary repo targets**
+- `src/compiler_frontend/ast/field_access/collection_builtin.rs`
+- any lowering/runtime helpers backing collection methods
+- related builtin/error-type handling for `get(index)` and mutating methods
+- integration fixtures covering collection receiver methods
+
+**Primary goals**
+- Remove compatibility-only branches that no longer match current frontend semantics.
+- Ensure JS/runtime lowering matches the current AST rules exactly.
+- Make collection receiver-method behavior one consistent language surface rather than a partially legacy one.
+
+**Checklist**
+- Audit the frontend and backend paths for:
+  - `get`
+  - `set`
+  - `push`
+  - `remove`
+  - `length`
+- Re-check that mutating collection methods consistently require:
+  - a place receiver
+  - a mutable receiver
+  - explicit mutable call-site access where intended
+- Re-check `get(index)` result handling behavior and ensure the `Result` surface is consistent through parsing, typing, and lowering.
+- Remove or justify any remaining compatibility branches that contradict:
+  - removed syntax
+  - current mutability semantics
+  - current result-handling semantics
+- Re-check any synthetic/fake builtin parameter scaffolding still used around collection method lowering and either:
+  - remove it
+  - or document clearly why it remains necessary
+
+**Testing checklist**
+- Add backend-facing tests for:
+  - successful `get(index)!`
+  - `get(index)` failure / fallback behavior
+  - `set`, `push`, and `remove` on valid mutable receivers
+  - errors for temporary/non-place receivers
+  - errors for missing explicit mutable receiver access where required
+  - `length()` on non-mutating shared receivers
+- Re-run:
+  - `cargo clippy`
+  - `cargo test`
+  - `cargo run tests`
+
+**Done when**
+- Collection receiver-method semantics are consistent from AST parsing through backend output.
+- Removed/legacy compatibility behavior is no longer lingering in active codepaths.
+- Integration tests prove the current intended language rules rather than backend accidents.
+
+### PR - Review and reorganize runtime start-fragment synthesis and capture analysis
+
+`src/compiler_frontend/ast/templates/top_level_templates.rs` has grown into a substantial piece of frontend behavior.
+
+It now handles:
+- entry start-function scanning
+- top-level template extraction
+- const vs runtime fragment partitioning
+- fragment ordering
+- generated runtime fragment functions
+- capture dependency analysis
+- mutation-sensitive capture rejection
+- pruning of template-only declarations
+- doc fragment collection and stripping
+
+This is exactly the kind of file that can keep working while gradually becoming too broad to reason about safely.
+
+This PR turns the existing roadmap note about runtime template review into a fuller code-organization and semantic-audit pass.
+
+**Why now**
+- Runtime template/start-fragment behavior is now a real compiler surface, not just a temporary implementation detail.
+- The file mixes orchestration, dependency analysis, mutation checks, fragment synthesis, and doc extraction.
+- Later HTML-builder stabilization will be easier if this frontend/template-fragment behavior is cleaned up first.
+
+**Primary repo targets**
+- `src/compiler_frontend/ast/templates/top_level_templates.rs`
+- any nearby template folding / template AST helpers it depends on
+- tests for top-level template extraction and runtime fragment ordering/capture behavior
+
+**Primary goals**
+- Split orchestration from analysis logic.
+- Re-check capture semantics and mutation restrictions against the intended language/runtime model.
+- Make generated runtime fragment behavior easier to audit and test.
+- Keep doc-fragment collection from being too entangled with runtime start-fragment synthesis.
+
+**Checklist**
+- Split `top_level_templates.rs` into smaller focused units, likely around:
+  - fragment extraction/order planning
+  - runtime capture/dependency analysis
+  - fragment function synthesis
+  - doc fragment collection/stripping
+- Re-check the runtime fragment capture model for:
+  - declaration dependency inclusion
+  - mutation-sensitive capture rejection
+  - declaration pruning in the rewritten entry start body
+- Re-check whether capture analysis helpers are duplicating AST-walking logic that should be shared elsewhere.
+- Ensure comments clearly explain:
+  - why runtime fragments are synthesized as generated functions
+  - why mutable reassignment before fragment evaluation is currently rejected
+  - how pruned declarations are determined
+- Add or tighten tests for fragment ordering, capture dependencies, and mutation rejection behavior.
+
+**Testing checklist**
+- Add targeted tests for:
+  - mixed const/runtime top-level templates
+  - source-order preservation
+  - runtime fragment capture of required declarations only
+  - rejection of mutable reassignment before fragment evaluation
+  - pruning of declarations that are template-only captures
+  - doc fragment extraction remaining stable after refactor
+- Re-run:
+  - `cargo clippy`
+  - `cargo test`
+  - `cargo run tests`
+
+**Done when**
+- Runtime start-fragment synthesis is easier to understand and maintain.
+- Capture analysis is isolated enough to be audited independently.
+- Template/doc extraction behavior is cleaner ahead of the final HTML-builder stabilization pass.
 
 ## Phase 4 - diagnostics and compiler UX hardening
 
