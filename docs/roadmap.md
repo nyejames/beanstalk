@@ -22,18 +22,6 @@ Review captures and code organisation inside `top_level_templates.rs` and check 
 
 ## Phase 4 - diagnostics and compiler UX hardening
 
-### PR - Standardize unsupported/incomplete-feature diagnostics
-
-All incomplete or intentionally deferred features fail the same way: clearly and helpfully.
-
-**Checklist**
-- Audit current “not implemented”, “reserved”, and fallback diagnostics.
-- Normalize wording, stage metadata, source locations, and suggestion style.
-- Prefer one clean pattern for deferred-feature errors.
-
-**Done when**
-- Unsupported features feel deliberately handled.
-
 ### PR - Improve type-checking diagnostics across common user mistakes
 
 Push compiler errors toward useful Nushell-style presentation and clarity.
