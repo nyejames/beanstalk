@@ -22,19 +22,6 @@ Review captures and code organisation inside `top_level_templates.rs` and check 
 
 ## Phase 4 - diagnostics and compiler UX hardening
 
-### PR - Improve type-checking diagnostics across common user mistakes
-
-Push compiler errors toward useful Nushell-style presentation and clarity.
-
-**Checklist**
-- Audit the most common type mismatch surfaces.
-- Make messages name exact types and exact offending value/name where practical.
-- Improve suggestions for common mistakes in calls, assignments, expressions, and struct construction.
-- Add targeted failure fixtures proving the wording is specific enough.
-
-**Done when**
-- Type errors are accurate, grounded, and visibly better than generic compiler output.
-
 ### PR - Improve formatting/rendering of compiler errors
 
 Move the displayed output closer to the desired final feel.
