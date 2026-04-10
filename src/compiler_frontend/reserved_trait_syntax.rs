@@ -6,6 +6,7 @@
 //! and metadata instead of each stage inventing its own fallback error.
 
 use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorMetaDataKey, ErrorType};
+use crate::compiler_frontend::deferred_feature_diagnostics::deferred_feature_rule_error;
 use crate::compiler_frontend::tokenizer::tokens::{SourceLocation, TokenKind};
 use std::collections::HashMap;
 
@@ -38,43 +39,23 @@ pub(crate) fn reserved_trait_keyword_error(
     compilation_stage: &'static str,
     primary_suggestion: &'static str,
 ) -> CompilerError {
-    let mut metadata = HashMap::new();
-    metadata.insert(
-        ErrorMetaDataKey::CompilationStage,
-        compilation_stage.to_owned(),
-    );
-    metadata.insert(
-        ErrorMetaDataKey::PrimarySuggestion,
-        primary_suggestion.to_owned(),
-    );
-
-    CompilerError::new_rule_error_with_metadata(
+    deferred_feature_rule_error(
         format!(
-            "'{}' is reserved for traits and is not implemented yet in Alpha.",
-            keyword.as_str(),
+            "Keyword '{}' is reserved for traits and is deferred for Alpha.",
+            keyword.as_str()
         ),
         location,
-        metadata,
+        compilation_stage,
+        primary_suggestion,
     )
 }
 
 pub(crate) fn reserved_trait_declaration_error(location: SourceLocation) -> CompilerError {
-    let mut metadata = HashMap::new();
-    metadata.insert(
-        ErrorMetaDataKey::CompilationStage,
-        String::from("Header Parsing"),
-    );
-    metadata.insert(
-        ErrorMetaDataKey::PrimarySuggestion,
-        String::from(
-            "Remove 'must' for now or rename the declaration until traits are implemented",
-        ),
-    );
-
-    CompilerError::new_rule_error_with_metadata(
-        "Trait declarations using 'must' are reserved for traits and are not implemented yet in Alpha.",
+    deferred_feature_rule_error(
+        "Trait declarations using 'must' are reserved for traits and are deferred for Alpha.",
         location,
-        metadata,
+        "Header Parsing",
+        "Use a normal declaration form until trait declarations are supported.",
     )
 }
 

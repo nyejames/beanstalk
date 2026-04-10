@@ -102,8 +102,7 @@ pub(crate) fn synthesize_start_template_items(
         runtime_candidates,
         entry_scope,
         non_template_body,
-    } =
-        extract_runtime_template_candidates(ast_nodes, entry_start_index, string_table)?;
+    } = extract_runtime_template_candidates(ast_nodes, entry_start_index, string_table)?;
 
     // Phase 2: collect const/runtime fragment sources and order them by source location.
     let mut ordered_header_items = top_level_template_items.to_owned();
@@ -745,9 +744,9 @@ fn expression_may_mutate_tracked_symbols(
         | ExpressionKind::HostFunctionCall(_, args)
         | ExpressionKind::Collection(args) => {
             call_arguments_mutate_tracked_symbols(args, tracked_symbols)
-                || args
-                    .iter()
-                    .any(|argument| expression_may_mutate_tracked_symbols(argument, tracked_symbols))
+                || args.iter().any(|argument| {
+                    expression_may_mutate_tracked_symbols(argument, tracked_symbols)
+                })
         }
 
         ExpressionKind::ResultHandledFunctionCall { args, handling, .. } => {
@@ -763,17 +762,19 @@ fn expression_may_mutate_tracked_symbols(
             }
 
             match handling {
-                ResultCallHandling::Fallback(fallback_values) => fallback_values.iter().any(
-                    |fallback| expression_may_mutate_tracked_symbols(fallback, tracked_symbols),
-                ),
+                ResultCallHandling::Fallback(fallback_values) => {
+                    fallback_values.iter().any(|fallback| {
+                        expression_may_mutate_tracked_symbols(fallback, tracked_symbols)
+                    })
+                }
                 ResultCallHandling::Handler { fallback, body, .. } => {
                     fallback.as_ref().is_some_and(|fallback_values| {
                         fallback_values.iter().any(|fallback| {
                             expression_may_mutate_tracked_symbols(fallback, tracked_symbols)
                         })
-                    }) || body.iter().any(|node| {
-                        ast_node_may_mutate_tracked_symbols(node, tracked_symbols)
-                    })
+                    }) || body
+                        .iter()
+                        .any(|node| ast_node_may_mutate_tracked_symbols(node, tracked_symbols))
                 }
                 ResultCallHandling::Propagate => false,
             }
@@ -790,9 +791,9 @@ fn expression_may_mutate_tracked_symbols(
             .any(|value| expression_may_mutate_tracked_symbols(&value, tracked_symbols)),
 
         ExpressionKind::StructDefinition(arguments) | ExpressionKind::StructInstance(arguments) => {
-            arguments
-                .iter()
-                .any(|argument| expression_may_mutate_tracked_symbols(&argument.value, tracked_symbols))
+            arguments.iter().any(|argument| {
+                expression_may_mutate_tracked_symbols(&argument.value, tracked_symbols)
+            })
         }
 
         ExpressionKind::Range(lower, upper) => {
@@ -816,17 +817,19 @@ fn expression_may_mutate_tracked_symbols(
             }
 
             match handling {
-                ResultCallHandling::Fallback(fallback_values) => fallback_values.iter().any(
-                    |fallback| expression_may_mutate_tracked_symbols(fallback, tracked_symbols),
-                ),
+                ResultCallHandling::Fallback(fallback_values) => {
+                    fallback_values.iter().any(|fallback| {
+                        expression_may_mutate_tracked_symbols(fallback, tracked_symbols)
+                    })
+                }
                 ResultCallHandling::Handler { fallback, body, .. } => {
                     fallback.as_ref().is_some_and(|fallback_values| {
                         fallback_values.iter().any(|fallback| {
                             expression_may_mutate_tracked_symbols(fallback, tracked_symbols)
                         })
-                    }) || body.iter().any(|node| {
-                        ast_node_may_mutate_tracked_symbols(node, tracked_symbols)
-                    })
+                    }) || body
+                        .iter()
+                        .any(|node| ast_node_may_mutate_tracked_symbols(node, tracked_symbols))
                 }
                 ResultCallHandling::Propagate => false,
             }
@@ -887,9 +890,11 @@ fn ast_node_may_mutate_tracked_symbols(
             }
 
             match handling {
-                ResultCallHandling::Fallback(fallback_values) => fallback_values.iter().any(
-                    |fallback| expression_may_mutate_tracked_symbols(fallback, tracked_symbols),
-                ),
+                ResultCallHandling::Fallback(fallback_values) => {
+                    fallback_values.iter().any(|fallback| {
+                        expression_may_mutate_tracked_symbols(fallback, tracked_symbols)
+                    })
+                }
                 ResultCallHandling::Handler { fallback, body, .. } => {
                     fallback.as_ref().is_some_and(|fallback_values| {
                         fallback_values.iter().any(|fallback| {
@@ -911,13 +916,15 @@ fn ast_node_may_mutate_tracked_symbols(
             .iter()
             .any(|value| expression_may_mutate_tracked_symbols(value, tracked_symbols)),
 
-        NodeKind::ReturnError(value) => expression_may_mutate_tracked_symbols(value, tracked_symbols),
+        NodeKind::ReturnError(value) => {
+            expression_may_mutate_tracked_symbols(value, tracked_symbols)
+        }
 
         NodeKind::If(condition, then_body, else_body) => {
             expression_may_mutate_tracked_symbols(condition, tracked_symbols)
-                || then_body
-                    .iter()
-                    .any(|statement| ast_node_may_mutate_tracked_symbols(statement, tracked_symbols))
+                || then_body.iter().any(|statement| {
+                    ast_node_may_mutate_tracked_symbols(statement, tracked_symbols)
+                })
                 || else_body.as_ref().is_some_and(|body| {
                     body.iter().any(|statement| {
                         ast_node_may_mutate_tracked_symbols(statement, tracked_symbols)
@@ -995,9 +1002,9 @@ fn ast_node_may_mutate_tracked_symbols(
             expression_may_mutate_tracked_symbols(value, tracked_symbols)
         }
 
-        NodeKind::StructDefinition(_, fields) => fields.iter().any(|field| {
-            expression_may_mutate_tracked_symbols(&field.value, tracked_symbols)
-        }),
+        NodeKind::StructDefinition(_, fields) => fields
+            .iter()
+            .any(|field| expression_may_mutate_tracked_symbols(&field.value, tracked_symbols)),
 
         NodeKind::Function(_, _, body) => body
             .iter()

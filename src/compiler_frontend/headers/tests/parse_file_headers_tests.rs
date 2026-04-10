@@ -819,7 +819,7 @@ fn choice_headers_reject_payload_variant_forms_for_alpha() {
         .expect("expected constructor-style payload parse errors");
     assert!(payload_paren_errors.iter().any(|error| {
         error.msg.contains(
-            "Choice payload variants using constructor-style declarations ('Variant(...)') are deferred for Alpha",
+            "Constructor-style choice variant declarations ('Variant(...)') are deferred for Alpha",
         )
     }));
 
@@ -925,6 +925,6 @@ fn trait_declarations_using_must_are_reserved_during_header_parsing() {
             && error
                 .msg
                 .contains("Trait declarations using 'must' are reserved for traits")
-            && error.msg.contains("not implemented yet in Alpha")
+            && error.msg.contains("deferred for Alpha")
     }));
 }

@@ -16,6 +16,7 @@ pub(crate) mod module_dependencies;
 
 pub(crate) mod basic_utility_functions;
 pub(crate) mod builtins;
+pub(crate) mod deferred_feature_diagnostics;
 pub(crate) mod identifier_policy;
 pub(crate) mod reserved_trait_syntax;
 

@@ -15,6 +15,7 @@ use crate::compiler_frontend::ast::statements::condition_validation::ensure_bool
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::deferred_feature_diagnostics::deferred_feature_rule_error;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
 use crate::compiler_frontend::type_coercion::compatibility::is_type_compatible;
@@ -366,14 +367,12 @@ fn parse_case_arm(
     };
 
     if token_stream.current_token_kind() == &TokenKind::TypeParameterBracket {
-        return_rule_error!(
+        return Err(deferred_feature_rule_error(
             "Capture/tagged patterns using '|...|' are deferred for Alpha.",
             token_stream.current_location(),
-            {
-                CompilationStage => "Match Statement Parsing",
-                PrimarySuggestion => "Use simple literal or choice-variant patterns only",
-            }
-        );
+            "Match Statement Parsing",
+            "Use simple literal or choice-variant patterns only.",
+        ));
     }
 
     if token_stream.current_token_kind() == &TokenKind::Colon {
@@ -530,14 +529,12 @@ fn parse_choice_variant_pattern(
     };
 
     if token_stream.current_token_kind() == &TokenKind::TypeParameterBracket {
-        return_rule_error!(
+        return Err(deferred_feature_rule_error(
             "Capture/tagged patterns using '|...|' are deferred for Alpha.",
             token_stream.current_location(),
-            {
-                CompilationStage => "Match Statement Parsing",
-                PrimarySuggestion => "Use simple choice variant patterns only in this phase",
-            }
-        );
+            "Match Statement Parsing",
+            "Use simple choice-variant patterns only in this phase.",
+        ));
     }
 
     // Match lowering compares tag indices today, so we normalize variant names to their index.
@@ -686,47 +683,39 @@ fn reject_deferred_pattern_lead_token(token_stream: &FileTokens) -> Result<(), C
     // These forms intentionally fail fast so unsupported syntax never drifts silently.
     match token_stream.current_token_kind() {
         TokenKind::Wildcard => {
-            return_rule_error!(
-                "Wildcard patterns ('case _ =>') are deferred for Alpha. Use 'else =>' for the default arm.",
+            return Err(deferred_feature_rule_error(
+                "Wildcard patterns ('case _ =>') are deferred for Alpha.",
                 token_stream.current_location(),
-                {
-                    CompilationStage => "Match Statement Parsing",
-                    PrimarySuggestion => "Replace wildcard arms with an explicit 'else =>' arm",
-                }
-            );
+                "Match Statement Parsing",
+                "Replace wildcard arms with an explicit 'else =>' arm.",
+            ));
         }
         TokenKind::LessThan
         | TokenKind::LessThanOrEqual
         | TokenKind::GreaterThan
         | TokenKind::GreaterThanOrEqual => {
-            return_rule_error!(
+            return Err(deferred_feature_rule_error(
                 "Relational match patterns (for example '<', '<=', '>', '>=') are deferred for Alpha.",
                 token_stream.current_location(),
-                {
-                    CompilationStage => "Match Statement Parsing",
-                    PrimarySuggestion => "Use literal/choice-variant patterns for now and move relational checks into arm bodies",
-                }
-            );
+                "Match Statement Parsing",
+                "Use literal or choice-variant patterns and move relational checks into arm bodies.",
+            ));
         }
         TokenKind::Not => {
-            return_rule_error!(
+            return Err(deferred_feature_rule_error(
                 "Negated match patterns (for example 'case not ... =>') are deferred for Alpha.",
                 token_stream.current_location(),
-                {
-                    CompilationStage => "Match Statement Parsing",
-                    PrimarySuggestion => "Use explicit positive case arms and an 'else =>' fallback in this phase",
-                }
-            );
+                "Match Statement Parsing",
+                "Use explicit positive case arms and an 'else =>' fallback in this phase.",
+            ));
         }
         TokenKind::TypeParameterBracket => {
-            return_rule_error!(
+            return Err(deferred_feature_rule_error(
                 "Capture/tagged patterns using '|...|' are deferred for Alpha.",
                 token_stream.current_location(),
-                {
-                    CompilationStage => "Match Statement Parsing",
-                    PrimarySuggestion => "Use simple literal or choice-variant patterns only",
-                }
-            );
+                "Match Statement Parsing",
+                "Use simple literal or choice-variant patterns only.",
+            ));
         }
         _ => {}
     }

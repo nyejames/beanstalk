@@ -892,12 +892,7 @@ fn short_circuit_rhs_mutable_call_with_later_merge_use_borrows_instead_of_moving
     let rhs_function = function_node(
         rhs_name.clone(),
         FunctionSignature {
-            parameters: vec![param(
-                param_calls.clone(),
-                DataType::Int,
-                true,
-                location(1),
-            )],
+            parameters: vec![param(param_calls.clone(), DataType::Int, true, location(1))],
             returns: fresh_returns(vec![DataType::Bool]),
         },
         vec![

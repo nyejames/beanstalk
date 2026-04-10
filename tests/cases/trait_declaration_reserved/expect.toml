@@ -2,4 +2,4 @@
 mode = "failure"
 warnings = "forbid"
 error_type = "Rule"
-message_contains = ["Trait declarations using 'must' are reserved for traits", "not implemented yet in Alpha"]
+message_contains = ["Trait declarations using 'must' are reserved for traits", "deferred for Alpha"]

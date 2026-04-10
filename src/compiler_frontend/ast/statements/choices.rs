@@ -10,6 +10,7 @@ use crate::compiler_frontend::ast::expressions::expression::{Expression, Express
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::deferred_feature_diagnostics::deferred_feature_rule_error;
 use crate::compiler_frontend::identifier_policy::{
     IdentifierNamingKind, ensure_not_keyword_shadow_identifier, naming_warning_for_identifier,
 };
@@ -142,42 +143,38 @@ pub(crate) fn parse_choice_header_payload(
                     ));
                 }
                 if starts_choice_payload_type(&next_token) {
-                    return_rule_error!(
-                        "Choice payload variants are deferred for Alpha. Only unit variants ('Choice :: VariantA, VariantB;') are supported in this phase.",
-                        token_stream.current_location(), {
-                            CompilationStage => "Header Parsing",
-                            PrimarySuggestion => "Remove the payload type and keep this variant as a unit variant for now",
-                        }
-                    );
+                    return Err(deferred_feature_rule_error(
+                        "Choice payload variants are deferred for Alpha.",
+                        token_stream.current_location(),
+                        "Header Parsing",
+                        "Declare this as a unit variant for now, for example: 'Choice :: VariantA, VariantB;'.",
+                    ));
                 }
 
                 match next_token {
                     TokenKind::OpenParenthesis => {
-                        return_rule_error!(
-                            "Choice payload variants using constructor-style declarations ('Variant(...)') are deferred for Alpha.",
-                            token_stream.current_location(), {
-                                CompilationStage => "Header Parsing",
-                                PrimarySuggestion => "Declare this as a unit variant for now, for example: 'Choice :: Variant;'",
-                            }
-                        );
+                        return Err(deferred_feature_rule_error(
+                            "Constructor-style choice variant declarations ('Variant(...)') are deferred for Alpha.",
+                            token_stream.current_location(),
+                            "Header Parsing",
+                            "Declare this as a unit variant for now, for example: 'Choice :: Variant;'.",
+                        ));
                     }
                     TokenKind::TypeParameterBracket => {
-                        return_rule_error!(
+                        return Err(deferred_feature_rule_error(
                             "Tagged choice variant bodies using '| ... |' are deferred for Alpha.",
-                            token_stream.current_location(), {
-                                CompilationStage => "Header Parsing",
-                                PrimarySuggestion => "Use only flat unit variants in this phase",
-                            }
-                        );
+                            token_stream.current_location(),
+                            "Header Parsing",
+                            "Use unit variants only in this phase.",
+                        ));
                     }
                     TokenKind::Assign => {
-                        return_rule_error!(
+                        return Err(deferred_feature_rule_error(
                             "Choice variant default values are deferred for Alpha.",
-                            token_stream.current_location(), {
-                                CompilationStage => "Header Parsing",
-                                PrimarySuggestion => "Remove the default assignment and keep this variant as a unit variant",
-                            }
-                        );
+                            token_stream.current_location(),
+                            "Header Parsing",
+                            "Remove the default assignment and keep this as a unit variant.",
+                        ));
                     }
                     TokenKind::Comma => {
                         body.push(token_stream.current_token());
@@ -216,31 +213,28 @@ pub(crate) fn parse_choice_header_payload(
                                 continue;
                             }
                             TokenKind::TypeParameterBracket => {
-                                return_rule_error!(
+                                return Err(deferred_feature_rule_error(
                                     "Tagged choice variant bodies using '| ... |' are deferred for Alpha.",
-                                    token_stream.current_location(), {
-                                        CompilationStage => "Header Parsing",
-                                        PrimarySuggestion => "Use only flat unit variants in this phase",
-                                    }
-                                );
+                                    token_stream.current_location(),
+                                    "Header Parsing",
+                                    "Use unit variants only in this phase.",
+                                ));
                             }
                             TokenKind::Assign => {
-                                return_rule_error!(
+                                return Err(deferred_feature_rule_error(
                                     "Choice variant default values are deferred for Alpha.",
-                                    token_stream.current_location(), {
-                                        CompilationStage => "Header Parsing",
-                                        PrimarySuggestion => "Remove the default assignment and keep this variant as a unit variant",
-                                    }
-                                );
+                                    token_stream.current_location(),
+                                    "Header Parsing",
+                                    "Remove the default assignment and keep this as a unit variant.",
+                                ));
                             }
                             payload_token if starts_choice_payload_type(payload_token) => {
-                                return_rule_error!(
-                                    "Choice payload variants are deferred for Alpha. Only unit variants ('Choice :: VariantA, VariantB;') are supported in this phase.",
-                                    token_stream.current_location(), {
-                                        CompilationStage => "Header Parsing",
-                                        PrimarySuggestion => "Remove the payload type and keep this variant as a unit variant for now",
-                                    }
-                                );
+                                return Err(deferred_feature_rule_error(
+                                    "Choice payload variants are deferred for Alpha.",
+                                    token_stream.current_location(),
+                                    "Header Parsing",
+                                    "Declare this as a unit variant for now, for example: 'Choice :: VariantA, VariantB;'.",
+                                ));
                             }
                             _ => {
                                 return_rule_error!(
@@ -281,13 +275,12 @@ pub(crate) fn parse_choice_header_payload(
                 }
             }
             TokenKind::TypeParameterBracket => {
-                return_rule_error!(
+                return Err(deferred_feature_rule_error(
                     "Tagged choice variant bodies using '| ... |' are deferred for Alpha.",
-                    current_location, {
-                        CompilationStage => "Header Parsing",
-                        PrimarySuggestion => "Use only flat unit variants in this phase",
-                    }
-                );
+                    current_location,
+                    "Header Parsing",
+                    "Use unit variants only in this phase.",
+                ));
             }
             TokenKind::End => {
                 if variants.is_empty() {
@@ -420,18 +413,16 @@ pub(crate) fn parse_choice_variant_value(
 
     token_stream.advance();
     if token_stream.current_token_kind() == &TokenKind::OpenParenthesis {
-        return_rule_error!(
+        return Err(deferred_feature_rule_error(
             format!(
-                "Constructor-call syntax '{}::{}(...)' is deferred for Alpha because choice payload variants are not supported yet.",
+                "Constructor-call syntax '{}::{}(...)' is deferred for Alpha.",
                 choice_name,
                 string_table.resolve(variant_name)
             ),
             token_stream.current_location(),
-            {
-                CompilationStage => "Expression Parsing",
-                PrimarySuggestion => "Use unit variants only for now: 'Choice::Variant'",
-            }
-        );
+            "Expression Parsing",
+            "Use unit variant values only for now: 'Choice::Variant'.",
+        ));
     }
 
     Ok(Expression::new(

@@ -1,6 +1,5 @@
 use super::*;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
-use crate::compiler_frontend::ast::test_support::parse_single_file_ast;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::statements::functions::{
     FunctionReturn, FunctionSignature, ReturnSlot,
@@ -10,6 +9,7 @@ use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::ast::templates::top_level_templates::{
     AstDocFragment, AstStartTemplateItem,
 };
+use crate::compiler_frontend::ast::test_support::parse_single_file_ast;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::headers::parse_file_headers::{
@@ -182,10 +182,9 @@ value = lhs and rhs_capture(~calls)
     let (ast, mut string_table) = parse_single_file_ast(source);
 
     assert!(
-        ast.start_template_items.iter().any(|item| matches!(
-            item,
-            AstStartTemplateItem::RuntimeStringFunction { .. }
-        )),
+        ast.start_template_items
+            .iter()
+            .any(|item| matches!(item, AstStartTemplateItem::RuntimeStringFunction { .. })),
         "single dynamic top-level template should lower into a runtime fragment"
     );
 

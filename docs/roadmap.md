@@ -15,6 +15,11 @@ These are the non-negotiable conditions for starting Alpha.
 - Compiler diagnostics are useful, accurate, consistently formatted, and visually moving toward the Nushell-style goal.
 - Cross-platform output is stable enough that Windows and macOS do not produce avoidable golden drift.
 
+### PR - Review runtime template code
+
+Review captures and code organisation inside `top_level_templates.rs` and check it against the style guide.
+
+
 ## Phase 4 - diagnostics and compiler UX hardening
 
 ### PR - Standardize unsupported/incomplete-feature diagnostics

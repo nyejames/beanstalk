@@ -19,12 +19,13 @@
 
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
+use crate::compiler_frontend::deferred_feature_diagnostics::deferred_feature_rule_error;
 use crate::compiler_frontend::reserved_trait_syntax::{
     reserved_trait_keyword, reserved_trait_keyword_error,
 };
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
-use crate::{return_rule_error, return_syntax_error};
+use crate::return_syntax_error;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum TypeAnnotationContext {
@@ -124,14 +125,12 @@ fn parse_required_type(
             DataType::NamedType(type_name)
         }
         TokenKind::Colon if matches!(context, TypeAnnotationContext::DeclarationTarget) => {
-            return_rule_error!(
-                "Labeled scopes are not yet implemented in the language.",
+            return Err(deferred_feature_rule_error(
+                "Labeled scopes are deferred for Alpha.",
                 token_stream.current_location(),
-                {
-                    CompilationStage => "Variable Declaration",
-                    PrimarySuggestion => "Remove the label syntax for now or rewrite this as supported control flow",
-                }
-            )
+                "Variable Declaration",
+                "Remove the label and use supported control flow syntax.",
+            ));
         }
         other
             if matches!(context, TypeAnnotationContext::DeclarationTarget)

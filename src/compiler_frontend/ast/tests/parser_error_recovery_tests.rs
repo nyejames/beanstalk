@@ -5,7 +5,7 @@
 //! WHY: parser changes should not silently degrade recovery paths or produce vague errors.
 
 use crate::compiler_frontend::ast::test_support::parse_single_file_ast_error;
-use crate::compiler_frontend::compiler_errors::ErrorType;
+use crate::compiler_frontend::compiler_errors::{ErrorMetaDataKey, ErrorType};
 
 #[test]
 fn reports_missing_signature_colon() {
@@ -38,6 +38,44 @@ fn reports_wildcard_match_arms_as_deferred_rule_errors() {
             .msg
             .contains("Wildcard patterns ('case _ =>') are deferred")
     );
+    assert_eq!(
+        error
+            .metadata
+            .get(&ErrorMetaDataKey::CompilationStage)
+            .map(String::as_str),
+        Some("Match Statement Parsing")
+    );
+    assert_eq!(
+        error
+            .metadata
+            .get(&ErrorMetaDataKey::PrimarySuggestion)
+            .map(String::as_str),
+        Some("Replace wildcard arms with an explicit 'else =>' arm.")
+    );
+    assert!(error.location.start_pos.char_column > 0);
+}
+
+#[test]
+fn reports_labeled_scopes_as_deferred_rule_errors() {
+    let error = parse_single_file_ast_error("label:\n    io(\"x\")\n;\n");
+
+    assert_eq!(error.error_type, ErrorType::Rule);
+    assert!(error.msg.contains("Labeled scopes are deferred for Alpha."));
+    assert_eq!(
+        error
+            .metadata
+            .get(&ErrorMetaDataKey::CompilationStage)
+            .map(String::as_str),
+        Some("Variable Declaration")
+    );
+    assert_eq!(
+        error
+            .metadata
+            .get(&ErrorMetaDataKey::PrimarySuggestion)
+            .map(String::as_str),
+        Some("Remove the label and use supported control flow syntax.")
+    );
+    assert!(error.location.start_pos.char_column > 0);
 }
 
 #[test]
@@ -93,8 +131,9 @@ fn reports_reserved_must_keyword_in_function_body() {
     let error = parse_single_file_ast_error("must = 1\n");
 
     assert_eq!(error.error_type, ErrorType::Rule);
-    assert!(error.msg.contains("'must' is reserved for traits"));
-    assert!(error.msg.contains("not implemented yet in Alpha"));
+    assert!(error.msg.contains("Keyword 'must' is reserved for traits"));
+    assert!(error.msg.contains("deferred for Alpha"));
+    assert!(error.location.start_pos.char_column > 0);
 }
 
 #[test]
@@ -102,8 +141,8 @@ fn reports_reserved_this_keyword_in_function_body_statement_position() {
     let error = parse_single_file_ast_error("#f||:\n    This\n;\n");
 
     assert_eq!(error.error_type, ErrorType::Rule);
-    assert!(error.msg.contains("'This' is reserved for traits"));
-    assert!(error.msg.contains("not implemented yet in Alpha"));
+    assert!(error.msg.contains("Keyword 'This' is reserved for traits"));
+    assert!(error.msg.contains("deferred for Alpha"));
 }
 
 #[test]
@@ -111,8 +150,8 @@ fn reports_reserved_this_keyword_in_declaration_type_position() {
     let error = parse_single_file_ast_error("value This = 1\n");
 
     assert_eq!(error.error_type, ErrorType::Rule);
-    assert!(error.msg.contains("'This' is reserved for traits"));
-    assert!(error.msg.contains("not implemented yet in Alpha"));
+    assert!(error.msg.contains("Keyword 'This' is reserved for traits"));
+    assert!(error.msg.contains("deferred for Alpha"));
 }
 
 #[test]
@@ -120,8 +159,8 @@ fn reports_reserved_must_keyword_in_expression_position() {
     let error = parse_single_file_ast_error("value = must\n");
 
     assert_eq!(error.error_type, ErrorType::Rule);
-    assert!(error.msg.contains("'must' is reserved for traits"));
-    assert!(error.msg.contains("not implemented yet in Alpha"));
+    assert!(error.msg.contains("Keyword 'must' is reserved for traits"));
+    assert!(error.msg.contains("deferred for Alpha"));
 }
 
 #[test]
@@ -129,8 +168,8 @@ fn reports_reserved_this_keyword_in_expression_position() {
     let error = parse_single_file_ast_error("value = This\n");
 
     assert_eq!(error.error_type, ErrorType::Rule);
-    assert!(error.msg.contains("'This' is reserved for traits"));
-    assert!(error.msg.contains("not implemented yet in Alpha"));
+    assert!(error.msg.contains("Keyword 'This' is reserved for traits"));
+    assert!(error.msg.contains("deferred for Alpha"));
 }
 
 #[test]
@@ -138,6 +177,6 @@ fn reports_reserved_must_keyword_in_copy_place_position() {
     let error = parse_single_file_ast_error("value = copy must\n");
 
     assert_eq!(error.error_type, ErrorType::Rule);
-    assert!(error.msg.contains("'must' is reserved for traits"));
-    assert!(error.msg.contains("not implemented yet in Alpha"));
+    assert!(error.msg.contains("Keyword 'must' is reserved for traits"));
+    assert!(error.msg.contains("deferred for Alpha"));
 }

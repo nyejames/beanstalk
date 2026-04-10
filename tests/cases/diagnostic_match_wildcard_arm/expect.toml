@@ -2,4 +2,4 @@
 mode = "failure"
 warnings = "forbid"
 error_type = "Rule"
-message_contains = ["Wildcard patterns ('case _ =>') are deferred", "Use 'else =>'"]
+message_contains = ["Wildcard patterns ('case _ =>') are deferred"]

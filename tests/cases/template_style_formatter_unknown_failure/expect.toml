@@ -2,4 +2,4 @@
 mode = "failure"
 warnings = "forbid"
 error_type = "Syntax"
-message_contains = ["Unsupported style directive '$formatter'"]
+message_contains = ["Style directive '$formatter' is unsupported here"]

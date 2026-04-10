@@ -5,6 +5,7 @@
 
 use crate::compiler_frontend::basic_utility_functions::{NumericalParsing, is_valid_var_char};
 use crate::compiler_frontend::compiler_errors::CompilerError;
+use crate::compiler_frontend::deferred_feature_diagnostics::unsupported_style_directive_syntax_error;
 use crate::compiler_frontend::identity::FileId;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::const_paths::parse_file_path;
@@ -239,18 +240,12 @@ pub fn get_token_kind(
 
         let directive = string_table.intern(&token_value);
         let Some(body_mode) = style_directives.body_mode_for(&token_value) else {
-            return_syntax_error!(
-                format!(
-                    "Unsupported style directive '${}'. Registered directives are {}.",
-                    token_value,
-                    style_directives.supported_directives_for_diagnostic(),
-                ),
+            return Err(unsupported_style_directive_syntax_error(
+                &token_value,
+                &style_directives.supported_directives_for_diagnostic(),
                 stream.new_location(),
-                {
-                    CompilationStage => "Tokenization",
-                    PrimarySuggestion => "Register this directive in the project builder frontend_style_directives list or use a supported built-in directive",
-                }
-            )
+                "Tokenization",
+            ));
         };
 
         stream.mark_current_template_body_mode(body_mode);

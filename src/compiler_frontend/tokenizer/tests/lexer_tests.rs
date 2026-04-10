@@ -1,4 +1,5 @@
 use super::*;
+use crate::compiler_frontend::compiler_errors::ErrorMetaDataKey;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::style_directives::{
     StyleDirectiveHandlerSpec, StyleDirectiveRegistry, StyleDirectiveSpec,
@@ -261,10 +262,29 @@ fn rejects_legacy_reset_style_directive_name() {
     .expect_err("legacy reset directive should be rejected");
 
     assert!(
-        error.msg.contains("Unsupported style directive '$reset'"),
+        error
+            .msg
+            .contains("Style directive '$reset' is unsupported here"),
         "unexpected error message: {}",
         error.msg
     );
+    assert_eq!(
+        error
+            .metadata
+            .get(&ErrorMetaDataKey::CompilationStage)
+            .map(String::as_str),
+        Some("Tokenization")
+    );
+    assert_eq!(
+        error
+            .metadata
+            .get(&ErrorMetaDataKey::PrimarySuggestion)
+            .map(String::as_str),
+        Some(
+            "Use a registered style directive here or register this directive in the active project builder."
+        )
+    );
+    assert!(error.location.start_pos.char_column > 0);
 }
 
 #[test]
@@ -390,8 +410,20 @@ fn unknown_style_directives_fail_under_strict_registry() {
         None,
     );
     let error = result.expect_err("unknown directive should fail during tokenization");
-    assert!(error.msg.contains("Unsupported style directive"));
+    assert!(
+        error
+            .msg
+            .contains("Style directive '$unknown' is unsupported here")
+    );
     assert!(error.msg.contains("$unknown"));
+    assert_eq!(
+        error
+            .metadata
+            .get(&ErrorMetaDataKey::CompilationStage)
+            .map(String::as_str),
+        Some("Tokenization")
+    );
+    assert!(error.location.start_pos.char_column > 0);
 }
 
 #[test]

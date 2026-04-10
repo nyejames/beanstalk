@@ -222,7 +222,10 @@ fn validate_artifact_assertion_fields(
         ("must_contain", &assertion.must_contain),
         ("must_not_contain", &assertion.must_not_contain),
         ("must_contain_in_order", &assertion.must_contain_in_order),
-        ("must_contain_exactly_once", &assertion.must_contain_exactly_once),
+        (
+            "must_contain_exactly_once",
+            &assertion.must_contain_exactly_once,
+        ),
         ("must_export", &assertion.must_export),
         ("must_import", &assertion.must_import),
     ] {

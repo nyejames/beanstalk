@@ -4,6 +4,7 @@
 //! compiler test workflows.
 
 use crate::build_system::build;
+use crate::build_system::build::BuildResult;
 use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::display_messages::print_compiler_messages;
@@ -15,13 +16,12 @@ use crate::projects::dev_server::{self, DevServerOptions};
 use crate::projects::html_project::html_project_builder::HtmlProjectBuilder;
 use crate::projects::html_project::new_html_project;
 use saying::say;
+use std::time::Instant;
 use std::{
     env,
     io::{self, Write},
     process,
 };
-use std::time::Instant;
-use crate::build_system::build::BuildResult;
 
 #[derive(Debug, PartialEq, Eq)]
 enum Command {
@@ -458,7 +458,7 @@ fn print_build_message(build_result: BuildResult, duration: std::time::Duration)
         Reset " files successfully in: ",
         Green Bold #duration
     );
-    
+
     print_compiler_messages(CompilerMessages {
         errors: Vec::new(),
         warnings: build_result.warnings,

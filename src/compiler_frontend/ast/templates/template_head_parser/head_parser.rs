@@ -25,6 +25,7 @@ use crate::compiler_frontend::ast::templates::template::{CommentDirectiveKind, T
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::deferred_feature_diagnostics::unsupported_style_directive_syntax_error;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::style_directives::{StyleDirectiveKind, StyleDirectiveSpec};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
@@ -265,18 +266,14 @@ pub fn parse_template_head(
                 // Parse `$slot` / `$insert` first, then fall back to style handling.
                 let directive_name = string_table.resolve(directive).to_owned();
                 let Some(spec) = context.style_directives.find(&directive_name) else {
-                    return_syntax_error!(
-                        format!(
-                            "Unsupported style directive '${directive_name}'. Registered directives are {}.",
-                            context.style_directives.supported_directives_for_diagnostic()
-                        ),
-                        token_stream
-                            .current_location()
-                            ,
-                        {
-                            PrimarySuggestion => "Register this directive in the active project builder style directive list or use a supported core directive",
-                        }
-                    )
+                    return Err(unsupported_style_directive_syntax_error(
+                        &directive_name,
+                        &context
+                            .style_directives
+                            .supported_directives_for_diagnostic(),
+                        token_stream.current_location(),
+                        "Template Head Parsing",
+                    ));
                 };
 
                 let handled_slot_insert = maybe_parse_slot_or_insert_helper_directive(

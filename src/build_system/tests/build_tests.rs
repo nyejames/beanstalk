@@ -328,9 +328,12 @@ fn html_project_directives_fail_when_builder_does_not_register_them() {
             panic!("project-owned directives should fail when not registered");
         };
         assert!(
-            messages.errors.iter().any(|error| error
-                .msg
-                .contains(&format!("Unsupported style directive '${directive_name}'"))),
+            messages
+                .errors
+                .iter()
+                .any(|error| error.msg.contains(&format!(
+                    "Style directive '${directive_name}' is unsupported here"
+                ))),
             "expected unsupported directive error for '${directive_name}', got: {:?}",
             messages
                 .errors

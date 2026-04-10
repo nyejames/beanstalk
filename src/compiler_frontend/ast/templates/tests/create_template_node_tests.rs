@@ -11,6 +11,7 @@ use crate::compiler_frontend::ast::templates::template::{
     CommentDirectiveKind, TemplateAtom, TemplateSegment, TemplateSegmentOrigin, TemplateType,
 };
 use crate::compiler_frontend::ast::templates::template_render_plan::RenderPiece;
+use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorMetaDataKey};
 use crate::compiler_frontend::compiler_warnings::WarningKind;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::host_functions::HostRegistry;
@@ -316,10 +317,10 @@ fn template_parse_error(source: &str) -> String {
     template_parse_error_with_style_directives(source, &style_directives)
 }
 
-fn template_parse_error_with_style_directives(
+fn template_parse_compiler_error_with_style_directives(
     source: &str,
     style_directives: &StyleDirectiveRegistry,
-) -> String {
+) -> CompilerError {
     let mut string_table = StringTable::new();
     let scope = InternedPath::from_single_str("main.bst/#const_template0", &mut string_table);
     let mut token_stream = match tokenize(
@@ -332,7 +333,7 @@ fn template_parse_error_with_style_directives(
         None,
     ) {
         Ok(tokens) => tokens,
-        Err(error) => return error.msg,
+        Err(error) => return error,
     };
     token_stream.index = token_stream
         .tokens
@@ -346,7 +347,13 @@ fn template_parse_error_with_style_directives(
 
     Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect_err("template should fail to parse")
-        .msg
+}
+
+fn template_parse_error_with_style_directives(
+    source: &str,
+    style_directives: &StyleDirectiveRegistry,
+) -> String {
+    template_parse_compiler_error_with_style_directives(source, style_directives).msg
 }
 
 fn template_warnings_with_style_directives(
@@ -1410,7 +1417,7 @@ fn doc_brackets_become_literal_text_not_doc_children() {
 fn formatter_directive_is_unknown_without_builder_registration() {
     let error = template_parse_error("[$formatter(markdown, 10): body]");
 
-    assert!(error.contains("Unsupported style directive"));
+    assert!(error.contains("Style directive '$formatter' is unsupported here"));
     assert!(error.contains("$formatter"));
 }
 
@@ -1418,7 +1425,7 @@ fn formatter_directive_is_unknown_without_builder_registration() {
 fn unknown_style_directives_error_cleanly() {
     let error = template_parse_error("[$unknown: body]");
 
-    assert!(error.contains("Unsupported style directive"));
+    assert!(error.contains("Style directive '$unknown' is unsupported here"));
     assert!(error.contains("$unknown"));
 }
 
@@ -1426,8 +1433,56 @@ fn unknown_style_directives_error_cleanly() {
 fn ignore_is_rejected_as_unsupported_style_directive() {
     let error = template_parse_error("[$ignore: body]");
 
-    assert!(error.contains("Unsupported style directive"));
+    assert!(error.contains("Style directive '$ignore' is unsupported here"));
     assert!(error.contains("$ignore"));
+}
+
+#[test]
+fn template_head_fallback_unknown_directive_uses_standard_metadata() {
+    let tokenization_registry =
+        StyleDirectiveRegistry::merged(&[StyleDirectiveSpec::handler_no_op(
+            "brand",
+            TemplateBodyMode::Normal,
+        )])
+        .expect("test directive should merge for tokenization");
+    let parser_registry = frontend_test_style_directives();
+
+    // Re-parse with a context that lacks '$brand' to exercise template-head fallback dispatch.
+    let mut string_table = StringTable::new();
+    let mut token_stream = template_tokens_from_source_with_style_directives(
+        "[$brand: body]",
+        &tokenization_registry,
+        &mut string_table,
+    );
+    let context = new_constant_context_with_style_directives(
+        token_stream.src_path.to_owned(),
+        &parser_registry,
+    );
+    let fallback_error = Template::new(&mut token_stream, &context, vec![], &mut string_table)
+        .expect_err("template-head fallback should reject missing registry directives");
+
+    assert!(
+        fallback_error
+            .msg
+            .contains("Style directive '$brand' is unsupported here")
+    );
+    assert_eq!(
+        fallback_error
+            .metadata
+            .get(&ErrorMetaDataKey::CompilationStage)
+            .map(String::as_str),
+        Some("Template Head Parsing")
+    );
+    assert_eq!(
+        fallback_error
+            .metadata
+            .get(&ErrorMetaDataKey::PrimarySuggestion)
+            .map(String::as_str),
+        Some(
+            "Use a registered style directive here or register this directive in the active project builder."
+        )
+    );
+    assert!(fallback_error.location.start_pos.char_column > 0);
 }
 
 #[test]
