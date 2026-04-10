@@ -185,22 +185,6 @@ pub(crate) fn markdown_formatter_factory(
     Ok(Some(markdown_formatter()))
 }
 
-#[cfg_attr(not(test), allow(dead_code))]
-pub fn to_markdown(content: &str, default_tag: &str) -> String {
-    let lines = split_text_into_lines(content);
-    let pieces = render_markdown_stream(&lines, default_tag);
-
-    pieces
-        .into_iter()
-        .map(|piece| match piece {
-            FormatterOutputPiece::Text(text) => text,
-            FormatterOutputPiece::Opaque(_) => {
-                unreachable!("plain-text markdown helper should never emit opaque anchors")
-            }
-        })
-        .collect()
-}
-
 /// Converts formatter input into newline-delimited markdown lines without flattening anchors.
 ///
 /// WHAT:
@@ -617,14 +601,13 @@ fn render_inline_atoms(
                 prev_whitespace = true;
                 index += 1;
             }
-            MarkdownInlineAtom::Char('\n') => {
+            MarkdownInlineAtom::Char('\n') | MarkdownInlineAtom::Char('\r') => {
                 literalize_pending_stars(
                     &mut output,
                     wrapper_tag,
                     &mut wrapper_open,
                     &mut pending_open_strength,
                 );
-                output.push_raw(" ");
                 prev_whitespace = true;
                 index += 1;
             }

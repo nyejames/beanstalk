@@ -49,7 +49,11 @@ impl PassThroughFormatterInput {
     /// WHY:
     /// - HTML/CSS validators need a contiguous string view, but the frontend render plan still
     ///   needs opaque child anchors to survive untouched.
-    pub(crate) fn from_input(input: FormatterInput, string_table: &StringTable) -> Self {
+    pub(crate) fn from_input(
+        input: FormatterInput,
+        string_table: &StringTable,
+        strip_whitespace: bool,
+    ) -> Self {
         let mut output_pieces = Vec::with_capacity(input.pieces.len());
         let mut spans = Vec::new();
         let mut flattened_source = String::new();
@@ -72,6 +76,7 @@ impl PassThroughFormatterInput {
                     flattened_source.push_str(&text);
                     output_pieces.push(FormatterOutputPiece::Text(text));
                 }
+
                 FormatterInputPiece::Opaque(anchor) => {
                     output_pieces.push(FormatterOutputPiece::Opaque(anchor));
                 }

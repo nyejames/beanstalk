@@ -76,9 +76,7 @@ pub(crate) fn reserved_trait_dispatch_mismatch_error(
     );
 
     CompilerError {
-        msg: format!(
-            "Reserved trait token dispatch mismatch in {parser_context}: {token_kind:?}"
-        ),
+        msg: format!("Reserved trait token dispatch mismatch in {parser_context}: {token_kind:?}"),
         location,
         error_type: ErrorType::Compiler,
         metadata,

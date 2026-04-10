@@ -50,6 +50,7 @@ impl TemplateFormatter for HtmlValidationTemplateFormatter {
             WarningKind::MalformedHtmlTemplate,
             string_table,
         );
+
         Ok(flattened_input.into_formatter_result(warnings))
     }
 }
