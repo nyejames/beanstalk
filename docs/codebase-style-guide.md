@@ -23,6 +23,19 @@ Before finishing changes, always run:
 - Functions should be self-describing through clear names.
 - Compiler passes should use explicit names such as `build_ast`, `generate_hir`, and `emit_wasm`.
 
+### Format! and printing
+- Use the saying library macro `say!()` for std out when creating user facing messages that may need color styling in the future.
+
+Use variables directly in format! strings whenever possible:
+BAD:
+```rust
+    format!("Rust interpreter lowering could not resolve assignment target local {:?}", local_id);
+```
+GOOD:
+```rust
+    format!("Rust interpreter lowering could not resolve assignment target local {local_id:?}");
+```
+
 ### Imports
 - Avoid inline imports. If a type or function is used more than once in a file, import it at the top.
 - Avoid aliasing unless it clearly improves readability.
@@ -99,7 +112,7 @@ Bad:
 - Use `clippy`.
 - Use the default Rust formatter.
 - Keep unused variables and dead code to a minimum.
-- Use `#[allow(dead_code)]` sparingly and only with clear justification. Dead code must have a comment with it stating this is a todo, used only in tests or another valid justification.
+- Use `#[allow(dead_code)]` only with clear justification. Dead code must have a comment with it stating this is a todo or used only in tests.
 
 ## Returning Errors
 

@@ -47,8 +47,7 @@ pub(crate) fn lower_hir_to_exec_program(
                     return Err(CompilerMessages::from_error(
                         InterpreterBackendError::Execution {
                             message: format!(
-                                "Rust interpreter backend cannot execute specific function {:?} yet",
-                                function_id
+                                "Rust interpreter backend cannot execute specific function {function_id:?} yet"
                             ),
                         }
                             .into_compiler_error(),
@@ -99,8 +98,7 @@ fn validate_request(
                 if !contains_function(hir_module, *function_id) {
                     return Err(InterpreterBackendError::InvalidRequest {
                         message: format!(
-                            "Rust interpreter backend request references missing function {:?}",
-                            function_id
+                            "Rust interpreter backend request references missing function {function_id:?}"
                         ),
                     });
                 }

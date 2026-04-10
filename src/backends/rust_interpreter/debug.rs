@@ -60,8 +60,7 @@ fn build_lowering_plan_text(exec_program: &ExecProgram) -> String {
     let constant_count = exec_program.module.constants.len();
 
     format!(
-        "Rust interpreter lowering produced an Exec IR program with {} function(s), {} block(s), {} local slot(s), {} instruction(s), and {} constant(s).",
-        function_count, block_count, local_count, instruction_count, constant_count,
+        "Rust interpreter lowering produced an Exec IR program with {function_count} function(s), {block_count} block(s), {local_count} local slot(s), {instruction_count} instruction(s), and {constant_count} constant(s)."
     )
 }
 

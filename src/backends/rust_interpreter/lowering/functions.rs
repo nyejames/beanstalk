@@ -31,15 +31,13 @@ pub(crate) fn lower_function_shell(
     for local_id in &layout.ordered_hir_local_ids {
         let Some(exec_local_id) = layout.exec_local_by_hir_local.get(local_id).copied() else {
             return Err(CompilerError::compiler_error(format!(
-                "Rust interpreter lowering could not resolve Exec local for HIR local {:?}",
-                local_id
+                "Rust interpreter lowering could not resolve Exec local for HIR local {local_id:?}"
             )));
         };
 
         let Some(hir_local) = locals_by_id.get(local_id) else {
             return Err(CompilerError::compiler_error(format!(
-                "Rust interpreter lowering could not resolve HIR local {:?}",
-                local_id
+                "Rust interpreter lowering could not resolve HIR local {local_id:?}"
             )));
         };
 
@@ -69,8 +67,7 @@ pub(crate) fn lower_function_shell(
     for hir_block_id in &layout.ordered_hir_block_ids {
         let Some(exec_block_id) = layout.exec_block_by_hir_block.get(hir_block_id).copied() else {
             return Err(CompilerError::compiler_error(format!(
-                "Rust interpreter lowering could not resolve Exec block for HIR block {:?}",
-                hir_block_id
+                "Rust interpreter lowering could not resolve Exec block for HIR block {hir_block_id:?}"
             )));
         };
 

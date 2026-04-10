@@ -51,8 +51,7 @@ pub(crate) fn lower_expression_into(
         HirExpressionKind::Load(HirPlace::Local(local_id)) => {
             let Some(source) = layout.exec_local_by_hir_local.get(local_id).copied() else {
                 return Err(CompilerError::compiler_error(format!(
-                    "Rust interpreter lowering could not resolve local {:?} for load expression",
-                    local_id
+                    "Rust interpreter lowering could not resolve local {local_id:?} for load expression"
                 )));
             };
 
@@ -63,8 +62,7 @@ pub(crate) fn lower_expression_into(
         HirExpressionKind::Copy(HirPlace::Local(local_id)) => {
             let Some(source) = layout.exec_local_by_hir_local.get(local_id).copied() else {
                 return Err(CompilerError::compiler_error(format!(
-                    "Rust interpreter lowering could not resolve local {:?} for copy expression",
-                    local_id
+                    "Rust interpreter lowering could not resolve local {local_id:?} for copy expression"
                 )));
             };
 

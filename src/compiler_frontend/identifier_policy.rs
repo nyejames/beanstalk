@@ -117,8 +117,7 @@ pub(crate) fn naming_warning_for_identifier(
 
             Some(CompilerWarning::new(
                 &format!(
-                    "'{}' should use CamelCase for struct/choice/trait/type-like names.",
-                    identifier
+                    "'{identifier}' should use CamelCase for struct/choice/trait/type-like names."
                 ),
                 location,
                 WarningKind::IdentifierNamingConvention,
@@ -131,8 +130,7 @@ pub(crate) fn naming_warning_for_identifier(
 
             Some(CompilerWarning::new(
                 &format!(
-                    "'{}' should use lowercase_with_underscores for value/function/binding names.",
-                    identifier
+                    "'{identifier}' should use lowercase_with_underscores for value/function/binding names."
                 ),
                 location,
                 WarningKind::IdentifierNamingConvention,
@@ -147,8 +145,7 @@ pub(crate) fn naming_warning_for_identifier(
 
             Some(CompilerWarning::new(
                 &format!(
-                    "Top-level constant '{}' should use lowercase_with_underscores or UPPER_CASE_WITH_UNDERSCORES.",
-                    identifier
+                    "Top-level constant '{identifier}' should use lowercase_with_underscores or UPPER_CASE_WITH_UNDERSCORES."
                 ),
                 location,
                 WarningKind::IdentifierNamingConvention,
@@ -166,8 +163,7 @@ pub(crate) fn reserved_keyword_shadow_error(
     let shadowed_keyword = keyword_shadow_match(identifier).unwrap_or("<unknown>");
     let mut error = CompilerError::new_rule_error(
         format!(
-            "Identifier '{}' is reserved because it visually shadows language keyword '{}'. Keyword shadows are not allowed even with capitalization changes or leading underscores.",
-            identifier, shadowed_keyword
+            "Identifier '{identifier}' is reserved because it visually shadows language keyword '{shadowed_keyword}'. Keyword shadows are not allowed even with capitalization changes or leading underscores."
         ),
         location,
     );

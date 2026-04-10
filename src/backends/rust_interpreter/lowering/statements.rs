@@ -22,8 +22,7 @@ pub(crate) fn lower_block_statements(
                     let Some(exec_target) = layout.exec_local_by_hir_local.get(local_id).copied()
                     else {
                         return Err(CompilerError::compiler_error(format!(
-                            "Rust interpreter lowering could not resolve assignment target local {:?}",
-                            local_id
+                            "Rust interpreter lowering could not resolve assignment target local {local_id:?}"
                         )));
                     };
 

@@ -48,8 +48,7 @@ impl<'a> AstBuildState<'a> {
                     return Err(self.error_messages(
                         CompilerError::new_rule_error(
                             format!(
-                                "'{}' is reserved as a builtin language type.",
-                                symbol_name_text
+                                "'{symbol_name_text}' is reserved as a builtin language type."
                             ),
                             header.name_location.to_owned(),
                         ),
