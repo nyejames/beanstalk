@@ -52,7 +52,6 @@ impl PassThroughFormatterInput {
     pub(crate) fn from_input(
         input: FormatterInput,
         string_table: &StringTable,
-        strip_whitespace: bool,
     ) -> Self {
         let mut output_pieces = Vec::with_capacity(input.pieces.len());
         let mut spans = Vec::new();

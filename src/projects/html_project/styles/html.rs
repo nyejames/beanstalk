@@ -7,6 +7,7 @@
 //! WHY:
 //! - HTML-specific safety heuristics are output-policy concerns owned by the HTML project builder.
 
+use crate::compiler_frontend::ast::templates::styles::whitespace::TemplateWhitespacePassProfile;
 use crate::compiler_frontend::ast::templates::template::{
     Formatter, FormatterResult, TemplateFormatter,
 };
@@ -23,7 +24,7 @@ struct HtmlValidationTemplateFormatter;
 
 pub(crate) fn html_validation_formatter() -> Formatter {
     Formatter {
-        pre_format_whitespace_passes: Vec::new(),
+        pre_format_whitespace_passes: vec![TemplateWhitespacePassProfile::default_template_body()],
         formatter: Arc::new(HtmlValidationTemplateFormatter),
         post_format_whitespace_passes: Vec::new(),
     }

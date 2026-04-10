@@ -8,6 +8,7 @@
 //! - CSS validation and inline-style policy are owned by the HTML project builder, even though
 //!   the frontend executes the formatter during parsing and folding.
 
+use crate::compiler_frontend::ast::templates::styles::whitespace::TemplateWhitespacePassProfile;
 use crate::compiler_frontend::ast::templates::template::{
     Formatter, FormatterResult, TemplateFormatter,
 };
@@ -32,7 +33,7 @@ struct CssValidationTemplateFormatter {
 
 pub(crate) fn css_validation_formatter(mode: CssFormatterMode) -> Formatter {
     Formatter {
-        pre_format_whitespace_passes: Vec::new(),
+        pre_format_whitespace_passes: vec![TemplateWhitespacePassProfile::default_template_body()],
         formatter: Arc::new(CssValidationTemplateFormatter { mode }),
         post_format_whitespace_passes: Vec::new(),
     }
