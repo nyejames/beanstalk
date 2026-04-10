@@ -1,0 +1,8 @@
+[backends.html]
+mode = "failure"
+warnings = "forbid"
+error_type = "Type"
+message_contains = [
+  "Mismatched propagated error type",
+  "Expected 'ErrB', but found 'ErrA'",
+]

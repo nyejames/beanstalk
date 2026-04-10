@@ -24,7 +24,9 @@ use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, Token, TokenKind};
 use crate::compiler_frontend::traits::ContainsReferences;
 use crate::compiler_frontend::type_coercion::compatibility::is_declaration_compatible;
-use crate::compiler_frontend::type_coercion::diagnostics::expected_found_clause;
+use crate::compiler_frontend::type_coercion::diagnostics::{
+    expected_found_clause, offending_value_clause,
+};
 use crate::compiler_frontend::type_coercion::numeric::coerce_expression_to_declared_type;
 use crate::compiler_frontend::type_coercion::parse_context::parse_expectation_for_target_type;
 use crate::compiler_frontend::type_syntax::resolve_named_types_in_data_type;
@@ -232,15 +234,20 @@ pub fn resolve_declaration_syntax(
             if !matches!(declared_type, DataType::Inferred)
                 && !is_declaration_compatible(&declared_type, &expr.data_type)
             {
+                let declaration_name = full_name.name_str(string_table).unwrap_or("<value>");
                 return_type_error!(
                     format!(
-                        "Type mismatch in expression. {}",
-                        expected_found_clause(&declared_type, &expr.data_type, string_table)
+                        "Declaration '{}' has incompatible initializer type. {} {}",
+                        declaration_name,
+                        expected_found_clause(&declared_type, &expr.data_type, string_table),
+                        offending_value_clause(&expr, string_table)
                     ),
                     expr.location.clone(),
                     {
                         CompilationStage => "Expression Evaluation",
-                        PrimarySuggestion => "Ensure the expression produces the declared type",
+                        ExpectedType => declared_type.display_with_table(string_table),
+                        FoundType => expr.data_type.display_with_table(string_table),
+                        PrimarySuggestion => "Update the initializer so it matches the declared variable type, or cast explicitly",
                     }
                 );
             }

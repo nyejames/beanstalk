@@ -93,7 +93,7 @@ fn rejects_immutable_collection_argument_for_mutable_parameter() {
     assert!(
         error
             .msg
-            .contains("Argument for parameter 'items' in function 'touch' has incorrect type"),
+            .contains("Argument for parameter 'items' in Function 'touch' has incorrect type"),
         "{}",
         error.msg
     );
@@ -108,7 +108,32 @@ fn rejects_collection_element_type_mismatch_with_mutability_relaxation() {
     assert!(
         error
             .msg
-            .contains("Argument for parameter 'items' in function 'sum' has incorrect type"),
+            .contains("Argument for parameter 'items' in Function 'sum' has incorrect type"),
+        "{}",
+        error.msg
+    );
+}
+
+#[test]
+fn rejects_struct_constructor_argument_type_with_field_wording() {
+    let error = parse_single_file_ast_error(
+        "Point = |\n    x Int,\n    y Int,\n|\n\npoint = Point(x = 1, y = \"oops\")\n",
+    );
+
+    assert!(
+        error
+            .msg
+            .contains("Argument for field 'y' in Struct constructor 'Point' has incorrect type"),
+        "{}",
+        error.msg
+    );
+    assert!(
+        error.msg.contains("Expected 'Int', but found 'String'"),
+        "{}",
+        error.msg
+    );
+    assert!(
+        error.msg.contains("Offending value: \"oops\""),
         "{}",
         error.msg
     );
@@ -318,6 +343,41 @@ fn parses_result_propagation_call_in_expression_position() {
             ..
         }
     ));
+}
+
+#[test]
+fn rejects_result_propagation_when_error_slot_types_do_not_match() {
+    let error = parse_single_file_ast_error(
+        "ErrA = |\n    message String,\n|\n\nErrB = |\n    message String,\n|\n\ninner || -> Int, ErrA!:\n    return! ErrA(\"failed\")\n;\n\nouter || -> Int, ErrB!:\n    value = inner()!\n    return value\n;\n",
+    );
+
+    assert!(
+        error.msg.contains("Mismatched propagated error type"),
+        "{}",
+        error.msg
+    );
+    assert!(
+        error.msg.contains("Expected 'ErrB', but found 'ErrA'"),
+        "{}",
+        error.msg
+    );
+}
+
+#[test]
+fn rejects_return_value_type_with_expected_found_and_value_details() {
+    let error = parse_single_file_ast_error("render || -> String:\n    return 1\n;\n\nrender()\n");
+
+    assert!(
+        error.msg.contains("Return value 1 has incorrect type"),
+        "{}",
+        error.msg
+    );
+    assert!(
+        error.msg.contains("Expected 'String', but found 'Int'"),
+        "{}",
+        error.msg
+    );
+    assert!(error.msg.contains("Offending value: 1"), "{}", error.msg);
 }
 
 #[test]

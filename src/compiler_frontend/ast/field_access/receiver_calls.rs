@@ -7,7 +7,7 @@ use super::{MemberStepContext, ReceiverAccessMode};
 use crate::compiler_frontend::ast::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::expressions::call_validation::{
-    expectations_from_receiver_method_signature, resolve_call_arguments,
+    CallDiagnosticContext, expectations_from_receiver_method_signature, resolve_call_arguments,
 };
 use crate::compiler_frontend::ast::expressions::function_calls::parse_call_arguments;
 use crate::compiler_frontend::ast::place_access::{
@@ -154,8 +154,9 @@ pub(super) fn parse_receiver_method_call(
     let raw_args = parse_call_arguments(token_stream, context, string_table)?;
     let expectations =
         expectations_from_receiver_method_signature(&method_entry.signature.parameters[1..]);
+    let method_name = string_table.resolve(member_name).to_owned();
     let args = resolve_call_arguments(
-        &method_entry.function_path.to_string(string_table),
+        CallDiagnosticContext::receiver_method(&method_name),
         &raw_args,
         &expectations,
         member_location.clone(),

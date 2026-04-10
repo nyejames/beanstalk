@@ -20,6 +20,7 @@ use crate::{return_syntax_error, return_type_error};
 pub(super) fn create_multiple_expressions(
     token_stream: &mut FileTokens,
     context: &ScopeContext,
+    context_label: &str,
     consume_closing_parenthesis: bool,
     string_table: &mut StringTable,
 ) -> Result<Vec<Expression>, CompilerError> {
@@ -53,14 +54,15 @@ pub(super) fn create_multiple_expressions(
             if token_stream.current_token_kind() != &TokenKind::Comma {
                 return_type_error!(
                     format!(
-                        "Too few arguments provided. Expected: {}. Provided: {}.",
+                        "Too few {} provided. Expected {}, provided {}.",
+                        context_label,
                         context.expected_result_types.len(),
                         expressions.len()
                     ),
                     token_stream.current_location(),
                     {
                         CompilationStage => "Expression Parsing",
-                        PrimarySuggestion => "Add missing arguments to match the expected count",
+                        PrimarySuggestion => "Add missing values to match the expected count",
                     }
                 )
             }

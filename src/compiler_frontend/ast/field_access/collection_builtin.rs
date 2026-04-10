@@ -111,6 +111,7 @@ pub(super) fn parse_collection_builtin_member(
     let Some(builtin) = collection_builtin_method_name(member_name, string_table) else {
         return Ok(None);
     };
+    let member_name_text = string_table.resolve(member_name).to_owned();
 
     if token_stream.peek_next_token() != Some(&TokenKind::OpenParenthesis) {
         return_rule_error!(
@@ -198,6 +199,7 @@ pub(super) fn parse_collection_builtin_member(
         CollectionBuiltinMethod::Get => {
             let args = parse_builtin_method_args(
                 token_stream,
+                &member_name_text,
                 &[DataType::Int],
                 scope_context,
                 &member_location,
@@ -214,6 +216,7 @@ pub(super) fn parse_collection_builtin_member(
         CollectionBuiltinMethod::Set => {
             let args = parse_builtin_method_args(
                 token_stream,
+                &member_name_text,
                 &[DataType::Int, inner_type.as_ref().to_owned()],
                 scope_context,
                 &member_location,
@@ -224,6 +227,7 @@ pub(super) fn parse_collection_builtin_member(
         CollectionBuiltinMethod::Push => {
             let args = parse_builtin_method_args(
                 token_stream,
+                &member_name_text,
                 &[inner_type.as_ref().to_owned()],
                 scope_context,
                 &member_location,
@@ -234,6 +238,7 @@ pub(super) fn parse_collection_builtin_member(
         CollectionBuiltinMethod::Remove => {
             let args = parse_builtin_method_args(
                 token_stream,
+                &member_name_text,
                 &[DataType::Int],
                 scope_context,
                 &member_location,
@@ -244,6 +249,7 @@ pub(super) fn parse_collection_builtin_member(
         CollectionBuiltinMethod::Length => {
             let args = parse_builtin_method_args(
                 token_stream,
+                &member_name_text,
                 &[],
                 scope_context,
                 &member_location,

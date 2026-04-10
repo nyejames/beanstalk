@@ -3,7 +3,7 @@ mode = "failure"
 warnings = "forbid"
 error_type = "Type"
 message_contains = [
-  "Declaration 'result' has incompatible initializer type",
-  "Expected 'Float', but found 'Bool'",
+  "Assignment to 'value' has incorrect value type",
+  "Expected 'Int', but found 'Bool'",
   "Offending value: true",
 ]

@@ -22,12 +22,14 @@ use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 pub fn create_multiple_expressions(
     token_stream: &mut FileTokens,
     context: &ScopeContext,
+    context_label: &str,
     consume_closing_parenthesis: bool,
     string_table: &mut StringTable,
 ) -> Result<Vec<Expression>, CompilerError> {
     super::parse_expression_lists::create_multiple_expressions(
         token_stream,
         context,
+        context_label,
         consume_closing_parenthesis,
         string_table,
     )

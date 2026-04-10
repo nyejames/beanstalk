@@ -178,12 +178,14 @@ fn validate_expression_result_type(
 
     return_type_error!(
         format!(
-            "Type mismatch in expression. {}",
+            "Expression result type mismatch. {}",
             expected_found_clause(expected_type, actual_type, string_table)
         ),
         location.clone(),
         {
             CompilationStage => "Expression Evaluation",
+            ExpectedType => expected_type.display_with_table(string_table),
+            FoundType => actual_type.display_with_table(string_table),
             PrimarySuggestion => "Ensure the expression produces the declared type, or add an explicit cast/handler first",
         }
     )

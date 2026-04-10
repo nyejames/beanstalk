@@ -15,6 +15,9 @@ use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::compiler_frontend::type_coercion::compatibility::is_numeric_coercible;
+use crate::compiler_frontend::type_coercion::diagnostics::{
+    expected_found_clause, offending_value_clause,
+};
 use crate::compiler_frontend::type_coercion::numeric::coerce_expression_to_return_type;
 use crate::{return_rule_error, return_type_error};
 
@@ -84,13 +87,15 @@ pub(crate) fn parse_return_statement(
         if &normalized_actual != expected_error_type {
             return_type_error!(
                 format!(
-                    "return! value has incorrect type. Expected '{}', got '{}'.",
-                    expected_error_type.display_with_table(string_table),
-                    normalized_actual.display_with_table(string_table)
+                    "return! value has incorrect type. {} {}",
+                    expected_found_clause(expected_error_type, &normalized_actual, string_table),
+                    offending_value_clause(&returned_error, string_table)
                 ),
                 returned_error.location.clone(),
                 {
                     CompilationStage => "AST Construction",
+                    ExpectedType => expected_error_type.display_with_table(string_table),
+                    FoundType => normalized_actual.display_with_table(string_table),
                     PrimarySuggestion => "Return an error value that exactly matches the function error slot type",
                 }
             );
@@ -136,8 +141,13 @@ pub(crate) fn parse_return_statement(
             )
         }
 
-        let parsed_returns =
-            create_multiple_expressions(token_stream, context, false, string_table)?;
+        let parsed_returns = create_multiple_expressions(
+            token_stream,
+            context,
+            "return values",
+            false,
+            string_table,
+        )?;
 
         if token_stream.current_token_kind() == &TokenKind::Comma {
             let expected_count = context.expected_result_types.len();
@@ -180,14 +190,16 @@ pub(crate) fn parse_return_statement(
 
             return_type_error!(
                 format!(
-                    "Return value {} has incorrect type. Expected '{}', got '{}'. Return values must match the function signature exactly.",
+                    "Return value {} has incorrect type. {} {} Return values must match the function signature exactly.",
                     index + 1,
-                    expected_type.display_with_table(string_table),
-                    normalized_actual.display_with_table(string_table)
+                    expected_found_clause(expected_type, &normalized_actual, string_table),
+                    offending_value_clause(&returned_value, string_table),
                 ),
                 returned_value.location.clone(),
                 {
                     CompilationStage => "AST Construction",
+                    ExpectedType => expected_type.display_with_table(string_table),
+                    FoundType => normalized_actual.display_with_table(string_table),
                     PrimarySuggestion => "Update the returned expression to match the declared return type",
                     AlternativeSuggestion => "If this value is intended, change the function return signature to the correct type",
                 }

@@ -80,6 +80,7 @@ pub(super) fn parse_error_builtin_member(
     let Some(builtin) = error_builtin_method_name(member_name, string_table) else {
         return Ok(None);
     };
+    let member_name_text = string_table.resolve(member_name).to_owned();
 
     if token_stream.peek_next_token() != Some(&TokenKind::OpenParenthesis) {
         return_rule_error!(
@@ -118,6 +119,7 @@ pub(super) fn parse_error_builtin_member(
                 resolve_builtin_error_location_type(scope_context, &member_location, string_table)?;
             let args = parse_builtin_method_args(
                 token_stream,
+                &member_name_text,
                 &[location_type],
                 scope_context,
                 &member_location,
@@ -130,6 +132,7 @@ pub(super) fn parse_error_builtin_member(
                 resolve_builtin_stack_frame_type(scope_context, &member_location, string_table)?;
             let args = parse_builtin_method_args(
                 token_stream,
+                &member_name_text,
                 &[frame_type],
                 scope_context,
                 &member_location,
@@ -140,6 +143,7 @@ pub(super) fn parse_error_builtin_member(
         ErrorBuiltinMethod::Bubble => {
             let args = parse_builtin_method_args(
                 token_stream,
+                &member_name_text,
                 &[],
                 scope_context,
                 &member_location,

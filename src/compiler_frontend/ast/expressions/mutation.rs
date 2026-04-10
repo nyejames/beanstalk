@@ -9,9 +9,13 @@ use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
+use crate::compiler_frontend::type_coercion::compatibility::is_declaration_compatible;
+use crate::compiler_frontend::type_coercion::diagnostics::{
+    expected_found_clause, offending_value_clause,
+};
 use crate::compiler_frontend::type_coercion::numeric::coerce_expression_to_declared_type;
 use crate::compiler_frontend::type_coercion::parse_context::parse_expectation_for_target_type;
-use crate::{ast_log, return_rule_error, return_syntax_error};
+use crate::{ast_log, return_rule_error, return_syntax_error, return_type_error};
 
 fn assignment_target_value_type(target: &AstNode) -> Result<DataType, CompilerError> {
     if let NodeKind::MethodCall {
@@ -26,6 +30,81 @@ fn assignment_target_value_type(target: &AstNode) -> Result<DataType, CompilerEr
     }
 
     Ok(target.get_expr()?.data_type)
+}
+
+fn assignment_target_name(target: &AstNode, string_table: &StringTable) -> String {
+    assignment_target_path(target, string_table)
+        .map(|path| format!("'{path}'"))
+        .unwrap_or_else(|| String::from("<assignment target>"))
+}
+
+fn assignment_target_path(target: &AstNode, string_table: &StringTable) -> Option<String> {
+    match &target.kind {
+        NodeKind::Rvalue(expression) => match &expression.kind {
+            crate::compiler_frontend::ast::expressions::expression::ExpressionKind::Reference(
+                path,
+            ) => Some(
+                path.name_str(string_table)
+                    .map(str::to_owned)
+                    .unwrap_or_else(|| path.to_string(string_table)),
+            ),
+            crate::compiler_frontend::ast::expressions::expression::ExpressionKind::Runtime(
+                nodes,
+            ) if nodes.len() == 1 => assignment_target_path(&nodes[0], string_table),
+            _ => None,
+        },
+        NodeKind::FieldAccess { base, field, .. } => assignment_target_path(base, string_table)
+            .map(|base_path| format!("{base_path}.{}", string_table.resolve(*field))),
+        NodeKind::MethodCall {
+            receiver,
+            builtin,
+            method,
+            ..
+        } => {
+            let receiver_path = assignment_target_path(receiver, string_table)?;
+            if matches!(builtin, Some(BuiltinMethodKind::CollectionGet)) {
+                Some(format!("{receiver_path}.get(...)"))
+            } else {
+                Some(format!(
+                    "{receiver_path}.{}(...)",
+                    string_table.resolve(*method)
+                ))
+            }
+        }
+        _ => None,
+    }
+}
+
+fn validate_assignment_value_type(
+    expected_type: &DataType,
+    actual_value: &Expression,
+    target: &AstNode,
+    assignment_operator: &str,
+    string_table: &StringTable,
+) -> Result<(), CompilerError> {
+    if is_declaration_compatible(expected_type, &actual_value.data_type) {
+        return Ok(());
+    }
+
+    let target_name = assignment_target_name(target, string_table);
+    let mismatch_clause =
+        expected_found_clause(expected_type, &actual_value.data_type, string_table);
+    return_type_error!(
+        format!(
+            "{} to {} has incorrect value type. {} {}",
+            assignment_operator,
+            target_name,
+            mismatch_clause,
+            offending_value_clause(actual_value, string_table)
+        ),
+        actual_value.location.clone(),
+        {
+            CompilationStage => "Expression Parsing",
+            ExpectedType => expected_type.display_with_table(string_table),
+            FoundType => actual_value.data_type.display_with_table(string_table),
+            PrimarySuggestion => "Use a value whose type matches the assignment target, or cast explicitly before assignment",
+        }
+    )
 }
 
 fn build_mutation_from_target(
@@ -105,6 +184,13 @@ fn build_mutation_from_target(
                 false,
                 string_table,
             )?;
+            validate_assignment_value_type(
+                &target_type,
+                &rhs,
+                &target,
+                "Assignment",
+                string_table,
+            )?;
             coerce_expression_to_declared_type(rhs, &target_type)
         }
 
@@ -119,6 +205,13 @@ fn build_mutation_from_target(
                 &mut expr_type,
                 &variable_arg.value.ownership,
                 false,
+                string_table,
+            )?;
+            validate_assignment_value_type(
+                &target_type,
+                &rhs,
+                &target,
+                "Compound assignment '+='",
                 string_table,
             )?;
             let add_value = coerce_expression_to_declared_type(rhs, &target_type);
@@ -157,6 +250,13 @@ fn build_mutation_from_target(
                 false,
                 string_table,
             )?;
+            validate_assignment_value_type(
+                &target_type,
+                &rhs,
+                &target,
+                "Compound assignment '-='",
+                string_table,
+            )?;
             let subtract_value = coerce_expression_to_declared_type(rhs, &target_type);
 
             // Create a subtraction expression in RPN order: variable, subtract_value, -
@@ -193,6 +293,13 @@ fn build_mutation_from_target(
                 false,
                 string_table,
             )?;
+            validate_assignment_value_type(
+                &target_type,
+                &rhs,
+                &target,
+                "Compound assignment '*='",
+                string_table,
+            )?;
             let multiply_value = coerce_expression_to_declared_type(rhs, &target_type);
 
             // Create a multiplication expression in RPN order: variable, multiply_value, *
@@ -227,6 +334,13 @@ fn build_mutation_from_target(
                 &mut expr_type,
                 &variable_arg.value.ownership,
                 false,
+                string_table,
+            )?;
+            validate_assignment_value_type(
+                &target_type,
+                &rhs,
+                &target,
+                "Compound assignment '/='",
                 string_table,
             )?;
             let divide_value = coerce_expression_to_declared_type(rhs, &target_type);
@@ -295,3 +409,7 @@ pub fn handle_mutation(
     let target = parse_field_access(token_stream, variable_arg, context, string_table)?;
     build_mutation_from_target(token_stream, variable_arg, target, context, string_table)
 }
+
+#[cfg(test)]
+#[path = "tests/mutation_tests.rs"]
+mod mutation_tests;

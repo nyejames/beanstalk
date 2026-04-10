@@ -1833,9 +1833,10 @@ fn build_project_rejects_const_record_when_required_fields_are_missing() {
         };
 
         assert!(
-            messages.errors.iter().any(|error| error
-                .msg
-                .contains("Missing required argument for parameter")),
+            messages
+                .errors
+                .iter()
+                .any(|error| error.msg.contains("Missing required argument for field")),
             "expected a missing-required-fields constructor diagnostic"
         );
     }

@@ -53,7 +53,7 @@ pub(crate) fn parse_multi_bind_statement(
     if rhs_slots.len() != parsed_targets.len() {
         return_type_error!(
             format!(
-                "Multi-bind arity mismatch: {} target(s) but {} value slot(s).",
+                "Multi-bind arity mismatch: {} target(s) but {} value slot(s). Target count must match returned slot count exactly.",
                 parsed_targets.len(),
                 rhs_slots.len()
             ),
@@ -303,13 +303,16 @@ fn resolve_multi_bind_targets(
     let mut resolved_targets = Vec::with_capacity(parsed_targets.len());
     let mut new_declarations = Vec::new();
 
-    for (slot_type, target_syntax) in rhs_slots.iter().zip(parsed_targets.iter()) {
+    for (slot_index, (slot_type, target_syntax)) in
+        rhs_slots.iter().zip(parsed_targets.iter()).enumerate()
+    {
         let explicit_type = resolve_target_explicit_type(target_syntax, context, string_table)?;
         let Some(existing_declaration) = context.get_reference(&target_syntax.name) else {
             let target_data_type = resolve_new_target_data_type(
                 target_syntax,
                 explicit_type,
                 slot_type,
+                slot_index,
                 string_table,
             )?;
             let target_ownership = binding_target_ownership(target_syntax);
@@ -339,6 +342,7 @@ fn resolve_multi_bind_targets(
             slot_type,
             explicit_type.as_ref(),
             existing_declaration,
+            slot_index,
             string_table,
         )?);
     }
@@ -354,6 +358,7 @@ fn resolve_existing_target(
     slot_type: &DataType,
     explicit_type: Option<&DataType>,
     existing_declaration: &Declaration,
+    slot_index: usize,
     string_table: &StringTable,
 ) -> Result<MultiBindTarget, CompilerError> {
     if target_syntax.mutable_marker {
@@ -389,8 +394,9 @@ fn resolve_existing_target(
     {
         return_type_error!(
             format!(
-                "Explicit type for existing target '{}' does not match the declared variable type.",
-                string_table.resolve(target_syntax.name)
+                "Explicit type for existing target '{}' at multi-bind slot {} does not match the declared variable type.",
+                string_table.resolve(target_syntax.name),
+                slot_index + 1
             ),
             target_syntax.location.clone(),
             {
@@ -404,8 +410,9 @@ fn resolve_existing_target(
     if &expected_slot_type != slot_type {
         return_type_error!(
             format!(
-                "Type mismatch for target '{}'. Expected '{}', got '{}'.",
+                "Type mismatch for target '{}' at multi-bind slot {}. Expected '{}', got '{}'.",
                 string_table.resolve(target_syntax.name),
+                slot_index + 1,
                 expected_slot_type.display_with_table(string_table),
                 slot_type.display_with_table(string_table)
             ),
@@ -430,6 +437,7 @@ fn resolve_new_target_data_type(
     target_syntax: &BindingTargetSyntax,
     explicit_type: Option<DataType>,
     slot_type: &DataType,
+    slot_index: usize,
     string_table: &StringTable,
 ) -> Result<DataType, CompilerError> {
     let inferred_slot_type = slot_type.to_owned();
@@ -440,8 +448,9 @@ fn resolve_new_target_data_type(
     if explicit_type != inferred_slot_type {
         return_type_error!(
             format!(
-                "Type mismatch for target '{}'. Expected '{}', got '{}'.",
+                "Type mismatch for target '{}' at multi-bind slot {}. Expected '{}', got '{}'.",
                 string_table.resolve(target_syntax.name),
+                slot_index + 1,
                 explicit_type.display_with_table(string_table),
                 inferred_slot_type.display_with_table(string_table)
             ),

@@ -1,0 +1,9 @@
+[backends.html]
+mode = "failure"
+warnings = "forbid"
+error_type = "Type"
+message_contains = [
+  "Argument for field 'y' in Struct constructor 'Point' has incorrect type",
+  "Expected 'Int', but found 'String'",
+  "Offending value: \"oops\"",
+]

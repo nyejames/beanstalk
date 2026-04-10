@@ -2,4 +2,7 @@
 mode = "failure"
 warnings = "forbid"
 error_type = "Type"
-message_contains = ["Expected B, but got A"]
+message_contains = [
+  "Argument for parameter 'value' in Function 'take' has incorrect type",
+  "Expected 'B', but found 'A'",
+]

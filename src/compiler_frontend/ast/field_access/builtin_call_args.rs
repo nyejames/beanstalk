@@ -6,7 +6,7 @@
 use crate::compiler_frontend::ast::ast::ScopeContext;
 use crate::compiler_frontend::ast::expressions::call_argument::CallArgument;
 use crate::compiler_frontend::ast::expressions::call_validation::{
-    ExpectedAccessMode, ParameterExpectation, resolve_call_arguments,
+    CallDiagnosticContext, ExpectedAccessMode, ParameterExpectation, resolve_call_arguments,
 };
 use crate::compiler_frontend::ast::expressions::function_calls::parse_call_arguments;
 use crate::compiler_frontend::compiler_errors::CompilerError;
@@ -18,6 +18,7 @@ use crate::return_rule_error;
 /// Parses builtin receiver-method arguments using positional-only policy.
 pub(super) fn parse_builtin_method_args(
     token_stream: &mut FileTokens,
+    member_name: &str,
     expected_types: &[DataType],
     context: &ScopeContext,
     member_location: &SourceLocation,
@@ -77,7 +78,7 @@ pub(super) fn parse_builtin_method_args(
         );
     }
     resolve_call_arguments(
-        "<builtin member>",
+        CallDiagnosticContext::builtin_member(member_name),
         &raw_args,
         &expectations,
         member_location.to_owned(),

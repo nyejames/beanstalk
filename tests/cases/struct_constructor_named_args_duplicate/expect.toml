@@ -2,4 +2,4 @@
 mode = "failure"
 warnings = "forbid"
 error_type = "Rule"
-message_contains = ["Parameter 'x' was provided more than once"]
+message_contains = ["Field 'x' was provided more than once"]

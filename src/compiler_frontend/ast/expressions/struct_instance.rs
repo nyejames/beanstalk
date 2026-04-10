@@ -1,7 +1,7 @@
 use crate::compiler_frontend::ast::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::call_validation::{
-    expectations_from_struct_fields, resolve_call_arguments,
+    CallDiagnosticContext, expectations_from_struct_fields, resolve_call_arguments,
 };
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::expressions::function_calls::parse_call_arguments;
@@ -49,7 +49,7 @@ pub(crate) fn parse_struct_constructor_expression(
     let raw_args = parse_call_arguments(token_stream, context, string_table)?;
     let expectations = expectations_from_struct_fields(fields);
     let resolved_args = resolve_call_arguments(
-        &struct_name_str,
+        CallDiagnosticContext::struct_constructor(&struct_name_str),
         &raw_args,
         &expectations,
         constructor_location.clone(),

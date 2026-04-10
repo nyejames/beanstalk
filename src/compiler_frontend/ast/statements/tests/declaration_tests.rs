@@ -8,6 +8,7 @@ use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
 use crate::compiler_frontend::ast::test_support::{
     parse_single_file_ast, parse_single_file_ast_error, start_function_body,
 };
+use crate::compiler_frontend::compiler_errors::{ErrorMetaDataKey, ErrorType};
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 
 #[test]
@@ -79,5 +80,38 @@ fn rejects_keyword_shadow_variable_declarations() {
         ),
         "{}",
         error.msg
+    );
+}
+
+#[test]
+fn rejects_initializer_type_mismatch_with_target_and_value_details() {
+    let error = parse_single_file_ast_error("result Float = true\n");
+    assert_eq!(error.error_type, ErrorType::Type);
+    assert!(
+        error
+            .msg
+            .contains("Declaration 'result' has incompatible initializer type"),
+        "{}",
+        error.msg
+    );
+    assert!(
+        error.msg.contains("Expected 'Float', but found 'Bool'"),
+        "{}",
+        error.msg
+    );
+    assert!(error.msg.contains("Offending value: true"), "{}", error.msg);
+    assert_eq!(
+        error
+            .metadata
+            .get(&ErrorMetaDataKey::ExpectedType)
+            .map(String::as_str),
+        Some("Float")
+    );
+    assert_eq!(
+        error
+            .metadata
+            .get(&ErrorMetaDataKey::FoundType)
+            .map(String::as_str),
+        Some("Bool")
     );
 }

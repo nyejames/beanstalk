@@ -14,10 +14,120 @@ use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::host_functions::{HostAccessKind, HostFunctionDef};
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::type_coercion::compatibility::is_type_compatible;
-use crate::compiler_frontend::type_coercion::diagnostics::argument_conversion_hint;
+use crate::compiler_frontend::type_coercion::diagnostics::{
+    argument_conversion_hint, expected_found_clause, offending_value_clause,
+};
 use crate::return_rule_error;
 use crate::return_type_error;
 use rustc_hash::FxHashMap;
+
+#[derive(Clone, Copy)]
+pub(crate) enum CallSurfaceKind {
+    Function,
+    StructConstructor,
+    ReceiverMethod,
+    BuiltinMember,
+    HostFunction,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct CallDiagnosticContext<'a> {
+    pub kind: CallSurfaceKind,
+    pub callee_name: &'a str,
+}
+
+impl<'a> CallDiagnosticContext<'a> {
+    pub(crate) fn function(callee_name: &'a str) -> Self {
+        Self {
+            kind: CallSurfaceKind::Function,
+            callee_name,
+        }
+    }
+
+    pub(crate) fn struct_constructor(callee_name: &'a str) -> Self {
+        Self {
+            kind: CallSurfaceKind::StructConstructor,
+            callee_name,
+        }
+    }
+
+    pub(crate) fn receiver_method(callee_name: &'a str) -> Self {
+        Self {
+            kind: CallSurfaceKind::ReceiverMethod,
+            callee_name,
+        }
+    }
+
+    pub(crate) fn builtin_member(callee_name: &'a str) -> Self {
+        Self {
+            kind: CallSurfaceKind::BuiltinMember,
+            callee_name,
+        }
+    }
+
+    pub(crate) fn host_function(callee_name: &'a str) -> Self {
+        Self {
+            kind: CallSurfaceKind::HostFunction,
+            callee_name,
+        }
+    }
+
+    fn callable_title(self) -> &'static str {
+        match self.kind {
+            CallSurfaceKind::Function => "Function",
+            CallSurfaceKind::StructConstructor => "Struct constructor",
+            CallSurfaceKind::ReceiverMethod => "Receiver method",
+            CallSurfaceKind::BuiltinMember => "Builtin member",
+            CallSurfaceKind::HostFunction => "Host function",
+        }
+    }
+
+    fn slot_noun(self) -> &'static str {
+        match self.kind {
+            CallSurfaceKind::StructConstructor => "field",
+            _ => "parameter",
+        }
+    }
+
+    fn known_slots_label(self) -> &'static str {
+        match self.kind {
+            CallSurfaceKind::StructConstructor => "Known fields",
+            _ => "Known parameters",
+        }
+    }
+
+    fn slot_noun_title(self) -> &'static str {
+        match self.kind {
+            CallSurfaceKind::StructConstructor => "Field",
+            _ => "Parameter",
+        }
+    }
+
+    fn primary_conversion_suggestion(self) -> &'static str {
+        match self.kind {
+            CallSurfaceKind::StructConstructor => {
+                "Convert this field value to the declared struct field type"
+            }
+            _ => "Convert the argument to the expected type",
+        }
+    }
+
+    fn callable_label(self) -> String {
+        format!("{} '{}'", self.callable_title(), self.callee_name)
+    }
+
+    fn slot_label(
+        self,
+        expectation: &ParameterExpectation,
+        slot: usize,
+        string_table: &StringTable,
+    ) -> String {
+        expectation
+            .name
+            .map(|name| format!("'{}'", string_table.resolve(name)))
+            .unwrap_or_else(|| format!("#{}", slot + 1))
+    }
+}
 
 pub(crate) enum ExpectedAccessMode {
     Shared,
@@ -99,7 +209,7 @@ pub(crate) fn expectations_from_receiver_method_signature(
 /// WHAT: this is the shared normalization boundary for all call-shaped syntax.
 /// WHY: once one caller changes argument policy, every other caller should inherit it from here.
 pub(crate) fn resolve_call_arguments(
-    call_name: &str,
+    diagnostics: CallDiagnosticContext<'_>,
     args: &[CallArgument],
     expectations: &[ParameterExpectation],
     location: SourceLocation,
@@ -135,14 +245,19 @@ pub(crate) fn resolve_call_arguments(
                     .map(|name| format!("'{}'", string_table.resolve(name)))
                     .collect::<Vec<_>>();
                 let known_parameter_hint = if known_parameters.is_empty() {
-                    String::from("This call accepts positional-only parameters.")
+                    String::from("This call accepts positional-only arguments.")
                 } else {
-                    format!("Known parameters: {}", known_parameters.join(", "))
+                    format!(
+                        "{}: {}",
+                        diagnostics.known_slots_label(),
+                        known_parameters.join(", ")
+                    )
                 };
                 return_rule_error!(
                     format!(
-                        "Function '{}' has no parameter named '{}'. {}",
-                        call_name,
+                        "{} has no {} named '{}'. {}",
+                        diagnostics.callable_label(),
+                        diagnostics.slot_noun(),
                         string_table.resolve(target_name),
                         known_parameter_hint
                     ),
@@ -152,7 +267,10 @@ pub(crate) fn resolve_call_arguments(
                         .unwrap_or_else(|| argument.location.clone()),
                     {
                         CompilationStage => "Function Call Validation",
-                        PrimarySuggestion => "Use a declared parameter name in this call",
+                        PrimarySuggestion => format!(
+                            "Use a declared {} name in this call",
+                            diagnostics.slot_noun()
+                        ),
                     }
                 );
             };
@@ -161,8 +279,8 @@ pub(crate) fn resolve_call_arguments(
             if saw_named_argument {
                 return_rule_error!(
                     format!(
-                        "Function '{}' does not allow positional arguments after named arguments",
-                        call_name
+                        "{} does not allow positional arguments after named arguments",
+                        diagnostics.callable_label()
                     ),
                     argument.location.clone(),
                     {
@@ -178,8 +296,8 @@ pub(crate) fn resolve_call_arguments(
             if positional_cursor >= expectations.len() {
                 return_type_error!(
                     format!(
-                        "Function '{}' expects {} argument(s), but extra positional arguments were provided",
-                        call_name,
+                        "{} expects {} argument(s), but extra positional arguments were provided",
+                        diagnostics.callable_label(),
                         expectations.len()
                     ),
                     location.clone(),
@@ -195,19 +313,23 @@ pub(crate) fn resolve_call_arguments(
         };
 
         if resolved[slot].is_some() {
-            let parameter_name = expectations[slot]
-                .name
-                .map(|name| string_table.resolve(name).to_owned())
-                .unwrap_or_else(|| format!("#{}", slot + 1));
+            let slot_label = diagnostics.slot_label(&expectations[slot], slot, string_table);
             return_rule_error!(
-                format!("Parameter '{}' was provided more than once", parameter_name),
+                format!(
+                    "{} {} was provided more than once",
+                    diagnostics.slot_noun_title(),
+                    slot_label
+                ),
                 argument
                     .target_location
                     .clone()
                     .unwrap_or_else(|| argument.location.clone()),
                 {
                     CompilationStage => "Function Call Validation",
-                    PrimarySuggestion => "Provide each parameter at most once",
+                    PrimarySuggestion => format!(
+                        "Provide each {} at most once",
+                        diagnostics.slot_noun()
+                    ),
                 }
             );
         }
@@ -229,11 +351,19 @@ pub(crate) fn resolve_call_arguments(
                     .map(|name| format!("'{}'", string_table.resolve(name)))
                     .unwrap_or_else(|| format!("#{}", slot + 1));
                 return_type_error!(
-                    format!("Missing required argument for parameter {}", parameter_label),
+                    format!(
+                        "Missing required argument for {} {} in {}",
+                        diagnostics.slot_noun(),
+                        parameter_label,
+                        diagnostics.callable_label()
+                    ),
                     location.clone(),
                     {
                         CompilationStage => "Function Call Validation",
-                        PrimarySuggestion => "Provide values for all required parameters",
+                        PrimarySuggestion => format!(
+                            "Provide values for all required {}s",
+                            diagnostics.slot_noun()
+                        ),
                     }
                 );
             }
@@ -249,28 +379,31 @@ pub(crate) fn resolve_call_arguments(
         if !is_type_compatible(&expectation.data_type, &argument.value.data_type) {
             let conversion_hint =
                 argument_conversion_hint(&expectation.data_type, &argument.value.data_type);
+            let slot_label = diagnostics.slot_label(expectation, slot, string_table);
             return_type_error!(
                 format!(
-                    "Argument for parameter {} in function '{}' has incorrect type. Expected {}, but got {}. {}",
-                    expectation
-                        .name
-                        .map(|name| format!("'{}'", string_table.resolve(name)))
-                        .unwrap_or_else(|| format!("#{}", slot + 1)),
-                    call_name,
-                    expectation.data_type.display_with_table(string_table),
-                    argument.value.data_type.display_with_table(string_table),
-                    conversion_hint,
+                    "Argument for {} {} in {} has incorrect type. {} {} {}",
+                    diagnostics.slot_noun(),
+                    slot_label,
+                    diagnostics.callable_label(),
+                    expected_found_clause(
+                        &expectation.data_type,
+                        &argument.value.data_type,
+                        string_table
+                    ),
+                    offending_value_clause(&argument.value, string_table),
+                    conversion_hint
                 ),
                 argument.location.clone(),
                 {
                     CompilationStage => "Function Call Validation",
-                    PrimarySuggestion => "Convert the argument to the expected type",
+                    PrimarySuggestion => diagnostics.primary_conversion_suggestion(),
                 }
             );
         }
 
         validate_call_access_mode(
-            call_name,
+            &diagnostics,
             &argument,
             expectation,
             location.clone(),
@@ -283,28 +416,30 @@ pub(crate) fn resolve_call_arguments(
 }
 
 fn validate_call_access_mode(
-    call_name: &str,
+    diagnostics: &CallDiagnosticContext<'_>,
     argument: &CallArgument,
     expectation: &ParameterExpectation,
     _location: SourceLocation,
     string_table: &StringTable,
 ) -> Result<(), CompilerError> {
+    let slot_noun = diagnostics.slot_noun();
     let parameter_label = expectation
         .name
-        .map(|name| format!("parameter '{}'", string_table.resolve(name)))
+        .map(|name| format!("{slot_noun} '{}'", string_table.resolve(name)))
         .unwrap_or_else(|| {
             argument
                 .target_param
-                .map(|name| format!("parameter '{}'", string_table.resolve(name)))
-                .unwrap_or_else(|| String::from("this parameter"))
+                .map(|name| format!("{slot_noun} '{}'", string_table.resolve(name)))
+                .unwrap_or_else(|| format!("this {slot_noun}"))
         });
     match (argument.access_mode, &expectation.access_mode) {
         (CallAccessMode::Shared, ExpectedAccessMode::Shared) => Ok(()),
         (CallAccessMode::Shared, ExpectedAccessMode::Mutable) => {
             return_rule_error!(
                 format!(
-                    "Function '{}' requires explicit '~' for {}",
-                    call_name, parameter_label
+                    "{} requires explicit '~' for {}",
+                    diagnostics.callable_label(),
+                    parameter_label
                 ),
                 argument.location.clone(),
                 {
@@ -316,8 +451,9 @@ fn validate_call_access_mode(
         (CallAccessMode::Mutable, ExpectedAccessMode::Shared) => {
             return_rule_error!(
                 format!(
-                    "Function '{}' does not accept '~' for {}",
-                    call_name, parameter_label
+                    "{} does not accept '~' for {}",
+                    diagnostics.callable_label(),
+                    parameter_label
                 ),
                 argument.location.clone(),
                 {
@@ -330,8 +466,9 @@ fn validate_call_access_mode(
             if !expression_is_place(&argument.value) {
                 return_rule_error!(
                     format!(
-                        "Function '{}' received '~' on a non-place argument for {}",
-                        call_name, parameter_label
+                        "{} received '~' on a non-place argument for {}",
+                        diagnostics.callable_label(),
+                        parameter_label
                     ),
                     argument.location.clone(),
                     {
@@ -343,8 +480,9 @@ fn validate_call_access_mode(
             if !expression_is_mutable_place(&argument.value) {
                 return_rule_error!(
                     format!(
-                        "Function '{}' received '~' on an immutable place for {}",
-                        call_name, parameter_label
+                        "{} received '~' on an immutable place for {}",
+                        diagnostics.callable_label(),
+                        parameter_label
                     ),
                     argument.location.clone(),
                     {

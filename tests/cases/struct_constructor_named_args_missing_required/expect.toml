@@ -2,4 +2,4 @@
 mode = "failure"
 warnings = "forbid"
 error_type = "Type"
-message_contains = ["Missing required argument for parameter 'y'"]
+message_contains = ["Missing required argument for field 'y'", "Struct constructor 'Point'"]

@@ -9,7 +9,8 @@ use crate::compiler_frontend::ast::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
 use crate::compiler_frontend::ast::expressions::call_argument::{CallAccessMode, CallArgument};
 use crate::compiler_frontend::ast::expressions::call_validation::{
-    expectations_from_host_function, expectations_from_user_parameters, resolve_call_arguments,
+    CallDiagnosticContext, expectations_from_host_function, expectations_from_user_parameters,
+    resolve_call_arguments,
 };
 use crate::compiler_frontend::ast::expressions::expression::ResultCallHandling;
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
@@ -25,6 +26,9 @@ use crate::compiler_frontend::host_functions::HostFunctionDef;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
+use crate::compiler_frontend::type_coercion::diagnostics::{
+    expected_found_clause, offending_value_clause,
+};
 use crate::{ast_log, return_rule_error, return_syntax_error, return_type_error};
 
 pub fn parse_function_call(
@@ -78,15 +82,23 @@ pub fn parse_function_call(
                 };
 
                 if expected_error_type != error_return.data_type() {
+                    let call_name = id.name_str(string_table).unwrap_or("<function>");
                     return_type_error!(
                         format!(
-                            "Mismatched propagated error type. Called function returns '{}', but current function expects '{}'.",
-                            error_return.data_type().display_with_table(string_table),
-                            expected_error_type.display_with_table(string_table)
+                            "Mismatched propagated error type for call '{}'. {} Offending call: {}(...).",
+                            call_name,
+                            expected_found_clause(
+                                expected_error_type,
+                                error_return.data_type(),
+                                string_table
+                            ),
+                            call_name
                         ),
                         token_stream.current_location(),
                         {
                             CompilationStage => "Function Call Parsing",
+                            ExpectedType => expected_error_type.display_with_table(string_table),
+                            FoundType => error_return.data_type().display_with_table(string_table),
                             PrimarySuggestion => "Use a function with the same error type or change the surrounding function error slot type",
                         }
                     );
@@ -351,7 +363,9 @@ fn resolve_user_function_call_arguments(
 ) -> Result<Vec<CallArgument>, CompilerError> {
     let expectations = expectations_from_user_parameters(parameters);
     resolve_call_arguments(
-        function_name.name_str(string_table).unwrap_or("<unknown>"),
+        CallDiagnosticContext::function(
+            function_name.name_str(string_table).unwrap_or("<unknown>"),
+        ),
         raw_args,
         &expectations,
         location,
@@ -387,7 +401,7 @@ pub fn parse_host_function_call(
 
     let expectations = expectations_from_host_function(host_func);
     let args = resolve_call_arguments(
-        host_func.name,
+        CallDiagnosticContext::host_function(host_func.name),
         &raw_args,
         &expectations,
         location.clone(),
@@ -423,10 +437,11 @@ fn validate_host_specific_call_rules(
             if argument.value.data_type.is_result() {
                 return_type_error!(
                     format!(
-                        "Argument {} to function '{}' has incorrect type. Expected a renderable value, but got {}. Result values must be handled before reaching io(...).",
+                        "Argument {} to function '{}' has incorrect type. Expected a renderable value, but got {}. {} Result values must be handled before reaching io(...).",
                         i + 1,
                         function.name,
-                        &argument.value.data_type.display_with_table(string_table)
+                        &argument.value.data_type.display_with_table(string_table),
+                        offending_value_clause(&argument.value, string_table),
                     ),
                     location.clone(),
                     {
@@ -449,10 +464,11 @@ fn validate_host_specific_call_rules(
             ) {
                 return_type_error!(
                     format!(
-                        "Argument {} to function '{}' has incorrect type. Expected a final scalar or textual value, but got {}.",
+                        "Argument {} to function '{}' has incorrect type. Expected a final scalar or textual value, but got {}. {}",
                         i + 1,
                         function.name,
-                        argument.value.data_type.display_with_table(string_table)
+                        argument.value.data_type.display_with_table(string_table),
+                        offending_value_clause(&argument.value, string_table),
                     ),
                     location.clone(),
                     {

@@ -21,6 +21,9 @@ use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
 use crate::compiler_frontend::traits::ContainsReferences;
+use crate::compiler_frontend::type_coercion::diagnostics::{
+    expected_found_clause, offending_value_clause,
+};
 use crate::{return_rule_error, return_syntax_error, return_type_error};
 
 pub(crate) struct ResultHandledCall {
@@ -59,8 +62,13 @@ pub(crate) fn parse_result_fallback_values(
     string_table: &mut StringTable,
 ) -> Result<Vec<Expression>, CompilerError> {
     let fallback_context = context.new_child_expression(success_result_types.to_owned());
-    let fallback_values =
-        create_multiple_expressions(token_stream, &fallback_context, false, string_table)?;
+    let fallback_values = create_multiple_expressions(
+        token_stream,
+        &fallback_context,
+        fallback_label,
+        false,
+        string_table,
+    )?;
 
     if token_stream.current_token_kind() == &TokenKind::Comma {
         return_type_error!(
@@ -131,13 +139,15 @@ pub(crate) fn parse_result_handling_suffix_for_expression(
             if expected_error_type != &error_return_type {
                 return_type_error!(
                     format!(
-                        "Mismatched propagated error type. Result expression returns '{}', but current function expects '{}'.",
-                        error_return_type.display_with_table(string_table),
-                        expected_error_type.display_with_table(string_table)
+                        "Mismatched propagated error type. {} {}",
+                        expected_found_clause(expected_error_type, &error_return_type, string_table),
+                        offending_value_clause(&value, string_table),
                     ),
                     token_stream.current_location(),
                     {
                         CompilationStage => "Expression Parsing",
+                        ExpectedType => expected_error_type.display_with_table(string_table),
+                        FoundType => error_return_type.display_with_table(string_table),
                         PrimarySuggestion => "Handle the result locally or change the surrounding function error slot type",
                     }
                 );

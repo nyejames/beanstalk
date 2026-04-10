@@ -594,6 +594,11 @@ path = "struct_constructor_named_args_missing_required"
 tags = ["integration", "structs", "named-args", "diagnostics"]
 
 [[case]]
+id = "struct_constructor_field_type_mismatch_rejected"
+path = "struct_constructor_field_type_mismatch_rejected"
+tags = ["integration", "structs", "diagnostics"]
+
+[[case]]
 id = "function_calls"
 path = "function_calls"
 tags = ["integration","functions"]
@@ -802,6 +807,11 @@ tags = ["integration","functions"]
 id = "integer_assignment_smoke"
 path = "integer_assignment_smoke"
 tags = ["integration","language"]
+
+[[case]]
+id = "assignment_type_mismatch_rejected"
+path = "assignment_type_mismatch_rejected"
+tags = ["integration","language","diagnostics"]
 
 [[case]]
 id = "integer_literal_overflow"
@@ -1264,9 +1274,19 @@ path = "result_propagation_nested_template_output"
 tags = ["integration","results","templates","js-backend"]
 
 [[case]]
+id = "result_propagation_error_type_mismatch_rejected"
+path = "result_propagation_error_type_mismatch_rejected"
+tags = ["integration","results","diagnostics"]
+
+[[case]]
 id = "return_without_correct_signature_type"
 path = "return_without_correct_signature_type"
 tags = ["integration","language"]
+
+[[case]]
+id = "return_value_type_mismatch_rejected"
+path = "return_value_type_mismatch_rejected"
+tags = ["integration","language","diagnostics"]
 
 [[case]]
 id = "scope_semantics"
