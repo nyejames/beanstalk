@@ -81,6 +81,12 @@ pub(crate) struct SuccessExpectation {
     pub warnings: WarningExpectation,
     /// Additional backend-specific artifact checks.
     pub artifact_assertions: Vec<ArtifactAssertion>,
+    /// Controls how golden output files are compared.
+    pub golden_mode: GoldenMode,
+    /// Text fragments that must appear in the rendered HTML/JS execution output.
+    pub rendered_output_contains: Vec<String>,
+    /// Text fragments that must not appear in the rendered HTML/JS execution output.
+    pub rendered_output_not_contains: Vec<String>,
 }
 
 #[derive(Clone)]
@@ -108,6 +114,33 @@ pub(crate) enum ArtifactKind {
     Binary,
 }
 
+/// Controls how golden output files are compared against produced artifacts.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub(crate) enum GoldenMode {
+    /// Byte-for-byte comparison. Any difference is a failure.
+    #[default]
+    Strict,
+    /// Counter-normalized comparison. Compiler-generated name suffixes (`_fnN`, `_lN`, etc.)
+    /// are canonicalized before diffing so counter drift does not cause spurious failures.
+    Normalized,
+}
+
+/// Distinguishes why a test case failed so reporting can route failures correctly.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum FailureKind {
+    /// A byte-for-byte golden file did not match the produced artifact.
+    StrictGoldenMismatch,
+    /// A normalized golden comparison found a semantic difference after counter normalization.
+    NormalizedSemanticMismatch,
+    /// The rendered HTML/JS execution produced output that did not satisfy the assertion.
+    RenderedOutputMismatch,
+    /// The test harness itself failed (panic, node not found, etc.).
+    HarnessFailed,
+    /// An artifact assertion (`must_contain`, `normalized_contains`, etc.) was violated.
+    ExpectationViolation,
+}
+
 #[derive(Clone)]
 pub(crate) struct ArtifactAssertion {
     /// Relative artifact path under the build output root.
@@ -124,6 +157,10 @@ pub(crate) struct ArtifactAssertion {
     pub must_contain_in_order: Vec<String>,
     /// Text fragments that must appear exactly once in text artifacts (`html`/`js`).
     pub must_contain_exactly_once: Vec<String>,
+    /// Required text fragments after counter-name normalization for text artifacts (`html`/`js`).
+    pub normalized_contains: Vec<String>,
+    /// Forbidden text fragments after counter-name normalization for text artifacts (`html`/`js`).
+    pub normalized_not_contains: Vec<String>,
     /// Enables wasmparser validation for `wasm` artifacts.
     pub validate_wasm: bool,
     /// Required export names for `wasm` artifacts.
@@ -180,6 +217,7 @@ pub(crate) struct CaseExecutionResult {
     pub build_result: Option<BuildResult>,
     pub messages: Option<CompilerMessages>,
     pub failure_reason: Option<String>,
+    pub failure_kind: Option<FailureKind>,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -257,6 +295,7 @@ pub(crate) struct FailureTriageEntry {
     pub backend: String,
     pub expected_outcome: &'static str,
     pub failure_reason: String,
+    pub failure_kind: Option<FailureKind>,
     pub panic_message: Option<String>,
 }
 
@@ -297,6 +336,12 @@ pub(crate) struct ParsedBackendExpectation {
     pub message_contains: Vec<String>,
     /// Additional artifact assertions for success mode.
     pub artifact_assertions: Vec<ArtifactAssertion>,
+    /// Controls how golden output files are compared.
+    pub golden_mode: GoldenMode,
+    /// Text fragments that must appear in the rendered HTML/JS execution output.
+    pub rendered_output_contains: Vec<String>,
+    /// Text fragments that must not appear in the rendered HTML/JS execution output.
+    pub rendered_output_not_contains: Vec<String>,
 }
 
 /// Normalises a relative path string to forward slashes for cross-platform comparison.
@@ -357,6 +402,7 @@ pub fn run_all_test_cases_with_backend_filter(
                 backend: case.backend_id.as_str().to_string(),
                 expected_outcome: reporting::expected_outcome_label(&case.expected),
                 failure_reason: reporting::observed_failure_reason(&result),
+                failure_kind: result.failure_kind,
                 panic_message: result.panic_message.clone(),
             });
         }

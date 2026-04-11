@@ -5,12 +5,15 @@
 //! WHY: the test runner is load-bearing infrastructure — catching regressions here prevents
 //!      silent changes in how fixtures are discovered, parsed, or executed.
 
+use super::assertions::normalize_text_for_comparison;
 use super::execution::panic_case_result;
 use super::expectations::parse_expectation_file;
 use super::fixture::{
     load_canonical_case_specs, load_test_suite_from_root, load_test_suite_from_root_with_filter,
 };
-use super::{BackendId, EXPECT_FILE_NAME, GOLDEN_DIR_NAME, INPUT_DIR_NAME, MANIFEST_FILE_NAME};
+use super::{
+    BackendId, EXPECT_FILE_NAME, FailureKind, GOLDEN_DIR_NAME, INPUT_DIR_NAME, MANIFEST_FILE_NAME,
+};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
@@ -368,4 +371,226 @@ fn accepts_success_fixture_with_golden_only_assertion() {
     assert_eq!(cases[0].display_name, "case [html]");
 
     fs::remove_dir_all(&root).expect("should clean up temp fixture root");
+}
+
+// ─── Normalization unit tests ───────────────────────────────────────────────
+
+#[test]
+fn normalization_replaces_fn_counter_suffix() {
+    assert_eq!(
+        normalize_text_for_comparison("bst_rhs_and_fn0"),
+        "bst_rhs_and_fnN"
+    );
+    assert_eq!(
+        normalize_text_for_comparison("bst_start_fn1"),
+        "bst_start_fnN"
+    );
+}
+
+#[test]
+fn normalization_replaces_local_counter_suffix() {
+    assert_eq!(
+        normalize_text_for_comparison("bst_calls_l0"),
+        "bst_calls_lN"
+    );
+    assert_eq!(
+        normalize_text_for_comparison("bst_lhs_l1 bst_value_l3"),
+        "bst_lhs_lN bst_value_lN"
+    );
+}
+
+#[test]
+fn normalization_replaces_hir_tmp_counters() {
+    assert_eq!(
+        normalize_text_for_comparison("bst___hir_tmp_0_l4"),
+        "bst___hir_tmp_N_lN"
+    );
+    assert_eq!(
+        normalize_text_for_comparison("bst___hir_tmp_3_l13"),
+        "bst___hir_tmp_N_lN"
+    );
+}
+
+#[test]
+fn normalization_replaces_template_fn_counters() {
+    assert_eq!(
+        normalize_text_for_comparison("bst___template_fn_0_fn3"),
+        "bst___template_fn_N_fnN"
+    );
+    assert_eq!(
+        normalize_text_for_comparison("bst___template_fn_2_fn5"),
+        "bst___template_fn_N_fnN"
+    );
+}
+
+#[test]
+fn normalization_replaces_frag_counters() {
+    assert_eq!(
+        normalize_text_for_comparison("bst___bst_frag_0_fn2"),
+        "bst___bst_frag_N_fnN"
+    );
+}
+
+#[test]
+fn normalization_preserves_runtime_library_names() {
+    let input = "__bs_read __bs_write __bs_binding __bs_assign_value __bs_result_fallback";
+    assert_eq!(normalize_text_for_comparison(input), input);
+}
+
+#[test]
+fn normalization_is_deterministic() {
+    let input = "function bst_rhs_and_fn0(bst_calls_l2) { bst___hir_tmp_3_l13; }";
+    let first = normalize_text_for_comparison(input);
+    let second = normalize_text_for_comparison(input);
+    assert_eq!(first, second);
+}
+
+#[test]
+fn normalization_does_not_mask_semantic_name_change() {
+    let a = normalize_text_for_comparison("bst_rhs_and_fn0");
+    let b = normalize_text_for_comparison("bst_rhs_or_fn0");
+    assert_ne!(a, b, "different base names must still differ after normalization");
+}
+
+#[test]
+fn normalization_preserves_non_bst_identifiers() {
+    let input = "function foo(x) { return x + 1; }";
+    assert_eq!(normalize_text_for_comparison(input), input);
+}
+
+#[test]
+fn normalization_preserves_base_name_segment() {
+    let result = normalize_text_for_comparison("bst_rhs_and_fn0");
+    assert!(
+        result.starts_with("bst_rhs_and_fn"),
+        "base name must be preserved: {result}"
+    );
+    assert!(
+        result.ends_with('N'),
+        "only the counter is replaced: {result}"
+    );
+}
+
+// ─── New fixture contract tests ─────────────────────────────────────────────
+
+#[test]
+fn accepts_normalized_golden_mode() {
+    let root = temp_dir("normalized_golden_mode");
+    let case_root = root.join("case");
+    let input_root = case_root.join(INPUT_DIR_NAME);
+    let golden_root = case_root.join(GOLDEN_DIR_NAME).join("html");
+    fs::create_dir_all(&input_root).expect("should create input directory");
+    fs::create_dir_all(&golden_root).expect("should create golden directory");
+    fs::write(input_root.join("#page.bst"), "#[:ok]\n").expect("should write source");
+    fs::write(golden_root.join("index.html"), "<h1>ok</h1>\n").expect("should write golden");
+    fs::write(
+        case_root.join(EXPECT_FILE_NAME),
+        "[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\ngolden_mode = \"normalized\"\n",
+    )
+    .expect("should write expect file");
+
+    let cases = load_canonical_case_specs(&case_root, None, None)
+        .expect("normalized golden_mode fixture should be accepted");
+    assert_eq!(cases.len(), 1);
+
+    fs::remove_dir_all(&root).expect("should clean up");
+}
+
+#[test]
+fn rejects_unknown_golden_mode() {
+    let root = temp_dir("unknown_golden_mode");
+    let case_root = root.join("case");
+    let input_root = case_root.join(INPUT_DIR_NAME);
+    fs::create_dir_all(&input_root).expect("should create input directory");
+    fs::write(input_root.join("#page.bst"), "#[:ok]\n").expect("should write source");
+    fs::write(
+        case_root.join(EXPECT_FILE_NAME),
+        "[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\ngolden_mode = \"fuzzy\"\n",
+    )
+    .expect("should write expect file");
+
+    let Err(error) = load_canonical_case_specs(&case_root, None, None) else {
+        panic!("unknown golden_mode should be rejected");
+    };
+    assert!(
+        error.contains("golden_mode") && error.contains("fuzzy"),
+        "unexpected error: {error}"
+    );
+
+    fs::remove_dir_all(&root).expect("should clean up");
+}
+
+#[test]
+fn accepts_success_fixture_with_rendered_output_only() {
+    let root = temp_dir("rendered_output_only");
+    let case_root = root.join("case");
+    let input_root = case_root.join(INPUT_DIR_NAME);
+    fs::create_dir_all(&input_root).expect("should create input directory");
+    fs::write(input_root.join("#page.bst"), "#[:ok]\n").expect("should write source");
+    fs::write(
+        case_root.join(EXPECT_FILE_NAME),
+        "[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\nrendered_output_contains = [\"ok\"]\n",
+    )
+    .expect("should write expect file");
+
+    let cases = load_canonical_case_specs(&case_root, None, None)
+        .expect("rendered_output_contains-only fixture should be accepted");
+    assert_eq!(cases.len(), 1);
+
+    fs::remove_dir_all(&root).expect("should clean up");
+}
+
+#[test]
+fn rejects_rendered_output_in_failure_mode() {
+    let root = temp_dir("rendered_output_failure_mode");
+    let case_root = root.join("case");
+    let input_root = case_root.join(INPUT_DIR_NAME);
+    fs::create_dir_all(&input_root).expect("should create input directory");
+    fs::write(input_root.join("#page.bst"), "#[:ok]\n").expect("should write source");
+    fs::write(
+        case_root.join(EXPECT_FILE_NAME),
+        "[backends.html]\nmode = \"failure\"\nwarnings = \"ignore\"\nerror_type = \"rule\"\nmessage_contains = [\"x\"]\nrendered_output_contains = [\"y\"]\n",
+    )
+    .expect("should write expect file");
+
+    let Err(error) = load_canonical_case_specs(&case_root, None, None) else {
+        panic!("rendered_output_contains in failure mode should be rejected");
+    };
+    assert!(
+        error.contains("rendered_output_contains"),
+        "unexpected error: {error}"
+    );
+
+    fs::remove_dir_all(&root).expect("should clean up");
+}
+
+#[test]
+fn rejects_normalized_contains_on_wasm_artifact() {
+    let root = temp_dir("normalized_contains_wasm");
+    let case_root = root.join("case");
+    let input_root = case_root.join(INPUT_DIR_NAME);
+    fs::create_dir_all(&input_root).expect("should create input directory");
+    fs::write(input_root.join("#page.bst"), "#[:ok]\n").expect("should write source");
+    fs::write(
+        case_root.join(EXPECT_FILE_NAME),
+        "[backends.html]\nmode = \"success\"\nwarnings = \"forbid\"\n\n[[backends.html.artifact_assertions]]\npath = \"page.wasm\"\nkind = \"wasm\"\nnormalized_contains = [\"something\"]\n",
+    )
+    .expect("should write expect file");
+
+    let Err(error) = load_canonical_case_specs(&case_root, None, None) else {
+        panic!("normalized_contains on wasm should be rejected");
+    };
+    assert!(
+        error.contains("text-only"),
+        "unexpected error: {error}"
+    );
+
+    fs::remove_dir_all(&root).expect("should clean up");
+}
+
+#[test]
+fn panic_execution_result_has_harness_failed_kind() {
+    let result = panic_case_result(Box::new("boom".to_string()));
+    assert!(!result.passed);
+    assert_eq!(result.failure_kind, Some(FailureKind::HarnessFailed));
 }

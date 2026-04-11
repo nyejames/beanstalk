@@ -1,3 +1,4 @@
 [backends.html]
 mode = "success"
 warnings = "forbid"
+rendered_output_contains = ["logical_short_circuit_and value=false calls=0"]

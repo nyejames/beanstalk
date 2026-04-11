@@ -1,3 +1,4 @@
 [backends.html]
 mode = "success"
 warnings = "forbid"
+rendered_output_contains = ["short_circuit_mutable_rhs_runtime_capture_dual value=false calls=0"]

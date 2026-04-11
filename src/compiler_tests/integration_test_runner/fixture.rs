@@ -168,6 +168,9 @@ pub(crate) fn load_canonical_case_specs(
             ExpectationMode::Success => ExpectedOutcome::Success(SuccessExpectation {
                 warnings: backend_expectation.warnings,
                 artifact_assertions: backend_expectation.artifact_assertions,
+                golden_mode: backend_expectation.golden_mode,
+                rendered_output_contains: backend_expectation.rendered_output_contains,
+                rendered_output_not_contains: backend_expectation.rendered_output_not_contains,
             }),
             ExpectationMode::Failure => ExpectedOutcome::Failure(FailureExpectation {
                 warnings: backend_expectation.warnings,
@@ -258,9 +261,16 @@ fn validate_fixture_contract(
                 }
             }
             ExpectationMode::Success => {
-                if !has_golden_dir && !has_artifact_assertions && !has_backend_baseline_contract {
+                let has_rendered_output = !backend_expectation.rendered_output_contains.is_empty()
+                    || !backend_expectation.rendered_output_not_contains.is_empty();
+                if !has_golden_dir
+                    && !has_artifact_assertions
+                    && !has_backend_baseline_contract
+                    && !has_rendered_output
+                {
                     return Err(format!(
-                        "Fixture '{}' backend '{}' uses mode = \"success\" and must provide artifact assertions and/or a '{}' directory.",
+                        "Fixture '{}' backend '{}' uses mode = \"success\" and must provide \
+                         artifact assertions, a '{}' directory, or 'rendered_output_contains'.",
                         fixture_root.display(),
                         backend_expectation.backend_id.as_str(),
                         golden_dir.display()

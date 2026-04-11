@@ -5,8 +5,9 @@
 //!      makes expectation format changes easy to find and update.
 
 use super::{
-    ArtifactAssertion, ArtifactKind, BackendId, ExpectationMode, ParsedBackendExpectation,
-    ParsedExpectationFile, WarningExpectation, normalize_relative_path_text,
+    ArtifactAssertion, ArtifactKind, BackendId, ExpectationMode, GoldenMode,
+    ParsedBackendExpectation, ParsedExpectationFile, WarningExpectation,
+    normalize_relative_path_text,
 };
 use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::compiler_messages::compiler_errors::ErrorType;
@@ -47,6 +48,11 @@ struct BackendExpectationToml {
     message_contains: Vec<String>,
     #[serde(default)]
     artifact_assertions: Vec<ArtifactAssertionToml>,
+    golden_mode: Option<String>,
+    #[serde(default)]
+    rendered_output_contains: Vec<String>,
+    #[serde(default)]
+    rendered_output_not_contains: Vec<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -62,6 +68,10 @@ struct ArtifactAssertionToml {
     must_contain_in_order: Vec<String>,
     #[serde(default)]
     must_contain_exactly_once: Vec<String>,
+    #[serde(default)]
+    normalized_contains: Vec<String>,
+    #[serde(default)]
+    normalized_not_contains: Vec<String>,
     #[serde(default)]
     validate_wasm: bool,
     #[serde(default)]
@@ -150,6 +160,39 @@ fn parse_matrix_expectation_file(
         let artifact_assertions =
             parse_artifact_assertions(path, &context, &backend_expectation.artifact_assertions)?;
 
+        let golden_mode = parse_golden_mode(
+            path,
+            &context,
+            backend_expectation.golden_mode.as_deref(),
+        )?;
+
+        // rendered_output_* is only valid for success mode; validate here so the
+        // error message can reference the backend context.
+        if backend_expectation.mode == ExpectationMode::Failure
+            && (!backend_expectation.rendered_output_contains.is_empty()
+                || !backend_expectation.rendered_output_not_contains.is_empty())
+        {
+            return Err(format!(
+                "Expectation file '{}' {} uses mode = \"failure\" and must not set \
+                 'rendered_output_contains' or 'rendered_output_not_contains'.",
+                path.display(),
+                context
+            ));
+        }
+
+        validate_rendered_output_strings(
+            path,
+            &context,
+            "rendered_output_contains",
+            &backend_expectation.rendered_output_contains,
+        )?;
+        validate_rendered_output_strings(
+            path,
+            &context,
+            "rendered_output_not_contains",
+            &backend_expectation.rendered_output_not_contains,
+        )?;
+
         backend_expectations.push(ParsedBackendExpectation {
             backend_id,
             flags,
@@ -158,6 +201,9 @@ fn parse_matrix_expectation_file(
             error_type,
             message_contains: backend_expectation.message_contains,
             artifact_assertions,
+            golden_mode,
+            rendered_output_contains: backend_expectation.rendered_output_contains,
+            rendered_output_not_contains: backend_expectation.rendered_output_not_contains,
         });
     }
 
@@ -196,6 +242,8 @@ fn parse_artifact_assertions(
             must_not_contain: assertion.must_not_contain.clone(),
             must_contain_in_order: assertion.must_contain_in_order.clone(),
             must_contain_exactly_once: assertion.must_contain_exactly_once.clone(),
+            normalized_contains: assertion.normalized_contains.clone(),
+            normalized_not_contains: assertion.normalized_not_contains.clone(),
             validate_wasm: assertion.validate_wasm,
             must_export: assertion.must_export.clone(),
             must_import: assertion.must_import.clone(),
@@ -225,6 +273,11 @@ fn validate_artifact_assertion_fields(
         (
             "must_contain_exactly_once",
             &assertion.must_contain_exactly_once,
+        ),
+        ("normalized_contains", &assertion.normalized_contains),
+        (
+            "normalized_not_contains",
+            &assertion.normalized_not_contains,
         ),
         ("must_export", &assertion.must_export),
         ("must_import", &assertion.must_import),
@@ -257,9 +310,13 @@ fn validate_artifact_assertion_shape(
                 && assertion.must_not_contain.is_empty()
                 && assertion.must_contain_in_order.is_empty()
                 && assertion.must_contain_exactly_once.is_empty()
+                && assertion.normalized_contains.is_empty()
+                && assertion.normalized_not_contains.is_empty()
             {
                 return Err(format!(
-                    "Expectation file '{}' {} must define at least one of 'must_contain', 'must_not_contain', 'must_contain_in_order', or 'must_contain_exactly_once' for text artifacts.",
+                    "Expectation file '{}' {} must define at least one of 'must_contain', \
+                     'must_not_contain', 'must_contain_in_order', 'must_contain_exactly_once', \
+                     'normalized_contains', or 'normalized_not_contains' for text artifacts.",
                     path.display(),
                     assertion_label
                 ));
@@ -270,6 +327,8 @@ fn validate_artifact_assertion_shape(
                 || !assertion.must_not_contain.is_empty()
                 || !assertion.must_contain_in_order.is_empty()
                 || !assertion.must_contain_exactly_once.is_empty()
+                || !assertion.normalized_contains.is_empty()
+                || !assertion.normalized_not_contains.is_empty()
             {
                 return Err(format!(
                     "Expectation file '{}' {} uses text-only fields on a wasm artifact assertion.",
@@ -293,6 +352,8 @@ fn validate_artifact_assertion_shape(
                 || !assertion.must_not_contain.is_empty()
                 || !assertion.must_contain_in_order.is_empty()
                 || !assertion.must_contain_exactly_once.is_empty()
+                || !assertion.normalized_contains.is_empty()
+                || !assertion.normalized_not_contains.is_empty()
                 || assertion.validate_wasm
                 || !assertion.must_export.is_empty()
                 || !assertion.must_import.is_empty()
@@ -326,6 +387,41 @@ fn validate_artifact_strings(
         }
     }
 
+    Ok(())
+}
+
+fn parse_golden_mode(
+    path: &Path,
+    context: &str,
+    raw: Option<&str>,
+) -> Result<GoldenMode, String> {
+    match raw {
+        None | Some("strict") => Ok(GoldenMode::Strict),
+        Some("normalized") => Ok(GoldenMode::Normalized),
+        Some(other) => Err(format!(
+            "Expectation file '{}' {} has unsupported golden_mode '{other}'. \
+             Supported values: \"strict\", \"normalized\".",
+            path.display(),
+            context
+        )),
+    }
+}
+
+fn validate_rendered_output_strings(
+    path: &Path,
+    context: &str,
+    field_name: &str,
+    values: &[String],
+) -> Result<(), String> {
+    for value in values {
+        if value.is_empty() {
+            return Err(format!(
+                "Expectation file '{}' {} contains an empty '{field_name}' value.",
+                path.display(),
+                context
+            ));
+        }
+    }
     Ok(())
 }
 
