@@ -16,7 +16,7 @@ use crate::compiler_frontend::compiler_messages::compiler_errors::{
 };
 use std::fs;
 use std::path::{Path, PathBuf};
-use wasmparser::{Parser, Payload};
+use wasmparser::{Imports, Parser, Payload};
 
 pub(crate) fn validate_success_result(
     case: &TestCaseSpec,
@@ -550,7 +550,15 @@ fn collect_wasm_imports(bytes: &[u8]) -> Result<Vec<String>, String> {
         let payload = payload.map_err(|error| error.to_string())?;
         if let Payload::ImportSection(reader) = payload {
             for import in reader {
-                let import = import.map_err(|error| error.to_string())?;
+                let import = match import {
+                    Ok(imports) => match imports {
+                        Imports::Single(_, import) => import,
+                        _ => todo!(
+                            "Update to use the new wasm_parser imports enum 'Compact1' and 'Compact2'."
+                        ),
+                    },
+                    Err(e) => return Err(e.to_string()),
+                };
                 imports.push(format!("{}.{}", import.module, import.name));
             }
         }

@@ -170,6 +170,6 @@ This is a collection of notes and findings for future roadmaps once the roadmap 
 
 Broader Wasm maturity beyond the current experimental path.
 
-## Notes and limitations from previous investigations:
+## Notes and limitations from previous investigations
 - The WASM backend can't handle Choice/Union types yet (maps to Handle but produces i32/i64 mismatches). 
 - rt_string_from_i64 Wasm helper: Explicitly noted in the 1ac2613 commit message as an "incremental bridge implementation". It produces valid output but is not a complete runtime implementation. This is scoped for a dedicated follow-up and does not cause panics.
