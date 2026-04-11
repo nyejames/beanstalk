@@ -14,6 +14,520 @@ These are the non-negotiable conditions for starting Alpha.
 - The JS backend and HTML builder are stable enough for real small projects and docs-style sites.
 - Compiler diagnostics are useful, accurate, consistently formatted, and visually moving toward the Nushell-style goal.
 - Cross-platform output is stable enough that Windows and macOS do not produce avoidable golden drift.
+ 
+
+### PR - Finish the AST → HIR template boundary and remove transitional lowering fallbacks
+
+Make template ownership across frontend stages fully intentional. AST should be the only stage that decides template foldability, produces complete render plans, and lowers runtime-template structure. HIR should consume finished semantic template data, not recover missing frontend work.
+
+**Why this PR exists**
+
+The current docs say normal template parsing/folding belongs to AST and that HIR should only retain a narrow transitional fallback for already-constant contexts. The implementation still contains that fallback, including constant-path template folding in HIR and raw-content render-plan reconstruction when AST did not provide a plan. That weakens the stage contract, makes HIR less stable as a backend-facing IR, and leaves alpha-critical behavior split across two stages.
+
+**Goals**
+
+* Make AST the single owner of:
+
+  * template foldability decisions
+  * render-plan construction
+  * constant-template lowering
+  * runtime-template lowering preparation
+* Remove HIR recovery paths that try to compensate for incomplete AST template data.
+* Tighten invariants so missing template planning is treated as a compiler bug, not a recoverable frontend path.
+* Reduce stage coupling so HIR is easier to audit and keep backend-stable.
+
+**Non-goals**
+
+* No redesign of user-facing template syntax.
+* No redesign of slot semantics or formatter semantics.
+* No broad HIR template feature expansion beyond enforcing the intended boundary.
+
+**Implementation guidance**
+
+#### 1. Make AST output fully authoritative for templates
+
+Audit the full AST template pipeline and make sure every template reaching HIR has one of two explicit outcomes:
+
+* fully folded constant string / constant template artifact
+* runtime-template form with a complete, validated render plan
+
+In practice this means:
+
+* remove cases where HIR needs to call back into template folding for constant contexts
+* remove cases where HIR reconstructs a fallback plan from raw template content
+* ensure AST finalization / template synthesis produces complete runtime-fragment metadata for top-level templates and template expressions
+
+**Primary files to audit**
+
+* `src/compiler_frontend/ast/templates/`
+* `src/compiler_frontend/ast/module_ast/pass_emit_nodes.rs`
+* `src/compiler_frontend/ast/module_ast/pass_finalize.rs`
+* `src/compiler_frontend/ast/templates/top_level_templates.rs`
+* `src/compiler_frontend/ast/templates/template_render_plan.rs`
+
+#### 2. Remove HIR transitional constant-template fallback
+
+Refactor `src/compiler_frontend/hir/hir_expression/templates.rs` so HIR no longer:
+
+* folds templates for constant-lowering contexts
+* reconstructs missing render plans from raw template content
+
+Replace that with explicit invariants:
+
+* if HIR receives a supposedly runtime template without a render plan, return a compiler bug diagnostic
+* if HIR receives a template in a constant path that AST should already have folded, return a compiler bug diagnostic
+
+This should turn “transitional fallback” into a hard compiler invariant.
+
+#### 3. Simplify HIR construction inputs
+
+Re-check whether `CompilerFrontend::generate_hir` still needs a project path resolver once template fallback is removed.
+
+Target result:
+
+* HIR lowering should not depend on path-resolution services purely because template cleanup is incomplete
+* any remaining path resolver requirement should have a narrowly documented, intentional reason
+
+If the resolver is no longer needed for HIR construction, remove it from that path and thread the simplification through the builder/frontend orchestration.
+
+#### 4. Tighten AST/HIR comments and contracts
+
+Update comments and doc comments so they stop describing the transitional fallback as normal expected behavior.
+
+Add explicit WHAT/WHY comments around the new invariant:
+
+* AST owns template planning and foldability
+* HIR assumes template inputs are already semantically complete
+
+#### 5. Add regression coverage around the stage boundary
+
+Add focused tests that prove:
+
+* constant templates are fully resolved before HIR
+* runtime templates reaching HIR always carry a render plan
+* top-level const templates never require HIR fallback
+* runtime fragment ordering still works after fallback removal
+* missing render-plan state is treated as an internal compiler error in test-only/compiler-bug paths, not silently recovered
+
+**Test targets**
+
+* AST template unit tests
+* HIR template lowering tests
+* integration fixtures for:
+
+  * const top-level templates
+  * mixed const/runtime fragment streams
+  * slot-bearing templates that remain runtime
+  * path/rendered-path template cases that previously depended on fallback behavior
+
+**Checklist**
+
+* Audit all template entry paths from AST emission through HIR lowering.
+* Remove HIR constant-template folding fallback.
+* Remove HIR raw-content render-plan reconstruction fallback.
+* Ensure AST emits complete render-plan/runtime-template metadata for all runtime template paths.
+* Re-check and simplify HIR path-resolver dependency if it only exists for template fallback.
+* Add regression tests for constant vs runtime template boundary behavior.
+* Update comments/docs to describe the final boundary, not the transitional one.
+
+**Done when**
+
+* HIR no longer folds templates or reconstructs render plans.
+* AST is the sole owner of template foldability and runtime-template planning.
+* Missing render-plan/template-boundary violations fail loudly as compiler bugs.
+* Existing runtime-fragment and top-level-template integration behavior still passes with no fallback logic in HIR.
+
+**Implementation notes for the later execution plan**
+
+* Land this before broad JS/backend hardening work so later backend audits are operating on a cleaner IR contract.
+* Keep the diff disciplined: this PR is about stage ownership, not template feature expansion.
+* Prefer deleting fallback code over wrapping it in more abstraction.
+
+### PR - Refactor collection builtins into explicit compiler-owned operations and remove compatibility-shaped dispatch
+
+Collection builtins should lower through an explicit compiler-owned representation instead of leaning on method-call-shaped compatibility scaffolding. This removes fake dispatch surface, simplifies backend contracts, and makes collection semantics easier to audit for Alpha.
+
+**Why this PR exists**
+
+The language rules are already clear: collection operations are compiler-owned builtins, not ordinary user-defined receiver methods. The current implementation still carries method-call-shaped indirection, including synthetic builtin paths and compatibility behavior that blurs the semantic boundary. That is workable in pre-alpha, but it is exactly the kind of representation drift that makes backend audits noisy and future maintenance harder.
+
+**Goals**
+
+* Represent collection builtin operations explicitly as compiler-owned operations.
+* Remove synthetic “pretend method” compatibility paths where they no longer carry semantic value.
+* Keep call-site mutability rules strict and explicit.
+* Make collection lowering easier to audit in JS and HTML/Wasm runtime-heavy tests.
+
+**Non-goals**
+
+* No change to user-facing collection syntax in this PR.
+* No redesign of collection semantics or error-return behavior.
+* No broad container-type redesign.
+
+**Implementation guidance**
+
+#### 1. Replace method-shaped collection builtin representation
+
+Audit how collection builtins currently move through AST/HIR/backend lowering.
+
+The target shape should make it obvious that these are not normal receiver methods. Choose one current representation and thread it through:
+
+**Preferred direction**
+
+* add a dedicated compiler-owned builtin operation representation for collection operations
+
+Possible shapes:
+
+* dedicated AST node variants such as:
+
+  * `CollectionGet`
+  * `CollectionSet`
+  * `CollectionPush`
+  * `CollectionRemove`
+  * `CollectionLength`
+* or a smaller shared builtin-op enum if that keeps lowering cleaner
+
+Avoid keeping synthetic method paths just to preserve the old AST shape.
+
+#### 2. Remove compatibility-only dispatch artifacts
+
+Clean up compatibility-shaped pieces such as:
+
+* synthetic builtin method path for `set`
+* collection-op lowering that depends on pretending there is a normal method symbol behind the syntax
+* any compatibility branch retained only because older AST/HIR/backend shapes expected methods everywhere
+
+Keep only what is still semantically justified.
+
+#### 3. Re-audit mutability and place validation at the builtin boundary
+
+Use this PR to make collection builtin validation visibly consistent with the language guide:
+
+* mutating collection operations require explicit mutable/exclusive access at the receiver site
+* non-mutating operations reject unnecessary `~`
+* mutating operations require a mutable place receiver
+* indexed-write / `get(index) = value` behavior remains explicit and compiler-owned
+
+The parser/frontend diagnostics for these cases should stay clear and specific.
+
+#### 4. Simplify HIR/backend lowering contracts
+
+Once AST stops pretending these are methods, lower them through a smaller explicit contract.
+
+Target result:
+
+* HIR and JS lowering do not need to infer “is this really a collection builtin disguised as a method call?”
+* lowering logic can switch on a dedicated builtin-op kind
+* collection get/set/remove/push/length semantics become easier to test directly
+
+#### 5. Re-check JS runtime helper usage against frontend semantics
+
+Audit the emitted JS/runtime behavior for:
+
+* `get`
+* `set`
+* `push`
+* `remove`
+* `length`
+
+Specifically check for “working by accident” behavior and for any mismatch between current frontend validation and runtime helper semantics.
+
+#### 6. Strengthen backend-facing coverage
+
+Expand tests so collection behavior is not only parser/frontend-covered but also backend-contract-covered.
+
+Add or improve cases for:
+
+* successful `get/set/push/remove/length`
+* out-of-bounds `get`
+* explicit mutable receiver requirement for mutating ops
+* indexed write forms
+* result propagation/fallback after `get`
+* HTML-Wasm runtime-sensitive collection paths where emitted runtime behavior matters
+
+**Primary files to audit**
+
+* `src/compiler_frontend/ast/field_access/collection_builtin.rs`
+* `src/compiler_frontend/ast/field_access/mod.rs`
+* relevant AST/HIR lowering files for method/builtin calls
+* JS runtime helper emission and expression/statement lowering
+* integration fixtures covering collection operations
+
+**Checklist**
+
+* Introduce one explicit representation for collection builtins.
+* Remove synthetic method-path compatibility scaffolding where it is no longer needed.
+* Keep parser/frontend mutability/place validation aligned with the language rules.
+* Thread the new builtin-op shape through HIR/backend lowering.
+* Re-audit JS runtime semantics for all collection builtins.
+* Add backend-facing and HTML-Wasm-sensitive regression coverage.
+* Remove stale compatibility branches and comments once the new shape lands.
+
+**Done when**
+
+* Collection builtins no longer depend on fake method-dispatch representation.
+* AST/HIR/backend code treats collection ops as compiler-owned operations explicitly.
+* Mutability/place diagnostics remain clear and correct.
+* JS/backend tests prove collection behavior directly rather than indirectly through compatibility shape.
+
+**Implementation notes for the later execution plan**
+
+* Keep the representation change central and mechanical: choose one shape and thread it through.
+* Avoid adding a second abstraction layer just to preserve old code.
+* Land this before or alongside the JS backend semantic audit so the audit sees the final builtin representation.
+
+
+### PR - Split the JS runtime prelude by concern and harden backend helper contracts
+
+The JS backend runtime prelude currently centralizes too many unrelated helper groups in one file. Split it into focused modules, keep one small orchestration layer, and add stronger tests around the helper contracts that define Alpha runtime semantics.
+
+**Why this PR exists**
+
+The JS backend is the near-term stable backend and one of the main Alpha product surfaces. The runtime prelude is readable and well commented, but it is still too broad in one file: bindings, aliasing, computed places, cloning, errors, results, collections, strings, and casts all live together. That makes semantic auditing, targeted refactors, and regression testing harder than they need to be.
+
+**Goals**
+
+* Split the JS runtime helper emission into small focused modules.
+* Preserve the current runtime semantics exactly unless a bug is being intentionally fixed.
+* Make helper-group ownership obvious.
+* Strengthen targeted tests for each helper surface.
+
+**Non-goals**
+
+* No wholesale JS backend redesign.
+* No formatting/style churn unrelated to helper extraction.
+* No user-facing language changes.
+
+**Implementation guidance**
+
+#### 1. Split `prelude.rs` into focused runtime helper modules
+
+Refactor the current prelude into a small orchestration module plus focused helper emitters.
+
+**Suggested structure**
+
+* `src/backends/js/runtime/mod.rs`
+* `src/backends/js/runtime/bindings.rs`
+* `src/backends/js/runtime/aliasing.rs`
+* `src/backends/js/runtime/places.rs`
+* `src/backends/js/runtime/cloning.rs`
+* `src/backends/js/runtime/errors.rs`
+* `src/backends/js/runtime/results.rs`
+* `src/backends/js/runtime/collections.rs`
+* `src/backends/js/runtime/strings.rs`
+* `src/backends/js/runtime/casts.rs`
+
+The top-level emitter should only own:
+
+* helper emission order
+* high-level comments about why these groups exist
+* any tiny shared glue that genuinely belongs at orchestration level
+
+#### 2. Keep helper boundaries semantically intentional
+
+Use the split to make helper responsibilities clearer:
+
+* binding helpers: reference record construction, parameter normalization, read/write resolution
+* alias helpers: borrow/value assignment semantics
+* computed-place helpers: field/index place access
+* clone helpers: explicit `copy` semantics
+* error helpers: canonical runtime `Error` construction and context helpers
+* result helpers: propagation and fallback behavior
+* collection helpers: runtime contracts for ordered collections
+* string helpers: string coercion and IO
+* cast helpers: numeric/string cast behavior and result-carrier error paths
+
+Avoid “misc” modules. Keep each file narrow.
+
+#### 3. Re-check helper APIs for accidental overlap or leakage
+
+During extraction, audit whether helper groups expose duplicated or cross-cutting behavior that should be simplified.
+
+Examples to watch for:
+
+* collection helpers depending on unrelated error-helper details without a clean boundary
+* result helpers assuming too much about caller lowering shape
+* alias/binding helpers carrying responsibilities that belong in computed-place helpers
+
+Do not redesign aggressively; just remove obvious leakage.
+
+#### 4. Strengthen JS backend tests around runtime contracts
+
+Add targeted tests for helper-backed semantics, not just broad output snapshots.
+
+Focus on:
+
+* aliasing and assignment semantics
+* explicit copy behavior
+* result propagation/fallback helpers
+* builtin error helper lowering
+* collection runtime helpers
+* cast success/failure behavior
+* mutable receiver / place validation paths where JS runtime behavior depends on correct lowering
+
+Prefer targeted artifact assertions or rendered-output assertions where full JS snapshots are noisy.
+
+#### 5. Keep comments strong while reducing file breadth
+
+The current prelude comments are useful. Preserve that quality after the split:
+
+* each runtime helper file gets a short module doc comment
+* each emitter function explains WHAT/WHY at the group level
+* avoid repeating a giant duplicated overview in every file
+
+**Primary files to touch**
+
+* `src/backends/js/prelude.rs`
+* `src/backends/js/mod.rs`
+* JS backend tests and integration fixtures with runtime-heavy behavior
+
+**Checklist**
+
+* Split the JS runtime prelude into focused helper-group modules.
+* Keep one small orchestration layer responsible for emission order.
+* Preserve current helper semantics unless fixing an identified bug.
+* Audit for duplicated or leaked helper responsibilities during extraction.
+* Add or expand targeted tests for helper-backed runtime semantics.
+* Prefer targeted assertions over brittle full-file snapshots where code shape is not the contract.
+
+**Done when**
+
+* No single JS runtime helper file owns most of the backend runtime surface.
+* Helper-group ownership is obvious from file layout.
+* Existing JS semantics remain stable.
+* Runtime-heavy test coverage is stronger and lower-noise than before.
+
+**Implementation notes for the later execution plan**
+
+* Keep the first pass mostly structural.
+* Only fix helper semantics in the same PR when the bug is obvious and covered.
+* This PR should make the later “JS backend semantic audit for Alpha surface” materially easier.
+
+### PR - Migrate remaining brittle fixtures, prune redundant coverage, and close the Alpha test matrix gaps
+
+Now that the integration runner supports strict goldens, normalized goldens, rendered-output assertions, and targeted artifact assertions, finish migrating brittle fixtures to the right assertion surface, remove redundant cases that no longer add value, and fill the most visible Alpha-surface coverage gaps.
+
+**Why this PR exists**
+
+The integration runner is already capable of lower-noise assertion modes. The remaining work is fixture migration and coverage curation: some fixtures are still too brittle for what they actually test, some gaps remain visible in the language surface matrix, and some older coverage is now redundant or weaker than newer canonical cases.
+
+**Goals**
+
+* Migrate remaining brittle fixtures to normalized, rendered-output, or targeted artifact assertions where appropriate.
+* Keep strict byte-for-byte goldens only where exact output shape is actually the contract.
+* Fill the clearest remaining Alpha-surface gaps.
+* Remove or rewrite redundant tests that duplicate stronger canonical coverage.
+* Keep the matrix and manifest aligned with the real supported surface.
+
+**Non-goals**
+
+* No broad feature expansion.
+* No weakening of semantic checks just to reduce failures.
+* No mass deletion of tests without replacing lost confidence.
+
+**Implementation guidance**
+
+#### 1. Audit all remaining brittle fixtures by assertion intent
+
+For each currently noisy fixture, decide what it is really testing:
+
+* **Strict golden** when exact HTML/JS/Wasm shape is the contract
+* **Normalized golden** when emitted code structure matters but counter-name drift is noise
+* **Rendered output** when runtime behavior is the contract
+* **Artifact assertions** when only a few targeted output properties matter
+
+Document the migration reason in the PR notes so future fixture authors can follow the pattern.
+
+#### 2. Migrate the remaining runtime-fragment-heavy brittle cases
+
+Prioritize fixtures where full generated-output snapshots are still too noisy compared with the semantic intent.
+
+Common candidates:
+
+* runtime fragment ordering / interleave behavior
+* result propagation/fallback through generated output
+* runtime collection read/write flows
+* call/lowering paths where helper/counter drift is noisy
+* short-circuit/runtime behavior cases where rendered output is the real contract
+
+#### 3. Fill the explicit matrix gaps
+
+Add or strengthen canonical cases for the most visible remaining gaps:
+
+* choice / match backend-runtime coverage
+* char failure diagnostics
+* HTML-Wasm collection runtime coverage
+* cross-platform newline / rendering drift-sensitive surfaces
+* any remaining receiver-method runtime-sensitive cases outside plain JS coverage
+
+Where possible, prefer one strong canonical fixture over several narrow redundant fixtures.
+
+#### 4. Prune or rewrite redundant coverage
+
+Audit tests that are now redundant because newer canonical cases cover the same behavior more clearly.
+
+Candidates to prune or rewrite:
+
+* older fixtures that assert emitted-shape noise rather than semantics
+* overlapping frontend-only tests that add little beyond stronger integration cases
+* repeated narrow cases that can be merged into one clearer canonical scenario
+
+Do not delete coverage blindly. Replace weak/redundant tests with stronger intent-aligned tests.
+
+#### 5. Harden the integration harness itself where needed
+
+Use this PR to remove remaining obvious harness rough edges that affect trust in the suite.
+
+In particular:
+
+* remove any remaining `todo!`/panic-shaped paths in integration assertion code that can still be exercised during normal test workflows
+* add small runner-level tests around normalization / rendered-output behavior where confidence is still thin
+* keep harness failures clearly distinct from semantic mismatches
+
+#### 6. Keep matrix and manifest ownership disciplined
+
+For every test migration or new canonical fixture:
+
+* update `docs/language-surface-integration-matrix.md`
+* update `tests/cases/manifest.toml`
+* remove vague “temporary” coverage where the new canonical case supersedes it
+
+The goal is that the matrix describes the real supported Alpha surface and the canonical fixtures that prove it.
+
+**Suggested migration heuristic**
+
+Use this decision rule consistently:
+
+* exact emitted shape matters → strict golden
+* emitted structure matters but generated counters do not → normalized golden
+* runtime behavior matters → rendered output
+* only a few output facts matter → artifact assertions
+
+**Checklist**
+
+* Audit remaining brittle fixtures by semantic intent.
+* Migrate noisy full-file goldens to normalized/rendered/artifact modes where appropriate.
+* Add missing canonical cases for the visible Alpha matrix gaps.
+* Rewrite or remove redundant weaker tests that no longer add confidence.
+* Remove remaining avoidable `todo!`/panic-shaped harness paths in active test code.
+* Update the language surface matrix and test manifest alongside fixture changes.
+* Add small runner-level regression tests where the assertion infrastructure itself needs confidence.
+
+**Done when**
+
+* Remaining broad golden failures mostly indicate real semantic regressions, not generator noise.
+* The visible Alpha matrix gaps are materially reduced.
+* The suite has fewer redundant fixtures and stronger canonical cases.
+* Harness failures are clearly infrastructure failures, not mixed with semantic mismatches.
+* The matrix and manifest accurately reflect the current supported surface.
+
+**Implementation notes for the later execution plan**
+
+* Treat this as a curation PR, not a random grab-bag.
+* Migrate fixtures in small themed batches so failures stay interpretable.
+* Prefer behavior-first assertions for runtime semantics.
+* Keep strict goldens only where exact emitted shape is intentionally contractual.
+
 
 ## Phase 5 - cross-platform consistency and test stability
 
@@ -28,26 +542,6 @@ Remove avoidable Windows/macOS golden drift from source normalization and emitte
 
 **Done when**
 - Golden outputs are stable across normal Windows/macOS workflows.
-
-### PR - Add normalized artifact assertion mode to reduce non-semantic golden churn
-
-Full `index.html` snapshots currently include generated JS details such as line-number-derived symbols
-and temporary names (`bst___hir_tmp_*`) that change even when runtime behavior does not.
-That makes integration goldens brittle and increases PR noise/risk when frontend lowering shape changes.
-
-This PR should make integration assertions more robust without weakening semantic checks.
-
-**Fits with other PRs**
-- Extends the Phase 3 integration-checks goal to use stronger assertions where byte-for-byte goldens are too brittle.
-- Should land before Phase 6 backend/html stabilization so those audits can use less brittle assertions.
-
-**Checklist**
-- Extend the integration runner expectation model with an explicit normalized-assertion mode for text artifacts.
-- Implement deterministic normalization for generated HTML/JS assertion comparisons, focused on unstable compiler-generated identifiers and irrelevant formatting drift.
-- Keep strict byte-for-byte golden checks available for cases where exact output shape is intentionally contractual.
-- Add fixture-level documentation/examples showing when to choose strict goldens vs normalized assertions.
-- Migrate the known brittle runtime-fragment cases (including the recent function/collection/char/receiver-method drift set) to the appropriate assertion style.
-- Add runner tests proving normalization is stable and does not mask real semantic regressions.
 
 **Done when**
 - Non-semantic generator-shape churn no longer causes broad golden failures.
