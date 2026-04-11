@@ -173,8 +173,290 @@ impl RuntimeEngine {
                 let value = self.copy_local_value(*source)?;
                 self.write_local(*target, value)?;
             }
+
+            ExecInstruction::BinaryOp {
+                left,
+                operator,
+                right,
+                destination,
+            } => {
+                self.execute_binary_op(*left, *operator, *right, *destination)?;
+            }
+
+            ExecInstruction::UnaryOp {
+                operand,
+                operator,
+                destination,
+            } => {
+                self.execute_unary_op(*operand, *operator, *destination)?;
+            }
         }
 
+        Ok(())
+    }
+
+    fn execute_binary_op(
+        &mut self,
+        left: ExecLocalId,
+        operator: crate::backends::rust_interpreter::exec_ir::ExecBinaryOperator,
+        right: ExecLocalId,
+        destination: ExecLocalId,
+    ) -> Result<(), InterpreterBackendError> {
+        use crate::backends::rust_interpreter::exec_ir::ExecBinaryOperator;
+
+        let left_value = self.read_local(left)?;
+        let right_value = self.read_local(right)?;
+
+        let result = match operator {
+            // Int arithmetic operations
+            ExecBinaryOperator::Add => match (left_value, right_value) {
+                (Value::Int(l), Value::Int(r)) => Value::Int(l + r),
+                (Value::Float(l), Value::Float(r)) => Value::Float(l + r),
+                (l, r) => {
+                    return Err(InterpreterBackendError::Execution {
+                        message: format!(
+                            "Type mismatch in Add operation: expected Int or Float operands, found {:?} and {:?}",
+                            l, r
+                        ),
+                    });
+                }
+            },
+
+            ExecBinaryOperator::Subtract => match (left_value, right_value) {
+                (Value::Int(l), Value::Int(r)) => Value::Int(l - r),
+                (Value::Float(l), Value::Float(r)) => Value::Float(l - r),
+                (l, r) => {
+                    return Err(InterpreterBackendError::Execution {
+                        message: format!(
+                            "Type mismatch in Subtract operation: expected Int or Float operands, found {:?} and {:?}",
+                            l, r
+                        ),
+                    });
+                }
+            },
+
+            ExecBinaryOperator::Multiply => match (left_value, right_value) {
+                (Value::Int(l), Value::Int(r)) => Value::Int(l * r),
+                (Value::Float(l), Value::Float(r)) => Value::Float(l * r),
+                (l, r) => {
+                    return Err(InterpreterBackendError::Execution {
+                        message: format!(
+                            "Type mismatch in Multiply operation: expected Int or Float operands, found {:?} and {:?}",
+                            l, r
+                        ),
+                    });
+                }
+            },
+
+            ExecBinaryOperator::Divide => match (left_value, right_value) {
+                (Value::Int(l), Value::Int(r)) => {
+                    if r == 0 {
+                        return Err(InterpreterBackendError::Execution {
+                            message: "Division by zero".to_owned(),
+                        });
+                    }
+                    Value::Int(l / r)
+                }
+                (Value::Float(l), Value::Float(r)) => {
+                    if r == 0.0 {
+                        return Err(InterpreterBackendError::Execution {
+                            message: "Division by zero".to_owned(),
+                        });
+                    }
+                    Value::Float(l / r)
+                }
+                (l, r) => {
+                    return Err(InterpreterBackendError::Execution {
+                        message: format!(
+                            "Type mismatch in Divide operation: expected Int or Float operands, found {:?} and {:?}",
+                            l, r
+                        ),
+                    });
+                }
+            },
+
+            ExecBinaryOperator::Modulo => match (left_value, right_value) {
+                (Value::Int(l), Value::Int(r)) => {
+                    if r == 0 {
+                        return Err(InterpreterBackendError::Execution {
+                            message: "Modulo by zero".to_owned(),
+                        });
+                    }
+                    Value::Int(l % r)
+                }
+                (Value::Float(l), Value::Float(r)) => {
+                    if r == 0.0 {
+                        return Err(InterpreterBackendError::Execution {
+                            message: "Modulo by zero".to_owned(),
+                        });
+                    }
+                    Value::Float(l % r)
+                }
+                (l, r) => {
+                    return Err(InterpreterBackendError::Execution {
+                        message: format!(
+                            "Type mismatch in Modulo operation: expected Int or Float operands, found {:?} and {:?}",
+                            l, r
+                        ),
+                    });
+                }
+            },
+
+            // Comparison operations
+            ExecBinaryOperator::Equal => match (left_value, right_value) {
+                (Value::Int(l), Value::Int(r)) => Value::Bool(l == r),
+                (Value::Float(l), Value::Float(r)) => Value::Bool(l == r),
+                (Value::Bool(l), Value::Bool(r)) => Value::Bool(l == r),
+                (Value::Char(l), Value::Char(r)) => Value::Bool(l == r),
+                (l, r) => {
+                    return Err(InterpreterBackendError::Execution {
+                        message: format!(
+                            "Type mismatch in Equal operation: operands must have the same type, found {:?} and {:?}",
+                            l, r
+                        ),
+                    });
+                }
+            },
+
+            ExecBinaryOperator::NotEqual => match (left_value, right_value) {
+                (Value::Int(l), Value::Int(r)) => Value::Bool(l != r),
+                (Value::Float(l), Value::Float(r)) => Value::Bool(l != r),
+                (Value::Bool(l), Value::Bool(r)) => Value::Bool(l != r),
+                (Value::Char(l), Value::Char(r)) => Value::Bool(l != r),
+                (l, r) => {
+                    return Err(InterpreterBackendError::Execution {
+                        message: format!(
+                            "Type mismatch in NotEqual operation: operands must have the same type, found {:?} and {:?}",
+                            l, r
+                        ),
+                    });
+                }
+            },
+
+            ExecBinaryOperator::LessThan => match (left_value, right_value) {
+                (Value::Int(l), Value::Int(r)) => Value::Bool(l < r),
+                (Value::Float(l), Value::Float(r)) => Value::Bool(l < r),
+                (Value::Char(l), Value::Char(r)) => Value::Bool(l < r),
+                (l, r) => {
+                    return Err(InterpreterBackendError::Execution {
+                        message: format!(
+                            "Type mismatch in LessThan operation: expected Int, Float, or Char operands, found {:?} and {:?}",
+                            l, r
+                        ),
+                    });
+                }
+            },
+
+            ExecBinaryOperator::LessThanOrEqual => match (left_value, right_value) {
+                (Value::Int(l), Value::Int(r)) => Value::Bool(l <= r),
+                (Value::Float(l), Value::Float(r)) => Value::Bool(l <= r),
+                (Value::Char(l), Value::Char(r)) => Value::Bool(l <= r),
+                (l, r) => {
+                    return Err(InterpreterBackendError::Execution {
+                        message: format!(
+                            "Type mismatch in LessThanOrEqual operation: expected Int, Float, or Char operands, found {:?} and {:?}",
+                            l, r
+                        ),
+                    });
+                }
+            },
+
+            ExecBinaryOperator::GreaterThan => match (left_value, right_value) {
+                (Value::Int(l), Value::Int(r)) => Value::Bool(l > r),
+                (Value::Float(l), Value::Float(r)) => Value::Bool(l > r),
+                (Value::Char(l), Value::Char(r)) => Value::Bool(l > r),
+                (l, r) => {
+                    return Err(InterpreterBackendError::Execution {
+                        message: format!(
+                            "Type mismatch in GreaterThan operation: expected Int, Float, or Char operands, found {:?} and {:?}",
+                            l, r
+                        ),
+                    });
+                }
+            },
+
+            ExecBinaryOperator::GreaterThanOrEqual => match (left_value, right_value) {
+                (Value::Int(l), Value::Int(r)) => Value::Bool(l >= r),
+                (Value::Float(l), Value::Float(r)) => Value::Bool(l >= r),
+                (Value::Char(l), Value::Char(r)) => Value::Bool(l >= r),
+                (l, r) => {
+                    return Err(InterpreterBackendError::Execution {
+                        message: format!(
+                            "Type mismatch in GreaterThanOrEqual operation: expected Int, Float, or Char operands, found {:?} and {:?}",
+                            l, r
+                        ),
+                    });
+                }
+            },
+
+            // Boolean logic operations
+            ExecBinaryOperator::And => match (left_value, right_value) {
+                (Value::Bool(l), Value::Bool(r)) => Value::Bool(l && r),
+                (l, r) => {
+                    return Err(InterpreterBackendError::Execution {
+                        message: format!(
+                            "Type mismatch in And operation: expected Bool operands, found {:?} and {:?}",
+                            l, r
+                        ),
+                    });
+                }
+            },
+
+            ExecBinaryOperator::Or => match (left_value, right_value) {
+                (Value::Bool(l), Value::Bool(r)) => Value::Bool(l || r),
+                (l, r) => {
+                    return Err(InterpreterBackendError::Execution {
+                        message: format!(
+                            "Type mismatch in Or operation: expected Bool operands, found {:?} and {:?}",
+                            l, r
+                        ),
+                    });
+                }
+            },
+        };
+
+        self.write_local(destination, result)?;
+        Ok(())
+    }
+
+    fn execute_unary_op(
+        &mut self,
+        operand: ExecLocalId,
+        operator: crate::backends::rust_interpreter::exec_ir::ExecUnaryOperator,
+        destination: ExecLocalId,
+    ) -> Result<(), InterpreterBackendError> {
+        use crate::backends::rust_interpreter::exec_ir::ExecUnaryOperator;
+
+        let operand_value = self.read_local(operand)?;
+
+        let result = match operator {
+            ExecUnaryOperator::Negate => match operand_value {
+                Value::Int(v) => Value::Int(-v),
+                Value::Float(v) => Value::Float(-v),
+                other => {
+                    return Err(InterpreterBackendError::Execution {
+                        message: format!(
+                            "Type mismatch in Negate operation: expected Int or Float operand, found {:?}",
+                            other
+                        ),
+                    });
+                }
+            },
+
+            ExecUnaryOperator::Not => match operand_value {
+                Value::Bool(v) => Value::Bool(!v),
+                other => {
+                    return Err(InterpreterBackendError::Execution {
+                        message: format!(
+                            "Type mismatch in Not operation: expected Bool operand, found {:?}",
+                            other
+                        ),
+                    });
+                }
+            },
+        };
+
+        self.write_local(destination, result)?;
         Ok(())
     }
 

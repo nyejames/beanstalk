@@ -196,15 +196,9 @@ fn lowers_assignment_to_local_then_return_load_local() {
         .any(|inst| matches!(inst, ExecInstruction::LoadConst { .. }));
     assert!(has_load_const, "expected LoadConst from assignment");
 
-    let has_read_local = entry_block
-        .instructions
-        .iter()
-        .any(|inst| matches!(inst, ExecInstruction::ReadLocal { .. }));
-    assert!(
-        has_read_local,
-        "expected ReadLocal from Load expression in return"
-    );
-
+    // WHAT: with ExecValue optimization, Load expressions return ExecValue::Local directly
+    // WHY: no ReadLocal instruction is emitted during expression lowering; the local reference
+    //      is passed directly to the terminator
     assert!(
         matches!(
             &entry_block.terminator,
@@ -707,5 +701,177 @@ fn lowers_entry_function_id_matches_start_function() {
     assert!(
         entry_fn.flags.is_start,
         "entry function should have is_start flag set"
+    );
+}
+
+// ============================================================
+// Test: Binary operation lowering
+// ============================================================
+
+#[test]
+fn lowers_simple_binary_operation() {
+    use crate::compiler_frontend::hir::hir_nodes::{HirBinOp, HirExpression, HirExpressionKind};
+
+    let mut string_table = StringTable::new();
+    let (type_context, types) = build_type_context();
+    let region = RegionId(0);
+
+    // Create a simple binary operation: 1 + 2
+    let left = Box::new(int_expression(1, 1, types.int, region));
+    let right = Box::new(int_expression(2, 2, types.int, region));
+    let add_expr = HirExpression {
+        id: crate::compiler_frontend::hir::hir_nodes::HirValueId(3),
+        kind: HirExpressionKind::BinOp {
+            left,
+            op: HirBinOp::Add,
+            right,
+        },
+        ty: types.int,
+        value_kind: crate::compiler_frontend::hir::hir_nodes::ValueKind::RValue,
+        region,
+    };
+
+    let block = HirBlock {
+        id: BlockId(0),
+        region,
+        locals: vec![],
+        statements: vec![],
+        terminator: HirTerminator::Return(add_expr),
+    };
+
+    let function = HirFunction {
+        id: FunctionId(0),
+        entry: BlockId(0),
+        params: vec![],
+        return_type: types.int,
+        return_aliases: vec![],
+    };
+
+    let path = InternedPath::from_single_str("start", &mut string_table);
+    let module = build_module(
+        &mut string_table,
+        vec![(function, path, HirFunctionOrigin::EntryStart)],
+        vec![block],
+        type_context,
+        FunctionId(0),
+    );
+
+    let exec_program = lower_only(&module);
+
+    let function = &exec_program.module.functions[0];
+    let entry_block = &function.blocks[0];
+
+    // Verify that BinaryOp instruction was emitted
+    let has_binary_op = entry_block
+        .instructions
+        .iter()
+        .any(|inst| matches!(inst, ExecInstruction::BinaryOp { .. }));
+    assert!(
+        has_binary_op,
+        "expected BinaryOp instruction for binary operation"
+    );
+
+    // Verify that temporary locals were allocated for the literals
+    let load_const_count = entry_block
+        .instructions
+        .iter()
+        .filter(|inst| matches!(inst, ExecInstruction::LoadConst { .. }))
+        .count();
+    assert_eq!(
+        load_const_count, 2,
+        "expected 2 LoadConst instructions for the two literal operands"
+    );
+
+    // Verify return terminator exists
+    assert!(
+        matches!(
+            &entry_block.terminator,
+            ExecTerminator::Return { value: Some(_) }
+        ),
+        "expected Return with a value, got {:?}",
+        entry_block.terminator
+    );
+}
+
+#[test]
+fn lowers_simple_unary_operation() {
+    use crate::compiler_frontend::hir::hir_nodes::{HirExpression, HirExpressionKind, HirUnaryOp};
+
+    let mut string_table = StringTable::new();
+    let (type_context, types) = build_type_context();
+    let region = RegionId(0);
+
+    // Create a simple unary operation: -42
+    let operand = Box::new(int_expression(42, 1, types.int, region));
+    let negate_expr = HirExpression {
+        id: crate::compiler_frontend::hir::hir_nodes::HirValueId(2),
+        kind: HirExpressionKind::UnaryOp {
+            op: HirUnaryOp::Neg,
+            operand,
+        },
+        ty: types.int,
+        value_kind: crate::compiler_frontend::hir::hir_nodes::ValueKind::RValue,
+        region,
+    };
+
+    let block = HirBlock {
+        id: BlockId(0),
+        region,
+        locals: vec![],
+        statements: vec![],
+        terminator: HirTerminator::Return(negate_expr),
+    };
+
+    let function = HirFunction {
+        id: FunctionId(0),
+        entry: BlockId(0),
+        params: vec![],
+        return_type: types.int,
+        return_aliases: vec![],
+    };
+
+    let path = InternedPath::from_single_str("start", &mut string_table);
+    let module = build_module(
+        &mut string_table,
+        vec![(function, path, HirFunctionOrigin::EntryStart)],
+        vec![block],
+        type_context,
+        FunctionId(0),
+    );
+
+    let exec_program = lower_only(&module);
+
+    let function = &exec_program.module.functions[0];
+    let entry_block = &function.blocks[0];
+
+    // Verify that UnaryOp instruction was emitted
+    let has_unary_op = entry_block
+        .instructions
+        .iter()
+        .any(|inst| matches!(inst, ExecInstruction::UnaryOp { .. }));
+    assert!(
+        has_unary_op,
+        "expected UnaryOp instruction for unary operation"
+    );
+
+    // Verify that temporary local was allocated for the literal operand
+    let load_const_count = entry_block
+        .instructions
+        .iter()
+        .filter(|inst| matches!(inst, ExecInstruction::LoadConst { .. }))
+        .count();
+    assert_eq!(
+        load_const_count, 1,
+        "expected 1 LoadConst instruction for the literal operand"
+    );
+
+    // Verify return terminator exists
+    assert!(
+        matches!(
+            &entry_block.terminator,
+            ExecTerminator::Return { value: Some(_) }
+        ),
+        "expected Return with a value, got {:?}",
+        entry_block.terminator
     );
 }

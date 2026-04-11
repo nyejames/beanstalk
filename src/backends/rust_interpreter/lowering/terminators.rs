@@ -1,16 +1,18 @@
 //! Terminator lowering for the interpreter backend.
 
-use crate::backends::rust_interpreter::exec_ir::{ExecInstruction, ExecTerminator};
+use crate::backends::rust_interpreter::exec_ir::{
+    ExecConstValue, ExecInstruction, ExecStorageType, ExecTerminator, ExecValue,
+};
 use crate::backends::rust_interpreter::lowering::context::{
     FunctionLoweringLayout, LoweringContext,
 };
-use crate::backends::rust_interpreter::lowering::expressions::lower_expression_into;
+use crate::backends::rust_interpreter::lowering::expressions::lower_expression;
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
 use crate::compiler_frontend::hir::hir_nodes::{HirExpression, HirExpressionKind, HirTerminator};
 
 pub(crate) fn lower_block_terminator(
     context: &mut LoweringContext<'_>,
-    layout: &FunctionLoweringLayout,
+    layout: &mut FunctionLoweringLayout,
     instructions: &mut Vec<ExecInstruction>,
     terminator: &HirTerminator,
 ) -> Result<ExecTerminator, CompilerError> {
@@ -34,13 +36,21 @@ pub(crate) fn lower_block_terminator(
             then_block,
             else_block,
         } => {
-            lower_expression_into(
-                context,
-                layout,
-                instructions,
-                layout.scratch_local_id,
-                condition,
-            )?;
+            let condition_value = lower_expression(context, layout, instructions, condition)?;
+
+            // Materialize the condition to a local if it's a literal
+            let condition_local = match condition_value {
+                ExecValue::Local(local_id) => local_id,
+                ExecValue::Literal(const_value) => {
+                    let temp_local = layout.allocate_temp_local(ExecStorageType::Bool);
+                    let const_id = context.intern_const(const_value);
+                    instructions.push(ExecInstruction::LoadConst {
+                        target: temp_local,
+                        const_id,
+                    });
+                    temp_local
+                }
+            };
 
             let Some(exec_then_block) = layout.exec_block_by_hir_block.get(then_block).copied()
             else {
@@ -57,7 +67,7 @@ pub(crate) fn lower_block_terminator(
             };
 
             Ok(ExecTerminator::BranchBool {
-                condition: layout.scratch_local_id,
+                condition: condition_local,
                 then_block: exec_then_block,
                 else_block: exec_else_block,
             })
@@ -67,16 +77,33 @@ pub(crate) fn lower_block_terminator(
             if is_unit_expression(expression) {
                 Ok(ExecTerminator::Return { value: None })
             } else {
-                lower_expression_into(
-                    context,
-                    layout,
-                    instructions,
-                    layout.scratch_local_id,
-                    expression,
-                )?;
+                let return_value = lower_expression(context, layout, instructions, expression)?;
+
+                // Materialize the return value to a local if it's a literal
+                let return_local = match return_value {
+                    ExecValue::Local(local_id) => local_id,
+                    ExecValue::Literal(const_value) => {
+                        // Infer storage type from the constant value
+                        let storage_type = match &const_value {
+                            ExecConstValue::Unit => ExecStorageType::Unit,
+                            ExecConstValue::Bool(_) => ExecStorageType::Bool,
+                            ExecConstValue::Int(_) => ExecStorageType::Int,
+                            ExecConstValue::Float(_) => ExecStorageType::Float,
+                            ExecConstValue::Char(_) => ExecStorageType::Char,
+                            ExecConstValue::String(_) => ExecStorageType::HeapHandle,
+                        };
+                        let temp_local = layout.allocate_temp_local(storage_type);
+                        let const_id = context.intern_const(const_value);
+                        instructions.push(ExecInstruction::LoadConst {
+                            target: temp_local,
+                            const_id,
+                        });
+                        temp_local
+                    }
+                };
 
                 Ok(ExecTerminator::Return {
-                    value: Some(layout.scratch_local_id),
+                    value: Some(return_local),
                 })
             }
         }

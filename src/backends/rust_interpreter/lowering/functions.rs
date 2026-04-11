@@ -22,7 +22,7 @@ pub(crate) fn lower_function_shell(
     context: &mut LoweringContext<'_>,
     function: &HirFunction,
 ) -> Result<(), CompilerError> {
-    let layout = build_function_layout(context, function)?;
+    let mut layout = build_function_layout(context, function)?;
     let locals_by_id = collect_hir_locals_by_id(context, function, &layout)?;
 
     let mut exec_locals = Vec::new();
@@ -64,7 +64,8 @@ pub(crate) fn lower_function_shell(
     });
 
     let mut exec_blocks = Vec::with_capacity(layout.ordered_hir_block_ids.len());
-    for hir_block_id in &layout.ordered_hir_block_ids {
+    let ordered_hir_block_ids = layout.ordered_hir_block_ids.clone();
+    for hir_block_id in &ordered_hir_block_ids {
         let Some(exec_block_id) = layout.exec_block_by_hir_block.get(hir_block_id).copied() else {
             return Err(CompilerError::compiler_error(format!(
                 "Rust interpreter lowering could not resolve Exec block for HIR block {hir_block_id:?}"
@@ -72,8 +73,11 @@ pub(crate) fn lower_function_shell(
         };
 
         let hir_block = context.hir_block_by_id(*hir_block_id)?.clone();
-        exec_blocks.push(lower_block(context, &layout, &hir_block, exec_block_id)?);
+        exec_blocks.push(lower_block(context, &mut layout, &hir_block, exec_block_id)?);
     }
+
+    // Add temporary locals to the exec_locals list after all blocks are lowered
+    exec_locals.extend(layout.temp_locals.clone());
 
     let Some(entry_block) = layout.exec_block_by_hir_block.get(&function.entry).copied() else {
         return Err(CompilerError::compiler_error(format!(
@@ -135,12 +139,15 @@ fn build_function_layout(
         ordered_hir_local_ids,
         exec_local_by_hir_local,
         scratch_local_id,
+        next_temp_local_index: 0,
+        temp_local_count: 0,
+        temp_locals: Vec::new(),
     })
 }
 
 fn lower_block(
     context: &mut LoweringContext<'_>,
-    layout: &FunctionLoweringLayout,
+    layout: &mut FunctionLoweringLayout,
     hir_block: &HirBlock,
     exec_block_id: ExecBlockId,
 ) -> Result<ExecBlock, CompilerError> {
