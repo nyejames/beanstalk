@@ -1,3 +1,4 @@
 [backends.html]
 mode = "success"
 warnings = "forbid"
+rendered_output_contains = ["collection_get_out_of_bounds result=-1"]

@@ -1,6 +1,7 @@
 [backends.html]
 mode = "success"
 warnings = "forbid"
+rendered_output_contains = ["collection_methods_backend_contract first=10 len=3"]
 
 [[backends.html.artifact_assertions]]
 path = "index.html"
@@ -11,4 +12,6 @@ must_contain = [
     "__bs_collection_remove",
     "__bs_collection_length",
     "collection_methods_backend_contract",
+    "__bs_write(__bs_index(",
 ]
+must_not_contain = ["__bs_collection_set("]

@@ -388,9 +388,8 @@ impl<'hir> JsEmitter<'hir> {
             ERROR_CODE_COLLECTION_INDEX_OUT_OF_BOUNDS,
         ));
 
-        self.emit_line("function __bs_collection_get(collectionRef, index) {");
+        self.emit_line("function __bs_collection_get(collection, index) {");
         self.with_indent(|emitter| {
-            emitter.emit_line("const collection = __bs_read(collectionRef);");
             emitter.emit_line("if (!Array.isArray(collection)) {");
             emitter.with_indent(|em| {
                 em.emit_line(&format!(
@@ -412,9 +411,8 @@ impl<'hir> JsEmitter<'hir> {
         self.emit_line("}");
         self.emit_line("");
 
-        self.emit_line("function __bs_collection_push(collectionRef, value) {");
+        self.emit_line("function __bs_collection_push(collection, value) {");
         self.with_indent(|emitter| {
-            emitter.emit_line("const collection = __bs_read(collectionRef);");
             emitter.emit_line("if (Array.isArray(collection)) {");
             emitter.with_indent(|em| em.emit_line("collection.push(value);"));
             emitter.emit_line("}");
@@ -422,9 +420,8 @@ impl<'hir> JsEmitter<'hir> {
         self.emit_line("}");
         self.emit_line("");
 
-        self.emit_line("function __bs_collection_remove(collectionRef, index) {");
+        self.emit_line("function __bs_collection_remove(collection, index) {");
         self.with_indent(|emitter| {
-            emitter.emit_line("const collection = __bs_read(collectionRef);");
             emitter.emit_line(
                 "if (Array.isArray(collection) && Number.isInteger(index) && index >= 0 && index < collection.length) {",
             );
@@ -434,9 +431,8 @@ impl<'hir> JsEmitter<'hir> {
         self.emit_line("}");
         self.emit_line("");
 
-        self.emit_line("function __bs_collection_length(collectionRef) {");
+        self.emit_line("function __bs_collection_length(collection) {");
         self.with_indent(|emitter| {
-            emitter.emit_line("const collection = __bs_read(collectionRef);");
             emitter.emit_line("if (!Array.isArray(collection)) {");
             emitter.with_indent(|em| em.emit_line("return 0;"));
             emitter.emit_line("}");

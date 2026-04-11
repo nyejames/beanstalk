@@ -449,7 +449,10 @@ fn normalization_is_deterministic() {
 fn normalization_does_not_mask_semantic_name_change() {
     let a = normalize_text_for_comparison("bst_rhs_and_fn0");
     let b = normalize_text_for_comparison("bst_rhs_or_fn0");
-    assert_ne!(a, b, "different base names must still differ after normalization");
+    assert_ne!(
+        a, b,
+        "different base names must still differ after normalization"
+    );
 }
 
 #[test]
@@ -580,10 +583,7 @@ fn rejects_normalized_contains_on_wasm_artifact() {
     let Err(error) = load_canonical_case_specs(&case_root, None, None) else {
         panic!("normalized_contains on wasm should be rejected");
     };
-    assert!(
-        error.contains("text-only"),
-        "unexpected error: {error}"
-    );
+    assert!(error.contains("text-only"), "unexpected error: {error}");
 
     fs::remove_dir_all(&root).expect("should clean up");
 }

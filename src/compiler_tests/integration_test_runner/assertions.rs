@@ -53,16 +53,15 @@ pub(crate) fn validate_success_result(
         return fail(build_result, reason, kind);
     }
 
-    if !expectation.rendered_output_contains.is_empty()
-        || !expectation.rendered_output_not_contains.is_empty()
-    {
-        if let Some((reason, kind)) = validate_rendered_output(
+    if (!expectation.rendered_output_contains.is_empty()
+        || !expectation.rendered_output_not_contains.is_empty())
+        && let Some((reason, kind)) = validate_rendered_output(
             &build_result,
             &expectation.rendered_output_contains,
             &expectation.rendered_output_not_contains,
-        ) {
-            return fail(build_result, reason, kind);
-        }
+        )
+    {
+        return fail(build_result, reason, kind);
     }
 
     CaseExecutionResult {
@@ -646,10 +645,7 @@ fn validate_golden_outputs(
             Ok(bytes) => bytes,
             Err(error) => {
                 return Some((
-                    format!(
-                        "Failed to read golden output '{}': {error}",
-                        file.display()
-                    ),
+                    format!("Failed to read golden output '{}': {error}", file.display()),
                     FailureKind::HarnessFailed,
                 ));
             }
@@ -662,10 +658,7 @@ fn validate_golden_outputs(
         };
 
         // Text artifacts support normalized comparison; binary/wasm always use strict.
-        let is_text = matches!(
-            output.file_kind(),
-            FileKind::Html(_) | FileKind::Js(_)
-        );
+        let is_text = matches!(output.file_kind(), FileKind::Html(_) | FileKind::Js(_));
 
         if is_text && mode == GoldenMode::Normalized {
             let expected_str = String::from_utf8_lossy(&expected_bytes);
@@ -676,10 +669,7 @@ fn validate_golden_outputs(
             let norm_expected = normalize_text_for_comparison(&expected_str);
             let norm_actual = normalize_text_for_comparison(actual_str);
             if norm_expected != norm_actual {
-                let detail = format!(
-                    "\n{}",
-                    generate_text_diff(&norm_expected, &norm_actual, 8)
-                );
+                let detail = format!("\n{}", generate_text_diff(&norm_expected, &norm_actual, 8));
                 return Some((
                     format!(
                         "Golden output '{relative}' did not match after normalization.{detail}"
@@ -700,9 +690,7 @@ fn validate_golden_outputs(
                 ),
             };
             return Some((
-                format!(
-                    "Golden output '{relative}' did not match the produced artifact.{detail}"
-                ),
+                format!("Golden output '{relative}' did not match the produced artifact.{detail}"),
                 FailureKind::StrictGoldenMismatch,
             ));
         }
@@ -913,9 +901,8 @@ fn execute_html_in_node(html: &str) -> Result<RenderedOutput, String> {
         .unwrap_or(0);
     let temp_path = std::env::temp_dir().join(format!("bst_render_harness_{unique}.js"));
 
-    std::fs::write(&temp_path, &harness).map_err(|e| {
-        format!("rendered_output: failed to write node harness: {e}")
-    })?;
+    std::fs::write(&temp_path, &harness)
+        .map_err(|e| format!("rendered_output: failed to write node harness: {e}"))?;
 
     let output = std::process::Command::new("node")
         .arg(&temp_path)

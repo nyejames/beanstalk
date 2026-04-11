@@ -278,6 +278,8 @@ impl<'a> HirBuilder<'a> {
         args: &[Expression],
         location: &SourceLocation,
     ) -> Result<LoweredExpression, CompilerError> {
+        // WHAT: lowers `collection.set(index, value)` to direct indexed assignment.
+        // WHY: collection `set` is frontend-owned syntax, not a runtime host helper call.
         if args.len() != 2 {
             return_hir_transformation_error!(
                 format!(

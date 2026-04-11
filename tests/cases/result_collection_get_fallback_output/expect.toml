@@ -1,8 +1,4 @@
 [backends.html]
 mode = "success"
 warnings = "forbid"
-
-[[backends.html.artifact_assertions]]
-path = "index.html"
-kind = "html"
-must_contain = ["__bs_collection_get", "__bs_result_fallback", "collection_get_fallback"]
+rendered_output_contains = ["collection_get_fallback in_bounds=20 out_of_bounds=42"]

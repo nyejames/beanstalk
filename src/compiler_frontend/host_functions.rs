@@ -175,7 +175,7 @@ impl HostRegistry {
                 parameters: vec![
                     HostParameter {
                         language_type: DataType::Inferred,
-                        access_kind: HostAccessKind::Shared,
+                        access_kind: HostAccessKind::Mutable,
                     },
                     HostParameter {
                         language_type: DataType::Inferred,
@@ -193,7 +193,7 @@ impl HostRegistry {
                 parameters: vec![
                     HostParameter {
                         language_type: DataType::Inferred,
-                        access_kind: HostAccessKind::Shared,
+                        access_kind: HostAccessKind::Mutable,
                     },
                     HostParameter {
                         language_type: DataType::Int,

@@ -1,4 +1,4 @@
 [backends.html]
 mode = "success"
 warnings = "forbid"
-golden_mode = "normalized"
+rendered_output_contains = ["collection_indexed_write_end_to_end first=10 second=99 len=3"]

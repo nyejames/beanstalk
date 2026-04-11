@@ -28,6 +28,9 @@ const COLLECTION_PUSH_NAME: &str = "push";
 const COLLECTION_REMOVE_NAME: &str = "remove";
 const COLLECTION_LENGTH_NAME: &str = "length";
 
+// WHAT: synthetic method path retained for AST `MethodCall` shape consistency.
+// WHY: `set` lowering bypasses host-call dispatch and becomes direct index assignment in HIR,
+//      but AST still models collection builtins uniformly as method-call nodes.
 const COLLECTION_BUILTIN_SET_PATH: &str = "__bs_collection_set";
 
 #[derive(Clone, Copy, PartialEq, Eq)]

@@ -160,11 +160,8 @@ fn parse_matrix_expectation_file(
         let artifact_assertions =
             parse_artifact_assertions(path, &context, &backend_expectation.artifact_assertions)?;
 
-        let golden_mode = parse_golden_mode(
-            path,
-            &context,
-            backend_expectation.golden_mode.as_deref(),
-        )?;
+        let golden_mode =
+            parse_golden_mode(path, &context, backend_expectation.golden_mode.as_deref())?;
 
         // rendered_output_* is only valid for success mode; validate here so the
         // error message can reference the backend context.
@@ -390,11 +387,7 @@ fn validate_artifact_strings(
     Ok(())
 }
 
-fn parse_golden_mode(
-    path: &Path,
-    context: &str,
-    raw: Option<&str>,
-) -> Result<GoldenMode, String> {
+fn parse_golden_mode(path: &Path, context: &str, raw: Option<&str>) -> Result<GoldenMode, String> {
     match raw {
         None | Some("strict") => Ok(GoldenMode::Strict),
         Some("normalized") => Ok(GoldenMode::Normalized),

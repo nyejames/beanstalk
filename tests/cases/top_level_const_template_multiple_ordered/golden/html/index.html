@@ -354,8 +354,7 @@ body {
         throw new Error("Expected internal Result carrier during fallback handling");
     }
 
-    function __bs_collection_get(collectionRef, index) {
-        const collection = __bs_read(collectionRef);
+    function __bs_collection_get(collection, index) {
         if (!Array.isArray(collection)) {
             const err = __bs_make_error("InvalidArgument", "collection.expected_ordered_collection", "Collection get(...) expects an ordered collection", null, null);
             return { tag: "err", value: err };
@@ -367,22 +366,19 @@ body {
         return { tag: "ok", value: collection[index] };
     }
 
-    function __bs_collection_push(collectionRef, value) {
-        const collection = __bs_read(collectionRef);
+    function __bs_collection_push(collection, value) {
         if (Array.isArray(collection)) {
             collection.push(value);
         }
     }
 
-    function __bs_collection_remove(collectionRef, index) {
-        const collection = __bs_read(collectionRef);
+    function __bs_collection_remove(collection, index) {
         if (Array.isArray(collection) && Number.isInteger(index) && index >= 0 && index < collection.length) {
             collection.splice(index, 1);
         }
     }
 
-    function __bs_collection_length(collectionRef) {
-        const collection = __bs_read(collectionRef);
+    function __bs_collection_length(collection) {
         if (!Array.isArray(collection)) {
             return 0;
         }

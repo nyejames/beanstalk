@@ -279,6 +279,26 @@ path = "collection_mutating_method_requires_explicit_receiver_tilde"
 tags = ["integration","collections","diagnostics"]
 
 [[case]]
+id = "collection_mutating_method_temporary_receiver_rejected"
+path = "collection_mutating_method_temporary_receiver_rejected"
+tags = ["integration","collections","diagnostics"]
+
+[[case]]
+id = "collection_pull_removed_syntax_rejected"
+path = "collection_pull_removed_syntax_rejected"
+tags = ["integration","collections","diagnostics"]
+
+[[case]]
+id = "collection_remove_requires_explicit_receiver_tilde"
+path = "collection_remove_requires_explicit_receiver_tilde"
+tags = ["integration","collections","diagnostics"]
+
+[[case]]
+id = "collection_set_requires_explicit_receiver_tilde"
+path = "collection_set_requires_explicit_receiver_tilde"
+tags = ["integration","collections","diagnostics"]
+
+[[case]]
 id = "commas"
 path = "commas"
 tags = ["integration","language"]
