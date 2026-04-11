@@ -1,0 +1,4 @@
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = ["runtime_fragment_mutable_reassignment_capture counter=2"]

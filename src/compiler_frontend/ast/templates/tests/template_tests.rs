@@ -654,7 +654,7 @@ fn errors_when_const_template_lookup_is_missing() {
 }
 
 #[test]
-fn rejects_mutable_reassignment_of_captured_symbol_before_runtime_template() {
+fn captures_mutable_reassignment_of_captured_symbol_before_runtime_template() {
     let mut string_table = StringTable::new();
     let entry_dir = InternedPath::from_single_str("main.bst", &mut string_table);
     let entry_scope = entry_dir.to_owned();
@@ -708,16 +708,147 @@ fn rejects_mutable_reassignment_of_captured_symbol_before_runtime_template() {
         &mut string_table,
     )];
 
-    let error = synthesize_start_template_items_for_tests(
+    let start_items = synthesize_start_template_items_for_tests(
         &mut ast_nodes,
         &entry_dir,
         &[],
         &FxHashMap::default(),
         &mut string_table,
     )
-    .expect_err("captured symbol reassignment should fail");
+    .expect("captured symbol reassignment should be replayed in the fragment setup");
 
-    assert!(error.msg.contains("do not support mutable reassignments"));
+    assert_eq!(start_items.len(), 1);
+    let generated_fragment_name = match &start_items[0] {
+        AstStartTemplateItem::RuntimeStringFunction { function, .. } => function.to_owned(),
+        _ => panic!("expected runtime fragment item"),
+    };
+
+    let entry_start_name = entry_dir.join_str(IMPLICIT_START_FUNC_NAME, &mut string_table);
+    let entry_start = find_function(&ast_nodes, &entry_start_name);
+    let NodeKind::Function(_, _, entry_body) = &entry_start.kind else {
+        panic!("entry start node should be a function");
+    };
+
+    assert!(
+        entry_body.is_empty(),
+        "template-only declaration and reassignment setup should be pruned from start()"
+    );
+
+    let generated_fragment = find_function(&ast_nodes, &generated_fragment_name);
+    let NodeKind::Function(_, _, generated_body) = &generated_fragment.kind else {
+        panic!("generated fragment should be a function");
+    };
+
+    assert_eq!(generated_body.len(), 3);
+    assert!(matches!(
+        generated_body[0].kind,
+        NodeKind::VariableDeclaration(_)
+    ));
+    assert!(matches!(
+        generated_body[1].kind,
+        NodeKind::Assignment { .. }
+    ));
+    assert!(matches!(generated_body[2].kind, NodeKind::Return(_)));
+}
+
+#[test]
+fn keeps_captured_reassignment_when_later_non_template_statement_depends_on_symbol() {
+    let mut string_table = StringTable::new();
+    let entry_dir = InternedPath::from_single_str("main.bst", &mut string_table);
+    let entry_scope = entry_dir.to_owned();
+    let counter_name = InternedPath::from_single_str("counter", &mut string_table);
+    let sink_name = InternedPath::from_single_str("sink", &mut string_table);
+
+    let declare_counter = variable_declaration_node(
+        counter_name.to_owned(),
+        Expression::int(1, test_location(2), Ownership::ImmutableOwned),
+        test_location(2),
+        entry_scope.to_owned(),
+    );
+
+    let assign_counter = assignment_node(
+        AstNode {
+            kind: NodeKind::Rvalue(Expression::reference(
+                counter_name.to_owned(),
+                DataType::Int,
+                test_location(3),
+                Ownership::MutableReference,
+            )),
+            location: test_location(3),
+            scope: entry_scope.to_owned(),
+        },
+        Expression::int(2, test_location(3), Ownership::ImmutableOwned),
+        test_location(3),
+        entry_scope.to_owned(),
+    );
+
+    let sink_declaration = variable_declaration_node(
+        sink_name,
+        Expression::reference(
+            counter_name.to_owned(),
+            DataType::Int,
+            test_location(4),
+            Ownership::ImmutableReference,
+        ),
+        test_location(4),
+        entry_scope.to_owned(),
+    );
+
+    let runtime_template = variable_declaration_node(
+        InternedPath::from_single_str(TOP_LEVEL_TEMPLATE_NAME, &mut string_table),
+        top_level_template_declaration(
+            vec![Expression::reference(
+                counter_name,
+                DataType::Int,
+                test_location(5),
+                Ownership::ImmutableReference,
+            )],
+            TemplateType::StringFunction,
+            test_location(5),
+            &mut string_table,
+        )
+        .value,
+        test_location(5),
+        entry_scope.to_owned(),
+    );
+
+    let mut ast_nodes = vec![start_function_node(
+        &entry_dir,
+        vec![
+            declare_counter,
+            assign_counter,
+            sink_declaration,
+            runtime_template,
+        ],
+        test_location(1),
+        &mut string_table,
+    )];
+
+    let _ = synthesize_start_template_items_for_tests(
+        &mut ast_nodes,
+        &entry_dir,
+        &[],
+        &FxHashMap::default(),
+        &mut string_table,
+    )
+    .expect("runtime template synthesis should succeed");
+
+    let entry_start_name = entry_dir.join_str(IMPLICIT_START_FUNC_NAME, &mut string_table);
+    let entry_start = find_function(&ast_nodes, &entry_start_name);
+    let NodeKind::Function(_, _, entry_body) = &entry_start.kind else {
+        panic!("entry start node should be a function");
+    };
+
+    assert_eq!(entry_body.len(), 3);
+    assert!(matches!(
+        entry_body[0].kind,
+        NodeKind::VariableDeclaration(_)
+    ));
+    assert!(matches!(entry_body[1].kind, NodeKind::Assignment { .. }));
+    assert!(matches!(
+        entry_body[2].kind,
+        NodeKind::VariableDeclaration(_)
+    ));
 }
 
 #[test]

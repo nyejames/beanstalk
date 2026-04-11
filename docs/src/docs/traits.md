@@ -5,6 +5,8 @@ Traits define a named behavioural contract for a type.
 They are intended to be simple, explicit, and cheap for the compiler to resolve.
 Beanstalk traits are designed to support static method resolution by default without dragging the language toward Rust-level trait-system complexity or runtime interface-object semantics.
 
+Style note: trait names will always be fully capitalised. They will be the only language construct to do this to help them stand out.
+
 ## Goals
 
 - Keep traits **nominal** and **explicit**.
@@ -31,18 +33,13 @@ The first version should stay intentionally narrow.
 Trait declarations use the keyword `must`:
 
 ```beanstalk
-Drawable must:
+DRAWABLE must:
     draw |This, surface Surface| -> String;
     bounds |This| -> Rect, Bool;
 ;
 ```
 
-This reads as: any type claiming to satisfy `Drawable` **must** provide these methods.
-
-### Why `must`
-
-`must` gives traits a clear contract-oriented tone without inventing another symbolic delimiter family.
-It is short, readable, and difficult to confuse with existing struct, choice, template, or path syntax.
+This reads as: any type claiming to satisfy `DRAWABLE` **must** provide these methods.
 
 ## The `This` placeholder
 
@@ -128,9 +125,7 @@ This trades some runtime performance for:
 
 Selective monomorphization can still be added later as an optimisation, especially for release builds, but it should not define the semantic model of traits.
 
-## Recommended v1 scope
-
-Traits should start small.
+## V1 scope
 
 Recommended first slice:
 

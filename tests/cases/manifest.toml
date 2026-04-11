@@ -1474,6 +1474,11 @@ path = "top_level_const_template_multiple_ordered"
 tags = ["integration","templates"]
 
 [[case]]
+id = "top_level_fragment_mixed_const_runtime_order"
+path = "top_level_fragment_mixed_const_runtime_order"
+tags = ["integration","templates"]
+
+[[case]]
 id = "top_level_const_template_non_entry_file_rejected"
 path = "top_level_const_template_non_entry_file_rejected"
 tags = ["integration","templates","diagnostics"]
@@ -1693,6 +1698,11 @@ tags = ["integration", "control-flow", "borrows", "templates"]
 id = "short_circuit_mutable_rhs_no_later_use_inconsistent"
 path = "short_circuit_mutable_rhs_no_later_use_inconsistent"
 tags = ["integration", "control-flow", "borrows", "diagnostics"]
+
+[[case]]
+id = "runtime_fragment_mutable_reassignment_capture"
+path = "runtime_fragment_mutable_reassignment_capture"
+tags = ["integration", "templates", "borrows"]
 
 [[case]]
 id = "if_condition_requires_bool"

@@ -16,6 +16,7 @@ pub(crate) use module_ast as ast;
 pub(crate) mod ast_nodes;
 pub(crate) mod import_bindings;
 pub(crate) mod receiver_methods;
+pub(crate) mod symbol_analysis;
 pub(crate) mod type_resolution;
 pub(crate) mod expressions {
     pub(crate) mod call_argument;
