@@ -75,13 +75,6 @@ import @styles/docs {navbar, title, section, palette, table, codeblock, theme_he
 
             io([value, number])
         ;
-
-        panics ||:
-            canError("") e!:
-                io("Error: ", e)
-                panic("Panicking due to error")
-            ;
-        ;
     ]
 
     ## Closures
