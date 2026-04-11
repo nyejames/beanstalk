@@ -15,20 +15,6 @@ These are the non-negotiable conditions for starting Alpha.
 - Compiler diagnostics are useful, accurate, consistently formatted, and visually moving toward the Nushell-style goal.
 - Cross-platform output is stable enough that Windows and macOS do not produce avoidable golden drift.
 
-## Phase 4 - diagnostics and compiler UX hardening
-
-### PR - Dev server hardening
-The dev server current can hang when clicking links and sometimes takes a very long time to respond to file changes and perform a rebuild.
-
-A review of the code should also take place to make sure the code is well orgsanised, following the codebase style guide and has helpful comments.
-
-**Done when**
-- Dev server no longer hangs when a page is refreshed multiple times
-- Dev server is always snappy and responsive to source file changes and performs fast rebuilds
-- Dev server code is well organised, commented and concise
-
----
-
 ## Phase 5 - cross-platform consistency and test stability
 
 ### PR - Finish CRLF normalization in strings and templates
@@ -184,6 +170,6 @@ This is a collection of notes and findings for future roadmaps once the roadmap 
 
 Broader Wasm maturity beyond the current experimental path.
 
-Notes and limitations from previous investigations:
+## Notes and limitations from previous investigations:
 - The WASM backend can't handle Choice/Union types yet (maps to Handle but produces i32/i64 mismatches). 
 - rt_string_from_i64 Wasm helper: Explicitly noted in the 1ac2613 commit message as an "incremental bridge implementation". It produces valid output but is not a complete runtime implementation. This is scoped for a dedicated follow-up and does not cause panics.

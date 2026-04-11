@@ -8,10 +8,11 @@ use std::io::{self, Write};
 use std::net::TcpStream;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
-use std::sync::mpsc::{self, RecvTimeoutError};
+use std::sync::mpsc::{self, RecvTimeoutError, SyncSender, TrySendError};
 use std::time::Duration;
 
-const KEEP_ALIVE_INTERVAL: Duration = Duration::from_secs(15);
+const WRITE_TIMEOUT: Duration = Duration::from_secs(2);
+const KEEP_ALIVE_INTERVAL: Duration = Duration::from_secs(5);
 
 pub fn format_reload_event(version: u64) -> String {
     format!("event: reload\ndata: {version}\n\n")
@@ -25,19 +26,20 @@ pub fn broadcast_reload(state: &Arc<DevServerState>, version: u64) -> usize {
     };
 
     let mut notified_count = 0usize;
-    // Broadcast and prune disconnected clients in one pass.
-    clients.retain(|client| {
-        let sent = client.sender.send(event.clone()).is_ok();
-        if sent {
+    // Broadcast and prune disconnected clients in one pass. Full queues already have a reload
+    // pending, so they count as notified without stacking redundant work.
+    clients.retain(|client| match client.sender.try_send(event.clone()) {
+        Ok(()) | Err(TrySendError::Full(_)) => {
             notified_count += 1;
+            true
         }
-        sent
+        Err(TrySendError::Disconnected(_)) => false,
     });
 
     notified_count
 }
 
-fn register_client(state: &Arc<DevServerState>, sender: mpsc::Sender<String>) -> Option<u64> {
+fn register_client(state: &Arc<DevServerState>, sender: SyncSender<String>) -> Option<u64> {
     let client_id = state.next_client_id.fetch_add(1, Ordering::Relaxed);
     let mut clients = state.clients.lock().ok()?;
     clients.push(SseClient {
@@ -53,7 +55,18 @@ pub fn remove_client(state: &Arc<DevServerState>, client_id: u64) {
     }
 }
 
-pub fn handle_sse_connection(mut stream: TcpStream, state: Arc<DevServerState>) -> io::Result<()> {
+pub fn handle_sse_connection(stream: TcpStream, state: Arc<DevServerState>) -> io::Result<()> {
+    handle_sse_connection_with_timeouts(stream, state, WRITE_TIMEOUT, KEEP_ALIVE_INTERVAL)
+}
+
+fn handle_sse_connection_with_timeouts(
+    mut stream: TcpStream,
+    state: Arc<DevServerState>,
+    write_timeout: Duration,
+    keep_alive_interval: Duration,
+) -> io::Result<()> {
+    stream.set_write_timeout(Some(write_timeout))?;
+
     let headers = concat!(
         "HTTP/1.1 200 OK\r\n",
         "Content-Type: text/event-stream\r\n",
@@ -65,7 +78,7 @@ pub fn handle_sse_connection(mut stream: TcpStream, state: Arc<DevServerState>) 
     stream.write_all(b": connected\n\n")?;
     stream.flush()?;
 
-    let (sender, receiver) = mpsc::channel::<String>();
+    let (sender, receiver) = mpsc::sync_channel::<String>(1);
     let Some(client_id) = register_client(&state, sender) else {
         return Err(io::Error::other(
             "Failed to register SSE client due to state lock poisoning",
@@ -73,7 +86,7 @@ pub fn handle_sse_connection(mut stream: TcpStream, state: Arc<DevServerState>) 
     };
 
     loop {
-        match receiver.recv_timeout(KEEP_ALIVE_INTERVAL) {
+        match receiver.recv_timeout(keep_alive_interval) {
             Ok(event_payload) => {
                 if stream.write_all(event_payload.as_bytes()).is_err() || stream.flush().is_err() {
                     break;

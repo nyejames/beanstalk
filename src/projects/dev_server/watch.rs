@@ -1,14 +1,148 @@
-//! Filesystem polling and debounce helpers for the dev server.
+//! Filesystem watch scope and change-notification helpers for the dev server.
 //!
-//! The watcher is intentionally std-only and uses fingerprints to detect file add/remove/modify
-//! events while ignoring the generated dev output tree.
+//! WHAT: derives the dev-server watch scope, starts either a `notify` watcher or a polling
+//! fallback, and exposes a revision-based wait API to the build loop.
+//! WHY: rebuild coordination should react to concrete source changes without re-scanning broad
+//! unrelated trees on every loop iteration.
 
+use crate::compiler_frontend::paths::path_resolution::resolve_project_entry_root;
+use crate::projects::settings::{CONFIG_FILE_NAME, Config};
+use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
+use saying::say;
 use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant, SystemTime};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError, SyncSender};
+use std::thread::{self, JoinHandle};
+use std::time::{Duration, SystemTime};
+
+const WATCH_DEBOUNCE_WINDOW: Duration = Duration::from_millis(50);
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WatchScope {
+    pub output_dir: PathBuf,
+    pub targets: Vec<WatchTarget>,
+}
+
+impl WatchScope {
+    pub fn derive(entry_target: &Path, config: Option<&Config>, output_dir: &Path) -> Self {
+        let mut scope = Self {
+            output_dir: canonical_if_exists(output_dir),
+            targets: Vec::new(),
+        };
+
+        if entry_target.is_dir() {
+            let config = config.expect("directory watch scope requires config");
+            let project_root = canonical_if_exists(&config.entry_dir);
+            scope.watch_exact_file_or_parent(&project_root.join(CONFIG_FILE_NAME));
+            scope.watch_directory_or_parent(&resolve_project_entry_root(config));
+            for root_folder in &config.root_folders {
+                scope.watch_directory_or_parent(&project_root.join(root_folder));
+            }
+            return scope;
+        }
+
+        let parent = entry_target
+            .parent()
+            .map(canonical_if_exists)
+            .unwrap_or_else(|| PathBuf::from("."));
+        scope.push_target(WatchTarget {
+            watch_path: parent,
+            interest_path: None,
+            recursive: true,
+        });
+        scope
+    }
+
+    pub fn watches_path(&self, path: &Path) -> bool {
+        if should_ignore_path(path, &self.output_dir) {
+            return false;
+        }
+
+        self.targets.iter().any(|target| target.matches(path))
+    }
+
+    fn watch_exact_file_or_parent(&mut self, target_path: &Path) {
+        if target_path.is_file() {
+            let canonical = canonical_if_exists(target_path);
+            self.push_target(WatchTarget {
+                watch_path: canonical.clone(),
+                interest_path: Some(canonical),
+                recursive: false,
+            });
+            return;
+        }
+
+        let watch_path = target_path
+            .parent()
+            .map(canonical_if_exists)
+            .unwrap_or_else(|| PathBuf::from("."));
+        self.push_target(WatchTarget {
+            watch_path,
+            interest_path: Some(target_path.to_path_buf()),
+            recursive: false,
+        });
+    }
+
+    fn watch_directory_or_parent(&mut self, target_path: &Path) {
+        if target_path.is_dir() {
+            self.push_target(WatchTarget {
+                watch_path: canonical_if_exists(target_path),
+                interest_path: None,
+                recursive: true,
+            });
+            return;
+        }
+
+        let watch_path = target_path
+            .parent()
+            .map(canonical_if_exists)
+            .unwrap_or_else(|| PathBuf::from("."));
+        self.push_target(WatchTarget {
+            watch_path,
+            interest_path: Some(target_path.to_path_buf()),
+            recursive: false,
+        });
+    }
+
+    fn push_target(&mut self, target: WatchTarget) {
+        if self.targets.contains(&target) {
+            return;
+        }
+        self.targets.push(target);
+        self.targets.sort_by(|left, right| {
+            left.watch_path
+                .cmp(&right.watch_path)
+                .then_with(|| left.interest_path.cmp(&right.interest_path))
+                .then_with(|| left.recursive.cmp(&right.recursive))
+        });
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WatchTarget {
+    pub watch_path: PathBuf,
+    pub interest_path: Option<PathBuf>,
+    pub recursive: bool,
+}
+
+impl WatchTarget {
+    fn matches(&self, path: &Path) -> bool {
+        if let Some(interest_path) = &self.interest_path {
+            return path == interest_path;
+        }
+
+        if self.recursive {
+            return path.starts_with(&self.watch_path);
+        }
+
+        path == self.watch_path || path.parent() == Some(self.watch_path.as_path())
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FileFingerprint {
@@ -16,14 +150,289 @@ pub struct FileFingerprint {
     pub len: u64,
 }
 
-pub fn collect_fingerprints(
-    watch_root: &Path,
-    output_dir: &Path,
-) -> io::Result<HashMap<PathBuf, FileFingerprint>> {
-    let mut fingerprints = HashMap::new();
-    // Manual stack avoids recursion depth issues on nested project trees.
-    let mut stack = vec![watch_root.to_path_buf()];
+pub struct WatchSession {
+    scope: WatchScope,
+    revision: Arc<AtomicU64>,
+    receiver: Receiver<()>,
+    stop_signal: Arc<AtomicBool>,
+    backend: WatchBackend,
+}
 
+enum WatchBackend {
+    Notify {
+        _watcher: RecommendedWatcher,
+    },
+    Polling {
+        join_handle: Option<JoinHandle<()>>,
+    },
+    #[cfg(test)]
+    Manual,
+}
+
+impl WatchSession {
+    pub fn start(scope: WatchScope, poll_interval: Duration) -> Self {
+        let revision = Arc::new(AtomicU64::new(0));
+        let (sender, receiver) = mpsc::sync_channel::<()>(1);
+        let stop_signal = Arc::new(AtomicBool::new(false));
+
+        let backend = match start_notify_backend(
+            &scope,
+            Arc::clone(&revision),
+            sender.clone(),
+            Arc::clone(&stop_signal),
+        ) {
+            Ok(watcher) => WatchBackend::Notify { _watcher: watcher },
+            Err(error) => {
+                say!(
+                    Yellow "Dev server watch warning: notify backend unavailable, falling back to polling: ",
+                    Yellow error.to_string()
+                );
+                let join_handle = start_polling_backend(
+                    scope.clone(),
+                    Arc::clone(&revision),
+                    sender,
+                    Arc::clone(&stop_signal),
+                    poll_interval,
+                );
+                WatchBackend::Polling {
+                    join_handle: Some(join_handle),
+                }
+            }
+        };
+
+        Self {
+            scope,
+            revision,
+            receiver,
+            stop_signal,
+            backend,
+        }
+    }
+
+    pub fn current_revision(&self) -> u64 {
+        self.revision.load(Ordering::Relaxed)
+    }
+
+    pub fn scope(&self) -> &WatchScope {
+        &self.scope
+    }
+
+    pub fn wait_for_stable_change(&self, last_seen_revision: u64) -> io::Result<u64> {
+        if self.current_revision() <= last_seen_revision {
+            loop {
+                self.receiver.recv().map_err(|_| {
+                    io::Error::other("Dev server watch session closed while waiting for changes")
+                })?;
+                if self.current_revision() > last_seen_revision {
+                    break;
+                }
+            }
+        }
+
+        loop {
+            match self.receiver.recv_timeout(WATCH_DEBOUNCE_WINDOW) {
+                Ok(()) => continue,
+                Err(RecvTimeoutError::Timeout) | Err(RecvTimeoutError::Disconnected) => {
+                    return Ok(self.current_revision());
+                }
+            }
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn manual(scope: WatchScope) -> (Self, ManualWatchTrigger) {
+        let revision = Arc::new(AtomicU64::new(0));
+        let (sender, receiver) = mpsc::sync_channel::<()>(1);
+        let stop_signal = Arc::new(AtomicBool::new(false));
+        let session = Self {
+            scope,
+            revision: Arc::clone(&revision),
+            receiver,
+            stop_signal,
+            backend: WatchBackend::Manual,
+        };
+        let trigger = ManualWatchTrigger { revision, sender };
+        (session, trigger)
+    }
+}
+
+impl Drop for WatchSession {
+    fn drop(&mut self) {
+        self.stop_signal.store(true, Ordering::Relaxed);
+        if let WatchBackend::Polling { join_handle } = &mut self.backend
+            && let Some(join_handle) = join_handle.take()
+        {
+            let _ = join_handle.join();
+        }
+    }
+}
+
+#[cfg(test)]
+pub(crate) struct ManualWatchTrigger {
+    revision: Arc<AtomicU64>,
+    sender: SyncSender<()>,
+}
+
+#[cfg(test)]
+impl ManualWatchTrigger {
+    pub(crate) fn notify_change(&self) {
+        signal_change(&self.revision, &self.sender);
+    }
+}
+
+fn start_notify_backend(
+    scope: &WatchScope,
+    revision: Arc<AtomicU64>,
+    sender: SyncSender<()>,
+    stop_signal: Arc<AtomicBool>,
+) -> notify::Result<RecommendedWatcher> {
+    let callback_scope = scope.clone();
+    let callback_revision = Arc::clone(&revision);
+    let callback_sender = sender;
+    let callback_stop_signal = stop_signal;
+
+    let mut watcher = notify::recommended_watcher(move |event_result: notify::Result<Event>| {
+        if callback_stop_signal.load(Ordering::Relaxed) {
+            return;
+        }
+
+        let Ok(event) = event_result else {
+            return;
+        };
+        if !is_actionable_event(&event) {
+            return;
+        }
+        if event
+            .paths
+            .iter()
+            .any(|path| callback_scope.watches_path(path))
+        {
+            signal_change(&callback_revision, &callback_sender);
+        }
+    })?;
+
+    for target in &scope.targets {
+        let recursive_mode = if target.recursive {
+            RecursiveMode::Recursive
+        } else {
+            RecursiveMode::NonRecursive
+        };
+        watcher.watch(&target.watch_path, recursive_mode)?;
+    }
+
+    Ok(watcher)
+}
+
+fn start_polling_backend(
+    scope: WatchScope,
+    revision: Arc<AtomicU64>,
+    sender: SyncSender<()>,
+    stop_signal: Arc<AtomicBool>,
+    poll_interval: Duration,
+) -> JoinHandle<()> {
+    thread::spawn(move || {
+        let mut known_fingerprints = match collect_fingerprints(&scope) {
+            Ok(fingerprints) => fingerprints,
+            Err(error) => {
+                say!(
+                    Yellow "Dev server watch warning: failed to collect initial polling fingerprints: ",
+                    Yellow error.to_string()
+                );
+                HashMap::new()
+            }
+        };
+
+        while !stop_signal.load(Ordering::Relaxed) {
+            thread::sleep(poll_interval);
+
+            let current_fingerprints = match collect_fingerprints(&scope) {
+                Ok(fingerprints) => fingerprints,
+                Err(error) => {
+                    say!(
+                        Yellow "Dev server watch warning: polling scan failed: ",
+                        Yellow error.to_string()
+                    );
+                    continue;
+                }
+            };
+
+            if detect_changes(&known_fingerprints, &current_fingerprints) {
+                known_fingerprints = current_fingerprints;
+                signal_change(&revision, &sender);
+            }
+        }
+    })
+}
+
+fn signal_change(revision: &Arc<AtomicU64>, sender: &SyncSender<()>) {
+    revision.fetch_add(1, Ordering::Relaxed);
+    let _ = sender.try_send(());
+}
+
+fn is_actionable_event(event: &Event) -> bool {
+    matches!(
+        event.kind,
+        EventKind::Any | EventKind::Create(_) | EventKind::Modify(_) | EventKind::Remove(_)
+    )
+}
+
+pub fn collect_fingerprints(scope: &WatchScope) -> io::Result<HashMap<PathBuf, FileFingerprint>> {
+    let mut fingerprints = HashMap::new();
+
+    for target in &scope.targets {
+        if let Some(interest_path) = &target.interest_path {
+            collect_exact_path_fingerprint(interest_path, &scope.output_dir, &mut fingerprints)?;
+            continue;
+        }
+
+        collect_directory_fingerprints(
+            &target.watch_path,
+            target.recursive,
+            &scope.output_dir,
+            &mut fingerprints,
+        )?;
+    }
+
+    Ok(fingerprints)
+}
+
+fn collect_exact_path_fingerprint(
+    target_path: &Path,
+    output_dir: &Path,
+    fingerprints: &mut HashMap<PathBuf, FileFingerprint>,
+) -> io::Result<()> {
+    if should_ignore_path(target_path, output_dir) {
+        return Ok(());
+    }
+
+    let metadata = match fs::metadata(target_path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(error),
+    };
+
+    fingerprints.insert(
+        target_path.to_path_buf(),
+        FileFingerprint {
+            modified: metadata.modified().unwrap_or(SystemTime::UNIX_EPOCH),
+            len: metadata.len(),
+        },
+    );
+
+    Ok(())
+}
+
+fn collect_directory_fingerprints(
+    root: &Path,
+    recursive: bool,
+    output_dir: &Path,
+    fingerprints: &mut HashMap<PathBuf, FileFingerprint>,
+) -> io::Result<()> {
+    if !root.exists() {
+        return Ok(());
+    }
+
+    let mut stack = vec![root.to_path_buf()];
     while let Some(dir_path) = stack.pop() {
         if should_ignore_path(&dir_path, output_dir) {
             continue;
@@ -40,24 +449,29 @@ pub fn collect_fingerprints(
 
             let metadata = entry.metadata()?;
             if metadata.is_dir() {
-                stack.push(path);
+                if recursive {
+                    stack.push(path);
+                }
                 continue;
             }
 
             if metadata.is_file() {
-                let modified = metadata.modified().unwrap_or(SystemTime::UNIX_EPOCH);
                 fingerprints.insert(
                     path,
                     FileFingerprint {
-                        modified,
+                        modified: metadata.modified().unwrap_or(SystemTime::UNIX_EPOCH),
                         len: metadata.len(),
                     },
                 );
             }
         }
+
+        if !recursive {
+            break;
+        }
     }
 
-    Ok(fingerprints)
+    Ok(())
 }
 
 pub fn detect_changes(
@@ -76,32 +490,37 @@ pub fn detect_changes(
         })
 }
 
-pub fn should_trigger_debounced_build(
-    dirty_since: Option<Instant>,
-    debounce_window: Duration,
-) -> bool {
-    should_trigger_debounced_build_at(dirty_since, Instant::now(), debounce_window)
-}
-
-fn should_trigger_debounced_build_at(
-    dirty_since: Option<Instant>,
-    now: Instant,
-    debounce_window: Duration,
-) -> bool {
-    match dirty_since {
-        Some(first_dirty_at) => now.saturating_duration_since(first_dirty_at) >= debounce_window,
-        None => false,
-    }
-}
-
 pub fn should_ignore_path(path: &Path, output_dir: &Path) -> bool {
-    // Ignore generated build output to prevent rebuild loops.
     if path.starts_with(output_dir) {
         return true;
     }
 
-    path.components()
+    if path
+        .components()
         .any(|component| component.as_os_str() == OsStr::new(".git"))
+    {
+        return true;
+    }
+
+    path.file_name()
+        .and_then(OsStr::to_str)
+        .is_some_and(is_editor_temporary_name)
+}
+
+fn is_editor_temporary_name(name: &str) -> bool {
+    name == ".DS_Store"
+        || name.starts_with(".#")
+        || (name.starts_with('#') && name.ends_with('#'))
+        || name.ends_with('~')
+        || name.ends_with(".swp")
+        || name.ends_with(".swo")
+        || name.ends_with(".swx")
+        || name.ends_with(".tmp")
+        || name.ends_with(".temp")
+}
+
+fn canonical_if_exists(path: &Path) -> PathBuf {
+    path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
 }
 
 #[cfg(test)]

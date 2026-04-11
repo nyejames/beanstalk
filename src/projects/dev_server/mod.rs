@@ -4,6 +4,7 @@
 //! and serves HTTP/SSE traffic for hot reload for both single-file and project-directory builds.
 
 mod build_loop;
+mod dev_client;
 mod error_page;
 mod http;
 mod sse;
@@ -44,6 +45,12 @@ impl Default for DevServerOptions {
     }
 }
 
+#[derive(Debug)]
+struct DevRuntimePaths {
+    output_dir: PathBuf,
+    watch_scope: watch::WatchScope,
+}
+
 pub fn run_dev_server(
     builder: ProjectBuilder,
     entry_path: &str,
@@ -51,26 +58,17 @@ pub fn run_dev_server(
     options: DevServerOptions,
 ) -> Result<(), CompilerMessages> {
     let entry_target = validate_dev_entry_path(entry_path)?;
-    let watch_root = if entry_target.is_dir() {
-        entry_target.clone()
-    } else {
-        entry_target
-            .parent()
-            .map(Path::to_path_buf)
-            .unwrap_or_else(|| PathBuf::from("."))
-    };
+    let resolved_paths = resolve_dev_runtime_paths(&builder, &entry_target, flags)?;
+    let mut watch_scope = resolved_paths.watch_scope;
 
-    // WHAT: Resolve output directory using the same config-driven logic as core compilation.
-    // WHY: Dev server and core compilation must use consistent output root policy for directory projects.
-    //       The path is canonicalized when it exists so that `should_ignore_path`'s `starts_with`
-    //       comparison works reliably against the canonicalized `watch_root`.
-    let output_dir = resolve_dev_output_dir(&builder, &entry_target, flags)?;
-
-    let state = Arc::new(DevServerState::new(output_dir.clone()));
+    let state = Arc::new(DevServerState::new(resolved_paths.output_dir.clone()));
     let mut executor = ProjectBuildExecutor::new(builder);
 
     let initial_build_report =
         build_loop::run_single_build_cycle(&state, &mut executor, &entry_target, flags);
+    if let Some(updated_watch_scope) = initial_build_report.watch_scope.clone() {
+        watch_scope = updated_watch_scope;
+    }
     if initial_build_report.build_ok {
         say!(
             Green "Initial dev build succeeded. Reload broadcast to ",
@@ -110,7 +108,6 @@ pub fn run_dev_server(
     let watch_executor = Box::new(executor) as Box<dyn build_loop::DevBuildExecutor>;
     let watch_entry_file = entry_target.clone();
     let watch_flags = flags.to_vec();
-    let watch_root_clone = watch_root.clone();
     let poll_interval = Duration::from_millis(options.poll_interval_ms);
 
     // Watch/rebuild runs independently from request handling so SSE clients do not block rebuilds.
@@ -120,7 +117,7 @@ pub fn run_dev_server(
             watch_executor,
             watch_entry_file,
             watch_flags,
-            watch_root_clone,
+            watch_scope,
             poll_interval,
         );
     });
@@ -151,22 +148,30 @@ pub fn run_dev_server(
     Ok(())
 }
 
-fn resolve_dev_output_dir(
+fn resolve_dev_runtime_paths(
     builder: &ProjectBuilder,
     entry_target: &Path,
     flags: &[Flag],
-) -> Result<PathBuf, CompilerMessages> {
+) -> Result<DevRuntimePaths, CompilerMessages> {
     if !entry_target.is_dir() {
-        return Ok(entry_target
+        let output_dir = entry_target
             .parent()
             .map(Path::to_path_buf)
             .unwrap_or_else(|| PathBuf::from("."))
-            .join("dev"));
+            .join("dev");
+        return Ok(DevRuntimePaths {
+            watch_scope: watch::WatchScope::derive(entry_target, None, &output_dir),
+            output_dir,
+        });
     }
 
     let bootstrap = bootstrap_project_build(builder, entry_target.to_path_buf())?;
     let resolved = resolve_project_output_root(&bootstrap.config, flags);
-    Ok(resolved.canonicalize().unwrap_or(resolved))
+    let output_dir = resolved.canonicalize().unwrap_or(resolved);
+    Ok(DevRuntimePaths {
+        watch_scope: watch::WatchScope::derive(entry_target, Some(&bootstrap.config), &output_dir),
+        output_dir,
+    })
 }
 
 fn validate_dev_entry_path(entry_path: &str) -> Result<PathBuf, CompilerMessages> {

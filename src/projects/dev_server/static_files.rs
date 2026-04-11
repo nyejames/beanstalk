@@ -3,7 +3,7 @@
 //! This module resolves safe output-relative paths, maps content types, and injects the tiny
 //! EventSource client into HTML responses.
 
-use crate::projects::dev_server::error_page::DEV_CLIENT_MARKER;
+use crate::projects::dev_server::dev_client::{DEV_CLIENT_MARKER, dev_client_snippet};
 use crate::projects::routing::{HtmlSiteConfig, PageUrlStyle, prefix_origin};
 use std::path::{Component, Path, PathBuf};
 
@@ -27,13 +27,6 @@ pub enum ResolvedRequest {
     MissingEntryPage,
     NotFound,
     InvalidPath,
-}
-
-pub fn dev_client_snippet(origin: &str) -> String {
-    let sse_path = prefix_origin(origin, "/__beanstalk/events");
-    format!(
-        "\n{DEV_CLIENT_MARKER}\n<script>\n  (() => {{\n    const source = new EventSource('{sse_path}');\n    source.addEventListener('reload', () => window.location.reload());\n  }})();\n</script>\n"
-    )
 }
 
 pub fn inject_dev_client(html: &str, origin: &str) -> String {

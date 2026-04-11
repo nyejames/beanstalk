@@ -1,13 +1,14 @@
-//! Tests for filesystem fingerprinting and debounce helpers.
+//! Tests for dev-server watch scope derivation and change detection helpers.
 
 use super::{
-    FileFingerprint, collect_fingerprints, detect_changes, should_ignore_path,
-    should_trigger_debounced_build, should_trigger_debounced_build_at,
+    FileFingerprint, WatchScope, WatchSession, WatchTarget, collect_fingerprints, detect_changes,
+    should_ignore_path,
 };
+use crate::projects::settings::Config;
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, SystemTime};
 
 fn temp_dir(prefix: &str) -> PathBuf {
     let unique = SystemTime::now()
@@ -74,69 +75,98 @@ fn detects_modified_file_fingerprints() {
 }
 
 #[test]
-fn debounce_trigger_only_after_window() {
-    let now = Instant::now();
-    let just_dirty = now
-        .checked_sub(Duration::from_millis(50))
-        .expect("checked_sub should produce a valid instant");
-    let old_dirty = now
-        .checked_sub(Duration::from_secs(2))
-        .expect("checked_sub should produce a valid instant");
+fn directory_scope_watches_config_entry_root_and_root_folders() {
+    let root = temp_dir("directory_scope");
+    let output_dir = root.join("dev");
+    fs::create_dir_all(root.join("src")).expect("should create src dir");
+    fs::create_dir_all(root.join("assets")).expect("should create assets dir");
+    let canonical_root = root.canonicalize().expect("root should canonicalize");
 
-    assert!(!should_trigger_debounced_build_at(
-        Some(just_dirty),
-        now,
-        Duration::from_millis(100)
-    ));
-    assert!(should_trigger_debounced_build_at(
-        Some(old_dirty),
-        now,
-        Duration::from_millis(100)
-    ));
-    assert!(!should_trigger_debounced_build_at(
-        None,
-        now,
-        Duration::from_millis(100)
-    ));
+    let mut config = Config::new(root.clone());
+    config.entry_root = PathBuf::from("src");
+    config.root_folders = vec![PathBuf::from("assets")];
 
-    // Keep one smoke check on the public wrapper that uses Instant::now internally.
-    assert!(!should_trigger_debounced_build(
-        Some(Instant::now()),
-        Duration::from_secs(10)
-    ));
+    let scope = WatchScope::derive(&root, Some(&config), &output_dir);
+
+    assert!(scope.watches_path(&canonical_root.join("#config.bst")));
+    assert!(scope.watches_path(&canonical_root.join("src/main.bst")));
+    assert!(scope.watches_path(&canonical_root.join("assets/logo.png")));
+    assert!(!scope.watches_path(&canonical_root.join("target/debug/app")));
+
+    fs::remove_dir_all(&root).expect("should remove temp test dir");
 }
 
 #[test]
-fn scanner_ignores_dev_output_directory() {
+fn scanner_only_scans_declared_watch_targets() {
     let root = temp_dir("watch_scan");
     let output_dir = root.join("dev");
     let src_dir = root.join("src");
+    let unrelated_dir = root.join("target");
     fs::create_dir_all(&output_dir).expect("should create output dir");
     fs::create_dir_all(&src_dir).expect("should create source dir");
+    fs::create_dir_all(&unrelated_dir).expect("should create unrelated dir");
 
     fs::write(src_dir.join("main.bst"), "main").expect("should write source file");
     fs::write(output_dir.join("bundle.js"), "js").expect("should write output file");
+    fs::write(unrelated_dir.join("debug.txt"), "ignore me").expect("should write unrelated file");
 
-    let fingerprints = collect_fingerprints(&root, &output_dir).expect("scanner should complete");
+    let scope = WatchScope {
+        output_dir: output_dir.clone(),
+        targets: vec![WatchTarget {
+            watch_path: src_dir.clone(),
+            interest_path: None,
+            recursive: true,
+        }],
+    };
+
+    let fingerprints = collect_fingerprints(&scope).expect("scanner should complete");
+    assert!(fingerprints.keys().all(|path| path.starts_with(&src_dir)));
+    assert!(fingerprints.keys().any(|path| path.ends_with("main.bst")));
     assert!(
         fingerprints
             .keys()
             .all(|path| !path.starts_with(&output_dir)),
         "scanner should ignore output directory files"
     );
-    assert!(
-        fingerprints.keys().any(|path| path.ends_with("main.bst")),
-        "scanner should include source files"
-    );
 
     fs::remove_dir_all(&root).expect("should remove temp test dir");
 }
 
 #[test]
-fn ignore_rules_cover_git_and_output_dir() {
+fn manual_watch_session_coalesces_bursty_changes() {
+    let scope = WatchScope {
+        output_dir: PathBuf::from("dev"),
+        targets: vec![WatchTarget {
+            watch_path: PathBuf::from("src"),
+            interest_path: None,
+            recursive: true,
+        }],
+    };
+    let (session, trigger) = WatchSession::manual(scope);
+
+    trigger.notify_change();
+    trigger.notify_change();
+    trigger.notify_change();
+
+    let seen_revision = session
+        .wait_for_stable_change(0)
+        .expect("manual watch session should settle");
+    assert_eq!(seen_revision, 3);
+}
+
+#[test]
+fn ignore_rules_cover_git_output_and_editor_temp_files() {
     let root = PathBuf::from("/tmp/project");
     let output_dir = root.join("dev");
     assert!(should_ignore_path(&root.join(".git/index"), &output_dir));
     assert!(should_ignore_path(&root.join("dev/main.js"), &output_dir));
+    assert!(should_ignore_path(
+        &root.join("src/main.bst.swp"),
+        &output_dir
+    ));
+    assert!(should_ignore_path(
+        &root.join("src/#main.bst#"),
+        &output_dir
+    ));
     assert!(!should_ignore_path(&root.join("src/main.bst"), &output_dir));
 }

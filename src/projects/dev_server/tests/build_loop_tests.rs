@@ -6,7 +6,7 @@ use super::{
 };
 use crate::build_system::build::{
     self, BackendBuilder, BuildResult, CleanupPolicy, FileKind, OutputFile, Project,
-    ProjectBuilder, WriteOptions,
+    ProjectBuilder, WriteMode, WriteOptions,
 };
 use crate::compiler_frontend::compiler_errors::{
     CompilerError, CompilerMessages, ErrorMetaDataKey, ErrorType, SourceLocation,
@@ -46,6 +46,17 @@ fn html_build_result() -> BuildResult {
         config: Config::new(PathBuf::from("main.bst")),
         warnings: vec![],
         string_table: StringTable::new(),
+    }
+}
+
+fn watch_scope(root: &Path, output_dir: &Path) -> watch::WatchScope {
+    watch::WatchScope {
+        output_dir: output_dir.to_path_buf(),
+        targets: vec![watch::WatchTarget {
+            watch_path: root.to_path_buf(),
+            interest_path: None,
+            recursive: true,
+        }],
     }
 }
 
@@ -141,6 +152,7 @@ impl DevBuildExecutor for FakeExecutor {
                     &WriteOptions {
                         output_root: output_dir.to_path_buf(),
                         project_entry_dir: None,
+                        write_mode: WriteMode::AlwaysWrite,
                     },
                     &build_result.string_table,
                 )?;
@@ -313,6 +325,8 @@ fn queued_rebuild_runs_when_files_change_during_build() {
     fs::write(root.join("main.bst"), "start").expect("should write initial source file");
     let output_dir = root.join("dev");
     let state = Arc::new(DevServerState::new(output_dir.clone()));
+    let (watch_session, watch_trigger) =
+        watch::WatchSession::manual(watch_scope(&root, &output_dir));
 
     let watched_file = root.join("main.bst");
     let mut executor = FakeExecutor::with_on_call(
@@ -321,25 +335,21 @@ fn queued_rebuild_runs_when_files_change_during_build() {
             if call_index == 1 {
                 fs::write(&watched_file, "updated")
                     .expect("should mutate watched file during first build");
+                watch_trigger.notify_change();
             }
         }),
     );
-
-    let mut baseline =
-        watch::collect_fingerprints(&root, &output_dir).expect("should collect baseline");
 
     let builds = run_builds_until_stable(
         &state,
         &mut executor,
         &root.join("main.bst"),
         &Vec::new(),
-        &root,
-        &output_dir,
-        &mut baseline,
+        &watch_session,
     )
     .expect("build loop should complete");
 
-    assert_eq!(builds, 2);
+    assert!(builds.watch_scope.is_some());
     assert_eq!(executor.call_count.load(Ordering::SeqCst), 2);
     fs::remove_dir_all(&root).expect("should remove temp dir");
 }
@@ -353,6 +363,8 @@ fn rebuild_loop_stops_at_max_consecutive_rebuilds() {
     fs::write(root.join("main.bst"), "start").expect("should write initial source file");
     let output_dir = root.join("dev");
     let state = Arc::new(DevServerState::new(output_dir.clone()));
+    let (watch_session, watch_trigger) =
+        watch::WatchSession::manual(watch_scope(&root, &output_dir));
 
     // Build enough responses for every possible rebuild cycle.
     let responses: Vec<_> = (0..MAX_CONSECUTIVE_REBUILDS + 2)
@@ -370,25 +382,24 @@ fn rebuild_loop_stops_at_max_consecutive_rebuilds() {
             counter_clone.store(call_index, Ordering::SeqCst);
             let content = format!("version_{call_index}");
             fs::write(&watched_file, content).expect("should mutate watched file during build");
+            watch_trigger.notify_change();
         }),
     );
 
-    let mut baseline =
-        watch::collect_fingerprints(&root, &output_dir).expect("should collect baseline");
-
-    let builds = run_builds_until_stable(
+    let _builds = run_builds_until_stable(
         &state,
         &mut executor,
         &root.join("main.bst"),
         &Vec::new(),
-        &root,
-        &output_dir,
-        &mut baseline,
+        &watch_session,
     )
     .expect("build loop should complete despite instability");
 
     // The loop must stop at the safety limit rather than running forever.
-    assert_eq!(builds, MAX_CONSECUTIVE_REBUILDS);
+    assert_eq!(
+        executor.call_count.load(Ordering::SeqCst),
+        MAX_CONSECUTIVE_REBUILDS
+    );
     fs::remove_dir_all(&root).expect("should remove temp dir");
 }
 

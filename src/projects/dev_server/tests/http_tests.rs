@@ -1,10 +1,19 @@
 //! Tests for dev-server HTTP routing during successful and failed builds.
 
-use super::{PreparedResponse, prepare_static_response, should_serve_failed_build_html};
-use crate::projects::dev_server::state::BuildState;
+use super::{
+    PreparedResponse, handle_connection_with_timeouts, prepare_static_response,
+    should_serve_failed_build_html,
+};
+use crate::projects::dev_server::state::{BuildState, DevServerState};
 use crate::projects::dev_server::static_files::ResolvedRequestKind;
 use std::fs;
+use std::io::{Read, Write};
+use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::sync::mpsc;
+use std::thread;
+use std::time::Duration;
 use std::time::SystemTime;
 
 fn temp_dir(prefix: &str) -> PathBuf {
@@ -13,6 +22,14 @@ fn temp_dir(prefix: &str) -> PathBuf {
         .expect("time should be after unix epoch")
         .as_nanos();
     std::env::temp_dir().join(format!("beanstalk_dev_server_http_{prefix}_{unique}"))
+}
+
+fn bind_loopback_listener() -> Option<TcpListener> {
+    match TcpListener::bind("127.0.0.1:0") {
+        Ok(listener) => Some(listener),
+        Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied => None,
+        Err(error) => panic!("should bind test listener: {error}"),
+    }
 }
 
 fn configure_failed_build_state(
@@ -221,4 +238,76 @@ fn redirects_are_returned_even_during_failed_build() {
     }
 
     fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
+fn rapid_loopback_ping_requests_do_not_stall_request_handling() {
+    let Some(listener) = bind_loopback_listener() else {
+        return;
+    };
+    let address = listener
+        .local_addr()
+        .expect("listener should report bound address");
+    let state = Arc::new(DevServerState::new(PathBuf::from("dev")));
+
+    let server_state = Arc::clone(&state);
+    let server_thread = thread::spawn(move || {
+        for _ in 0..5 {
+            let (stream, _) = listener.accept().expect("should accept client");
+            handle_connection_with_timeouts(
+                stream,
+                Arc::clone(&server_state),
+                Duration::from_millis(100),
+                Duration::from_millis(100),
+            )
+            .expect("ping request should succeed");
+        }
+    });
+
+    for _ in 0..5 {
+        let mut client = TcpStream::connect(address).expect("client should connect");
+        client
+            .write_all(b"GET /__beanstalk/ping HTTP/1.1\r\nHost: localhost\r\n\r\n")
+            .expect("client should send ping request");
+        let mut response = String::new();
+        client
+            .read_to_string(&mut response)
+            .expect("client should read ping response");
+        assert!(response.contains("200 OK"));
+        assert!(response.ends_with("ok"));
+    }
+
+    server_thread.join().expect("server thread should finish");
+}
+
+#[test]
+fn partial_loopback_requests_time_out_without_stalling_worker_threads() {
+    let Some(listener) = bind_loopback_listener() else {
+        return;
+    };
+    let address = listener
+        .local_addr()
+        .expect("listener should report bound address");
+    let state = Arc::new(DevServerState::new(PathBuf::from("dev")));
+    let (done_sender, done_receiver) = mpsc::channel();
+
+    let server_state = Arc::clone(&state);
+    thread::spawn(move || {
+        let (stream, _) = listener.accept().expect("should accept client");
+        handle_connection_with_timeouts(
+            stream,
+            server_state,
+            Duration::from_millis(50),
+            Duration::from_millis(50),
+        )
+        .expect("partial request should time out cleanly");
+        done_sender
+            .send(())
+            .expect("server thread should signal completion");
+    });
+
+    let _client = TcpStream::connect(address).expect("client should connect");
+    done_receiver
+        .recv_timeout(Duration::from_secs(1))
+        .expect("timed-out partial request should not stall the worker thread");
 }

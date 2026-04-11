@@ -2,7 +2,7 @@
 //!
 //! This module delegates compilation and artifact writing to the core build APIs, then translates
 //! build outcomes into dev-server state updates and SSE reload broadcasts.
-use crate::build_system::build::{self, BuildResult, ProjectBuilder, WriteOptions};
+use crate::build_system::build::{self, BuildResult, ProjectBuilder, WriteMode, WriteOptions};
 use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages, ErrorType};
 use crate::projects::dev_server::error_page::{
@@ -13,17 +13,21 @@ use crate::projects::dev_server::state::DevServerState;
 use crate::projects::dev_server::watch;
 use crate::projects::routing::{HtmlSiteConfig, parse_html_site_config};
 use saying::say;
-use std::collections::HashMap;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 pub struct BuildCycleReport {
     pub version: u64,
     pub build_ok: bool,
     pub clients_notified: usize,
+    pub watch_scope: Option<watch::WatchScope>,
+}
+
+#[derive(Debug, Clone)]
+pub struct RebuildRunReport {
+    pub watch_scope: Option<watch::WatchScope>,
 }
 
 struct BuildOutcome {
@@ -32,6 +36,7 @@ struct BuildOutcome {
     html_site_config: Option<HtmlSiteConfig>,
     diagnostics_summary: String,
     failed_build: Option<BuildFailure>,
+    watch_scope: Option<watch::WatchScope>,
 }
 
 enum BuildFailure {
@@ -88,6 +93,7 @@ impl DevBuildExecutor for ProjectBuildExecutor {
             &WriteOptions {
                 output_root: output_dir.to_path_buf(),
                 project_entry_dir,
+                write_mode: WriteMode::SkipUnchanged,
             },
             &build_result.string_table,
         ) {
@@ -120,6 +126,7 @@ pub fn run_single_build_cycle(
         html_site_config,
         diagnostics_summary,
         failed_build,
+        watch_scope,
     } = build_outcome;
 
     let version = {
@@ -151,14 +158,19 @@ pub fn run_single_build_cycle(
                 Some(BuildFailure::CompilerMessages(messages)) => render_compiler_error_page(
                     &messages,
                     &project_root,
+                    &build_state.html_site_config.origin,
                     build_state.last_build_version,
                 ),
-                Some(BuildFailure::RuntimeError { title, details }) => {
-                    render_runtime_error_page(&title, &details, build_state.last_build_version)
-                }
+                Some(BuildFailure::RuntimeError { title, details }) => render_runtime_error_page(
+                    &title,
+                    &details,
+                    &build_state.html_site_config.origin,
+                    build_state.last_build_version,
+                ),
                 None => render_runtime_error_page(
                     "Build Failed",
                     "The latest build failed, but no diagnostics were stored.",
+                    &build_state.html_site_config.origin,
                     build_state.last_build_version,
                 ),
             });
@@ -172,6 +184,7 @@ pub fn run_single_build_cycle(
         version,
         build_ok: build_succeeded,
         clients_notified,
+        watch_scope,
     }
 }
 
@@ -185,17 +198,14 @@ pub fn run_builds_until_stable(
     executor: &mut dyn DevBuildExecutor,
     entry_file: &Path,
     flags: &[Flag],
-    watch_root: &Path,
-    output_dir: &Path,
-    baseline_fingerprints: &mut HashMap<PathBuf, watch::FileFingerprint>,
-) -> io::Result<usize> {
+    watch_session: &watch::WatchSession,
+) -> io::Result<RebuildRunReport> {
     let mut build_count = 0usize;
-
-    loop {
-        // Capture source fingerprints before building so we can detect edits made during build.
-        let before_build = watch::collect_fingerprints(watch_root, output_dir)?;
+    let latest_watch_scope = loop {
+        let build_start_revision = watch_session.current_revision();
         let report = run_single_build_cycle(state, executor, entry_file, flags);
         build_count += 1;
+        let report_watch_scope = report.watch_scope.clone();
 
         if report.build_ok {
             say!(
@@ -215,12 +225,9 @@ pub fn run_builds_until_stable(
             );
         }
 
-        let after_build = watch::collect_fingerprints(watch_root, output_dir)?;
-        *baseline_fingerprints = after_build.clone();
-
-        // Queue one immediate follow-up build if files changed while the previous build was running.
-        if !watch::detect_changes(&before_build, &after_build) {
-            break;
+        // Queue one immediate follow-up build when the watch revision advances during a build.
+        if watch_session.current_revision() == build_start_revision {
+            break report_watch_scope;
         }
 
         if build_count >= MAX_CONSECUTIVE_REBUILDS {
@@ -230,11 +237,13 @@ pub fn run_builds_until_stable(
                 Yellow " consecutive rebuilds without stabilising — pausing rebuild loop. ",
                 Yellow "This usually means the build is modifying watched source files."
             );
-            break;
+            break report_watch_scope;
         }
-    }
+    };
 
-    Ok(build_count)
+    Ok(RebuildRunReport {
+        watch_scope: latest_watch_scope,
+    })
 }
 
 pub fn run_watch_build_loop(
@@ -242,65 +251,50 @@ pub fn run_watch_build_loop(
     mut executor: Box<dyn DevBuildExecutor>,
     entry_file: PathBuf,
     flags: Vec<Flag>,
-    watch_root: PathBuf,
+    initial_watch_scope: watch::WatchScope,
     poll_interval: Duration,
 ) {
-    let debounce_window = poll_interval;
-    let output_dir = match state.build_state.lock() {
-        Ok(guard) => guard.output_dir.clone(),
-        Err(_) => return,
-    };
-
-    let mut known_fingerprints = watch::collect_fingerprints(&watch_root, &output_dir)
-        .unwrap_or_else(|error| {
-            say!(
-                Yellow "Dev server watch warning: failed to collect initial fingerprints: ",
-                Yellow error.to_string()
-            );
-            HashMap::new()
-        });
-
-    let mut dirty_since: Option<Instant> = None;
+    let mut watch_session = watch::WatchSession::start(initial_watch_scope, poll_interval);
+    let mut last_seen_revision = watch_session.current_revision();
 
     loop {
-        thread::sleep(poll_interval);
-
-        let current_fingerprints = match watch::collect_fingerprints(&watch_root, &output_dir) {
-            Ok(fingerprints) => fingerprints,
+        let seen_revision = match watch_session.wait_for_stable_change(last_seen_revision) {
+            Ok(seen_revision) => seen_revision,
             Err(error) => {
                 say!(
-                    Yellow "Dev server watch warning: scan failed: ",
+                    Yellow "Dev server watch warning: failed while waiting for file changes: ",
                     Yellow error.to_string()
                 );
-                continue;
+                return;
             }
         };
 
-        if watch::detect_changes(&known_fingerprints, &current_fingerprints) {
-            known_fingerprints = current_fingerprints;
-            dirty_since = Some(Instant::now());
-        }
-
-        if !watch::should_trigger_debounced_build(dirty_since, debounce_window) {
-            continue;
-        }
-
-        if let Err(error) = run_builds_until_stable(
+        let rebuild_report = match run_builds_until_stable(
             &state,
             executor.as_mut(),
             &entry_file,
             &flags,
-            &watch_root,
-            &output_dir,
-            &mut known_fingerprints,
+            &watch_session,
         ) {
-            say!(
-                Yellow "Dev server watch warning: rebuild cycle failed: ",
-                Yellow error.to_string()
-            );
-        }
+            Ok(report) => report,
+            Err(error) => {
+                say!(
+                    Yellow "Dev server watch warning: rebuild cycle failed: ",
+                    Yellow error.to_string()
+                );
+                last_seen_revision = watch_session.current_revision().max(seen_revision);
+                continue;
+            }
+        };
 
-        dirty_since = None;
+        last_seen_revision = watch_session.current_revision().max(seen_revision);
+
+        if let Some(next_watch_scope) = rebuild_report.watch_scope
+            && next_watch_scope != *watch_session.scope()
+        {
+            watch_session = watch::WatchSession::start(next_watch_scope, poll_interval);
+            last_seen_revision = watch_session.current_revision();
+        }
     }
 }
 
@@ -319,9 +313,15 @@ fn build_once(
                 html_site_config: None,
                 diagnostics_summary: format_compiler_messages(&messages),
                 failed_build: Some(BuildFailure::CompilerMessages(messages)),
+                watch_scope: None,
             };
         }
     };
+    let watch_scope = watch::WatchScope::derive(
+        &build_result.config.entry_dir,
+        Some(&build_result.config),
+        output_dir,
+    );
 
     let html_site_config =
         match parse_html_site_config(&build_result.config, &mut build_result.string_table) {
@@ -338,6 +338,7 @@ fn build_once(
                     html_site_config: None,
                     diagnostics_summary: format_compiler_messages(&messages),
                     failed_build: Some(BuildFailure::CompilerMessages(messages)),
+                    watch_scope: Some(watch_scope),
                 };
             }
         };
@@ -362,6 +363,7 @@ fn build_once(
             html_site_config: Some(html_site_config),
             diagnostics_summary,
             failed_build: None,
+            watch_scope: Some(watch_scope),
         }
     } else {
         BuildOutcome {
@@ -377,6 +379,7 @@ fn build_once(
                     "Build completed, but the project builder did not declare a dev entry page.",
                 ),
             }),
+            watch_scope: Some(watch_scope),
         }
     }
 }

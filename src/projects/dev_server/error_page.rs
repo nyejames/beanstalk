@@ -12,11 +12,10 @@ use crate::compiler_frontend::display_messages::{
 };
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
+use crate::projects::dev_server::dev_client::dev_client_snippet;
 use std::fmt::Write;
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
-
-pub const DEV_CLIENT_MARKER: &str = "<!-- beanstalk-dev-client -->";
 
 struct SourcePathLink {
     display_label: String,
@@ -121,21 +120,33 @@ pub fn format_compiler_messages(messages: &CompilerMessages) -> String {
 pub fn render_compiler_error_page(
     messages: &CompilerMessages,
     project_root: &Path,
+    origin: &str,
     build_version: u64,
 ) -> String {
     let diagnostics_html = render_compiler_diagnostics(messages, project_root);
-    render_error_page_shell("Build Failed", &diagnostics_html, build_version)
+    render_error_page_shell("Build Failed", &diagnostics_html, origin, build_version)
 }
 
-pub fn render_runtime_error_page(title: &str, details: &str, build_version: u64) -> String {
+pub fn render_runtime_error_page(
+    title: &str,
+    details: &str,
+    origin: &str,
+    build_version: u64,
+) -> String {
     let escaped_details = escape_html(details);
     let details_html = format!("<pre class=\"msg\">{escaped_details}</pre>");
-    render_error_page_shell(title, &details_html, build_version)
+    render_error_page_shell(title, &details_html, origin, build_version)
 }
 
-fn render_error_page_shell(title: &str, body_html: &str, build_version: u64) -> String {
+fn render_error_page_shell(
+    title: &str,
+    body_html: &str,
+    origin: &str,
+    build_version: u64,
+) -> String {
     let escaped_title = escape_html(title);
     let timestamp = current_timestamp_unix_seconds();
+    let dev_client = dev_client_snippet(origin);
 
     format!(
         r#"<!doctype html>
@@ -280,13 +291,7 @@ fn render_error_page_shell(title: &str, body_html: &str, build_version: u64) -> 
       {body_html}
     </section>
   </main>
-  {DEV_CLIENT_MARKER}
-  <script>
-    (() => {{
-      const source = new EventSource('/__beanstalk/events');
-      source.addEventListener('reload', () => window.location.reload());
-    }})();
-  </script>
+  {dev_client}
 </body>
 </html>"#
     )

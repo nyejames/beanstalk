@@ -1,6 +1,6 @@
 //! Tests for dev-server orchestration and entry-path validation.
 
-use super::{DevServerOptions, resolve_dev_output_dir, validate_dev_entry_path};
+use super::{DevServerOptions, resolve_dev_runtime_paths, validate_dev_entry_path};
 use crate::build_system::build::{BackendBuilder, Project, ProjectBuilder};
 use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::compiler_errors::CompilerError;
@@ -129,45 +129,45 @@ fn empty_entry_path_uses_current_directory() {
 }
 
 #[test]
-fn resolve_dev_output_dir_uses_configured_dev_folder_for_directory_projects() {
+fn resolve_dev_runtime_paths_use_configured_dev_folder_for_directory_projects() {
     let root = temp_dir("configured_dev_folder");
     fs::create_dir_all(&root).expect("should create temp root");
     fs::write(root.join("#config.bst"), "#dev_folder = \"preview\"\n")
         .expect("should write config");
 
     let builder = ProjectBuilder::new(Box::new(NoopBuilder));
-    let output_dir =
-        resolve_dev_output_dir(&builder, &root, &[]).expect("directory output dir should resolve");
+    let resolved = resolve_dev_runtime_paths(&builder, &root, &[])
+        .expect("directory output dir should resolve");
 
-    assert_eq!(output_dir, root.join("preview"));
+    assert_eq!(resolved.output_dir, root.join("preview"));
     fs::remove_dir_all(&root).expect("should clean up temp dir");
 }
 
 #[test]
-fn resolve_dev_output_dir_falls_back_to_project_root_for_empty_dev_folder() {
+fn resolve_dev_runtime_paths_fall_back_to_project_root_for_empty_dev_folder() {
     let root = temp_dir("empty_dev_folder");
     fs::create_dir_all(&root).expect("should create temp root");
     fs::write(root.join("#config.bst"), "#dev_folder = \"\"\n").expect("should write config");
 
     let builder = ProjectBuilder::new(Box::new(NoopBuilder));
-    let output_dir =
-        resolve_dev_output_dir(&builder, &root, &[]).expect("directory output dir should resolve");
+    let resolved = resolve_dev_runtime_paths(&builder, &root, &[])
+        .expect("directory output dir should resolve");
 
     assert_eq!(
-        output_dir,
+        resolved.output_dir,
         root.canonicalize().expect("temp dir should canonicalize")
     );
     fs::remove_dir_all(&root).expect("should clean up temp dir");
 }
 
 #[test]
-fn resolve_dev_output_dir_returns_config_load_failures() {
+fn resolve_dev_runtime_paths_return_config_load_failures() {
     let root = temp_dir("bad_config");
     fs::create_dir_all(&root).expect("should create temp root");
     fs::write(root.join("#config.bst"), "import\n").expect("should write bad config");
 
     let builder = ProjectBuilder::new(Box::new(NoopBuilder));
-    let messages = resolve_dev_output_dir(&builder, &root, &[])
+    let messages = resolve_dev_runtime_paths(&builder, &root, &[])
         .expect_err("bad config should fail directory bootstrap");
 
     assert_eq!(messages.errors.len(), 1);
@@ -180,12 +180,12 @@ fn resolve_dev_output_dir_returns_config_load_failures() {
 }
 
 #[test]
-fn resolve_dev_output_dir_returns_style_directive_merge_failures() {
+fn resolve_dev_runtime_paths_return_style_directive_merge_failures() {
     let root = temp_dir("style_directive_conflict");
     fs::create_dir_all(&root).expect("should create temp root");
 
     let builder = ProjectBuilder::new(Box::new(ConflictingDirectiveBuilder));
-    let messages = resolve_dev_output_dir(&builder, &root, &[])
+    let messages = resolve_dev_runtime_paths(&builder, &root, &[])
         .expect_err("conflicting directives should fail bootstrap");
 
     assert_eq!(messages.errors.len(), 1);

@@ -5,6 +5,7 @@
 //! WHY: build orchestration should stay focused on compilation and file emission while cleanup
 //! policy remains isolated behind one safety-first module.
 
+use crate::build_system::build::WriteMode;
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::string_interning::StringTable;
 use saying::say;
@@ -183,6 +184,7 @@ pub(crate) fn finalize_output_cleanup(
     output_root: &Path,
     current_managed_artifact_paths: &HashSet<PathBuf>,
     cleanup_policy: &CleanupPolicy,
+    write_mode: WriteMode,
     string_table: &StringTable,
 ) -> Result<(), CompilerMessages> {
     let Some(manifest_load_result) = cleanup_state.manifest_load_result.as_ref() else {
@@ -204,6 +206,7 @@ pub(crate) fn finalize_output_cleanup(
         output_root,
         current_managed_artifact_paths,
         cleanup_policy,
+        write_mode,
         string_table,
     )
 }
@@ -359,6 +362,7 @@ pub(crate) fn write_build_manifest(
     output_root: &Path,
     current_paths: &HashSet<PathBuf>,
     cleanup_policy: &CleanupPolicy,
+    write_mode: WriteMode,
     string_table: &StringTable,
 ) -> Result<(), CompilerMessages> {
     let manifest_path = output_root.join(BUILD_MANIFEST_FILENAME);
@@ -383,6 +387,9 @@ pub(crate) fn write_build_manifest(
     manifest_lines.extend(sorted_paths);
 
     let content = manifest_lines.join("\n");
+    if should_skip_unchanged_write(&manifest_path, content.as_bytes(), write_mode) {
+        return Ok(());
+    }
     fs::write(&manifest_path, content).map_err(|error| {
         file_error_messages(
             &manifest_path,
@@ -393,6 +400,17 @@ pub(crate) fn write_build_manifest(
             string_table,
         )
     })
+}
+
+fn should_skip_unchanged_write(path: &Path, next_bytes: &[u8], write_mode: WriteMode) -> bool {
+    if write_mode != WriteMode::SkipUnchanged {
+        return false;
+    }
+
+    match fs::read(path) {
+        Ok(existing_bytes) => existing_bytes == next_bytes,
+        Err(_) => false,
+    }
 }
 
 /// Remove stale managed files tracked by the previous manifest.

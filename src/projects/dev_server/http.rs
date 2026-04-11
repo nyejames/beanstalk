@@ -13,8 +13,24 @@ use std::io::{self, BufRead, BufReader, Write};
 use std::net::TcpStream;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::Duration;
 
-pub fn handle_connection(mut stream: TcpStream, state: Arc<DevServerState>) -> io::Result<()> {
+const REQUEST_READ_TIMEOUT: Duration = Duration::from_secs(2);
+const RESPONSE_WRITE_TIMEOUT: Duration = Duration::from_secs(2);
+
+pub fn handle_connection(stream: TcpStream, state: Arc<DevServerState>) -> io::Result<()> {
+    handle_connection_with_timeouts(stream, state, REQUEST_READ_TIMEOUT, RESPONSE_WRITE_TIMEOUT)
+}
+
+fn handle_connection_with_timeouts(
+    mut stream: TcpStream,
+    state: Arc<DevServerState>,
+    read_timeout: Duration,
+    write_timeout: Duration,
+) -> io::Result<()> {
+    stream.set_read_timeout(Some(read_timeout))?;
+    stream.set_write_timeout(Some(write_timeout))?;
+
     let Some(request) = parse_request(&stream)? else {
         return Ok(());
     };
@@ -107,14 +123,23 @@ fn parse_request(stream: &TcpStream) -> io::Result<Option<HttpRequest>> {
     let mut reader = BufReader::new(stream.try_clone()?);
 
     let mut request_line = String::new();
-    if reader.read_line(&mut request_line)? == 0 {
+    let request_line_bytes = match reader.read_line(&mut request_line) {
+        Ok(bytes_read) => bytes_read,
+        Err(error) if is_connection_timeout(&error) => return Ok(None),
+        Err(error) => return Err(error),
+    };
+    if request_line_bytes == 0 {
         return Ok(None);
     }
 
     // Discard headers; v2 only needs method/path routing.
     loop {
         let mut header_line = String::new();
-        let bytes_read = reader.read_line(&mut header_line)?;
+        let bytes_read = match reader.read_line(&mut header_line) {
+            Ok(bytes_read) => bytes_read,
+            Err(error) if is_connection_timeout(&error) => return Ok(None),
+            Err(error) => return Err(error),
+        };
         if bytes_read == 0 || header_line == "\r\n" {
             break;
         }
@@ -132,6 +157,13 @@ fn parse_request(stream: &TcpStream) -> io::Result<Option<HttpRequest>> {
         method: method.to_owned(),
         path: path.to_owned(),
     }))
+}
+
+fn is_connection_timeout(error: &io::Error) -> bool {
+    matches!(
+        error.kind(),
+        io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock
+    )
 }
 
 fn split_path_and_query(path: &str) -> (&str, Option<&str>) {
@@ -189,6 +221,7 @@ fn prepare_static_response(
             render_runtime_error_page(
                 "Build Failed",
                 "The latest build failed, but no diagnostics were stored.",
+                &build_state.html_site_config.origin,
                 build_state.last_build_version,
             )
         });
@@ -202,6 +235,7 @@ fn prepare_static_response(
             let error_page = render_runtime_error_page(
                 "Missing Entry Page",
                 "Build did not produce a HTML entry page for '/'.",
+                &build_state.html_site_config.origin,
                 build_state.last_build_version,
             );
             return PreparedResponse::text("200 OK", "text/html; charset=utf-8", error_page);
@@ -229,6 +263,7 @@ fn prepare_static_response(
             render_runtime_error_page(
                 "Build Failed",
                 "The latest build failed, but no diagnostics were stored.",
+                &build_state.html_site_config.origin,
                 build_state.last_build_version,
             )
         });

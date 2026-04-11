@@ -33,11 +33,12 @@ fn escape_html_rewrites_special_characters() {
 
 #[test]
 fn rendered_runtime_page_includes_version_error_text_and_dark_mode() {
-    let page = render_runtime_error_page("Title", "something broke", 14);
+    let page = render_runtime_error_page("Title", "something broke", "/preview", 14);
     assert!(page.contains("Build Version: 14"));
     assert!(page.contains("something broke"));
     assert!(page.contains("Timestamp (unix):"));
     assert!(page.contains("color-scheme: dark"));
+    assert!(page.contains("EventSource('/preview/__beanstalk/events')"));
 }
 
 #[test]
@@ -100,7 +101,7 @@ fn compiler_error_page_links_to_project_relative_resolved_source_path() {
     messages.errors.push(error);
     messages.string_table = string_table;
 
-    let page = render_compiler_error_page(&messages, &root, 7);
+    let page = render_compiler_error_page(&messages, &root, "/docs", 7);
     let resolved_source_file = fs::canonicalize(&source_file).expect("source file should resolve");
     let expected_href = file_url_from_path(&resolved_source_file, false);
 
@@ -113,6 +114,7 @@ fn compiler_error_page_links_to_project_relative_resolved_source_path() {
     assert!(page.contains("Help: Add"));
     assert!(page.contains("return declarations"));
     assert!(!page.contains("start.header"));
+    assert!(page.contains("EventSource('/docs/__beanstalk/events')"));
 
     fs::remove_dir_all(&root).expect("should remove temp dir");
 }

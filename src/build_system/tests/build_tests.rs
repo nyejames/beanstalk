@@ -3,8 +3,8 @@
 // Or these tests will fail on Windows due to attempts to delete non-empty temp directories while files are still open.
 
 use super::{
-    BackendBuilder, CleanupPolicy, FileKind, OutputFile, Project, ProjectBuilder, WriteOptions,
-    build_project, resolve_project_output_root,
+    BackendBuilder, CleanupPolicy, FileKind, OutputFile, Project, ProjectBuilder, WriteMode,
+    WriteOptions, build_project, resolve_project_output_root,
     write_project_outputs as write_project_outputs_with_table,
 };
 use crate::build_system::output_cleanup::{
@@ -24,7 +24,8 @@ use crate::projects::settings::Config;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::{Mutex, MutexGuard, OnceLock};
-use std::time::SystemTime;
+use std::thread;
+use std::time::{Duration, SystemTime};
 
 fn temp_dir(prefix: &str) -> PathBuf {
     let unique = SystemTime::now()
@@ -80,6 +81,25 @@ fn write_project_outputs(
     options: &WriteOptions,
 ) -> Result<(), CompilerMessages> {
     write_project_outputs_with_table(project, options, &StringTable::default())
+}
+
+fn always_write_options(output_root: PathBuf, project_entry_dir: Option<PathBuf>) -> WriteOptions {
+    WriteOptions {
+        output_root,
+        project_entry_dir,
+        write_mode: WriteMode::AlwaysWrite,
+    }
+}
+
+fn skip_unchanged_options(
+    output_root: PathBuf,
+    project_entry_dir: Option<PathBuf>,
+) -> WriteOptions {
+    WriteOptions {
+        output_root,
+        project_entry_dir,
+        write_mode: WriteMode::SkipUnchanged,
+    }
 }
 
 fn html_project(output_files: Vec<OutputFile>, entry_page_rel: Option<PathBuf>) -> Project {
@@ -486,14 +506,8 @@ fn write_project_outputs_writes_all_supported_artifacts_and_skips_not_built() {
         warnings: vec![],
     };
 
-    write_project_outputs(
-        &project,
-        &WriteOptions {
-            output_root: root.clone(),
-            project_entry_dir: None,
-        },
-    )
-    .expect("writer should succeed");
+    write_project_outputs(&project, &always_write_options(root.clone(), None))
+        .expect("writer should succeed");
 
     assert!(root.join("assets").is_dir());
     assert_eq!(
@@ -552,15 +566,99 @@ fn write_project_outputs_rejects_invalid_paths() {
     ];
 
     for project in invalid_projects {
-        let result = write_project_outputs(
-            &project,
-            &WriteOptions {
-                output_root: root.clone(),
-                project_entry_dir: None,
-            },
-        );
+        let result = write_project_outputs(&project, &always_write_options(root.clone(), None));
         assert!(result.is_err(), "invalid output path should be rejected");
     }
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
+fn skip_unchanged_mode_preserves_existing_output_mtime() {
+    let root = temp_dir("skip_unchanged_mtime");
+    fs::create_dir_all(&root).expect("should create temp root");
+
+    let project = html_project(
+        vec![OutputFile::new(
+            PathBuf::from("index.html"),
+            FileKind::Html(String::from("<html>same</html>")),
+        )],
+        Some(PathBuf::from("index.html")),
+    );
+    let options = skip_unchanged_options(root.clone(), None);
+
+    write_project_outputs(&project, &options).expect("first write should succeed");
+    let first_modified = fs::metadata(root.join("index.html"))
+        .expect("output file should exist")
+        .modified()
+        .expect("metadata should include modified time");
+
+    thread::sleep(Duration::from_millis(30));
+    write_project_outputs(&project, &options).expect("second write should succeed");
+    let second_modified = fs::metadata(root.join("index.html"))
+        .expect("output file should exist")
+        .modified()
+        .expect("metadata should include modified time");
+
+    assert_eq!(first_modified, second_modified);
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
+fn skip_unchanged_mode_still_cleans_stale_manifest_tracked_outputs() {
+    let root = temp_dir("skip_unchanged_cleanup");
+    fs::create_dir_all(&root).expect("should create temp root");
+    let project_dir = root.join("project");
+    fs::create_dir_all(&project_dir).expect("should create project dir");
+    let output_root = project_dir.join("dev");
+
+    let initial_project = html_project(
+        vec![
+            OutputFile::new(
+                PathBuf::from("index.html"),
+                FileKind::Html(String::from("<html>home</html>")),
+            ),
+            OutputFile::new(
+                PathBuf::from("about/index.html"),
+                FileKind::Html(String::from("<html>about</html>")),
+            ),
+        ],
+        Some(PathBuf::from("index.html")),
+    );
+    write_project_outputs(
+        &initial_project,
+        &skip_unchanged_options(output_root.clone(), Some(project_dir.clone())),
+    )
+    .expect("initial write should succeed");
+
+    let index_modified = fs::metadata(output_root.join("index.html"))
+        .expect("index should exist")
+        .modified()
+        .expect("metadata should include modified time");
+
+    thread::sleep(Duration::from_millis(30));
+    let follow_up_project = html_project(
+        vec![OutputFile::new(
+            PathBuf::from("index.html"),
+            FileKind::Html(String::from("<html>home</html>")),
+        )],
+        Some(PathBuf::from("index.html")),
+    );
+    write_project_outputs(
+        &follow_up_project,
+        &skip_unchanged_options(output_root.clone(), Some(project_dir.clone())),
+    )
+    .expect("follow-up write should succeed");
+
+    let updated_index_modified = fs::metadata(output_root.join("index.html"))
+        .expect("index should still exist")
+        .modified()
+        .expect("metadata should include modified time");
+    assert_eq!(index_modified, updated_index_modified);
+    assert!(
+        !output_root.join("about/index.html").exists(),
+        "stale manifest-tracked output should still be removed in skip-unchanged mode"
+    );
 
     fs::remove_dir_all(&root).expect("should remove temp dir");
 }
@@ -1035,10 +1133,7 @@ fn build_directory_project_emits_index_and_404_and_ignores_unreachable_files() {
 
     write_project_outputs(
         &build_result.project,
-        &WriteOptions {
-            output_root: output_root.clone(),
-            project_entry_dir: None,
-        },
+        &always_write_options(output_root.clone(), None),
     )
     .expect("should write project outputs");
 
@@ -1076,10 +1171,7 @@ fn build_directory_project_respects_custom_entry_root() {
     let output_root = resolve_project_output_root(&build_result.config, &[]);
     write_project_outputs(
         &build_result.project,
-        &WriteOptions {
-            output_root: output_root.clone(),
-            project_entry_dir: None,
-        },
+        &always_write_options(output_root.clone(), None),
     )
     .expect("should write project outputs");
 
@@ -1914,10 +2006,7 @@ fn cleanup_manifest_diff_removes_stale_managed_files() {
     );
     write_project_outputs(
         &project_a,
-        &WriteOptions {
-            output_root: output_root.clone(),
-            project_entry_dir: Some(project_dir.clone()),
-        },
+        &always_write_options(output_root.clone(), Some(project_dir.clone())),
     )
     .expect("build A should succeed");
 
@@ -1936,10 +2025,7 @@ fn cleanup_manifest_diff_removes_stale_managed_files() {
     );
     write_project_outputs(
         &project_b,
-        &WriteOptions {
-            output_root: output_root.clone(),
-            project_entry_dir: Some(project_dir.clone()),
-        },
+        &always_write_options(output_root.clone(), Some(project_dir.clone())),
     )
     .expect("build B should succeed");
 
@@ -1983,10 +2069,7 @@ fn cleanup_manifest_diff_removes_stale_tracked_byte_assets_from_v2_manifest() {
     );
     write_project_outputs(
         &project_a,
-        &WriteOptions {
-            output_root: output_root.clone(),
-            project_entry_dir: Some(project_dir.clone()),
-        },
+        &always_write_options(output_root.clone(), Some(project_dir.clone())),
     )
     .expect("build A should succeed");
 
@@ -2011,10 +2094,7 @@ fn cleanup_manifest_diff_removes_stale_tracked_byte_assets_from_v2_manifest() {
     );
     write_project_outputs(
         &project_b,
-        &WriteOptions {
-            output_root: output_root.clone(),
-            project_entry_dir: Some(project_dir.clone()),
-        },
+        &always_write_options(output_root.clone(), Some(project_dir.clone())),
     )
     .expect("build B should succeed");
 
@@ -2057,10 +2137,7 @@ fn cleanup_missing_manifest_preserves_stale_html_route_alias() {
     );
     write_project_outputs(
         &project,
-        &WriteOptions {
-            output_root: output_root.clone(),
-            project_entry_dir: Some(project_dir.clone()),
-        },
+        &always_write_options(output_root.clone(), Some(project_dir.clone())),
     )
     .expect("build should succeed");
 
@@ -2096,10 +2173,7 @@ fn cleanup_missing_manifest_preserves_unrelated_managed_files() {
     );
     write_project_outputs(
         &project,
-        &WriteOptions {
-            output_root: output_root.clone(),
-            project_entry_dir: Some(project_dir.clone()),
-        },
+        &always_write_options(output_root.clone(), Some(project_dir.clone())),
     )
     .expect("build should succeed");
 
@@ -2135,10 +2209,7 @@ fn cleanup_missing_manifest_preserves_non_managed_files() {
     );
     write_project_outputs(
         &project,
-        &WriteOptions {
-            output_root: output_root.clone(),
-            project_entry_dir: Some(project_dir.clone()),
-        },
+        &always_write_options(output_root.clone(), Some(project_dir.clone())),
     )
     .expect("build should succeed");
 
@@ -2173,10 +2244,7 @@ fn cleanup_first_build_writes_v2_manifest_without_removing() {
     );
     write_project_outputs(
         &project,
-        &WriteOptions {
-            output_root: output_root.clone(),
-            project_entry_dir: Some(project_dir.clone()),
-        },
+        &always_write_options(output_root.clone(), Some(project_dir.clone())),
     )
     .expect("first build should succeed");
 
@@ -2214,10 +2282,7 @@ fn cleanup_removes_empty_parent_directories_after_deleting_managed_files() {
     );
     write_project_outputs(
         &project_a,
-        &WriteOptions {
-            output_root: output_root.clone(),
-            project_entry_dir: Some(project_dir.clone()),
-        },
+        &always_write_options(output_root.clone(), Some(project_dir.clone())),
     )
     .expect("build A should succeed");
     assert!(output_root.join("a/b/c/file.js").exists());
@@ -2231,10 +2296,7 @@ fn cleanup_removes_empty_parent_directories_after_deleting_managed_files() {
     );
     write_project_outputs(
         &project_b,
-        &WriteOptions {
-            output_root: output_root.clone(),
-            project_entry_dir: Some(project_dir.clone()),
-        },
+        &always_write_options(output_root.clone(), Some(project_dir.clone())),
     )
     .expect("build B should succeed");
 
@@ -2268,6 +2330,7 @@ fn cleanup_preserves_parent_directories_when_non_managed_files_remain() {
         &output_root,
         &manifest_paths,
         &html_cleanup_policy(),
+        WriteMode::AlwaysWrite,
         &StringTable::new(),
     )
     .expect("should write v2 manifest");
@@ -2281,10 +2344,7 @@ fn cleanup_preserves_parent_directories_when_non_managed_files_remain() {
     );
     write_project_outputs(
         &project,
-        &WriteOptions {
-            output_root: output_root.clone(),
-            project_entry_dir: Some(project_dir.clone()),
-        },
+        &always_write_options(output_root.clone(), Some(project_dir.clone())),
     )
     .expect("build should succeed");
 
@@ -2369,10 +2429,7 @@ fn cleanup_unsupported_manifest_preserves_existing_files() {
     );
     write_project_outputs(
         &project,
-        &WriteOptions {
-            output_root: output_root.clone(),
-            project_entry_dir: Some(project_dir.clone()),
-        },
+        &always_write_options(output_root.clone(), Some(project_dir.clone())),
     )
     .expect("build should succeed");
 
@@ -2430,10 +2487,7 @@ fn cleanup_unreadable_manifest_enters_limited_safe_mode_and_preserves_existing_f
     );
     write_project_outputs(
         &project,
-        &WriteOptions {
-            output_root: output_root.clone(),
-            project_entry_dir: Some(project_dir.clone()),
-        },
+        &always_write_options(output_root.clone(), Some(project_dir.clone())),
     )
     .expect("build should succeed despite unreadable manifest");
 
@@ -2463,14 +2517,8 @@ fn cleanup_disabled_skips_manifest_cleanup() {
         )],
         Some(PathBuf::from("docs/basics/index.html")),
     );
-    write_project_outputs(
-        &project,
-        &WriteOptions {
-            output_root: root.clone(),
-            project_entry_dir: None,
-        },
-    )
-    .expect("build should succeed");
+    write_project_outputs(&project, &always_write_options(root.clone(), None))
+        .expect("build should succeed");
 
     assert!(root.join("docs/basics/index.html").exists());
     assert!(
@@ -2525,10 +2573,7 @@ fn unsupported_manifest_preserves_existing_files_until_next_v2_cleanup() {
     );
     write_project_outputs(
         &project,
-        &WriteOptions {
-            output_root: output_root.clone(),
-            project_entry_dir: Some(project_dir.clone()),
-        },
+        &always_write_options(output_root.clone(), Some(project_dir.clone())),
     )
     .expect("build should succeed");
 
@@ -2558,6 +2603,7 @@ fn read_build_manifest_rejects_builder_mismatch_in_v2_manifest() {
         &root,
         &paths,
         &generic_cleanup_policy(),
+        WriteMode::AlwaysWrite,
         &StringTable::new(),
     )
     .expect("should write manifest");
@@ -2588,8 +2634,14 @@ fn write_build_manifest_produces_sorted_v2_output() {
     .into_iter()
     .collect();
 
-    write_build_manifest(&root, &paths, &html_cleanup_policy(), &StringTable::new())
-        .expect("should write manifest");
+    write_build_manifest(
+        &root,
+        &paths,
+        &html_cleanup_policy(),
+        WriteMode::AlwaysWrite,
+        &StringTable::new(),
+    )
+    .expect("should write manifest");
 
     let content =
         fs::read_to_string(root.join(BUILD_MANIFEST_FILENAME)).expect("should read manifest file");

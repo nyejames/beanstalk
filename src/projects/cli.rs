@@ -124,6 +124,7 @@ pub fn start_cli() {
                         &build::WriteOptions {
                             output_root,
                             project_entry_dir: Some(build_result.config.entry_dir.clone()),
+                            write_mode: build::WriteMode::AlwaysWrite,
                         },
                         &build_result.string_table,
                     );

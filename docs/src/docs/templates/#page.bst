@@ -1,5 +1,5 @@
 import @lib/html {format, style}
-import @styles/docs {navbar, title, section, palette, table, codeblock, theme_head}
+import @styles/docs {navbar, title, section, palette, table, codeblock, codesnippet, theme_head}
 
 # page_title = "Templates"
 # page_description = "Template syntax, slots, directives, and formatting in Beanstalk."
@@ -15,7 +15,14 @@ import @styles/docs {navbar, title, section, palette, table, codeblock, theme_he
 
     The main purpose of a template is to generate either complex text content, markdown, HTML or just regular formatted strings.
 
-    Templates have two sections, the head and the body, separated with a colon. 
+    Templates have two sections separated by a colon:
+    - Head
+    - Body
+
+    This example creates the string [codesnippet: "head body"]
+    [codeblock, $code("bst"):
+        ["head": body]
+    ]
 
     Templates are scoped using square brackets and can be passed special types called Styles to change their behavior, content and styling.
     

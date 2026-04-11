@@ -177,7 +177,6 @@ import @lib/html {format}
     <span style="
         color: #c444aff9; 
         padding: 0.1em; 
-        background-color: hsla(0, 0%, 35%, 0.50); 
         font-family: var(--bst-font-family-monospace);
     ">[$slot]</span>
 ]

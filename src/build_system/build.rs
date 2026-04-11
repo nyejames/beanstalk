@@ -140,6 +140,12 @@ pub struct BuildResult {
     pub string_table: StringTable,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WriteMode {
+    AlwaysWrite,
+    SkipUnchanged,
+}
+
 /// Options for writing a compiled project to disk.
 pub struct WriteOptions {
     pub output_root: PathBuf,
@@ -147,6 +153,7 @@ pub struct WriteOptions {
     /// validation. Should be the project's entry directory so safety checks can verify the output
     /// root is in a sensible location relative to the project.
     pub project_entry_dir: Option<PathBuf>,
+    pub write_mode: WriteMode,
 }
 
 /// Resolve the output root for a directory project based on the build profile.
@@ -324,30 +331,10 @@ pub fn write_project_outputs(
                 })?;
             }
             FileKind::Js(content) | FileKind::Html(content) => {
-                create_parent_dir_if_needed(&destination, string_table)?;
-                fs::write(&destination, content).map_err(|error| {
-                    file_error_messages(
-                        &destination,
-                        format!(
-                            "Failed to write output file '{}': {error}",
-                            destination.display()
-                        ),
-                        string_table,
-                    )
-                })?;
+                write_string_output(&destination, content, options.write_mode, string_table)?;
             }
             FileKind::Wasm(bytes) | FileKind::Bytes(bytes) => {
-                create_parent_dir_if_needed(&destination, string_table)?;
-                fs::write(&destination, bytes).map_err(|error| {
-                    file_error_messages(
-                        &destination,
-                        format!(
-                            "Failed to write output file '{}': {error}",
-                            destination.display()
-                        ),
-                        string_table,
-                    )
-                })?;
+                write_bytes_output(&destination, bytes, options.write_mode, string_table)?;
             }
         }
     }
@@ -359,6 +346,7 @@ pub fn write_project_outputs(
         &options.output_root,
         &current_managed_artifact_paths,
         &project.cleanup_policy,
+        options.write_mode,
         string_table,
     )?;
 
@@ -391,6 +379,54 @@ fn create_parent_dir_if_needed(
             string_table,
         )
     })
+}
+
+fn write_string_output(
+    destination: &Path,
+    content: &str,
+    write_mode: WriteMode,
+    string_table: &StringTable,
+) -> Result<(), CompilerMessages> {
+    write_bytes_output(destination, content.as_bytes(), write_mode, string_table)
+}
+
+fn write_bytes_output(
+    destination: &Path,
+    content: &[u8],
+    write_mode: WriteMode,
+    string_table: &StringTable,
+) -> Result<(), CompilerMessages> {
+    create_parent_dir_if_needed(destination, string_table)?;
+
+    if should_skip_unchanged_write(destination, content, write_mode) {
+        return Ok(());
+    }
+
+    fs::write(destination, content).map_err(|error| {
+        file_error_messages(
+            destination,
+            format!(
+                "Failed to write output file '{}': {error}",
+                destination.display()
+            ),
+            string_table,
+        )
+    })
+}
+
+fn should_skip_unchanged_write(
+    destination: &Path,
+    next_bytes: &[u8],
+    write_mode: WriteMode,
+) -> bool {
+    if write_mode != WriteMode::SkipUnchanged {
+        return false;
+    }
+
+    match fs::read(destination) {
+        Ok(existing_bytes) => existing_bytes == next_bytes,
+        Err(_) => false,
+    }
 }
 
 fn file_error_messages(

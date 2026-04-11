@@ -6,12 +6,12 @@ use crate::projects::routing::HtmlSiteConfig;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::sync::atomic::AtomicU64;
-use std::sync::mpsc::Sender;
+use std::sync::mpsc::SyncSender;
 
 #[derive(Debug)]
 pub struct SseClient {
     pub id: u64,
-    pub sender: Sender<String>,
+    pub sender: SyncSender<String>,
 }
 
 #[derive(Debug, Clone)]
