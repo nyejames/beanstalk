@@ -1650,6 +1650,11 @@ path = "short_circuit_mutable_rhs_later_plain_use"
 tags = ["integration", "control-flow", "borrows"]
 
 [[case]]
+id = "short_circuit_place_rhs_later_plain_use"
+path = "short_circuit_place_rhs_later_plain_use"
+tags = ["integration", "control-flow", "borrows"]
+
+[[case]]
 id = "short_circuit_mutable_rhs_later_runtime_capture"
 path = "short_circuit_mutable_rhs_later_runtime_capture"
 tags = ["integration", "control-flow", "borrows", "templates"]

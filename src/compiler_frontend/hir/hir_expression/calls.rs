@@ -12,8 +12,8 @@ use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::hir::hir_datatypes::{HirTypeKind, TypeId};
 use crate::compiler_frontend::hir::hir_nodes::{
-    BlockId, HirExpression, HirExpressionKind, HirPlace, HirStatement, HirStatementKind,
-    HirTerminator, LocalId, ValueKind,
+    BlockId, HirExpressionKind, HirPlace, HirStatement, HirStatementKind, HirTerminator, LocalId,
+    ValueKind,
 };
 use crate::compiler_frontend::host_functions::CallTarget;
 use crate::compiler_frontend::host_functions::ERROR_BUBBLE_HOST_NAME;
@@ -623,7 +623,7 @@ impl<'a> HirBuilder<'a> {
         let region = self.current_region_or_error(location)?;
         let bool_type = self.intern_type_kind(HirTypeKind::Bool);
         let result_for_test =
-            self.make_result_carrier_load_expression(result_local, carrier_type, location, region);
+            self.make_local_load_expression(result_local, carrier_type, location, region);
         let result_test = self.make_expression(
             location,
             HirExpressionKind::ResultIsOk {
@@ -659,7 +659,7 @@ impl<'a> HirBuilder<'a> {
         self.set_current_block(success_block, location)?;
         if let Some(ok_local) = merge_local {
             let success_region = self.current_region_or_error(location)?;
-            let success_result = self.make_result_carrier_load_expression(
+            let success_result = self.make_local_load_expression(
                 result_local,
                 carrier_type,
                 location,
@@ -686,12 +686,8 @@ impl<'a> HirBuilder<'a> {
 
         self.set_current_block(error_block, location)?;
         let error_region = self.current_region_or_error(location)?;
-        let error_result = self.make_result_carrier_load_expression(
-            result_local,
-            carrier_type,
-            location,
-            error_region,
-        );
+        let error_result =
+            self.make_local_load_expression(result_local, carrier_type, location, error_region);
         let error_payload = self.make_expression(
             location,
             HirExpressionKind::ResultUnwrapErr {
@@ -740,13 +736,7 @@ impl<'a> HirBuilder<'a> {
                     self.set_current_block(merge_block, location)?;
                     let value = if let Some(ok_local) = merge_local {
                         let merge_region = self.current_region_or_error(location)?;
-                        self.make_expression(
-                            location,
-                            HirExpressionKind::Load(HirPlace::Local(ok_local)),
-                            ok_type,
-                            ValueKind::RValue,
-                            merge_region,
-                        )
+                        self.make_local_load_expression(ok_local, ok_type, location, merge_region)
                     } else {
                         self.unit_expression(location, self.current_region_or_error(location)?)
                     };
@@ -799,13 +789,7 @@ impl<'a> HirBuilder<'a> {
         self.set_current_block(merge_block, location)?;
         let merge_region = self.current_region_or_error(location)?;
         let value = if let Some(ok_local) = merge_local {
-            self.make_expression(
-                location,
-                HirExpressionKind::Load(HirPlace::Local(ok_local)),
-                ok_type,
-                ValueKind::RValue,
-                merge_region,
-            )
+            self.make_local_load_expression(ok_local, ok_type, location, merge_region)
         } else {
             self.unit_expression(location, merge_region)
         };
@@ -814,41 +798,6 @@ impl<'a> HirBuilder<'a> {
             prelude: vec![],
             value,
         })
-    }
-
-    fn emit_assign_local_statement(
-        &mut self,
-        local: LocalId,
-        value: HirExpression,
-        location: &SourceLocation,
-    ) -> Result<(), CompilerError> {
-        let assign_statement = HirStatement {
-            id: self.allocate_node_id(),
-            kind: HirStatementKind::Assign {
-                target: HirPlace::Local(local),
-                value,
-            },
-            location: location.to_owned(),
-        };
-
-        self.side_table.map_statement(location, &assign_statement);
-        self.emit_statement_to_current_block(assign_statement, location)
-    }
-
-    fn make_result_carrier_load_expression(
-        &mut self,
-        result_local: LocalId,
-        carrier_type: TypeId,
-        location: &SourceLocation,
-        region: crate::compiler_frontend::hir::hir_nodes::RegionId,
-    ) -> HirExpression {
-        self.make_expression(
-            location,
-            HirExpressionKind::Load(HirPlace::Local(result_local)),
-            carrier_type,
-            ValueKind::RValue,
-            region,
-        )
     }
 
     fn lower_call_result_type(

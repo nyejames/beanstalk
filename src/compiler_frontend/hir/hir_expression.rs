@@ -11,8 +11,8 @@ use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::hir::hir_datatypes::{HirTypeKind, TypeId};
 use crate::compiler_frontend::hir::hir_nodes::{
-    HirBlock, HirBuiltinCastKind, HirExpression, HirExpressionKind, HirLocal, HirStatement,
-    LocalId, OptionVariant, RegionId, ResultVariant, ValueKind,
+    HirBlock, HirBuiltinCastKind, HirExpression, HirExpressionKind, HirLocal, HirPlace,
+    HirStatement, HirStatementKind, LocalId, OptionVariant, RegionId, ResultVariant, ValueKind,
 };
 use crate::compiler_frontend::host_functions::CallTarget;
 use crate::compiler_frontend::interned_path::InternedPath;
@@ -373,6 +373,28 @@ impl<'a> HirBuilder<'a> {
         Ok(())
     }
 
+    // WHAT: emits one `Assign(Local, value)` statement in the current block.
+    // WHY: runtime short-circuit and handled-result branching both need consistent temp-local
+    //      assignment behavior and source mapping.
+    pub(crate) fn emit_assign_local_statement(
+        &mut self,
+        local: LocalId,
+        value: HirExpression,
+        location: &SourceLocation,
+    ) -> Result<(), CompilerError> {
+        let assign_statement = HirStatement {
+            id: self.allocate_node_id(),
+            kind: HirStatementKind::Assign {
+                target: HirPlace::Local(local),
+                value,
+            },
+            location: location.to_owned(),
+        };
+
+        self.side_table.map_statement(location, &assign_statement);
+        self.emit_statement_to_current_block(assign_statement, location)
+    }
+
     // WHAT: allocates an unnamed temporary local in the current block.
     // WHY: complex expression lowering needs scratch storage to preserve evaluation order and
     //      explicit place/value distinctions in HIR.
@@ -440,6 +462,25 @@ impl<'a> HirBuilder<'a> {
             value_kind,
             region,
         }
+    }
+
+    // WHAT: creates a canonical load expression for one local.
+    // WHY: runtime/result branching paths frequently reconstruct this node shape and should share
+    //      one helper for readability and consistency.
+    pub(crate) fn make_local_load_expression(
+        &mut self,
+        local: LocalId,
+        ty: TypeId,
+        location: &SourceLocation,
+        region: RegionId,
+    ) -> HirExpression {
+        self.make_expression(
+            location,
+            HirExpressionKind::Load(HirPlace::Local(local)),
+            ty,
+            ValueKind::RValue,
+            region,
+        )
     }
 
     // WHAT: builds the canonical HIR representation of unit.

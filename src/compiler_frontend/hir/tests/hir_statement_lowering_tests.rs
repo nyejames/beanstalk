@@ -24,7 +24,7 @@ use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::hir::hir_nodes::{
     FunctionId, HirConstValue, HirDocFragmentKind, HirExpressionKind, HirModule, HirPattern,
-    HirStatementKind, HirTerminator, StartFragment,
+    HirPlace, HirStatementKind, HirTerminator, StartFragment,
 };
 use crate::compiler_frontend::hir::tests::hir_expression_lowering_tests::location;
 use crate::compiler_frontend::host_functions::CallTarget;
@@ -1602,6 +1602,48 @@ fn short_circuit_and_keeps_rhs_call_off_always_run_path() {
     );
     assert_eq!(call_blocks[0], then_block.0 as usize);
     assert_ne!(call_blocks[0], else_block.0 as usize);
+
+    let rhs_branch_block = &module.blocks[then_block.0 as usize];
+    let short_branch_block = &module.blocks[else_block.0 as usize];
+    let rhs_merge_target = match rhs_branch_block.terminator {
+        HirTerminator::Jump { target, .. } => target,
+        _ => panic!("rhs short-circuit branch should jump to merge block"),
+    };
+    let short_merge_target = match short_branch_block.terminator {
+        HirTerminator::Jump { target, .. } => target,
+        _ => panic!("short short-circuit branch should jump to merge block"),
+    };
+    assert_eq!(
+        rhs_merge_target, short_merge_target,
+        "short-circuit branches should rejoin at one merge block"
+    );
+
+    let rhs_assign_local = rhs_branch_block
+        .statements
+        .iter()
+        .find_map(|statement| match &statement.kind {
+            HirStatementKind::Assign {
+                target: HirPlace::Local(local),
+                ..
+            } => Some(*local),
+            _ => None,
+        })
+        .expect("rhs branch should assign merge temp local");
+    let short_assign_local = short_branch_block
+        .statements
+        .iter()
+        .find_map(|statement| match &statement.kind {
+            HirStatementKind::Assign {
+                target: HirPlace::Local(local),
+                ..
+            } => Some(*local),
+            _ => None,
+        })
+        .expect("short branch should assign merge temp local");
+    assert_eq!(
+        rhs_assign_local, short_assign_local,
+        "both short-circuit branches should write the same merge temp local"
+    );
 }
 
 #[test]
@@ -1706,6 +1748,48 @@ fn short_circuit_or_keeps_rhs_call_off_true_short_path() {
     );
     assert_eq!(call_blocks[0], else_block.0 as usize);
     assert_ne!(call_blocks[0], then_block.0 as usize);
+
+    let rhs_branch_block = &module.blocks[else_block.0 as usize];
+    let short_branch_block = &module.blocks[then_block.0 as usize];
+    let rhs_merge_target = match rhs_branch_block.terminator {
+        HirTerminator::Jump { target, .. } => target,
+        _ => panic!("rhs short-circuit branch should jump to merge block"),
+    };
+    let short_merge_target = match short_branch_block.terminator {
+        HirTerminator::Jump { target, .. } => target,
+        _ => panic!("short short-circuit branch should jump to merge block"),
+    };
+    assert_eq!(
+        rhs_merge_target, short_merge_target,
+        "short-circuit branches should rejoin at one merge block"
+    );
+
+    let rhs_assign_local = rhs_branch_block
+        .statements
+        .iter()
+        .find_map(|statement| match &statement.kind {
+            HirStatementKind::Assign {
+                target: HirPlace::Local(local),
+                ..
+            } => Some(*local),
+            _ => None,
+        })
+        .expect("rhs branch should assign merge temp local");
+    let short_assign_local = short_branch_block
+        .statements
+        .iter()
+        .find_map(|statement| match &statement.kind {
+            HirStatementKind::Assign {
+                target: HirPlace::Local(local),
+                ..
+            } => Some(*local),
+            _ => None,
+        })
+        .expect("short branch should assign merge temp local");
+    assert_eq!(
+        rhs_assign_local, short_assign_local,
+        "both short-circuit branches should write the same merge temp local"
+    );
 }
 
 #[test]
@@ -1804,6 +1888,117 @@ fn if_condition_with_runtime_logical_expression_lowers_to_two_stage_cfg() {
     assert!(
         if_terminator_count >= 2,
         "expected separate if terminators for short-circuit dispatch and statement branching"
+    );
+}
+
+#[test]
+fn short_circuit_place_rhs_materializes_copy_before_merge_assignment() {
+    let mut string_table = StringTable::new();
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
+    let lhs_name = super::symbol("lhs", &mut string_table);
+    let rhs_name = super::symbol("rhs", &mut string_table);
+    let location = test_location(60);
+
+    let condition = Expression::runtime(
+        vec![
+            node(
+                NodeKind::Rvalue(Expression::reference(
+                    lhs_name.clone(),
+                    DataType::Bool,
+                    location.clone(),
+                    Ownership::ImmutableReference,
+                )),
+                location.clone(),
+            ),
+            node(
+                NodeKind::Rvalue(Expression::reference(
+                    rhs_name.clone(),
+                    DataType::Bool,
+                    location.clone(),
+                    Ownership::ImmutableReference,
+                )),
+                location.clone(),
+            ),
+            runtime_operator_node(Operator::And, location.clone()),
+        ],
+        DataType::Bool,
+        location.clone(),
+        Ownership::MutableOwned,
+    );
+
+    let start_fn = function_node(
+        start_name,
+        FunctionSignature {
+            parameters: vec![],
+            returns: vec![],
+        },
+        vec![
+            node(
+                NodeKind::VariableDeclaration(make_test_variable(
+                    lhs_name,
+                    Expression::bool(false, location.clone(), Ownership::ImmutableOwned),
+                )),
+                location.clone(),
+            ),
+            node(
+                NodeKind::VariableDeclaration(make_test_variable(
+                    rhs_name,
+                    Expression::bool(true, location.clone(), Ownership::MutableOwned),
+                )),
+                location.clone(),
+            ),
+            node(
+                NodeKind::If(
+                    condition,
+                    vec![node(
+                        NodeKind::Rvalue(Expression::int(
+                            1,
+                            location.clone(),
+                            Ownership::ImmutableOwned,
+                        )),
+                        location.clone(),
+                    )],
+                    None,
+                ),
+                location.clone(),
+            ),
+        ],
+        location.clone(),
+    );
+
+    let module = lower_ast(build_ast(vec![start_fn], entry_path), &mut string_table)
+        .expect("short-circuit place rhs lowering should succeed");
+    let start_function = module
+        .functions
+        .iter()
+        .find(|function| function.id == module.start_function)
+        .expect("start function should exist");
+    let start_entry_block = &module.blocks[start_function.entry.0 as usize];
+    let (rhs_block, _short_block) = match start_entry_block.terminator {
+        HirTerminator::If {
+            then_block,
+            else_block,
+            ..
+        } => (then_block, else_block),
+        _ => panic!("expected short-circuit dispatcher if terminator in entry block"),
+    };
+
+    let rhs_branch_block = &module.blocks[rhs_block.0 as usize];
+    let rhs_merge_assignment = rhs_branch_block
+        .statements
+        .iter()
+        .find_map(|statement| match &statement.kind {
+            HirStatementKind::Assign { value, .. } => Some(value),
+            _ => None,
+        })
+        .expect("rhs short-circuit branch should assign merge temp local");
+
+    assert!(
+        matches!(
+            rhs_merge_assignment.kind,
+            HirExpressionKind::Copy(HirPlace::Local(_))
+        ),
+        "rhs place loads should be materialized as Copy before merge-temp assignment"
     );
 }
 
