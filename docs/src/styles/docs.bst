@@ -163,13 +163,23 @@ import @lib/html {format}
 ]
 
 # codeblock = [$html:
-    <pre style="background-color: hsla(0, 0%, 42%, 0.12); padding-left: 1em; border-radius: 5px; max-width: 100%; white-space: pre; overflow-x: auto;">[$slot]</pre>
+    <pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    ">[$slot]</pre>
 ]
 
 # codesnippet = [$html:
-    <span style="color: #c444aff9; padding: 0.1em; background-color: hsla(0, 0%, 35%, 0.50); font-family: var(--bst-font-family-monospace);">
-        [$slot]
-    </span>
+    <span style="
+        color: #c444aff9; 
+        padding: 0.1em; 
+        background-color: hsla(0, 0%, 35%, 0.50); 
+        font-family: var(--bst-font-family-monospace);
+    ">[$slot]</span>
 ]
 
 # title = [$html: <h1 style="font-size: 2em;[$slot("style")]">[$slot]</h1>]

@@ -527,6 +527,15 @@ Remove avoidable Windows/macOS golden drift from source normalization and emitte
 **Done when**
 - Golden outputs are stable across normal Windows/macOS workflows.
 
+### PR - Extend and compactify test runner output
+Now that there are loads of integration tests, some compactifying and useful info should be added.
+
+**Checklist**
+- Test runner should only show failures and summary (rather than a long output list of all the tests that are ran)
+- If the test runner succeeds without any failures, just show the summary.
+- When there are golden output disparities, print a diff of the artefacts generated and the golden (should do this concisely and limit how much it shows for each failure)
+
+
 ### PR - Add normalized artifact assertion mode to reduce non-semantic golden churn
 
 Full `index.html` snapshots currently include generated JS details such as line-number-derived symbols
