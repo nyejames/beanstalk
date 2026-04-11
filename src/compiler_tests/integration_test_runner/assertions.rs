@@ -7,8 +7,8 @@
 
 use super::{
     ArtifactAssertion, ArtifactKind, BackendId, CaseExecutionResult, FailureExpectation,
-    SuccessExpectation, TestCaseSpec, WarningExpectation, normalize_relative_path,
-    normalize_relative_path_text,
+    FailureKind, GoldenMode, SuccessExpectation, TestCaseSpec, WarningExpectation,
+    normalize_relative_path, normalize_relative_path_text,
 };
 use crate::build_system::build::{BuildResult, FileKind, OutputFile};
 use crate::compiler_frontend::compiler_messages::compiler_errors::{
@@ -26,59 +26,43 @@ pub(crate) fn validate_success_result(
     if let Some(reason) =
         validate_warning_expectation(build_result.warnings.len(), expectation.warnings)
     {
-        return CaseExecutionResult {
-            passed: false,
-            panic_message: None,
-            build_result: Some(build_result),
-            messages: None,
-            failure_reason: Some(reason),
-        };
+        return fail(build_result, reason, FailureKind::ExpectationViolation);
     }
 
     if case.backend_id == BackendId::Html
         && let Some(reason) = validate_html_baseline_contract(&build_result)
     {
-        return CaseExecutionResult {
-            passed: false,
-            panic_message: None,
-            build_result: Some(build_result),
-            messages: None,
-            failure_reason: Some(reason),
-        };
+        return fail(build_result, reason, FailureKind::ExpectationViolation);
     }
 
     if case.backend_id == BackendId::HtmlWasm
         && let Some(reason) = validate_html_wasm_baseline_contract(&build_result)
     {
-        return CaseExecutionResult {
-            passed: false,
-            panic_message: None,
-            build_result: Some(build_result),
-            messages: None,
-            failure_reason: Some(reason),
-        };
+        return fail(build_result, reason, FailureKind::ExpectationViolation);
     }
 
     if let Some(reason) =
         validate_artifact_assertions(&build_result, &expectation.artifact_assertions)
     {
-        return CaseExecutionResult {
-            passed: false,
-            panic_message: None,
-            build_result: Some(build_result),
-            messages: None,
-            failure_reason: Some(reason),
-        };
+        return fail(build_result, reason, FailureKind::ExpectationViolation);
     }
 
-    if let Some(reason) = validate_golden_outputs(&build_result, &case.golden_dir) {
-        return CaseExecutionResult {
-            passed: false,
-            panic_message: None,
-            build_result: Some(build_result),
-            messages: None,
-            failure_reason: Some(reason),
-        };
+    if let Some((reason, kind)) =
+        validate_golden_outputs(&build_result, &case.golden_dir, expectation.golden_mode)
+    {
+        return fail(build_result, reason, kind);
+    }
+
+    if !expectation.rendered_output_contains.is_empty()
+        || !expectation.rendered_output_not_contains.is_empty()
+    {
+        if let Some((reason, kind)) = validate_rendered_output(
+            &build_result,
+            &expectation.rendered_output_contains,
+            &expectation.rendered_output_not_contains,
+        ) {
+            return fail(build_result, reason, kind);
+        }
     }
 
     CaseExecutionResult {
@@ -87,6 +71,18 @@ pub(crate) fn validate_success_result(
         build_result: Some(build_result),
         messages: None,
         failure_reason: None,
+        failure_kind: None,
+    }
+}
+
+fn fail(build_result: BuildResult, reason: String, kind: FailureKind) -> CaseExecutionResult {
+    CaseExecutionResult {
+        passed: false,
+        panic_message: None,
+        build_result: Some(build_result),
+        messages: None,
+        failure_reason: Some(reason),
+        failure_kind: Some(kind),
     }
 }
 
@@ -103,6 +99,7 @@ pub(crate) fn validate_failure_result(
             build_result: None,
             messages: Some(messages),
             failure_reason: Some(reason),
+            failure_kind: Some(FailureKind::ExpectationViolation),
         };
     }
 
@@ -120,6 +117,7 @@ pub(crate) fn validate_failure_result(
                 "Expected error type '{}', but it was not reported.",
                 error_type_to_str(&expectation.error_type)
             )),
+            failure_kind: Some(FailureKind::ExpectationViolation),
         };
     }
 
@@ -138,6 +136,7 @@ pub(crate) fn validate_failure_result(
                 "Expected ordered diagnostic message fragments were not found in any emitted error."
                     .to_string(),
             ),
+            failure_kind: Some(FailureKind::ExpectationViolation),
         };
     }
 
@@ -147,6 +146,7 @@ pub(crate) fn validate_failure_result(
         build_result: None,
         messages: Some(messages),
         failure_reason: None,
+        failure_kind: None,
     }
 }
 
@@ -266,6 +266,30 @@ fn validate_single_artifact_assertion(
                         "Artifact '{}' expected fragment '{}' exactly once, but found {} time(s).",
                         assertion.path, required_once, count
                     ));
+                }
+            }
+
+            if !assertion.normalized_contains.is_empty()
+                || !assertion.normalized_not_contains.is_empty()
+            {
+                let normalized_text = normalize_text_for_comparison(text);
+                for required in &assertion.normalized_contains {
+                    let normalized_required = normalize_text_for_comparison(required);
+                    if !normalized_text.contains(normalized_required.as_str()) {
+                        return Some(format!(
+                            "Artifact '{}' did not contain required normalized fragment '{}'.",
+                            assertion.path, required
+                        ));
+                    }
+                }
+                for forbidden in &assertion.normalized_not_contains {
+                    let normalized_forbidden = normalize_text_for_comparison(forbidden);
+                    if normalized_text.contains(normalized_forbidden.as_str()) {
+                        return Some(format!(
+                            "Artifact '{}' contained forbidden normalized fragment '{}'.",
+                            assertion.path, forbidden
+                        ));
+                    }
                 }
             }
         }
@@ -578,7 +602,11 @@ fn output_binary_bytes(output: &OutputFile) -> Option<&[u8]> {
     }
 }
 
-fn validate_golden_outputs(build_result: &BuildResult, golden_dir: &Path) -> Option<String> {
+fn validate_golden_outputs(
+    build_result: &BuildResult,
+    golden_dir: &Path,
+    mode: GoldenMode,
+) -> Option<(String, FailureKind)> {
     if !golden_dir.is_dir() {
         return None;
     }
@@ -597,7 +625,7 @@ fn validate_golden_outputs(build_result: &BuildResult, golden_dir: &Path) -> Opt
     }
 
     if let Some(reason) = validate_expected_artifact_paths(build_result, &expected_paths) {
-        return Some(reason);
+        return Some((reason, FailureKind::StrictGoldenMismatch));
     }
 
     for file in expected_files {
@@ -608,15 +636,21 @@ fn validate_golden_outputs(build_result: &BuildResult, golden_dir: &Path) -> Opt
             .replace('\\', "/");
 
         let Some(output) = find_output_file(build_result, &relative) else {
-            return Some(format!("Golden output '{relative}' was not produced."));
+            return Some((
+                format!("Golden output '{relative}' was not produced."),
+                FailureKind::StrictGoldenMismatch,
+            ));
         };
 
         let expected_bytes = match fs::read(&file) {
             Ok(bytes) => bytes,
             Err(error) => {
-                return Some(format!(
-                    "Failed to read golden output '{}': {error}",
-                    file.display()
+                return Some((
+                    format!(
+                        "Failed to read golden output '{}': {error}",
+                        file.display()
+                    ),
+                    FailureKind::HarnessFailed,
                 ));
             }
         };
@@ -627,7 +661,33 @@ fn validate_golden_outputs(build_result: &BuildResult, golden_dir: &Path) -> Opt
             FileKind::Directory | FileKind::NotBuilt => Vec::new(),
         };
 
-        if actual_bytes != expected_bytes {
+        // Text artifacts support normalized comparison; binary/wasm always use strict.
+        let is_text = matches!(
+            output.file_kind(),
+            FileKind::Html(_) | FileKind::Js(_)
+        );
+
+        if is_text && mode == GoldenMode::Normalized {
+            let expected_str = String::from_utf8_lossy(&expected_bytes);
+            let actual_str = match output.file_kind() {
+                FileKind::Html(s) | FileKind::Js(s) => s.as_str(),
+                _ => unreachable!("is_text is true"),
+            };
+            let norm_expected = normalize_text_for_comparison(&expected_str);
+            let norm_actual = normalize_text_for_comparison(actual_str);
+            if norm_expected != norm_actual {
+                let detail = format!(
+                    "\n{}",
+                    generate_text_diff(&norm_expected, &norm_actual, 8)
+                );
+                return Some((
+                    format!(
+                        "Golden output '{relative}' did not match after normalization.{detail}"
+                    ),
+                    FailureKind::NormalizedSemanticMismatch,
+                ));
+            }
+        } else if actual_bytes != expected_bytes {
             let detail = match output.file_kind() {
                 FileKind::Html(content) | FileKind::Js(content) => {
                     let expected_str = String::from_utf8_lossy(&expected_bytes);
@@ -639,13 +699,322 @@ fn validate_golden_outputs(build_result: &BuildResult, golden_dir: &Path) -> Opt
                     actual_bytes.len()
                 ),
             };
-            return Some(format!(
-                "Golden output '{relative}' did not match the produced artifact.{detail}"
+            return Some((
+                format!(
+                    "Golden output '{relative}' did not match the produced artifact.{detail}"
+                ),
+                FailureKind::StrictGoldenMismatch,
             ));
         }
     }
 
     None
+}
+
+/// Normalizes compiler-generated counter suffixes in JS/HTML text for comparison.
+///
+/// WHAT: replaces unstable numeric counters in `bst_`-prefixed identifiers with the
+///       placeholder `N`, so backend naming changes do not cause spurious golden diffs.
+/// WHY: the semantics of the emitted code are determined by the identifier base name and
+///      structure, not by which counter value was assigned during a specific compilation.
+///
+/// Stable `__bs_*` runtime library names are NOT touched.
+///
+/// Examples:
+/// - `bst_rhs_and_fn0`        → `bst_rhs_and_fnN`
+/// - `bst_calls_l2`           → `bst_calls_lN`
+/// - `bst___hir_tmp_3_l13`    → `bst___hir_tmp_N_lN`
+/// - `bst___template_fn_1_fn4`→ `bst___template_fn_N_fnN`
+/// - `bst___bst_frag_0_fn2`   → `bst___bst_frag_N_fnN`
+pub(crate) fn normalize_text_for_comparison(text: &str) -> String {
+    let mut result = String::with_capacity(text.len());
+    let mut token_start: Option<usize> = None;
+
+    for (i, ch) in text.char_indices() {
+        let in_ident = ch.is_ascii_alphanumeric() || ch == '_';
+        match (token_start, in_ident) {
+            (None, true) => token_start = Some(i),
+            (Some(start), false) => {
+                result.push_str(&normalize_bst_identifier(&text[start..i]));
+                result.push(ch);
+                token_start = None;
+            }
+            (Some(_), true) => {}
+            (None, false) => result.push(ch),
+        }
+    }
+    if let Some(start) = token_start {
+        result.push_str(&normalize_bst_identifier(&text[start..]));
+    }
+    result
+}
+
+/// Normalizes counter segments in a single `bst_`-prefixed identifier token.
+///
+/// Two patterns are normalized:
+/// 1. Segments ending in digits whose non-digit prefix is `fn` or `l`
+///    (e.g., `fn0` → `fnN`, `l13` → `lN`)
+/// 2. Purely-digit standalone segments immediately after a trigger segment
+///    (`fn`, `tmp`, `frag`) (e.g., `tmp_3` → `tmp_N`)
+fn normalize_bst_identifier(token: &str) -> String {
+    if !token.starts_with("bst_") {
+        return token.to_owned();
+    }
+
+    let parts: Vec<&str> = token.split('_').collect();
+    let mut result: Vec<String> = Vec::with_capacity(parts.len());
+
+    for (i, &part) in parts.iter().enumerate() {
+        let prev = if i > 0 { parts[i - 1] } else { "" };
+
+        // Pattern 1: pure digit segment after a trigger keyword
+        let is_pure_digit = !part.is_empty() && part.chars().all(|c| c.is_ascii_digit());
+        let prev_is_trigger = matches!(prev, "fn" | "tmp" | "frag");
+        if is_pure_digit && prev_is_trigger {
+            result.push("N".to_owned());
+            continue;
+        }
+
+        // Pattern 2: segment ending in digits where the short prefix is `fn` or `l`
+        if let Some(normalized) = normalize_counter_suffix(part) {
+            result.push(normalized);
+            continue;
+        }
+
+        result.push(part.to_owned());
+    }
+
+    result.join("_")
+}
+
+/// Replaces trailing digits on a `fn` or `l` prefixed segment with `N`.
+///
+/// Returns `None` if the segment is not a recognized counter-suffix pattern.
+fn normalize_counter_suffix(segment: &str) -> Option<String> {
+    // Find the index of the first character in the trailing digit run.
+    let digit_start = segment
+        .char_indices()
+        .rev()
+        .take_while(|(_, c)| c.is_ascii_digit())
+        .last()
+        .map(|(i, _)| i);
+
+    let digit_start = digit_start?;
+
+    // If the segment is entirely digits, it is a standalone counter — handled by pattern 1.
+    if digit_start == 0 {
+        return None;
+    }
+
+    let prefix = &segment[..digit_start];
+    if matches!(prefix, "fn" | "l") {
+        Some(format!("{prefix}N"))
+    } else {
+        None
+    }
+}
+
+/// Validates rendered HTML/JS output against `contains`/`not_contains` fragments.
+///
+/// WHAT: extracts `<script>` blocks from `index.html`, runs them through a minimal
+///       Node.js harness that stubs `document` and captures `console.log`, then
+///       checks the combined runtime output against the supplied fragment lists.
+/// WHY: for runtime-semantic fixtures the emitted JS structure is noise; what matters
+///      is what the program actually does when executed.
+fn validate_rendered_output(
+    build_result: &BuildResult,
+    contains: &[String],
+    not_contains: &[String],
+) -> Option<(String, FailureKind)> {
+    let Some(index_html_file) = find_output_file(build_result, "index.html") else {
+        return Some((
+            "rendered_output assertion requires 'index.html', but it was not produced.".to_string(),
+            FailureKind::HarnessFailed,
+        ));
+    };
+
+    let Some(html) = output_text_content(index_html_file, ArtifactKind::Html) else {
+        return Some((
+            "rendered_output assertion requires 'index.html' to be an HTML artifact.".to_string(),
+            FailureKind::HarnessFailed,
+        ));
+    };
+
+    let rendered = match execute_html_in_node(html) {
+        Ok(output) => output,
+        Err(reason) => return Some((reason, FailureKind::HarnessFailed)),
+    };
+
+    let combined = combine_rendered_output(&rendered);
+
+    for required in contains {
+        if !combined.contains(required.as_str()) {
+            return Some((
+                format!(
+                    "Rendered output did not contain required fragment '{required}'.\nActual output:\n{combined}"
+                ),
+                FailureKind::RenderedOutputMismatch,
+            ));
+        }
+    }
+
+    for forbidden in not_contains {
+        if combined.contains(forbidden.as_str()) {
+            return Some((
+                format!(
+                    "Rendered output contained forbidden fragment '{forbidden}'.\nActual output:\n{combined}"
+                ),
+                FailureKind::RenderedOutputMismatch,
+            ));
+        }
+    }
+
+    None
+}
+
+struct RenderedOutput {
+    io_lines: Vec<String>,
+    slot_outputs: Vec<SlotOutput>,
+}
+
+struct SlotOutput {
+    #[allow(dead_code)]
+    id: String,
+    html: String,
+}
+
+fn combine_rendered_output(output: &RenderedOutput) -> String {
+    let mut parts = output.io_lines.clone();
+    for slot in &output.slot_outputs {
+        parts.push(slot.html.clone());
+    }
+    parts.join("\n")
+}
+
+/// Executes the script blocks from compiled HTML through a minimal Node.js harness.
+///
+/// The harness stubs `document.getElementById` to capture `insertAdjacentHTML` calls,
+/// intercepts `console.log`, and emits a JSON summary to stdout for parsing.
+fn execute_html_in_node(html: &str) -> Result<RenderedOutput, String> {
+    let scripts = extract_script_blocks(html);
+    if scripts.is_empty() {
+        return Err(
+            "rendered_output: no <script> blocks found in 'index.html'. \
+             Ensure the fixture produces runtime output."
+                .to_string(),
+        );
+    }
+
+    let harness = build_node_harness(&scripts);
+
+    let unique = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.subsec_nanos())
+        .unwrap_or(0);
+    let temp_path = std::env::temp_dir().join(format!("bst_render_harness_{unique}.js"));
+
+    std::fs::write(&temp_path, &harness).map_err(|e| {
+        format!("rendered_output: failed to write node harness: {e}")
+    })?;
+
+    let output = std::process::Command::new("node")
+        .arg(&temp_path)
+        .output()
+        .map_err(|e| {
+            let _ = std::fs::remove_file(&temp_path);
+            format!(
+                "rendered_output: failed to invoke node: {e}. \
+                 Ensure 'node' is on PATH to use rendered_output_contains."
+            )
+        })?;
+
+    let _ = std::fs::remove_file(&temp_path);
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!(
+            "rendered_output: node harness execution failed:\n{stderr}"
+        ));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    parse_harness_output(stdout.trim())
+}
+
+fn build_node_harness(scripts: &[String]) -> String {
+    let prefix = r#"const __bst_io = [];
+const __bst_slots = [];
+console.log = (...args) => __bst_io.push(args.map(String).join(' '));
+const document = {
+    getElementById: (id) => ({
+        insertAdjacentHTML: (_, html) => __bst_slots.push({ id, html })
+    })
+};
+"#;
+
+    let suffix = r#"
+process.stdout.write(JSON.stringify({ io: __bst_io, slots: __bst_slots }) + '\n');
+"#;
+
+    format!("{prefix}{}\n{suffix}", scripts.join("\n"))
+}
+
+/// Extracts the text content between `<script>` and `</script>` tag pairs.
+fn extract_script_blocks(html: &str) -> Vec<String> {
+    let mut blocks = Vec::new();
+    let mut search_from = 0;
+
+    while let Some(open_end) = find_script_open_end(html, search_from) {
+        let close_tag = "</script>";
+        let Some(close_start) = html[open_end..].find(close_tag) else {
+            break;
+        };
+        let block = &html[open_end..open_end + close_start];
+        if !block.trim().is_empty() {
+            blocks.push(block.to_owned());
+        }
+        search_from = open_end + close_start + close_tag.len();
+    }
+
+    blocks
+}
+
+/// Finds the end position of a `<script>` opening tag starting from `from`.
+fn find_script_open_end(html: &str, from: usize) -> Option<usize> {
+    let slice = &html[from..];
+    let tag_start = slice.find("<script")?;
+    let tag_slice = &slice[tag_start..];
+    let close_bracket = tag_slice.find('>')?;
+    Some(from + tag_start + close_bracket + 1)
+}
+
+fn parse_harness_output(json: &str) -> Result<RenderedOutput, String> {
+    let value: serde_json::Value = serde_json::from_str(json).map_err(|e| {
+        format!("rendered_output: failed to parse node harness JSON output: {e}\nRaw: {json}")
+    })?;
+
+    let io_lines = value["io"]
+        .as_array()
+        .ok_or("rendered_output: 'io' field missing from harness output")?
+        .iter()
+        .filter_map(|v| v.as_str().map(str::to_owned))
+        .collect();
+
+    let slot_outputs = value["slots"]
+        .as_array()
+        .ok_or("rendered_output: 'slots' field missing from harness output")?
+        .iter()
+        .filter_map(|v| {
+            let id = v["id"].as_str()?.to_owned();
+            let html = v["html"].as_str()?.to_owned();
+            Some(SlotOutput { id, html })
+        })
+        .collect();
+
+    Ok(RenderedOutput {
+        io_lines,
+        slot_outputs,
+    })
 }
 
 fn collect_files_recursive(root: &Path) -> Vec<PathBuf> {

@@ -1,3 +1,4 @@
 [backends.html]
 mode = "success"
 warnings = "forbid"
+rendered_output_contains = ["short_circuit_mutable_rhs_later_plain_use value=false after=0"]

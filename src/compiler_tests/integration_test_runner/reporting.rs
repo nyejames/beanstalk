@@ -5,8 +5,8 @@
 //!      outcomes — not how to render them — so the output format can evolve independently.
 
 use super::{
-    BackendId, CaseExecutionResult, ExpectedOutcome, FailureTriageEntry, FailureTriageReport,
-    SEPARATOR_LINE_LENGTH, SummaryCounts, TestCaseSpec,
+    BackendId, CaseExecutionResult, ExpectedOutcome, FailureKind, FailureTriageEntry,
+    FailureTriageReport, SEPARATOR_LINE_LENGTH, SummaryCounts, TestCaseSpec,
 };
 use crate::compiler_frontend::compiler_messages::compiler_errors::error_type_to_str;
 use crate::compiler_frontend::display_messages::{print_formatted_error, print_formatted_warning};
@@ -25,6 +25,17 @@ pub(crate) fn render_case_result(
         (ExpectedOutcome::Failure(_), true) => say!(Green "✓ EXPECTED FAILURE"),
         (ExpectedOutcome::Success(_), false) => say!(Red "✗ FAIL"),
         (ExpectedOutcome::Failure(_), false) => say!(Yellow "✗ UNEXPECTED SUCCESS"),
+    }
+
+    if let Some(kind) = result.failure_kind {
+        let label = match kind {
+            FailureKind::StrictGoldenMismatch => "[strict golden mismatch]",
+            FailureKind::NormalizedSemanticMismatch => "[normalized mismatch]",
+            FailureKind::RenderedOutputMismatch => "[rendered output mismatch]",
+            FailureKind::HarnessFailed => "[harness error]",
+            FailureKind::ExpectationViolation => "[expectation violation]",
+        };
+        say!(Dark White label);
     }
 
     if let Some(reason) = &result.failure_reason {

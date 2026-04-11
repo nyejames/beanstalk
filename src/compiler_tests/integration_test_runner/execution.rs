@@ -4,7 +4,7 @@
 //! WHY: isolating execution here keeps panic handling, builder selection, and flag injection
 //!      in one place so the orchestrator only has to call one function per case.
 
-use super::{BackendId, CaseExecutionResult, ExpectedOutcome, TestCaseSpec};
+use super::{BackendId, CaseExecutionResult, ExpectedOutcome, FailureKind, TestCaseSpec};
 use crate::build_system::build::{ProjectBuilder, build_project};
 use crate::compiler_frontend::Flag;
 use crate::projects::html_project::html_project_builder::HtmlProjectBuilder;
@@ -37,6 +37,7 @@ pub(crate) fn execute_test_case(case: &TestCaseSpec) -> CaseExecutionResult {
                     failure_reason: Some(
                         "Expected a successful build, but compilation failed.".to_string(),
                     ),
+                    failure_kind: Some(FailureKind::ExpectationViolation),
                 },
             },
             ExpectedOutcome::Failure(expectation) => match build_result {
@@ -49,6 +50,7 @@ pub(crate) fn execute_test_case(case: &TestCaseSpec) -> CaseExecutionResult {
                         "Expected a compilation failure, but the case built successfully."
                             .to_string(),
                     ),
+                    failure_kind: Some(FailureKind::ExpectationViolation),
                 },
                 Err(messages) => super::assertions::validate_failure_result(messages, expectation),
             },
@@ -64,6 +66,7 @@ pub(crate) fn panic_case_result(payload: Box<dyn Any + Send>) -> CaseExecutionRe
         build_result: None,
         messages: None,
         failure_reason: Some("The compiler panicked while running this case.".to_string()),
+        failure_kind: Some(FailureKind::HarnessFailed),
     }
 }
 
