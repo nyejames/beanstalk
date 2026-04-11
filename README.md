@@ -93,6 +93,9 @@ post = create_post("Boring Title", date, [$markdown:
 <div align="center">
 
 ## LLM Aware design
+
+</div>
+
 Beanstalk is designed for a future where LLM workflows are inevitable: 
 
 Humans should validate, review and write the more declarative and creative parts of the codebase while LLMs provide the churn. 
@@ -105,6 +108,8 @@ Even the way compiler errors are designed is to provide good metadata for LLMs r
 
 Beanstalk not being saturated in LLM training data may provide a the long term advantage of having a smaller, higher quality codebase dataset as the language matures.
 
+<div align="center">
+  
 ## Documentation
 
 </div>
