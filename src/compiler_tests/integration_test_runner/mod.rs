@@ -340,35 +340,40 @@ pub fn run_all_test_cases_with_backend_filter(
     let mut backend_summaries = BTreeMap::<BackendId, SummaryCounts>::new();
     let mut failure_triage_entries = Vec::new();
 
-    if !suite.cases.is_empty() {
-        say!(Cyan "Testing integration cases:");
-        say!(Dark White "=".repeat(SEPARATOR_LINE_LENGTH));
+    // Phase 1: run all cases, accumulate counts.
+    let mut case_results: Vec<(TestCaseSpec, CaseExecutionResult)> = Vec::new();
+    for case in suite.cases {
+        let result = execution::execute_test_case(&case);
 
-        for case in &suite.cases {
-            println!("  {}", case.display_name);
+        total_summary.record(&case, &result);
+        backend_summaries
+            .entry(case.backend_id)
+            .or_default()
+            .record(&case, &result);
 
-            let result = execution::execute_test_case(case);
-            reporting::render_case_result(case, &result, options.show_warnings);
-
-            total_summary.record(case, &result);
-            backend_summaries
-                .entry(case.backend_id)
-                .or_default()
-                .record(case, &result);
-
-            if !result.passed {
-                failure_triage_entries.push(FailureTriageEntry {
-                    case: case.display_name.clone(),
-                    backend: case.backend_id.as_str().to_string(),
-                    expected_outcome: reporting::expected_outcome_label(&case.expected),
-                    failure_reason: reporting::observed_failure_reason(&result),
-                    panic_message: result.panic_message.clone(),
-                });
-            }
-
-            say!(Dark White "-".repeat(SEPARATOR_LINE_LENGTH));
+        if !result.passed {
+            failure_triage_entries.push(FailureTriageEntry {
+                case: case.display_name.clone(),
+                backend: case.backend_id.as_str().to_string(),
+                expected_outcome: reporting::expected_outcome_label(&case.expected),
+                failure_reason: reporting::observed_failure_reason(&result),
+                panic_message: result.panic_message.clone(),
+            });
         }
 
+        case_results.push((case, result));
+    }
+
+    // Phase 2: render failures only — skip per-case output entirely on a clean pass.
+    let failures: Vec<_> = case_results.iter().filter(|(_, r)| !r.passed).collect();
+    if !failures.is_empty() {
+        say!(Cyan "Failures:");
+        say!(Dark White "=".repeat(SEPARATOR_LINE_LENGTH));
+        for (case, result) in &failures {
+            println!("  {}", case.display_name);
+            reporting::render_case_result(case, result, options.show_warnings);
+            say!(Dark White "-".repeat(SEPARATOR_LINE_LENGTH));
+        }
         println!();
     }
 
@@ -396,18 +401,21 @@ pub fn run_all_test_cases_with_backend_filter(
     );
 
     say!();
-    say!(
-        "  Correct results:   ",
-        Green Bold total_summary.correct_results(),
-        Dark White " / ",
-        total_summary.total_tests
-    );
-    say!(
-        "  Incorrect results: ",
-        Red Bold total_summary.incorrect_results(),
-        Dark White " / ",
-        total_summary.total_tests
-    );
+    if total_summary.incorrect_results() == 0 {
+        say!(
+            "  Correct results:   ",
+            Green Bold total_summary.correct_results(),
+            Dark White " / ",
+            total_summary.total_tests
+        );
+    } else {
+        say!(
+            "  Incorrect results: ",
+            Red Bold total_summary.incorrect_results(),
+            Dark White " / ",
+            total_summary.total_tests
+        );
+    }
 
     reporting::render_backend_summary(&backend_summaries);
 

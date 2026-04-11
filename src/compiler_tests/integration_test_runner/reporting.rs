@@ -6,7 +6,7 @@
 
 use super::{
     BackendId, CaseExecutionResult, ExpectedOutcome, FailureTriageEntry, FailureTriageReport,
-    SummaryCounts, TestCaseSpec,
+    SEPARATOR_LINE_LENGTH, SummaryCounts, TestCaseSpec,
 };
 use crate::compiler_frontend::compiler_messages::compiler_errors::error_type_to_str;
 use crate::compiler_frontend::display_messages::{print_formatted_error, print_formatted_warning};
@@ -65,16 +65,24 @@ pub(crate) fn render_backend_summary(backend_summaries: &BTreeMap<BackendId, Sum
     }
 
     say!("\n  Backend breakdown:");
+    let rule = format!("  {}", "─".repeat(SEPARATOR_LINE_LENGTH - 2));
+    say!(Dark White rule);
     for (backend_id, summary) in backend_summaries {
-        say!(format!(
-            "    {:<9} total={} pass={} fail={} expected_failures={} unexpected_successes={}",
-            backend_id.as_str(),
-            summary.total_tests,
-            summary.passed_tests,
-            summary.failed_tests,
-            summary.expected_failures,
-            summary.unexpected_successes
-        ));
+        let incorrect = summary.incorrect_results();
+        if incorrect > 0 {
+            say!(
+                "    ", Cyan format!("{:<9}", backend_id.as_str()),
+                Reset "  total: ", Yellow summary.total_tests,
+                Reset "  passed: ", Blue summary.correct_results(),
+                Reset "  failed: ", Red Bold incorrect
+            );
+        } else {
+            say!(
+                "    ", Cyan format!("{:<9}", backend_id.as_str()),
+                Reset "  total: ", Yellow summary.total_tests,
+                Reset "  passed: ", Green Bold summary.correct_results()
+            );
+        }
     }
 }
 

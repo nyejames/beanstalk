@@ -628,8 +628,19 @@ fn validate_golden_outputs(build_result: &BuildResult, golden_dir: &Path) -> Opt
         };
 
         if actual_bytes != expected_bytes {
+            let detail = match output.file_kind() {
+                FileKind::Html(content) | FileKind::Js(content) => {
+                    let expected_str = String::from_utf8_lossy(&expected_bytes);
+                    format!("\n{}", generate_text_diff(&expected_str, content, 8))
+                }
+                _ => format!(
+                    " (expected {} bytes, got {} bytes)",
+                    expected_bytes.len(),
+                    actual_bytes.len()
+                ),
+            };
             return Some(format!(
-                "Golden output '{relative}' did not match the produced artifact."
+                "Golden output '{relative}' did not match the produced artifact.{detail}"
             ));
         }
     }
@@ -685,4 +696,41 @@ fn count_occurrences(text: &str, needle: &str) -> usize {
     }
 
     count
+}
+
+/// Produces a compact unified-style diff between `expected` and `actual` text.
+///
+/// Shows at most `max_pairs` differing line pairs (- expected / + actual).
+/// Truncates with a count of remaining differences if the limit is hit.
+fn generate_text_diff(expected: &str, actual: &str, max_pairs: usize) -> String {
+    let exp_lines: Vec<&str> = expected.lines().collect();
+    let act_lines: Vec<&str> = actual.lines().collect();
+    let max_len = exp_lines.len().max(act_lines.len());
+
+    let mut diff_lines: Vec<String> = Vec::new();
+    let mut extra = 0usize;
+
+    for i in 0..max_len {
+        let e = exp_lines.get(i).copied();
+        let a = act_lines.get(i).copied();
+        if e == a {
+            continue;
+        }
+        if diff_lines.len() >= max_pairs * 2 {
+            extra += 1;
+            continue;
+        }
+        if let Some(line) = e {
+            diff_lines.push(format!("- {line}"));
+        }
+        if let Some(line) = a {
+            diff_lines.push(format!("+ {line}"));
+        }
+    }
+
+    let mut out = format!("--- expected\n+++ actual\n{}", diff_lines.join("\n"));
+    if extra > 0 {
+        out.push_str(&format!("\n... ({extra} more differing lines)"));
+    }
+    out
 }
