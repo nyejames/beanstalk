@@ -11,7 +11,7 @@ use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
 use crate::compiler_frontend::ast::function_body_to_ast;
-use crate::compiler_frontend::ast::statements::condition_validation::ensure_boolean_condition;
+use crate::compiler_frontend::ast::statements::condition_validation::ensure_if_statement_condition;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
@@ -64,14 +64,7 @@ pub fn create_branch(
         return Ok(vec![match_statement]);
     }
 
-    ensure_boolean_condition(
-        &then_condition,
-        "If statement condition",
-        &then_condition.location,
-        "If Statement Parsing",
-        "Use a boolean expression in the if condition (for example 'value is 0' or 'flag')",
-        string_table,
-    )?;
+    ensure_if_statement_condition(&then_condition, string_table)?;
 
     ast_log!("Creating If Statement");
     if token_stream.current_token_kind() != &TokenKind::Colon {

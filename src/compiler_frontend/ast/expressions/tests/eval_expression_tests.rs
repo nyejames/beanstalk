@@ -25,6 +25,24 @@ fn template_ast_node(template: Template) -> AstNode {
     }
 }
 
+fn first_start_declaration_expression(source: &str) -> Expression {
+    let (ast, _string_table) = parse_single_file_ast(source);
+    let start_function = ast
+        .nodes
+        .iter()
+        .find(|node| matches!(node.kind, NodeKind::Function(_, _, _)))
+        .expect("start function should exist");
+
+    let NodeKind::Function(_, _, body) = &start_function.kind else {
+        panic!("expected start function body");
+    };
+    let NodeKind::VariableDeclaration(declaration) = &body[0].kind else {
+        panic!("expected first start statement to be a variable declaration");
+    };
+
+    declaration.value.to_owned()
+}
+
 #[test]
 fn concat_template_preserves_full_style_state_from_last_template() {
     let mut left = Template::create_default(vec![]);
@@ -263,6 +281,32 @@ fn ordinary_operators_reject_result_operands_without_handler() {
 }
 
 #[test]
+fn arithmetic_operator_rejects_result_operands_without_handler() {
+    let error = parse_single_file_ast_error("value = Int(\"1\") + 1\n");
+    assert_eq!(error.error_type, ErrorType::Type);
+    assert!(
+        error
+            .msg
+            .contains("does not implicitly unwrap Result values"),
+        "{}",
+        error.msg
+    );
+}
+
+#[test]
+fn logical_operator_rejects_result_operands_before_bool_validation() {
+    let error = parse_single_file_ast_error("value = true and Int(\"1\")\n");
+    assert_eq!(error.error_type, ErrorType::Type);
+    assert!(
+        error
+            .msg
+            .contains("does not implicitly unwrap Result values"),
+        "{}",
+        error.msg
+    );
+}
+
+#[test]
 fn logical_operator_rejects_option_operands_with_precise_found_type() {
     let error = parse_single_file_ast_error("maybe String? = none\nvalue = maybe or true\n");
     assert_eq!(error.error_type, ErrorType::Type);
@@ -300,6 +344,48 @@ fn comparison_operator_rejects_option_to_scalar_comparison() {
             .map(String::as_str),
         Some("Option(String) and String")
     );
+}
+
+#[test]
+fn mixed_int_float_arithmetic_resolves_to_float() {
+    let value = first_start_declaration_expression("value = 1 + 2.5\n");
+    assert_eq!(value.data_type, DataType::Float);
+}
+
+#[test]
+fn mixed_int_float_comparison_resolves_to_bool() {
+    let value = first_start_declaration_expression("value = 1 <= 2.5\n");
+    assert_eq!(value.data_type, DataType::Bool);
+}
+
+#[test]
+fn bool_relational_comparison_is_rejected() {
+    let error = parse_single_file_ast_error("value = true < false\n");
+    assert_eq!(error.error_type, ErrorType::Type);
+    assert!(
+        error.msg.contains("Comparison operator '<' cannot compare"),
+        "{}",
+        error.msg
+    );
+    assert_eq!(
+        error
+            .metadata
+            .get(&ErrorMetaDataKey::FoundType)
+            .map(String::as_str),
+        Some("Bool and Bool")
+    );
+}
+
+#[test]
+fn string_equality_comparison_resolves_to_bool() {
+    let value = first_start_declaration_expression("value = \"a\" is \"b\"\n");
+    assert_eq!(value.data_type, DataType::Bool);
+}
+
+#[test]
+fn char_relational_comparison_resolves_to_bool() {
+    let value = first_start_declaration_expression("value = 'a' < 'b'\n");
+    assert_eq!(value.data_type, DataType::Bool);
 }
 
 #[test]

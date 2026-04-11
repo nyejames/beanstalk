@@ -1284,6 +1284,11 @@ path = "result_named_handler_scope_with_fallback"
 tags = ["integration","results"]
 
 [[case]]
+id = "result_operand_without_handler_in_operator"
+path = "result_operand_without_handler_in_operator"
+tags = ["integration","results","diagnostics"]
+
+[[case]]
 id = "result_propagation_nested_template_output"
 path = "result_propagation_nested_template_output"
 tags = ["integration","results","templates","js-backend"]

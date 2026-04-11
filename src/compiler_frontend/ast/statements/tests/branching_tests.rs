@@ -102,6 +102,13 @@ fn rejects_non_boolean_if_condition_with_type_error_metadata() {
             .map(String::as_str),
         Some("Int")
     );
+    assert_eq!(
+        error
+            .metadata
+            .get(&ErrorMetaDataKey::PrimarySuggestion)
+            .map(String::as_str),
+        Some("Use a boolean expression in the if condition (for example 'value is 0' or 'flag')")
+    );
 }
 
 #[test]

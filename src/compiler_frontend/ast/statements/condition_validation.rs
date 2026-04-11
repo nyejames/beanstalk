@@ -10,7 +10,7 @@ use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::return_type_error;
 
-pub(crate) fn ensure_boolean_condition(
+fn ensure_boolean_condition(
     condition: &Expression,
     context_name: &str,
     location: &SourceLocation,
@@ -32,5 +32,35 @@ pub(crate) fn ensure_boolean_condition(
             FoundType => found_type,
             PrimarySuggestion => suggestion,
         }
+    )
+}
+
+/// Validate `if` statement condition type with centralized diagnostics policy.
+pub(crate) fn ensure_if_statement_condition(
+    condition: &Expression,
+    string_table: &StringTable,
+) -> Result<(), CompilerError> {
+    ensure_boolean_condition(
+        condition,
+        "If statement condition",
+        &condition.location,
+        "If Statement Parsing",
+        "Use a boolean expression in the if condition (for example 'value is 0' or 'flag')",
+        string_table,
+    )
+}
+
+/// Validate conditional-loop header type with centralized diagnostics policy.
+pub(crate) fn ensure_loop_condition(
+    condition: &Expression,
+    string_table: &StringTable,
+) -> Result<(), CompilerError> {
+    ensure_boolean_condition(
+        condition,
+        "Loop condition",
+        &condition.location,
+        "Loop Parsing",
+        "Use a boolean expression after 'loop', e.g. loop is_ready():",
+        string_table,
     )
 }

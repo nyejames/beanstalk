@@ -399,6 +399,13 @@ fn rejects_non_boolean_conditional_loop_condition() {
             .map(String::as_str),
         Some("Int")
     );
+    assert_eq!(
+        error
+            .metadata
+            .get(&ErrorMetaDataKey::PrimarySuggestion)
+            .map(String::as_str),
+        Some("Use a boolean expression after 'loop', e.g. loop is_ready():")
+    );
 }
 
 #[test]
