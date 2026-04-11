@@ -18,7 +18,7 @@ use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::datatypes::Ownership;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::reserved_trait_syntax::{
-    reserved_trait_dispatch_mismatch_error, reserved_trait_keyword, reserved_trait_keyword_error,
+    reserved_trait_keyword_error, reserved_trait_keyword_or_dispatch_mismatch,
 };
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
@@ -102,13 +102,14 @@ fn unexpected_function_body_token_error(
         }
 
         TokenKind::Must | TokenKind::TraitThis => {
-            let Some(keyword) = reserved_trait_keyword(token) else {
-                return reserved_trait_dispatch_mismatch_error(
-                    token,
-                    token_stream.current_location(),
-                    "AST Construction",
-                    "function-body statement parsing",
-                );
+            let keyword = match reserved_trait_keyword_or_dispatch_mismatch(
+                token,
+                token_stream.current_location(),
+                "AST Construction",
+                "function-body statement parsing",
+            ) {
+                Ok(keyword) => keyword,
+                Err(error) => return error,
             };
 
             reserved_trait_keyword_error(

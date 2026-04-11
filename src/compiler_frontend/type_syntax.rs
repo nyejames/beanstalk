@@ -21,7 +21,7 @@ use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::deferred_feature_diagnostics::deferred_feature_rule_error;
 use crate::compiler_frontend::reserved_trait_syntax::{
-    reserved_trait_keyword, reserved_trait_keyword_error,
+    reserved_trait_keyword_error, reserved_trait_keyword_or_dispatch_mismatch,
 };
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
@@ -107,8 +107,12 @@ fn parse_required_type(
             )
         }
         TokenKind::Must | TokenKind::TraitThis => {
-            let keyword = reserved_trait_keyword(token_stream.current_token_kind())
-                .expect("reserved trait token should map to a keyword");
+            let keyword = reserved_trait_keyword_or_dispatch_mismatch(
+                token_stream.current_token_kind(),
+                token_stream.current_location(),
+                compilation_stage(context),
+                "type annotation parsing",
+            )?;
 
             let (stage, suggestion) = reserved_trait_type_annotation_error(context);
             return Err(reserved_trait_keyword_error(

@@ -14,6 +14,7 @@ use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
+use crate::return_compiler_error;
 use crate::{return_syntax_error, return_type_error};
 
 /// Parses compiler-owned numeric cast forms (`Int(...)`, `Float(...)`).
@@ -102,7 +103,17 @@ pub(crate) fn parse_builtin_cast_expression(
             error_type,
             cast_location,
         )),
-        _ => unreachable!("builtin cast parser only accepts Int/Float tokens"),
+        other => {
+            return_compiler_error!(
+                format!(
+                    "Builtin cast parser dispatch mismatch: expected Int/Float token, got '{other:?}'."
+                );
+                {
+                    CompilationStage => "Expression Parsing",
+                    PrimarySuggestion => "This indicates parser dispatch drift. Please report this compiler bug.",
+                }
+            )
+        }
     }
 }
 

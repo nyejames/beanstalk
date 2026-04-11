@@ -16,6 +16,7 @@ use crate::compiler_frontend::identifier_policy::{
 };
 use crate::compiler_frontend::reserved_trait_syntax::{
     reserved_trait_keyword, reserved_trait_keyword_error,
+    reserved_trait_keyword_or_dispatch_mismatch,
 };
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
@@ -83,8 +84,12 @@ pub(crate) fn parse_choice_header_payload(
 
         match current_token {
             TokenKind::Must | TokenKind::TraitThis => {
-                let keyword = reserved_trait_keyword(token_stream.current_token_kind())
-                    .expect("reserved trait token should map to a keyword");
+                let keyword = reserved_trait_keyword_or_dispatch_mismatch(
+                    token_stream.current_token_kind(),
+                    current_location.clone(),
+                    "Header Parsing",
+                    "choice header payload parsing",
+                )?;
 
                 return Err(reserved_trait_keyword_error(
                     keyword,
@@ -198,9 +203,12 @@ pub(crate) fn parse_choice_header_payload(
                                 break;
                             }
                             TokenKind::Must | TokenKind::TraitThis => {
-                                let keyword =
-                                    reserved_trait_keyword(token_stream.current_token_kind())
-                                        .expect("reserved trait token should map to a keyword");
+                                let keyword = reserved_trait_keyword_or_dispatch_mismatch(
+                                    token_stream.current_token_kind(),
+                                    token_stream.current_location(),
+                                    "Header Parsing",
+                                    "choice header payload parsing",
+                                )?;
 
                                 return Err(reserved_trait_keyword_error(
                                     keyword,
@@ -363,8 +371,12 @@ pub(crate) fn parse_choice_variant_value(
     let variant_name = match token_stream.current_token_kind() {
         TokenKind::Symbol(name) => *name,
         TokenKind::Must | TokenKind::TraitThis => {
-            let keyword = reserved_trait_keyword(token_stream.current_token_kind())
-                .expect("reserved trait token should map to a keyword");
+            let keyword = reserved_trait_keyword_or_dispatch_mismatch(
+                token_stream.current_token_kind(),
+                token_stream.current_location(),
+                "Expression Parsing",
+                "choice variant expression parsing",
+            )?;
 
             return Err(reserved_trait_keyword_error(
                 keyword,

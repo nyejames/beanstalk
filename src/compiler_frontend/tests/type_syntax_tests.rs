@@ -70,6 +70,21 @@ fn signature_parameter_rejects_none_type() {
 }
 
 #[test]
+fn signature_parameter_rejects_reserved_trait_this_type() {
+    let mut string_table = StringTable::new();
+    let mut stream = stream_from_tokens(
+        vec![token(TokenKind::TraitThis), token(TokenKind::Eof)],
+        &mut string_table,
+    );
+
+    let error = parse_type_annotation(&mut stream, TypeAnnotationContext::SignatureParameter)
+        .expect_err("reserved trait keyword type should fail");
+
+    assert!(error.msg.contains("Keyword 'This' is reserved for traits"));
+    assert!(error.msg.contains("deferred for Alpha"));
+}
+
+#[test]
 fn duplicate_optional_marker_is_rejected() {
     let mut string_table = StringTable::new();
     let mut stream = stream_from_tokens(

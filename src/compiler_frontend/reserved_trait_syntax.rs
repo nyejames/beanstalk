@@ -33,6 +33,27 @@ pub(crate) fn reserved_trait_keyword(token_kind: &TokenKind) -> Option<ReservedT
     }
 }
 
+/// Resolves a reserved trait keyword in contexts that already dispatched on reserved tokens.
+///
+/// WHAT: converts `must` / `This` token kinds into their reserved-keyword enum variant.
+/// WHY: parser dispatch drift should return a structured internal compiler diagnostic instead of
+/// relying on nearby `expect(...)` assumptions.
+pub(crate) fn reserved_trait_keyword_or_dispatch_mismatch(
+    token_kind: &TokenKind,
+    location: SourceLocation,
+    compilation_stage: &'static str,
+    parser_context: &'static str,
+) -> Result<ReservedTraitKeyword, CompilerError> {
+    reserved_trait_keyword(token_kind).ok_or_else(|| {
+        reserved_trait_dispatch_mismatch_error(
+            token_kind,
+            location,
+            compilation_stage,
+            parser_context,
+        )
+    })
+}
+
 pub(crate) fn reserved_trait_keyword_error(
     keyword: ReservedTraitKeyword,
     location: SourceLocation,

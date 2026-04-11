@@ -1504,6 +1504,16 @@ path = "trait_this_reserved"
 tags = ["integration","diagnostics"]
 
 [[case]]
+id = "trait_must_signature_parameter_reserved"
+path = "trait_must_signature_parameter_reserved"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "reserved_trait_keyword_in_postfix_member"
+path = "reserved_trait_keyword_in_postfix_member"
+tags = ["integration","diagnostics"]
+
+[[case]]
 id = "undefined_variable_mutation"
 path = "undefined_variable_mutation"
 tags = ["integration","diagnostics"]

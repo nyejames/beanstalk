@@ -224,22 +224,24 @@ pub fn get_token_kind(
                 )
             }
 
-            token_value.push(
-                stream.next().expect(
-                    "validated style directive should still expose its first identifier char",
-                ),
-            );
+            let Some(first_directive_char) = stream.next() else {
+                return Err(CompilerError::compiler_error(
+                    "Tokenizer validated a style directive name but failed to consume its first character.",
+                ));
+            };
+            token_value.push(first_directive_char);
 
             while let Some(&next_char) = stream.peek() {
                 if !is_valid_var_char(&next_char) {
                     break;
                 }
 
-                token_value.push(
-                    stream
-                        .next()
-                        .expect("peeked style directive character should remain available"),
-                );
+                let Some(directive_char) = stream.next() else {
+                    return Err(CompilerError::compiler_error(
+                        "Tokenizer peeked a style directive character but could not advance the stream.",
+                    ));
+                };
+                token_value.push(directive_char);
             }
 
             let directive = string_table.intern(&token_value);
@@ -558,11 +560,12 @@ pub(crate) fn keyword_or_variable(
         if let Some(char) = stream.peek()
             && is_valid_var_char(char)
         {
-            token_value.push(
-                stream
-                    .next()
-                    .expect("peeked identifier character should remain available"),
-            );
+            let Some(identifier_char) = stream.next() else {
+                return Err(CompilerError::compiler_error(
+                    "Tokenizer peeked an identifier character but could not advance the stream.",
+                ));
+            };
+            token_value.push(identifier_char);
             continue;
         }
 
@@ -851,11 +854,12 @@ fn tokenize_template_body(
             }
 
             _ => {
-                token_value.push(
-                    stream.next().expect(
-                        "string tokenization loop should only consume available characters",
-                    ),
-                );
+                let Some(next_char) = stream.next() else {
+                    return Err(CompilerError::compiler_error(
+                        "Tokenizer peeked a template-body character but could not advance the stream.",
+                    ));
+                };
+                token_value.push(next_char);
             }
         }
     }

@@ -310,7 +310,7 @@ fn resolve_import_target_path(
     candidates: &FxHashSet<InternedPath>,
     string_table: &StringTable,
 ) -> ImportPathResolution {
-    let mut exact_matches = candidates
+    let exact_matches = candidates
         .iter()
         .filter(|candidate| exact_path_matches_candidate(candidate, requested_path, string_table))
         .cloned()
@@ -318,17 +318,16 @@ fn resolve_import_target_path(
 
     match exact_matches.len() {
         1 => {
-            return ImportPathResolution::Resolved(
-                exact_matches
-                    .pop()
-                    .expect("exactly one exact import candidate should exist"),
-            );
+            if let Some(path) = exact_matches.into_iter().next() {
+                return ImportPathResolution::Resolved(path);
+            }
+            return ImportPathResolution::Missing;
         }
         2.. => return ImportPathResolution::Ambiguous,
         _ => {}
     }
 
-    let mut matches = candidates
+    let matches = candidates
         .iter()
         .filter(|candidate| {
             candidate.ends_with(requested_path)
@@ -343,11 +342,11 @@ fn resolve_import_target_path(
 
     match matches.len() {
         0 => ImportPathResolution::Missing,
-        1 => ImportPathResolution::Resolved(
-            matches
-                .pop()
-                .expect("exactly one import candidate should exist when matches.len() is 1"),
-        ),
+        1 => matches
+            .into_iter()
+            .next()
+            .map(ImportPathResolution::Resolved)
+            .unwrap_or(ImportPathResolution::Missing),
         _ => ImportPathResolution::Ambiguous,
     }
 }

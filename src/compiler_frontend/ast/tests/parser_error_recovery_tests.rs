@@ -180,3 +180,30 @@ fn reports_reserved_must_keyword_in_copy_place_position() {
     assert!(error.msg.contains("Keyword 'must' is reserved for traits"));
     assert!(error.msg.contains("deferred for Alpha"));
 }
+
+#[test]
+fn reports_reserved_must_keyword_in_signature_member_position() {
+    let error = parse_single_file_ast_error("#sum |must Int| -> Int:\n    return 1\n;\n");
+
+    assert_eq!(error.error_type, ErrorType::Rule);
+    assert!(error.msg.contains("Keyword 'must' is reserved for traits"));
+    assert!(error.msg.contains("deferred for Alpha"));
+    assert_eq!(
+        error
+            .metadata
+            .get(&ErrorMetaDataKey::CompilationStage)
+            .map(String::as_str),
+        Some("Struct/Parameter Parsing")
+    );
+}
+
+#[test]
+fn reports_reserved_must_keyword_in_postfix_member_position() {
+    let error = parse_single_file_ast_error(
+        "Point = |\n    value Int = 1,\n|\n\npoint ~= Point()\nvalue = point.must\n",
+    );
+
+    assert_eq!(error.error_type, ErrorType::Rule);
+    assert!(error.msg.contains("Keyword 'must' is reserved for traits"));
+    assert!(error.msg.contains("deferred for Alpha"));
+}

@@ -205,6 +205,17 @@ fn malformed_links_still_escape_literal_html_characters() {
 }
 
 #[test]
+fn opaque_anchor_inside_link_candidate_falls_back_to_literal_text() {
+    let rendered = markdown_formatter_output_from_text_and_anchors(&[
+        (Some("@/docs"), None),
+        (None, Some(child_anchor(7))),
+        (Some(" (Docs)"), None),
+    ]);
+
+    assert_eq!(rendered, "<p>@/docs{child:7} (Docs)</p>");
+}
+
+#[test]
 fn parses_unordered_list_markers_into_list_items() {
     let rendered = to_markdown("- first\n* second\n+ third", "p");
     assert_eq!(

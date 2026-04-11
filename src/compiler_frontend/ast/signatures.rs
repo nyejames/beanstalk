@@ -18,7 +18,7 @@ use crate::compiler_frontend::identifier_policy::{
 };
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::reserved_trait_syntax::{
-    reserved_trait_keyword, reserved_trait_keyword_error,
+    reserved_trait_keyword_error, reserved_trait_keyword_or_dispatch_mismatch,
 };
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
@@ -101,8 +101,12 @@ pub fn parse_signature_members(
             }
 
             TokenKind::Must | TokenKind::TraitThis => {
-                let keyword = reserved_trait_keyword(token_stream.current_token_kind())
-                    .expect("reserved trait token should map to a keyword");
+                let keyword = reserved_trait_keyword_or_dispatch_mismatch(
+                    token_stream.current_token_kind(),
+                    token_stream.current_location(),
+                    "Struct/Parameter Parsing",
+                    "signature member parsing",
+                )?;
 
                 return Err(reserved_trait_keyword_error(
                     keyword,

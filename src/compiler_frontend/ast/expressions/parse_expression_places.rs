@@ -14,12 +14,12 @@ use crate::compiler_frontend::ast::statements::declarations::create_reference;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::reserved_trait_syntax::{
-    reserved_trait_keyword, reserved_trait_keyword_error,
+    reserved_trait_keyword_error, reserved_trait_keyword_or_dispatch_mismatch,
 };
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::compiler_frontend::traits::ContainsReferences;
-use crate::{return_compiler_error, return_rule_error, return_syntax_error};
+use crate::{return_rule_error, return_syntax_error};
 
 pub(super) fn parse_mutable_receiver_expression(
     token_stream: &mut FileTokens,
@@ -161,16 +161,12 @@ pub(super) fn parse_copy_place_expression(
         }
 
         TokenKind::Must | TokenKind::TraitThis => {
-            let Some(keyword) = reserved_trait_keyword(token_stream.current_token_kind()) else {
-                return_compiler_error!(
-                    "Reserved trait token dispatch mismatch in copy-place parsing: {:?}",
-                    token_stream.current_token_kind();
-                    {
-                        CompilationStage => "Expression Parsing",
-                        PrimarySuggestion => "This indicates parser dispatch drift. Please report this compiler bug.",
-                    }
-                );
-            };
+            let keyword = reserved_trait_keyword_or_dispatch_mismatch(
+                token_stream.current_token_kind(),
+                token_stream.current_location(),
+                "Expression Parsing",
+                "copy-place parsing",
+            )?;
 
             Err(reserved_trait_keyword_error(
                 keyword,

@@ -8,7 +8,7 @@ use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::reserved_trait_syntax::{
-    reserved_trait_keyword, reserved_trait_keyword_error,
+    reserved_trait_keyword_error, reserved_trait_keyword_or_dispatch_mismatch,
 };
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
@@ -32,8 +32,12 @@ pub(super) fn parse_member_name(
         TokenKind::Symbol(id) => Ok(*id),
         TokenKind::IntLiteral(value) => Ok(string_table.get_or_intern(value.to_string())),
         TokenKind::Must | TokenKind::TraitThis => {
-            let keyword = reserved_trait_keyword(token_stream.current_token_kind())
-                .expect("reserved trait token should map to a keyword");
+            let keyword = reserved_trait_keyword_or_dispatch_mismatch(
+                token_stream.current_token_kind(),
+                token_stream.current_location(),
+                "AST Construction",
+                "postfix/member parsing",
+            )?;
 
             Err(reserved_trait_keyword_error(
                 keyword,

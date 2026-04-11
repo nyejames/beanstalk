@@ -17,6 +17,7 @@ use crate::compiler_frontend::type_coercion::compatibility::is_type_compatible;
 use crate::compiler_frontend::type_coercion::diagnostics::{
     argument_conversion_hint, expected_found_clause, offending_value_clause,
 };
+use crate::return_compiler_error;
 use crate::return_rule_error;
 use crate::return_type_error;
 use rustc_hash::FxHashMap;
@@ -372,9 +373,19 @@ pub(crate) fn resolve_call_arguments(
 
     let mut ordered = Vec::with_capacity(expectations.len());
     for (slot, expectation) in expectations.iter().enumerate() {
-        let argument = resolved[slot]
-            .take()
-            .expect("resolved argument slots must be filled before validation");
+        let Some(argument) = resolved[slot].take() else {
+            return_compiler_error!(
+                format!(
+                    "Call argument resolution left required slot {} empty for {}",
+                    slot + 1,
+                    diagnostics.callable_label()
+                );
+                {
+                    CompilationStage => "Function Call Validation",
+                    PrimarySuggestion => "This indicates a compiler bug in argument slot resolution. Please report this issue.",
+                }
+            );
+        };
 
         if !is_type_compatible(&expectation.data_type, &argument.value.data_type) {
             let conversion_hint =

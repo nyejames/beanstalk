@@ -22,11 +22,11 @@ use crate::compiler_frontend::builtins::expression_parsing::{
 use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorMetaDataKey};
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::reserved_trait_syntax::{
-    reserved_trait_keyword, reserved_trait_keyword_error,
+    reserved_trait_keyword_error, reserved_trait_keyword_or_dispatch_mismatch,
 };
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
-use crate::{ast_log, return_compiler_error, return_syntax_error, return_type_error};
+use crate::{ast_log, return_syntax_error, return_type_error};
 
 pub(super) enum ExpressionTokenStep {
     Continue,
@@ -377,16 +377,12 @@ pub(super) fn dispatch_expression_token(
         }
 
         TokenKind::Must | TokenKind::TraitThis => {
-            let Some(keyword) = reserved_trait_keyword(token_stream.current_token_kind()) else {
-                return_compiler_error!(
-                    "Reserved trait token dispatch mismatch in expression parsing: {:?}",
-                    token_stream.current_token_kind();
-                    {
-                        CompilationStage => "Expression Parsing",
-                        PrimarySuggestion => "This indicates parser dispatch drift. Please report this compiler bug.",
-                    }
-                );
-            };
+            let keyword = reserved_trait_keyword_or_dispatch_mismatch(
+                token_stream.current_token_kind(),
+                token_stream.current_location(),
+                "Expression Parsing",
+                "expression parsing",
+            )?;
 
             Err(reserved_trait_keyword_error(
                 keyword,

@@ -18,7 +18,7 @@ use crate::compiler_frontend::ast::templates::styles::whitespace::{
 use crate::compiler_frontend::ast::templates::template::{
     BodyWhitespacePolicy, Style, TemplateContent,
 };
-use crate::compiler_frontend::compiler_errors::CompilerMessages;
+use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
@@ -112,7 +112,9 @@ pub(crate) fn apply_body_formatter(
                     anchor_side_table.push(other.clone());
                     input_pieces.push(FormatterInputPiece::Opaque(FormatterOpaquePiece {
                         id: anchor_id,
-                        kind: opaque_kind_for_render_piece(other),
+                        kind: opaque_kind_for_render_piece(other).map_err(|error| {
+                            CompilerMessages::from_error_ref(error, string_table)
+                        })?,
                     }));
                 }
             }
@@ -237,13 +239,13 @@ fn output_to_input(
 }
 
 /// Narrows render-plan pieces into the formatter-visible opaque anchor kinds.
-fn opaque_kind_for_render_piece(piece: &RenderPiece) -> FormatterOpaqueKind {
+fn opaque_kind_for_render_piece(piece: &RenderPiece) -> Result<FormatterOpaqueKind, CompilerError> {
     match piece {
-        RenderPiece::ChildTemplate(_) => FormatterOpaqueKind::ChildTemplate,
-        RenderPiece::DynamicExpression(_) => FormatterOpaqueKind::DynamicExpression,
-        other => unreachable!(
-            "only non-text formatter-run pieces should be converted to opaque anchors: {other:?}"
-        ),
+        RenderPiece::ChildTemplate(_) => Ok(FormatterOpaqueKind::ChildTemplate),
+        RenderPiece::DynamicExpression(_) => Ok(FormatterOpaqueKind::DynamicExpression),
+        other => Err(CompilerError::compiler_error(format!(
+            "Template formatter attempted to anchor unsupported render piece kind: {other:?}"
+        ))),
     }
 }
 

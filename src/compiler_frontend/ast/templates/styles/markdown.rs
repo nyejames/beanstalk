@@ -207,20 +207,12 @@ fn split_formatter_input_into_lines(
                     if ch == '\n' {
                         lines.push(MarkdownLine::default());
                     } else {
-                        lines
-                            .last_mut()
-                            .expect("line buffer should exist while splitting markdown input")
-                            .atoms
-                            .push(MarkdownInlineAtom::Char(ch));
+                        push_atom_to_current_line(&mut lines, MarkdownInlineAtom::Char(ch));
                     }
                 }
             }
             FormatterInputPiece::Opaque(anchor) => {
-                lines
-                    .last_mut()
-                    .expect("line buffer should exist while splitting markdown input")
-                    .atoms
-                    .push(MarkdownInlineAtom::Opaque(anchor));
+                push_atom_to_current_line(&mut lines, MarkdownInlineAtom::Opaque(anchor));
             }
         }
     }
@@ -236,15 +228,25 @@ fn split_text_into_lines(content: &str) -> Vec<MarkdownLine> {
         if ch == '\n' {
             lines.push(MarkdownLine::default());
         } else {
-            lines
-                .last_mut()
-                .expect("line buffer should exist while splitting markdown text")
-                .atoms
-                .push(MarkdownInlineAtom::Char(ch));
+            push_atom_to_current_line(&mut lines, MarkdownInlineAtom::Char(ch));
         }
     }
 
     lines
+}
+
+/// Appends one atom to the current markdown line, creating a fallback line if state drift occurs.
+///
+/// WHAT: keeps line-atom writes non-panicking during formatter/text splitting.
+/// WHY: malformed or drifted parsing state should degrade gracefully instead of relying on
+/// unchecked `last_mut()` invariants.
+fn push_atom_to_current_line(lines: &mut Vec<MarkdownLine>, atom: MarkdownInlineAtom) {
+    if lines.is_empty() {
+        lines.push(MarkdownLine::default());
+    }
+    if let Some(line) = lines.last_mut() {
+        line.atoms.push(atom);
+    }
 }
 
 /// Renders the full markdown line stream while keeping block/list state across anchors.
@@ -438,11 +440,14 @@ fn render_list_block(
         }
 
         let rendered_item = render_list_item_fragments(&fragments, default_tag);
-        sections
-            .last_mut()
-            .expect("list section should exist before pushing items")
-            .items
-            .push(rendered_item);
+        if let Some(section) = sections.last_mut() {
+            section.items.push(rendered_item);
+        } else {
+            sections.push(MarkdownRenderedListSection {
+                kind: list_item.kind,
+                items: vec![rendered_item],
+            });
+        }
     }
 
     let mut output = MarkdownOutputBuilder::default();
@@ -589,15 +594,14 @@ fn render_inline_atoms(
                 prev_whitespace = false;
                 index += 1;
             }
-            MarkdownInlineAtom::Char(' ' | '\t') => {
+            MarkdownInlineAtom::Char(ch @ (' ' | '\t')) => {
                 literalize_pending_stars(
                     &mut output,
                     wrapper_tag,
                     &mut wrapper_open,
                     &mut pending_open_strength,
                 );
-                output
-                    .push_escaped_char(atom_char(atoms, index).expect("whitespace char expected"));
+                output.push_escaped_char(ch);
                 prev_whitespace = true;
                 index += 1;
             }
@@ -1036,11 +1040,9 @@ fn try_parse_link_at_atoms(
 fn collect_plain_chars(atoms: &[MarkdownInlineAtom]) -> String {
     atoms
         .iter()
-        .map(|atom| match atom {
-            MarkdownInlineAtom::Char(ch) => *ch,
-            MarkdownInlineAtom::Opaque(_) => {
-                unreachable!("link parsing should only collect plain character atoms")
-            }
+        .filter_map(|atom| match atom {
+            MarkdownInlineAtom::Char(ch) => Some(*ch),
+            MarkdownInlineAtom::Opaque(_) => None,
         })
         .collect()
 }

@@ -43,7 +43,7 @@ pub(super) fn order_expression_nodes(
                     &mut output_queue,
                     node_precedence,
                     left_associative,
-                );
+                )?;
 
                 operators_stack.push(node);
             }
@@ -71,7 +71,7 @@ fn pop_higher_precedence(
     output_queue: &mut Vec<AstNode>,
     current_precedence: u32,
     left_associative: bool,
-) {
+) -> Result<(), CompilerError> {
     while let Some(top_op_node) = operators_stack.last() {
         let existing_precedence = top_op_node.get_precedence();
 
@@ -82,16 +82,18 @@ fn pop_higher_precedence(
         };
 
         if should_pop {
-            // Invariant: `last()` returned `Some`, so a matching `pop()` must succeed.
-            output_queue.push(
-                operators_stack
-                    .pop()
-                    .expect("operator stack should contain the operator returned by last()"),
-            );
+            let Some(operator) = operators_stack.pop() else {
+                return_compiler_error!(
+                    "Expression ordering lost operator stack state during shunting-yard pop."
+                );
+            };
+            output_queue.push(operator);
         } else {
             break;
         }
     }
+
+    Ok(())
 }
 
 pub(super) fn extract_expression_location(
