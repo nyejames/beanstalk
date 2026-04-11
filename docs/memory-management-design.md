@@ -1,19 +1,12 @@
 # Beanstalk Memory Management Strategy
 The goal of Beanstalk’s memory system is to guarantee memory safety under all circumstances, while allowing performance to scale with the strength of static analysis.
 
-Beanstalk adopts a GC-first, statically eliding strategy. Garbage collection defines the baseline semantics. Static analysis progressively removes GC participation where it can prove safety. All programs are correct under GC. 
-
-Programs that satisfy stronger static rules run faster. Beanstalk treats ownership as an optimization target.
+Programs that satisfy stronger static rules run faster with no difference in language semantics. Beanstalk treats ownership as an optimization target.
 If static guarantees are missing or incomplete, the value falls back to GC.
 
-## High-Level Goals
-- Memory safety is always ensured.
+## Core Design Philosophy
 - No explicit lifetime annotations.
 - No explicit move syntax.
-- Early implementations rely on GC. Later implementations reduce or eliminate it.
-- The language semantics do not change as memory management improves.
-
-## Core Design Philosophy
 
 Beanstalk’s memory model is intentionally layered:
 - Garbage collection guarantees correctness for all heap-managed values by default. 
@@ -32,9 +25,6 @@ This model is used by:
 - The JavaScript backend
 - Early Wasm backends using Wasm GC
 - Debug and development builds
-
-Values begin as GC-managed.
-Analysis may remove the requirement for GC, but no backend may assume deterministic destruction unless eligibility is proven.
 
 ## Ownership as an Optional Runtime State
 When enabled by the backend, ownership is represented as runtime metadata, not a static type distinction.
@@ -56,10 +46,12 @@ These are similar to Rust.
 
 ### Shared Access (Default)
 
-* All variable usages create a shared reference by default.
-* Any number of shared references may exist simultaneously.
-* Shared access is read-only.
-* Shared references never imply ownership.
+- All variable usages create a shared reference by default.
+- Created by default assignment: `x = y`
+- Any number of shared references may exist simultaneously.
+- Shared access is read-only.
+- Shared references never imply ownership.
+- **No explicit `&` or `&mut` operators** - these don't exist in Beanstalk
 
 This allows aggressive reuse of values without copying.
 
@@ -67,13 +59,16 @@ This allows aggressive reuse of values without copying.
 
 Mutable access must always be explicit.
 
-* At most one mutable access to a value may exist at any time.
-* Mutable access excludes all other access (shared or mutable).
-* Mutable access may be either:
-
+- At most one mutable access to a value may exist at any time.
+- `~` at a call site requests mutable/exclusive access for that specific argument.
+- A mutable/exclusive parameter is never satisfied implicitly. The caller must spell `~` at the use site.
+- Collections and mutable receiver/member calls follow the same explicit rule.
+- Mutable access may be either:
   * a mutable borrow, or
   * an ownership transfer
+- Mutable access excludes all other access (shared or mutable).
 
+Mutable access may be either a mutable borrow, or an ownership transfer.
 Which of these occurs is determined by static last-use analysis and finalised at runtime.
 
 ### Ownership Transfer (Moves)
@@ -81,7 +76,17 @@ A move transfers full responsibility for a value.
 Moves are inferred automatically by the compiler,
 the programmer does not annotate ownership explicitly.
 
+- Moves are identified via last-use analysis but finalized at runtime using ownership flags
+- The compiler determines when the last use of a variable happens statically for any given scope
+- If the variable is passed into a function call or assigned to a new variable, and it's determined to be a move at runtime, then the new owner is responsible for dropping the value
+- Otherwise, the last time an owner uses a value without moving it, a drop_if_owned() insertion will drop the value
+
 Moves are identified statically as *possible ownership consumption points* and resolved dynamically using the ownership flag.
+
+### Copies are Explicit
+- No implicit copying for any types unless they are part of an expression creating a new value out of multiple references, or when used inside a template head
+- All types require explicit copy semantics when copying is needed
+- Most operations use borrowing instead of copying
 
 ## Last-Use Analysis
 Beanstalk uses last-use analysis as a sufficient condition for ownership transfer, not a necessary one.

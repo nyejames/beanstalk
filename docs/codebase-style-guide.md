@@ -27,11 +27,6 @@ Before finishing changes, always run:
 - Use the saying library macro `say!()` for std out when creating user facing messages that may need color styling in the future.
 
 Use variables directly in format! strings whenever possible:
-BAD:
-```rust
-    format!("Rust interpreter lowering could not resolve assignment target local {:?}", local_id);
-```
-GOOD:
 ```rust
     format!("Rust interpreter lowering could not resolve assignment target local {local_id:?}");
 ```
@@ -162,7 +157,6 @@ return_compiler_error!(
 ## Development Commands and Feature Flags
 
 ```bash
-cargo run -- build test.bst
 cargo run --features "show_ast,show_hir,detailed_timers" -- build test.bst
 cargo run -- tests
 cargo run -- build tests/cases/basic_print_statement/input/main.bst

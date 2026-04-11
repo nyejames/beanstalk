@@ -193,7 +193,8 @@ name, score = load_user(id) err! "guest", 0.0:
 Beanstalk still uses multiple returns, so the success path keeps normal return values.  
 The special `!` return is only for the error path.
 
-**Collections**
+### Collections
+Collections are ordered groups of values that are zero-indexed.
 
 When a new collection uses the mutable symbol, its internal values can be mutated by default.
 
@@ -208,25 +209,22 @@ items ~= {10, 20, 30}
 ~items.remove(1)
 ```
 
-Collections are ordered groups of values that are zero-indexed.
-
 `collection.get(index)` returns `Result<Elem, Error>`, so value-position reads must be
 handled with `!` syntax.
 
 Both indexed write forms are supported:
 
 ```beanstalk
-items.set(0, value)
-items.get(0) = value
+~items.set(0, value)
+~items.get(0) = value
 ```
 
 `set` and `get(index) = value` require mutable element semantics.
-`push` and `remove` are allowed on immutable collections.
 
 There may not be a runtime call under the hood when using collection methods, because the
 compiler can lower these operations directly.
 
-**Output and printing:**
+### Standard Output
 ```beanstalk
 -- Print to stdout using io() function
 io("Hello, World!")
@@ -251,7 +249,7 @@ greet |name String|:
 Templates are either folded to strings at compile time, or become functions that return strings at runtime. 
 They are the ONLY way to create mutable strings in Beanstalk. "" are only for string slices.
 
-**Template structure:**
+Template structure:
 - Head and body separated by `:`
 - Variable capture from the surrounding scope
 
@@ -705,37 +703,3 @@ Basic = | defaults String |
 ```
 
 `values` has type `#Basic` and is data-only. Const records do not have a runtime method surface, so `values.some_method()` is not valid.
-
-### Start fragments and the builder interface
-
-Project builders are aware of:
-
-- the entry start function
-- an ordered `start_fragments` stream
-- `module_constants` metadata in HIR
-- backend output (for example JS or Wasm bundle)
-
-`start_fragments` interleave:
-
-* compile-time strings (`ConstString`)
-* runtime fragment functions (`RuntimeStringFn`)
-
-Builders **do not** consume arbitrary exports directly. They consume the ordered fragments and decide how to materialize output for their target.
-
-Exported constants exist so that **templates can reference them** and remain guaranteed-foldable.
-They are also useful for constant data that wants to be shared module wide.
-
-Example:
-
-```beanstalk
-# head_defaults = [:
-  <meta charset="UTF-8">
-]
-
--- `#[...]` is a top-level const template.
--- Top-level const templates are entry-file only.
--- They must fully fold at compile time.
--- Captures must be constant-only.
--- Slots are allowed if their resolved content is constant.
-#[html.head: [head_defaults]]
-```

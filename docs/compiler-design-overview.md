@@ -1,11 +1,10 @@
-# Compilation 
+# Compilation
 ## What is this compiler?
 - A high-level language with templates as first-class citizens 
 - Near-term target is a stable JS backend/build system for static pages and JS output. Wasm remains the long-term primary target.
 - Build systems can use the compiler up through HIR (and borrow checking) and then apply their own codegen for any backend, including potential Rust-interpreter-backed builds.
 - A modular compiler exposed as a library, plus a build system, dev server and CLI that assemble single-file and multi-file projects into runnable bundles.
 - Ownership treated as an optimisation (GC is the fallback).
-- At runtime, ownership is resolved via tagged pointers, allowing a single calling convention for borrowed and owned values.
 
 ### Frontend structure at a glance
 - `src/compiler_frontend/mod.rs` wires stages together
@@ -82,6 +81,40 @@ Since compile speed is a goal of the compiler, complex optimisations are left to
 - Exactly one file is chosen as the module entry file; that file's start function is the module start function in HIR
 - The entry file can optionally contain top-level const templates that are consumed by project builders
 
+### Start fragments and the builder interface
+
+Project builders are aware of:
+
+- the entry start function
+- an ordered `start_fragments` stream
+- `module_constants` metadata in HIR
+- backend output (for example JS or Wasm bundle)
+
+`start_fragments` interleave:
+
+* compile-time strings (`ConstString`)
+* runtime fragment functions (`RuntimeStringFn`)
+
+Builders **do not** consume arbitrary exports directly. They consume the ordered fragments and decide how to materialize output for their target.
+
+Exported constants exist so that **templates can reference them** and remain guaranteed-foldable.
+They are also useful for constant data that wants to be shared module wide.
+
+Example:
+
+```beanstalk
+# head_defaults = [:
+  <meta charset="UTF-8">
+]
+
+-- `#[...]` is a top-level const template.
+-- Top-level const templates are entry-file only.
+-- They must fully fold at compile time.
+-- Captures must be constant-only.
+-- Slots are allowed if their resolved content is constant.
+#[html.head: [head_defaults]]
+```
+
 ## Pipeline Stages
 The Beanstalk compiler frontend and build system processes modules through these stages:
 
@@ -101,7 +134,7 @@ Project builders then perform:
     - Other build systems: reuse the shared pipeline through HIR (and borrow checking) and apply custom codegen while keeping Beanstalk semantics identical across targets
 
 ### Stage 0: Project Structure (`src/build_system/create_project_modules.rs`)
-**Purpose**: Determine the boundaries of each module in the project and the config for the project.
+Determines the boundaries of each module in the project and the config for the project.
 
 **key Features**:
 - Provides a canonical opinionated project structure
@@ -125,20 +158,15 @@ Project builders then perform:
 - The project builder can be aware of multiple `#` files per root, but they can only exist at the root of a module
 
 ### Stage 1: Tokenization (`src/compiler_frontend/tokenizer/lexer.rs`)
-**Purpose**: Convert raw source code into structured tokens with location information.
+Converts raw source code into structured tokens with location information.
 
-**Key Features**:
 - Precise source location tracking for error reporting
 - Recognition of Beanstalk-specific syntax
 - Context switching for delimiter handling templates / strings (`[]` vs `""`)
 
-**Development Notes**:
-This stage of the compiler is stable and currently can represent almost all the tokens Beanstalk will need to represent.
-
 ### Stage 2: Header Parsing (`src/compiler_frontend/headers/parse_file_headers.rs`)
-**Purpose**: Extract function definitions, structs, constants, imports and identify entry points before AST construction.
+Extracts function definitions, structs, constants, imports and identify entry points before AST construction.
 
-**Key Features**:
 - **Header Extraction**: Separates declarations from top-level code
 - **Implicit Start Function**: Top-level code that does not fit other header categories is collected into a `HeaderKind::StartFunction` header.
 - **Entry Path Tracking**: Entry-file status is tracked separately and used in later stages.
@@ -147,37 +175,10 @@ This stage of the compiler is stable and currently can represent almost all the 
 - **Collect Constants**: Collect exported constants as declaration syntax plus dependency metadata
 - **Preserve Top-Level Template Order**: Entry-file top-level templates are tracked in source order as ordered template items (`ConstTemplate` / `RuntimeTemplate`) for later fragment lowering.
 
-**Development Notes**:
-Use `show_headers` feature flag to inspect parsed headers.
-
-```rust
-pub enum HeaderKind {
-    Function {
-        signature: FunctionSignature,
-    },
-    Constant {
-        metadata: ConstantHeaderMetadata,
-    },
-    Struct,
-    Choice,
-    ConstTemplate {
-        file_order: usize,
-    },
-    StartFunction,
-}
-
-pub struct ConstantHeaderMetadata {
-    pub declaration_syntax: DeclarationSyntax,
-    pub file_constant_order: usize,
-    pub import_dependencies: HashSet<InternedPath>,
-}
-```
-
 ### Stage 3: Dependency Sorting (`src/compiler_frontend/module_dependencies.rs`)
-**Purpose**: Order headers topologically to ensure the proper compilation sequence so the AST for the whole module can be created in one pass. 
+Orders headers topologically to ensure the proper compilation sequence so the AST for the whole module can be created in one pass. 
 This enables the AST to perform full type checking.
 
-**Key Features**:
 - Topological sort of import dependencies
 - Constant dependency ordering across files
 - Source-order stability for constants declared in the same file
@@ -185,9 +186,8 @@ This enables the AST to perform full type checking.
 - Missing dependency diagnostics
 
 ### Stage 4: AST Construction (`src/compiler_frontend/ast/module_ast/mod.rs`)
-**Purpose**: Transform headers into Abstract Syntax Tree with compile-time optimizations.
+Transforms headers into Abstract Syntax Tree with compile-time optimizations.
 
-**Key Features**:
 - **Header Integration**: Convert headers to AST nodes
 - **Entry Point Handling**: The entry file path selects which start function is exposed as the module start function.
 - **Constant Resolution Pass**: Constants are resolved in dependency order before general body lowering.
@@ -244,9 +244,6 @@ Generic expression evaluation determines the natural type of an expression and s
 - Module constants are stored in AST constant metadata, not emitted as top-level runtime declaration statements
 - Builtin error types (`Error`, `ErrorKind`, `ErrorLocation`, `StackFrame`) are registered from `src/compiler_frontend/builtins/error_type.rs` and lowered as canonical frontend-owned types
 
-**Development Notes**:
-- Use `show_ast` feature flag to inspect generated AST
-
 ## Stage 5: HIR Generation (`src/compiler_frontend/hir/`)
 HIR (High-Level IR) is Beanstalk’s semantic lowering stage.
 It converts the fully typed AST into the first backend-facing semantic IR.
@@ -298,10 +295,15 @@ HIR is the first stage where resource lifetime semantics are made explicit, but 
 - HIR assumes required host imports exist.
 - No abstraction layer exists between HIR and host calls.
 
-### Debugging HIR
-Use the `show_hir` flag to see the output.
-
 ## Stage 6: Borrow Validation (`src/compiler_frontend/analysis/borrow_checker/`)
+Statically determines which values are not managed by the GC heap.
+Whether a drop actually happens is decided at runtime via ownership flags OR whether the value is managed by the GC.
+
+**Does Not**
+- Compute exact lifetimes
+- Track per-field or per-projection aliasing
+- Require ownership to be statically resolved
+
 Borrow validation is a mandatory frontend phase for backend semantic parity:
 - Programs that violate borrow/exclusivity rules are rejected before backend lowering.
 - Programs that pass borrow validation can additionally be optimized for non-GC lowering in capable backends.
@@ -319,16 +321,6 @@ but mandatory borrow validation itself is not optional.
     2. On return
     3. On break from ownership-bearing scopes
 
-- Whether a drop actually happens is decided at runtime via ownership flags OR whether the value is managed by the GC
-
-### Purpose
-Statically determine which values are not managed by the GC heap.
-
-**Does Not**
-- Compute exact lifetimes
-- Track per-field or per-projection aliasing
-- Require ownership to be statically resolved
-
 ### Key Features
 **Exclusivity Checking**
 Ensures no two mutable accesses overlap and mutable access excludes shared access.
@@ -342,41 +334,6 @@ Branches are checked independently and merges enforce conservative rules.
 
 **Drop Safety**
 Ensures all values that might own data eventually reach a drop site.
-
-### Shared References (Default)
-- Borrowing is the Default
-- Multiple shared references to the same data are allowed
-- Shared references are read-only access
-- Created by default assignment: `x = y`
-- **No explicit `&` or `&mut` operators** - these don't exist in Beanstalk
-- All variable usage creates immutable references by default
-
-### Mutable Access (`~`)
-Mutable access must always be explicit.
-
-* At most one mutable access to a value may exist at any time.
-* Mutable access excludes all other access (shared or mutable).
-* `~` on a declaration or reassignment makes the binding mutable.
-* `~` at a call site requests mutable/exclusive access for that specific argument.
-* A mutable/exclusive parameter is never satisfied implicitly. The caller must spell `~` at the use site.
-* `~` is only valid on a mutable place. Immutable bindings, literals, temporaries, and computed expressions are rejected.
-* Collections and mutable receiver/member calls follow the same explicit rule.
-* Mutable access may be either:
-  * a mutable borrow, or
-  * an ownership transfer
-
-Which of these occurs is determined by static last-use analysis and finalised at runtime.
-
-### Ownership Transfer (Moves)
-- Moves are identified via last-use analysis but finalized at runtime using ownership flags
-- The compiler determines when the last use of a variable happens statically for any given scope
-- If the variable is passed into a function call or assigned to a new variable, and it's determined to be a move at runtime, then the new owner is responsible for dropping the value
-- Otherwise, the last time an owner uses a value without moving it, a drop_if_owned() insertion will drop the value
-
-### Copies are Explicit
-- No implicit copying for any types unless they are part of an expression creating a new value out of multiple references, or when used inside a template head
-- All types require explicit copy semantics when copying is needed
-- Most operations use borrowing instead of copying
 
 ## Language Notes
 There are **no temporaries** at the language level. Compiler-introduced locals are treated exactly like user locals.
