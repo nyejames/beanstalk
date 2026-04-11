@@ -1,5 +1,7 @@
 # Coroutines and Async in Beanstalk (Design Overview)
 
+This is intended as a future reference for language design and compiler implementation planning. It is not final user-facing documentation yet.
+
 Beanstalk approaches async and concurrency by making **control flow explicit** and **communication safe by default**. 
 Instead of hiding async behind keywords like `async` / `await` or complex runtime abstractions, 
 Beanstalk uses a small set of primitives that make data flow, suspension, and concurrency visible in the syntax.

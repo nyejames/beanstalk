@@ -1,5 +1,7 @@
 # Reactivity in Beanstalk Templates
 
+This is intended as a future reference for language design and compiler implementation planning. It is not final user-facing documentation yet.
+
 This document describes the design and semantics of **reactivity in Beanstalk templates**.
 
 Reactivity in Beanstalk is **explicit**, **place-based**, and built directly on the existing mutability model of the language.
