@@ -1239,6 +1239,21 @@ path = "result_handler_without_fallback_fallthrough_rejected"
 tags = ["integration","results","diagnostics"]
 
 [[case]]
+id = "result_handler_propagation_vs_local_fallback"
+path = "result_handler_propagation_vs_local_fallback"
+tags = ["integration","results"]
+
+[[case]]
+id = "result_handler_nested_control_flow"
+path = "result_handler_nested_control_flow"
+tags = ["integration","results","control-flow"]
+
+[[case]]
+id = "result_handler_if_match_termination"
+path = "result_handler_if_match_termination"
+tags = ["integration","results","control-flow"]
+
+[[case]]
 id = "result_multi_bind_fallback"
 path = "result_multi_bind_fallback"
 tags = ["integration","results"]

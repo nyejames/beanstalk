@@ -133,6 +133,7 @@ pub fn parse_function_call(
                 context,
                 &call.result_types,
                 "Fallback values",
+                "Function Call Parsing",
                 string_table,
             )?;
 
