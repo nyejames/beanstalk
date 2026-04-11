@@ -22,11 +22,11 @@
 ## First Class String Template Syntax
 
 </div>
-<p>Beanstalk is designed to be an original, opinionated and a refreshing modern app building language and ecosystem</p>
+<p>Beanstalk is designed to be an opinionated and refreshing take on modern app building</p>
 
-<p>The build system is web first, while being modular enough to be agnostic about the backend or platform. This opens up a future where Beanstalk can be ran or embedded anywhere.
-It originated with the desire to never have to use TypeScript, web frameworks or bloated UI/web ecosystems again.</p>
-<p>Beanstalk is an attempt to make something fresh, future aware and carefully designed from the ground up for a wide variety of applications with the sleek feel of a modern high-level language</p>
+<p>The main build system is web based, but the compiler can have any number of pluggable backends through its builder interface. This opens up a future where Beanstalk can be ran or embedded anywhere.
+This comes from a string desire to never have to use TypeScript, web frameworks or bloated UI/web ecosystems again.</p>
+<p>Beanstalk is an attempt to make something fresh, future aware and carefully designed from the ground up for a wide variety of applications with the sleek feel of a modern high-level language, but without the technical debt and poor design principles</p>
 
 <br>
 
@@ -82,27 +82,28 @@ post = create_post("Boring Title", date, [$markdown:
 
 </div>
 
-- String templates that can double up as a tiny compile time HTML/markup engine or anything else you want. Perfect for UI generation and string formatting. Even comes with built-in markdown parsing.
+- String templates powerful enough to become a tiny compile time HTML/markup engine. Perfect for UI generation and complex string formatting. Even comes with built-in markdown parsing.
 - Readability-first syntax. Modern, concise and consistent.
 - Modular and fast for snappy tooling and fast development builds
 - Integrated build system and tooling for web projects and beyond
 - Simple, static and strong type system with a borrow checker for writing confident, safe and correct code
 - A memory model that can allow for future static optimizations. The GC can be  completly elided in ideal cases.
-- Backend agnostic. Could be used as the baseline for a whole web framework, a Wasm module builder or eventually an embedded UI engine for Rust. Extendable to any target in the future.
+- Backend agnostic. Could be used as the baseline for a whole web framework, a Wasm module builder or eventually an embedded UI engine for Rust. Designed to be extendable to any target in the future.
 
 <div align="center">
 
 ## LLM Aware design
-Beanstalk is designed with future LLM workflows in mind: 
+Beanstalk is designed for a future where LLM workflows are inevitable: 
 
-Humans validate, review and write the more declarative and "fun" parts of the codebase (where string templates shine). 
+Humans should validate, review and write the more declarative and creative parts of the codebase while LLMs provide the churn. 
+
 This is one reason why readability is the primary goal of the language.
 
-LLMs can write code with with a strict compiler and snappy tooling that enables it to iterate fast and avoid bad patterns due to Beanstalk being opinionated, memory safe and panic avoidant. The language is simple and terse which is ideal for context limits.
+The strict compiler and snappy, modular tooling enables LLMs to iterate fast and avoid bad patterns due to Beanstalk being opinionated, memory safe and panic avoidant. The language is simple and terse which is ideal for context limits and human validation.
 
 Even the way compiler errors are designed is to provide good metadata for LLMs right from the start, not just pretty human readable ones.
 
-Beanstalk not being saturated in LLM training data actually gives it the long term advantage of having a smaller, higher quality data set to work from as the language is used for real work.
+Beanstalk not being saturated in LLM training data may provide a the long term advantage of having a smaller, higher quality codebase dataset as the language matures.
 
 ## Documentation
 
@@ -141,5 +142,7 @@ Here is the current <a href="https://github.com/nyejames/beanstalk/blob/main/doc
 The language is nearly at the first alpha stage, but already has a broad set of tooling, build system work and backend scaffolding already done. The upcoming alpha will be about taking an already powerful set of tools and language and making it stable and usable.
 
 The syntax and some constructs (e.g. closures, async) are not implemented at all yet and will evolve in their design during the alpha stage. Not everything is completely set in stone so some things can be figured out based on how the language feels to use in real projects.
+
+The goal once hitting alpha is to have a stable Wasm backend for web projects.
 
 <br>
