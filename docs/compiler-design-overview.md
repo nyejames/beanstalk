@@ -173,7 +173,7 @@ Extracts function definitions, structs, constants, imports and identify entry po
 - **Import Resolution**: Processes import declarations
 - **Dependency Analysis**: Builds import graph and detects circular dependencies
 - **Collect Constants**: Collect exported constants as declaration syntax plus dependency metadata
-- **Preserve Top-Level Template Order**: Entry-file top-level templates are tracked in source order as ordered template items (`ConstTemplate` / `RuntimeTemplate`) for later fragment lowering.
+- **Preserve Top-Level Template Order**: Entry-file top-level const templates are tracked as ordered template items. Entry-file runtime templates stay in the start-function body and are extracted later in source order for fragment lowering.
 
 ### Stage 3: Dependency Sorting (`src/compiler_frontend/module_dependencies.rs`)
 Orders headers topologically to ensure the proper compilation sequence so the AST for the whole module can be created in one pass. 
@@ -228,7 +228,7 @@ Generic expression evaluation determines the natural type of an expression and s
 - Templates fully resolved at the AST stage become string literals before HIR.
 - Templates requiring runtime evaluation are lowered into **explicit template functions**.
 - Top-level const templates are fully folded (or throw a rule error).
-- Entry-file top-level templates become ordered `start_template_items` so HIR can build canonical start fragments.
+- Entry-file top-level const templates plus extracted runtime templates become ordered `start_template_items` so HIR can build canonical start fragments.
 - AST owns normal template parsing and folding boundaries. HIR still keeps a narrow transitional
   constant-lowering fallback for template values that arrive in already-constant contexts.
 

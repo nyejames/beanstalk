@@ -43,9 +43,9 @@ use crate::compiler_frontend::analysis::borrow_checker::{
 use crate::compiler_frontend::hir::hir_datatypes::{HirType, HirTypeKind, TypeContext, TypeId};
 use crate::compiler_frontend::hir::hir_nodes::{
     BlockId, FieldId, FunctionId, HirBlock, HirExpression, HirExpressionKind, HirField,
-    HirFunction, HirLocal, HirModule, HirNodeId, HirPlace, HirRegion, HirStatement,
-    HirStatementKind, HirStruct, HirTerminator, LocalId, OptionVariant, RegionId, StructId,
-    ValueKind,
+    HirFunction, HirLocal, HirMatchArm, HirModule, HirNodeId, HirPattern, HirPlace, HirRegion,
+    HirStatement, HirStatementKind, HirStruct, HirTerminator, LocalId, OptionVariant, RegionId,
+    StructId, ValueKind,
 };
 use crate::compiler_frontend::host_functions::CallTarget;
 use crate::compiler_frontend::interned_path::InternedPath;
@@ -743,6 +743,111 @@ fn emits_structured_if_without_dispatcher() {
     .expect("JS lowering should succeed");
 
     assert!(output.source.contains("if (true)"));
+    assert!(!output.source.contains("switch (__bb"));
+}
+
+/// Verifies that a synthetic wildcard merge arm remains a post-match continuation. [cfg]
+#[test]
+fn emits_structured_match_without_inlining_synthetic_merge_arm() {
+    let mut string_table = StringTable::new();
+    let (type_context, types) = build_type_context();
+
+    let blocks = vec![
+        HirBlock {
+            id: BlockId(0),
+            region: RegionId(0),
+            locals: vec![local(0, types.int, RegionId(0))],
+            statements: vec![statement(
+                1,
+                HirStatementKind::Assign {
+                    target: HirPlace::Local(LocalId(0)),
+                    value: int_expression(1, 1, types.int, RegionId(0)),
+                },
+                1,
+            )],
+            terminator: HirTerminator::Match {
+                scrutinee: expression(
+                    2,
+                    HirExpressionKind::Load(HirPlace::Local(LocalId(0))),
+                    types.int,
+                    RegionId(0),
+                    ValueKind::RValue,
+                ),
+                arms: vec![
+                    HirMatchArm {
+                        pattern: HirPattern::Literal(int_expression(3, 0, types.int, RegionId(0))),
+                        guard: None,
+                        body: BlockId(1),
+                    },
+                    HirMatchArm {
+                        pattern: HirPattern::Literal(int_expression(4, 1, types.int, RegionId(0))),
+                        guard: None,
+                        body: BlockId(2),
+                    },
+                    HirMatchArm {
+                        pattern: HirPattern::Wildcard,
+                        guard: None,
+                        body: BlockId(3),
+                    },
+                ],
+            },
+        },
+        HirBlock {
+            id: BlockId(1),
+            region: RegionId(0),
+            locals: vec![],
+            statements: vec![],
+            terminator: HirTerminator::Jump {
+                target: BlockId(3),
+                args: vec![],
+            },
+        },
+        HirBlock {
+            id: BlockId(2),
+            region: RegionId(0),
+            locals: vec![],
+            statements: vec![],
+            terminator: HirTerminator::Jump {
+                target: BlockId(3),
+                args: vec![],
+            },
+        },
+        HirBlock {
+            id: BlockId(3),
+            region: RegionId(0),
+            locals: vec![],
+            statements: vec![],
+            terminator: HirTerminator::Return(unit_expression(5, types.unit, RegionId(0))),
+        },
+    ];
+
+    let function = HirFunction {
+        id: FunctionId(0),
+        entry: BlockId(0),
+        params: vec![],
+        return_type: types.unit,
+        return_aliases: vec![],
+    };
+
+    let module = build_module(
+        &mut string_table,
+        "main",
+        blocks,
+        function,
+        &[(LocalId(0), "x")],
+        type_context,
+    );
+
+    let output = lower_hir_to_js(
+        &module,
+        &crate::compiler_frontend::analysis::borrow_checker::BorrowCheckReport::default(),
+        &string_table,
+        default_config(),
+    )
+    .expect("JS lowering should succeed");
+
+    assert!(output.source.contains("const __match_value_0"));
+    assert!(!output.source.contains("else if (true)"));
     assert!(!output.source.contains("switch (__bb"));
 }
 

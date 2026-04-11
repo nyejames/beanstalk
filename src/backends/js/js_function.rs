@@ -326,13 +326,25 @@ impl<'hir> JsEmitter<'hir> {
         let merge_target = self.resolve_match_merge_target(arms)?;
         let scrutinee = self.lower_expr(scrutinee)?;
         let scrutinee_temp = self.next_temp_identifier("__match_value");
+        let synthetic_merge_wildcard = merge_target.and_then(|target| {
+            arms.iter().position(|arm| {
+                matches!(arm.pattern, HirPattern::Wildcard)
+                    && arm.guard.is_none()
+                    && arm.body == target
+            })
+        });
 
         self.emit_line(&format!("const {scrutinee_temp} = {scrutinee};"));
 
+        let mut emitted_arm_count = 0usize;
         for (index, arm) in arms.iter().enumerate() {
+            if synthetic_merge_wildcard == Some(index) {
+                continue;
+            }
+
             let condition = self.lower_match_arm_condition(&scrutinee_temp, arm)?;
 
-            if index == 0 {
+            if emitted_arm_count == 0 {
                 self.emit_line(&format!("if ({condition}) {{"));
             } else {
                 self.emit_line(&format!("else if ({condition}) {{"));
@@ -342,6 +354,7 @@ impl<'hir> JsEmitter<'hir> {
             self.emit_simple_branch_block(arm.body, merge_target, emitted_blocks)?;
             self.indent -= 1;
             self.emit_line("}");
+            emitted_arm_count += 1;
         }
 
         if let Some(merge_target) = merge_target {

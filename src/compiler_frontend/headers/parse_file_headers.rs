@@ -41,7 +41,7 @@ use std::collections::HashSet;
 use std::fmt::Display;
 use std::path::Path;
 
-/// Parsed headers for one module plus the ordered top-level template items from entry files.
+/// Parsed headers for one module plus ordered entry-file const-template metadata.
 pub struct Headers {
     pub headers: Vec<Header>,
     pub top_level_template_items: Vec<TopLevelTemplateItem>,
@@ -94,7 +94,6 @@ pub struct TopLevelTemplateItem {
 #[derive(Clone, Debug)]
 pub enum TopLevelTemplateKind {
     ConstTemplate { header_path: InternedPath },
-    RuntimeTemplate,
 }
 
 #[derive(Clone, Debug)]
@@ -462,16 +461,9 @@ fn parse_headers_in_file(
                     headers.push(header);
                     next_statement_exported = false;
                 } else {
-                    // Runtime top-level templates stay in the start function body and are ordered
-                    // separately so AST finalization can reassemble them deterministically.
-                    if context.is_entry_file {
-                        context.top_level_template_items.push(TopLevelTemplateItem {
-                            file_order: *context.top_level_template_order,
-                            location: current_location.clone(),
-                            kind: TopLevelTemplateKind::RuntimeTemplate,
-                        });
-                        *context.top_level_template_order += 1;
-                    }
+                    // Runtime top-level templates stay in the start-function body. AST
+                    // finalization re-discovers them from the body snapshot, so headers only
+                    // track const-template metadata here.
                     push_runtime_template_tokens_to_start_function(
                         current_token,
                         token_stream,

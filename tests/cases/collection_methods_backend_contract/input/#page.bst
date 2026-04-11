@@ -1,4 +1,4 @@
--- Backend-shape contract case: keep explicit helper checks for collection builtins.
+-- Backend-shape contract case: assert helper/lowering shape, not collection semantics.
 
 values ~= {10, 20, 30}
 ~values.push(40)

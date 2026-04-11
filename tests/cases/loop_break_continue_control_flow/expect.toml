@@ -1,6 +1,7 @@
 [backends.html]
 mode = "success"
 warnings = "forbid"
+rendered_output_contains = ["<p>18</p>"]
 
 [[backends.html.artifact_assertions]]
 path = "index.html"

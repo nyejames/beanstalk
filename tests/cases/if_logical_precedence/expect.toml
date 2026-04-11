@@ -1,3 +1,4 @@
 [backends.html]
 mode = "success"
 warnings = "forbid"
+rendered_output_contains = ["if_logical_precedence not_and=false or_after_and=true grouped=false taken=0-1-0"]

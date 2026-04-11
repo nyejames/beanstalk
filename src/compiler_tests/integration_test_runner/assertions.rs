@@ -613,6 +613,10 @@ fn validate_golden_outputs(
     let mut expected_files = collect_files_recursive(golden_dir);
     expected_files.sort();
 
+    if expected_files.is_empty() {
+        return None;
+    }
+
     let mut expected_paths = Vec::with_capacity(expected_files.len());
     for file in &expected_files {
         let relative = file

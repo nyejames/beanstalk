@@ -191,9 +191,9 @@ Integration tests are the main regression check for new features and refactors.
 - Canonical cases should be self-contained directories representing one scenario each.
 - Multi-file fixtures should remain inside one case folder so helpers are not treated as standalone tests.
 - Failure cases should assert the intended `ErrorType` and, where practical, message fragments proving the correct failure reason.
-- Always add strong golden outputs when possible
-- Tests should use top level templates + goldens to test actual output when relevant
-- Avoid using host functions like io() unless they are explicitly what is being tests. Prefer top level templates to simulate output since this will show up in the artefact.
+- Always add strong output assertions when possible.
+- Use strict goldens only when exact emitted text is contractual. Prefer rendered-output assertions for behavior-first cases.
+- Avoid using host functions like io() unless they are explicitly what is being tested. Prefer top-level templates to simulate output since this shows up in emitted artifacts.
 
 **Test Case Structure** (`tests/cases/`):
 ```text

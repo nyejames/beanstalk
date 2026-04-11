@@ -13,5 +13,4 @@ pub(crate) mod module;
 pub(crate) mod ownership;
 pub(crate) mod static_data;
 pub(crate) mod stmt;
-pub(crate) mod templates;
 pub(crate) mod terminator;

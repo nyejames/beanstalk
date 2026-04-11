@@ -5,7 +5,6 @@ use crate::backends::wasm::hir_to_lir::context::{
 };
 use crate::backends::wasm::hir_to_lir::ownership::insert_advisory_drops;
 use crate::backends::wasm::hir_to_lir::stmt::lower_statement;
-use crate::backends::wasm::hir_to_lir::templates::lower_runtime_template_function;
 use crate::backends::wasm::hir_to_lir::terminator::lower_terminator;
 use crate::backends::wasm::lir::function::{WasmLirFunction, WasmLirFunctionOrigin};
 use crate::backends::wasm::lir::types::{WasmAbiType, WasmLirSignature, WasmLocalRole};
@@ -66,15 +65,6 @@ pub(crate) fn lower_function(
     alloc_function_locals(&mut function_context, &local_type_map)?;
     for block_id in &reachable_blocks {
         function_context.alloc_block(*block_id);
-    }
-
-    // Runtime template bodies use dedicated string-fragment lowering path.
-    if matches!(
-        function_context.lir_function.origin,
-        WasmLirFunctionOrigin::RuntimeTemplate
-    ) {
-        lower_runtime_template_function(&mut function_context)?;
-        return Ok(function_context.lir_function);
     }
 
     for block_id in &reachable_blocks {

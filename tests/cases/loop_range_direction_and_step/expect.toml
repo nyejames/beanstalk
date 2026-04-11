@@ -1,3 +1,4 @@
 [backends.html]
 mode = "success"
 warnings = "forbid"
+rendered_output_contains = ["loop_range_direction_and_step count_desc=5 sum_even_desc=30 sum_even_desc_negative=30"]

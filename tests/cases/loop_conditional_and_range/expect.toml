@@ -1,3 +1,4 @@
 [backends.html]
 mode = "success"
 warnings = "forbid"
+rendered_output_contains = ["loop_conditional_and_range counter=3 sum_exclusive=10 sum_inclusive=15"]

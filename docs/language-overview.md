@@ -258,8 +258,8 @@ Templates unlock the full power of Beanstalk's HTML / CSS generation capabilitie
 ### Template Styles
 Templates can be used to build complex UI components. They can use slots to insert content from other templates and have **style metadata** attached to them.
 
-In the HTML project builder, top-level templates in the entry file are directly inserted into the body of the generated HTML document.
-ONLY runtime or const top level templates do this (a template expression directly in the file scope), function calls that return templates or templates assigned to variables don't contribute. 
+In the HTML project builder, top-level template expressions in the entry file are inserted into the generated HTML body.
+Only direct file-scope template expressions do this. Function calls that return templates, or templates assigned to variables, do not.
 
 A template’s style is defined in the **template head** using `$` directives. 
 `$` introduces **compiler-handled directives** (so they don’t collide with normal variables and can be extended in the future), such as formatter-like built-ins, precedence controls, and default child templates that are automatically applied to direct child templates.

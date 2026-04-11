@@ -1,3 +1,4 @@
 [backends.html]
 mode = "success"
 warnings = "forbid"
+rendered_output_contains = ["logical_grouping grouped=false ungrouped=true taken=0-1"]

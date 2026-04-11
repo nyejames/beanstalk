@@ -64,26 +64,25 @@ pub(super) fn synthesize_start_template_items(
     let extraction =
         extract_runtime_template_candidates(ast_nodes, entry_start_index, string_table)?;
 
-    // 2) Merge const-template headers with extracted runtime templates in source order.
+    // 2) Merge entry-file const-template headers with extracted runtime templates in source order.
     let mut ordered_header_items = top_level_template_items.to_owned();
     ordered_header_items.sort_by_key(|item| item.file_order);
 
     let mut ordered_fragment_sources: Vec<OrderedFragmentSource> =
         Vec::with_capacity(ordered_header_items.len() + extraction.runtime_candidates.len());
     for template_item in ordered_header_items {
-        if let TopLevelTemplateKind::ConstTemplate { header_path } = template_item.kind {
-            let Some(value) = const_templates_by_path.get(&header_path).copied() else {
-                return Err(CompilerError::compiler_error(format!(
-                    "Missing const template value for '{}'",
-                    header_path.to_string(string_table)
-                )));
-            };
+        let TopLevelTemplateKind::ConstTemplate { header_path } = template_item.kind;
+        let Some(value) = const_templates_by_path.get(&header_path).copied() else {
+            return Err(CompilerError::compiler_error(format!(
+                "Missing const template value for '{}'",
+                header_path.to_string(string_table)
+            )));
+        };
 
-            ordered_fragment_sources.push(OrderedFragmentSource::Const {
-                value,
-                location: template_item.location.to_owned(),
-            });
-        }
+        ordered_fragment_sources.push(OrderedFragmentSource::Const {
+            value,
+            location: template_item.location.to_owned(),
+        });
     }
 
     // Runtime fragment ordering comes from extracted top-level template declarations.

@@ -231,7 +231,7 @@ fn validate_fixture_contract(
 
     for backend_expectation in &expectation.backend_expectations {
         let golden_dir = golden_dir_for_backend(fixture_root, backend_expectation.backend_id);
-        let has_golden_dir = golden_dir.is_dir();
+        let has_golden_dir = golden_dir_has_files(&golden_dir);
         let has_artifact_assertions = !backend_expectation.artifact_assertions.is_empty();
         let has_backend_baseline_contract =
             backend_has_builtin_success_contract(backend_expectation.backend_id);
@@ -330,4 +330,10 @@ fn resolve_case_entry_path(
 /// WHY: keeps artifact snapshots backend-specific even for non-matrix fixtures.
 pub(crate) fn golden_dir_for_backend(fixture_root: &Path, backend_id: BackendId) -> PathBuf {
     fixture_root.join(GOLDEN_DIR_NAME).join(backend_id.as_str())
+}
+
+fn golden_dir_has_files(golden_dir: &Path) -> bool {
+    std::fs::read_dir(golden_dir)
+        .ok()
+        .is_some_and(|mut entries| entries.next().is_some())
 }

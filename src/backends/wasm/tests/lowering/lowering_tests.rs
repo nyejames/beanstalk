@@ -253,6 +253,146 @@ fn lowers_runtime_template_with_literal_and_handle_chunks_in_order() {
 }
 
 #[test]
+fn lowers_runtime_template_with_cfg_before_final_return() {
+    let mut string_table = StringTable::new();
+    let (type_context, types) = build_type_context();
+    let runtime_path = InternedPath::from_single_str("__bst_frag_cfg", &mut string_table);
+
+    let entry_block = HirBlock {
+        id: BlockId(0),
+        region: RegionId(0),
+        locals: vec![local(0, types.int, RegionId(0))],
+        statements: vec![statement(
+            300,
+            HirStatementKind::Assign {
+                target: HirPlace::Local(LocalId(0)),
+                value: int_expression(301, 0, types.int, RegionId(0)),
+            },
+            300,
+        )],
+        terminator: HirTerminator::Jump {
+            target: BlockId(1),
+            args: vec![],
+        },
+    };
+
+    let header_block = HirBlock {
+        id: BlockId(1),
+        region: RegionId(0),
+        locals: vec![],
+        statements: vec![],
+        terminator: HirTerminator::If {
+            condition: expression(
+                302,
+                HirExpressionKind::BinOp {
+                    left: Box::new(load_local(303, LocalId(0), types.int, RegionId(0))),
+                    op: HirBinOp::Lt,
+                    right: Box::new(int_expression(304, 2, types.int, RegionId(0))),
+                },
+                types.boolean,
+                RegionId(0),
+                ValueKind::RValue,
+            ),
+            then_block: BlockId(2),
+            else_block: BlockId(3),
+        },
+    };
+
+    let body_block = HirBlock {
+        id: BlockId(2),
+        region: RegionId(0),
+        locals: vec![],
+        statements: vec![statement(
+            305,
+            HirStatementKind::Assign {
+                target: HirPlace::Local(LocalId(0)),
+                value: expression(
+                    306,
+                    HirExpressionKind::BinOp {
+                        left: Box::new(load_local(307, LocalId(0), types.int, RegionId(0))),
+                        op: HirBinOp::Add,
+                        right: Box::new(int_expression(308, 1, types.int, RegionId(0))),
+                    },
+                    types.int,
+                    RegionId(0),
+                    ValueKind::RValue,
+                ),
+            },
+            305,
+        )],
+        terminator: HirTerminator::Jump {
+            target: BlockId(1),
+            args: vec![],
+        },
+    };
+
+    let exit_block = HirBlock {
+        id: BlockId(3),
+        region: RegionId(0),
+        locals: vec![],
+        statements: vec![],
+        terminator: HirTerminator::Return(string_expression(
+            309,
+            "runtime loop done",
+            types.string,
+            RegionId(0),
+        )),
+    };
+
+    let runtime_function = HirFunction {
+        id: FunctionId(0),
+        entry: BlockId(0),
+        params: vec![],
+        return_type: types.string,
+        return_aliases: vec![],
+    };
+
+    let mut module = build_module(
+        &mut string_table,
+        vec![(
+            runtime_function,
+            runtime_path,
+            HirFunctionOrigin::RuntimeTemplate,
+        )],
+        vec![entry_block, header_block, body_block, exit_block],
+        type_context,
+        FunctionId(0),
+    );
+    module
+        .start_fragments
+        .push(StartFragment::RuntimeStringFn(FunctionId(0)));
+
+    let result = lower_hir_to_wasm_lir(
+        &module,
+        &default_borrow_facts(),
+        &WasmBackendRequest::default(),
+        &string_table,
+    )
+    .expect("runtime template CFG should lower successfully");
+
+    let runtime_lir = result
+        .lir_module
+        .functions
+        .iter()
+        .find(|function| function.id == WasmLirFunctionId(0))
+        .expect("runtime CFG function should be present");
+
+    assert_eq!(runtime_lir.blocks.len(), 4);
+    assert!(matches!(
+        runtime_lir.blocks[0].terminator,
+        WasmLirTerminator::Jump(_)
+    ));
+    assert!(matches!(
+        runtime_lir.blocks[1].terminator,
+        WasmLirTerminator::Branch { .. }
+    ));
+    assert!(matches!(
+        runtime_lir.blocks[3].terminator,
+        WasmLirTerminator::Return { value: Some(_) }
+    ));
+}
+
+#[test]
 fn lowers_non_runtime_string_add_as_buffer_concat() {
     let mut string_table = StringTable::new();
     let (type_context, types) = build_type_context();

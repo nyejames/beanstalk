@@ -6,7 +6,7 @@ use crate::backends::wasm::lir::instructions::WasmLirStmt;
 use crate::backends::wasm::lir::types::{WasmAbiType, WasmLirLocalId, WasmLocalRole};
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
 use crate::compiler_frontend::hir::hir_nodes::{
-    HirBinOp, HirExpression, HirExpressionKind, HirFunctionOrigin, HirPlace,
+    HirBinOp, HirExpression, HirExpressionKind, HirPlace,
 };
 
 /// Result of lowering a single HIR expression into LIR statements and a destination local.
@@ -293,7 +293,7 @@ fn should_lower_as_string_concat(
     context: &WasmFunctionLoweringContext<'_, '_>,
     expression: &HirExpression,
 ) -> bool {
-    !is_runtime_template_function(context) && is_handle_type(context, expression)
+    is_handle_type(context, expression)
 }
 
 fn lower_string_concat_expression(
@@ -301,9 +301,9 @@ fn lower_string_concat_expression(
     expression: &HirExpression,
     statements: &mut Vec<WasmLirStmt>,
 ) -> Result<ExprLoweringOutput, CompilerError> {
-    // WHAT: lower non-runtime-template string `Add` chains into explicit buffer operations.
-    // WHY: regular function bodies can still produce template-like concatenation and must emit
-    // deterministic runtime string helper calls instead of failing the lowering pass.
+    // WHAT: lower string `Add` chains into explicit buffer operations.
+    // WHY: both normal functions and runtime fragments should follow the same string-concat path
+    // so control-flow-heavy runtime wrappers do not need a second lowering contract.
     let mut chunks = Vec::new();
     collect_string_concat_chunks(context, expression, &mut chunks);
 
@@ -374,17 +374,6 @@ fn collect_string_concat_chunks<'a>(
     }
 
     out.push(expression);
-}
-
-fn is_runtime_template_function(context: &WasmFunctionLoweringContext<'_, '_>) -> bool {
-    matches!(
-        context
-            .module_context
-            .hir_module
-            .function_origins
-            .get(&context.hir_function.id),
-        Some(HirFunctionOrigin::RuntimeTemplate)
-    )
 }
 
 fn is_handle_type(
