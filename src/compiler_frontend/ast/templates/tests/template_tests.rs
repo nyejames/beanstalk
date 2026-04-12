@@ -4,7 +4,9 @@ use crate::compiler_frontend::ast::expressions::expression::{Expression, Express
 use crate::compiler_frontend::ast::statements::functions::{
     FunctionReturn, FunctionSignature, ReturnSlot,
 };
-use crate::compiler_frontend::ast::templates::template::{CommentDirectiveKind, TemplateType};
+use crate::compiler_frontend::ast::templates::template::{
+    CommentDirectiveKind, SlotKey, SlotPlaceholder, TemplateAtom, TemplateType,
+};
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::ast::templates::top_level_templates::{
     AstDocFragment, AstStartTemplateItem,
@@ -575,6 +577,69 @@ fn folds_runtime_candidate_that_is_already_const_into_const_fragment() {
             .filter(|node| matches!(node.kind, NodeKind::Function(_, _, _)))
             .count(),
         1
+    );
+}
+
+#[test]
+fn wrapper_shaped_runtime_candidate_stays_runtime_fragment() {
+    let mut string_table = StringTable::new();
+    let entry_dir = InternedPath::from_single_str("main.bst", &mut string_table);
+    let entry_scope = entry_dir.to_owned();
+    let location = test_location(2);
+
+    let mut wrapper_template = Template::create_default(vec![]);
+    wrapper_template.kind = TemplateType::String;
+    wrapper_template.location = location.to_owned();
+    wrapper_template.content.add(Expression::string_slice(
+        string_table.intern("before "),
+        location.to_owned(),
+        Ownership::ImmutableOwned,
+    ));
+    wrapper_template
+        .content
+        .atoms
+        .push(TemplateAtom::Slot(SlotPlaceholder::new(SlotKey::Default)));
+    wrapper_template.content.add(Expression::string_slice(
+        string_table.intern("after"),
+        location.to_owned(),
+        Ownership::ImmutableOwned,
+    ));
+
+    let wrapper_declaration = variable_declaration_node(
+        InternedPath::from_single_str(TOP_LEVEL_TEMPLATE_NAME, &mut string_table),
+        Expression::template(wrapper_template, Ownership::ImmutableOwned),
+        location.to_owned(),
+        entry_scope,
+    );
+
+    let mut ast_nodes = vec![start_function_node(
+        &entry_dir,
+        vec![wrapper_declaration],
+        test_location(1),
+        &mut string_table,
+    )];
+
+    let start_items = synthesize_start_template_items_for_tests(
+        &mut ast_nodes,
+        &entry_dir,
+        &[],
+        &FxHashMap::default(),
+        &mut string_table,
+    )
+    .expect("wrapper-shaped runtime candidate should remain a runtime fragment");
+
+    assert_eq!(start_items.len(), 1);
+    assert!(matches!(
+        start_items[0],
+        AstStartTemplateItem::RuntimeStringFunction { .. }
+    ));
+
+    assert_eq!(
+        ast_nodes
+            .iter()
+            .filter(|node| matches!(node.kind, NodeKind::Function(_, _, _)))
+            .count(),
+        2
     );
 }
 

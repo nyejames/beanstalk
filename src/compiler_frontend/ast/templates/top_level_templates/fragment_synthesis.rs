@@ -111,12 +111,12 @@ pub(super) fn synthesize_start_template_items(
                     ));
                 };
 
-                // Runtime template expressions can still fold to constants after AST folding.
-                // Keep them as const fragments to avoid generating unnecessary wrapper functions.
+                // Wrapper-shaped does not imply compile-time-final.
+                // Only fully renderable final templates become const start fragments.
+                // Runtime templates remain runtime fragment entries.
                 if matches!(
                     template.const_value_kind(),
                     TemplateConstValueKind::RenderableString
-                        | TemplateConstValueKind::WrapperTemplate
                 ) {
                     let folded = fold_template_with_context(
                         template,

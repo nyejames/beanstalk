@@ -1,0 +1,14 @@
+[backends.html]
+mode = "success"
+warnings = "forbid"
+
+[[backends.html.artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain = [
+    "<div id=\"bst-slot-0\"></div>",
+    "function bst___bst_frag_",
+    "template_docs_examples_runtime_coverage",
+    "first slot lives here",
+    "before",
+]

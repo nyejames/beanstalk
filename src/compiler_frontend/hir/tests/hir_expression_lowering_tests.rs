@@ -157,7 +157,7 @@ fn builtin_error_related_types(string_table: &mut StringTable) -> (DataType, Dat
 }
 
 #[test]
-fn compile_time_wrapper_templates_fail_when_they_reach_hir_runtime_lowering() {
+fn compile_time_wrapper_templates_lower_as_runtime_templates_when_they_reach_hir() {
     let mut string_table = StringTable::new();
     let before = string_table.intern("before ");
     let after = string_table.intern("after");
@@ -183,15 +183,55 @@ fn compile_time_wrapper_templates_fail_when_they_reach_hir_runtime_lowering() {
     template.kind = crate::compiler_frontend::ast::templates::template::TemplateType::String;
     template.resync_runtime_metadata();
 
-    let err = builder
+    let lowered = builder
         .lower_expression(&Expression::template(template, Ownership::ImmutableOwned))
-        .expect_err("compile-time wrapper templates should be rejected in HIR");
+        .expect("wrapper-shaped runtime templates should lower in HIR");
+
+    assert_eq!(lowered.prelude.len(), 1);
+    let call_args = match &lowered.prelude[0].kind {
+        HirStatementKind::Call { args, .. } => args,
+        other => panic!("expected template call prelude, got {other:?}"),
+    };
+    assert_eq!(call_args.len(), 2);
+    assert!(matches!(
+        call_args[0].kind,
+        HirExpressionKind::StringLiteral(ref value) if value == "before "
+    ));
+    assert!(matches!(
+        call_args[1].kind,
+        HirExpressionKind::StringLiteral(ref value) if value == "after"
+    ));
+}
+
+#[test]
+fn escaped_slot_insert_helpers_fail_when_they_reach_hir_runtime_lowering() {
+    let mut string_table = StringTable::new();
+    let text = string_table.intern("content");
+    let body_slot = string_table.intern("body");
+    let location = location(2);
+    let mut builder = setup_builder(&mut string_table);
+
+    let mut helper = Template::create_default(vec![]);
+    helper.location = location.clone();
+    helper.kind = crate::compiler_frontend::ast::templates::template::TemplateType::SlotInsert(
+        SlotKey::named(body_slot),
+    );
+    helper.content.add(Expression::string_slice(
+        text,
+        location.clone(),
+        Ownership::ImmutableOwned,
+    ));
+    helper.resync_runtime_metadata();
+
+    let err = builder
+        .lower_expression(&Expression::template(helper, Ownership::ImmutableOwned))
+        .expect_err("escaped helper templates should be rejected in HIR");
 
     assert_eq!(err.error_type, ErrorType::HirTransformation);
-    assert!(matches!(
-        err.msg.as_str(),
-        "Compile-time template reached HIR runtime-template lowering before AST folding."
-    ));
+    assert!(
+        err.msg
+            .contains("Template helper reached HIR runtime-template lowering")
+    );
 }
 
 #[test]

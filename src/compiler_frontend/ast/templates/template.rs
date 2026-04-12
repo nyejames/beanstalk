@@ -43,9 +43,15 @@ pub enum TemplateType {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TemplateConstValueKind {
+    // Fully resolved final string value. Safe to materialize as StringSlice before HIR.
     RenderableString,
+    // Compile-time wrapper value (for example unresolved slot placeholders).
+    // This is not automatically a backend-facing const string in runtime paths.
     WrapperTemplate,
+    // AST composition helper (`$insert(...)`) that must not escape as a
+    // backend-facing runtime value.
     SlotInsertHelper,
+    // Final template value still depends on runtime expressions.
     NonConst,
 }
 

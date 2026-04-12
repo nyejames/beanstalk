@@ -10,8 +10,8 @@
 //!
 //! ## Normalization Strategy
 //!
-//! 1. **Constant Folding**: Templates with `RenderableString` or `WrapperTemplate`
-//!    const value kinds are folded into `StringSlice` expressions immediately.
+//! 1. **Constant Folding**: Templates with `RenderableString` const value kinds
+//!    are folded into `StringSlice` expressions immediately.
 //!
 //! 2. **Render Plan Construction**: Runtime templates receive complete render
 //!    plans so HIR doesn't need to reconstruct them.
@@ -19,8 +19,8 @@
 //! 3. **Metadata Completion**: All templates have `content_needs_formatting`
 //!    set to false and their kind refreshed from content.
 //!
-//! 4. **Slot Insert Rejection**: `SlotInsertHelper` templates are rejected if
-//!    they reach finalization outside immediate wrapper-slot composition.
+//! 4. **Helper Rejection**: escaped `$insert(...)` helper templates are rejected
+//!    if they reach finalization outside immediate wrapper-slot composition.
 //!
 //! ## AST→HIR Template Boundary
 //!
@@ -33,7 +33,7 @@
 //! HIR receives:
 //! - Folded constant templates as `StringSlice` expressions
 //! - Runtime templates with complete render plans
-//! - No `SlotInsertHelper` templates
+//! - No escaped helper artifacts (`TemplateType::SlotInsert`)
 //! - No templates requiring formatting
 
 use super::super::build_state::AstBuildState;
@@ -42,8 +42,8 @@ use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, ResultCallHandling,
 };
-use crate::compiler_frontend::ast::templates::template::TemplateAtom;
 use crate::compiler_frontend::ast::templates::template::TemplateConstValueKind;
+use crate::compiler_frontend::ast::templates::template::{TemplateAtom, TemplateType};
 use crate::compiler_frontend::ast::templates::template_render_plan::TemplateRenderPlan;
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::compiler_errors::CompilerError;
@@ -720,27 +720,31 @@ fn normalize_expression_templates(
                 string_table,
             )?;
 
-            // Try to fold the template if it's a compile-time constant
-            match try_fold_template_to_string(
-                template,
-                source_file_scope,
-                path_format_config,
-                project_path_resolver,
-                string_table,
-            )? {
-                Some(folded) => Some(folded),
-                None => {
-                    // SlotInsertHelper templates should not reach finalization
-                    if matches!(
-                        template.const_value_kind(),
-                        TemplateConstValueKind::SlotInsertHelper
-                    ) {
-                        return Err(CompilerError::compiler_error(
-                            "Template helper reached AST finalization outside immediate wrapper-slot composition.",
-                        ));
-                    }
-                    None
+            let template_const_kind = template.const_value_kind();
+
+            // Fold only fully renderable final template values.
+            // Wrapper-shaped values may still represent runtime templates in this path.
+            if matches!(
+                template_const_kind,
+                TemplateConstValueKind::RenderableString
+            ) {
+                try_fold_template_to_string(
+                    template,
+                    source_file_scope,
+                    path_format_config,
+                    project_path_resolver,
+                    string_table,
+                )?
+            } else {
+                // Escaped slot-insert helpers are composition machinery only and must not survive
+                // as backend-facing AST values.
+                if is_escaped_template_helper(template, template_const_kind) {
+                    return Err(CompilerError::compiler_error(
+                        "Template helper reached AST finalization outside immediate wrapper-slot composition.",
+                    ));
                 }
+
+                None
             }
         }
 
@@ -801,9 +805,13 @@ fn normalize_expression_templates(
 /// WHAT: Normalizes child templates in template content, sets content_needs_formatting
 /// to false, refreshes the template kind, and builds a render plan.
 ///
-/// WHY: Runtime templates may contain compile-time child templates after wrapper/head
-/// composition. We fold those now so HIR only sees real runtime chunks plus finalized
-/// text pieces. The render plan is built here so HIR doesn't need to reconstruct it.
+/// WHY:
+/// - Runtime templates may contain compile-time child templates after wrapper/head
+///   composition. We fold those pieces now so HIR sees finalized chunks.
+/// - AST may fold compile-time subtemplates inside a runtime template, but must preserve
+///   the enclosing runtime template whenever any runtime chunk remains.
+/// - Only escaped helper artifacts are invalid after AST composition.
+/// - The render plan is built here so HIR doesn't need to reconstruct it.
 fn normalize_template_for_hir(
     template: &mut Template,
     source_file_scope: &InternedPath,
@@ -835,4 +843,9 @@ fn normalize_template_for_hir(
     // Build the render plan so HIR doesn't need to reconstruct it
     template.render_plan = Some(TemplateRenderPlan::from_content(&template.content));
     Ok(())
+}
+
+fn is_escaped_template_helper(template: &Template, const_kind: TemplateConstValueKind) -> bool {
+    matches!(template.kind, TemplateType::SlotInsert(_))
+        || matches!(const_kind, TemplateConstValueKind::SlotInsertHelper)
 }

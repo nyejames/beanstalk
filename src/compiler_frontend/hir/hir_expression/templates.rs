@@ -5,7 +5,14 @@
 //!
 //! Boundary note: AST owns template foldability and render-plan construction. HIR only lowers
 //! runtime templates whose semantic planning is already complete.
+//!
+//! HIR boundary rules:
+//! - HIR assumes wrapper/slot composition is already complete.
+//! - HIR lowers final runtime templates.
+//! - HIR rejects escaped helper artifacts and missing AST materialization bugs.
+//! - HIR does not decide wrapper-vs-runtime legality.
 
+use crate::compiler_frontend::ast::templates::template::{TemplateConstValueKind, TemplateType};
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
@@ -37,21 +44,27 @@ impl<'a> HirBuilder<'a> {
             );
         }
 
+        if matches!(template.kind, TemplateType::SlotInsert(_)) {
+            return_hir_transformation_error!(
+                "Template helper reached HIR runtime-template lowering before AST wrapper-slot resolution.",
+                self.hir_error_location(location)
+            );
+        }
+
         match template.const_value_kind() {
-            crate::compiler_frontend::ast::templates::template::TemplateConstValueKind::RenderableString
-            | crate::compiler_frontend::ast::templates::template::TemplateConstValueKind::WrapperTemplate => {
+            TemplateConstValueKind::RenderableString => {
                 return_hir_transformation_error!(
                     "Compile-time template reached HIR runtime-template lowering before AST folding.",
                     self.hir_error_location(location)
                 );
             }
-            crate::compiler_frontend::ast::templates::template::TemplateConstValueKind::SlotInsertHelper => {
+            TemplateConstValueKind::SlotInsertHelper => {
                 return_hir_transformation_error!(
                     "Template helper reached HIR runtime-template lowering before AST wrapper-slot resolution.",
                     self.hir_error_location(location)
                 );
             }
-            crate::compiler_frontend::ast::templates::template::TemplateConstValueKind::NonConst => {}
+            TemplateConstValueKind::WrapperTemplate | TemplateConstValueKind::NonConst => {}
         }
 
         let Some(plan) = &template.render_plan else {

@@ -17,7 +17,6 @@ use crate::compiler_frontend::ast::statements::branching::MatchArm;
 use crate::compiler_frontend::ast::statements::functions::{
     FunctionReturn, FunctionSignature, ReturnSlot,
 };
-use crate::compiler_frontend::ast::templates::template::{SlotKey, SlotPlaceholder, TemplateAtom};
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::compiler_errors::{CompilerMessages, ErrorType};
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
@@ -559,7 +558,7 @@ fn start_function_can_reference_module_constant() {
 }
 
 #[test]
-fn rejects_template_constants_that_ast_should_have_materialized() {
+fn rejects_unmaterialized_template_constants_in_hir_module_constant_lowering() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
 
@@ -573,21 +572,12 @@ fn rejects_template_constants_that_ast_should_have_materialized() {
         test_location(1),
     );
 
-    let mut wrapper_template = Template::create_default(vec![]);
-    wrapper_template.kind =
+    let mut template_constant = Template::create_default(vec![]);
+    template_constant.kind =
         crate::compiler_frontend::ast::templates::template::TemplateType::String;
-    wrapper_template.location = test_location(2);
-    wrapper_template.content.add(Expression::string_slice(
-        string_table.intern("before "),
-        test_location(2),
-        Ownership::ImmutableOwned,
-    ));
-    wrapper_template
-        .content
-        .atoms
-        .push(TemplateAtom::Slot(SlotPlaceholder::new(SlotKey::Default)));
-    wrapper_template.content.add(Expression::string_slice(
-        string_table.intern(" after"),
+    template_constant.location = test_location(2);
+    template_constant.content.add(Expression::string_slice(
+        string_table.intern("literal"),
         test_location(2),
         Ownership::ImmutableOwned,
     ));
@@ -595,7 +585,7 @@ fn rejects_template_constants_that_ast_should_have_materialized() {
     let mut ast = build_ast(vec![start_function], entry_path);
     ast.module_constants.push(make_test_variable(
         super::symbol("WRAPPER", &mut string_table),
-        Expression::template(wrapper_template, Ownership::ImmutableOwned),
+        Expression::template(template_constant, Ownership::ImmutableOwned),
     ));
 
     let error =
@@ -608,7 +598,7 @@ fn rejects_template_constants_that_ast_should_have_materialized() {
 }
 
 #[test]
-fn rejects_nested_template_constants_that_ast_should_have_materialized() {
+fn rejects_nested_unmaterialized_template_constants_in_hir_module_constant_lowering() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
 
@@ -622,21 +612,12 @@ fn rejects_nested_template_constants_that_ast_should_have_materialized() {
         test_location(1),
     );
 
-    let mut wrapper_template = Template::create_default(vec![]);
-    wrapper_template.kind =
+    let mut template_constant = Template::create_default(vec![]);
+    template_constant.kind =
         crate::compiler_frontend::ast::templates::template::TemplateType::String;
-    wrapper_template.location = test_location(2);
-    wrapper_template.content.add(Expression::string_slice(
-        string_table.intern("<section>"),
-        test_location(2),
-        Ownership::ImmutableOwned,
-    ));
-    wrapper_template
-        .content
-        .atoms
-        .push(TemplateAtom::Slot(SlotPlaceholder::new(SlotKey::Default)));
-    wrapper_template.content.add(Expression::string_slice(
-        string_table.intern("</section>"),
+    template_constant.location = test_location(2);
+    template_constant.content.add(Expression::string_slice(
+        string_table.intern("<section>body</section>"),
         test_location(2),
         Ownership::ImmutableOwned,
     ));
@@ -651,7 +632,7 @@ fn rejects_nested_template_constants_that_ast_should_have_materialized() {
             super::symbol("Page", &mut string_table),
             vec![make_test_variable(
                 body_field,
-                Expression::template(wrapper_template, Ownership::ImmutableOwned),
+                Expression::template(template_constant, Ownership::ImmutableOwned),
             )],
             test_location(2),
             Ownership::ImmutableOwned,

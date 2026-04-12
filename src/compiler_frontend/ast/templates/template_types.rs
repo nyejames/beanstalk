@@ -140,6 +140,11 @@ impl Template {
 
     /// Classifies template const-ness in one place.
     /// AST constant checks and render-required paths need consistent rules.
+    ///
+    /// IMPORTANT:
+    /// - `WrapperTemplate` means "compile-time wrapper value" (unresolved slots).
+    /// - It does NOT mean "always fold to backend-facing const string" in runtime paths.
+    /// - Runtime-vs-const lowering decisions must use the final template value shape.
     pub fn const_value_kind(&self) -> TemplateConstValueKind {
         if !self.content.is_const_evaluable_value() {
             return TemplateConstValueKind::NonConst;

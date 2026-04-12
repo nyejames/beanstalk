@@ -226,11 +226,16 @@ Generic expression evaluation determines the natural type of an expression and s
 
 #### Templates
 - Templates fully resolved at the AST stage become string literals before HIR.
-- Templates requiring runtime evaluation are lowered into **explicit template functions**.
-- Top-level const templates are fully folded (or throw a rule error).
+- Templates requiring runtime evaluation are lowered into explicit runtime template functions.
+- Top-level const templates are entry-file only and must fully fold (or throw a rule error).
+- Entry-file runtime templates stay in the start-function body and are extracted later in source order into `start_template_items`.
 - Entry-file top-level const templates plus extracted runtime templates become ordered `start_template_items` so HIR can build canonical start fragments.
-- AST owns template foldability, render-plan construction, constant-template lowering, and
-  runtime-template planning before HIR.
+- Partial compile-time folding inside a runtime template is normal and expected.
+- Wrapper/slot composition is AST-time machinery only.
+- Wrapper-shaped final templates are not automatically const.
+- The deciding rule is whether the final template value still depends on runtime expressions.
+- AST owns template foldability, render-plan construction, constant-template lowering, and runtime-template planning before HIR.
+- Non-goal/invalid state: raw slot-insert/helper artifacts are not stable program values and must not survive past AST composition.
 
 **Runtime Expressions**: When expressions cannot be folded at compile time:
 - Variables, function calls or complex operations become `ExpressionKind::Runtime(Vec<AstNode>)`
