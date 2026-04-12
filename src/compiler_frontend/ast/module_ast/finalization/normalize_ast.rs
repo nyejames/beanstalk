@@ -452,12 +452,13 @@ fn normalize_declaration_templates(
 
         NodeKind::StructDefinition(_, fields) => {
             for field in fields {
-                normalize_expression_templates(
+                normalize_expression_templates_with_context(
                     &mut field.value,
                     source_file_scope,
                     path_format_config,
                     project_path_resolver,
                     string_table,
+                    HelperArtifactPolicy::AllowNestedHelperContent,
                 )?;
             }
             Ok(())
@@ -532,6 +533,7 @@ fn normalize_call_templates(
                 path_format_config,
                 project_path_resolver,
                 string_table,
+                HelperArtifactPolicy::RejectFinalHelperValue,
             )
         }
 
@@ -552,16 +554,18 @@ fn normalize_result_handling_templates(
     path_format_config: &PathStringFormatConfig,
     project_path_resolver: &ProjectPathResolver,
     string_table: &mut StringTable,
+    helper_artifact_policy: HelperArtifactPolicy,
 ) -> Result<(), CompilerError> {
     match handling {
         ResultCallHandling::Fallback(fallback_values) => {
             for fallback in fallback_values {
-                normalize_expression_templates(
+                normalize_expression_templates_with_context(
                     fallback,
                     source_file_scope,
                     path_format_config,
                     project_path_resolver,
                     string_table,
+                    helper_artifact_policy,
                 )?;
             }
             Ok(())
@@ -569,12 +573,13 @@ fn normalize_result_handling_templates(
         ResultCallHandling::Handler { fallback, body, .. } => {
             if let Some(fallback_values) = fallback {
                 for fallback in fallback_values {
-                    normalize_expression_templates(
+                    normalize_expression_templates_with_context(
                         fallback,
                         source_file_scope,
                         path_format_config,
                         project_path_resolver,
                         string_table,
+                        helper_artifact_policy,
                     )?;
                 }
             }
@@ -593,6 +598,12 @@ fn normalize_result_handling_templates(
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum HelperArtifactPolicy {
+    RejectFinalHelperValue,
+    AllowNestedHelperContent,
+}
+
 /// Normalizes templates in expressions.
 ///
 /// WHAT: Recursively normalizes templates embedded in expressions by folding
@@ -606,6 +617,24 @@ fn normalize_expression_templates(
     path_format_config: &PathStringFormatConfig,
     project_path_resolver: &ProjectPathResolver,
     string_table: &mut StringTable,
+) -> Result<(), CompilerError> {
+    normalize_expression_templates_with_context(
+        expression,
+        source_file_scope,
+        path_format_config,
+        project_path_resolver,
+        string_table,
+        HelperArtifactPolicy::RejectFinalHelperValue,
+    )
+}
+
+fn normalize_expression_templates_with_context(
+    expression: &mut Expression,
+    source_file_scope: &InternedPath,
+    path_format_config: &PathStringFormatConfig,
+    project_path_resolver: &ProjectPathResolver,
+    string_table: &mut StringTable,
+    helper_artifact_policy: HelperArtifactPolicy,
 ) -> Result<(), CompilerError> {
     let folded_template = match &mut expression.kind {
         ExpressionKind::Copy(place) => {
@@ -649,12 +678,13 @@ fn normalize_expression_templates(
         | ExpressionKind::HostFunctionCall(_, args)
         | ExpressionKind::Collection(args) => {
             for argument in args {
-                normalize_expression_templates(
+                normalize_expression_templates_with_context(
                     argument,
                     source_file_scope,
                     path_format_config,
                     project_path_resolver,
                     string_table,
+                    helper_artifact_policy,
                 )?;
             }
             None
@@ -662,12 +692,13 @@ fn normalize_expression_templates(
 
         ExpressionKind::ResultHandledFunctionCall { args, handling, .. } => {
             for argument in args {
-                normalize_expression_templates(
+                normalize_expression_templates_with_context(
                     argument,
                     source_file_scope,
                     path_format_config,
                     project_path_resolver,
                     string_table,
+                    helper_artifact_policy,
                 )?;
             }
             normalize_result_handling_templates(
@@ -676,6 +707,7 @@ fn normalize_expression_templates(
                 path_format_config,
                 project_path_resolver,
                 string_table,
+                helper_artifact_policy,
             )?;
             None
         }
@@ -683,23 +715,25 @@ fn normalize_expression_templates(
         ExpressionKind::BuiltinCast { value, .. }
         | ExpressionKind::ResultConstruct { value, .. }
         | ExpressionKind::Coerced { value, .. } => {
-            normalize_expression_templates(
+            normalize_expression_templates_with_context(
                 value,
                 source_file_scope,
                 path_format_config,
                 project_path_resolver,
                 string_table,
+                helper_artifact_policy,
             )?;
             None
         }
 
         ExpressionKind::HandledResult { value, handling } => {
-            normalize_expression_templates(
+            normalize_expression_templates_with_context(
                 value,
                 source_file_scope,
                 path_format_config,
                 project_path_resolver,
                 string_table,
+                helper_artifact_policy,
             )?;
             normalize_result_handling_templates(
                 handling,
@@ -707,6 +741,7 @@ fn normalize_expression_templates(
                 path_format_config,
                 project_path_resolver,
                 string_table,
+                helper_artifact_policy,
             )?;
             None
         }
@@ -736,11 +771,15 @@ fn normalize_expression_templates(
                     string_table,
                 )?
             } else {
-                // Escaped slot-insert helpers are composition machinery only and must not survive
-                // as backend-facing AST values.
-                if is_escaped_template_helper(template, template_const_kind) {
-                    return Err(CompilerError::compiler_error(
+                // Nested helper-owned contribution structure can be legal inside wrapper
+                // templates. Reject only when this expression's final value itself is a
+                // standalone helper artifact after composition.
+                if helper_artifact_policy == HelperArtifactPolicy::RejectFinalHelperValue
+                    && is_illegal_final_template_helper_value(template, template_const_kind)
+                {
+                    return Err(CompilerError::new_rule_error(
                         "Template helper reached AST finalization outside immediate wrapper-slot composition.",
+                        template.location.to_owned(),
                     ));
                 }
 
@@ -750,31 +789,34 @@ fn normalize_expression_templates(
 
         ExpressionKind::StructDefinition(arguments) | ExpressionKind::StructInstance(arguments) => {
             for argument in arguments {
-                normalize_expression_templates(
+                normalize_expression_templates_with_context(
                     &mut argument.value,
                     source_file_scope,
                     path_format_config,
                     project_path_resolver,
                     string_table,
+                    helper_artifact_policy,
                 )?;
             }
             None
         }
 
         ExpressionKind::Range(lower, upper) => {
-            normalize_expression_templates(
+            normalize_expression_templates_with_context(
                 lower,
                 source_file_scope,
                 path_format_config,
                 project_path_resolver,
                 string_table,
+                helper_artifact_policy,
             )?;
-            normalize_expression_templates(
+            normalize_expression_templates_with_context(
                 upper,
                 source_file_scope,
                 path_format_config,
                 project_path_resolver,
                 string_table,
+                helper_artifact_policy,
             )?;
             None
         }
@@ -826,13 +868,15 @@ fn normalize_template_for_hir(
 
         // Runtime templates may still contain compile-time child templates after
         // wrapper/head composition. Fold those now so HIR only sees real runtime
-        // chunks plus finalized text pieces.
-        normalize_expression_templates(
+        // chunks plus finalized text pieces. Nested helper-owned contribution
+        // structure is allowed at this stage for reusable wrapper templates.
+        normalize_expression_templates_with_context(
             &mut segment.expression,
             source_file_scope,
             path_format_config,
             project_path_resolver,
             string_table,
+            HelperArtifactPolicy::AllowNestedHelperContent,
         )?;
     }
 
@@ -845,7 +889,10 @@ fn normalize_template_for_hir(
     Ok(())
 }
 
-fn is_escaped_template_helper(template: &Template, const_kind: TemplateConstValueKind) -> bool {
+fn is_illegal_final_template_helper_value(
+    template: &Template,
+    const_kind: TemplateConstValueKind,
+) -> bool {
     matches!(template.kind, TemplateType::SlotInsert(_))
         || matches!(const_kind, TemplateConstValueKind::SlotInsertHelper)
 }

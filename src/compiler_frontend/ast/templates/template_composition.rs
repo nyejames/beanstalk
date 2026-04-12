@@ -370,6 +370,8 @@ fn resolve_chain_layer(
     if layer.fill_items.is_empty() {
         // Head-only wrapper references like `[format.table]` must stay as unresolved
         // wrapper templates so later use-sites can still fill their slots.
+        // This is expected for reusable template/style constants and should not
+        // be treated as an escaped helper artifact.
         cache.insert(layer_index, layer.wrapper.to_owned());
         return Ok(layer.wrapper.to_owned());
     }

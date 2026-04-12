@@ -49,7 +49,8 @@ pub enum TemplateConstValueKind {
     // This is not automatically a backend-facing const string in runtime paths.
     WrapperTemplate,
     // AST composition helper (`$insert(...)`) that must not escape as a
-    // backend-facing runtime value.
+    // backend-facing runtime value. Helper identity alone is not sufficient to
+    // prove illegality when nested under a wrapper-owned final template value.
     SlotInsertHelper,
     // Final template value still depends on runtime expressions.
     NonConst,

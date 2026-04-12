@@ -1369,6 +1369,11 @@ path = "template_docs_examples_runtime_coverage"
 tags = ["integration","templates","docs"]
 
 [[case]]
+id = "template_escaped_insert_helper_standalone_failure"
+path = "template_escaped_insert_helper_standalone_failure"
+tags = ["integration","templates","diagnostics"]
+
+[[case]]
 id = "template_frontend_builtins_normal_flow_success"
 path = "template_frontend_builtins_normal_flow_success"
 tags = ["integration","templates"]
@@ -1382,6 +1387,11 @@ tags = ["integration","html"]
 id = "template_html_title_center_slot_chain"
 path = "template_html_title_center_slot_chain"
 tags = ["integration","html"]
+
+[[case]]
+id = "template_imported_style_wrapper_nested_helpers_runtime"
+path = "template_imported_style_wrapper_nested_helpers_runtime"
+tags = ["integration","templates","docs"]
 
 [[case]]
 id = "template_output_test"

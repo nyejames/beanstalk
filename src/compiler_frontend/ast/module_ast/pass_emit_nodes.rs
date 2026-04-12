@@ -234,6 +234,9 @@ impl<'a> AstBuildState<'a> {
                         // WHAT: top-level const templates can be direct strings or wrapper
                         // templates with optional, unfilled slots.
                         // WHY: unfilled slots are rendered as empty strings at compile time.
+                        // Nested helper-owned contribution structure is legal while composing a
+                        // wrapper, but the final top-level const value itself cannot be a raw
+                        // `$insert(...)` helper artifact.
                         TemplateConstValueKind::RenderableString
                         | TemplateConstValueKind::WrapperTemplate => {}
                         TemplateConstValueKind::SlotInsertHelper => {

@@ -11,7 +11,9 @@ use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::ast::templates::top_level_templates::{
     AstDocFragment, AstStartTemplateItem,
 };
-use crate::compiler_frontend::ast::test_support::parse_single_file_ast;
+use crate::compiler_frontend::ast::test_support::{
+    parse_single_file_ast, parse_single_file_ast_error,
+};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::headers::parse_file_headers::{
@@ -208,6 +210,53 @@ value = lhs and rhs_capture(~calls)
                     .is_some_and(|name| name == TOP_LEVEL_TEMPLATE_NAME)
         )),
         "entry start body should not retain top-level runtime template declarations"
+    );
+}
+
+#[test]
+fn docs_shaped_table_wrapper_with_nested_helpers_survives_ast_finalization() {
+    let source = r#"
+#format_table = [:
+    <table style="[$slot("style")]">
+        [$slot]
+    </table>
+]
+
+#table = [format_table:
+    [$insert("style"): border-collapse: collapse;]
+    [$children([:<td>[$slot]</td>]):[$slot]]
+]
+
+[:docs_shaped_table_wrapper_with_nested_helpers [table:
+    [:A]
+    [:B]
+]]
+"#;
+
+    let (ast, _) = parse_single_file_ast(source);
+
+    assert!(
+        !ast.start_template_items.is_empty(),
+        "docs-shaped helper-heavy wrapper templates should survive AST finalization"
+    );
+}
+
+#[test]
+fn standalone_insert_helper_value_is_rejected_after_composition() {
+    let source = r#"
+value = [$insert("style"): color: red;]
+"#;
+
+    let error = parse_single_file_ast_error(source);
+
+    assert!(
+        error.msg.contains(
+            "Template helper reached AST finalization outside immediate wrapper-slot composition."
+        ) || error
+            .msg
+            .contains("'$insert(...)' can only be used while filling an immediate parent template"),
+        "expected escaped helper failure, got: {}",
+        error.msg
     );
 }
 

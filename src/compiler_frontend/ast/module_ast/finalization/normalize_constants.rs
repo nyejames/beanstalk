@@ -57,12 +57,10 @@ impl<'a> AstBuildState<'a> {
             // `$insert(..)` helper constants only exist so AST template composition can
             // splice them into an immediate parent wrapper. They do not have a stable
             // backend-facing value shape, so HIR must not receive them as module consts.
-            if let ExpressionKind::Template(template) = &declaration.value.kind
-                && matches!(
-                    template.const_value_kind(),
-                    TemplateConstValueKind::SlotInsertHelper
-                )
-            {
+            // Wrapper constants remain valid here even when their authored source used
+            // slot-oriented composition structure, as long as the final constant value
+            // classifies as `RenderableString` or `WrapperTemplate`.
+            if contains_helper_only_template_value(&declaration.value) {
                 continue;
             }
 
@@ -188,5 +186,24 @@ impl<'a> AstBuildState<'a> {
             _ => expression.kind.to_owned(),
         };
         Ok(normalized)
+    }
+}
+
+fn contains_helper_only_template_value(expression: &Expression) -> bool {
+    match &expression.kind {
+        ExpressionKind::Template(template) => matches!(
+            template.const_value_kind(),
+            TemplateConstValueKind::SlotInsertHelper
+        ),
+        ExpressionKind::Collection(items) => items.iter().any(contains_helper_only_template_value),
+        ExpressionKind::StructInstance(fields) => fields
+            .iter()
+            .any(|field| contains_helper_only_template_value(&field.value)),
+        ExpressionKind::Range(start, end) => {
+            contains_helper_only_template_value(start) || contains_helper_only_template_value(end)
+        }
+        ExpressionKind::ResultConstruct { value, .. } => contains_helper_only_template_value(value),
+        ExpressionKind::Coerced { value, .. } => contains_helper_only_template_value(value),
+        _ => false,
     }
 }

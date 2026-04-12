@@ -144,6 +144,8 @@ impl Template {
     /// IMPORTANT:
     /// - `WrapperTemplate` means "compile-time wrapper value" (unresolved slots).
     /// - It does NOT mean "always fold to backend-facing const string" in runtime paths.
+    /// - `SlotInsertHelper` identifies helper shape, but nested helper-owned content can
+    ///   still be legal inside a reusable wrapper value.
     /// - Runtime-vs-const lowering decisions must use the final template value shape.
     pub fn const_value_kind(&self) -> TemplateConstValueKind {
         if !self.content.is_const_evaluable_value() {

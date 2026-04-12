@@ -14,6 +14,246 @@ These are the non-negotiable conditions for starting Alpha.
 - The JS backend and HTML builder are stable enough for real small projects and docs-style sites.
 - Compiler diagnostics are useful, accurate, consistently formatted, and visually moving toward the Nushell-style goal.
 - Cross-platform output is stable enough that Windows and macOS do not produce avoidable golden drift.
+
+### REVERT MISTAKEN AST DRIFT
+
+
+
+
+
+# Plan: restore the original AST architecture
+
+## Diagnosis
+
+The regression began when AST was changed from:
+- a consumer of header-owned top-level declaration knowledge
+
+into:
+- a pass-driven stage that rebuilds module-wide declaration/index state from sorted headers before lowering bodies.
+
+The root misunderstanding was introduced in commit `9786f4f41cbec596fe9d2f5b3f7cd7a9594654fc`.
+Later commits `8cd0572a8d01747975438a9c7b76757f5beb15fe` and `87df41a78d37a60bec59a740d1603bc9703e815a` expanded and entrenched AST-side normalization/finalization responsibilities.
+`bdf78deb5ca8f0cb1bb673add470a3e366502cd9` is surrounding orchestration churn, not the root cause.
+
+## Correct architecture to restore
+
+Pipeline:
+
+1. Tokenize files
+2. Parse file headers
+3. Dependency sort headers
+4. Lower sorted headers directly into AST
+   - top-level declarations are already known from headers
+   - function/local declarations are added in order as encountered during body parsing
+
+Principles:
+
+- Header parsing owns top-level declaration discovery
+- Dependency sorting owns inter-header order
+- AST owns:
+  - type resolution
+  - constant folding
+  - body lowering
+  - template lowering only where genuinely required by the AST→HIR boundary
+- AST does **not** rebuild the module declaration universe from headers
+- Function/local declarations remain incremental and ordered
+
+## Things to preserve
+
+Do not remove or redesign the current local declaration path inside function bodies.
+
+Keep:
+- `new_declaration(...)`
+- `context.add_var(...)`
+- local declaration insertion in source order as statements are parsed
+
+That part still matches the original architecture.
+
+## Phase 1: restore the stage contract in code comments and types
+
+### Goals
+- Make the intended ownership boundaries explicit before changing logic
+- Stop the code from documenting the wrong model
+
+### Changes
+- Update `src/compiler_frontend/mod.rs`
+  - rewrite the `headers_to_ast()` docs so they explicitly say:
+    - headers already provide top-level declaration structure
+    - AST lowers sorted headers and only adds in-body declarations incrementally
+- Update `src/compiler_frontend/ast/module_ast/mod.rs`
+  - remove wording that frames pass 1 as “register all symbols module-wide”
+- Add a top-level comment in the AST entrypoint stating:
+  - headers are the source of truth for top-level declarations
+  - AST must not reconstruct them
+
+### Done when
+- comments and docs match the intended old architecture exactly
+
+## Phase 2: move top-level declaration ownership back to headers
+
+### Goals
+- make header parsing / sorted headers the authoritative source of top-level declaration metadata
+- eliminate AST-side reconstruction of top-level declaration indexes
+
+### Changes
+- Introduce a header-owned manifest or index structure, for example:
+  - declared symbol paths by file
+  - declared names by file
+  - export visibility
+  - file imports
+  - start-function symbol path / alias metadata
+- Build this during header parsing and/or dependency sorting
+- Pass it into AST as an input instead of deriving it again inside `AstBuildState`
+
+### Files
+- `src/compiler_frontend/headers/parse_file_headers.rs`
+- `src/compiler_frontend/module_dependencies.rs`
+- `src/compiler_frontend/mod.rs`
+
+### Done when
+- AST no longer needs to scan sorted headers just to reconstruct declaration tables
+
+## Phase 3: delete AST pass 1 declaration collection
+
+### Goals
+- remove the direct source of duplicated work
+- make AST start from real semantic work instead
+
+### Changes
+- Delete `src/compiler_frontend/ast/module_ast/pass_declarations.rs`
+- Remove `collect_declarations(...)` from `Ast::new(...)`
+- Remove `register_declared_symbol(...)` and any AST-owned top-level declaration/index state that only exists to support pass 1
+- Rewrite import-binding resolution to consume the header-owned manifest instead
+
+### Files
+- `src/compiler_frontend/ast/module_ast/pass_declarations.rs`
+- `src/compiler_frontend/ast/module_ast/orchestrate.rs`
+- `src/compiler_frontend/ast/module_ast/build_state.rs`
+- `src/compiler_frontend/ast/module_ast/pass_import_bindings.rs`
+
+### Done when
+- `Ast::new(...)` begins from real lowering/resolution work, not declaration recollection
+
+## Phase 4: shrink `AstBuildState` to real AST responsibilities
+
+### Goals
+- remove state that exists only because AST was rebuilding header-owned data
+- reduce conceptual and compile-time overhead
+
+### Remove or relocate if only used for top-level recollection
+- `importable_symbol_exported`
+- `file_imports_by_source`
+- `declared_paths_by_file`
+- `declared_names_by_file`
+- `module_file_paths`
+- any helper methods that only populate those tables
+
+### Keep only if still required for true AST work
+- resolved type/signature tables
+- module constants
+- const template results
+- AST nodes
+- warnings
+- template metadata genuinely needed before HIR
+
+### Files
+- `src/compiler_frontend/ast/module_ast/build_state.rs`
+
+### Done when
+- `AstBuildState` looks like AST state, not a second header-index database
+
+## Phase 5: stop cloning full declaration vectors through scope contexts
+
+### Goals
+- preserve ordered local declarations
+- avoid copying the whole module declaration table into every scope
+
+### Changes
+- Replace `ScopeContext.declarations: Vec<Declaration>` with a layered shape:
+  - shared immutable module declaration view
+  - small mutable local declaration list for the active scope
+- Child control-flow scopes should inherit local visibility cheaply
+- Function scopes should extend with parameters without cloning the full module vec
+- `add_var(...)` should continue to append only local declarations
+
+### Files
+- `src/compiler_frontend/ast/module_ast/scope_context.rs`
+- `src/compiler_frontend/ast/module_ast/pass_emit_nodes.rs`
+- any expression/reference lookup helpers that currently assume one flat cloned vec
+
+### Done when
+- function emission no longer does:
+  - `self.declarations.to_owned()`
+- `ScopeContext::new(...)` no longer eagerly clones the whole declaration table
+
+## Phase 6: trim AST finalization back to the minimum boundary needed
+
+### Goals
+- keep AST focused
+- prevent AST from becoming a generic whole-tree normalization machine
+
+### Review introduced drift from
+- `8cd0572a8d01747975438a9c7b76757f5beb15fe`
+- `87df41a78d37a60bec59a740d1603bc9703e815a`
+
+### Questions to answer per finalization helper
+- Is this genuinely AST semantic work?
+- Is this actually template parsing/composition work that should happen earlier?
+- Is this HIR-shaping work that should happen at the AST→HIR lowering boundary instead?
+- Is this only compensating for another abstraction leak?
+
+### Likely keep
+- top-level const template folding
+- start fragment synthesis if AST is still the canonical source for it
+
+### Likely reduce or move
+- broad recursive AST-wide normalization sweeps that exist mainly to “clean up” before HIR
+- duplicated template/materialization helpers that can happen during template construction instead
+
+### Files
+- `src/compiler_frontend/ast/module_ast/finalization/*`
+- `src/compiler_frontend/ast/templates/*`
+- `src/compiler_frontend/hir/*` boundary code where appropriate
+
+### Done when
+- AST finalization is small, explicit, and only contains logic that truly belongs before HIR
+
+## Phase 7: restore the tests around the original contract
+
+### Add regression coverage for
+
+1. Header-owned top-level knowledge
+   - imported declarations are available without AST recollecting them
+   - sorted headers are sufficient for top-level lowering
+
+2. Ordered in-body declarations
+   - locals become visible only after declaration
+   - no full pre-scan of function locals is required
+
+3. Import visibility
+   - file-scoped imports remain enforced
+   - start-function aliases still work
+
+4. Performance-shape regression checks
+   - no AST declaration recollection pass
+   - no full declaration vec cloning per function scope
+
+### Done when
+- the restored architecture is enforced by tests, not just comments
+
+## Expected end state
+
+`Ast::new(...)` should look conceptually like this:
+
+1. consume sorted headers plus header-owned module manifest
+2. resolve types/signatures using that manifest
+3. lower headers/bodies directly
+4. add locals as encountered inside body parsing
+5. perform only minimal AST finalization actually required before HIR
+
+No AST-side top-level declaration recollection.
+No repeated rebuilding of symbol/index tables from headers.
+No cloning of full module declaration vecs into every scope.
  
 ### PR - Refactor collection builtins into explicit compiler-owned operations and remove compatibility-shaped dispatch
 
