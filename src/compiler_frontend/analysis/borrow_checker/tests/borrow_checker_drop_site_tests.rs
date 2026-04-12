@@ -6,7 +6,7 @@
 use crate::compiler_frontend::analysis::borrow_checker::BorrowDropSiteKind;
 use crate::compiler_frontend::analysis::borrow_checker::tests::test_support::{
     assignment_target, build_ast, default_host_registry, entry_and_start, function_node, location,
-    make_test_variable, node, run_borrow_checker, symbol, test_project_path_resolver,
+    make_test_variable, node, run_borrow_checker, symbol,
 };
 use crate::compiler_frontend::ast::ast_nodes::NodeKind;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
@@ -20,13 +20,9 @@ fn lower_hir(
     ast: crate::compiler_frontend::ast::ast::Ast,
     string_table: &mut StringTable,
 ) -> crate::compiler_frontend::hir::hir_nodes::HirModule {
-    HirBuilder::new(
-        string_table,
-        PathStringFormatConfig::default(),
-        test_project_path_resolver(),
-    )
-    .build_hir_module(ast)
-    .expect("HIR lowering should succeed")
+    HirBuilder::new(string_table, PathStringFormatConfig::default())
+        .build_hir_module(ast)
+        .expect("HIR lowering should succeed")
 }
 
 #[test]

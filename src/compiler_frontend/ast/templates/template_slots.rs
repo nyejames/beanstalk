@@ -406,9 +406,7 @@ fn compose_wrapper_atoms_recursive(
                             string_table,
                         )?,
                     };
-                    nested_template.unformatted_content = nested_template.content.to_owned();
-                    nested_template.content_needs_formatting = false;
-                    nested_template.render_plan = None;
+                    nested_template.resync_runtime_metadata();
 
                     let mut nested_expression = segment.expression.to_owned();
                     nested_expression.kind = ExpressionKind::Template(Box::new(nested_template));
@@ -532,9 +530,8 @@ fn wrap_child_slot_contribution(
     let origin = contribution_origin(atom);
     let mut wrapped_template = Template::create_default(vec![]);
     wrapped_template.content = wrapped_content;
-    wrapped_template.unformatted_content = wrapped_template.content.to_owned();
-    refresh_template_kind(&mut wrapped_template);
     wrapped_template.location = contribution_location(atom);
+    wrapped_template.resync_runtime_metadata();
 
     Ok(TemplateAtom::Content(TemplateSegment::new(
         Expression::template(wrapped_template, Ownership::ImmutableOwned),
@@ -556,12 +553,7 @@ fn apply_child_wrappers_to_contribution_children(
         child_wrappers,
         string_table,
     )?;
-    contribution_template.unformatted_content = contribution_template.content.to_owned();
-    contribution_template.content_needs_formatting = false;
-    // Clear the stale render plan so fold_into_stringid rebuilds it from the
-    // now-modified content (which includes the freshly-applied child wrappers).
-    contribution_template.render_plan = None;
-    refresh_template_kind(&mut contribution_template);
+    contribution_template.resync_runtime_metadata();
 
     Ok(TemplateAtom::Content(TemplateSegment::new(
         Expression::template(contribution_template, Ownership::ImmutableOwned),
@@ -592,23 +584,6 @@ fn contribution_is_child_template_output(atom: &TemplateAtom) -> bool {
         return false;
     };
     segment.is_child_template_output
-}
-
-fn refresh_template_kind(template: &mut Template) {
-    if matches!(
-        template.kind,
-        TemplateType::SlotInsert(_) | TemplateType::SlotDefinition(_) | TemplateType::Comment(_)
-    ) {
-        return;
-    }
-
-    template.kind = if template.content.is_const_evaluable_value()
-        && !template.content.contains_slot_insertions()
-    {
-        TemplateType::String
-    } else {
-        TemplateType::StringFunction
-    };
 }
 
 fn contribution_origin(atom: &TemplateAtom) -> TemplateSegmentOrigin {
@@ -699,6 +674,7 @@ fn collect_direct_slot_insert_contributions(
     sanitized.content = TemplateContent {
         atoms: sanitized_atoms,
     };
+    sanitized.resync_runtime_metadata();
 
     (sanitized, extracted)
 }

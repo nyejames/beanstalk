@@ -238,8 +238,10 @@ fn finalize_template_after_formatting(
     )?;
     template.content = compose_template_head_chain(&template.content, foldable, string_table)?;
 
-    // `template.render_plan` is always derived from the finalized content stream so lowering
-    // and runtime fallbacks observe the same authoritative piece ordering.
+    // `template.render_plan` must always match the finalized content stream before HIR sees
+    // the template. AST owns both piece ordering and runtime-template planning.
+    template.content_needs_formatting = false;
+    template.refresh_kind_from_content();
     template.render_plan = Some(TemplateRenderPlan::from_content(&template.content));
     Ok(())
 }

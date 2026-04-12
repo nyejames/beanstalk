@@ -110,9 +110,7 @@ fn wrap_atom_in_child_template(
 
         let mut wrapped_template = wrapper.to_owned();
         wrapped_template.content = composed_content;
-        wrapped_template.unformatted_content = wrapped_template.content.to_owned();
-        wrapped_template.content_needs_formatting = false;
-        wrapped_template.render_plan = None;
+        wrapped_template.resync_runtime_metadata();
         wrapped_template
     } else {
         let mut wrapped_template = Template::create_default(vec![]);
@@ -126,14 +124,7 @@ fn wrap_atom_in_child_template(
                 atom.to_owned(),
             ],
         };
-        wrapped_template.unformatted_content = wrapped_template.content.to_owned();
-        wrapped_template.kind = if wrapped_template.content.is_const_evaluable_value()
-            && !wrapped_template.content.contains_slot_insertions()
-        {
-            TemplateType::String
-        } else {
-            TemplateType::StringFunction
-        };
+        wrapped_template.resync_runtime_metadata();
         wrapped_template
     };
 
@@ -397,9 +388,7 @@ fn resolve_chain_layer(
 
     let mut resolved_wrapper = layer.wrapper.to_owned();
     resolved_wrapper.content = composed_content;
-    resolved_wrapper.unformatted_content = resolved_wrapper.content.to_owned();
-    resolved_wrapper.content_needs_formatting = false;
-    resolved_wrapper.render_plan = None;
+    resolved_wrapper.resync_runtime_metadata();
     cache.insert(layer_index, resolved_wrapper.to_owned());
 
     Ok(resolved_wrapper)

@@ -180,7 +180,7 @@ body {
     </style>
   </head>
   <body style="">
-    <div id="bst-slot-0"></div>
+    template_slot_wrapper_runtime  before  after
     <script>
     function __bs_is_ref(value) {
         return value !== null && typeof value === "object" && value.__bs_ref === true;
@@ -454,45 +454,10 @@ body {
         return "";
     }
 
-    function bst___bst_frag_0_fn1() {
-        let bst___hir_tmp_0_l5 = __bs_binding(undefined);
-        let bst___hir_tmp_1_l6 = __bs_binding(undefined);
-        let bst___hir_tmp_2_l7 = __bs_binding(undefined);
-        
-        __bs_assign_value(bst___hir_tmp_0_l5, bst___template_fn_2_fn4(__bs_binding(" before "), __bs_binding(" after")));
-        __bs_assign_value(bst___hir_tmp_1_l6, bst___template_fn_1_fn3(bst___hir_tmp_0_l5));
-        __bs_assign_value(bst___hir_tmp_2_l7, bst___template_fn_0_fn2(__bs_binding("template_slot_wrapper_runtime "), bst___hir_tmp_1_l6));
-        return __bs_clone_value(__bs_read(bst___hir_tmp_2_l7));
-    }
-
-    function bst___template_fn_0_fn2(bst_chunk_0_l0, bst_chunk_1_l1) {
-        
-        bst_chunk_0_l0 = __bs_param_binding(bst_chunk_0_l0);
-        bst_chunk_1_l1 = __bs_param_binding(bst_chunk_1_l1);
-        
-        return (("" + __bs_read(bst_chunk_0_l0)) + __bs_read(bst_chunk_1_l1));
-    }
-
-    function bst___template_fn_1_fn3(bst_chunk_0_l2) {
-        
-        bst_chunk_0_l2 = __bs_param_binding(bst_chunk_0_l2);
-        
-        return ("" + __bs_read(bst_chunk_0_l2));
-    }
-
-    function bst___template_fn_2_fn4(bst_chunk_0_l3, bst_chunk_1_l4) {
-        
-        bst_chunk_0_l3 = __bs_param_binding(bst_chunk_0_l3);
-        bst_chunk_1_l4 = __bs_param_binding(bst_chunk_1_l4);
-        
-        return (("" + __bs_read(bst_chunk_0_l3)) + __bs_read(bst_chunk_1_l4));
-    }
-
     </script>
     <script>
     (function () {
       const slots = [
-        ["bst-slot-0", bst___bst_frag_0_fn1],
       ];
 
       for (const [id, fn] of slots) {

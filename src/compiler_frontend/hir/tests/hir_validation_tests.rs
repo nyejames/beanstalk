@@ -80,12 +80,7 @@ fn lower_ast(
     ast: Ast,
     string_table: &mut StringTable,
 ) -> Result<crate::compiler_frontend::hir::hir_nodes::HirModule, CompilerMessages> {
-    HirBuilder::new(
-        string_table,
-        PathStringFormatConfig::default(),
-        super::test_project_path_resolver(),
-    )
-    .build_hir_module(ast)
+    HirBuilder::new(string_table, PathStringFormatConfig::default()).build_hir_module(ast)
 }
 
 #[test]

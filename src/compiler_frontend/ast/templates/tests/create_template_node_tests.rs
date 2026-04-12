@@ -405,13 +405,10 @@ fn collect_body_text_from_render_plan(
     template: &Template,
     string_table: &StringTable,
 ) -> Vec<String> {
-    use crate::compiler_frontend::ast::templates::template_render_plan::TemplateRenderPlan;
-
     let plan = template
         .render_plan
         .as_ref()
-        .cloned()
-        .unwrap_or_else(|| TemplateRenderPlan::from_content(&template.content));
+        .expect("parsed templates should carry a render plan");
 
     plan.pieces
         .iter()
@@ -423,13 +420,10 @@ fn collect_body_text_from_render_plan(
 }
 
 fn collect_body_text_locations_from_render_plan(template: &Template) -> Vec<SourceLocation> {
-    use crate::compiler_frontend::ast::templates::template_render_plan::TemplateRenderPlan;
-
     let plan = template
         .render_plan
         .as_ref()
-        .cloned()
-        .unwrap_or_else(|| TemplateRenderPlan::from_content(&template.content));
+        .expect("parsed templates should carry a render plan");
 
     plan.pieces
         .iter()
@@ -1281,7 +1275,6 @@ fn markdown_parent_with_fresh_row_wrapper_renders_plain_cells() {
     let folded = fold_template_in_context(&template, &context, &mut string_table);
     let rendered = string_table.resolve(folded);
 
-    println!("RENDERED: {}", rendered);
     assert_eq!(rendered.matches("<td>").count(), 2);
     assert!(rendered.contains("Type"));
     assert!(rendered.contains("Description"));
@@ -1302,12 +1295,8 @@ fn markdown_parent_with_fresh_header_row_wrapper_renders_plain_headers() {
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("markdown header row usage should parse");
 
-    println!("PARENT RENDER PLAN: {:#?}", template.render_plan);
-
     let folded = fold_template_in_context(&template, &context, &mut string_table);
     let rendered = string_table.resolve(folded);
-
-    println!("RENDERED: {}", rendered);
 
     assert_eq!(
         rendered

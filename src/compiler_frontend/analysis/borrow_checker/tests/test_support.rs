@@ -22,9 +22,7 @@ use crate::compiler_frontend::host_functions::{
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::string_interning::StringTable;
-pub(crate) use crate::compiler_frontend::test_support::{
-    test_project_path_resolver, test_source_location,
-};
+pub(crate) use crate::compiler_frontend::test_support::test_source_location;
 use crate::projects::settings::IMPLICIT_START_FUNC_NAME;
 
 pub(crate) fn location(line: i32) -> SourceLocation {
@@ -120,13 +118,9 @@ pub(crate) fn lower_hir(
     ast: Ast,
     string_table: &mut StringTable,
 ) -> crate::compiler_frontend::hir::hir_nodes::HirModule {
-    HirBuilder::new(
-        string_table,
-        PathStringFormatConfig::default(),
-        test_project_path_resolver(),
-    )
-    .build_hir_module(ast)
-    .expect("HIR lowering should succeed")
+    HirBuilder::new(string_table, PathStringFormatConfig::default())
+        .build_hir_module(ast)
+        .expect("HIR lowering should succeed")
 }
 
 pub(crate) fn default_host_registry(_string_table: &mut StringTable) -> HostRegistry {

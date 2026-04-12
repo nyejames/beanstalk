@@ -80,12 +80,7 @@ fn build_ast(nodes: Vec<AstNode>, entry_path: InternedPath) -> Ast {
 }
 
 fn lower_ast(ast: Ast, string_table: &mut StringTable) -> Result<HirModule, CompilerMessages> {
-    HirBuilder::new(
-        string_table,
-        PathStringFormatConfig::default(),
-        super::test_project_path_resolver(),
-    )
-    .build_hir_module(ast)
+    HirBuilder::new(string_table, PathStringFormatConfig::default()).build_hir_module(ast)
 }
 
 fn assert_no_placeholder_terminators(module: &HirModule) {

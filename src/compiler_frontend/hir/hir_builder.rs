@@ -19,7 +19,6 @@ use crate::compiler_frontend::ast::ast::Ast;
 use crate::compiler_frontend::ast::ast::AstDocFragmentKind;
 use crate::compiler_frontend::ast::ast::AstStartTemplateItem;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, SourceLocation};
-use crate::compiler_frontend::ast::templates::template_folding::TemplateFoldContext;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::hir::hir_datatypes::{HirTypeKind, TypeContext, TypeId};
 use crate::compiler_frontend::hir::hir_nodes::{
@@ -31,7 +30,6 @@ use crate::compiler_frontend::hir::hir_side_table::HirSideTable;
 use crate::compiler_frontend::hir::hir_validation::validate_hir_module;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
-use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::projects::settings::IMPLICIT_START_FUNC_NAME;
 use crate::return_hir_transformation_error;
@@ -44,9 +42,8 @@ pub fn lower_module(
     ast: Ast,
     string_table: &mut StringTable,
     path_format_config: PathStringFormatConfig,
-    project_path_resolver: ProjectPathResolver,
 ) -> Result<HirModule, CompilerMessages> {
-    let ctx = HirBuilder::new(string_table, path_format_config, project_path_resolver);
+    let ctx = HirBuilder::new(string_table, path_format_config);
     ctx.build_hir_module(ast)
 }
 
@@ -79,7 +76,6 @@ pub struct HirBuilder<'a> {
 
     // === Path formatting config (origin, output style) ===
     pub(super) path_format_config: PathStringFormatConfig,
-    pub(super) project_path_resolver: ProjectPathResolver,
 
     // === ID Counters ===
     next_block_id: u32,
@@ -147,14 +143,12 @@ impl<'a> HirBuilder<'a> {
     pub fn new(
         string_table: &'a mut StringTable,
         path_format_config: PathStringFormatConfig,
-        project_path_resolver: ProjectPathResolver,
     ) -> HirBuilder<'a> {
         HirBuilder {
             module: HirModule::new(),
 
             string_table,
             path_format_config,
-            project_path_resolver,
 
             next_block_id: 0,
             next_local_id: 0,
@@ -190,18 +184,6 @@ impl<'a> HirBuilder<'a> {
             current_block: None,
             current_region: None,
             loop_targets: vec![],
-        }
-    }
-
-    pub(crate) fn new_template_fold_context<'b>(
-        &'b mut self,
-        source_file_scope: &'b InternedPath,
-    ) -> TemplateFoldContext<'b> {
-        TemplateFoldContext {
-            string_table: self.string_table,
-            project_path_resolver: &self.project_path_resolver,
-            path_format_config: &self.path_format_config,
-            source_file_scope,
         }
     }
 

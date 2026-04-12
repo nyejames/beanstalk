@@ -9,6 +9,7 @@
 use crate::compiler_frontend::ast::templates::template::{
     Style, TemplateConstValueKind, TemplateContent, TemplateType,
 };
+use crate::compiler_frontend::ast::templates::template_render_plan::TemplateRenderPlan;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
 /// The central template representation in the AST.
@@ -93,6 +94,46 @@ impl Template {
     /// Returns true if this template is a compile-time string (not a wrapper).
     pub fn is_const_renderable_string(&self) -> bool {
         self.const_value_kind().is_renderable_string()
+    }
+
+    /// Rebuilds the derived metadata that must stay aligned with `content`.
+    ///
+    /// WHAT:
+    /// - refreshes the pre-format snapshot
+    /// - clears deferred-formatting state
+    /// - reclassifies non-special template kinds
+    /// - rebuilds the final render plan from the current content stream
+    ///
+    /// WHY:
+    /// - wrapper/slot composition mutates template content after parsing, and HIR must only
+    ///   receive templates whose runtime metadata is already authoritative.
+    pub(crate) fn resync_runtime_metadata(&mut self) {
+        self.unformatted_content = self.content.to_owned();
+        self.content_needs_formatting = false;
+        self.refresh_kind_from_content();
+        self.render_plan = Some(TemplateRenderPlan::from_content(&self.content));
+    }
+
+    /// Refreshes the non-special string/string-function classification from current content.
+    ///
+    /// WHY:
+    /// - slot/comment helper kinds are semantic markers and must not be rewritten by generic
+    ///   post-composition cleanup.
+    pub(crate) fn refresh_kind_from_content(&mut self) {
+        if matches!(
+            self.kind,
+            TemplateType::SlotInsert(_) | TemplateType::SlotDefinition(_) | TemplateType::Comment(_)
+        ) {
+            return;
+        }
+
+        self.kind = if self.content.is_const_evaluable_value()
+            && !self.content.contains_slot_insertions()
+        {
+            TemplateType::String
+        } else {
+            TemplateType::StringFunction
+        };
     }
 
     /// Classifies template const-ness in one place.

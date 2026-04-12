@@ -12,6 +12,7 @@ use super::fragment_extraction::{extract_runtime_template_candidates, replace_en
 use super::{AstStartTemplateItem, RuntimeTemplateCandidate, fold_template_with_context};
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
+use crate::compiler_frontend::ast::templates::template::TemplateConstValueKind;
 use crate::compiler_frontend::ast::statements::functions::{
     FunctionReturn, FunctionSignature, ReturnSlot,
 };
@@ -112,7 +113,11 @@ pub(super) fn synthesize_start_template_items(
 
                 // Runtime template expressions can still fold to constants after AST folding.
                 // Keep them as const fragments to avoid generating unnecessary wrapper functions.
-                if template.is_const_renderable_string() {
+                if matches!(
+                    template.const_value_kind(),
+                    TemplateConstValueKind::RenderableString
+                        | TemplateConstValueKind::WrapperTemplate
+                ) {
                     let folded = fold_template_with_context(
                         template,
                         &template.location.scope,
