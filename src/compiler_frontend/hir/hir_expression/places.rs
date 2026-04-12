@@ -370,50 +370,14 @@ impl<'a> HirBuilder<'a> {
             return Ok(None);
         };
 
-        if let ExpressionKind::Template(template) = &constant_declaration.value.kind {
-            match template.const_value_kind() {
-                crate::compiler_frontend::ast::templates::template::TemplateConstValueKind::RenderableString => {
-                    let mut fold_context = self.new_template_fold_context(&template.location.scope);
-                    let folded = template.fold_into_stringid(&mut fold_context)?;
-                    let string_ty = self.intern_type_kind(HirTypeKind::String);
-                    let region = self.current_region_or_error(location)?;
-
-                    return Ok(Some(self.make_expression(
-                        location,
-                        HirExpressionKind::StringLiteral(self.string_table.resolve(folded).to_owned()),
-                        string_ty,
-                        ValueKind::Const,
-                        region,
-                    )));
-                }
-                crate::compiler_frontend::ast::templates::template::TemplateConstValueKind::WrapperTemplate => {
-                    // WHAT: allow direct runtime uses of wrapper constants to lower as strings.
-                    // WHY: unresolved wrapper slots render as empty segments when no fill-site
-                    // consumes them, matching runtime template rendering semantics.
-                    let mut fold_context = self.new_template_fold_context(&template.location.scope);
-                    let folded = template.fold_into_stringid(&mut fold_context)?;
-                    let string_ty = self.intern_type_kind(HirTypeKind::String);
-                    let region = self.current_region_or_error(location)?;
-
-                    return Ok(Some(self.make_expression(
-                        location,
-                        HirExpressionKind::StringLiteral(self.string_table.resolve(folded).to_owned()),
-                        string_ty,
-                        ValueKind::Const,
-                        region,
-                    )));
-                }
-                crate::compiler_frontend::ast::templates::template::TemplateConstValueKind::SlotInsertHelper => {
-                    return_hir_transformation_error!(
-                        format!(
-                            "Template helper constant '{}' reached HIR expression lowering before AST wrapper-slot resolution.",
-                            self.symbol_name_for_diagnostics(name)
-                        ),
-                        self.hir_error_location(location)
-                    );
-                }
-                crate::compiler_frontend::ast::templates::template::TemplateConstValueKind::NonConst => {}
-            }
+        if matches!(constant_declaration.value.kind, ExpressionKind::Template(_)) {
+            return_hir_transformation_error!(
+                format!(
+                    "Template constant '{}' reached HIR expression lowering before AST materialized it.",
+                    self.symbol_name_for_diagnostics(name)
+                ),
+                self.hir_error_location(location)
+            );
         }
 
         if !self.currently_lowering_constants.insert(name.to_owned()) {

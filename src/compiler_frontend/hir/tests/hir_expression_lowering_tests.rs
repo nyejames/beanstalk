@@ -27,11 +27,7 @@ use crate::compiler_frontend::tokenizer::tokens::{CharPosition, SourceLocation};
 
 fn setup_builder(string_table: &'_ mut StringTable) -> HirBuilder<'_> {
     let test_function_name = InternedPath::from_single_str("__expr_test_fn", string_table);
-    let mut builder = HirBuilder::new(
-        string_table,
-        PathStringFormatConfig::default(),
-        super::test_project_path_resolver(),
-    );
+    let mut builder = HirBuilder::new(string_table, PathStringFormatConfig::default());
 
     let region = RegionId(0);
     let function_id = FunctionId(0);
@@ -131,6 +127,9 @@ fn runtime_template_expression(location: SourceLocation, content: Vec<Expression
         template.content.add(expr);
     }
 
+    template.resync_runtime_metadata();
+    template.kind = crate::compiler_frontend::ast::templates::template::TemplateType::StringFunction;
+
     Expression::template(template, Ownership::ImmutableOwned)
 }
 
@@ -157,7 +156,7 @@ fn builtin_error_related_types(string_table: &mut StringTable) -> (DataType, Dat
 }
 
 #[test]
-fn unresolved_slots_are_ignored_when_lowering_runtime_templates() {
+fn compile_time_wrapper_templates_fail_when_they_reach_hir_runtime_lowering() {
     let mut string_table = StringTable::new();
     let before = string_table.intern("before ");
     let after = string_table.intern("after");
@@ -181,25 +180,40 @@ fn unresolved_slots_are_ignored_when_lowering_runtime_templates() {
         Ownership::ImmutableOwned,
     ));
     template.kind = crate::compiler_frontend::ast::templates::template::TemplateType::String;
+    template.resync_runtime_metadata();
 
-    let lowered = builder
+    let err = builder
         .lower_expression(&Expression::template(template, Ownership::ImmutableOwned))
-        .expect("unresolved slots should be ignored in runtime template lowering");
+        .expect_err("compile-time wrapper templates should be rejected in HIR");
 
-    let args = match &lowered.prelude[0].kind {
-        HirStatementKind::Call { args, .. } => args,
-        other => panic!("expected synthetic template call, got {other:?}"),
-    };
+    assert_eq!(err.error_type, ErrorType::HirTransformation);
+    assert!(matches!(
+        err.msg.as_str(),
+        "Compile-time template reached HIR runtime-template lowering before AST folding."
+    ));
+}
 
-    assert_eq!(args.len(), 2);
-    assert!(matches!(
-        args[0].kind,
-        HirExpressionKind::StringLiteral(ref value) if value == "before "
+#[test]
+fn runtime_template_without_render_plan_reports_compiler_bug() {
+    let mut string_table = StringTable::new();
+    let location = location(2);
+    let hello = string_table.intern("hello");
+    let mut builder = setup_builder(&mut string_table);
+    let mut template = Template::create_default(vec![]);
+    template.location = location.clone();
+    template.content.add(Expression::string_slice(
+        hello,
+        location.clone(),
+        Ownership::ImmutableOwned,
     ));
-    assert!(matches!(
-        args[1].kind,
-        HirExpressionKind::StringLiteral(ref value) if value == "after"
-    ));
+    template.kind = crate::compiler_frontend::ast::templates::template::TemplateType::StringFunction;
+
+    let err = builder
+        .lower_expression(&Expression::template(template, Ownership::ImmutableOwned))
+        .expect_err("runtime templates without render plans should fail");
+
+    assert_eq!(err.error_type, ErrorType::HirTransformation);
+    assert!(err.msg.contains("without a render plan"));
 }
 
 #[test]
@@ -1378,8 +1392,7 @@ fn field_access_from_module_constant_base_materializes_temp_place() {
     let format_struct = super::symbol("Format", &mut string_table);
     let center_leaf = string_table.intern("center");
     let center_field = format_struct.append(center_leaf);
-    let before = string_table.intern("<div>");
-    let after = string_table.intern("</div>");
+    let center_value = string_table.intern("<div></div>");
     let mut builder = setup_builder(&mut string_table);
 
     let template_type = builder
@@ -1392,30 +1405,17 @@ fn field_access_from_module_constant_base_materializes_temp_place() {
         vec![(FieldId(200), center_field.clone(), template_type)],
     );
 
-    let mut wrapper_template = Template::create_default(vec![]);
-    wrapper_template.location = location.clone();
-    wrapper_template.content.add(Expression::string_slice(
-        before,
-        location.clone(),
-        Ownership::ImmutableOwned,
-    ));
-    wrapper_template
-        .content
-        .atoms
-        .push(TemplateAtom::Slot(SlotPlaceholder::new(SlotKey::Default)));
-    wrapper_template.content.add(Expression::string_slice(
-        after,
-        location.clone(),
-        Ownership::ImmutableOwned,
-    ));
-
     builder.test_register_module_constant(
         format_name.clone(),
         Expression::struct_instance(
             format_struct.clone(),
             vec![Declaration {
                 id: center_field.clone(),
-                value: Expression::template(wrapper_template, Ownership::ImmutableOwned),
+                value: Expression::string_slice(
+                    center_value,
+                    location.clone(),
+                    Ownership::ImmutableOwned,
+                ),
             }],
             location.clone(),
             Ownership::ImmutableOwned,

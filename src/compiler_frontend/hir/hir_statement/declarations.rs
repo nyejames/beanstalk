@@ -150,30 +150,10 @@ impl<'a> HirBuilder<'a> {
                     value: Box::new(lowered_value),
                 }))
             }
-            ExpressionKind::Template(template) => {
-                // WHAT: omit unresolved wrapper/slot helpers from the HIR constant pool.
-                // WHY: these are AST-time composition values, not concrete runtime metadata.
-                match template.const_value_kind() {
-                    crate::compiler_frontend::ast::templates::template::TemplateConstValueKind::RenderableString => {
-                        let mut fold_context =
-                            self.new_template_fold_context(&template.location.scope);
-                        let folded = template.fold_into_stringid(&mut fold_context)?;
-                        Ok(Some(HirConstValue::String(
-                            self.string_table.resolve(folded).to_string(),
-                        )))
-                    }
-                    crate::compiler_frontend::ast::templates::template::TemplateConstValueKind::WrapperTemplate
-                    | crate::compiler_frontend::ast::templates::template::TemplateConstValueKind::SlotInsertHelper => {
-                        Ok(None)
-                    }
-                    crate::compiler_frontend::ast::templates::template::TemplateConstValueKind::NonConst => {
-                        return_hir_transformation_error!(
-                            "Template constant reached HIR without compile-time const semantics.",
-                            self.hir_error_location(location)
-                        )
-                    }
-                }
-            }
+            ExpressionKind::Template(_) => return_hir_transformation_error!(
+                "Template constant reached HIR module-constant lowering before AST materialized it.",
+                self.hir_error_location(location)
+            ),
             _ => return_hir_transformation_error!(
                 format!(
                     "Unsupported constant expression during HIR lowering: {:?}",

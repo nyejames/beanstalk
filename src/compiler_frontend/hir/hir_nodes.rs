@@ -10,8 +10,8 @@
 //! - expression trees are still allowed for normal operators/value construction
 //!
 //! HIR strips AST parsing-only machinery from normal lowering paths.
-//! Template parsing/folding belongs to AST; HIR still retains a narrow transitional
-//! constant-template fallback used only when lowering already-constant contexts.
+//! Template parsing, folding, and runtime render-plan construction belong to AST.
+//! HIR only consumes the finalized semantic template data AST hands it.
 //!
 //! ============================================================
 //!                     Memory Semantics

@@ -92,13 +92,9 @@ fn classifies_entry_file_start_runtime_template_and_normal_functions() {
         }],
     );
 
-    let module = HirBuilder::new(
-        &mut string_table,
-        PathStringFormatConfig::default(),
-        super::test_project_path_resolver(),
-    )
-    .build_hir_module(ast)
-    .expect("HIR lowering should succeed");
+    let module = HirBuilder::new(&mut string_table, PathStringFormatConfig::default())
+        .build_hir_module(ast)
+        .expect("HIR lowering should succeed");
 
     let imported_start_id = find_function_id_by_path(&module, &imported_start)
         .expect("imported implicit start should be present");

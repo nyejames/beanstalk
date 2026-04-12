@@ -1,6 +1,6 @@
 use super::*;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
-use crate::compiler_frontend::ast::expressions::expression::Expression;
+use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::statements::functions::{
     FunctionReturn, FunctionSignature, ReturnSlot,
 };
@@ -206,6 +206,43 @@ value = lhs and rhs_capture(~calls)
                     .is_some_and(|name| name == TOP_LEVEL_TEMPLATE_NAME)
         )),
         "entry start body should not retain top-level runtime template declarations"
+    );
+}
+
+#[test]
+fn finalized_module_constants_materialize_const_templates_before_hir() {
+    let source = r#"
+#wrapper = [:<div class="frame">[$slot]</div>]
+#content = [wrapper: [:Hello]]
+"#;
+
+    let (ast, string_table) = parse_single_file_ast(source);
+
+    let wrapper = ast
+        .module_constants
+        .iter()
+        .find(|declaration| declaration.id.name_str(&string_table) == Some("wrapper"))
+        .expect("wrapper constant should exist");
+    let content = ast
+        .module_constants
+        .iter()
+        .find(|declaration| declaration.id.name_str(&string_table) == Some("content"))
+        .expect("content constant should exist");
+
+    let ExpressionKind::StringSlice(wrapper_value) = &wrapper.value.kind else {
+        panic!("wrapper template should already be materialized before HIR");
+    };
+    let ExpressionKind::StringSlice(content_value) = &content.value.kind else {
+        panic!("const template application should already be materialized before HIR");
+    };
+
+    assert_eq!(
+        string_table.resolve(*wrapper_value),
+        "<div class=\"frame\"></div>"
+    );
+    assert_eq!(
+        string_table.resolve(*content_value),
+        "<div class=\"frame\"> Hello</div>"
     );
 }
 

@@ -3,9 +3,8 @@
 //! WHAT: lowers AST templates that survive constant folding into runtime HIR fragments and calls.
 //! WHY: template lowering has enough control-flow and naming detail to warrant its own focused module.
 //!
-//! Boundary note: AST owns normal template parsing/folding. This module keeps a narrow
-//! transitional fallback for already-constant lowering paths so constant contexts stay
-//! statement-free while frontend cleanup work converges on the final boundary.
+//! Boundary note: AST owns template foldability and render-plan construction. HIR only lowers
+//! runtime templates whose semantic planning is already complete.
 
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::compiler_errors::CompilerError;
@@ -24,46 +23,42 @@ use crate::return_hir_transformation_error;
 use super::LoweredExpression;
 
 impl<'a> HirBuilder<'a> {
-    // WHAT: Lowers template expressions to either folded constants or runtime helper calls.
-    // WHY: HIR keeps only runtime call lowering plus a transitional constant fallback for
-    //      already-constant contexts that cannot emit runtime statements.
+    // WHAT: Lowers runtime template expressions into synthesized helper calls.
+    // WHY: AST must already have folded any compile-time template value before HIR sees it.
     pub(crate) fn lower_runtime_template_expression(
         &mut self,
         template: &Template,
         location: &SourceLocation,
     ) -> Result<LoweredExpression, CompilerError> {
         if !self.currently_lowering_constants.is_empty() {
-            // Module constant evaluation must stay statement-free. When constant structs carry
-            // wrapper templates, fold them into string literals with unresolved slots rendered
-            // as empty segments so constant references can lower without runtime template calls.
-            let mut fold_context = self.new_template_fold_context(&template.location.scope);
-            let folded = template.fold_into_stringid(&mut fold_context)?;
-            let region = self.current_region_or_error(location)?;
-            let string_ty = self.intern_type_kind(HirTypeKind::String);
-
-            return Ok(LoweredExpression {
-                prelude: vec![],
-                value: self.make_expression(
-                    location,
-                    HirExpressionKind::StringLiteral(self.string_table.resolve(folded).to_owned()),
-                    string_ty,
-                    ValueKind::Const,
-                    region,
-                ),
-            });
+            return_hir_transformation_error!(
+                "Template reached HIR constant lowering before AST materialized the compile-time value.",
+                self.hir_error_location(location)
+            );
         }
 
-        // Unfilled slots are rendered as empty strings when templates are used directly.
-        // Keep lowering focused on the authored content atoms that carry expressions.
-        // Fall back to building a plan from raw content for templates that bypassed
-        // the full parser pipeline (e.g. test helpers or slot wrappers without formatting).
-        let fallback_plan;
-        let plan = match &template.render_plan {
-            Some(plan) => plan,
-            None => {
-                fallback_plan = crate::compiler_frontend::ast::templates::template_render_plan::TemplateRenderPlan::from_content(&template.content);
-                &fallback_plan
+        match template.const_value_kind() {
+            crate::compiler_frontend::ast::templates::template::TemplateConstValueKind::RenderableString
+            | crate::compiler_frontend::ast::templates::template::TemplateConstValueKind::WrapperTemplate => {
+                return_hir_transformation_error!(
+                    "Compile-time template reached HIR runtime-template lowering before AST folding.",
+                    self.hir_error_location(location)
+                );
             }
+            crate::compiler_frontend::ast::templates::template::TemplateConstValueKind::SlotInsertHelper => {
+                return_hir_transformation_error!(
+                    "Template helper reached HIR runtime-template lowering before AST wrapper-slot resolution.",
+                    self.hir_error_location(location)
+                );
+            }
+            crate::compiler_frontend::ast::templates::template::TemplateConstValueKind::NonConst => {}
+        }
+
+        let Some(plan) = &template.render_plan else {
+            return_hir_transformation_error!(
+                "Runtime template reached HIR without a render plan. AST must finalize template planning before HIR lowering.",
+                self.hir_error_location(location)
+            );
         };
         let chunks = plan.flatten_expressions();
         let chunk_types: Vec<DataType> =

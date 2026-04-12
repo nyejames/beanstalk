@@ -111,7 +111,7 @@ pub(super) fn parse_children_style_directive(
                 argument_location,
                 Ownership::ImmutableOwned,
             ));
-            wrapper.unformatted_content = wrapper.content.to_owned();
+            wrapper.resync_runtime_metadata();
             wrapper
         }
 

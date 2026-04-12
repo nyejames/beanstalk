@@ -92,6 +92,9 @@ fn runtime_template_expression(location: SourceLocation, content: Vec<Expression
         template.content.add(expression);
     }
 
+    template.resync_runtime_metadata();
+    template.kind = crate::compiler_frontend::ast::templates::template::TemplateType::StringFunction;
+
     Expression::template(template, Ownership::ImmutableOwned)
 }
 
@@ -128,12 +131,7 @@ fn build_ast(nodes: Vec<AstNode>, entry_path: InternedPath) -> Ast {
 }
 
 fn lower_ast(ast: Ast, string_table: &mut StringTable) -> Result<HirModule, CompilerMessages> {
-    HirBuilder::new(
-        string_table,
-        PathStringFormatConfig::default(),
-        super::test_project_path_resolver(),
-    )
-    .build_hir_module(ast)
+    HirBuilder::new(string_table, PathStringFormatConfig::default()).build_hir_module(ast)
 }
 
 fn assert_no_placeholder_terminators(module: &HirModule) {
@@ -560,7 +558,7 @@ fn start_function_can_reference_module_constant() {
 }
 
 #[test]
-fn omits_unresolved_slot_wrapper_constants_from_hir_const_pool() {
+fn rejects_template_constants_that_ast_should_have_materialized() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
 
@@ -598,29 +596,17 @@ fn omits_unresolved_slot_wrapper_constants_from_hir_const_pool() {
         super::symbol("WRAPPER", &mut string_table),
         Expression::template(wrapper_template, Ownership::ImmutableOwned),
     ));
-    ast.module_constants.push(make_test_variable(
-        super::symbol("READY", &mut string_table),
-        Expression::string_slice(
-            string_table.intern("materialized"),
-            test_location(3),
-            Ownership::ImmutableOwned,
-        ),
-    ));
 
-    let module =
-        lower_ast(ast, &mut string_table).expect("HIR lowering should skip unresolved wrappers");
-
-    assert_eq!(module.module_constants.len(), 1);
-    let constant = &module.module_constants[0];
-    assert_eq!(constant.name, "READY");
-    assert!(matches!(
-        constant.value,
-        HirConstValue::String(ref value) if value == "materialized"
-    ));
+    let error =
+        lower_ast(ast, &mut string_table).expect_err("template constants should fail in HIR");
+    assert!(error.errors.iter().any(|item| {
+        item.msg
+            .contains("Template constant reached HIR module-constant lowering before AST materialized it.")
+    }));
 }
 
 #[test]
-fn omits_nested_struct_constants_with_unresolved_template_helpers_from_hir_const_pool() {
+fn rejects_nested_template_constants_that_ast_should_have_materialized() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
 
@@ -670,25 +656,13 @@ fn omits_nested_struct_constants_with_unresolved_template_helpers_from_hir_const
             true,
         ),
     ));
-    ast.module_constants.push(make_test_variable(
-        super::symbol("READY", &mut string_table),
-        Expression::string_slice(
-            string_table.intern("materialized"),
-            test_location(3),
-            Ownership::ImmutableOwned,
-        ),
-    ));
 
-    let module = lower_ast(ast, &mut string_table)
-        .expect("HIR lowering should skip nested unresolved wrapper constants");
-
-    assert_eq!(module.module_constants.len(), 1);
-    let constant = &module.module_constants[0];
-    assert_eq!(constant.name, "READY");
-    assert!(matches!(
-        constant.value,
-        HirConstValue::String(ref value) if value == "materialized"
-    ));
+    let error =
+        lower_ast(ast, &mut string_table).expect_err("nested template constants should fail");
+    assert!(error.errors.iter().any(|item| {
+        item.msg
+            .contains("Template constant reached HIR module-constant lowering before AST materialized it.")
+    }));
 }
 
 #[test]
