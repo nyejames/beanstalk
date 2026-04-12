@@ -192,7 +192,7 @@ Transforms headers into Abstract Syntax Tree with compile-time optimizations.
 - **Entry Point Handling**: The entry file path selects which start function is exposed as the module start function.
 - **Constant Resolution Pass**: Constants are resolved in dependency order before general body lowering.
 - **Constant Folding**: Immediate evaluation of compile-time expressions
-- **Namespace Resolution**: Makes sure that variables exist and are unique to the entire module.
+- **Namespace Resolution**: Makes sure that variables exist and are unique to their scope.
 Variables store their full path including their parents in their name, the last part of the path is the variable name.
 - **Type Checking**: Early type resolution and validation
 
