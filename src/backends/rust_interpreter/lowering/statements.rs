@@ -54,7 +54,8 @@ pub(crate) fn lower_block_statements(
             },
 
             HirStatementKind::Expr(expression) => {
-                let value_result = lower_expression(context, layout, &mut instructions, expression)?;
+                let value_result =
+                    lower_expression(context, layout, &mut instructions, expression)?;
 
                 // For expression statements, we need to materialize the value to discard it
                 // This ensures side effects are preserved even if the value isn't used

@@ -10,9 +10,7 @@ use crate::compiler_frontend::hir::hir_nodes::{HirBinOp, HirUnaryOp};
 /// Maps a HIR binary operator to the corresponding Exec IR binary operator.
 ///
 /// Returns an error if the HIR operator is not yet supported by the interpreter.
-pub(crate) fn map_binary_operator(
-    hir_op: HirBinOp,
-) -> Result<ExecBinaryOperator, CompilerError> {
+pub(crate) fn map_binary_operator(hir_op: HirBinOp) -> Result<ExecBinaryOperator, CompilerError> {
     match hir_op {
         HirBinOp::Add => Ok(ExecBinaryOperator::Add),
         HirBinOp::Sub => Ok(ExecBinaryOperator::Subtract),
@@ -27,21 +25,17 @@ pub(crate) fn map_binary_operator(
         HirBinOp::Ge => Ok(ExecBinaryOperator::GreaterThanOrEqual),
         HirBinOp::And => Ok(ExecBinaryOperator::And),
         HirBinOp::Or => Ok(ExecBinaryOperator::Or),
-        HirBinOp::Root | HirBinOp::Exponent => {
-            Err(CompilerError::compiler_error(format!(
-                "Binary operator {:?} is not yet supported by the interpreter",
-                hir_op
-            )))
-        }
+        HirBinOp::Root | HirBinOp::Exponent => Err(CompilerError::compiler_error(format!(
+            "Binary operator {:?} is not yet supported by the interpreter",
+            hir_op
+        ))),
     }
 }
 
 /// Maps a HIR unary operator to the corresponding Exec IR unary operator.
 ///
 /// Returns an error if the HIR operator is not yet supported by the interpreter.
-pub(crate) fn map_unary_operator(
-    hir_op: HirUnaryOp,
-) -> Result<ExecUnaryOperator, CompilerError> {
+pub(crate) fn map_unary_operator(hir_op: HirUnaryOp) -> Result<ExecUnaryOperator, CompilerError> {
     match hir_op {
         HirUnaryOp::Neg => Ok(ExecUnaryOperator::Negate),
         HirUnaryOp::Not => Ok(ExecUnaryOperator::Not),

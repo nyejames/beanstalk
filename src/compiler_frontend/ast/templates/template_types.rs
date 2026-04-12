@@ -122,7 +122,9 @@ impl Template {
     pub(crate) fn refresh_kind_from_content(&mut self) {
         if matches!(
             self.kind,
-            TemplateType::SlotInsert(_) | TemplateType::SlotDefinition(_) | TemplateType::Comment(_)
+            TemplateType::SlotInsert(_)
+                | TemplateType::SlotDefinition(_)
+                | TemplateType::Comment(_)
         ) {
             return;
         }

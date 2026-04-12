@@ -92,17 +92,17 @@ pub(crate) struct FunctionLoweringLayout {
     pub(crate) ordered_hir_local_ids: Vec<LocalId>,
     pub(crate) exec_local_by_hir_local: FxHashMap<LocalId, ExecLocalId>,
     pub(crate) scratch_local_id: ExecLocalId,
-    
+
     /// Counter for allocating temporary locals during expression lowering.
     /// WHAT: tracks the next available temporary local index.
     /// WHY: expression lowering needs unique temporary locals for intermediate results.
     pub(crate) next_temp_local_index: u32,
-    
+
     /// Total count of temporary locals allocated during function lowering.
     /// WHAT: tracks how many temporaries were allocated.
     /// WHY: function finalization needs to know the total temporary count.
     pub(crate) temp_local_count: u32,
-    
+
     /// Temporary locals allocated during expression lowering.
     /// WHAT: stores ExecLocal entries for each temporary.
     /// WHY: temporary locals need to be registered in the function's local list.
@@ -118,10 +118,10 @@ impl FunctionLoweringLayout {
         let temp_index = self.next_temp_local_index;
         self.next_temp_local_index += 1;
         self.temp_local_count += 1;
-        
+
         // Temporary locals come after user locals in the local array.
         let local_id = ExecLocalId(self.ordered_hir_local_ids.len() as u32 + temp_index);
-        
+
         // Register the temporary in the function's local list.
         self.temp_locals.push(ExecLocal {
             id: local_id,
@@ -129,7 +129,7 @@ impl FunctionLoweringLayout {
             storage_type,
             role: crate::backends::rust_interpreter::exec_ir::ExecLocalRole::Temp,
         });
-        
+
         local_id
     }
 }

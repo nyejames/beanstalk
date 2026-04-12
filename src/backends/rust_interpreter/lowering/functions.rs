@@ -73,7 +73,12 @@ pub(crate) fn lower_function_shell(
         };
 
         let hir_block = context.hir_block_by_id(*hir_block_id)?.clone();
-        exec_blocks.push(lower_block(context, &mut layout, &hir_block, exec_block_id)?);
+        exec_blocks.push(lower_block(
+            context,
+            &mut layout,
+            &hir_block,
+            exec_block_id,
+        )?);
     }
 
     // Add temporary locals to the exec_locals list after all blocks are lowered

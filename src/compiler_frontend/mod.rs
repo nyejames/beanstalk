@@ -273,11 +273,8 @@ impl CompilerFrontend {
     ///
     /// HIR assumes AST has already finalized template foldability and runtime render plans.
     pub fn generate_hir(&mut self, ast: Ast) -> Result<HirModule, CompilerMessages> {
-        let hir_module = lower_module(
-            ast,
-            &mut self.string_table,
-            self.path_format_config.clone(),
-        )?;
+        let hir_module =
+            lower_module(ast, &mut self.string_table, self.path_format_config.clone())?;
         Ok(hir_module)
     }
 

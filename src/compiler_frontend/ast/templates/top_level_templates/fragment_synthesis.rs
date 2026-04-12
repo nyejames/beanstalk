@@ -12,10 +12,10 @@ use super::fragment_extraction::{extract_runtime_template_candidates, replace_en
 use super::{AstStartTemplateItem, RuntimeTemplateCandidate, fold_template_with_context};
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
-use crate::compiler_frontend::ast::templates::template::TemplateConstValueKind;
 use crate::compiler_frontend::ast::statements::functions::{
     FunctionReturn, FunctionSignature, ReturnSlot,
 };
+use crate::compiler_frontend::ast::templates::template::TemplateConstValueKind;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::headers::parse_file_headers::{

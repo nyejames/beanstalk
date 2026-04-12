@@ -4,7 +4,9 @@
 //! WHY: property tests complement unit tests by verifying universal properties hold for all inputs.
 
 use crate::backends::rust_interpreter::exec_ir::{ExecBinaryOperator, ExecUnaryOperator};
-use crate::backends::rust_interpreter::lowering::operators::{map_binary_operator, map_unary_operator};
+use crate::backends::rust_interpreter::lowering::operators::{
+    map_binary_operator, map_unary_operator,
+};
 use crate::compiler_frontend::hir::hir_nodes::{HirBinOp, HirUnaryOp};
 use proptest::prelude::*;
 
@@ -19,12 +21,12 @@ use proptest::prelude::*;
 fn property_binary_operator_mapping_correctness() {
     proptest!(ProptestConfig::with_cases(100), |(hir_op in any_supported_hir_binary_operator())| {
         let result = map_binary_operator(hir_op);
-        
+
         // All supported operators should map successfully
         prop_assert!(result.is_ok(), "Supported operator {:?} should map successfully", hir_op);
-        
+
         let exec_op = result.unwrap();
-        
+
         // Verify the mapping preserves semantic meaning
         match hir_op {
             HirBinOp::Add => prop_assert_eq!(exec_op, ExecBinaryOperator::Add),
@@ -77,12 +79,12 @@ fn any_supported_hir_binary_operator() -> impl Strategy<Value = HirBinOp> {
 fn property_unary_operator_mapping_correctness() {
     proptest!(ProptestConfig::with_cases(100), |(hir_op in any_supported_hir_unary_operator())| {
         let result = map_unary_operator(hir_op);
-        
+
         // All supported operators should map successfully
         prop_assert!(result.is_ok(), "Supported operator {:?} should map successfully", hir_op);
-        
+
         let exec_op = result.unwrap();
-        
+
         // Verify the mapping preserves semantic meaning
         match hir_op {
             HirUnaryOp::Neg => prop_assert_eq!(exec_op, ExecUnaryOperator::Negate),
@@ -95,10 +97,7 @@ fn property_unary_operator_mapping_correctness() {
 ///
 /// This generates all unary operators currently supported by the interpreter.
 fn any_supported_hir_unary_operator() -> impl Strategy<Value = HirUnaryOp> {
-    prop_oneof![
-        Just(HirUnaryOp::Neg),
-        Just(HirUnaryOp::Not),
-    ]
+    prop_oneof![Just(HirUnaryOp::Neg), Just(HirUnaryOp::Not),]
 }
 
 /// **Validates: Requirements 3.3**
@@ -110,12 +109,16 @@ fn any_supported_hir_unary_operator() -> impl Strategy<Value = HirUnaryOp> {
 #[test]
 fn property_literal_lowering_efficiency() {
     use crate::backends::rust_interpreter::exec_ir::{ExecConstValue, ExecFunctionId, ExecValue};
-    use crate::backends::rust_interpreter::lowering::context::{FunctionLoweringLayout, LoweringContext};
+    use crate::backends::rust_interpreter::lowering::context::{
+        FunctionLoweringLayout, LoweringContext,
+    };
     use crate::backends::rust_interpreter::lowering::expressions::lower_expression;
     use crate::compiler_frontend::hir::hir_datatypes::{HirType, HirTypeKind, TypeContext};
-    use crate::compiler_frontend::hir::hir_nodes::{HirExpression, HirExpressionKind, HirModule, HirValueId, RegionId, ValueKind};
+    use crate::compiler_frontend::hir::hir_nodes::{
+        HirExpression, HirExpressionKind, HirModule, HirValueId, RegionId, ValueKind,
+    };
     use rustc_hash::FxHashMap;
-    
+
     proptest!(ProptestConfig::with_cases(100), |(literal_variant in any_literal_expression())| {
         // Create minimal test context.
         let mut type_context = TypeContext::default();
@@ -125,12 +128,12 @@ fn property_literal_lowering_efficiency() {
         let char_type = type_context.insert(HirType { kind: HirTypeKind::Char });
         let string_type = type_context.insert(HirType { kind: HirTypeKind::String });
         let unit_type = type_context.insert(HirType { kind: HirTypeKind::Unit });
-        
+
         let mut hir_module = HirModule::new();
         hir_module.type_context = type_context;
-        
+
         let mut context = LoweringContext::new(&hir_module);
-        
+
         let mut layout = FunctionLoweringLayout {
             exec_function_id: ExecFunctionId(0),
             ordered_hir_block_ids: vec![],
@@ -142,9 +145,9 @@ fn property_literal_lowering_efficiency() {
             temp_local_count: 0,
             temp_locals: vec![],
         };
-        
+
         let mut instructions = vec![];
-        
+
         // Create the HIR expression based on the generated variant.
         let (expression, expected_const_value) = match literal_variant {
             LiteralVariant::Int(value) => {
@@ -208,35 +211,35 @@ fn property_literal_lowering_efficiency() {
                 (expr, ExecConstValue::Unit)
             }
         };
-        
+
         // Lower the expression.
         let result = lower_expression(&mut context, &mut layout, &mut instructions, &expression);
-        
+
         // Property 1: Lowering must succeed.
         prop_assert!(result.is_ok(), "Literal lowering should succeed");
-        
+
         let exec_value = result.unwrap();
-        
+
         // Property 2: Result must be ExecValue::Literal, not ExecValue::Local.
         prop_assert!(
             matches!(exec_value, ExecValue::Literal(_)),
             "Literal lowering must return ExecValue::Literal, not ExecValue::Local"
         );
-        
+
         // Property 3: No temporary locals should be allocated.
         prop_assert_eq!(
             layout.temp_local_count,
             0,
             "Literal lowering must not allocate temporary locals"
         );
-        
+
         // Property 4: No instructions should be emitted.
         prop_assert_eq!(
             instructions.len(),
             0,
             "Literal lowering must not emit instructions"
         );
-        
+
         // Property 5: The literal value must match the input.
         if let ExecValue::Literal(const_value) = exec_value {
             match (const_value, expected_const_value) {
@@ -291,29 +294,34 @@ fn any_literal_expression() -> impl Strategy<Value = LiteralVariant> {
 #[test]
 fn property_local_reference_lowering_efficiency() {
     use crate::backends::rust_interpreter::exec_ir::{ExecFunctionId, ExecLocalId, ExecValue};
-    use crate::backends::rust_interpreter::lowering::context::{FunctionLoweringLayout, LoweringContext};
+    use crate::backends::rust_interpreter::lowering::context::{
+        FunctionLoweringLayout, LoweringContext,
+    };
     use crate::backends::rust_interpreter::lowering::expressions::lower_expression;
     use crate::compiler_frontend::hir::hir_datatypes::{HirType, HirTypeKind, TypeContext};
-    use crate::compiler_frontend::hir::hir_nodes::{HirExpression, HirExpressionKind, HirModule, HirPlace, HirValueId, LocalId, RegionId, ValueKind};
+    use crate::compiler_frontend::hir::hir_nodes::{
+        HirExpression, HirExpressionKind, HirModule, HirPlace, HirValueId, LocalId, RegionId,
+        ValueKind,
+    };
     use rustc_hash::FxHashMap;
-    
+
     proptest!(ProptestConfig::with_cases(100), |(local_index in 0u32..=50, is_load in any::<bool>())| {
         // Create minimal test context.
         let mut type_context = TypeContext::default();
         let int_type = type_context.insert(HirType { kind: HirTypeKind::Int });
-        
+
         let mut hir_module = HirModule::new();
         hir_module.type_context = type_context;
-        
+
         let mut context = LoweringContext::new(&hir_module);
-        
+
         // Create a HIR local ID and map it to an Exec local ID.
         let hir_local_id = LocalId(local_index);
         let exec_local_id = ExecLocalId(local_index);
-        
+
         let mut exec_local_by_hir_local = FxHashMap::default();
         exec_local_by_hir_local.insert(hir_local_id, exec_local_id);
-        
+
         let mut layout = FunctionLoweringLayout {
             exec_function_id: ExecFunctionId(0),
             ordered_hir_block_ids: vec![],
@@ -325,9 +333,9 @@ fn property_local_reference_lowering_efficiency() {
             temp_local_count: 0,
             temp_locals: vec![],
         };
-        
+
         let mut instructions = vec![];
-        
+
         // Create a HIR local reference expression (either Load or Copy).
         let expression = if is_load {
             HirExpression {
@@ -346,21 +354,21 @@ fn property_local_reference_lowering_efficiency() {
                 region: RegionId(0),
             }
         };
-        
+
         // Lower the expression.
         let result = lower_expression(&mut context, &mut layout, &mut instructions, &expression);
-        
+
         // Property 1: Lowering must succeed.
         prop_assert!(result.is_ok(), "Local reference lowering should succeed");
-        
+
         let exec_value = result.unwrap();
-        
+
         // Property 2: Result must be ExecValue::Local, not ExecValue::Literal.
         prop_assert!(
             matches!(exec_value, ExecValue::Local(_)),
             "Local reference lowering must return ExecValue::Local, not ExecValue::Literal"
         );
-        
+
         // Property 3: The returned local ID must match the mapped exec local ID.
         if let ExecValue::Local(returned_id) = exec_value {
             prop_assert_eq!(
@@ -369,14 +377,14 @@ fn property_local_reference_lowering_efficiency() {
                 "Returned local ID must match the mapped exec local ID"
             );
         }
-        
+
         // Property 4: No temporary locals should be allocated.
         prop_assert_eq!(
             layout.temp_local_count,
             0,
             "Local reference lowering must not allocate temporary locals"
         );
-        
+
         // Property 5: No instructions should be emitted.
         prop_assert_eq!(
             instructions.len(),
@@ -398,7 +406,7 @@ fn property_temporary_local_uniqueness() {
     use crate::backends::rust_interpreter::exec_ir::{ExecFunctionId, ExecStorageType};
     use crate::backends::rust_interpreter::lowering::context::FunctionLoweringLayout;
     use rustc_hash::FxHashMap;
-    
+
     proptest!(ProptestConfig::with_cases(100), |(allocation_count in 1u32..=50)| {
         // Create a minimal FunctionLoweringLayout for testing temporary allocation.
         let mut layout = FunctionLoweringLayout {
@@ -412,14 +420,14 @@ fn property_temporary_local_uniqueness() {
             temp_local_count: 0,
             temp_locals: vec![],
         };
-        
+
         // Allocate multiple temporary locals.
         let mut allocated_ids = vec![];
         for _ in 0..allocation_count {
             let temp_id = layout.allocate_temp_local(ExecStorageType::Int);
             allocated_ids.push(temp_id);
         }
-        
+
         // Property 1: All allocated temporary local IDs must be unique.
         let unique_ids: std::collections::HashSet<_> = allocated_ids.iter().copied().collect();
         prop_assert_eq!(
@@ -427,21 +435,21 @@ fn property_temporary_local_uniqueness() {
             allocation_count as usize,
             "All temporary local IDs must be unique"
         );
-        
+
         // Property 2: temp_local_count must match the actual number of allocations.
         prop_assert_eq!(
             layout.temp_local_count,
             allocation_count,
             "temp_local_count must equal the number of allocations"
         );
-        
+
         // Property 3: The temp_locals vector must contain exactly temp_local_count entries.
         prop_assert_eq!(
             layout.temp_locals.len(),
             allocation_count as usize,
             "temp_locals vector must contain exactly temp_local_count entries"
         );
-        
+
         // Property 4: Each allocated ID must be registered in temp_locals.
         for (i, &allocated_id) in allocated_ids.iter().enumerate() {
             prop_assert_eq!(
@@ -794,9 +802,7 @@ fn property_unary_operation_lowering_structure() {
 /// operand's instructions in the instruction sequence.
 #[test]
 fn property_nested_expression_evaluation_order() {
-    use crate::backends::rust_interpreter::exec_ir::{
-        ExecFunctionId, ExecInstruction, ExecValue,
-    };
+    use crate::backends::rust_interpreter::exec_ir::{ExecFunctionId, ExecInstruction, ExecValue};
     use crate::backends::rust_interpreter::lowering::context::{
         FunctionLoweringLayout, LoweringContext,
     };
@@ -842,7 +848,7 @@ fn property_nested_expression_evaluation_order() {
 
         // Create nested expression: (a op b) outer_op (c op d)
         // This tests that left subtree (a op b) is fully lowered before right subtree (c op d).
-        
+
         // Left subtree: a op b
         let a_expr = HirExpression {
             id: HirValueId(1),
@@ -961,10 +967,10 @@ fn property_nested_expression_evaluation_order() {
         // Property 4: Verify left-to-right evaluation order.
         // WHAT: find the BinaryOp instructions for left and right subtrees and the outer operation.
         // WHY: we need to verify that left subtree instructions appear before right subtree instructions.
-        
+
         // Count BinaryOp instructions (should be 3: left inner, right inner, outer).
         let binary_op_count = instructions.iter().filter(|inst| matches!(inst, ExecInstruction::BinaryOp { .. })).count();
-        
+
         // We expect at least 3 BinaryOp instructions (one for each operation).
         // There may be additional LoadConst instructions for literals.
         prop_assert!(
@@ -990,7 +996,7 @@ fn property_nested_expression_evaluation_order() {
         // Property 6: The second BinaryOp should be for the right subtree (c op d).
         // Property 7: The third BinaryOp should be for the outer operation.
         // This verifies left-to-right evaluation order.
-        
+
         if binary_op_indices.len() >= 3 {
             let left_inner_idx = binary_op_indices[0];
             let right_inner_idx = binary_op_indices[1];
@@ -1059,8 +1065,8 @@ fn property_branch_condition_lowering() {
     use crate::backends::rust_interpreter::lowering::terminators::lower_block_terminator;
     use crate::compiler_frontend::hir::hir_datatypes::{HirType, HirTypeKind, TypeContext};
     use crate::compiler_frontend::hir::hir_nodes::{
-        BlockId, HirExpression, HirExpressionKind, HirModule, HirTerminator, HirValueId,
-        RegionId, ValueKind,
+        BlockId, HirExpression, HirExpressionKind, HirModule, HirTerminator, HirValueId, RegionId,
+        ValueKind,
     };
     use rustc_hash::FxHashMap;
 
@@ -1222,8 +1228,7 @@ fn property_return_value_lowering() {
     use crate::backends::rust_interpreter::lowering::terminators::lower_block_terminator;
     use crate::compiler_frontend::hir::hir_datatypes::{HirType, HirTypeKind, TypeContext};
     use crate::compiler_frontend::hir::hir_nodes::{
-        HirExpression, HirExpressionKind, HirModule, HirTerminator, HirValueId, RegionId,
-        ValueKind,
+        HirExpression, HirExpressionKind, HirModule, HirTerminator, HirValueId, RegionId, ValueKind,
     };
     use rustc_hash::FxHashMap;
 

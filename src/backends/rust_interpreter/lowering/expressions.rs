@@ -119,7 +119,8 @@ pub(crate) fn lower_expression(
             let operand_value = lower_expression(context, layout, instructions, operand)?;
 
             // Ensure operand is in a local (allocate temporary if needed).
-            let operand_local = ensure_value_in_local(context, layout, instructions, operand_value)?;
+            let operand_local =
+                ensure_value_in_local(context, layout, instructions, operand_value)?;
 
             // Map HIR operator to Exec operator using map_unary_operator.
             let exec_operator = map_unary_operator(*op)?;

@@ -93,7 +93,8 @@ fn runtime_template_expression(location: SourceLocation, content: Vec<Expression
     }
 
     template.resync_runtime_metadata();
-    template.kind = crate::compiler_frontend::ast::templates::template::TemplateType::StringFunction;
+    template.kind =
+        crate::compiler_frontend::ast::templates::template::TemplateType::StringFunction;
 
     Expression::template(template, Ownership::ImmutableOwned)
 }
@@ -600,8 +601,9 @@ fn rejects_template_constants_that_ast_should_have_materialized() {
     let error =
         lower_ast(ast, &mut string_table).expect_err("template constants should fail in HIR");
     assert!(error.errors.iter().any(|item| {
-        item.msg
-            .contains("Template constant reached HIR module-constant lowering before AST materialized it.")
+        item.msg.contains(
+            "Template constant reached HIR module-constant lowering before AST materialized it.",
+        )
     }));
 }
 
@@ -660,8 +662,9 @@ fn rejects_nested_template_constants_that_ast_should_have_materialized() {
     let error =
         lower_ast(ast, &mut string_table).expect_err("nested template constants should fail");
     assert!(error.errors.iter().any(|item| {
-        item.msg
-            .contains("Template constant reached HIR module-constant lowering before AST materialized it.")
+        item.msg.contains(
+            "Template constant reached HIR module-constant lowering before AST materialized it.",
+        )
     }));
 }
 

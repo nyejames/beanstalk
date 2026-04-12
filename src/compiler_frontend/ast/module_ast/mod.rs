@@ -7,17 +7,18 @@
 //!
 //! ## Pass sequence (see each sub-module for details)
 //!
-//! 1. `pass_declarations`      — register all symbols module-wide
-//! 2. `pass_import_bindings`   — build per-file visibility gates
-//! 3. `pass_type_resolution`   — resolve constants and struct field types
+//! 1. `pass_declarations` — register all symbols module-wide
+//! 2. `pass_import_bindings` — build per-file visibility gates
+//! 3. `pass_type_resolution` — resolve constants and struct field types
 //! 4. `pass_function_signatures` — resolve function signatures; build receiver catalog
-//! 5. `pass_emit_nodes`        — lower function/template bodies into AST nodes
-//! 6. `pass_finalize`          — synthesize templates; assemble final `Ast`
+//! 5. `pass_emit_nodes` — lower function/template bodies into AST nodes
+//! 6. `orchestrate` — normalize templates; assemble final `Ast`
 
 mod build_state;
+mod finalization;
+mod orchestrate;
 mod pass_declarations;
 mod pass_emit_nodes;
-mod pass_finalize;
 mod pass_function_signatures;
 mod pass_import_bindings;
 mod pass_type_resolution;
@@ -29,7 +30,7 @@ pub use crate::compiler_frontend::ast::templates::top_level_templates::AstDocFra
 pub use crate::compiler_frontend::ast::templates::top_level_templates::{
     AstDocFragmentKind, AstStartTemplateItem,
 };
-pub use pass_finalize::{Ast, AstBuildContext};
+pub use orchestrate::{Ast, AstBuildContext};
 pub use scope_context::{ContextKind, ScopeContext};
 #[cfg(test)]
 pub(crate) use scope_context::{ReceiverMethodCatalog, ReceiverMethodEntry};

@@ -128,7 +128,8 @@ fn runtime_template_expression(location: SourceLocation, content: Vec<Expression
     }
 
     template.resync_runtime_metadata();
-    template.kind = crate::compiler_frontend::ast::templates::template::TemplateType::StringFunction;
+    template.kind =
+        crate::compiler_frontend::ast::templates::template::TemplateType::StringFunction;
 
     Expression::template(template, Ownership::ImmutableOwned)
 }
@@ -206,7 +207,8 @@ fn runtime_template_without_render_plan_reports_compiler_bug() {
         location.clone(),
         Ownership::ImmutableOwned,
     ));
-    template.kind = crate::compiler_frontend::ast::templates::template::TemplateType::StringFunction;
+    template.kind =
+        crate::compiler_frontend::ast::templates::template::TemplateType::StringFunction;
 
     let err = builder
         .lower_expression(&Expression::template(template, Ownership::ImmutableOwned))
