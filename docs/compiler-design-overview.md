@@ -75,45 +75,48 @@ Project builders do **not**:
 Since compile speed is a goal of the compiler, complex optimisations are left to external tools for release builds only.
 
 **Entry Point Semantics**:
-- Each file has an **implicit start function** containing its top-level code
-- Header parsing represents each file's top-level code as `HeaderKind::StartFunction`
-- Imported files' implicit start functions are callable but do not execute automatically
-- Exactly one file is chosen as the module entry file; that file's start function is the module start function in HIR
-- The entry file can optionally contain top-level const templates that are consumed by project builders
+- Each file has an **implicit start function** containing its top-level runtime code.
+- Header parsing represents each file's top-level runtime code as `HeaderKind::StartFunction`.
+- Imported files' implicit start functions are not callable. The build system decides how they should be called.
+- Exactly one file is chosen as the module entry file, its start function becomes the module entry start function.
+- Entry-file top-level **runtime** templates are evaluated inside that entry start function in source order.
+- Entry-file top-level **const** templates are folded separately and exposed to project builders as compile-time fragment metadata.
+- The entry start function returns the runtime fragment strings (`Vec<String>`) for the page in source order.
 
-### Start fragments and the builder interface
+### Entry-page fragment interface
 
 Project builders are aware of:
 
 - the entry start function
-- an ordered `start_fragments` stream
+- compile-time top-level fragment metadata produced by AST
 - `module_constants` metadata in HIR
 - backend output (for example JS or Wasm bundle)
 
-`start_fragments` interleave:
+Builders do **not** consume a HIR-level ordered start-fragment stream. Instead:
 
-* compile-time strings (`ConstString`)
-* runtime fragment functions (`RuntimeStringFn`)
+- AST folds entry-file top-level const templates into compile-time fragment strings
+- each compile-time fragment records a **runtime insertion index**
+- the entry `start()` function evaluates entry-file runtime top-level templates in source order
+- the entry `start()` function returns `Vec<String>` containing those runtime fragment strings
+- the builder merges compile-time fragments into the returned runtime fragment list using the recorded insertion indices
 
-Builders **do not** consume arbitrary exports directly. They consume the ordered fragments and decide how to materialize output for their target.
+This keeps compile-time page fragments out of HIR and avoids a separate runtime fragment wrapper-function pipeline.
 
 Exported constants exist so that **templates can reference them** and remain guaranteed-foldable.
 They are also useful for constant data that wants to be shared module wide.
-
-Example:
 
 ```beanstalk
 # head_defaults = [:
   <meta charset="UTF-8">
 ]
+```
 
 -- `#[...]` is a top-level const template.
 -- Top-level const templates are entry-file only.
 -- They must fully fold at compile time.
 -- Captures must be constant-only.
--- Slots are allowed if their resolved content is constant.
-#[html.head: [head_defaults]]
-```
+-- They become compile-time builder fragments, not HIR runtime fragments.
+`#[html.head: [head_defaults]]`
 
 ## Pipeline Stages
 The Beanstalk compiler frontend and build system processes modules through these stages:
@@ -122,7 +125,7 @@ The Beanstalk compiler frontend and build system processes modules through these
 1. **Tokenization** – Convert source text to tokens
 2. **Header Parsing** – Extract headers and identify the entry point. Separates function definitions, structs and constants from top-level code. Processes import statements so dependencies can be sorted after.
 3. **Dependency Sorting** – Order headers by import dependencies (including constant dependencies)
-4. **AST Construction** – Name resolution, type checking, constant resolution/folding and template lowering
+4. **AST Construction** – Ordered header lowering, scoped name resolution, type checking, constant resolution/folding, and template preparation
 5. **HIR Generation** – Semantic lowering with explicit control flow
 6. **Borrow Validation** – An analysis pass to verify memory safety
 
@@ -165,19 +168,21 @@ Converts raw source code into structured tokens with location information.
 - Context switching for delimiter handling templates / strings (`[]` vs `""`)
 
 ### Stage 2: Header Parsing (`src/compiler_frontend/headers/parse_file_headers.rs`)
-Extracts function definitions, structs, constants, imports and identify entry points before AST construction.
+Extracts top-level declaration headers and entry-file top-level fragment metadata before AST construction.
 
-- **Header Extraction**: Separates declarations from top-level code
-- **Implicit Start Function**: Top-level code that does not fit other header categories is collected into a `HeaderKind::StartFunction` header.
-- **Entry Path Tracking**: Entry-file status is tracked separately and used in later stages.
+- **Header Extraction**: Separates declarations from top-level runtime code
+- **Implicit Start Function**: Top-level runtime code that does not fit other header categories is collected into a `HeaderKind::StartFunction` header
+- **Entry Path Tracking**: Entry-file status is tracked separately and used in later stages
 - **Import Resolution**: Processes import declarations
 - **Dependency Analysis**: Builds import graph and detects circular dependencies
 - **Collect Constants**: Collect exported constants as declaration syntax plus dependency metadata
-- **Preserve Top-Level Template Order**: Entry-file top-level const templates are tracked as ordered template items. Entry-file runtime templates stay in the start-function body and are extracted later in source order for fragment lowering.
+- **Top-Level Declaration Ownership**: Header parsing is the authoritative stage for discovering module-wide top-level declarations
+- **Top-Level Const Fragment Metadata**: Entry-file top-level const templates are recorded as compile-time fragment headers plus builder-facing placement metadata
+- **Runtime Fragment Counting**: Entry-file top-level runtime templates remain in the start-function body, while header parsing tracks how many runtime fragments precede each const fragment so builders can later merge outputs correctly
 
 ### Stage 3: Dependency Sorting (`src/compiler_frontend/module_dependencies.rs`)
-Orders headers topologically to ensure the proper compilation sequence so the AST for the whole module can be created in one pass. 
-This enables the AST to perform full type checking.
+Orders headers topologically so AST can lower the whole module in declaration order without rebuilding module-wide top-level symbol knowledge.
+This enables full-module type checking while keeping top-level declaration ownership in the header stage.
 
 - Topological sort of import dependencies
 - Constant dependency ordering across files
@@ -186,15 +191,16 @@ This enables the AST to perform full type checking.
 - Missing dependency diagnostics
 
 ### Stage 4: AST Construction (`src/compiler_frontend/ast/module_ast/mod.rs`)
-Transforms headers into Abstract Syntax Tree with compile-time optimizations.
+Transforms dependency-sorted headers into the typed AST and performs the compiler's main semantic frontend work.
 
-- **Header Integration**: Convert headers to AST nodes
-- **Entry Point Handling**: The entry file path selects which start function is exposed as the module start function.
-- **Constant Resolution Pass**: Constants are resolved in dependency order before general body lowering.
+- **Ordered Header Lowering**: AST consumes the already-sorted top-level declaration stream produced by header parsing and dependency sorting. Top-level declarations are already known.
+- **Entry Point Handling**: The entry file path selects which start function becomes the module entry start function
+- **Constant Resolution Pass**: Constants are resolved in dependency order before general body lowering
 - **Constant Folding**: Immediate evaluation of compile-time expressions
-- **Namespace Resolution**: Makes sure that variables exist and are unique to their scope.
-Variables store their full path including their parents in their name, the last part of the path is the variable name.
+- **Local Scope Growth**: Function and start-function bodies register new local declarations incrementally as they are encountered in source order
+- **Namespace Resolution**: Variables store their full path including parent scope information, and uniqueness is enforced by scope rules rather than post-hoc recollection
 - **Type Checking**: Early type resolution and validation
+- **Template Preparation**: AST performs template composition, compile-time folding, and runtime render-plan preparation before HIR
 
 **Type checking and coercion**
 
@@ -226,16 +232,26 @@ Generic expression evaluation determines the natural type of an expression and s
 
 #### Templates
 - Templates fully resolved at the AST stage become string literals before HIR.
-- Templates requiring runtime evaluation are lowered into explicit runtime template functions.
-- Top-level const templates are entry-file only and must fully fold (or throw a rule error).
-- Entry-file runtime templates stay in the start-function body and are extracted later in source order into `start_template_items`.
-- Entry-file top-level const templates plus extracted runtime templates become ordered `start_template_items` so HIR can build canonical start fragments.
+- Templates requiring runtime evaluation remain runtime template expressions and are lowered normally inside function bodies.
+- AST owns template composition, compile-time folding, helper elimination, and render-plan construction.
+- HIR only lowers finalized runtime templates that remain after AST folding.
+
+**Top-level templates**
+- Entry-file top-level const templates are folded in AST.
+- Folded top-level const templates are exposed as builder-facing compile-time fragment metadata.
+- Each compile-time top-level fragment stores a **runtime insertion index** describing where it should be merged into the final runtime fragment list.
+- Entry-file top-level runtime templates remain ordinary runtime code inside the entry `start()` function.
+- AST does not synthesize standalone runtime fragment wrapper functions for top-level templates.
+- AST does not perform top-level runtime template capture replay or start-body pruning as part of template generation.
+- The entry `start()` function returns `Vec<String>` containing runtime top-level fragment results in source order.
+- Builders merge compile-time fragments into that returned runtime list using the recorded insertion indices.
+
+**General template rules**
 - Partial compile-time folding inside a runtime template is normal and expected.
 - Wrapper/slot composition is AST-time machinery only.
-- Wrapper-shaped final templates are not automatically const.
+- Wrapper-shaped final templates are not automatically compile-time constants.
 - The deciding rule is whether the final template value still depends on runtime expressions.
-- AST owns template foldability, render-plan construction, constant-template lowering, and runtime-template planning before HIR.
-- Non-goal/invalid state: raw slot-insert/helper artifacts are not stable program values and must not survive past AST composition.
+- Raw slot-insert/helper artifacts are not stable program values and must not survive past AST composition.
 
 **Runtime Expressions**: When expressions cannot be folded at compile time:
 - Variables, function calls or complex operations become `ExpressionKind::Runtime(Vec<AstNode>)`
@@ -253,8 +269,8 @@ Generic expression evaluation determines the natural type of an expression and s
 HIR (High-Level IR) is Beanstalk’s semantic lowering stage.
 It converts the fully typed AST into the first backend-facing semantic IR.
 HIR makes control flow, locals, regions, and call structure explicit while still allowing nested expression trees for normal value construction and operators.
-HIR assumes template inputs are already semantically complete; it does not fold templates or
-reconstruct missing template plans.
+HIR assumes AST has already completed template folding, composition, and runtime render-plan preparation.
+HIR does not carry compile-time top-level page fragment metadata and does not reconstruct missing template plans.
 
 HIR is the first stage where resource lifetime semantics are made explicit, but ownership is not fully resolved yet.
 
@@ -271,10 +287,17 @@ HIR is the first stage where resource lifetime semantics are made explicit, but 
 - All control-flow is explicit via blocks, jumps and terminators
 - Expression trees remain nested for ordinary operators and value construction
 
-**Start Fragment Stream**
-- HIR exposes `start_fragments` for project builders.
-- `StartFragment::ConstString` references folded compile-time strings in `const_string_pool`.
-- `StartFragment::RuntimeStringFn` references generated runtime fragment functions in source order.
+**Template Boundary**
+- HIR assumes template inputs are already semantically complete.
+- HIR does not fold templates or reconstruct missing template plans.
+- HIR lowers remaining runtime templates as ordinary runtime expressions inside function bodies.
+- Top-level const page fragments do not pass through HIR.
+
+**Entry Start Runtime Output**
+- HIR lowers the entry `start()` function normally.
+- The entry `start()` function returns the runtime fragment strings for the page in source order.
+- HIR does not carry compile-time top-level fragment placement metadata.
+- Builder-facing compile-time fragment ordering is resolved before HIR and stays outside the HIR data model.
 
 **Module Constant Pool**
 - HIR exposes `module_constants` as compile-time metadata.
