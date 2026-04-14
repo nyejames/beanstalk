@@ -5,12 +5,14 @@
 //! WHY: documentation extraction is a separate concern from runtime fragment
 //! synthesis and should remain independently auditable.
 
-use crate::compiler_frontend::ast::templates::top_level_templates::{AstDocFragment, AstDocFragmentKind};
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
 use crate::compiler_frontend::ast::templates::template::{CommentDirectiveKind, TemplateType};
 use crate::compiler_frontend::ast::templates::template_folding::TemplateFoldContext;
 use crate::compiler_frontend::ast::templates::template_types::Template;
+use crate::compiler_frontend::ast::templates::top_level_templates::{
+    AstDocFragment, AstDocFragmentKind,
+};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
@@ -31,9 +33,7 @@ pub(in crate::compiler_frontend::ast::templates) fn collect_and_strip_comment_te
 
         let mut retained = Vec::with_capacity(body.len());
         for statement in std::mem::take(body) {
-            if let Some(comment_template) =
-                as_top_level_template_comment_declaration(&statement)
-            {
+            if let Some(comment_template) = as_top_level_template_comment_declaration(&statement) {
                 collect_doc_fragments(
                     comment_template,
                     &mut fragments,

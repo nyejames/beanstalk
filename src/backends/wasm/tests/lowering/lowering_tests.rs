@@ -207,11 +207,7 @@ fn lowers_runtime_template_with_literal_and_handle_chunks_in_order() {
 
     let module = build_module(
         &mut string_table,
-        vec![(
-            runtime_function,
-            runtime_path,
-            HirFunctionOrigin::Normal,
-        )],
+        vec![(runtime_function, runtime_path, HirFunctionOrigin::Normal)],
         vec![runtime_block],
         type_context,
         FunctionId(0),
@@ -346,11 +342,7 @@ fn lowers_runtime_template_with_cfg_before_final_return() {
 
     let module = build_module(
         &mut string_table,
-        vec![(
-            runtime_function,
-            runtime_path,
-            HirFunctionOrigin::Normal,
-        )],
+        vec![(runtime_function, runtime_path, HirFunctionOrigin::Normal)],
         vec![entry_block, header_block, body_block, exit_block],
         type_context,
         FunctionId(0),
@@ -1264,11 +1256,7 @@ fn multi_fragment_template_produces_all_push_operations() {
 
     let module = build_module(
         &mut string_table,
-        vec![(
-            runtime_function,
-            runtime_path,
-            HirFunctionOrigin::Normal,
-        )],
+        vec![(runtime_function, runtime_path, HirFunctionOrigin::Normal)],
         vec![runtime_block],
         type_context,
         FunctionId(0),

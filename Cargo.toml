@@ -1,4 +1,5 @@
 [features]
+# These add println! macros for debugging and info when compiling
 detailed_timers = []
 show_tokens = []
 show_headers = []

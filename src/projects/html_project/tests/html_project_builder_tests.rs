@@ -2,10 +2,10 @@
 
 use super::*;
 use crate::backends::js::test_symbol_helpers::expected_dev_function_name;
+use crate::build_system::build::ResolvedConstFragment;
 use crate::build_system::build::{FileKind, Project};
 use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::compiler_errors::{CompilerMessages, ErrorType};
-use crate::build_system::build::ResolvedConstFragment;
 use crate::compiler_frontend::hir::hir_nodes::FunctionId;
 use crate::compiler_frontend::paths::path_resolution::{CompileTimePathBase, CompileTimePathKind};
 use crate::compiler_frontend::string_interning::StringTable;

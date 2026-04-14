@@ -4,9 +4,7 @@ use crate::compiler_frontend::ast::expressions::expression::{Expression, Express
 use crate::compiler_frontend::ast::statements::functions::{
     FunctionReturn, FunctionSignature, ReturnSlot,
 };
-use crate::compiler_frontend::ast::templates::template::{
-    CommentDirectiveKind, TemplateType,
-};
+use crate::compiler_frontend::ast::templates::template::{CommentDirectiveKind, TemplateType};
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::ast::test_support::{
     parse_single_file_ast, parse_single_file_ast_error,
@@ -180,11 +178,7 @@ fn collects_and_strips_top_level_doc_comment_templates() {
     let mut ast_nodes = vec![start_function_node(
         &entry_dir,
         vec![
-            push_start_runtime_fragment_node(
-                doc_template,
-                doc_location,
-                entry_scope.clone(),
-            ),
+            push_start_runtime_fragment_node(doc_template, doc_location, entry_scope.clone()),
             push_start_runtime_fragment_node(
                 runtime_template,
                 runtime_location,

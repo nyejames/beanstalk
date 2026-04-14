@@ -740,7 +740,6 @@ fn lowers_struct_module_constant_into_record_with_ordered_fields() {
     }
 }
 
-
 #[test]
 fn lowers_ast_doc_fragments_into_hir_doc_metadata() {
     let mut string_table = StringTable::new();
@@ -866,7 +865,6 @@ fn variable_declaration_emits_local_and_assign_statement() {
             .any(|statement| matches!(statement.kind, HirStatementKind::Assign { .. }))
     );
 }
-
 
 #[test]
 fn duplicate_local_declarations_in_same_scope_fail() {

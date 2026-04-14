@@ -467,11 +467,13 @@ fn parse_headers_in_file(
                     *context.const_template_number += 1;
                     // Record placement metadata: runtime_insertion_index is the count of
                     // runtime fragments seen before this const fragment in source order.
-                    context.top_level_const_fragments.push(TopLevelConstFragment {
-                        runtime_insertion_index: *context.runtime_fragment_count,
-                        location: header.name_location.clone(),
-                        header_path: header.tokens.src_path.clone(),
-                    });
+                    context
+                        .top_level_const_fragments
+                        .push(TopLevelConstFragment {
+                            runtime_insertion_index: *context.runtime_fragment_count,
+                            location: header.name_location.clone(),
+                            header_path: header.tokens.src_path.clone(),
+                        });
                     headers.push(header);
                     next_statement_exported = false;
                 } else {
@@ -500,9 +502,12 @@ fn parse_headers_in_file(
     // Check non-entry files for top-level executable code. Since there is no semantic consumer
     // for non-entry implicit starts, any non-trivial top-level body is rejected.
     if !context.is_entry_file {
-        let has_executable_tokens = start_function_body
-            .iter()
-            .any(|t| !matches!(t.kind, TokenKind::Eof | TokenKind::Newline | TokenKind::ModuleStart));
+        let has_executable_tokens = start_function_body.iter().any(|t| {
+            !matches!(
+                t.kind,
+                TokenKind::Eof | TokenKind::Newline | TokenKind::ModuleStart
+            )
+        });
         if has_executable_tokens {
             return_rule_error!(
                 "Non-entry files cannot contain top-level executable statements. Move this code into a named function or into the entry file.",

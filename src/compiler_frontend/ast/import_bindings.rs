@@ -363,4 +363,3 @@ fn components_match_with_optional_bst_extension(
                 || requested_str.strip_suffix(".bst") == Some(candidate_str)
         })
 }
-

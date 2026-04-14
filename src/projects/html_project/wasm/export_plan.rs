@@ -4,9 +4,7 @@
 //! WHY: the backend must stay generic and only lower exports explicitly requested by builders.
 
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::hir::hir_nodes::{
-    BlockId, FunctionId, HirModule, HirStatementKind,
-};
+use crate::compiler_frontend::hir::hir_nodes::{BlockId, FunctionId, HirModule, HirStatementKind};
 use crate::compiler_frontend::hir::utils::terminator_targets;
 use crate::compiler_frontend::host_functions::CallTarget;
 use rustc_hash::FxHashSet;

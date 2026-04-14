@@ -31,5 +31,6 @@ import @styles/docs {navbar, title, section, palette, codeblock, theme_head}
     - @./if-statements (If Statements)
     - @./loops (Loops)
     - @./collections (Collections)
+    - @./structs (Structs)
     - @./pattern-matching (Pattern Matching)
 ]

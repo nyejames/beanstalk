@@ -1,0 +1,96 @@
+# Beanstalk Roadmap
+
+This catalogues the todo list for the language and compiler.
+
+The current major goal is getting to a credible alpha stage.
+Each plan or PR that is needed will be linked here.
+
+Use the language surface integration matrix as a reference for what is currently implemented: `./language-surface-integration-matrix.md`
+
+## Path to Alpha
+
+These are the non-negotiable conditions for starting Alpha.
+
+- All claimed Alpha features compile, type check, and run through the full supported pipeline.
+- Unsupported syntax or incomplete features fail with structured compiler diagnostics, not panics.
+- The integration suite covers the supported language surface, not just recent feature areas.
+- The JS backend and HTML builder are stable enough for real small projects and docs-style sites.
+- Compiler diagnostics are useful, accurate, consistently formatted, and visually moving toward the Nushell-style goal.
+- Cross-platform output is stable enough that Windows and macOS do not produce avoidable golden drift.
+- The documentation site (written in beanstalk) inside the docs directory should be able to render a complete and good looking docs website fully using the Beanstalk pipeline. This will be the final testing ground for whether the language feels "ready" to be alpha.
+
+## Next Plans
+
+- `docs/roadmap/plans/ast-refactor.md`
+Finish reverting back to simple AST / template fragment design.
+This should be a huge cleanup that removes a ton of overly complex code.
+Goal is to also fix a lot of golden test brittleness during the final stages.
+
+- `docs/roadmap/plans/integer-division.md`
+Makes `/` float division only. `//` becomes the integer division symbol.
+Using `/` in an expression with only integers and no explicit type will coerse to a float expression.
+
+- `docs/roadmap/plans/collection-builtins-refactor.md`
+Make collection methods simpler builtins that no longer lean on method-call compatilibity. 
+
+- `docs/roadmap/plans/breakup-js-prelude.md`
+Breakdown the prelude.rs file in the JS backend into smaller files.
+Currently has too many responsibilities and needs to be refactored into more files.
+
+- `docs/roadmap/plans/cross-platform-compat.md`
+Some tests current fail on windows, but the language is still usable.
+This is due to things like CRLF in golden outputs and OS path drifts.
+
+- `docs/roadmap/plans/js-backend-hardening.md`
+Reviewing the JS backend and making sure it implements the full suite of alpha features.
+
+
+## Final pre-alpha sweep
+
+### PR - Alpha checklist audit
+
+Verify that the Alpha gates are genuinely met.
+
+**Checklist**
+- Re-run the feature matrix and mark all supported areas as covered.
+- Re-check that unsupported/deferred features fail cleanly.
+- Re-check that docs and examples match actual support.
+- Re-check diagnostics quality on a representative set of failures.
+- Re-check cross-platform golden stability.
+
+**Done when**
+- There is a credible yes/no answer to “is Alpha ready?”
+
+### PR - Alpha cleanup PR
+
+Land final small consistency and hygiene fixes before the release branch/tag.
+
+**Checklist**
+- Remove obsolete rejection fixtures for features that are now supported.
+- Tighten comments, TODOs, and dead-code justifications.
+- Prune stale scaffolding where the current design has clearly replaced it.
+- Update release-facing docs and contribution notes if needed.
+
+**Done when**
+- The repo feels intentional at the point Alpha begins.
+
+---
+
+## Deferred until after Alpha
+These are intentionally not Alpha blockers unless they become necessary for one of the supported slices.
+
+This is a collection of notes and findings for future roadmaps once the roadmap above is complete.
+
+- builtin `Error` enrichment beyond what is already required for the current compiler/runtime surface
+- full tagged unions
+- full pattern-matching design
+- full interfaces implementation
+- richer numeric redesign work not required by Alpha
+
+**Wasm**
+
+Broader Wasm maturity beyond the current experimental path.
+
+## Notes and limitations from previous investigations
+- The WASM backend can't handle Choice/Union types yet (maps to Handle but produces i32/i64 mismatches). 
+- rt_string_from_i64 Wasm helper: Explicitly noted in the 1ac2613 commit message as an "incremental bridge implementation". It produces valid output but is not a complete runtime implementation. This is scoped for a dedicated follow-up and does not cause panics.

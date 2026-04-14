@@ -162,7 +162,10 @@ impl<'a> AstBuildState<'a> {
                     let start_signature = FunctionSignature {
                         parameters: vec![],
                         returns: vec![ReturnSlot::success(FunctionReturn::Value(
-                            DataType::Collection(Box::new(DataType::StringSlice), Ownership::MutableOwned),
+                            DataType::Collection(
+                                Box::new(DataType::StringSlice),
+                                Ownership::MutableOwned,
+                            ),
                         ))],
                     };
 
