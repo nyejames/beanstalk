@@ -847,9 +847,15 @@ fn build_project_emits_runtime_fragment_with_captured_start_local() {
         };
 
         assert!(html.contains("<div id=\"bst-slot-0\"></div>"));
+        // WHY: new architecture calls start() once and hydrates slots from the returned array.
+        //      No per-fragment wrapper functions (__bst_frag_N) are emitted.
         assert!(
-            html.contains("__bst_frag_0"),
-            "runtime fragment function should be emitted and bootstrapped"
+            html.contains("bst_frags"),
+            "bootstrap must use start() result array to hydrate slots"
+        );
+        assert!(
+            html.contains("insertAdjacentHTML"),
+            "bootstrap must hydrate runtime slots via insertAdjacentHTML"
         );
         assert!(
             html.contains("Beanstalk"),

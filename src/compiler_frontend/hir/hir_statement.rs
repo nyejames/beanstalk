@@ -225,20 +225,7 @@ impl<'a> HirBuilder<'a> {
                     );
                 };
 
-                // WHAT: capture the count of synthesized functions before lowering.
-                // WHY: lower_runtime_template_expression creates exactly one helper function;
-                //      comparing before/after gives us the template function ID for builders.
-                let fn_count_before = self.module.functions.len();
-
                 let lowered = self.lower_expression(expr)?;
-
-                // Record the newly synthesized template function (if one was created).
-                if self.module.functions.len() == fn_count_before + 1 {
-                    let template_fn_id = self.module.functions[fn_count_before].id;
-                    self.module
-                        .entry_runtime_fragment_functions
-                        .push(template_fn_id);
-                }
 
                 for prelude in lowered.prelude {
                     self.emit_statement_to_current_block(prelude, &node.location)?;

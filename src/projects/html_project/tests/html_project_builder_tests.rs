@@ -6,7 +6,6 @@ use crate::build_system::build::ResolvedConstFragment;
 use crate::build_system::build::{FileKind, Project};
 use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::compiler_errors::{CompilerMessages, ErrorType};
-use crate::compiler_frontend::hir::hir_nodes::FunctionId;
 use crate::compiler_frontend::paths::path_resolution::{CompileTimePathBase, CompileTimePathKind};
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::projects::html_project::tests::test_support::{
@@ -156,12 +155,14 @@ fn duplicate_output_paths_are_rejected() {
 }
 
 #[test]
-fn emits_runtime_slots_and_bootstrap_calls_start() {
+fn emits_const_fragment_and_calls_start() {
+    // WHAT: verify the builder embeds a compile-time const fragment and emits a start() call.
+    // WHY: slot count is now derived from HIR PushRuntimeFragment scanning; the test module has
+    //      none, so only the const fragment and start() invocation are asserted here.
     let builder = HtmlProjectBuilder::new();
     let entry_path = PathBuf::from("#page.bst");
     let mut string_table = StringTable::new();
     let mut module = create_test_module(entry_path.clone(), &mut string_table);
-    module.hir.entry_runtime_fragment_functions = vec![FunctionId(0)];
     module.const_top_level_fragments = vec![ResolvedConstFragment {
         runtime_insertion_index: 0,
         html: String::from("<meta charset=\"utf-8\">"),
@@ -181,12 +182,10 @@ fn emits_runtime_slots_and_bootstrap_calls_start() {
 
     assert_has_basic_shell(html);
     assert!(html.contains("<meta charset=\"utf-8\">"));
-    assert!(html.contains("<div id=\"bst-slot-0\"></div>"));
-    assert!(html.contains("insertAdjacentHTML(\"beforeend\", fn());"));
-    assert!(html.contains(&format!(
-        "if (typeof {} === \"function\") {}();",
-        start_name, start_name
-    )));
+    assert!(
+        html.contains(&format!("{start_name}()")),
+        "start() must be called in the emitted HTML"
+    );
 }
 
 #[test]

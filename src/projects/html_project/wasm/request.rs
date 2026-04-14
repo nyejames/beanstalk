@@ -6,7 +6,6 @@
 use crate::backends::wasm::request::{
     WasmBackendRequest, WasmExportPolicy, WasmHelperExportPolicy,
 };
-use crate::compiler_frontend::hir::hir_nodes::FunctionId;
 use crate::projects::html_project::wasm::export_plan::HtmlWasmExportPlan;
 use rustc_hash::FxHashMap;
 
@@ -41,19 +40,3 @@ pub(crate) fn build_wasm_backend_request(export_plan: &HtmlWasmExportPlan) -> Wa
     }
 }
 
-/// Creates a reverse lookup map used by JS bootstrap export binding.
-///
-/// WHAT: maps each function ID to its assigned stable Wasm export name.
-/// WHY: bootstrap codegen needs direct lookup while preserving builder naming policy.
-pub(crate) fn export_name_by_function_id(
-    export_plan: &HtmlWasmExportPlan,
-) -> FxHashMap<FunctionId, String> {
-    let mut names = FxHashMap::default();
-    for function_export in &export_plan.function_exports {
-        names.insert(
-            function_export.function_id,
-            function_export.export_name.clone(),
-        );
-    }
-    names
-}

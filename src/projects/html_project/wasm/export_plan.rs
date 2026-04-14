@@ -4,11 +4,7 @@
 //! WHY: the backend must stay generic and only lower exports explicitly requested by builders.
 
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::hir::hir_nodes::{BlockId, FunctionId, HirModule, HirStatementKind};
-use crate::compiler_frontend::hir::utils::terminator_targets;
-use crate::compiler_frontend::host_functions::CallTarget;
-use rustc_hash::FxHashSet;
-use std::collections::VecDeque;
+use crate::compiler_frontend::hir::hir_nodes::{FunctionId, HirModule};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct HtmlWasmExportPlan {
@@ -22,7 +18,7 @@ pub(crate) struct HtmlWasmExportPlan {
 pub(crate) struct HtmlWasmFunctionExport {
     /// Function selected from HIR as callable from builder-owned JS orchestration.
     pub function_id: FunctionId,
-    /// Stable export symbol name exposed by Wasm (`bst_call_N`).
+    /// Stable export symbol name exposed by Wasm.
     pub export_name: String,
     /// Reason the function is exported, used for debug readability and test intent.
     pub purpose: HtmlWasmExportPurpose,
@@ -30,7 +26,8 @@ pub(crate) struct HtmlWasmFunctionExport {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum HtmlWasmExportPurpose {
-    JsStartCall,
+    /// Entry start() exported directly; JS calls it and decodes the returned fragment list.
+    EntryStart,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -62,88 +59,18 @@ impl HtmlWasmHelperExports {
 
 /// Builds the full HTML->Wasm export plan from builder-visible HIR semantics.
 ///
-/// WHAT: walks entry-start reachable blocks and collects user functions called from start.
-/// WHY: HTML builder keeps entry orchestration in JS and only exports what JS needs to call.
+/// WHAT: exports entry start() directly as "bst_start" plus all string interop helpers.
+/// WHY: entry start() is the sole runtime fragment producer. JS calls it once and decodes
+///      the returned fragment list. No entry-body call scanning is needed or correct.
 pub(crate) fn build_html_wasm_export_plan(
     hir_module: &HirModule,
 ) -> Result<HtmlWasmExportPlan, CompilerError> {
-    let mut requested_function_ids = FxHashSet::default();
-
-    for block_id in collect_reachable_entry_blocks(hir_module)? {
-        let block = block_by_id_or_error(hir_module, block_id)?;
-        for statement in &block.statements {
-            if let HirStatementKind::Call { target, .. } = &statement.kind
-                && let CallTarget::UserFunction(function_id) = target
-            {
-                requested_function_ids.insert(*function_id);
-            }
-        }
-    }
-
-    let mut function_ids = requested_function_ids.into_iter().collect::<Vec<_>>();
-    function_ids.sort_by_key(|function_id| function_id.0);
-
-    let function_exports = function_ids
-        .iter()
-        .enumerate()
-        .map(|(index, &function_id)| HtmlWasmFunctionExport {
-            function_id,
-            export_name: format!("bst_call_{index}"),
-            purpose: HtmlWasmExportPurpose::JsStartCall,
-        })
-        .collect();
-
     Ok(HtmlWasmExportPlan {
-        function_exports,
+        function_exports: vec![HtmlWasmFunctionExport {
+            function_id: hir_module.start_function,
+            export_name: String::from("bst_start"),
+            purpose: HtmlWasmExportPurpose::EntryStart,
+        }],
         helper_exports: HtmlWasmHelperExports::all_enabled(),
     })
-}
-
-fn collect_reachable_entry_blocks(hir_module: &HirModule) -> Result<Vec<BlockId>, CompilerError> {
-    // Traverse control flow from the entry block so we only export reachable direct call targets.
-    let start_function = hir_module
-        .functions
-        .iter()
-        .find(|function| function.id == hir_module.start_function)
-        .ok_or_else(|| {
-            CompilerError::compiler_error(format!(
-                "HTML Wasm export planning could not find start function {:?}",
-                hir_module.start_function
-            ))
-        })?;
-
-    let mut queue = VecDeque::new();
-    let mut visited = FxHashSet::default();
-    queue.push_back(start_function.entry);
-
-    while let Some(block_id) = queue.pop_front() {
-        if !visited.insert(block_id) {
-            continue;
-        }
-
-        let block = block_by_id_or_error(hir_module, block_id)?;
-        for successor in terminator_targets(&block.terminator) {
-            queue.push_back(successor);
-        }
-    }
-
-    let mut block_ids = visited.into_iter().collect::<Vec<_>>();
-    block_ids.sort_by_key(|block_id| block_id.0);
-    Ok(block_ids)
-}
-
-fn block_by_id_or_error(
-    hir_module: &HirModule,
-    block_id: BlockId,
-) -> Result<&crate::compiler_frontend::hir::hir_nodes::HirBlock, CompilerError> {
-    // Convert unexpected missing-block states into deterministic compiler diagnostics.
-    hir_module
-        .blocks
-        .iter()
-        .find(|block| block.id == block_id)
-        .ok_or_else(|| {
-            CompilerError::compiler_error(format!(
-                "HTML Wasm export planning could not resolve block {block_id:?}",
-            ))
-        })
 }

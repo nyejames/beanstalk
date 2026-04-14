@@ -157,8 +157,12 @@ impl<'a> AstBuildState<'a> {
                         .src_path
                         .join_str(IMPLICIT_START_FUNC_NAME, string_table);
 
-                    // Entry start() returns Vec<String> — the runtime fragment list.
-                    // The HIR builder adds the implicit return of the accumulated fragment vec.
+                    // WHAT: entry start() returns Collection(StringSlice, MutableOwned),
+                    //       which is the Beanstalk frontend type for Vec<String>.
+                    // WHY: compiler-design-overview.md describes the return type as Vec<String>;
+                    //      DataType::Collection(StringSlice, MutableOwned) is the same contract
+                    //      expressed in frontend DataType terms. The HIR builder adds the implicit
+                    //      return of the accumulated fragment vec at function end.
                     let start_signature = FunctionSignature {
                         parameters: vec![],
                         returns: vec![ReturnSlot::success(FunctionReturn::Value(

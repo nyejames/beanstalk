@@ -1,53 +1,21 @@
 //! JS bootstrap generator for HTML+Wasm mode.
 //!
-//! WHAT: emits builder-owned JS that instantiates Wasm, wires host imports, installs
-//! wrapper functions, hydrates runtime slots, and then runs the entry start function.
+//! WHAT: emits builder-owned JS that instantiates Wasm, wires host imports, hydrates
+//! runtime slots from the fragment list returned by entry start(), and runs the lifecycle.
 //! WHY: HTML assembly/orchestration remains builder policy while Wasm stays backend-generic.
 
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::hir::hir_datatypes::HirTypeKind;
-use crate::compiler_frontend::hir::hir_nodes::{FunctionId, HirModule};
-use crate::projects::html_project::js_path::RuntimeSlotMount;
-use crate::projects::html_project::wasm::export_plan::HtmlWasmExportPlan;
-use crate::projects::html_project::wasm::request::export_name_by_function_id;
-use std::collections::HashMap;
-use std::fmt::Write as _;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum WasmWrapperReturnBehavior {
-    Unit,
-    StringHandle,
-    Passthrough,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct WasmWrapperBinding {
-    js_function_name: String,
-    export_name: String,
-    return_behavior: WasmWrapperReturnBehavior,
-}
 
 /// Emits `page.js` for HTML Wasm mode.
 ///
-/// WHAT: appends a Wasm bootstrap around lowered JS helpers, wrapper bindings, and slot hydration.
-/// WHY: keeps entry/start orchestration builder-owned while Wasm backend exports stay generic.
+/// WHAT: appends a Wasm bootstrap around lowered JS helpers and slot hydration.
+/// WHY: entry start() is exported as "bst_start"; JS calls it directly and uses the
+///      returned fragment list to hydrate slots. No per-function wrapper bindings needed.
 pub(crate) fn generate_wasm_bootstrap_js(
-    hir_module: &HirModule,
     js_bundle: &str,
-    function_name_by_id: &HashMap<FunctionId, String>,
-    export_plan: &HtmlWasmExportPlan,
-    runtime_slots: &[RuntimeSlotMount],
+    slot_ids: &[String],
     start_invocation_js: &str,
 ) -> Result<String, CompilerError> {
-    // Build wrapper metadata first so codegen can emit stable wrapper declarations.
-    let export_name_map = export_name_by_function_id(export_plan);
-    let wrapper_bindings = build_wrapper_bindings(
-        hir_module,
-        function_name_by_id,
-        export_plan,
-        &export_name_map,
-    )?;
-
     let mut out = String::new();
     out.push_str(js_bundle);
     out.push('\n');
@@ -86,16 +54,6 @@ pub(crate) fn generate_wasm_bootstrap_js(
     out.push_str("  } finally {\n");
     out.push_str("    instance.exports.bst_release(handle);\n");
     out.push_str("  }\n");
-    out.push_str("}\n");
-    out.push('\n');
-    out.push_str("function __bst_lift_call_arg(arg) {\n");
-    out.push_str("  const raw = __bs_is_ref(arg) ? __bs_read(arg) : arg;\n");
-    out.push_str("  if (typeof raw === \"string\") {\n");
-    out.push_str(
-        "    throw new Error(\"Wasm wrapper calls from JS do not support string arguments yet.\");\n",
-    );
-    out.push_str("  }\n");
-    out.push_str("  return raw;\n");
     out.push_str("}\n");
     out.push('\n');
     out.push_str("function __bst_build_imports(instance_ref) {\n");
@@ -143,45 +101,6 @@ pub(crate) fn generate_wasm_bootstrap_js(
     out.push_str("  return WebAssembly.instantiate(bytes, imports);\n");
     out.push_str("}\n");
     out.push('\n');
-    out.push_str("function __bst_install_wasm_wrappers(instance) {\n");
-    out.push_str("  function __bst_get_export(name) {\n");
-    out.push_str("    const exported = instance.exports[name];\n");
-    out.push_str(
-        "    if (typeof exported !== \"function\") throw new Error(\"Missing Wasm export: \" + name);\n",
-    );
-    out.push_str("    return exported;\n");
-    out.push_str("  }\n");
-    out.push('\n');
-
-    for wrapper_binding in &wrapper_bindings {
-        let export_name_literal = escape_js_string(&wrapper_binding.export_name);
-        match wrapper_binding.return_behavior {
-            WasmWrapperReturnBehavior::Unit => {
-                let _ = writeln!(
-                    out,
-                    "  {} = (...args) => {{\n    __bst_get_export({})(...args.map(__bst_lift_call_arg));\n    return;\n  }};",
-                    wrapper_binding.js_function_name, export_name_literal
-                );
-            }
-            WasmWrapperReturnBehavior::StringHandle => {
-                let _ = writeln!(
-                    out,
-                    "  {} = (...args) => {{\n    const result = __bst_get_export({})(...args.map(__bst_lift_call_arg));\n    return __bst_take_string(instance, result);\n  }};",
-                    wrapper_binding.js_function_name, export_name_literal
-                );
-            }
-            WasmWrapperReturnBehavior::Passthrough => {
-                let _ = writeln!(
-                    out,
-                    "  {} = (...args) => __bst_get_export({})(...args.map(__bst_lift_call_arg));",
-                    wrapper_binding.js_function_name, export_name_literal
-                );
-            }
-        }
-    }
-
-    out.push_str("}\n");
-    out.push('\n');
     out.push_str("(async function () {\n");
     out.push_str("  const instance_ref = { current: null };\n");
     out.push_str("  const imports = __bst_build_imports(instance_ref);\n");
@@ -189,134 +108,38 @@ pub(crate) fn generate_wasm_bootstrap_js(
         "  const { instance } = await __bst_instantiate_wasm(\"./page.wasm\", imports);\n",
     );
     out.push_str("  instance_ref.current = instance;\n");
-    out.push_str("  __bst_install_wasm_wrappers(instance);\n");
     out.push('\n');
-    out.push_str("  const slots = [\n");
-    for slot in runtime_slots {
-        let function_name = function_name_by_id
-            .get(&slot.function_id)
-            .ok_or_else(|| {
-                CompilerError::compiler_error(format!(
-                    "HTML Wasm bootstrap generation could not resolve runtime fragment function {:?}",
-                    slot.function_id
-                ))
-            })?
-            .clone();
-        let _ = writeln!(
-            out,
-            "    [{}, {}],",
-            escape_js_string(&slot.slot_id),
-            function_name
+
+    if slot_ids.is_empty() {
+        // No runtime slots — call bst_start() directly for any lifecycle effects.
+        out.push_str("  ");
+        out.push_str(start_invocation_js);
+        out.push('\n');
+    } else {
+        // WHAT: call bst_start() and decode the returned runtime fragment list to hydrate slots.
+        // WHY: entry start() is the sole runtime fragment producer; builders call it once and
+        //      use the returned Vec<String> elements to fill source-order slot placeholders.
+        // TODO: Vec<String> decoding from a Wasm handle requires Wasm Vec support.
+        //       See lower_push_runtime_fragment TODO in backends/wasm/hir_to_lir/stmt.rs.
+        //       Until that is implemented, programs with runtime templates fail to compile
+        //       in Wasm mode. The slot structure below is the correct target shape.
+        out.push_str("  const bst_slot_ids = [\n");
+        for slot_id in slot_ids {
+            out.push_str(&format!("    \"{slot_id}\",\n"));
+        }
+        out.push_str("  ];\n");
+        out.push_str("  ");
+        out.push_str(start_invocation_js);
+        out.push('\n');
+        out.push_str(
+            "  // TODO: decode Vec<String> from bst_start() return and hydrate bst_slot_ids.\n",
         );
     }
-    out.push_str("  ];\n");
-    out.push('\n');
-    out.push_str("  for (const [id, fn] of slots) {\n");
-    out.push_str("    const el = document.getElementById(id);\n");
-    out.push_str("    if (!el) throw new Error(\"Missing runtime mount slot: \" + id);\n");
-    out.push_str("    el.insertAdjacentHTML(\"beforeend\", fn());\n");
-    out.push_str("  }\n");
-    out.push('\n');
-    out.push_str("  ");
-    out.push_str(start_invocation_js);
-    out.push('\n');
+
     out.push_str("})().catch((error) => {\n");
     out.push_str("  console.error(\"Beanstalk Wasm bootstrap failed\", error);\n");
     out.push_str("  throw error;\n");
     out.push_str("});\n");
 
     Ok(out)
-}
-
-/// Resolves JS function names, assigned Wasm export names, and return handling policy.
-///
-/// WHAT: prepares all wrapper metadata before final JS emission.
-/// WHY: keeps mapping/validation logic separate from string-based code generation.
-fn build_wrapper_bindings(
-    hir_module: &HirModule,
-    function_name_by_id: &HashMap<FunctionId, String>,
-    export_plan: &HtmlWasmExportPlan,
-    export_name_map: &rustc_hash::FxHashMap<FunctionId, String>,
-) -> Result<Vec<WasmWrapperBinding>, CompilerError> {
-    let mut bindings = Vec::with_capacity(export_plan.function_exports.len());
-    for function_export in &export_plan.function_exports {
-        let js_function_name = function_name_by_id
-            .get(&function_export.function_id)
-            .ok_or_else(|| {
-                CompilerError::compiler_error(format!(
-                    "HTML Wasm bootstrap generation could not resolve JS function name for {:?}",
-                    function_export.function_id
-                ))
-            })?
-            .clone();
-        let export_name = export_name_map
-            .get(&function_export.function_id)
-            .ok_or_else(|| {
-                CompilerError::compiler_error(format!(
-                    "HTML Wasm bootstrap generation could not resolve export name for {:?}",
-                    function_export.function_id
-                ))
-            })?
-            .clone();
-        let return_behavior =
-            return_behavior_for_function(hir_module, function_export.function_id)?;
-
-        bindings.push(WasmWrapperBinding {
-            js_function_name,
-            export_name,
-            return_behavior,
-        });
-    }
-
-    Ok(bindings)
-}
-
-/// Determines how wrapper glue should adapt Wasm return values back to JS semantics.
-///
-/// WHAT: inspects HIR return type for each exported callable.
-/// WHY: string-returning functions need handle -> JS string conversion and release.
-fn return_behavior_for_function(
-    hir_module: &HirModule,
-    function_id: FunctionId,
-) -> Result<WasmWrapperReturnBehavior, CompilerError> {
-    let function = hir_module
-        .functions
-        .iter()
-        .find(|function| function.id == function_id)
-        .ok_or_else(|| {
-            CompilerError::compiler_error(format!(
-                "HTML Wasm bootstrap generation missing function metadata for {function_id:?}",
-            ))
-        })?;
-    let return_type = hir_module.type_context.get(function.return_type);
-
-    Ok(match return_type.kind {
-        HirTypeKind::Unit => WasmWrapperReturnBehavior::Unit,
-        HirTypeKind::String => WasmWrapperReturnBehavior::StringHandle,
-        _ => WasmWrapperReturnBehavior::Passthrough,
-    })
-}
-
-/// Escapes a Rust string into a safe JS string literal.
-///
-/// WHAT: applies escaping for quotes, control characters, and backslashes.
-/// WHY: generated bootstrap JS must remain syntactically valid for any route/slot/export name.
-fn escape_js_string(value: &str) -> String {
-    let mut escaped = String::from("\"");
-    for character in value.chars() {
-        match character {
-            '\\' => escaped.push_str("\\\\"),
-            '"' => escaped.push_str("\\\""),
-            '\n' => escaped.push_str("\\n"),
-            '\r' => escaped.push_str("\\r"),
-            '\t' => escaped.push_str("\\t"),
-            '\0' => escaped.push_str("\\0"),
-            control if control.is_control() => {
-                let _ = write!(escaped, "\\u{:04X}", control as u32);
-            }
-            normal => escaped.push(normal),
-        }
-    }
-    escaped.push('"');
-    escaped
 }

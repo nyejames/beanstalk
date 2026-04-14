@@ -10,11 +10,11 @@ use crate::backends::wasm::request::WasmBackendRequest;
 use crate::build_system::build::{FileKind, OutputFile, ResolvedConstFragment};
 use crate::compiler_frontend::analysis::borrow_checker::BorrowCheckReport;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
-use crate::compiler_frontend::hir::hir_nodes::{FunctionId, HirModule};
+use crate::compiler_frontend::hir::hir_nodes::HirModule;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::projects::html_project::document_config::HtmlDocumentConfig;
 use crate::projects::html_project::document_shell::render_html_document_shell;
-use crate::projects::html_project::js_path::{RuntimeSlotMount, render_entry_fragments};
+use crate::projects::html_project::js_path::{count_runtime_fragment_slots, render_entry_fragments};
 use crate::projects::html_project::output_plan::plan_wasm_output_from_logical_html_path;
 use crate::projects::html_project::page_metadata::extract_html_page_metadata;
 use crate::projects::html_project::wasm::export_plan::{
@@ -33,8 +33,8 @@ const SHOW_HTML_WASM_EXPORTS: bool = false;
 pub(crate) struct HtmlWasmBuildPlan {
     /// Deterministic export selection and wrapper naming policy for this module.
     pub export_plan: HtmlWasmExportPlan,
-    /// Ordered runtime slot mounts copied from start fragments.
-    pub js_entry_fragments: Vec<RuntimeSlotMount>,
+    /// Ordered runtime slot IDs derived from entry start() PushRuntimeFragment sequence.
+    pub js_entry_slot_ids: Vec<String>,
     /// JS start invocation snippet reused in bootstrap emission and debug summaries.
     pub js_start_invocation: String,
     /// Generic backend request derived from builder policy.
@@ -63,7 +63,6 @@ pub(crate) struct HtmlWasmArtifactEmitInput<'a> {
     pub document_config: &'a HtmlDocumentConfig,
     pub hir_module: &'a HirModule,
     pub js_bundle: &'a str,
-    pub function_name_by_id: &'a std::collections::HashMap<FunctionId, String>,
     pub wasm_bytes: Vec<u8>,
 }
 
@@ -116,11 +115,12 @@ pub(crate) fn compile_html_module_wasm(
         js_lowering_config,
     )
     .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;
-    let (entry_fragment_html, runtime_slots) = render_entry_fragments(hir_module, const_fragments);
 
-    let build_plan =
-        build_html_wasm_plan(hir_module, &js_module.function_name_by_id, runtime_slots)
-            .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;
+    let slot_count = count_runtime_fragment_slots(hir_module);
+    let (entry_fragment_html, slot_ids) = render_entry_fragments(const_fragments, slot_count);
+
+    let build_plan = build_html_wasm_plan(hir_module, slot_ids)
+        .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;
 
     let wasm_result = lower_hir_to_wasm_module(
         hir_module,
@@ -147,7 +147,6 @@ pub(crate) fn compile_html_module_wasm(
             document_config,
             hir_module,
             js_bundle: &js_module.source,
-            function_name_by_id: &js_module.function_name_by_id,
             wasm_bytes,
         },
     )
@@ -184,26 +183,17 @@ pub(crate) fn compile_html_module_wasm(
 /// WHY: HTML orchestration must remain explicit and stable while backend internals evolve.
 pub(crate) fn build_html_wasm_plan(
     hir_module: &HirModule,
-    function_name_by_id: &std::collections::HashMap<FunctionId, String>,
-    js_entry_fragments: Vec<RuntimeSlotMount>,
+    js_entry_slot_ids: Vec<String>,
 ) -> Result<HtmlWasmBuildPlan, CompilerError> {
     let export_plan = build_html_wasm_export_plan(hir_module)?;
     let wasm_request = build_wasm_backend_request(&export_plan);
-    let start_function_name = function_name_by_id
-        .get(&hir_module.start_function)
-        .ok_or_else(|| {
-            CompilerError::compiler_error(format!(
-                "HTML Wasm plan could not resolve JS start function name for {:?}",
-                hir_module.start_function
-            ))
-        })?
-        .clone();
-    let js_start_invocation =
-        format!("if (typeof {start_function_name} === \"function\") {start_function_name}();");
+    // WHY: entry start() is exported as "bst_start"; JS calls it directly on the Wasm instance.
+    //      No JS-side function-name lookup is needed — the export name is the contract.
+    let js_start_invocation = String::from("instance.exports.bst_start();");
 
     Ok(HtmlWasmBuildPlan {
         export_plan,
-        js_entry_fragments,
+        js_entry_slot_ids,
         js_start_invocation,
         wasm_request,
     })
@@ -225,16 +215,12 @@ pub(crate) fn emit_html_wasm_artifacts(
         document_config,
         hir_module,
         js_bundle,
-        function_name_by_id,
         wasm_bytes,
     } = input;
 
     let bootstrap_js = generate_wasm_bootstrap_js(
-        hir_module,
         js_bundle,
-        function_name_by_id,
-        &plan.export_plan,
-        &plan.js_entry_fragments,
+        &plan.js_entry_slot_ids,
         &plan.js_start_invocation,
     )?;
     let page_metadata = extract_html_page_metadata(hir_module, string_table)?;
@@ -283,7 +269,7 @@ fn build_debug_outputs(
     let _ = writeln!(
         plan_summary,
         "HTML Wasm build plan: runtime_slots={} requested_exports={}",
-        plan.js_entry_fragments.len(),
+        plan.js_entry_slot_ids.len(),
         plan.export_plan.function_exports.len()
     );
     let _ = writeln!(

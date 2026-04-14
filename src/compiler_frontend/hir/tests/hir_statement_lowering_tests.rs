@@ -80,21 +80,6 @@ fn fresh_returns(result_types: Vec<DataType>) -> Vec<ReturnSlot> {
         .collect()
 }
 
-fn runtime_template_expression(location: SourceLocation, content: Vec<Expression>) -> Expression {
-    let mut template = Template::create_default(vec![]);
-    template.location = location.clone();
-
-    for expression in content {
-        template.content.add(expression);
-    }
-
-    template.resync_runtime_metadata();
-    template.kind =
-        crate::compiler_frontend::ast::templates::template::TemplateType::StringFunction;
-
-    Expression::template(template, Ownership::ImmutableOwned)
-}
-
 fn runtime_function_call_node(
     name: InternedPath,
     result_types: Vec<DataType>,

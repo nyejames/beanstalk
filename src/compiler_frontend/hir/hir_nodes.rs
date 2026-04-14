@@ -148,13 +148,6 @@ pub struct HirModule {
     /// entry/runtime-template behavior stable across lowering passes.
     pub function_origins: rustc_hash::FxHashMap<FunctionId, HirFunctionOrigin>,
 
-    /// Ordered synthesized template functions called from entry start() PushRuntimeFragment nodes.
-    ///
-    /// WHAT: parallel to the PushRuntimeFragment statement sequence in entry start() body.
-    /// WHY: builders need the ordered function list to generate runtime slots and hydration scripts
-    /// without scanning HIR statement kinds.
-    pub entry_runtime_fragment_functions: Vec<FunctionId>,
-
     pub doc_fragments: Vec<HirDocFragment>,
     pub module_constants: Vec<HirModuleConst>,
     pub rendered_path_usages: Vec<RenderedPathUsage>,
@@ -176,7 +169,6 @@ impl HirModule {
             side_table: HirSideTable::default(),
             start_function: FunctionId(0),
             function_origins: rustc_hash::FxHashMap::default(),
-            entry_runtime_fragment_functions: vec![],
             doc_fragments: vec![],
             module_constants: vec![],
             rendered_path_usages: vec![],

@@ -122,6 +122,10 @@ impl<'a> AstBuildState<'a> {
                     let start_name = header
                         .source_file
                         .join_str(IMPLICIT_START_FUNC_NAME, string_table);
+                    // WHAT: entry start() signature uses Collection(StringSlice, MutableOwned),
+                    //       which is the Beanstalk frontend type for Vec<String>.
+                    // WHY: must match the signature emitted by pass_emit_nodes for the same
+                    //      implicit start function so call-site type checking succeeds.
                     self.declarations.push(Declaration {
                         id: start_name.to_owned(),
                         value: Expression::new(

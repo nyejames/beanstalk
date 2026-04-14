@@ -10,10 +10,8 @@ use crate::compiler_frontend::analysis::borrow_checker::BorrowCheckReport;
 use crate::compiler_frontend::hir::hir_datatypes::{HirType, HirTypeKind, TypeContext};
 use crate::compiler_frontend::hir::hir_nodes::{
     BlockId, FunctionId, HirBlock, HirExpression, HirExpressionKind, HirFunction,
-    HirFunctionOrigin, HirModule, HirNodeId, HirRegion, HirStatement, HirStatementKind,
-    HirTerminator, RegionId, ValueKind,
+    HirFunctionOrigin, HirModule, HirRegion, HirTerminator, RegionId, ValueKind,
 };
-use crate::compiler_frontend::host_functions::CallTarget;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_resolution::{CompileTimePathBase, CompileTimePathKind};
 use crate::compiler_frontend::paths::rendered_path_usage::RenderedPathUsage;
@@ -146,85 +144,6 @@ pub(crate) fn rendered_path_usage(
     }
 }
 
-/// Add a callable zero-argument unit-returning function to the test module.
-pub(crate) fn add_callable_function(
-    module: &mut Module,
-    function_id: FunctionId,
-    name: &str,
-    string_table: &mut StringTable,
-) {
-    let unit_type = module.hir.functions[0].return_type;
-    let block_id = BlockId(module.hir.blocks.len() as u32);
-    let value_id =
-        crate::compiler_frontend::hir::hir_nodes::HirValueId(module.hir.blocks.len() as u32 + 10);
-
-    module.hir.blocks.push(HirBlock {
-        id: block_id,
-        region: RegionId(0),
-        locals: vec![],
-        statements: vec![],
-        terminator: HirTerminator::Return(HirExpression {
-            id: value_id,
-            kind: HirExpressionKind::TupleConstruct { elements: vec![] },
-            ty: unit_type,
-            value_kind: ValueKind::Const,
-            region: RegionId(0),
-        }),
-    });
-    module.hir.functions.push(HirFunction {
-        id: function_id,
-        entry: block_id,
-        params: vec![],
-        return_type: unit_type,
-        return_aliases: vec![],
-    });
-    module
-        .hir
-        .function_origins
-        .insert(function_id, HirFunctionOrigin::Normal);
-    module.hir.side_table.bind_function_name(
-        function_id,
-        InternedPath::from_single_str(name, string_table),
-    );
-}
-
-/// Append a start-function call targeting an already-registered function name.
-pub(crate) fn add_start_call(
-    module: &mut Module,
-    target_name: &str,
-    statement_id: u32,
-    string_table: &mut StringTable,
-) {
-    let target_path = InternedPath::from_single_str(target_name, string_table);
-    let target_function_id = module
-        .hir
-        .functions
-        .iter()
-        .find_map(|function| {
-            module
-                .hir
-                .side_table
-                .function_name_path(function.id)
-                .filter(|path| **path == target_path)
-                .map(|_| function.id)
-        })
-        .expect("target function should exist in HIR side table");
-    let start_block = module
-        .hir
-        .blocks
-        .iter_mut()
-        .find(|block| block.id == BlockId(0))
-        .expect("start block should exist");
-    start_block.statements.push(HirStatement {
-        id: HirNodeId(statement_id),
-        kind: HirStatementKind::Call {
-            target: CallTarget::UserFunction(target_function_id),
-            args: vec![],
-            result: None,
-        },
-        location: SourceLocation::default(),
-    });
-}
 
 /// Collect output paths so tests can assert artifact layout without repeating iterator plumbing.
 pub(crate) fn collect_output_paths(output_files: &[OutputFile]) -> Vec<PathBuf> {

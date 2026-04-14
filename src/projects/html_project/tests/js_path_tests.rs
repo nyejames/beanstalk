@@ -2,81 +2,74 @@
 
 use super::*;
 use crate::build_system::build::ResolvedConstFragment;
-use crate::compiler_frontend::hir::hir_nodes::FunctionId;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::projects::html_project::document_config::HtmlDocumentConfig;
 use crate::projects::html_project::tests::test_support::{
-    add_callable_function, assert_has_basic_shell, create_test_hir_module, create_test_module,
+    create_test_hir_module, create_test_module,
 };
 use std::collections::HashMap;
 use std::path::Path;
 
 #[test]
-fn js_lifecycle_order_is_static_then_bundle_then_hydration_then_start() {
-    let mut string_table = StringTable::new();
-    let mut module = create_test_module(std::path::PathBuf::from("#page.bst"), &mut string_table);
-    module.hir.entry_runtime_fragment_functions = vec![FunctionId(0)];
+fn render_entry_fragments_static_before_runtime_slot() {
+    // WHAT: const fragment at insertion_index=0 must appear before the first runtime slot div.
     let const_fragments = vec![ResolvedConstFragment {
         runtime_insertion_index: 0,
         html: String::from("<h1>Hello</h1>"),
     }];
-    let function_names = HashMap::from([(FunctionId(0), String::from("start_entry"))]);
+    let (body_html, slot_ids) = render_entry_fragments(&const_fragments, 1);
 
-    let html = render_html_document(
-        &module.hir,
-        &const_fragments,
-        &string_table,
-        &HtmlDocumentConfig::default(),
-        Path::new("index.html"),
-        "",
-        "function start_entry() { return; }",
-        &function_names,
-    )
-    .expect("render_html_document should succeed");
-
-    let static_pos = html
+    let static_pos = body_html
         .find("<h1>Hello</h1>")
         .expect("static fragment must be present");
-    let slot_pos = html
-        .find("<div id=\"bst-slot-0\">")
+    let slot_pos = body_html
+        .find("bst-slot-0")
         .expect("runtime slot must be present");
-    let bundle_pos = html
-        .find("<script>")
-        .expect("JS bundle script block must be present");
-    let hydration_pos = html
-        .find("insertAdjacentHTML")
-        .expect("slot hydration must be present");
-    let start_pos = html
-        .find("if (typeof start_entry")
-        .expect("start() invocation must be present");
 
-    assert_has_basic_shell(&html);
+    assert_eq!(slot_ids.len(), 1);
+    assert!(static_pos < slot_pos, "const fragment must precede runtime slot div");
+}
+
+#[test]
+fn bootstrap_script_calls_start_once_and_hydrates_slots() {
+    // WHAT: with runtime slots, the bootstrap calls start() to get fragments and hydrates them.
+    // WHY: start() is the sole fragment producer; no per-function wrapper calls needed.
+    let slot_ids = vec![String::from("bst-slot-0")];
+    let script = render_runtime_bootstrap_script_html(
+        "start_entry",
+        "function start_entry() { return []; }",
+        &slot_ids,
+    );
+
     assert!(
-        static_pos < slot_pos,
-        "const fragment must appear before runtime slot"
+        script.contains("bst_frags = start_entry()"),
+        "bootstrap must call start() to get the fragment array"
     );
     assert!(
-        slot_pos < bundle_pos,
-        "runtime slot must appear before the JS bundle script tag"
+        script.contains("bst_slots"),
+        "bootstrap must set up the slot ID list"
     );
     assert!(
-        bundle_pos < hydration_pos,
-        "JS bundle must be loaded before slot hydration"
+        script.contains("insertAdjacentHTML"),
+        "bootstrap must hydrate each slot"
     );
+    // Verify start() call comes before slot list setup in emission order.
+    let start_frag_pos = script
+        .find("bst_frags = start_entry()")
+        .expect("start call must be present");
+    let slot_list_pos = script
+        .find("bst_slots")
+        .expect("slot list must be present");
     assert!(
-        hydration_pos < start_pos,
-        "slot hydration must complete before start() is called"
+        start_frag_pos < slot_list_pos,
+        "start() must be called before the slot ID list is set up"
     );
 }
 
 #[test]
 fn render_entry_fragments_preserves_runtime_slot_order() {
-    let mut string_table = StringTable::new();
-    let mut module = create_test_module(std::path::PathBuf::from("#page.bst"), &mut string_table);
-    add_callable_function(&mut module, FunctionId(1), "frag_b", &mut string_table);
-    module.hir.entry_runtime_fragment_functions = vec![FunctionId(0), FunctionId(1)];
+    let (body_html, slot_ids) = render_entry_fragments(&[], 2);
 
-    let (body_html, runtime_slots) = render_entry_fragments(&module.hir, &[]);
     let slot0_pos = body_html
         .find("bst-slot-0")
         .expect("bst-slot-0 must be present");
@@ -88,16 +81,17 @@ fn render_entry_fragments_preserves_runtime_slot_order() {
         slot0_pos < slot1_pos,
         "runtime slots must appear in source fragment order"
     );
-    assert_eq!(runtime_slots.len(), 2);
-    assert_eq!(runtime_slots[0].function_id, FunctionId(0));
-    assert_eq!(runtime_slots[1].function_id, FunctionId(1));
+    assert_eq!(slot_ids.len(), 2);
+    assert_eq!(slot_ids[0], "bst-slot-0");
+    assert_eq!(slot_ids[1], "bst-slot-1");
 }
 
 #[test]
 fn no_runtime_fragments_still_emits_start_call() {
     let mut string_table = StringTable::new();
     let module = create_test_module(std::path::PathBuf::from("#page.bst"), &mut string_table);
-    let function_names = HashMap::from([(FunctionId(0), String::from("start_entry"))]);
+    let function_names =
+        HashMap::from([(module.hir.start_function, String::from("start_entry"))]);
 
     let html = render_html_document(
         &module.hir,
@@ -106,7 +100,7 @@ fn no_runtime_fragments_still_emits_start_call() {
         &HtmlDocumentConfig::default(),
         Path::new("index.html"),
         "",
-        "function start_entry() { return; }",
+        "function start_entry() { return []; }",
         &function_names,
     )
     .expect("render_html_document should succeed");
@@ -116,7 +110,7 @@ fn no_runtime_fragments_still_emits_start_call() {
         "no runtime slots should be present when there are no runtime fragments"
     );
     assert!(
-        html.contains("if (typeof start_entry === \"function\") start_entry();"),
+        html.contains("start_entry()"),
         "start() must still be called when there are no runtime fragments"
     );
 }
@@ -136,7 +130,8 @@ fn escape_inline_script_replaces_closing_tag_sequence() {
 #[test]
 fn inline_js_bundle_with_closing_script_tag_is_escaped_in_html() {
     let hir_module = create_test_hir_module();
-    let function_names = HashMap::from([(FunctionId(0), String::from("start_entry"))]);
+    let function_names =
+        HashMap::from([(hir_module.start_function, String::from("start_entry"))]);
 
     let html = render_html_document(
         &hir_module,
@@ -157,27 +152,5 @@ fn inline_js_bundle_with_closing_script_tag_is_escaped_in_html() {
     assert!(
         html.contains("<\\/script>"),
         "the closing-tag sequence must be escaped as <\\/script> in the output"
-    );
-}
-
-#[test]
-fn render_html_document_errors_on_missing_function_name() {
-    let mut hir_module = create_test_hir_module();
-    hir_module.entry_runtime_fragment_functions = vec![FunctionId(99)];
-
-    let error = render_html_document(
-        &hir_module,
-        &[],
-        &crate::compiler_frontend::string_interning::StringTable::new(),
-        &HtmlDocumentConfig::default(),
-        Path::new("index.html"),
-        "",
-        "// bundle",
-        &HashMap::new(),
-    )
-    .expect_err("should fail when runtime fragment function name is missing");
-    assert!(
-        error.msg.contains("runtime fragment function"),
-        "error message must mention the missing runtime fragment function"
     );
 }
