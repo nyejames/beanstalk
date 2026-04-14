@@ -17,14 +17,6 @@ These are the non-negotiable conditions for starting Alpha.
 
 ### REVERT MISTAKEN AST DRIFT
 
-
-
-
-
-# Plan: restore the original AST architecture
-
-## Diagnosis
-
 The regression began when AST was changed from:
 - a consumer of header-owned top-level declaration knowledge
 
@@ -58,10 +50,98 @@ Principles:
 - AST does **not** rebuild the module declaration universe from headers
 - Function/local declarations remain incremental and ordered
 
+
+# Part 1 — finish the entry-fragment contract
+
+## Overview
+
+The goal is to finish the cleanup around top-level page fragments and make the builder/backend contract match the current design docs. Header parsing and AST-side top-level template lowering are already in the new shape. The remaining drift is now in HIR and the HTML Wasm export plan.
+
+Desired design:
+
+* entry `start()` is the only runtime fragment producer
+* AST exposes folded const fragments with `runtime_insertion_index`
+* builders merge AST const fragments into the runtime list returned by entry `start()`
+* builders do not depend on HIR-level ordered fragment streams or scan entry-body internals for export decisions
+
+Done so far:
+
+* `parse_file_headers.rs` already emits `top_level_const_fragments`, tracks `runtime_insertion_index`, restricts implicit starts to the entry file, and rejects non-entry top-level executable code 
+* `body_dispatch.rs` already lowers top-level runtime templates to `NodeKind::PushStartRuntimeFragment(...)` 
+* `top_level_templates.rs` is already reduced to const-fragment collection and doc-fragment extraction 
+* `pass_emit_nodes.rs` already treats entry `start()` as the runtime fragment producer and folds const templates separately 
+
+## Work to do
+
+### 1. Remove remaining HIR fragment-stream leftovers
+
+Files:
+
+* `src/compiler_frontend/hir/hir_nodes.rs`
+* `src/compiler_frontend/hir/hir_builder.rs`
+
+`StartFragment` and the old const-string pool are already gone. The remaining issue is `HirModule.entry_runtime_fragment_functions` and any lowering code that still treats HIR as carrying a builder-facing ordered runtime fragment list 
+
+Keep `PushRuntimeFragment` only if it is the clearest lowering for `NodeKind::PushStartRuntimeFragment`. Remove `entry_runtime_fragment_functions` and any code that populates or consumes it.
+
+### 2. Simplify the HTML Wasm export plan
+
+Files:
+
+* `src/projects/html_project/wasm/export_plan.rs`
+* any HTML Wasm wrapper code that depends on the current export selection logic
+
+`export_plan.rs` still walks reachable blocks from the entry function and exports direct user-function calls found inside `start()` 
+
+Replace that with a direct contract:
+
+* export entry `start()`
+* export string/memory helper functions
+* JS wrapper calls `start()`
+* JS wrapper decodes the returned runtime fragment list
+* builder merges `const_top_level_fragments` using `runtime_insertion_index`
+
+Remove entry-body call scanning as an export-selection policy.
+
+### 3. Resolve the runtime fragment return-type contract
+
+Files:
+
+* `src/compiler_frontend/ast/module_ast/pass_emit_nodes.rs`
+* `src/compiler_frontend/ast/module_ast/pass_declarations.rs`
+* relevant HIR type-lowering code
+* `src/compiler_frontend/mod.rs`
+* `docs/compiler-design-overview.md`
+
+The docs say entry `start()` returns `Vec<String>` 
+
+The implementation currently uses `DataType::Collection(Box::new(DataType::StringSlice), Ownership::MutableOwned)` for the implicit start signature in both emit and declaration collection  
+
+Pick one canonical contract and align all layers. If `StringSlice` is the real semantic carrier, document it precisely. If the semantic contract is `Vec<String>`, reflect that clearly in the frontend type story and backend expectations.
+
+## Done when
+
+* `HirModule` does not carry a builder-facing ordered runtime fragment list
+* HTML Wasm exports entry `start()` directly
+* builder-side merging is driven by AST const fragment metadata plus entry `start()` output
+* the runtime fragment return type is named consistently in code and docs
+
+# Part 2 — remove AST-side module declaration recollection
+
+## Overview
+
+The goal is to restore the original ownership split: headers and dependency sorting own top-level declaration discovery, and AST lowers sorted headers without rebuilding the module symbol manifest.
+
+Desired design:
+
+* top-level declaration discovery is header-owned
+* AST does not recollect module-wide declarations
+* AST does not rebuild per-file declared-path/name tables
+* AST consumes a shared top-level symbol manifest prepared before body lowering
+
 ## Things to preserve
 
 Do not remove or redesign the current local declaration path inside function bodies.
-
 Keep:
 - `new_declaration(...)`
 - `context.add_var(...)`
@@ -69,193 +149,649 @@ Keep:
 
 That part still matches the original architecture.
 
-## Phase 1: restore the stage contract in code comments and types
+Done so far:
 
-### Goals
-- Make the intended ownership boundaries explicit before changing logic
-- Stop the code from documenting the wrong model
+* header parsing already owns top-level declaration discovery and start-function classification in the way described by the compiler design overview  
+* bare file imports and imported file starts are already gone on the language-rule side, which removes one reason AST previously had extra import/start bookkeeping 
+
+## Work to do
+
+### 1. Delete the declaration recollection pass
+
+Files:
+
+* `src/compiler_frontend/ast/module_ast/pass_declarations.rs`
+* `src/compiler_frontend/ast/module_ast/orchestrate.rs`
+
+`pass_declarations.rs` still rebuilds a module-wide declaration and visibility database inside AST, including start declaration stubs and builtin absorption 
+
+Delete this pass. Remove `collect_declarations(...)` from `orchestrate.rs` and remove the stale pass-order comments that still present AST construction as declaration collection first 
+
+### 2. Move symbol-manifest ownership out of AST
+
+Files:
+
+* `src/compiler_frontend/headers/parse_file_headers.rs`
+* `src/compiler_frontend/mod.rs`
+* `src/compiler_frontend/module_dependencies.rs`
+* new manifest module if needed
+
+Introduce a frontend-owned manifest that is prepared before AST construction.
+
+Recommended shape:
+
+* top-level declaration stubs
+* export visibility
+* per-file visible symbol sets
+* canonical symbol-to-source mapping
+* file import metadata
+* builtin manifest merged once here
+
+AST should receive this manifest and consume it. It should not reconstruct it.
+
+### 3. Update AST construction API to consume the manifest
+
+Files:
+
+* `src/compiler_frontend/mod.rs`
+* `src/compiler_frontend/ast/module_ast/orchestrate.rs`
+
+`mod.rs` and `orchestrate.rs` still reflect the old ownership model in both comments and inputs  
+
+After the manifest exists, update the AST entrypoint so it takes:
+
+* sorted headers
+* top-level const fragment metadata
+* shared symbol manifest
+* existing AST build context
+
+AST construction should then begin from manifest-driven visibility/type resolution and ordered header lowering, not from symbol recollection.
+
+## Done when
+
+* `pass_declarations.rs` is deleted
+* `collect_declarations(...)` no longer exists in AST orchestration
+* the top-level symbol manifest is created before AST and passed in
+* AST no longer owns module declaration discovery
+
+# Part 3 — shrink AST state and replace cloned declaration scopes
+
+## Overview
+
+The goal is to finish the real AST simplification. Once recollection is removed, `AstBuildState` and `ScopeContext` can be reduced to true AST-stage responsibilities and layered scope growth.
+
+Desired design:
+
+* `AstBuildState` only carries AST-stage state
+* `ScopeContext` does not clone a full module declaration vec into every child scope
+* top-level declarations come from the shared manifest
+* parameters and locals grow incrementally in source order
+
+Done so far:
+
+* the AST body-lowering path already has the right semantic direction for start/runtime template handling
+* import semantics are already simpler because start aliasing is gone
+* the remaining complexity is now concentrated in `AstBuildState`, `ScopeContext`, and the orchestration around them
+
+## Work to do
+
+### 1. Shrink `AstBuildState`
+
+File:
+
+* `src/compiler_frontend/ast/module_ast/build_state.rs`
+
+`AstBuildState` still stores a second symbol database:
+
+* `importable_symbol_exported`
+* `file_imports_by_source`
+* `declared_paths_by_file`
+* `declared_names_by_file`
+* `module_file_paths`
+* `canonical_source_by_symbol_path`
+* `register_declared_symbol(...)` 
+
+Move that state to the shared manifest layer. Keep only true AST-stage state:
+
+* emitted AST nodes
+* warnings
+* module constants
+* folded const template values
+* resolved type/signature tables
+* rendered path usage sink
+* builtin AST payloads only if still needed after manifest construction
+
+### 2. Rewrite `ScopeContext` around layered scope data
+
+Files:
+
+* `src/compiler_frontend/ast/module_ast/scope_context.rs`
+* `src/compiler_frontend/ast/module_ast/pass_emit_nodes.rs`
+* any body-lowering helpers that assume cloned full declaration vectors
+
+`ScopeContext` still stores `declarations: Vec<Declaration>` and clones it into child contexts. `new_child_function`, `new_template_parsing_context`, `new_constant`, and `add_var(...)` still operate in that model 
+
+Replace it with:
+
+* immutable shared top-level declaration view from the manifest
+* small local declaration layer for parameters and locals
+* `add_var(...)` only extends the local layer
+* visibility gating still applied per file as needed
+
+This is the core fix for source-ordered local growth without carrying a cloned module declaration vec everywhere.
+
+### 3. Rework AST emission and import visibility to use the manifest + layered scopes
+
+Files:
+
+* `src/compiler_frontend/ast/module_ast/pass_emit_nodes.rs`
+* `src/compiler_frontend/ast/import_bindings.rs`
+* constant-header/type-resolution call sites
+
+`import_bindings.rs` already enforces the correct import rules, but it still resolves visibility against AST-owned symbol tables populated by recollection 
+
+Rewire it so:
+
+* visibility gates come from the shared manifest
+* constant-header resolution consumes manifest data plus per-file visible symbols
+* `pass_emit_nodes.rs` builds function/start contexts from the manifest + layered local scope model, not from large prebuilt declaration vecs
+
+## Done when
+
+* `AstBuildState` no longer stores a second symbol registration database
+* `ScopeContext` no longer clones the full module declaration vec into child contexts
+* file visibility is resolved from the shared manifest
+* function and start bodies grow only local/parameter scope incrementally
+
+# Part 4 — finalize, audit, document, and clean tests
+
+## Overview
+
+The goal is to finish the refactor cleanly. This phase makes the new AST pipeline readable, aligned with the docs, and free of leftover lint/style drift.
+
+Desired design:
+
+* the AST pipeline is easy to follow in `orchestrate.rs`
+* comments explain what each stage is doing and why it exists in the overall compiler pipeline
+* touched code follows the style guide and compiler design docs
+* tests reflect the new ownership model, not the old recollection model
+
+Done so far:
+
+* the top-level template rewrite already removed a large amount of fragment-specific complexity
+* the remaining work is now mostly structural cleanup, documentation alignment, and test/lint follow-through
+
+## Work to do
+
+### 1. Simplify `orchestrate.rs` to match the final architecture
+
+Files:
+
+* `src/compiler_frontend/ast/module_ast/orchestrate.rs`
+* `src/compiler_frontend/mod.rs`
+
+After Parts 1–3, rewrite `orchestrate.rs` so the pass sequence reflects the real pipeline:
+
+1. consume shared top-level symbol manifest
+2. resolve import visibility and type/signature tables
+3. lower sorted headers directly
+4. finalize const fragments, doc fragments, template normalization, and module constants
+
+Remove all stale wording that still describes AST as reconstructing declarations first  
+
+### 2. Review the touched areas against the style guide and compiler design docs
+
+Files:
+
+* all files touched by this plan
+* `docs/compiler-design-overview.md`
+* `docs/codebase-style-guide.md`
+
+Do a deliberate alignment pass:
+
+* stage ownership matches the design overview
+* module boundaries remain clear
+* no transitional wrappers or compatibility shims remain
+* comments explain behavior and rationale, not syntax
+* error paths use structured diagnostics and avoid user-input panics
+* naming stays explicit and full
+* files and functions still have one clear responsibility  
+
+### 3. Add strong comments to the new AST pipeline key parts
+
+Files:
+
+* `src/compiler_frontend/ast/module_ast/orchestrate.rs`
+* `src/compiler_frontend/ast/module_ast/build_state.rs`
+* `src/compiler_frontend/ast/module_ast/scope_context.rs`
+* `src/compiler_frontend/ast/import_bindings.rs`
+* `src/compiler_frontend/ast/module_ast/pass_emit_nodes.rs`
+
+The newly refactored AST pipeline key parts should be clearly commented.
+
+Comments should explain:
+
+* what this stage owns
+* what it no longer owns
+* why header parsing now owns top-level declaration discovery
+* how AST uses the shared manifest
+* how local scope growth works during body lowering
+* how entry `start()` and const fragment finalization relate to the big picture
+
+Use concise WHAT/WHY comments and file-level docs. The style guide requires this level of explanation for complex stage logic 
+
+### 4. Rewrite tests for the final architecture
+
+Focus areas:
+
+* manifest-driven import visibility
+* layered local scope growth
+* no AST-side declaration recollection assumptions
+* entry `start()` as the runtime fragment producer
+* builder merge behavior for const fragments + runtime fragments
+* HTML Wasm export plan behavior after direct entry `start()` export
+
+Delete or rewrite tests that are only validating the old recollection model.
+
+### 5. Clean remaining lints and dead code
+
+This final phase must explicitly include:
+
+* cleaning up any remaining `clippy` lints
+* reviewing dead code, stale `#[allow(dead_code)]`, and leftover unused paths
+* removing stale comments and docs from the old architecture
+* running the required checks from the style guide:
+
+  * `cargo clippy`
+  * `cargo test`
+  * `cargo run tests` 
+
+## Done when
+
+* `orchestrate.rs` reflects the final AST pipeline clearly
+* touched code follows the style guide and compiler design docs
+* key AST pipeline files are well commented with clear WHAT/WHY and stage ownership
+* tests validate the new architecture
+* remaining clippy lints in touched areas are cleaned up
+* no stale architectural comments from the old model remain
+
+
+
+
+
+
+
+
+# Implementation plan: make `/` real division and `//` integer division
+
+### Design decision
+
+* `/` is always real division.
+* `Int / Int` naturally evaluates to `Float`.
+* `//` becomes integer division.
+* `Int // Int` naturally evaluates to `Int`.
+* In explicitly `Int` contexts, using `/` should produce a targeted type error suggesting `//` or `Int(...)`.
+* `//=` should exist if `//` exists.
+* The old `//` root operator should be removed and replaced later with an explicit builtin/function/method design.
+
+### Current repo anchors
+
+The current compiler shape already gives you clean ownership boundaries for this change:
+
+* Contextual numeric coercion is still intentionally narrow and only handles `Int -> Float` at declaration/return sites in `src/compiler_frontend/type_coercion/numeric.rs` and `compatibility.rs`  
+* The tokenizer currently treats `//` as `Root` and `//=` as `RootAssign` in `src/compiler_frontend/tokenizer/lexer.rs` and `tokens.rs`  
+* Arithmetic typing still resolves `Int / Int` as `Int` in `src/compiler_frontend/ast/expressions/eval_expression/operator_policy/arithmetic.rs` 
+* Constant folding still performs integer division for `Int / Int` in `src/compiler_frontend/optimizers/constant_folding.rs` 
+* HIR and JS backend still carry/lower `Root` as a real operator in `src/compiler_frontend/hir/hir_nodes.rs`, `hir_expression/operators.rs`, and `src/backends/js/js_expr.rs`   
+
+## Phase 1: reclaim `//` in the tokenizer and AST
+
+### Files
+
+* `src/compiler_frontend/tokenizer/tokens.rs`
+* `src/compiler_frontend/tokenizer/lexer.rs`
+* `src/compiler_frontend/ast/expressions/expression.rs`
+* `src/compiler_frontend/ast/expressions/parse_expression_dispatch.rs`
 
 ### Changes
-- Update `src/compiler_frontend/mod.rs`
-  - rewrite the `headers_to_ast()` docs so they explicitly say:
-    - headers already provide top-level declaration structure
-    - AST lowers sorted headers and only adds in-body declarations incrementally
-- Update `src/compiler_frontend/ast/module_ast/mod.rs`
-  - remove wording that frames pass 1 as “register all symbols module-wide”
-- Add a top-level comment in the AST entrypoint stating:
-  - headers are the source of truth for top-level declarations
-  - AST must not reconstruct them
 
-### Done when
-- comments and docs match the intended old architecture exactly
+* Rename token/operator concepts:
 
-## Phase 2: move top-level declaration ownership back to headers
+  * `TokenKind::Root` -> `TokenKind::IntDivide`
+  * `TokenKind::RootAssign` -> `TokenKind::IntDivideAssign`
+  * `Operator::Root` -> `Operator::IntDivide`
+* Update lexer behavior:
 
-### Goals
-- make header parsing / sorted headers the authoritative source of top-level declaration metadata
-- eliminate AST-side reconstruction of top-level declaration indexes
+  * `//` -> `IntDivide`
+  * `//=` -> `IntDivideAssign`
+* Update token helpers:
+
+  * `is_assignment_operator()`
+  * `continues_expression()`
+* Update expression dispatch so `TokenKind::IntDivide` lowers to `Operator::IntDivide`
+* Remove root-operator parsing entirely
+
+### Notes
+
+This should be a hard replacement, not a compatibility layer. Pre-alpha is the right time to delete the old syntax cleanly.
+
+## Phase 2: change operator typing rules
+
+### Files
+
+* `src/compiler_frontend/ast/expressions/eval_expression/operator_policy/arithmetic.rs`
+* `src/compiler_frontend/ast/expressions/eval_expression/operator_policy/diagnostics.rs`
+
+### New typing rules
+
+* `Int + Int -> Int`
+* `Int - Int -> Int`
+* `Int * Int -> Int`
+* `Int % Int -> Int`
+* `Int / Int -> Float`
+* `Int // Int -> Int`
+* Mixed `Int`/`Float` arithmetic remains `Float`
+* `//` should be `Int`-only for now
+
+### Recommended restrictions
+
+Reject:
+
+* `Float // Float`
+* `Int // Float`
+* `Float // Int`
+
+That keeps `//` simple and predictable.
+
+### Diagnostics to add
+
+When `/` appears in an explicitly `Int` context, emit a targeted type error like:
+
+* “Regular division returns `Float`.”
+* “Use `//` for integer division.”
+* “Use `Int(...)` for an explicit conversion.”
+
+That is much better than a generic expected/found message.
+
+## Phase 3: keep contextual coercion narrow
+
+### Files
+
+* `src/compiler_frontend/type_coercion/compatibility.rs`
+* `src/compiler_frontend/type_coercion/numeric.rs`
 
 ### Changes
-- Introduce a header-owned manifest or index structure, for example:
-  - declared symbol paths by file
-  - declared names by file
-  - export visibility
-  - file imports
-  - start-function symbol path / alias metadata
-- Build this during header parsing and/or dependency sorting
-- Pass it into AST as an input instead of deriving it again inside `AstBuildState`
 
-### Files
-- `src/compiler_frontend/headers/parse_file_headers.rs`
-- `src/compiler_frontend/module_dependencies.rs`
-- `src/compiler_frontend/mod.rs`
+Do not expand coercion policy.
 
-### Done when
-- AST no longer needs to scan sorted headers just to reconstruct declaration tables
+Keep:
 
-## Phase 3: delete AST pass 1 declaration collection
+* implicit `Int -> Float` only
+* only at contextual boundaries such as declarations and returns
 
-### Goals
-- remove the direct source of duplicated work
-- make AST start from real semantic work instead
+Do not add:
 
-### Changes
-- Delete `src/compiler_frontend/ast/module_ast/pass_declarations.rs`
-- Remove `collect_declarations(...)` from `Ast::new(...)`
-- Remove `register_declared_symbol(...)` and any AST-owned top-level declaration/index state that only exists to support pass 1
-- Rewrite import-binding resolution to consume the header-owned manifest instead
+* implicit `Float -> Int`
+* general “expression-level float defaulting”
+* special hidden coercion paths for `//`
 
-### Files
-- `src/compiler_frontend/ast/module_ast/pass_declarations.rs`
-- `src/compiler_frontend/ast/module_ast/orchestrate.rs`
-- `src/compiler_frontend/ast/module_ast/build_state.rs`
-- `src/compiler_frontend/ast/module_ast/pass_import_bindings.rs`
+### Why
 
-### Done when
-- `Ast::new(...)` begins from real lowering/resolution work, not declaration recollection
+The current frontend separation is good:
 
-## Phase 4: shrink `AstBuildState` to real AST responsibilities
+* operator typing decides the natural type of an expression
+* contextual coercion applies afterwards only where the language explicitly allows it  
 
-### Goals
-- remove state that exists only because AST was rebuilding header-owned data
-- reduce conceptual and compile-time overhead
+This change should preserve that architecture.
 
-### Remove or relocate if only used for top-level recollection
-- `importable_symbol_exported`
-- `file_imports_by_source`
-- `declared_paths_by_file`
-- `declared_names_by_file`
-- `module_file_paths`
-- any helper methods that only populate those tables
+## Phase 4: fix constant folding to match runtime semantics
 
-### Keep only if still required for true AST work
-- resolved type/signature tables
-- module constants
-- const template results
-- AST nodes
-- warnings
-- template metadata genuinely needed before HIR
+### File
 
-### Files
-- `src/compiler_frontend/ast/module_ast/build_state.rs`
-
-### Done when
-- `AstBuildState` looks like AST state, not a second header-index database
-
-## Phase 5: stop cloning full declaration vectors through scope contexts
-
-### Goals
-- preserve ordered local declarations
-- avoid copying the whole module declaration table into every scope
+* `src/compiler_frontend/optimizers/constant_folding.rs`
 
 ### Changes
-- Replace `ScopeContext.declarations: Vec<Declaration>` with a layered shape:
-  - shared immutable module declaration view
-  - small mutable local declaration list for the active scope
-- Child control-flow scopes should inherit local visibility cheaply
-- Function scopes should extend with parameters without cloning the full module vec
-- `add_var(...)` should continue to append only local declarations
+
+Update constant folding so:
+
+* `5 / 2` folds to `2.5` as `Float`
+* `5 // 2` folds to `2` as `Int`
+
+Add explicit support for `Operator::IntDivide`.
+
+Keep zero-division checks for both operators.
+
+### Recommended integer division rule
+
+Use truncation toward zero.
+
+Examples:
+
+* `5 // 2 -> 2`
+* `-5 // 2 -> -2`
+* `5 // -2 -> -2`
+
+That is the easiest rule to mirror consistently in Rust-style logic and in the JS backend.
+
+### Important
+
+Constant folding and runtime lowering must match exactly. This is not optional.
+
+## Phase 5: update compound assignment
+
+### File
+
+* `src/compiler_frontend/ast/expressions/mutation.rs`
+
+### Changes
+
+Add support for:
+
+* `//=`
+
+Keep support for:
+
+* `/=`
+
+But change semantics:
+
+* `x /= y` should only be valid when the target type can accept the division result
+* `Int /= Int` should now fail because `/` produces `Float`
+* `Int //= Int` should succeed
+* `Float /= Int` should succeed
+
+### Recommended behavior
+
+```beanstalk
+x Int ~= 10
+x /= 4      -- error
+x //= 4     -- ok, x becomes 2
+
+y Float ~= 10
+y /= 4      -- ok, y becomes 2.5
+```
+
+## Phase 6: thread the new operator through HIR
 
 ### Files
-- `src/compiler_frontend/ast/module_ast/scope_context.rs`
-- `src/compiler_frontend/ast/module_ast/pass_emit_nodes.rs`
-- any expression/reference lookup helpers that currently assume one flat cloned vec
 
-### Done when
-- function emission no longer does:
-  - `self.declarations.to_owned()`
-- `ScopeContext::new(...)` no longer eagerly clones the whole declaration table
+* `src/compiler_frontend/hir/hir_nodes.rs`
+* `src/compiler_frontend/hir/hir_expression/operators.rs`
+* `src/compiler_frontend/hir/hir_display.rs` if needed
 
-## Phase 6: trim AST finalization back to the minimum boundary needed
+### Changes
 
-### Goals
-- keep AST focused
-- prevent AST from becoming a generic whole-tree normalization machine
+* Replace `HirBinOp::Root` with `HirBinOp::IntDiv`
+* Map AST `Operator::IntDivide` to HIR `IntDiv`
+* Update result-type inference:
 
-### Review introduced drift from
-- `8cd0572a8d01747975438a9c7b76757f5beb15fe`
-- `87df41a78d37a60bec59a740d1603bc9703e815a`
+  * `Div` may now produce `Float` even for two `Int` operands
+  * `IntDiv` produces `Int`
 
-### Questions to answer per finalization helper
-- Is this genuinely AST semantic work?
-- Is this actually template parsing/composition work that should happen earlier?
-- Is this HIR-shaping work that should happen at the AST→HIR lowering boundary instead?
-- Is this only compensating for another abstraction leak?
+### Important
 
-### Likely keep
-- top-level const template folding
-- start fragment synthesis if AST is still the canonical source for it
+The current HIR inference logic is still shaped around the old operator split, so this must be updated alongside AST typing, not later  
 
-### Likely reduce or move
-- broad recursive AST-wide normalization sweeps that exist mainly to “clean up” before HIR
-- duplicated template/materialization helpers that can happen during template construction instead
+## Phase 7: update backend lowering
 
 ### Files
-- `src/compiler_frontend/ast/module_ast/finalization/*`
-- `src/compiler_frontend/ast/templates/*`
-- `src/compiler_frontend/hir/*` boundary code where appropriate
 
-### Done when
-- AST finalization is small, explicit, and only contains logic that truly belongs before HIR
+* `src/backends/js/js_expr.rs`
+* any future Wasm/LIR operator-lowering sites
 
-## Phase 7: restore the tests around the original contract
+### Changes
 
-### Add regression coverage for
+* Keep `Div` lowered as `/`
+* Add `IntDiv` lowering
+* Remove root-operator lowering
 
-1. Header-owned top-level knowledge
-   - imported declarations are available without AST recollecting them
-   - sorted headers are sufficient for top-level lowering
+### Recommended JS lowering
 
-2. Ordered in-body declarations
-   - locals become visible only after declaration
-   - no full pre-scan of function locals is required
+Lower integer division as truncation toward zero:
 
-3. Import visibility
-   - file-scoped imports remain enforced
-   - start-function aliases still work
+```text
+Math.trunc(left / right)
+```
 
-4. Performance-shape regression checks
-   - no AST declaration recollection pass
-   - no full declaration vec cloning per function scope
+That matches the recommended constant-folding rule.
 
-### Done when
-- the restored architecture is enforced by tests, not just comments
+### Why
 
-## Expected end state
+The JS backend currently lowers `Div` as raw `/` and `Root` as `Math.pow(...)` . This is the exact place where backend semantics will drift if you do not update it.
 
-`Ast::new(...)` should look conceptually like this:
+## Test plan
 
-1. consume sorted headers plus header-owned module manifest
-2. resolve types/signatures using that manifest
-3. lower headers/bodies directly
-4. add locals as encountered inside body parsing
-5. perform only minimal AST finalization actually required before HIR
+Follow the existing repo preference for strong integration tests using real Beanstalk snippets and artifact/golden assertions, not just narrow unit tests 
 
-No AST-side top-level declaration recollection.
-No repeated rebuilding of symbol/index tables from headers.
-No cloning of full module declaration vecs into every scope.
+### Unit tests
+
+Add or update tests for:
+
+* tokenization of `//`
+* tokenization of `//=`
+* `Int / Int -> Float`
+* `Int // Int -> Int`
+* invalid mixed `//` cases
+* constant folding of `/`
+* constant folding of `//`
+* divide-by-zero for both
+* `/=` on `Int` target failing
+* `//=` on `Int` target succeeding
+
+### Integration tests
+
+Add cases for:
+
+* top-level real division output
+* top-level integer division output
+* `Int` declaration rejecting `/`
+* `Float` declaration accepting `/`
+* `Int` return rejecting `/`
+* `Int` return accepting `//`
+* `Float /= Int`
+* `Int /= Int` failure
+* `Int //= Int` success
+* mixed `Int`/`Float` real division
+* invalid `//` mixed numeric usage
+
+## Documentation updates
+
+### `docs/language-overview.md`
+
+Add or update a numeric semantics section.
+
+Suggested content:
+
+* Whole-number literals are `Int`
+* Decimal literals are `Float`
+* `+`, `-`, `*`, `%` preserve `Int` when both operands are `Int`
+* `/` is real division and returns `Float`
+* `//` is integer division and requires `Int` operands
+* There is no implicit `Float -> Int`
+* Use `//` for integer division
+* Use `Int(...)` for explicit conversion when you really want one
+
+Also update any operator tables/examples that still imply integer `/`.
+
+### `docs/compiler-design-overview.md`
+
+Update the “Type checking and coercion” section to reflect the new split:
+
+* generic expression evaluation stays strict
+* contextual coercion is still only `Int -> Float`
+* `/` is an operator-owned typing rule, not contextual coercion
+* `Int / Int` naturally evaluates to `Float`
+* `//` is a separate integer-division operator
+
+That keeps the docs aligned with the current compiler architecture rather than muddying the boundary between operator typing and contextual coercion 
+
+### `docs/language-overview.md` and any syntax references mentioning roots
+
+Remove operator-based root syntax.
+
+Do not document the replacement root API in the same PR unless you are actually implementing it.
+
+For this change, the cleaner move is:
+
+* remove `//` as root syntax
+* leave roots for a later explicit builtin/function/method design pass
+
+## Cleanup checklist
+
+* remove `Root` and `RootAssign` token names
+* remove `Operator::Root`
+* remove `HirBinOp::Root`
+* remove JS lowering for root operator
+* remove stale comments mentioning `//` as roots
+* update any failing snapshots/goldens
+* update diagnostics text that still describes `/` as integer-preserving
+
+## Recommended PR breakdown
+
+### PR 1
+
+* reclaim `//`
+* rename tokens/operators
+* change AST arithmetic typing
+* update constant folding
+* add diagnostics
+* add unit tests
+
+### PR 2
+
+* thread `IntDiv` through HIR
+* update JS/backend lowering
+* add `//=`
+* add integration coverage
+
+### PR 3
+
+* docs pass
+* remove leftover root references
+* cleanup stale comments/tests
+
+## Final recommendation
+
+This is the right change.
+
+It fixes the surprising part of integer arithmetic without making the whole numeric system fuzzy. The important discipline is to keep the rule narrow:
+
+* `/` is real division
+* `//` is integer division
+* no implicit `Float -> Int`
+* explicit `Int` contexts reject `/` with a helpful error
+
+That gives Beanstalk a clean numeric story instead of a permissive one.
+
+
+
+
+
+
+
+
  
-### PR - Refactor collection builtins into explicit compiler-owned operations and remove compatibility-shaped dispatch
+# Refactor collection builtins into explicit compiler-owned operations and remove compatibility-shaped dispatch
 
 Collection builtins should lower through an explicit compiler-owned representation instead of leaning on method-call-shaped compatibility scaffolding. This removes fake dispatch surface, simplifies backend contracts, and makes collection semantics easier to audit for Alpha.
 
@@ -389,7 +925,7 @@ Add or improve cases for:
 * Land this before or alongside the JS backend semantic audit so the audit sees the final builtin representation.
 
 
-### PR - Split the JS runtime prelude by concern and harden backend helper contracts
+# PR - Split the JS runtime prelude by concern and harden backend helper contracts
 
 The JS backend runtime prelude currently centralizes too many unrelated helper groups in one file. Split it into focused modules, keep one small orchestration layer, and add stronger tests around the helper contracts that define Alpha runtime semantics.
 
@@ -515,7 +1051,7 @@ The current prelude comments are useful. Preserve that quality after the split:
 * Only fix helper semantics in the same PR when the bug is obvious and covered.
 * This PR should make the later “JS backend semantic audit for Alpha surface” materially easier.
 
-### PR - Migrate remaining brittle fixtures, prune redundant coverage, and close the Alpha test matrix gaps
+# PR - Migrate remaining brittle fixtures, prune redundant coverage, and close the Alpha test matrix gaps
 
 Now that the integration runner supports strict goldens, normalized goldens, rendered-output assertions, and targeted artifact assertions, finish migrating brittle fixtures to the right assertion surface, remove redundant cases that no longer add value, and fill the most visible Alpha-surface coverage gaps.
 
