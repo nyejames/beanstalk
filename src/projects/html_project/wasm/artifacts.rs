@@ -14,9 +14,7 @@ use crate::compiler_frontend::hir::hir_nodes::HirModule;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::projects::html_project::document_config::HtmlDocumentConfig;
 use crate::projects::html_project::document_shell::render_html_document_shell;
-use crate::projects::html_project::js_path::{
-    count_runtime_fragment_slots, render_entry_fragments,
-};
+use crate::projects::html_project::js_path::render_entry_fragments;
 use crate::projects::html_project::output_plan::plan_wasm_output_from_logical_html_path;
 use crate::projects::html_project::page_metadata::extract_html_page_metadata;
 use crate::projects::html_project::wasm::export_plan::{
@@ -102,6 +100,7 @@ pub(crate) fn compile_html_module_wasm(
     project_name: &str,
     document_config: &HtmlDocumentConfig,
     release_build: bool,
+    entry_runtime_fragment_count: usize,
 ) -> Result<CompiledHtmlWasmModule, CompilerMessages> {
     // Derive per-route artifact paths from the already-derived logical HTML path.
     // WHY: the builder has already computed the canonical route via derive_logical_html_path.
@@ -118,8 +117,8 @@ pub(crate) fn compile_html_module_wasm(
     )
     .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;
 
-    let slot_count = count_runtime_fragment_slots(hir_module);
-    let (entry_fragment_html, slot_ids) = render_entry_fragments(const_fragments, slot_count);
+    let (entry_fragment_html, slot_ids) =
+        render_entry_fragments(const_fragments, entry_runtime_fragment_count);
 
     let build_plan = build_html_wasm_plan(hir_module, slot_ids)
         .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;

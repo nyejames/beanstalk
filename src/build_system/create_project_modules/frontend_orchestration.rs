@@ -69,13 +69,14 @@ impl FrontendModuleBuildContext<'_> {
                     entry_file_path,
                 )
             })?;
-            let sorted_modules = timed_frontend_stage("Dependency graph created in: ", || {
-                Self::sort_headers(&mut compiler, module_headers, &warnings)
-            })?;
+            let (sorted_headers, sorted_const_fragments, entry_runtime_fragment_count) =
+                timed_frontend_stage("Dependency graph created in: ", || {
+                    Self::sort_headers(&mut compiler, module_headers, &warnings)
+                })?;
             let module_ast = timed_frontend_stage("AST created in: ", || {
                 self.build_ast(
                     &mut compiler,
-                    sorted_modules,
+                    (sorted_headers, sorted_const_fragments),
                     entry_file_path,
                     &mut warnings,
                 )
@@ -117,6 +118,7 @@ impl FrontendModuleBuildContext<'_> {
                 borrow_analysis,
                 warnings,
                 const_top_level_fragments,
+                entry_runtime_fragment_count,
             })
         })();
         *self.string_table = compiler.string_table;
@@ -203,12 +205,14 @@ impl FrontendModuleBuildContext<'_> {
         (
             Vec<crate::compiler_frontend::headers::parse_file_headers::Header>,
             Vec<crate::compiler_frontend::headers::parse_file_headers::TopLevelConstFragment>,
+            usize,
         ),
         CompilerMessages,
     > {
         let Headers {
             headers,
             top_level_const_fragments,
+            entry_runtime_fragment_count,
         } = module_headers;
         let sorted_headers = compiler.sort_headers(headers).map_err(|errors| {
             CompilerMessages::from_errors_with_warnings(
@@ -218,7 +222,7 @@ impl FrontendModuleBuildContext<'_> {
             )
         })?;
 
-        Ok((sorted_headers, top_level_const_fragments))
+        Ok((sorted_headers, top_level_const_fragments, entry_runtime_fragment_count))
     }
 
     fn build_ast(

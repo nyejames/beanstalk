@@ -25,47 +25,6 @@ use crate::projects::html_project::page_metadata::extract_html_page_metadata;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-/// Returns the number of runtime fragment slots owned by entry start().
-///
-/// WHAT: walks PushRuntimeFragment statements in the entry start() function body.
-/// WHY: entry start() is the canonical source of runtime slot ordering; builders derive
-///      slot counts from the HIR statement sequence rather than a parallel metadata field.
-pub(crate) fn count_runtime_fragment_slots(hir_module: &HirModule) -> usize {
-    use crate::compiler_frontend::hir::hir_nodes::HirStatementKind;
-    use crate::compiler_frontend::hir::utils::terminator_targets;
-    use rustc_hash::FxHashSet;
-    use std::collections::VecDeque;
-
-    let Some(start_fn) = hir_module
-        .functions
-        .iter()
-        .find(|f| f.id == hir_module.start_function)
-    else {
-        return 0;
-    };
-
-    let mut count = 0;
-    let mut visited: FxHashSet<_> = FxHashSet::default();
-    let mut queue = VecDeque::new();
-    queue.push_back(start_fn.entry);
-
-    while let Some(block_id) = queue.pop_front() {
-        if !visited.insert(block_id) {
-            continue;
-        }
-        if let Some(block) = hir_module.blocks.iter().find(|b| b.id == block_id) {
-            for stmt in &block.statements {
-                if matches!(stmt.kind, HirStatementKind::PushRuntimeFragment { .. }) {
-                    count += 1;
-                }
-            }
-            for succ in terminator_targets(&block.terminator) {
-                queue.push_back(succ);
-            }
-        }
-    }
-    count
-}
 
 /// Compiles one module through the JS-only HTML builder path.
 ///
@@ -80,6 +39,7 @@ pub(crate) fn compile_html_module_js(
     project_name: &str,
     document_config: &HtmlDocumentConfig,
     release_build: bool,
+    entry_runtime_fragment_count: usize,
 ) -> Result<OutputFile, CompilerError> {
     let js_lowering_config = JsLoweringConfig::standard_html(release_build);
 
@@ -98,6 +58,7 @@ pub(crate) fn compile_html_module_js(
         project_name,
         &js_module.source,
         &js_module.function_name_by_id,
+        entry_runtime_fragment_count,
     )?;
 
     Ok(OutputFile::new(output_path, FileKind::Html(html)))
@@ -174,9 +135,9 @@ pub(crate) fn render_html_document(
     project_name: &str,
     js_bundle: &str,
     function_names: &HashMap<FunctionId, String>,
+    entry_runtime_fragment_count: usize,
 ) -> Result<String, CompilerError> {
-    let slot_count = count_runtime_fragment_slots(hir_module);
-    let (body_html, slot_ids) = render_entry_fragments(const_fragments, slot_count);
+    let (body_html, slot_ids) = render_entry_fragments(const_fragments, entry_runtime_fragment_count);
     let page_metadata = extract_html_page_metadata(hir_module, string_table)?;
 
     let Some(start_function_name) = function_names.get(&hir_module.start_function) else {

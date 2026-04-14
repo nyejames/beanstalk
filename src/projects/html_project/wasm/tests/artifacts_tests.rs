@@ -23,6 +23,7 @@ fn compile_html_module_wasm_exports_bst_start_directly() {
         "",
         &HtmlDocumentConfig::default(),
         false,
+        0,
     )
     .expect("wasm mode compilation should succeed");
     let js = expect_js_output(&compiled.output_files, "page.js");
@@ -98,6 +99,7 @@ fn compile_html_module_wasm_preserves_nested_logical_html_route() {
         "",
         &HtmlDocumentConfig::default(),
         false,
+        0,
     )
     .expect("wasm mode compilation should succeed for nested route");
 

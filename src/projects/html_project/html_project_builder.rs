@@ -204,6 +204,7 @@ fn compile_one_module(
             project_name,
             document_config,
             release_build,
+            module.entry_runtime_fragment_count,
         )?;
         Ok(CompiledHtmlModuleArtifacts::from_wasm(compiled_wasm))
     } else {
@@ -216,6 +217,7 @@ fn compile_one_module(
             project_name,
             document_config,
             release_build,
+            module.entry_runtime_fragment_count,
         )
         .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;
         Ok(CompiledHtmlModuleArtifacts::from_js(

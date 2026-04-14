@@ -102,6 +102,7 @@ fn no_runtime_fragments_still_emits_start_call() {
         "",
         "function start_entry() { return []; }",
         &function_names,
+        0,
     )
     .expect("render_html_document should succeed");
 
@@ -141,6 +142,7 @@ fn inline_js_bundle_with_closing_script_tag_is_escaped_in_html() {
         "",
         "const msg = \"</script>\";\n",
         &function_names,
+        0,
     )
     .expect("render_html_document should succeed");
 

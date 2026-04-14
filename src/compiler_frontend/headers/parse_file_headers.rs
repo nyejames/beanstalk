@@ -55,6 +55,11 @@ use std::path::Path;
 pub struct Headers {
     pub headers: Vec<Header>,
     pub top_level_const_fragments: Vec<TopLevelConstFragment>,
+    /// Number of top-level runtime templates in the entry file.
+    ///
+    /// WHY: only the entry file produces runtime slots; header parsing is the single authoritative
+    /// counter so builders do not need to re-scan HIR for `PushRuntimeFragment` statements.
+    pub entry_runtime_fragment_count: usize,
 }
 
 /// Placement metadata for one compile-time top-level template in the entry file.
@@ -252,6 +257,7 @@ pub fn parse_headers_with_path_resolver(
     Ok(Headers {
         headers,
         top_level_const_fragments,
+        entry_runtime_fragment_count: runtime_fragment_count,
     })
 }
 

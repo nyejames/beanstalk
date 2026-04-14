@@ -49,6 +49,11 @@ pub struct Module {
     pub(crate) warnings: Vec<CompilerWarning>,
     /// Resolved const top-level fragments with their runtime insertion indices.
     pub(crate) const_top_level_fragments: Vec<ResolvedConstFragment>,
+    /// Number of runtime fragment slots owned by entry start().
+    ///
+    /// WHY: header parsing is the authoritative counter; builders use this directly
+    /// rather than scanning HIR for `PushRuntimeFragment` statements.
+    pub(crate) entry_runtime_fragment_count: usize,
 }
 
 /// Unified build interface for all project types
