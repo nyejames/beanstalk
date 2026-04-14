@@ -14,7 +14,9 @@ use crate::compiler_frontend::hir::hir_nodes::HirModule;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::projects::html_project::document_config::HtmlDocumentConfig;
 use crate::projects::html_project::document_shell::render_html_document_shell;
-use crate::projects::html_project::js_path::{count_runtime_fragment_slots, render_entry_fragments};
+use crate::projects::html_project::js_path::{
+    count_runtime_fragment_slots, render_entry_fragments,
+};
 use crate::projects::html_project::output_plan::plan_wasm_output_from_logical_html_path;
 use crate::projects::html_project::page_metadata::extract_html_page_metadata;
 use crate::projects::html_project::wasm::export_plan::{

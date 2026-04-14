@@ -39,4 +39,3 @@ pub(crate) fn build_wasm_backend_request(export_plan: &HtmlWasmExportPlan) -> Wa
         ..WasmBackendRequest::default()
     }
 }
-

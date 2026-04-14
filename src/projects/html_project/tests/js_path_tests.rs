@@ -27,7 +27,10 @@ fn render_entry_fragments_static_before_runtime_slot() {
         .expect("runtime slot must be present");
 
     assert_eq!(slot_ids.len(), 1);
-    assert!(static_pos < slot_pos, "const fragment must precede runtime slot div");
+    assert!(
+        static_pos < slot_pos,
+        "const fragment must precede runtime slot div"
+    );
 }
 
 #[test]
@@ -57,9 +60,7 @@ fn bootstrap_script_calls_start_once_and_hydrates_slots() {
     let start_frag_pos = script
         .find("bst_frags = start_entry()")
         .expect("start call must be present");
-    let slot_list_pos = script
-        .find("bst_slots")
-        .expect("slot list must be present");
+    let slot_list_pos = script.find("bst_slots").expect("slot list must be present");
     assert!(
         start_frag_pos < slot_list_pos,
         "start() must be called before the slot ID list is set up"
@@ -90,8 +91,7 @@ fn render_entry_fragments_preserves_runtime_slot_order() {
 fn no_runtime_fragments_still_emits_start_call() {
     let mut string_table = StringTable::new();
     let module = create_test_module(std::path::PathBuf::from("#page.bst"), &mut string_table);
-    let function_names =
-        HashMap::from([(module.hir.start_function, String::from("start_entry"))]);
+    let function_names = HashMap::from([(module.hir.start_function, String::from("start_entry"))]);
 
     let html = render_html_document(
         &module.hir,
@@ -130,8 +130,7 @@ fn escape_inline_script_replaces_closing_tag_sequence() {
 #[test]
 fn inline_js_bundle_with_closing_script_tag_is_escaped_in_html() {
     let hir_module = create_test_hir_module();
-    let function_names =
-        HashMap::from([(hir_module.start_function, String::from("start_entry"))]);
+    let function_names = HashMap::from([(hir_module.start_function, String::from("start_entry"))]);
 
     let html = render_html_document(
         &hir_module,

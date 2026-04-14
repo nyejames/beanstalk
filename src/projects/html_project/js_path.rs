@@ -223,9 +223,7 @@ fn render_runtime_bootstrap_script_html(
         // WHAT: call entry start() once; it returns the runtime fragment array in source order.
         // WHY: start() accumulates fragments via PushRuntimeFragment and returns them as a JS
         //      array. Calling start() here both produces the fragments and runs the lifecycle.
-        html.push_str(&format!(
-            "  var bst_frags = {start_function_name}();\n"
-        ));
+        html.push_str(&format!("  var bst_frags = {start_function_name}();\n"));
         html.push_str("  var bst_slots = [\n");
         for slot_id in slot_ids {
             html.push_str(&format!("    \"{slot_id}\",\n"));

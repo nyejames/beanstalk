@@ -144,7 +144,6 @@ pub(crate) fn rendered_path_usage(
     }
 }
 
-
 /// Collect output paths so tests can assert artifact layout without repeating iterator plumbing.
 pub(crate) fn collect_output_paths(output_files: &[OutputFile]) -> Vec<PathBuf> {
     output_files
