@@ -39,6 +39,9 @@ Use variables directly in format! strings whenever possible:
 - Maintain clear separation between compilation stages.
 - Each module should have one clear responsibility. Do not mix concerns.
 - Split files by task category. Aim for files under ~2000 lines where practical.
+- `mod.rs` should be the module entry point and structural map: it exposes the public surface, shows the flow of the module, and points to the files that contain the real implementation. Keep it focused on orchestration, re-exports, and documentation rather than core implementation.
+- A reader should be able to open `mod.rs` first and quickly understand what the module does, which stages or responsibilities it contains, and where to find the important functions and types.
+- Use comments and doc comments in `mod.rs` to explain the module’s structure, data flow, and why the pieces are arranged that way.
 - Prefer context structs for shared state instead of passing many state values between functions.
 - Avoid `.unwrap()` unless it is blatantly safe and tied to an internal invariant.
 - Prefer `.to_owned()` over `.clone()` when copying owned string-like data.
