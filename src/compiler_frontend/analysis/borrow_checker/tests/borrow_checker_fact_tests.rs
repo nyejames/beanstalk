@@ -379,6 +379,9 @@ fn collect_statement_values(kind: HirStatementKind, out: &mut FxHashSet<HirValue
         }
         HirStatementKind::Expr(expr) => collect_expression_values(&expr, out),
         HirStatementKind::Drop(_) => {}
+        HirStatementKind::PushRuntimeFragment { value, .. } => {
+            collect_expression_values(&value, out)
+        }
     }
 }
 

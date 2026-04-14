@@ -61,7 +61,7 @@ fn parse_single_file_ast_result(source: &str) -> Result<(Ast, StringTable), Comp
     let entry_path = InternedPath::from_single_str("#page.bst", &mut string_table);
     let ast = Ast::new(
         sorted_headers,
-        headers.top_level_template_items,
+        headers.top_level_const_fragments,
         AstBuildContext {
             host_registry: &host_registry,
             style_directives: &style_directives,

@@ -696,6 +696,10 @@ fn collect_statement_loaded_locals(statement: &HirStatement, visitor: &mut impl 
             collect_expression_loaded_locals(expression, visitor);
         }
         HirStatementKind::Drop(local) => visitor(*local),
+        HirStatementKind::PushRuntimeFragment { vec_local, value } => {
+            visitor(*vec_local);
+            collect_expression_loaded_locals(value, visitor);
+        }
     }
 }
 
@@ -708,7 +712,8 @@ fn collect_statement_written_locals(statement: &HirStatement, visitor: &mut impl
         } => visitor(*local),
         HirStatementKind::Call { result: None, .. }
         | HirStatementKind::Expr(_)
-        | HirStatementKind::Drop(_) => {}
+        | HirStatementKind::Drop(_)
+        | HirStatementKind::PushRuntimeFragment { .. } => {}
     }
 }
 

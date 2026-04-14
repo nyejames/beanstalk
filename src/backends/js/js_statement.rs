@@ -71,6 +71,15 @@ impl<'hir> JsEmitter<'hir> {
             HirStatementKind::Drop(_) => {
                 // No-op for GC backend.
             }
+
+            HirStatementKind::PushRuntimeFragment { vec_local, value } => {
+                // WHAT: lower a fragment push into a JS vec push call.
+                // WHY: entry start() accumulates runtime fragments in a JS array;
+                //      each push appends one evaluated string.
+                let vec_name = self.local_name(*vec_local)?.to_owned();
+                let value_expr = self.lower_expr(value)?;
+                self.emit_line(&format!("{vec_name}.push({value_expr});"));
+            }
         }
 
         Ok(())

@@ -1,21 +1,15 @@
-//! Start-template/fragment synthesis for the entry file.
+//! Top-level const fragment collection and doc fragment extraction.
 //!
-//! WHAT: converts entry-file top-level templates into ordered start fragments
-//! (`ConstString` / generated runtime fragment functions) and extracts doc
-//! fragments from comment templates.
-//! WHY: builders consume canonical ordered fragments and doc metadata, while
-//! runtime fragment setup/capture policy remains frontend-owned.
-
-mod capture_analysis;
-mod doc_fragments;
-mod fragment_extraction;
-mod fragment_synthesis;
+//! WHAT: collects folded top-level const string fragments and extracts doc fragments from
+//! comment templates.
+//! WHY: builders consume ordered const fragments (with runtime insertion indices) and doc
+//! metadata; all runtime template handling moves into the entry start() function body via
+//! PushStartRuntimeFragment nodes.
 
 use crate::compiler_frontend::ast::ast_nodes::AstNode;
-use crate::compiler_frontend::ast::expressions::expression::Expression;
-use crate::compiler_frontend::ast::templates::template_folding::TemplateFoldContext;
+use crate::compiler_frontend::ast::templates::doc_fragments;
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::headers::parse_file_headers::TopLevelTemplateItem;
+use crate::compiler_frontend::headers::parse_file_headers::TopLevelConstFragment;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
@@ -23,17 +17,17 @@ use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use rustc_hash::FxHashMap;
 
+/// A top-level const template that has been folded to a string at compile time.
+///
+/// WHAT: carries the folded string value and its insertion index relative to runtime fragments.
+/// WHY: builders merge const fragments with the runtime fragment list using the insertion index
+/// to reconstruct source-order interleaving.
 #[derive(Clone, Debug)]
-pub enum AstStartTemplateItem {
-    ConstString {
-        value: StringId,
-        #[allow(dead_code)] // Preserved for future source-mapping and error reporting.
-        location: SourceLocation,
-    },
-    RuntimeStringFunction {
-        function: InternedPath,
-        location: SourceLocation,
-    },
+pub struct AstConstTopLevelFragment {
+    /// Number of runtime fragments preceding this const fragment in source order.
+    pub runtime_insertion_index: usize,
+    pub value: StringId,
+    pub location: SourceLocation,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -48,40 +42,33 @@ pub struct AstDocFragment {
     pub location: SourceLocation,
 }
 
-#[derive(Clone)]
-struct RuntimeTemplateCandidate {
-    template_expression: Expression,
-    location: SourceLocation,
-    scope: InternedPath,
-    source_index: usize,
-    preceding_statements: Vec<AstNode>,
-}
-
-#[derive(Clone)]
-struct RuntimeTemplateExtraction {
-    runtime_candidates: Vec<RuntimeTemplateCandidate>,
-    entry_scope: InternedPath,
-    non_template_body: Vec<AstNode>,
-}
-
-pub(crate) fn synthesize_start_template_items(
-    ast_nodes: &mut Vec<AstNode>,
-    entry_dir: &InternedPath,
-    top_level_template_items: &[TopLevelTemplateItem],
+/// Collects const top-level fragments from folded template values.
+///
+/// WHAT: maps each header-parsed const fragment to its folded string value using the
+/// const template path map produced during AST emission (pass_emit_nodes).
+/// WHY: const fragments are folded during emit; this function gathers the results into
+/// the ordered `AstConstTopLevelFragment` list consumed by HIR/builders.
+pub(crate) fn collect_const_top_level_fragments(
+    top_level_const_fragments: &[TopLevelConstFragment],
     const_templates_by_path: &FxHashMap<InternedPath, StringId>,
-    project_path_resolver: &ProjectPathResolver,
-    path_format_config: &PathStringFormatConfig,
-    string_table: &mut StringTable,
-) -> Result<Vec<AstStartTemplateItem>, CompilerError> {
-    fragment_synthesis::synthesize_start_template_items(
-        ast_nodes,
-        entry_dir,
-        top_level_template_items,
-        const_templates_by_path,
-        project_path_resolver,
-        path_format_config,
-        string_table,
-    )
+) -> Result<Vec<AstConstTopLevelFragment>, CompilerError> {
+    let mut result = Vec::with_capacity(top_level_const_fragments.len());
+    for fragment in top_level_const_fragments {
+        let value = const_templates_by_path
+            .get(&fragment.header_path)
+            .copied()
+            .ok_or_else(|| {
+                CompilerError::compiler_error(
+                    "Top-level const fragment has no corresponding folded template value. This is a compiler bug.",
+                )
+            })?;
+        result.push(AstConstTopLevelFragment {
+            runtime_insertion_index: fragment.runtime_insertion_index,
+            value,
+            location: fragment.location.clone(),
+        });
+    }
+    Ok(result)
 }
 
 pub(crate) fn collect_and_strip_comment_templates(
@@ -96,22 +83,6 @@ pub(crate) fn collect_and_strip_comment_templates(
         path_format_config,
         string_table,
     )
-}
-
-fn fold_template_with_context(
-    template: &crate::compiler_frontend::ast::templates::template_types::Template,
-    source_file_scope: &InternedPath,
-    project_path_resolver: &ProjectPathResolver,
-    path_format_config: &PathStringFormatConfig,
-    string_table: &mut StringTable,
-) -> Result<StringId, CompilerError> {
-    let mut fold_context = TemplateFoldContext {
-        string_table,
-        project_path_resolver,
-        path_format_config,
-        source_file_scope,
-    };
-    template.fold_into_stringid(&mut fold_context)
 }
 
 #[cfg(test)]

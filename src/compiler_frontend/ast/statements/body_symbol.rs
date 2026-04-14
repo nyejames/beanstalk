@@ -15,14 +15,10 @@ use crate::compiler_frontend::ast::field_access::parse_field_access;
 use crate::compiler_frontend::ast::receiver_methods::free_function_receiver_method_call_error;
 use crate::compiler_frontend::ast::statements::body_expr_stmt::parse_symbol_expression_statement_candidate;
 use crate::compiler_frontend::ast::statements::declarations::new_declaration;
-use crate::compiler_frontend::ast::statements::functions::{
-    FunctionReturn, FunctionSignature, ReturnSlot,
-};
 use crate::compiler_frontend::ast::statements::multi_bind::parse_multi_bind_statement;
 use crate::compiler_frontend::builtins::error_type::is_reserved_builtin_symbol;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
-use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::compiler_frontend::traits::ContainsReferences;
@@ -108,58 +104,6 @@ pub(crate) fn parse_symbol_statement(
     if let Some(multi_bind) = parse_multi_bind_statement(token_stream, context, string_table)? {
         ast.push(multi_bind);
         return Ok(());
-    }
-
-    if let Some(start_target) = context.resolve_start_import(&id) {
-        token_stream.advance();
-
-        match token_stream.current_token_kind() {
-            TokenKind::OpenParenthesis => {
-                ast.push(parse_function_call(
-                    token_stream,
-                    start_target,
-                    context,
-                    &FunctionSignature {
-                        parameters: vec![],
-                        returns: vec![ReturnSlot::success(FunctionReturn::Value(
-                            DataType::StringSlice,
-                        ))],
-                    },
-                    false,
-                    Some(warnings),
-                    string_table,
-                )?);
-                return Ok(());
-            }
-
-            TokenKind::Dot => {
-                return_rule_error!(
-                    format!(
-                        "Imported file '{}' is callable only as '{}()'. File-struct member access is no longer supported.",
-                        string_table.resolve(id),
-                        string_table.resolve(id),
-                    ),
-                    token_stream.current_location(), {
-                        CompilationStage => "AST Construction",
-                        PrimarySuggestion => "Import exports directly with '@path/to/file/symbol' or '@path/to/file {a, b}'",
-                    }
-                );
-            }
-
-            _ => {
-                return_rule_error!(
-                    format!(
-                        "Imported file '{}' can only be used as a callable start import ('{}()').",
-                        string_table.resolve(id),
-                        string_table.resolve(id),
-                    ),
-                    token_stream.current_location(), {
-                        CompilationStage => "AST Construction",
-                        PrimarySuggestion => "Call the file start function with 'file()' or import specific exports directly",
-                    }
-                );
-            }
-        }
     }
 
     if let Some(arg) = context.get_reference(&id) {

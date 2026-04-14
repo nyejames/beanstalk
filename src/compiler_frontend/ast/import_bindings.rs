@@ -3,7 +3,9 @@
 //! This module separates *file-local visibility* from *module declarations*:
 //! - `declarations` keeps every declaration known in the module so lookups can resolve full paths.
 //! - `visible_symbol_paths` limits what a specific source file is allowed to reference.
-//! - `start_aliases` tracks bare-file imports that map to implicit start functions.
+//!
+//! Bare file imports (`@path/to/file` without an explicit symbol) are rejected: start functions
+//! are build-system-only and are not importable or callable from modules.
 
 use crate::compiler_frontend::FrontendBuildProfile;
 use crate::compiler_frontend::ast::ast::{ContextKind, ScopeContext};
@@ -19,7 +21,6 @@ use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::paths::rendered_path_usage::RenderedPathUsage;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
-use crate::projects::settings::IMPLICIT_START_FUNC_NAME;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -29,8 +30,6 @@ pub(crate) struct FileImportBindings {
     /// Import-visible symbols for one source file.
     /// This is a path set rather than names-only so resolution stays globally unique.
     pub(crate) visible_symbol_paths: FxHashSet<InternedPath>,
-    /// Bare file imports (`@foo/bar`) bind an alias (`bar`) to that file's implicit start.
-    pub(crate) start_aliases: FxHashMap<StringId, InternedPath>,
 }
 
 #[derive(Clone)]
@@ -67,7 +66,6 @@ pub(crate) fn resolve_file_import_bindings(
                 .get(&source_file)
                 .cloned()
                 .unwrap_or_default(),
-            start_aliases: FxHashMap::default(),
         };
         let mut bound_names = declared_names_by_file
             .get(&source_file)
@@ -80,60 +78,21 @@ pub(crate) fn resolve_file_import_bindings(
             .unwrap_or_default();
 
         for import in imports {
-            // First, try bare-file import resolution. This is the only path that creates
-            // a callable alias (file stem -> imported start function).
-            match resolve_import_target_path(&import.header_path, module_file_paths, string_table) {
-                ImportPathResolution::Resolved(file_path) => {
-                    let Some(alias_name) =
-                        file_start_alias_from_import_path(&import.header_path, string_table)
-                    else {
-                        return Err(CompilerError::new_rule_error(
-                            "Imported file path must include a valid file name.",
-                            import.location,
-                        ));
-                    };
-
-                    if bound_names.contains(&alias_name) {
-                        return Err(CompilerError::new_rule_error(
-                            format!(
-                                "Import name collision: '{}' is already declared in this file.",
-                                string_table.resolve(alias_name)
-                            ),
-                            import.location,
-                        ));
-                    }
-
-                    if host_registry
-                        .get_function(string_table.resolve(alias_name))
-                        .is_some()
-                    {
-                        return Err(CompilerError::new_rule_error(
-                            format!(
-                                "Import name collision: '{}' conflicts with a host function name.",
-                                string_table.resolve(alias_name)
-                            ),
-                            import.location,
-                        ));
-                    }
-
-                    let start_target = file_path.join_str(IMPLICIT_START_FUNC_NAME, string_table);
-                    bindings.start_aliases.insert(alias_name, start_target);
-                    bound_names.insert(alias_name);
-                    continue;
-                }
-                ImportPathResolution::Ambiguous => {
-                    return Err(CompilerError::new_rule_error(
-                        format!(
-                            "Ambiguous import target '{}'. Use a more specific path.",
-                            import.header_path.to_portable_string(string_table)
-                        ),
-                        import.location,
-                    ));
-                }
-                ImportPathResolution::Missing => {}
+            // Bare-file imports (`@path/to/file` resolving to a module file path) are rejected.
+            // Start functions are build-system-only and are not importable or callable from modules.
+            if let ImportPathResolution::Resolved(_) | ImportPathResolution::Ambiguous =
+                resolve_import_target_path(&import.header_path, module_file_paths, string_table)
+            {
+                return Err(CompilerError::new_rule_error(
+                    format!(
+                        "Bare file import '{}' is not supported. Import specific exported symbols using '@path/to/file/symbol' instead.",
+                        import.header_path.to_portable_string(string_table)
+                    ),
+                    import.location,
+                ));
             }
 
-            // Otherwise, resolve as a symbol import (single or grouped path-expanded import).
+            // Resolve as a symbol import (single or grouped path-expanded import).
             // Symbol imports are export-only by language rule.
             match resolve_import_target_path(
                 &import.header_path,
@@ -223,7 +182,6 @@ pub(crate) fn resolve_file_import_bindings(
 pub(crate) struct ConstantHeaderParseContext<'a> {
     pub declarations: &'a [Declaration],
     pub visible_declaration_ids: &'a FxHashSet<InternedPath>,
-    pub start_import_aliases: &'a FxHashMap<StringId, InternedPath>,
     pub host_registry: &'a HostRegistry,
     pub style_directives: &'a StyleDirectiveRegistry,
     pub project_path_resolver: Option<ProjectPathResolver>,
@@ -241,7 +199,6 @@ pub(crate) fn parse_constant_header_declaration(
     let ConstantHeaderParseContext {
         declarations,
         visible_declaration_ids,
-        start_import_aliases,
         host_registry,
         style_directives,
         project_path_resolver,
@@ -280,7 +237,6 @@ pub(crate) fn parse_constant_header_declaration(
     // Keep full module declarations for path identity, but explicitly gate what this file
     // can see to enforce import boundaries and prevent cross-file leakage.
     .with_visible_declarations(visible_declaration_ids.to_owned())
-    .with_start_import_aliases(start_import_aliases.to_owned())
     .with_source_file_scope(source_file_scope);
 
     let declaration_result = resolve_declaration_syntax(
@@ -408,15 +364,3 @@ fn components_match_with_optional_bst_extension(
         })
 }
 
-fn file_start_alias_from_import_path(
-    import_path: &InternedPath,
-    string_table: &mut StringTable,
-) -> Option<StringId> {
-    let name = import_path.name_str(string_table)?;
-    let alias = name.strip_suffix(".bst").unwrap_or(name).trim();
-    if alias.is_empty() {
-        return None;
-    }
-
-    Some(string_table.get_or_intern(alias.to_string()))
-}

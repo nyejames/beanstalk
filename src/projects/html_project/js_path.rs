@@ -14,10 +14,10 @@
 //!      `insertAdjacentHTML`, then calls `start()` after all slots are filled.
 
 use crate::backends::js::{JsLoweringConfig, lower_hir_to_js};
-use crate::build_system::build::{FileKind, OutputFile};
+use crate::build_system::build::{FileKind, OutputFile, ResolvedConstFragment};
 use crate::compiler_frontend::analysis::borrow_checker::BorrowCheckReport;
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::hir::hir_nodes::{FunctionId, HirModule, StartFragment};
+use crate::compiler_frontend::hir::hir_nodes::{FunctionId, HirModule};
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::projects::html_project::document_config::HtmlDocumentConfig;
 use crate::projects::html_project::document_shell::render_html_document_shell;
@@ -40,6 +40,7 @@ pub(crate) struct RuntimeSlotMount {
 /// WHY: this preserves existing builder behavior when `--html-wasm` is not enabled.
 pub(crate) fn compile_html_module_js(
     hir_module: &HirModule,
+    const_fragments: &[ResolvedConstFragment],
     borrow_analysis: &BorrowCheckReport,
     string_table: &StringTable,
     output_path: PathBuf,
@@ -57,6 +58,7 @@ pub(crate) fn compile_html_module_js(
     )?;
     let html = render_html_document(
         hir_module,
+        const_fragments,
         string_table,
         document_config,
         &output_path,
@@ -70,47 +72,66 @@ pub(crate) fn compile_html_module_js(
 
 /// Renders entry-file start fragments into HTML markup and runtime slot mounts.
 ///
-/// WHAT: this preserves source order and creates deterministic slot IDs.
+/// WHAT: merges const fragments (with runtime insertion indices) and runtime fragment functions
+/// from entry start() into source-order HTML and slot mount list.
 /// WHY: runtime fragment hydration order is part of builder-visible semantics.
 pub(crate) fn render_entry_fragments(
     hir_module: &HirModule,
-) -> Result<(String, Vec<RuntimeSlotMount>), CompilerError> {
+    const_fragments: &[ResolvedConstFragment],
+) -> (String, Vec<RuntimeSlotMount>) {
     let mut html = String::new();
     let mut runtime_slots = Vec::new();
+
+    // WHAT: merge const fragments (with insertion index) and runtime fragment functions.
+    // WHY: source order requires interleaving const strings at their indexed positions
+    //      relative to runtime slots.
+
+    let runtime_fns = &hir_module.entry_runtime_fragment_functions;
     let mut runtime_index = 0usize;
 
-    for fragment in &hir_module.start_fragments {
-        match fragment {
-            StartFragment::ConstString(const_string_id) => {
-                let string_index = const_string_id.0 as usize;
-                let Some(const_string) = hir_module.const_string_pool.get(string_index) else {
-                    return Err(CompilerError::compiler_error(format!(
-                        "HTML builder could not resolve const fragment {}",
-                        const_string_id.0
-                    )));
-                };
-                // The HTML builder interprets const fragment strings as raw HTML.
-                html.push_str(const_string);
-                html.push('\n');
-            }
+    // Sort const fragments by runtime_insertion_index to handle them in order.
+    let mut sorted_const: Vec<(usize, &str)> = const_fragments
+        .iter()
+        .map(|f| (f.runtime_insertion_index, f.html.as_str()))
+        .collect();
+    sorted_const.sort_by_key(|(idx, _)| *idx);
 
-            StartFragment::RuntimeStringFn(function_id) => {
-                let slot_id = format!("bst-slot-{runtime_index}");
-                runtime_index += 1;
-                html.push_str(&format!("<div id=\"{slot_id}\"></div>\n"));
-                runtime_slots.push(RuntimeSlotMount {
-                    slot_id,
-                    function_id: *function_id,
-                });
-            }
+    let mut const_iter = sorted_const.iter().peekable();
+
+    // Emit const fragments with insertion_index == 0 (before any runtime slots).
+    while const_iter.peek().map(|(idx, _)| *idx == runtime_index).unwrap_or(false) {
+        let (_, html_str) = const_iter.next().unwrap();
+        html.push_str(html_str);
+        html.push('\n');
+    }
+
+    // Interleave runtime slots and const fragments.
+    for &function_id in runtime_fns {
+        let slot_id = format!("bst-slot-{runtime_index}");
+        html.push_str(&format!("<div id=\"{slot_id}\"></div>\n"));
+        runtime_slots.push(RuntimeSlotMount { slot_id, function_id });
+        runtime_index += 1;
+
+        // Emit any const fragments whose insertion_index matches this runtime slot position.
+        while const_iter.peek().map(|(idx, _)| *idx == runtime_index).unwrap_or(false) {
+            let (_, html_str) = const_iter.next().unwrap();
+            html.push_str(html_str);
+            html.push('\n');
         }
     }
 
-    Ok((html, runtime_slots))
+    // Emit any remaining const fragments after all runtime slots.
+    for (_, html_str) in const_iter {
+        html.push_str(html_str);
+        html.push('\n');
+    }
+
+    (html, runtime_slots)
 }
 
 pub(crate) fn render_html_document(
     hir_module: &HirModule,
+    const_fragments: &[ResolvedConstFragment],
     string_table: &StringTable,
     document_config: &HtmlDocumentConfig,
     logical_html_path: &Path,
@@ -119,7 +140,7 @@ pub(crate) fn render_html_document(
     function_names: &HashMap<FunctionId, String>,
 ) -> Result<String, CompilerError> {
     // Build static body content and runtime slot list first so hydration preserves source order.
-    let (body_html, runtime_slots) = render_entry_fragments(hir_module)?;
+    let (body_html, runtime_slots) = render_entry_fragments(hir_module, const_fragments);
     let page_metadata = extract_html_page_metadata(hir_module, string_table)?;
     let script_html = render_runtime_bootstrap_script_html(
         hir_module,

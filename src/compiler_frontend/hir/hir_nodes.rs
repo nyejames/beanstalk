@@ -70,14 +70,7 @@ define_hir_id!(StructId);
 define_hir_id!(FieldId);
 define_hir_id!(FunctionId);
 define_hir_id!(RegionId);
-define_hir_id!(ConstStringId);
 define_hir_id!(HirConstId);
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum StartFragment {
-    ConstString(ConstStringId),
-    RuntimeStringFn(FunctionId),
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum HirFunctionOrigin {
@@ -85,10 +78,6 @@ pub enum HirFunctionOrigin {
     Normal,
     /// Implicit start function for the module entry file.
     EntryStart,
-    /// Implicit start function for non-entry imported file.
-    FileStart,
-    /// Runtime template fragment function synthesized from top-level templates.
-    RuntimeTemplate,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -159,9 +148,13 @@ pub struct HirModule {
     /// entry/runtime-template behavior stable across lowering passes.
     pub function_origins: rustc_hash::FxHashMap<FunctionId, HirFunctionOrigin>,
 
-    /// Ordered start-fragment stream consumed by project builders.
-    pub start_fragments: Vec<StartFragment>,
-    pub const_string_pool: Vec<String>,
+    /// Ordered synthesized template functions called from entry start() PushRuntimeFragment nodes.
+    ///
+    /// WHAT: parallel to the PushRuntimeFragment statement sequence in entry start() body.
+    /// WHY: builders need the ordered function list to generate runtime slots and hydration scripts
+    /// without scanning HIR statement kinds.
+    pub entry_runtime_fragment_functions: Vec<FunctionId>,
+
     pub doc_fragments: Vec<HirDocFragment>,
     pub module_constants: Vec<HirModuleConst>,
     pub rendered_path_usages: Vec<RenderedPathUsage>,
@@ -183,8 +176,7 @@ impl HirModule {
             side_table: HirSideTable::default(),
             start_function: FunctionId(0),
             function_origins: rustc_hash::FxHashMap::default(),
-            start_fragments: vec![],
-            const_string_pool: vec![],
+            entry_runtime_fragment_functions: vec![],
             doc_fragments: vec![],
             module_constants: vec![],
             rendered_path_usages: vec![],
@@ -313,6 +305,18 @@ pub enum HirStatementKind {
 
     /// Expression evaluated only for side effects.
     Expr(HirExpression),
+
+    /// Accumulate one runtime string value into the entry start() fragment vec.
+    ///
+    /// WHAT: explicit HIR primitive that lowers from `NodeKind::PushStartRuntimeFragment`.
+    /// WHY: backends handle fragment accumulation without needing to inspect the entry start
+    /// function body for heuristic push patterns.
+    PushRuntimeFragment {
+        /// The local holding the Vec<String> accumulator inside entry start().
+        vec_local: LocalId,
+        /// Expression that produces the string value to push.
+        value: HirExpression,
+    },
 
     /// Explicit deterministic drop.
     #[allow(dead_code)] // Planned: explicit drop statements after ownership lowering matures.

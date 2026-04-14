@@ -47,7 +47,6 @@ impl<'a> AstBuildState<'a> {
                         ConstantHeaderParseContext {
                             declarations: &self.declarations,
                             visible_declaration_ids: &bindings.visible_symbol_paths,
-                            start_import_aliases: &bindings.start_aliases,
                             host_registry: self.host_registry,
                             style_directives: self.style_directives,
                             project_path_resolver: self.project_path_resolver.clone(),
@@ -74,7 +73,6 @@ impl<'a> AstBuildState<'a> {
                     .with_style_directives(self.style_directives)
                     .with_build_profile(self.build_profile)
                     .with_visible_declarations(bindings.visible_symbol_paths.to_owned())
-                    .with_start_import_aliases(bindings.start_aliases.to_owned())
                     .with_project_path_resolver(self.project_path_resolver.clone())
                     .with_path_format_config(self.path_format_config.clone())
                     .with_rendered_path_usage_sink(self.rendered_path_usages.clone())

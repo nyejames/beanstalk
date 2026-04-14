@@ -71,6 +71,26 @@ impl<'a> HirBuilder<'a> {
 
         self.enter_function(function_id, location)?;
 
+        // WHAT: for entry start(), allocate the Vec<String> fragment accumulator before lowering.
+        // WHY: PushStartRuntimeFragment nodes in the body push to this local; the implicit return
+        //      at end of entry start loads it as the function result.
+        if function_id == self.module.start_function {
+            let string_ty = self.intern_type_kind(HirTypeKind::String);
+            let vec_ty = self.intern_type_kind(HirTypeKind::Collection { element: string_ty });
+            let vec_local = self.allocate_temp_local(vec_ty, Some(location.clone()))?;
+
+            let region = self.current_region_or_error(location)?;
+            let empty_collection = self.make_expression(
+                location,
+                HirExpressionKind::Collection(vec![]),
+                vec_ty,
+                ValueKind::RValue,
+                region,
+            );
+            self.emit_assign_local_statement(vec_local, empty_collection, location)?;
+            self.entry_fragment_vec_local = Some(vec_local);
+        }
+
         let lower_result = self.lower_function_body_inner(function_id, signature, body, location);
         self.leave_function();
 
@@ -194,6 +214,44 @@ impl<'a> HirBuilder<'a> {
 
             NodeKind::Operator(_) => Ok(()),
 
+            NodeKind::PushStartRuntimeFragment(expr) => {
+                // WHAT: lower a top-level runtime template push into a PushRuntimeFragment HIR statement.
+                // WHY: the fragment accumulator local was allocated at function entry; each
+                //      PushStartRuntimeFragment appends one evaluated string to it.
+                let Some(vec_local) = self.entry_fragment_vec_local else {
+                    return_hir_transformation_error!(
+                        "PushStartRuntimeFragment encountered outside entry start() — no fragment vec local is active",
+                        self.hir_error_location(&node.location)
+                    );
+                };
+
+                // WHAT: capture the count of synthesized functions before lowering.
+                // WHY: lower_runtime_template_expression creates exactly one helper function;
+                //      comparing before/after gives us the template function ID for builders.
+                let fn_count_before = self.module.functions.len();
+
+                let lowered = self.lower_expression(expr)?;
+
+                // Record the newly synthesized template function (if one was created).
+                if self.module.functions.len() == fn_count_before + 1 {
+                    let template_fn_id = self.module.functions[fn_count_before].id;
+                    self.module
+                        .entry_runtime_fragment_functions
+                        .push(template_fn_id);
+                }
+
+                for prelude in lowered.prelude {
+                    self.emit_statement_to_current_block(prelude, &node.location)?;
+                }
+                self.emit_statement_kind(
+                    HirStatementKind::PushRuntimeFragment {
+                        vec_local,
+                        value: lowered.value,
+                    },
+                    &node.location,
+                )
+            }
+
             _ => return_hir_transformation_error!(
                 format!(
                     "Unsupported AST statement node during HIR lowering: {:?}",
@@ -260,6 +318,19 @@ impl<'a> HirBuilder<'a> {
                 region,
             );
             self.emit_terminator(current_block, HirTerminator::Return(ok_result), location)?;
+            return Ok(());
+        }
+
+        // WHAT: entry start() has an implicit return of the fragment vec accumulator.
+        // WHY: the body contains only PushStartRuntimeFragment nodes with no explicit return;
+        //      the return type is Vec<String> which the builder consumes as the fragment list.
+        if function_id == self.module.start_function
+            && let Some(vec_local) = self.entry_fragment_vec_local
+        {
+            let vec_type = self.local_type_id_or_error(vec_local, location)?;
+            let region = self.current_region_or_error(location)?;
+            let load_expr = self.make_local_load_expression(vec_local, vec_type, location, region);
+            self.emit_terminator(current_block, HirTerminator::Return(load_expr), location)?;
             return Ok(());
         }
 

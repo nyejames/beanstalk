@@ -8,7 +8,6 @@
 use super::build_state::AstBuildState;
 use super::canonical_source_file_for_header;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
-use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::function_body_to_ast;
 use crate::compiler_frontend::ast::import_bindings::FileImportBindings;
 use crate::compiler_frontend::ast::module_ast::scope_context::{
@@ -80,7 +79,6 @@ impl<'a> AstBuildState<'a> {
                     .with_style_directives(self.style_directives)
                     .with_build_profile(self.build_profile)
                     .with_visible_declarations(visible_declarations)
-                    .with_start_import_aliases(bindings.start_aliases.to_owned())
                     .with_project_path_resolver(self.project_path_resolver.clone())
                     .with_path_format_config(self.path_format_config.clone())
                     .with_rendered_path_usage_sink(self.rendered_path_usages.clone())
@@ -117,7 +115,14 @@ impl<'a> AstBuildState<'a> {
                     });
                 }
 
-                // --- Start (module entry-point) functions ---
+                // --- Entry start function ---
+                //
+                // WHAT: lowers the entry-file top-level body into the implicit `start` function.
+                // WHY: only the module entry file produces a start function. The body contains
+                // `PushStartRuntimeFragment` nodes for each top-level template. The function
+                // returns `Vec<String>` — the accumulated runtime fragment list. The HIR builder
+                // adds the implicit return of the fragment vec.
+                // Start functions are build-system-only and are not importable or callable.
                 HeaderKind::StartFunction => {
                     let context = ScopeContext::new(
                         ContextKind::Module,
@@ -129,7 +134,6 @@ impl<'a> AstBuildState<'a> {
                     .with_style_directives(self.style_directives)
                     .with_build_profile(self.build_profile)
                     .with_visible_declarations(bindings.visible_symbol_paths.to_owned())
-                    .with_start_import_aliases(bindings.start_aliases.to_owned())
                     .with_project_path_resolver(self.project_path_resolver.clone())
                     .with_path_format_config(self.path_format_config.clone())
                     .with_rendered_path_usage_sink(self.rendered_path_usages.clone())
@@ -146,35 +150,24 @@ impl<'a> AstBuildState<'a> {
                     );
                     self.warnings.extend(context.take_emitted_warnings());
 
-                    let mut body =
+                    let body =
                         body_result.map_err(|error| self.error_messages(error, string_table))?;
 
-                    // Add the automatic return statement for the start function.
-                    let empty_string = string_table.get_or_intern(String::new());
-                    body.push(AstNode {
-                        kind: NodeKind::Return(vec![Expression::string_slice(
-                            empty_string,
-                            token_stream.current_location(),
-                            Ownership::ImmutableOwned,
-                        )]),
-                        location: token_stream.current_location(),
-                        scope: context.scope.clone(),
-                    });
-
-                    // Create an implicit "start" function that can be called by other modules.
                     let full_name = token_stream
                         .src_path
                         .join_str(IMPLICIT_START_FUNC_NAME, string_table);
 
-                    let main_signature = FunctionSignature {
+                    // Entry start() returns Vec<String> — the runtime fragment list.
+                    // The HIR builder adds the implicit return of the accumulated fragment vec.
+                    let start_signature = FunctionSignature {
                         parameters: vec![],
                         returns: vec![ReturnSlot::success(FunctionReturn::Value(
-                            DataType::StringSlice,
+                            DataType::Collection(Box::new(DataType::StringSlice), Ownership::MutableOwned),
                         ))],
                     };
 
                     self.ast.push(AstNode {
-                        kind: NodeKind::Function(full_name, main_signature, body),
+                        kind: NodeKind::Function(full_name, start_signature, body),
                         location: header.name_location,
                         scope: context.scope.clone(),
                     });
@@ -218,7 +211,6 @@ impl<'a> AstBuildState<'a> {
                     .with_style_directives(self.style_directives)
                     .with_build_profile(self.build_profile)
                     .with_visible_declarations(bindings.visible_symbol_paths.to_owned())
-                    .with_start_import_aliases(bindings.start_aliases.to_owned())
                     .with_project_path_resolver(self.project_path_resolver.clone())
                     .with_path_format_config(self.path_format_config.clone())
                     .with_rendered_path_usage_sink(self.rendered_path_usages.clone())

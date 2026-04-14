@@ -1,9 +1,15 @@
 //! File-header parsing for the frontend pre-AST stage.
 //!
 //! WHAT: splits tokenized source files into function/struct/choice/constant/start-function headers
-//! plus ordered top-level template items.
+//! plus const-fragment placement metadata for the entry file.
 //! WHY: later AST passes need declaration-shaped inputs before body parsing, while still preserving
 //! file-local visibility, constant ordering, and entry-file template ordering.
+//!
+//! Top-level declaration discovery is header-owned. AST lowers sorted headers directly.
+//! Top-level runtime templates are evaluated in entry `start()` in source order.
+//! Entry `start()` returns `Vec<String>`.
+//! Only const top-level fragments carry placement metadata; they do not pass through HIR.
+//! Start functions are build-system-only and are not importable or callable from modules.
 
 use crate::compiler_frontend::ast::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::ast::statements::choices::{
@@ -41,10 +47,29 @@ use std::collections::HashSet;
 use std::fmt::Display;
 use std::path::Path;
 
-/// Parsed headers for one module plus ordered entry-file const-template metadata.
+/// Parsed headers for one module plus const-fragment placement metadata for the entry file.
+///
+/// WHY: const fragments carry runtime insertion indices so the builder can merge them with the
+/// runtime fragment list returned by entry `start()`. Runtime fragments are not tracked here —
+/// they are evaluated directly inside `start()` in source order.
 pub struct Headers {
     pub headers: Vec<Header>,
-    pub top_level_template_items: Vec<TopLevelTemplateItem>,
+    pub top_level_const_fragments: Vec<TopLevelConstFragment>,
+}
+
+/// Placement metadata for one compile-time top-level template in the entry file.
+///
+/// WHAT: records where a const fragment should be inserted relative to runtime fragments
+/// in the final merged output.
+/// WHY: only const fragments carry insertion metadata; runtime fragments are returned by
+/// `start()` in source order and need no separate metadata.
+#[derive(Clone, Debug)]
+pub struct TopLevelConstFragment {
+    /// Number of runtime fragments seen before this const fragment in source order.
+    /// Used by the builder to insert the const string at the correct position.
+    pub runtime_insertion_index: usize,
+    pub header_path: InternedPath,
+    pub location: SourceLocation,
 }
 
 /// Optional settings that affect module header parsing.
@@ -67,8 +92,10 @@ struct HeaderParseContext<'a> {
     path_format_config: PathStringFormatConfig,
     string_table: &'a mut StringTable,
     const_template_number: &'a mut usize,
-    top_level_template_order: &'a mut usize,
-    top_level_template_items: &'a mut Vec<TopLevelTemplateItem>,
+    /// Count of runtime (non-exported) top-level templates seen so far in the entry file.
+    /// Used as the runtime_insertion_index for the next const fragment.
+    runtime_fragment_count: &'a mut usize,
+    top_level_const_fragments: &'a mut Vec<TopLevelConstFragment>,
 }
 
 // Shared per-header builder inputs that stay stable while one declaration is classified.
@@ -82,18 +109,6 @@ struct HeaderBuildContext<'a> {
     file_import_entries: &'a [FileImport],
     file_constant_order: &'a mut usize,
     string_table: &'a mut StringTable,
-}
-
-#[derive(Clone, Debug)]
-pub struct TopLevelTemplateItem {
-    pub file_order: usize,
-    pub location: SourceLocation,
-    pub kind: TopLevelTemplateKind,
-}
-
-#[derive(Clone, Debug)]
-pub enum TopLevelTemplateKind {
-    ConstTemplate { header_path: InternedPath },
 }
 
 #[derive(Clone, Debug)]
@@ -114,11 +129,12 @@ pub enum HeaderKind {
 
     ConstTemplate,
 
-    /// The implicit file-level start function for non-header top-level statements.
+    /// The entry-file start function for non-header top-level statements.
     ///
     /// WHAT: captures top-level executable statements that are not declarations.
-    /// WHY: imported files expose that body as a callable start function, while the build system
-    /// picks one entry-file start function as the module entry later on.
+    /// WHY: only the module entry file produces a start function. Non-entry files with
+    /// non-trivial top-level executable code are rejected as a rule error.
+    /// Start functions are build-system-only; they are not importable or callable from modules.
     StartFunction,
 }
 
@@ -195,8 +211,9 @@ pub fn parse_headers_with_path_resolver(
     let mut headers: Vec<Header> = Vec::new();
     let mut errors: Vec<CompilerError> = Vec::new();
     let mut const_template_count = 0;
-    let mut top_level_template_items = Vec::new();
-    let mut top_level_template_order = 0usize;
+    let mut top_level_const_fragments = Vec::new();
+    // Tracks runtime fragments seen so far in the entry file, for const fragment insertion indices.
+    let mut runtime_fragment_count = 0usize;
 
     for mut file in tokenized_files {
         let is_entry_file = match (entry_file_id, file.file_id) {
@@ -212,8 +229,8 @@ pub fn parse_headers_with_path_resolver(
             path_format_config: path_format_config.clone(),
             string_table,
             const_template_number: &mut const_template_count,
-            top_level_template_order: &mut top_level_template_order,
-            top_level_template_items: &mut top_level_template_items,
+            runtime_fragment_count: &mut runtime_fragment_count,
+            top_level_const_fragments: &mut top_level_const_fragments,
         };
 
         let headers_from_file = parse_headers_in_file(&mut file, &mut parse_context);
@@ -234,7 +251,7 @@ pub fn parse_headers_with_path_resolver(
 
     Ok(Headers {
         headers,
-        top_level_template_items,
+        top_level_const_fragments,
     })
 }
 
@@ -448,22 +465,19 @@ fn parse_headers_in_file(
                     )?;
 
                     *context.const_template_number += 1;
-                    if context.is_entry_file {
-                        context.top_level_template_items.push(TopLevelTemplateItem {
-                            file_order: *context.top_level_template_order,
-                            location: header.name_location.clone(),
-                            kind: TopLevelTemplateKind::ConstTemplate {
-                                header_path: header.tokens.src_path.clone(),
-                            },
-                        });
-                        *context.top_level_template_order += 1;
-                    }
+                    // Record placement metadata: runtime_insertion_index is the count of
+                    // runtime fragments seen before this const fragment in source order.
+                    context.top_level_const_fragments.push(TopLevelConstFragment {
+                        runtime_insertion_index: *context.runtime_fragment_count,
+                        location: header.name_location.clone(),
+                        header_path: header.tokens.src_path.clone(),
+                    });
                     headers.push(header);
                     next_statement_exported = false;
                 } else {
-                    // Runtime top-level templates stay in the start-function body. AST
-                    // finalization re-discovers them from the body snapshot, so headers only
-                    // track const-template metadata here.
+                    // Runtime top-level templates stay in the start-function body and are
+                    // evaluated in source order by entry start(). Increment the runtime
+                    // fragment count so subsequent const fragments get the correct insertion index.
                     push_runtime_template_tokens_to_start_function(
                         current_token,
                         token_stream,
@@ -471,6 +485,9 @@ fn parse_headers_in_file(
                         &mut start_function_dependencies,
                         &mut start_function_body,
                     )?;
+                    if context.is_entry_file {
+                        *context.runtime_fragment_count += 1;
+                    }
                 }
             }
 
@@ -480,7 +497,29 @@ fn parse_headers_in_file(
         }
     }
 
-    // The implicit start function must see declarations from the same file plus any file imports.
+    // Check non-entry files for top-level executable code. Since there is no semantic consumer
+    // for non-entry implicit starts, any non-trivial top-level body is rejected.
+    if !context.is_entry_file {
+        let has_executable_tokens = start_function_body
+            .iter()
+            .any(|t| !matches!(t.kind, TokenKind::Eof | TokenKind::Newline | TokenKind::ModuleStart));
+        if has_executable_tokens {
+            return_rule_error!(
+                "Non-entry files cannot contain top-level executable statements. Move this code into a named function or into the entry file.",
+                start_function_body
+                    .iter()
+                    .find(|t| !matches!(t.kind, TokenKind::Eof | TokenKind::Newline | TokenKind::ModuleStart))
+                    .map(|t| t.location.clone())
+                    .unwrap_or_default(), {
+                    CompilationStage => "Header Parsing",
+                    PrimarySuggestion => "Wrap this code in a named function declaration",
+                }
+            );
+        }
+        return Ok(headers);
+    }
+
+    // Entry file: build the start function header with all file-local declarations as dependencies.
     for header in headers.iter() {
         header_log!(#header.tokens.src_path);
 
@@ -498,7 +537,7 @@ fn parse_headers_in_file(
 
     headers.push(Header {
         kind: HeaderKind::StartFunction,
-        exported: next_statement_exported,
+        exported: false,
         dependencies: start_function_dependencies,
         name_location: SourceLocation::default(),
         tokens: start_tokens,

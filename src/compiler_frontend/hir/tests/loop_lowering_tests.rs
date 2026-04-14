@@ -73,7 +73,7 @@ fn build_ast(nodes: Vec<AstNode>, entry_path: InternedPath) -> Ast {
         module_constants: vec![],
         doc_fragments: vec![],
         entry_path,
-        start_template_items: vec![],
+        const_top_level_fragments: vec![],
         rendered_path_usages: vec![],
         warnings: vec![],
     }

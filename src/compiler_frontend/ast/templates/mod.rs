@@ -46,6 +46,7 @@
 //! | `template_formatting.rs` | Shared formatting helpers |
 
 pub(crate) mod create_template_node;
+mod doc_fragments;
 pub(crate) mod styles;
 pub(crate) mod template;
 pub(crate) mod template_body_parser;

@@ -5,7 +5,9 @@ use crate::backends::wasm::hir_to_lir::expr::lower_expression;
 use crate::backends::wasm::hir_to_lir::imports::resolve_host_call_import;
 use crate::backends::wasm::lir::instructions::{WasmCalleeRef, WasmLirStmt};
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
-use crate::compiler_frontend::hir::hir_nodes::{HirPlace, HirStatement, HirStatementKind};
+use crate::compiler_frontend::hir::hir_nodes::{
+    HirExpression, HirPlace, HirStatement, HirStatementKind, LocalId,
+};
 use crate::compiler_frontend::host_functions::CallTarget;
 
 pub(crate) fn lower_statement(
@@ -84,6 +86,13 @@ pub(crate) fn lower_statement(
 
             Ok(())
         }
+
+        HirStatementKind::PushRuntimeFragment { vec_local, value } => {
+            // WHAT: lower a runtime fragment push into a Wasm vec-push sequence.
+            // WHY: entry start() accumulates runtime fragments via PushRuntimeFragment;
+            //      the Wasm backend must append the evaluated string to the fragment vec.
+            lower_push_runtime_fragment(context, vec_local, value, statements)
+        }
     }
 }
 
@@ -129,4 +138,18 @@ fn lower_assignment(
     }
 
     Ok(())
+}
+
+fn lower_push_runtime_fragment(
+    _context: &mut WasmFunctionLoweringContext<'_, '_>,
+    _vec_local: &LocalId,
+    _value: &HirExpression,
+    _statements: &mut Vec<WasmLirStmt>,
+) -> Result<(), CompilerError> {
+    // TODO: implement Vec<String> push lowering for Wasm entry start().
+    // WHY: the Wasm backend will need host-call or intrinsic support for appending
+    //      string handles to a Vec accumulator once Vec<String> return is wired up.
+    Err(CompilerError::lir_transformation(
+        "Wasm: PushRuntimeFragment lowering not yet implemented. Vec<String> return from entry start() requires Wasm Vec support.",
+    ))
 }

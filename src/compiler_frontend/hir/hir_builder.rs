@@ -17,21 +17,19 @@
 
 use crate::compiler_frontend::ast::ast::Ast;
 use crate::compiler_frontend::ast::ast::AstDocFragmentKind;
-use crate::compiler_frontend::ast::ast::AstStartTemplateItem;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, SourceLocation};
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::hir::hir_datatypes::{HirTypeKind, TypeContext, TypeId};
 use crate::compiler_frontend::hir::hir_nodes::{
-    BlockId, ConstStringId, FieldId, FunctionId, HirBlock, HirConstId, HirDocFragment,
-    HirDocFragmentKind, HirFunction, HirFunctionOrigin, HirModule, HirNodeId, HirRegion,
-    HirTerminator, HirValueId, LocalId, RegionId, StartFragment, StructId,
+    BlockId, FieldId, FunctionId, HirBlock, HirConstId, HirDocFragment, HirDocFragmentKind,
+    HirFunction, HirFunctionOrigin, HirModule, HirNodeId, HirRegion, HirTerminator, HirValueId,
+    LocalId, RegionId, StructId,
 };
 use crate::compiler_frontend::hir::hir_side_table::HirSideTable;
 use crate::compiler_frontend::hir::hir_validation::validate_hir_module;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::string_interning::StringTable;
-use crate::projects::settings::IMPLICIT_START_FUNC_NAME;
 use crate::return_hir_transformation_error;
 use rustc_hash::{FxHashMap, FxHashSet};
 
@@ -120,6 +118,10 @@ pub struct HirBuilder<'a> {
     current_block: Option<BlockId>,
     current_region: Option<RegionId>,
     pub(super) loop_targets: Vec<LoopTargets>,
+
+    /// The runtime fragment vec local inside entry start(), if currently lowering it.
+    /// Set when entering entry start() and cleared on leave.
+    pub(super) entry_fragment_vec_local: Option<LocalId>,
 }
 
 // WHAT: generates a typed `allocate_*_id` method for each HIR entity kind.
@@ -184,6 +186,7 @@ impl<'a> HirBuilder<'a> {
             current_block: None,
             current_region: None,
             loop_targets: vec![],
+            entry_fragment_vec_local: None,
         }
     }
 
@@ -209,10 +212,6 @@ impl<'a> HirBuilder<'a> {
         }
 
         if let Err(error) = self.lower_module_constants(&ast) {
-            return Err(self.lower_error_messages(error));
-        }
-
-        if let Err(error) = self.resolve_start_fragments(&ast) {
             return Err(self.lower_error_messages(error));
         }
 
@@ -251,7 +250,6 @@ impl<'a> HirBuilder<'a> {
         // WHY: downstream lowering needs explicit role data to avoid heuristic drift.
         self.module.function_origins.clear();
 
-        // Default all functions to user-defined; override specific categories below.
         for function in &self.module.functions {
             self.module
                 .function_origins
@@ -261,75 +259,6 @@ impl<'a> HirBuilder<'a> {
         self.module
             .function_origins
             .insert(self.module.start_function, HirFunctionOrigin::EntryStart);
-
-        // Runtime template fragment functions come from ordered start fragments.
-        for fragment in &self.module.start_fragments {
-            if let StartFragment::RuntimeStringFn(function_id) = fragment {
-                self.module
-                    .function_origins
-                    .insert(*function_id, HirFunctionOrigin::RuntimeTemplate);
-            }
-        }
-
-        for function in &self.module.functions {
-            let Some(function_path) = self.side_table.function_name_path(function.id) else {
-                return_hir_transformation_error!(
-                    format!(
-                        "Missing function symbol path for {:?} while assigning function origins",
-                        function.id
-                    ),
-                    SourceLocation::default()
-                );
-            };
-
-            let is_implicit_start = function_path
-                .name_str(self.string_table)
-                .map(|name| name == IMPLICIT_START_FUNC_NAME)
-                .unwrap_or(false);
-            if !is_implicit_start {
-                continue;
-            }
-
-            if matches!(
-                self.module.function_origins.get(&function.id),
-                Some(HirFunctionOrigin::EntryStart | HirFunctionOrigin::RuntimeTemplate)
-            ) {
-                continue;
-            }
-
-            // Remaining implicit-start functions belong to imported files.
-            self.module
-                .function_origins
-                .insert(function.id, HirFunctionOrigin::FileStart);
-        }
-
-        Ok(())
-    }
-
-    fn resolve_start_fragments(&mut self, ast: &Ast) -> Result<(), CompilerError> {
-        self.module.start_fragments.clear();
-        self.module.const_string_pool.clear();
-
-        for template_item in &ast.start_template_items {
-            match template_item {
-                AstStartTemplateItem::ConstString { value, .. } => {
-                    let const_string_id = ConstStringId(self.module.const_string_pool.len() as u32);
-                    self.module
-                        .const_string_pool
-                        .push(self.string_table.resolve(*value).to_owned());
-                    self.module
-                        .start_fragments
-                        .push(StartFragment::ConstString(const_string_id));
-                }
-
-                AstStartTemplateItem::RuntimeStringFunction { function, location } => {
-                    let function_id = self.resolve_function_id_or_error(function, location)?;
-                    self.module
-                        .start_fragments
-                        .push(StartFragment::RuntimeStringFn(function_id));
-                }
-            }
-        }
 
         Ok(())
     }
@@ -566,6 +495,7 @@ impl<'a> HirBuilder<'a> {
         self.current_region = None;
         self.locals_by_name.clear();
         self.loop_targets.clear();
+        self.entry_fragment_vec_local = None;
     }
 
     pub(crate) fn set_current_block(

@@ -1,9 +1,13 @@
 //! HIR function-origin tracking tests.
 //!
-//! WHAT: verifies how HIR records entry, imported-start, and generated-fragment function origins.
-//! WHY: backends rely on stable function-origin metadata when deciding which functions to emit and call.
+//! WHAT: verifies how HIR records entry and normal function origins.
+//! WHY: backends rely on stable function-origin metadata when deciding which functions to emit.
+//!
+//! The old FileStart and RuntimeTemplate origins are removed.
+//! Only EntryStart (for the entry-file implicit start) and Normal (for all other functions)
+//! remain after Phase 1.
 
-use crate::compiler_frontend::ast::ast::{Ast, AstStartTemplateItem};
+use crate::compiler_frontend::ast::ast::Ast;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind, SourceLocation};
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
@@ -39,17 +43,13 @@ fn function_node(name: InternedPath, location: SourceLocation) -> AstNode {
     )
 }
 
-fn build_ast(
-    nodes: Vec<AstNode>,
-    entry_path: InternedPath,
-    start_template_items: Vec<AstStartTemplateItem>,
-) -> Ast {
+fn build_ast(nodes: Vec<AstNode>, entry_path: InternedPath) -> Ast {
     Ast {
         nodes,
         module_constants: vec![],
         doc_fragments: vec![],
         entry_path,
-        start_template_items,
+        const_top_level_fragments: vec![],
         rendered_path_usages: vec![],
         warnings: vec![],
     }
@@ -66,40 +66,25 @@ fn find_function_id_by_path(
 }
 
 #[test]
-fn classifies_entry_file_start_runtime_template_and_normal_functions() {
+fn classifies_entry_start_and_normal_functions() {
     let mut string_table = StringTable::new();
 
     let entry_path = InternedPath::from_single_str("main.bst", &mut string_table);
     let entry_start = entry_path.join_str(IMPLICIT_START_FUNC_NAME, &mut string_table);
-
-    let imported_path = InternedPath::from_single_str("imported.bst", &mut string_table);
-    let imported_start = imported_path.join_str(IMPLICIT_START_FUNC_NAME, &mut string_table);
-
-    let runtime_fragment_fn = entry_path.join_str("__bst_frag_0", &mut string_table);
     let normal_fn = entry_path.join_str("helper", &mut string_table);
 
     let ast = build_ast(
         vec![
             function_node(entry_start, location(1)),
-            function_node(imported_start.clone(), location(2)),
-            function_node(runtime_fragment_fn.clone(), location(3)),
-            function_node(normal_fn.clone(), location(4)),
+            function_node(normal_fn.clone(), location(2)),
         ],
         entry_path,
-        vec![AstStartTemplateItem::RuntimeStringFunction {
-            function: runtime_fragment_fn.clone(),
-            location: location(5),
-        }],
     );
 
     let module = HirBuilder::new(&mut string_table, PathStringFormatConfig::default())
         .build_hir_module(ast)
         .expect("HIR lowering should succeed");
 
-    let imported_start_id = find_function_id_by_path(&module, &imported_start)
-        .expect("imported implicit start should be present");
-    let runtime_id = find_function_id_by_path(&module, &runtime_fragment_fn)
-        .expect("runtime template function should be present");
     let normal_id =
         find_function_id_by_path(&module, &normal_fn).expect("normal function should be present");
 
@@ -108,16 +93,9 @@ fn classifies_entry_file_start_runtime_template_and_normal_functions() {
         Some(&HirFunctionOrigin::EntryStart)
     );
     assert_eq!(
-        module.function_origins.get(&imported_start_id),
-        Some(&HirFunctionOrigin::FileStart)
-    );
-    assert_eq!(
-        module.function_origins.get(&runtime_id),
-        Some(&HirFunctionOrigin::RuntimeTemplate)
-    );
-    assert_eq!(
         module.function_origins.get(&normal_id),
         Some(&HirFunctionOrigin::Normal)
     );
+    // Every function has exactly one origin tag.
     assert_eq!(module.function_origins.len(), module.functions.len());
 }

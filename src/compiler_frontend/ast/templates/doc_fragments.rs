@@ -5,19 +5,18 @@
 //! WHY: documentation extraction is a separate concern from runtime fragment
 //! synthesis and should remain independently auditable.
 
-use super::{AstDocFragment, AstDocFragmentKind, fold_template_with_context};
+use crate::compiler_frontend::ast::templates::top_level_templates::{AstDocFragment, AstDocFragmentKind};
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
 use crate::compiler_frontend::ast::templates::template::{CommentDirectiveKind, TemplateType};
+use crate::compiler_frontend::ast::templates::template_folding::TemplateFoldContext;
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::string_interning::StringTable;
 
-use super::fragment_extraction::as_top_level_template_declaration;
-
-pub(super) fn collect_and_strip_comment_templates(
+pub(in crate::compiler_frontend::ast::templates) fn collect_and_strip_comment_templates(
     ast_nodes: &mut [AstNode],
     project_path_resolver: &ProjectPathResolver,
     path_format_config: &PathStringFormatConfig,
@@ -33,7 +32,7 @@ pub(super) fn collect_and_strip_comment_templates(
         let mut retained = Vec::with_capacity(body.len());
         for statement in std::mem::take(body) {
             if let Some(comment_template) =
-                as_top_level_template_comment_declaration(&statement, string_table)
+                as_top_level_template_comment_declaration(&statement)
             {
                 collect_doc_fragments(
                     comment_template,
@@ -62,12 +61,14 @@ pub(super) fn collect_and_strip_comment_templates(
     Ok(fragments)
 }
 
-fn as_top_level_template_comment_declaration<'a>(
-    node: &'a AstNode,
-    string_table: &StringTable,
-) -> Option<&'a Template> {
-    let declaration = as_top_level_template_declaration(node, string_table)?;
-    let ExpressionKind::Template(template) = &declaration.value.kind else {
+fn as_top_level_template_comment_declaration(node: &AstNode) -> Option<&Template> {
+    // WHAT: match PushStartRuntimeFragment nodes containing Comment templates.
+    // WHY: the old VariableDeclaration(#template) protocol is gone; doc comment templates
+    //      in the entry start body are now PushStartRuntimeFragment nodes.
+    let NodeKind::PushStartRuntimeFragment(expr) = &node.kind else {
+        return None;
+    };
+    let ExpressionKind::Template(template) = &expr.kind else {
         return None;
     };
 
@@ -85,13 +86,13 @@ fn collect_doc_fragments(
         template.kind,
         TemplateType::Comment(CommentDirectiveKind::Doc)
     ) {
-        let rendered = fold_template_with_context(
-            template,
-            &template.location.scope,
+        let mut fold_context = TemplateFoldContext {
+            string_table,
             project_path_resolver,
             path_format_config,
-            string_table,
-        )?;
+            source_file_scope: &template.location.scope,
+        };
+        let rendered = template.fold_into_stringid(&mut fold_context)?;
         fragments.push(AstDocFragment {
             kind: AstDocFragmentKind::Doc,
             value: rendered,

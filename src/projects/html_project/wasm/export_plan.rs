@@ -5,7 +5,7 @@
 
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::hir::hir_nodes::{
-    BlockId, FunctionId, HirModule, HirStatementKind, StartFragment,
+    BlockId, FunctionId, HirModule, HirStatementKind,
 };
 use crate::compiler_frontend::hir::utils::terminator_targets;
 use crate::compiler_frontend::host_functions::CallTarget;
@@ -33,7 +33,6 @@ pub(crate) struct HtmlWasmFunctionExport {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum HtmlWasmExportPurpose {
     JsStartCall,
-    RuntimeTemplateCall,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -65,17 +64,12 @@ impl HtmlWasmHelperExports {
 
 /// Builds the full HTML->Wasm export plan from builder-visible HIR semantics.
 ///
-/// WHAT: walks entry-start reachable blocks and start-fragment runtime functions.
+/// WHAT: walks entry-start reachable blocks and collects user functions called from start.
 /// WHY: HTML builder keeps entry orchestration in JS and only exports what JS needs to call.
 pub(crate) fn build_html_wasm_export_plan(
     hir_module: &HirModule,
 ) -> Result<HtmlWasmExportPlan, CompilerError> {
-    let runtime_template_functions = collect_runtime_template_fragment_functions(hir_module);
     let mut requested_function_ids = FxHashSet::default();
-
-    for function_id in &runtime_template_functions {
-        requested_function_ids.insert(*function_id);
-    }
 
     for block_id in collect_reachable_entry_blocks(hir_module)? {
         let block = block_by_id_or_error(hir_module, block_id)?;
@@ -91,35 +85,20 @@ pub(crate) fn build_html_wasm_export_plan(
     let mut function_ids = requested_function_ids.into_iter().collect::<Vec<_>>();
     function_ids.sort_by_key(|function_id| function_id.0);
 
-    let mut function_exports = Vec::with_capacity(function_ids.len());
-    for (index, function_id) in function_ids.iter().enumerate() {
-        let purpose = if runtime_template_functions.contains(function_id) {
-            HtmlWasmExportPurpose::RuntimeTemplateCall
-        } else {
-            HtmlWasmExportPurpose::JsStartCall
-        };
-        function_exports.push(HtmlWasmFunctionExport {
-            function_id: *function_id,
+    let function_exports = function_ids
+        .iter()
+        .enumerate()
+        .map(|(index, &function_id)| HtmlWasmFunctionExport {
+            function_id,
             export_name: format!("bst_call_{index}"),
-            purpose,
-        });
-    }
+            purpose: HtmlWasmExportPurpose::JsStartCall,
+        })
+        .collect();
 
     Ok(HtmlWasmExportPlan {
         function_exports,
         helper_exports: HtmlWasmHelperExports::all_enabled(),
     })
-}
-
-fn collect_runtime_template_fragment_functions(hir_module: &HirModule) -> FxHashSet<FunctionId> {
-    // Runtime template fragments must always be exported so slot hydration can invoke them.
-    let mut runtime_functions = FxHashSet::default();
-    for fragment in &hir_module.start_fragments {
-        if let StartFragment::RuntimeStringFn(function_id) = fragment {
-            runtime_functions.insert(*function_id);
-        }
-    }
-    runtime_functions
 }
 
 fn collect_reachable_entry_blocks(hir_module: &HirModule) -> Result<Vec<BlockId>, CompilerError> {

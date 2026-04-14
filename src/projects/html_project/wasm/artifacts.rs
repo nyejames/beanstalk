@@ -7,7 +7,7 @@
 use crate::backends::js::{JsLoweringConfig, lower_hir_to_js};
 use crate::backends::wasm::backend::lower_hir_to_wasm_module;
 use crate::backends::wasm::request::WasmBackendRequest;
-use crate::build_system::build::{FileKind, OutputFile};
+use crate::build_system::build::{FileKind, OutputFile, ResolvedConstFragment};
 use crate::compiler_frontend::analysis::borrow_checker::BorrowCheckReport;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::hir::hir_nodes::{FunctionId, HirModule};
@@ -94,6 +94,7 @@ pub(crate) struct CompiledHtmlWasmModule {
 /// WHY: keeps the HTML builder in charge of artifact layout while delegating Wasm lowering.
 pub(crate) fn compile_html_module_wasm(
     hir_module: &HirModule,
+    const_fragments: &[ResolvedConstFragment],
     borrow_analysis: &BorrowCheckReport,
     string_table: &mut StringTable,
     logical_html_output_path: &Path,
@@ -115,8 +116,8 @@ pub(crate) fn compile_html_module_wasm(
         js_lowering_config,
     )
     .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;
-    let (entry_fragment_html, runtime_slots) = render_entry_fragments(hir_module)
-        .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;
+    let (entry_fragment_html, runtime_slots) = render_entry_fragments(hir_module, const_fragments);
+
     let build_plan =
         build_html_wasm_plan(hir_module, &js_module.function_name_by_id, runtime_slots)
             .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;

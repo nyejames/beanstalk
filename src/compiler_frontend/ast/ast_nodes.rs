@@ -100,6 +100,15 @@ pub enum NodeKind {
     // Basics
     VariableDeclaration(Declaration), // Variable name, Value, Visibility,
 
+    /// Accumulate a runtime string expression into the entry start() fragment list.
+    ///
+    /// WHAT: replaces the old `VariableDeclaration(#template, ...)` protocol used to
+    /// mark top-level runtime templates for later extraction/synthesis passes.
+    /// WHY: explicit intent avoids encoding the protocol through synthetic variable names,
+    /// and removes the need for post-hoc fragment extraction from the start body.
+    /// The HIR builder lowers this into a `PushRuntimeFragment` statement inside entry start().
+    PushStartRuntimeFragment(Expression),
+
     // For simple field access: obj.field
     FieldAccess {
         base: Box<AstNode>,   // The expression being accessed

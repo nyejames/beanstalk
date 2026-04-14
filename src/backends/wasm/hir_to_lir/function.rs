@@ -280,11 +280,8 @@ fn build_debug_name(
 }
 
 fn map_function_origin(origin: HirFunctionOrigin) -> WasmLirFunctionOrigin {
-    // Intentional 1:1 mapping in phase-1 so origin semantics stay backend-stable.
     match origin {
         HirFunctionOrigin::Normal => WasmLirFunctionOrigin::Normal,
         HirFunctionOrigin::EntryStart => WasmLirFunctionOrigin::EntryStart,
-        HirFunctionOrigin::FileStart => WasmLirFunctionOrigin::FileStart,
-        HirFunctionOrigin::RuntimeTemplate => WasmLirFunctionOrigin::RuntimeTemplate,
     }
 }

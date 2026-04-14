@@ -2,7 +2,7 @@
 
 use super::*;
 use crate::backends::js::test_symbol_helpers::expected_dev_function_name;
-use crate::compiler_frontend::hir::hir_nodes::{FunctionId, StartFragment};
+use crate::compiler_frontend::hir::hir_nodes::FunctionId;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::projects::html_project::document_config::HtmlDocumentConfig;
 use crate::projects::html_project::tests::test_support::{
@@ -20,6 +20,7 @@ fn compile_html_module_wasm_uses_wrapper_exports_not_internal_names() {
 
     let compiled = compile_html_module_wasm(
         &module.hir,
+        &[],
         &module.borrow_analysis,
         &mut string_table,
         Path::new("index.html"),
@@ -44,8 +45,6 @@ fn wasm_export_plan_is_deterministic_with_stable_wrapper_names() {
     add_callable_function(&mut module, FunctionId(1), "helper_a", &mut string_table);
     add_start_call(&mut module, "helper_b", 41, &mut string_table);
     add_start_call(&mut module, "helper_a", 42, &mut string_table);
-    module.hir.start_fragments = vec![StartFragment::RuntimeStringFn(FunctionId(2))];
-
     let function_name_by_id = HashMap::from([
         (FunctionId(0), String::from("start_entry")),
         (FunctionId(1), String::from("helper_a")),
@@ -108,6 +107,7 @@ fn compile_html_module_wasm_preserves_nested_logical_html_route() {
 
     let compiled = compile_html_module_wasm(
         &module.hir,
+        &[],
         &module.borrow_analysis,
         &mut string_table,
         Path::new("docs/index.html"),

@@ -5,7 +5,7 @@
 //! syntax handling (symbol statements, returns, expression statements).
 
 use crate::compiler_frontend::ast::ast::{ContextKind, ScopeContext};
-use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
+use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::statements::body_expr_stmt::parse_expression_statement_candidate;
 use crate::compiler_frontend::ast::statements::body_return::parse_return_statement;
@@ -16,14 +16,12 @@ use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorMetaDataKey};
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::datatypes::Ownership;
-use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::reserved_trait_syntax::{
     reserved_trait_keyword_error, reserved_trait_keyword_or_dispatch_mismatch,
 };
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::projects::settings;
-use crate::projects::settings::TOP_LEVEL_TEMPLATE_NAME;
 use crate::{ast_log, return_rule_error, return_syntax_error};
 
 fn unexpected_function_body_token_error(
@@ -320,7 +318,10 @@ pub(crate) fn parse_function_body_statements(
                 }
             },
 
-            // String template at the top level of the start function.
+            // Top-level runtime template in the entry start() body.
+            // Each template becomes a PushStartRuntimeFragment so the HIR builder can
+            // push the evaluated string directly to the runtime fragment list.
+            // This replaces the old synthetic VariableDeclaration(#template) protocol.
             TokenKind::TemplateHead => {
                 if context.kind != ContextKind::Module {
                     return_rule_error!(
@@ -329,20 +330,13 @@ pub(crate) fn parse_function_body_statements(
                     )
                 }
 
-                // Each top-level template statement is emitted as a standalone declaration.
-                // `top_level_templates` later lifts and orders these declarations when synthesizing
-                // start fragments, so this stage intentionally preserves one declaration per template.
                 let template = Template::new(token_stream, &context, vec![], string_table)?;
                 let expr = Expression::template(template, Ownership::MutableOwned);
-
-                let template_var = Declaration {
-                    id: InternedPath::from_single_str(TOP_LEVEL_TEMPLATE_NAME, string_table),
-                    value: expr,
-                };
+                let location = token_stream.current_location();
 
                 ast.push(AstNode {
-                    kind: NodeKind::VariableDeclaration(template_var),
-                    location: token_stream.current_location(),
+                    kind: NodeKind::PushStartRuntimeFragment(expr),
+                    location,
                     scope: context.scope.clone(),
                 })
             }

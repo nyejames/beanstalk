@@ -27,9 +27,7 @@ pub(crate) mod scope_context;
 // Public AST surface consumed by later compiler stages.
 #[cfg(test)]
 pub use crate::compiler_frontend::ast::templates::top_level_templates::AstDocFragment;
-pub use crate::compiler_frontend::ast::templates::top_level_templates::{
-    AstDocFragmentKind, AstStartTemplateItem,
-};
+pub use crate::compiler_frontend::ast::templates::top_level_templates::AstDocFragmentKind;
 pub use orchestrate::{Ast, AstBuildContext};
 pub use scope_context::{ContextKind, ScopeContext};
 #[cfg(test)]

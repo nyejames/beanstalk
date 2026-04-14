@@ -82,12 +82,6 @@ impl<'a> HirDisplayContext<'a> {
             "  start_function: {}",
             self.function_label(module.start_function)
         );
-        let _ = writeln!(out, "  start_fragments: {}", module.start_fragments.len());
-        let _ = writeln!(
-            out,
-            "  const_string_pool: {}",
-            module.const_string_pool.len()
-        );
         let _ = writeln!(out, "  doc_fragments: {}", module.doc_fragments.len());
 
         let _ = writeln!(out, "  regions: {}", module.regions.len());
@@ -279,6 +273,13 @@ impl<'a> HirDisplayContext<'a> {
             }
             HirStatementKind::Expr(expr) => self.render_expression(expr),
             HirStatementKind::Drop(local) => format!("drop {}", self.local_label(*local)),
+            HirStatementKind::PushRuntimeFragment { vec_local, value } => {
+                format!(
+                    "push_fragment {} <- {}",
+                    self.local_label(*vec_local),
+                    self.render_expression(value)
+                )
+            }
         }
     }
 

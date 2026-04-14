@@ -197,6 +197,7 @@ fn compile_one_module(
     if wasm_enabled {
         let compiled_wasm = compile_html_module_wasm(
             &module.hir,
+            &module.const_top_level_fragments,
             &module.borrow_analysis,
             string_table,
             logical_html_output_path,
@@ -208,6 +209,7 @@ fn compile_one_module(
     } else {
         let output_file = compile_html_module_js(
             &module.hir,
+            &module.const_top_level_fragments,
             &module.borrow_analysis,
             string_table,
             logical_html_output_path.to_path_buf(),

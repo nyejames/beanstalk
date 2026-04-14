@@ -22,13 +22,13 @@ use super::build_state::AstBuildState;
 use crate::compiler_frontend::FrontendBuildProfile;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::templates::top_level_templates::{
-    AstDocFragment, AstStartTemplateItem, collect_and_strip_comment_templates,
-    synthesize_start_template_items,
+    AstConstTopLevelFragment, AstDocFragment, collect_and_strip_comment_templates,
+    collect_const_top_level_fragments,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
-use crate::compiler_frontend::headers::parse_file_headers::{Header, TopLevelTemplateItem};
+use crate::compiler_frontend::headers::parse_file_headers::{Header, TopLevelConstFragment};
 use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
@@ -46,7 +46,9 @@ pub struct Ast {
     // The path to the original entry point file.
     pub entry_path: InternedPath,
 
-    pub start_template_items: Vec<AstStartTemplateItem>,
+    /// Const top-level fragments with their runtime insertion indices.
+    /// Builders merge these with the runtime fragment list returned by entry start().
+    pub const_top_level_fragments: Vec<AstConstTopLevelFragment>,
     pub rendered_path_usages: Vec<RenderedPathUsage>,
     pub warnings: Vec<CompilerWarning>,
 }
@@ -66,19 +68,18 @@ pub struct AstBuildContext<'a> {
 }
 
 impl<'a> AstBuildState<'a> {
-    /// Pass 7: Assemble the final `Ast` from accumulated build state.
+    /// Pass 7: Assemble the final `Ast` from the accumulated build state.
     ///
-    /// WHAT: Strips doc-comment templates, synthesizes start-template items,
-    /// normalizes all templates for HIR consumption, and assembles the final
-    /// `Ast` output with all metadata.
+    /// WHAT: strips doc-comment templates, collects const top-level fragment values,
+    /// normalizes all templates for HIR consumption, and assembles the final `Ast` output.
     ///
-    /// WHY: This is the final transformation before HIR lowering. Templates
-    /// must be fully normalized (folded constants, render plans, complete
-    /// metadata) so HIR receives semantically complete template inputs.
+    /// WHY: this is the final transformation before HIR lowering. Templates must be fully
+    /// normalized (folded constants, render plans, complete metadata) so HIR receives
+    /// semantically complete template inputs.
     pub(super) fn finalize(
         mut self,
         entry_dir: InternedPath,
-        top_level_template_items: &[TopLevelTemplateItem],
+        top_level_const_fragments: &[TopLevelConstFragment],
         string_table: &mut StringTable,
     ) -> Result<Ast, CompilerMessages> {
         let project_path_resolver = self.project_path_resolver.as_ref().ok_or_else(|| {
@@ -98,14 +99,9 @@ impl<'a> AstBuildState<'a> {
         )
         .map_err(|error| self.error_messages(error, string_table))?;
 
-        let start_template_items = synthesize_start_template_items(
-            &mut self.ast,
-            &entry_dir,
-            top_level_template_items,
+        let const_top_level_fragments = collect_const_top_level_fragments(
+            top_level_const_fragments,
             &self.const_templates_by_path,
-            project_path_resolver,
-            self.path_format_config,
-            string_table,
         )
         .map_err(|error| self.error_messages(error, string_table))?;
 
@@ -127,7 +123,7 @@ impl<'a> AstBuildState<'a> {
             module_constants,
             doc_fragments,
             entry_path: entry_dir,
-            start_template_items,
+            const_top_level_fragments,
             rendered_path_usages: std::mem::take(&mut *self.rendered_path_usages.borrow_mut()),
             warnings: self.warnings,
         })
@@ -154,7 +150,7 @@ impl Ast {
     /// 7. finalize                  — Normalize templates and assemble output
     pub fn new(
         sorted_headers: Vec<Header>,
-        top_level_template_items: Vec<TopLevelTemplateItem>,
+        top_level_const_fragments: Vec<TopLevelConstFragment>,
         context: AstBuildContext<'_>,
     ) -> Result<Ast, CompilerMessages> {
         let AstBuildContext {
@@ -193,6 +189,6 @@ impl Ast {
             string_table,
         )?;
 
-        state.finalize(entry_dir, &top_level_template_items, string_table)
+        state.finalize(entry_dir, &top_level_const_fragments, string_table)
     }
 }

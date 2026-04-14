@@ -25,6 +25,19 @@ use std::path::{Path, PathBuf};
 
 const FILE_MIN_UNIQUE_SYMBOLS_CAPACITY: usize = 32;
 
+/// A resolved const top-level fragment: a static string and its runtime insertion index.
+///
+/// WHAT: carries a fully resolved (not interned) const fragment string plus the count of
+/// runtime fragments that precede it in source order.
+/// WHY: builders merge const strings with the runtime fragment list returned by entry start()
+/// using the insertion index to reconstruct source-order interleaving.
+pub struct ResolvedConstFragment {
+    /// Number of runtime fragments preceding this const fragment in source order.
+    pub runtime_insertion_index: usize,
+    /// The rendered HTML/text content of this const fragment.
+    pub html: String,
+}
+
 /// Frontend output for one module root ready for backend lowering.
 ///
 /// WHAT: bundles typed HIR plus borrow-analysis facts and warnings for a module entry file.
@@ -34,6 +47,8 @@ pub struct Module {
     pub(crate) hir: HirModule,
     pub(crate) borrow_analysis: BorrowCheckReport,
     pub(crate) warnings: Vec<CompilerWarning>,
+    /// Resolved const top-level fragments with their runtime insertion indices.
+    pub(crate) const_top_level_fragments: Vec<ResolvedConstFragment>,
 }
 
 /// Unified build interface for all project types

@@ -16,7 +16,7 @@ use crate::compiler_frontend::analysis::borrow_checker::BorrowDropSiteKind;
 use crate::compiler_frontend::hir::hir_datatypes::{HirType, HirTypeKind};
 use crate::compiler_frontend::hir::hir_nodes::{
     BlockId, FunctionId, HirBinOp, HirBlock, HirExpressionKind, HirFunction, HirFunctionOrigin,
-    HirPlace, HirStatementKind, HirTerminator, LocalId, RegionId, StartFragment, ValueKind,
+    HirPlace, HirStatementKind, HirTerminator, LocalId, RegionId, ValueKind,
 };
 use crate::compiler_frontend::host_functions::CallTarget;
 use crate::compiler_frontend::interned_path::InternedPath;
@@ -205,20 +205,17 @@ fn lowers_runtime_template_with_literal_and_handle_chunks_in_order() {
         return_aliases: vec![],
     };
 
-    let mut module = build_module(
+    let module = build_module(
         &mut string_table,
         vec![(
             runtime_function,
             runtime_path,
-            HirFunctionOrigin::RuntimeTemplate,
+            HirFunctionOrigin::Normal,
         )],
         vec![runtime_block],
         type_context,
         FunctionId(0),
     );
-    module
-        .start_fragments
-        .push(StartFragment::RuntimeStringFn(FunctionId(0)));
 
     let result = lower_hir_to_wasm_lir(
         &module,
@@ -347,20 +344,17 @@ fn lowers_runtime_template_with_cfg_before_final_return() {
         return_aliases: vec![],
     };
 
-    let mut module = build_module(
+    let module = build_module(
         &mut string_table,
         vec![(
             runtime_function,
             runtime_path,
-            HirFunctionOrigin::RuntimeTemplate,
+            HirFunctionOrigin::Normal,
         )],
         vec![entry_block, header_block, body_block, exit_block],
         type_context,
         FunctionId(0),
     );
-    module
-        .start_fragments
-        .push(StartFragment::RuntimeStringFn(FunctionId(0)));
 
     let result = lower_hir_to_wasm_lir(
         &module,
@@ -1268,20 +1262,17 @@ fn multi_fragment_template_produces_all_push_operations() {
         return_aliases: vec![],
     };
 
-    let mut module = build_module(
+    let module = build_module(
         &mut string_table,
         vec![(
             runtime_function,
             runtime_path,
-            HirFunctionOrigin::RuntimeTemplate,
+            HirFunctionOrigin::Normal,
         )],
         vec![runtime_block],
         type_context,
         FunctionId(0),
     );
-    module
-        .start_fragments
-        .push(StartFragment::RuntimeStringFn(FunctionId(0)));
 
     let result = lower_hir_to_wasm_lir(
         &module,

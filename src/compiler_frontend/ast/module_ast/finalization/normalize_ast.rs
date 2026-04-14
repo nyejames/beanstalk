@@ -194,6 +194,15 @@ fn normalize_ast_node_templates(
             string_table,
         ),
 
+        // Runtime fragment push — normalize the template expression it carries.
+        NodeKind::PushStartRuntimeFragment(expr) => normalize_expression_templates(
+            expr,
+            source_file_scope,
+            path_format_config,
+            project_path_resolver,
+            string_table,
+        ),
+
         // Terminal nodes (no templates to normalize)
         NodeKind::Break | NodeKind::Continue | NodeKind::Operator(_) => Ok(()),
     }

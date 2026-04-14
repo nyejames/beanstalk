@@ -27,10 +27,6 @@ pub(crate) enum WasmLirFunctionOrigin {
     Normal,
     /// Entry-file implicit start function.
     EntryStart,
-    /// Non-entry file implicit start function.
-    FileStart,
-    /// Runtime template fragment function.
-    RuntimeTemplate,
     /// Synthetic wrapper created by export policy.
     ExportWrapper,
 }

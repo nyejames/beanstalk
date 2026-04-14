@@ -5,7 +5,8 @@ use crate::backends::js::test_symbol_helpers::expected_dev_function_name;
 use crate::build_system::build::{FileKind, Project};
 use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::compiler_errors::{CompilerMessages, ErrorType};
-use crate::compiler_frontend::hir::hir_nodes::{ConstStringId, FunctionId, StartFragment};
+use crate::build_system::build::ResolvedConstFragment;
+use crate::compiler_frontend::hir::hir_nodes::FunctionId;
 use crate::compiler_frontend::paths::path_resolution::{CompileTimePathBase, CompileTimePathKind};
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::projects::html_project::tests::test_support::{
@@ -160,11 +161,11 @@ fn emits_runtime_slots_and_bootstrap_calls_start() {
     let entry_path = PathBuf::from("#page.bst");
     let mut string_table = StringTable::new();
     let mut module = create_test_module(entry_path.clone(), &mut string_table);
-    module.hir.start_fragments = vec![
-        StartFragment::ConstString(ConstStringId(0)),
-        StartFragment::RuntimeStringFn(FunctionId(0)),
-    ];
-    module.hir.const_string_pool = vec![String::from("<meta charset=\"utf-8\">")];
+    module.hir.entry_runtime_fragment_functions = vec![FunctionId(0)];
+    module.const_top_level_fragments = vec![ResolvedConstFragment {
+        runtime_insertion_index: 0,
+        html: String::from("<meta charset=\"utf-8\">"),
+    }];
 
     let project = builder
         .build_backend(

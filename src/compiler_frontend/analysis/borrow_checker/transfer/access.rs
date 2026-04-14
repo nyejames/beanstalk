@@ -428,6 +428,21 @@ pub(super) fn transfer_statement(
         HirStatementKind::Drop(_local) => {
             // Ownership/drop semantics are handled by later analyses.
         }
+
+        HirStatementKind::PushRuntimeFragment { value, .. } => {
+            let location = context.diagnostics.statement_error_location(statement);
+            let mut read_env = SharedReadEnv {
+                context,
+                layout,
+                state,
+                tracker: &mut tracker,
+                location: location.clone(),
+                current_order: statement_order,
+                stats,
+                value_fact_buffer,
+            };
+            record_shared_reads_in_expression(&mut read_env, value, location)?;
+        }
     }
 
     let statement_fact = StatementBorrowFact {

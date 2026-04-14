@@ -8,8 +8,7 @@ use crate::compiler_frontend::hir::hir_datatypes::{HirTypeKind, TypeId};
 use crate::compiler_frontend::hir::hir_nodes::{
     BlockId, FieldId, FunctionId, HirConstValue, HirDocFragmentKind, HirExpression,
     HirExpressionKind, HirFunctionOrigin, HirMatchArm, HirModule, HirPattern, HirPlace,
-    HirStatement, HirStatementKind, HirTerminator, LocalId, RegionId, StartFragment, StructId,
-    ValueKind,
+    HirStatement, HirStatementKind, HirTerminator, LocalId, RegionId, StructId, ValueKind,
 };
 use crate::compiler_frontend::hir::hir_side_table::HirLocation;
 use crate::compiler_frontend::hir::utils::terminator_targets;
@@ -59,7 +58,6 @@ impl<'a> HirValidator<'a> {
         self.validate_region_graph()?;
         self.validate_start_function()?;
         self.validate_function_origins()?;
-        self.validate_start_fragments()?;
         self.validate_doc_fragments()?;
         self.validate_module_constants()?;
         self.validate_functions()?;
@@ -224,54 +222,6 @@ impl<'a> HirValidator<'a> {
                 ),
                 Some(HirLocation::Function(self.module.start_function)),
             ));
-        }
-
-        for fragment in &self.module.start_fragments {
-            if let StartFragment::RuntimeStringFn(function_id) = fragment
-                && !matches!(
-                    self.module.function_origins.get(function_id),
-                    Some(HirFunctionOrigin::RuntimeTemplate)
-                )
-            {
-                return Err(self.error_with_hir(
-                    format!(
-                        "Runtime start fragment function {function_id:?} must be tagged as RuntimeTemplate"
-                    ),
-                    Some(HirLocation::Function(*function_id)),
-                ));
-            }
-        }
-
-        Ok(())
-    }
-
-    fn validate_start_fragments(&self) -> Result<(), CompilerError> {
-        for (index, fragment) in self.module.start_fragments.iter().enumerate() {
-            match fragment {
-                StartFragment::ConstString(const_string_id) => {
-                    let pool_index = const_string_id.0 as usize;
-                    if pool_index >= self.module.const_string_pool.len() {
-                        return Err(self.error_with_hir(
-                            format!(
-                                "Start fragment #{index} references missing const_string_pool entry {}",
-                                const_string_id.0
-                            ),
-                            None,
-                        ));
-                    }
-                }
-
-                StartFragment::RuntimeStringFn(function_id) => {
-                    if !self.function_ids.contains(function_id) {
-                        return Err(self.error_with_hir(
-                            format!(
-                                "Start fragment #{index} references missing runtime function {function_id:?}"
-                            ),
-                            Some(HirLocation::Function(*function_id)),
-                        ));
-                    }
-                }
-            }
         }
 
         Ok(())
@@ -625,6 +575,11 @@ impl<'a> HirValidator<'a> {
 
             HirStatementKind::Drop(local) => {
                 self.require_local_id(*local, anchor)?;
+            }
+
+            HirStatementKind::PushRuntimeFragment { vec_local, value } => {
+                self.require_local_id(*vec_local, anchor)?;
+                self.validate_expression(value, anchor)?;
             }
         }
 

@@ -54,7 +54,7 @@ use crate::compiler_frontend::ast::ast::{Ast, AstBuildContext};
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::headers::parse_file_headers::{
-    Header, HeaderParseOptions, Headers, TopLevelTemplateItem, parse_headers_with_path_resolver,
+    Header, HeaderParseOptions, Headers, TopLevelConstFragment, parse_headers_with_path_resolver,
 };
 use crate::compiler_frontend::hir::hir_builder::lower_module;
 use crate::compiler_frontend::hir::hir_nodes::HirModule;
@@ -238,7 +238,7 @@ impl CompilerFrontend {
     pub fn headers_to_ast(
         &mut self,
         headers: Vec<Header>,
-        top_level_template_items: Vec<TopLevelTemplateItem>,
+        top_level_const_fragments: Vec<TopLevelConstFragment>,
         entry_file_path: &Path,
         build_profile: FrontendBuildProfile,
     ) -> Result<Ast, CompilerMessages> {
@@ -252,7 +252,7 @@ impl CompilerFrontend {
 
         Ast::new(
             headers,
-            top_level_template_items,
+            top_level_const_fragments,
             AstBuildContext {
                 host_registry: &self.host_function_registry,
                 style_directives: &self.style_directives,

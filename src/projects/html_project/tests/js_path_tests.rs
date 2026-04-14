@@ -1,6 +1,8 @@
 //! Tests for the JS-only HTML rendering path.
 
 use super::*;
+use crate::build_system::build::ResolvedConstFragment;
+use crate::compiler_frontend::hir::hir_nodes::FunctionId;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::projects::html_project::document_config::HtmlDocumentConfig;
 use crate::projects::html_project::tests::test_support::{
@@ -13,15 +15,16 @@ use std::path::Path;
 fn js_lifecycle_order_is_static_then_bundle_then_hydration_then_start() {
     let mut string_table = StringTable::new();
     let mut module = create_test_module(std::path::PathBuf::from("#page.bst"), &mut string_table);
-    module.hir.start_fragments = vec![
-        StartFragment::ConstString(crate::compiler_frontend::hir::hir_nodes::ConstStringId(0)),
-        StartFragment::RuntimeStringFn(FunctionId(0)),
-    ];
-    module.hir.const_string_pool = vec![String::from("<h1>Hello</h1>")];
+    module.hir.entry_runtime_fragment_functions = vec![FunctionId(0)];
+    let const_fragments = vec![ResolvedConstFragment {
+        runtime_insertion_index: 0,
+        html: String::from("<h1>Hello</h1>"),
+    }];
     let function_names = HashMap::from([(FunctionId(0), String::from("start_entry"))]);
 
     let html = render_html_document(
         &module.hir,
+        &const_fragments,
         &string_table,
         &HtmlDocumentConfig::default(),
         Path::new("index.html"),
@@ -71,13 +74,9 @@ fn render_entry_fragments_preserves_runtime_slot_order() {
     let mut string_table = StringTable::new();
     let mut module = create_test_module(std::path::PathBuf::from("#page.bst"), &mut string_table);
     add_callable_function(&mut module, FunctionId(1), "frag_b", &mut string_table);
-    module.hir.start_fragments = vec![
-        StartFragment::RuntimeStringFn(FunctionId(0)),
-        StartFragment::RuntimeStringFn(FunctionId(1)),
-    ];
+    module.hir.entry_runtime_fragment_functions = vec![FunctionId(0), FunctionId(1)];
 
-    let (body_html, runtime_slots) =
-        render_entry_fragments(&module.hir).expect("fragments should render");
+    let (body_html, runtime_slots) = render_entry_fragments(&module.hir, &[]);
     let slot0_pos = body_html
         .find("bst-slot-0")
         .expect("bst-slot-0 must be present");
@@ -102,6 +101,7 @@ fn no_runtime_fragments_still_emits_start_call() {
 
     let html = render_html_document(
         &module.hir,
+        &[],
         &string_table,
         &HtmlDocumentConfig::default(),
         Path::new("index.html"),
@@ -135,12 +135,12 @@ fn escape_inline_script_replaces_closing_tag_sequence() {
 
 #[test]
 fn inline_js_bundle_with_closing_script_tag_is_escaped_in_html() {
-    let mut hir_module = create_test_hir_module();
-    hir_module.start_fragments = vec![];
+    let hir_module = create_test_hir_module();
     let function_names = HashMap::from([(FunctionId(0), String::from("start_entry"))]);
 
     let html = render_html_document(
         &hir_module,
+        &[],
         &crate::compiler_frontend::string_interning::StringTable::new(),
         &HtmlDocumentConfig::default(),
         Path::new("index.html"),
@@ -161,27 +161,13 @@ fn inline_js_bundle_with_closing_script_tag_is_escaped_in_html() {
 }
 
 #[test]
-fn render_entry_fragments_errors_on_missing_const_string() {
-    let mut hir_module = create_test_hir_module();
-    hir_module.start_fragments = vec![StartFragment::ConstString(
-        crate::compiler_frontend::hir::hir_nodes::ConstStringId(99),
-    )];
-
-    let error = render_entry_fragments(&hir_module)
-        .expect_err("should fail when const fragment ID is out of bounds");
-    assert!(
-        error.msg.contains("const fragment"),
-        "error message must mention the missing const fragment"
-    );
-}
-
-#[test]
 fn render_html_document_errors_on_missing_function_name() {
     let mut hir_module = create_test_hir_module();
-    hir_module.start_fragments = vec![StartFragment::RuntimeStringFn(FunctionId(99))];
+    hir_module.entry_runtime_fragment_functions = vec![FunctionId(99)];
 
     let error = render_html_document(
         &hir_module,
+        &[],
         &crate::compiler_frontend::string_interning::StringTable::new(),
         &HtmlDocumentConfig::default(),
         Path::new("index.html"),

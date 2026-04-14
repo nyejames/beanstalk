@@ -85,6 +85,7 @@ pub(crate) fn create_test_module(entry_point: PathBuf, string_table: &mut String
         hir: hir_module,
         borrow_analysis: BorrowCheckReport::default(),
         warnings: vec![],
+        const_top_level_fragments: vec![],
     }
 }
 

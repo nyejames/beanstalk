@@ -83,6 +83,14 @@ pub(crate) fn lower_block_statements(
             HirStatementKind::Drop(_) => {
                 // GC-first runtime semantics treat explicit drop as a no-op for now.
             }
+
+            HirStatementKind::PushRuntimeFragment { .. } => {
+                // PushRuntimeFragment is only valid inside entry start().
+                // The Rust interpreter does not support HTML fragment assembly.
+                return Err(CompilerError::compiler_error(
+                    "Rust interpreter: PushRuntimeFragment lowering is not supported",
+                ));
+            }
         }
     }
 

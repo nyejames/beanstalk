@@ -17,7 +17,7 @@ use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::return_compiler_error;
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashSet;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -46,8 +46,6 @@ pub struct ScopeContext {
     // Optional file-local visibility gate over `declarations`.
     // When present, references must be in this set, which enforces import boundaries.
     pub visible_declaration_ids: Option<FxHashSet<InternedPath>>,
-    // Bare file imports (`@path/to/file`) bind alias -> imported file start function path.
-    pub start_import_aliases: FxHashMap<StringId, InternedPath>,
 
     // --- Type expectations ---
     pub expected_result_types: Vec<DataType>,
@@ -116,7 +114,6 @@ impl ScopeContext {
             scope,
             declarations: declarations.to_owned(),
             visible_declaration_ids: None,
-            start_import_aliases: FxHashMap::default(),
             expected_result_types,
             expected_error_type: None,
             host_registry,
@@ -197,7 +194,6 @@ impl ScopeContext {
             scope: self.scope.clone(),
             declarations: self.declarations.to_owned(),
             visible_declaration_ids: self.visible_declaration_ids.clone(),
-            start_import_aliases: self.start_import_aliases.clone(),
             expected_result_types: vec![],
             expected_error_type: self.expected_error_type.clone(),
             host_registry: self.host_registry.clone(),
@@ -225,7 +221,6 @@ impl ScopeContext {
             scope,
             declarations: parent.declarations.to_owned(),
             visible_declaration_ids: parent.visible_declaration_ids.clone(),
-            start_import_aliases: parent.start_import_aliases.clone(),
             expected_result_types: Vec::new(),
             expected_error_type: parent.expected_error_type.clone(),
             host_registry: parent.host_registry.clone(),
@@ -296,14 +291,6 @@ impl ScopeContext {
         self
     }
 
-    pub fn with_start_import_aliases(
-        mut self,
-        aliases: FxHashMap<StringId, InternedPath>,
-    ) -> ScopeContext {
-        self.start_import_aliases = aliases;
-        self
-    }
-
     pub fn with_style_directives(
         mut self,
         style_directives: &StyleDirectiveRegistry,
@@ -344,10 +331,6 @@ impl ScopeContext {
     ) -> ScopeContext {
         self.receiver_methods = receiver_methods;
         self
-    }
-
-    pub fn resolve_start_import(&self, name: &StringId) -> Option<&InternedPath> {
-        self.start_import_aliases.get(name)
     }
 
     pub(crate) fn lookup_receiver_method(

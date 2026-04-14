@@ -3,7 +3,7 @@
 //! Drives a single discovered module through the full frontend pipeline:
 //! tokenization → header parsing → dependency sort → AST → HIR → borrow checking.
 
-use crate::build_system::build::{InputFile, Module};
+use crate::build_system::build::{InputFile, Module, ResolvedConstFragment};
 use crate::compiler_frontend::analysis::borrow_checker::BorrowCheckReport;
 use crate::compiler_frontend::ast::ast::Ast;
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
@@ -80,6 +80,17 @@ impl FrontendModuleBuildContext<'_> {
                     &mut warnings,
                 )
             })?;
+
+            // Resolve const fragment StringIds to strings before AST is consumed by HIR.
+            let const_top_level_fragments = module_ast
+                .const_top_level_fragments
+                .iter()
+                .map(|fragment| ResolvedConstFragment {
+                    runtime_insertion_index: fragment.runtime_insertion_index,
+                    html: compiler.string_table.resolve(fragment.value).to_owned(),
+                })
+                .collect::<Vec<_>>();
+
             let hir_module = timed_frontend_stage("HIR generated in: ", || {
                 Self::lower_hir(&mut compiler, module_ast, &mut warnings)
             })?;
@@ -105,6 +116,7 @@ impl FrontendModuleBuildContext<'_> {
                 hir: hir_module,
                 borrow_analysis,
                 warnings,
+                const_top_level_fragments,
             })
         })();
         *self.string_table = compiler.string_table;
@@ -190,13 +202,13 @@ impl FrontendModuleBuildContext<'_> {
     ) -> Result<
         (
             Vec<crate::compiler_frontend::headers::parse_file_headers::Header>,
-            Vec<crate::compiler_frontend::headers::parse_file_headers::TopLevelTemplateItem>,
+            Vec<crate::compiler_frontend::headers::parse_file_headers::TopLevelConstFragment>,
         ),
         CompilerMessages,
     > {
         let Headers {
             headers,
-            top_level_template_items,
+            top_level_const_fragments,
         } = module_headers;
         let sorted_headers = compiler.sort_headers(headers).map_err(|errors| {
             CompilerMessages::from_errors_with_warnings(
@@ -206,7 +218,7 @@ impl FrontendModuleBuildContext<'_> {
             )
         })?;
 
-        Ok((sorted_headers, top_level_template_items))
+        Ok((sorted_headers, top_level_const_fragments))
     }
 
     fn build_ast(
@@ -214,15 +226,15 @@ impl FrontendModuleBuildContext<'_> {
         compiler: &mut CompilerFrontend,
         module_headers: (
             Vec<crate::compiler_frontend::headers::parse_file_headers::Header>,
-            Vec<crate::compiler_frontend::headers::parse_file_headers::TopLevelTemplateItem>,
+            Vec<crate::compiler_frontend::headers::parse_file_headers::TopLevelConstFragment>,
         ),
         entry_file_path: &Path,
         warnings: &mut Vec<CompilerWarning>,
     ) -> Result<Ast, CompilerMessages> {
-        let (sorted_modules, top_level_template_items) = module_headers;
+        let (sorted_modules, top_level_const_fragments) = module_headers;
         match compiler.headers_to_ast(
             sorted_modules,
-            top_level_template_items,
+            top_level_const_fragments,
             entry_file_path,
             self.build_profile,
         ) {

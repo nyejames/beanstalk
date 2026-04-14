@@ -13,16 +13,13 @@ use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::receiver_methods::free_function_receiver_method_call_error;
 use crate::compiler_frontend::ast::statements::choices::parse_choice_variant_value;
 use crate::compiler_frontend::ast::statements::declarations::create_reference;
-use crate::compiler_frontend::ast::statements::functions::{
-    FunctionReturn, FunctionSignature, ReturnSlot,
-};
 use crate::compiler_frontend::ast::templates::template::TemplateType;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
 use crate::compiler_frontend::traits::ContainsReferences;
-use crate::{return_compiler_error, return_rule_error};
+use crate::return_rule_error;
 
 pub(super) fn parse_identifier_or_call(
     token_stream: &mut FileTokens,
@@ -249,118 +246,6 @@ pub(super) fn parse_identifier_or_call(
                     reference_node,
                 )?;
                 return Ok(()); // Will have moved onto the next token already
-            }
-        }
-    }
-
-    if let Some(start_target) = context.resolve_start_import(&id) {
-        token_stream.advance();
-
-        match token_stream.current_token_kind() {
-            TokenKind::OpenParenthesis => {
-                let function_call_node = parse_function_call(
-                    token_stream,
-                    start_target,
-                    context,
-                    &FunctionSignature {
-                        parameters: vec![],
-                        returns: vec![ReturnSlot::success(FunctionReturn::Value(
-                            DataType::StringSlice,
-                        ))],
-                    },
-                    true,
-                    None,
-                    string_table,
-                )?;
-                let function_call_location = function_call_node.location.to_owned();
-
-                match function_call_node.kind {
-                    NodeKind::FunctionCall {
-                        name,
-                        args,
-                        result_types,
-                        location,
-                    } => {
-                        push_expression_node(
-                            token_stream,
-                            context,
-                            string_table,
-                            expression,
-                            AstNode {
-                                kind: NodeKind::Rvalue(Expression::function_call(
-                                    name,
-                                    normalize_call_argument_values(&args),
-                                    result_types,
-                                    location,
-                                )),
-                                location: function_call_location.to_owned(),
-                                scope: context.scope.clone(),
-                            },
-                        )?;
-                        return Ok(());
-                    }
-                    NodeKind::ResultHandledFunctionCall {
-                        name,
-                        args,
-                        result_types,
-                        handling,
-                        location,
-                    } => {
-                        push_expression_node(
-                            token_stream,
-                            context,
-                            string_table,
-                            expression,
-                            AstNode {
-                                kind: NodeKind::Rvalue(Expression::result_handled_function_call(
-                                    name,
-                                    normalize_call_argument_values(&args),
-                                    result_types,
-                                    handling,
-                                    location,
-                                )),
-                                location: function_call_location.to_owned(),
-                                scope: context.scope.clone(),
-                            },
-                        )?;
-                        return Ok(());
-                    }
-                    _ => {}
-                }
-
-                return_compiler_error!(
-                    "Expected a function call node for imported file start alias"
-                );
-            }
-
-            TokenKind::Dot => {
-                return_rule_error!(
-                    format!(
-                        "Imported file '{}' is callable only as '{}()'. File-struct member access is no longer supported.",
-                        string_table.resolve(id),
-                        string_table.resolve(id),
-                    ),
-                    token_stream.current_location(),
-                    {
-                        CompilationStage => "Expression Parsing",
-                        PrimarySuggestion => "Import exports directly with '@path/to/file/symbol' or '@path/to/file {a, b}'",
-                    }
-                );
-            }
-
-            _ => {
-                return_rule_error!(
-                    format!(
-                        "Imported file '{}' can only be used as a callable start import ('{}()').",
-                        string_table.resolve(id),
-                        string_table.resolve(id),
-                    ),
-                    token_stream.current_location(),
-                    {
-                        CompilationStage => "Expression Parsing",
-                        PrimarySuggestion => "Call the file start function with 'file()' or import specific exports directly",
-                    }
-                );
             }
         }
     }

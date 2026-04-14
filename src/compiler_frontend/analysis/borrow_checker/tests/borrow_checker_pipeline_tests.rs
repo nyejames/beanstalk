@@ -133,6 +133,7 @@ fn successful_borrow_report_can_be_stored_on_module() {
         hir,
         borrow_analysis,
         warnings: Vec::new(),
+        const_top_level_fragments: Vec::new(),
     };
 
     assert!(module.borrow_analysis.stats.functions_analyzed >= 1);

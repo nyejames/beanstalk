@@ -143,7 +143,7 @@ impl FrontendProject {
         &mut self,
     ) -> (
         Vec<crate::compiler_frontend::headers::parse_file_headers::Header>,
-        Vec<crate::compiler_frontend::headers::parse_file_headers::TopLevelTemplateItem>,
+        Vec<crate::compiler_frontend::headers::parse_file_headers::TopLevelConstFragment>,
     ) {
         let headers = self.headers();
         let sorted_headers = self
@@ -151,15 +151,15 @@ impl FrontendProject {
             .sort_headers(headers.headers)
             .expect("header sorting should succeed");
 
-        (sorted_headers, headers.top_level_template_items)
+        (sorted_headers, headers.top_level_const_fragments)
     }
 
     fn ast(&mut self) -> crate::compiler_frontend::ast::ast::Ast {
-        let (sorted_headers, top_level_template_items) = self.sorted_headers();
+        let (sorted_headers, top_level_const_fragments) = self.sorted_headers();
         self.frontend
             .headers_to_ast(
                 sorted_headers,
-                top_level_template_items,
+                top_level_const_fragments,
                 &self.entry_file,
                 FrontendBuildProfile::Dev,
             )
