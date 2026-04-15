@@ -13,6 +13,17 @@
 - `src/compiler_frontend/hir/` lowers AST into HIR
 - `src/compiler_frontend/analysis/borrow_checker/` validates borrow/exclusivity rules
 
+**Ownership contract**
+
+The frontend is intentionally eager about top-level structure.
+
+- Header parsing owns top-level declaration discovery and top-level declaration-shell parsing.
+- Dependency sorting owns ordering those parsed top-level headers by strict dependency edges.
+- AST consumes the already-shaped, already-sorted top-level headers directly.
+- AST resolves, validates, and lowers those headers.
+- AST owns executable body parsing and body-local declarations.
+- AST must not reparse top-level declaration shells that header parsing already produced.
+
 ## Overview
 Build systems create a `BackendBuilder` implementation and wrap it in a `ProjectBuilder` struct.
 The backend builder also exposes any project-specific frontend style directives it wants to
@@ -75,13 +86,14 @@ Project builders do **not**:
 Since compile speed is a goal of the compiler, complex optimisations are left to external tools for release builds only.
 
 **Entry Point Semantics**:
-- Each file has an **implicit start function** containing its top-level runtime code.
-- Header parsing represents each file's top-level runtime code as `HeaderKind::StartFunction`.
-- Imported files' implicit start functions are not callable. The build system decides how they should be called.
-- Exactly one file is chosen as the module entry file, its start function becomes the module entry start function.
-- Entry-file top-level **runtime** templates are evaluated inside that entry start function in source order.
-- Entry-file top-level **const** templates are folded separately and exposed to project builders as compile-time fragment metadata.
-- The entry start function returns the runtime fragment strings (`Vec<String>`) for the page in source order.
+- The module entry file has an implicit `start` function containing its top-level runtime code.
+- Non-entry files do not participate in entry execution and cannot contain top-level executable code.
+- Header parsing represents the entry file’s top-level runtime code as `HeaderKind::StartFunction`.
+- The implicit entry `start` header is not part of dependency sorting.
+- After top-level declaration headers are dependency-sorted, the entry `start` header is appended last and lowered by AST.
+- Entry-file top-level runtime templates are evaluated inside that entry `start` function in source order.
+- Entry-file top-level const templates are folded separately and exposed to project builders as compile-time fragment metadata.
+- The entry `start` function returns the runtime fragment strings (`Vec<String>`) for the page in source order.
 
 ### Entry-page fragment interface
 
@@ -123,9 +135,9 @@ The Beanstalk compiler frontend and build system processes modules through these
 
 0. **Project Structure** – Parses the config file and determines the boundaries of each module in the project
 1. **Tokenization** – Convert source text to tokens
-2. **Header Parsing** – Extract headers and identify the entry point. Separates function definitions, structs and constants from top-level code. Processes import statements so dependencies can be sorted after.
-3. **Dependency Sorting** – Order headers by import dependencies (including constant dependencies)
-4. **AST Construction** – Ordered header lowering, scoped name resolution, type checking, constant resolution/folding, and template preparation
+2. **Header Parsing** – Discover top-level declarations, parse their declaration shells, collect strict top-level dependency edges, and build the implicit entry `start` body separately from top-level declarations
+3. **Dependency Sorting** – Order parsed top-level declaration headers by strict dependency edges, detect cycles in the top-level graph, and append the implicit entry `start` header last
+4. **AST Construction** – Lower the already-shaped, already-sorted top-level headers, resolve and validate them, and parse executable bodies and body-local declarations. All type checking happens here.
 5. **HIR Generation** – Semantic lowering with explicit control flow
 6. **Borrow Validation** – An analysis pass to verify memory safety
 
@@ -137,7 +149,7 @@ Project builders then perform:
     - Other build systems: reuse the shared pipeline through HIR (and borrow checking) and apply custom codegen while keeping Beanstalk semantics identical across targets
 
 ### Stage 0: Project Structure (`src/build_system/create_project_modules.rs`)
-Determines the boundaries of each module in the project and the config for the project.
+Determines boundaries for each module in the project and the config for the project.
 
 **key Features**:
 - Provides a canonical opinionated project structure
@@ -168,39 +180,57 @@ Converts raw source code into structured tokens with location information.
 - Context switching for delimiter handling templates / strings (`[]` vs `""`)
 
 ### Stage 2: Header Parsing (`src/compiler_frontend/headers/parse_file_headers.rs`)
-Extracts top-level declaration headers and entry-file top-level fragment metadata before AST construction.
+Top-level declaration discovery and top-level declaration-shell parsing.
+Does not merely classify declarations, but parses the top-level shape of each declaration kind so later stages do not need to reconstruct it.
+Does not parse executable bodies beyond capturing their token streams for later AST lowering.
 
-- **Header Extraction**: Separates declarations from top-level runtime code
-- **Implicit Start Function**: Top-level runtime code that does not fit other header categories is collected into a `HeaderKind::StartFunction` header
-- **Entry Path Tracking**: Entry-file status is tracked separately and used in later stages
-- **Import Resolution**: Processes import declarations
-- **Dependency Analysis**: Builds import graph and detects circular dependencies
-- **Collect Constants**: Collect exported constants as declaration syntax plus dependency metadata
-- **Top-Level Declaration Ownership**: Header parsing is the authoritative stage for discovering module-wide top-level declarations
-- **Top-Level Const Fragment Metadata**: Entry-file top-level const templates are recorded as compile-time fragment headers plus builder-facing placement metadata
-- **Runtime Fragment Counting**: Entry-file top-level runtime templates remain in the start-function body, while header parsing tracks how many runtime fragments precede each const fragment so builders can later merge outputs correctly
+- **Top-Level Declaration Discovery**: Header parsing is the only stage that discovers module-wide top-level declarations.
+- **Declaration-Shell Parsing**: Function signatures, exported constant declaration shells, struct shells, and choice shells are parsed here.
+- **Strict Dependency Edge Collection**: Header parsing collects strict top-level dependency edges from declaration-shell type references.
+- **Implicit Entry Start Capture**: Entry-file top-level executable code is collected into a `HeaderKind::StartFunction` header for later AST lowering.
+- **Import Collection**: Imports needed by top-level declarations are collected here for top-level dependency analysis.
+- **Top-Level Const Fragments**: Entry-file top-level const templates are recorded as compile-time fragment headers plus builder-facing placement metadata.
+- **Runtime Fragment Counting**: Entry-file top-level runtime templates remain in the entry `start` body, while header parsing tracks how many runtime fragments precede each const fragment so builders can merge outputs correctly.
+
+Exported constants are parsed as top-level declaration shells in header parsing. Their declared type shape is header-owned, while AST later resolves and validates the initializer. Struct field shapes and choice variant shapes are parsed in the header stage so AST can resolve and validate them without reparsing their top-level declaration syntax.
 
 ### Stage 3: Dependency Sorting (`src/compiler_frontend/module_dependencies.rs`)
-Orders headers topologically so AST can lower the whole module in declaration order without rebuilding module-wide top-level symbol knowledge.
+Operates only on top-level declaration headers and only on strict dependency edges known from their parsed declaration shells.
+Allows the AST to lower the whole module in declaration order without rebuilding module-wide top-level symbol knowledge.
+Does not use executable body references or soft expression-derived edges.
 This enables full-module type checking while keeping top-level declaration ownership in the header stage.
 
-- Topological sort of import dependencies
-- Constant dependency ordering across files
-- Source-order stability for constants declared in the same file
-- Circular dependency detection
-- Missing dependency diagnostics
+- Topological sort of parsed top-level declaration headers
+- Strict dependency edges only
+- Cycle detection in the strict top-level declaration graph
+- Missing strict dependency diagnostics
+- Source-order stability where possible among otherwise-independent declarations
+- The implicit entry `start` header is not part of the dependency graph and is appended after sorting
 
-### Stage 4: AST Construction (`src/compiler_frontend/ast/module_ast/mod.rs`)
+### Stage 4: AST Construction (`src/compiler_frontend/ast/mod.rs`)
+Consumes the already-shaped, already-sorted top-level headers from the header and dependency stages.
+Resolves, validates and lowers those header. Does not reparse the header top-level declaration syntax.
 Transforms dependency-sorted headers into the typed AST and performs the compiler's main semantic frontend work.
 
-- **Ordered Header Lowering**: AST consumes the already-sorted top-level declaration stream produced by header parsing and dependency sorting. Top-level declarations are already known.
-- **Entry Point Handling**: The entry file path selects which start function becomes the module entry start function
-- **Constant Resolution Pass**: Constants are resolved in dependency order before general body lowering
-- **Constant Folding**: Immediate evaluation of compile-time expressions
-- **Local Scope Growth**: Function and start-function bodies register new local declarations incrementally as they are encountered in source order
+- **Header-Payload Lowering**: AST lowers the parsed top-level header payloads produced by header parsing rather than reconstructing top-level declaration shells from raw tokens.
+- **Top-Level Resolution**: AST resolves type and symbol references against the known sorted top-level symbol set.
+- **Final Validation**: AST performs final semantic and type validation once dependency order is known.
+- **Body Parsing**: Function bodies and the entry `start` body are parsed and lowered here.
+- **Local Scope Growth**: Executable bodies register local declarations incrementally as they are encountered in source order.
 - **Namespace Resolution**: Variables store their full path including parent scope information, and uniqueness is enforced by scope rules rather than post-hoc recollection
 - **Type Checking**: Early type resolution and validation
 - **Template Preparation**: AST performs template composition, compile-time folding, and runtime render-plan preparation before HIR
+
+**Top-level vs body parsing**
+
+Top-level declaration-shell parsing and executable body parsing are intentionally separated.
+
+- Top-level declaration-shell parsing belongs to header parsing.
+- Executable body parsing belongs to AST construction.
+- Body-local declarations are parsed in source order during AST lowering of executable code.
+- Dependency sorting exists only to order top-level declarations before AST begins; it does not apply inside executable bodies.
+
+AST resolves and validates parsed struct and choice shells; it does not rediscover their top-level shape.
 
 **Type checking and coercion**
 
@@ -216,7 +246,10 @@ Generic expression evaluation determines the natural type of an expression and s
 - templates and template wrappers are accepted where string slices are expected because they lower to the same HIR/string representation
 - builtin casts like Float(x) / Int(x) remain explicit frontend-owned syntax
 
-**Constant rules enforced by AST**:
+**Constants**
+
+The AST consumes the parsed exported-constant shell directly and type-checks the initializer without rebuilding the declaration shell from raw top-level syntax.
+
 - Constant declarations share declaration syntax with normal variables
 - Constants cannot be mutable
 - Constants must be initialized
@@ -224,6 +257,7 @@ Generic expression evaluation determines the natural type of an expression and s
 - Constants must be fully foldable at compile time
 - Top-level const templates are entry-file only and must fully fold
 - Slots are supported in const templates if they resolve to constant values
+
 
 **Compile-Time Folding**: The AST stage performs aggressive constant folding in `src/compiler_frontend/optimizers/constant_folding.rs`:
 - Pure literal expressions (e.g., `2 + 3`) are evaluated immediately
@@ -266,11 +300,10 @@ Generic expression evaluation determines the natural type of an expression and s
 - Builtin error types (`Error`, `ErrorKind`, `ErrorLocation`, `StackFrame`) are registered from `src/compiler_frontend/builtins/error_type.rs` and lowered as canonical frontend-owned types
 
 ## Stage 5: HIR Generation (`src/compiler_frontend/hir/`)
-HIR (High-Level IR) is Beanstalk’s semantic lowering stage.
-It converts the fully typed AST into the first backend-facing semantic IR.
-HIR makes control flow, locals, regions, and call structure explicit while still allowing nested expression trees for normal value construction and operators.
-HIR assumes AST has already completed template folding, composition, and runtime render-plan preparation.
-HIR does not carry compile-time top-level page fragment metadata and does not reconstruct missing template plans.
+The Semantic lowering stage, converting the fully typed AST into the first backend-facing semantic IR.
+Makes control flow, locals, regions, and call structure explicit while still allowing nested expression trees for normal value construction and operators.
+Assumes AST has already completed template folding, composition, and runtime render-plan preparation.
+Does not carry compile-time top-level page fragment metadata and does not reconstruct missing template plans.
 
 HIR is the first stage where resource lifetime semantics are made explicit, but ownership is not fully resolved yet.
 
