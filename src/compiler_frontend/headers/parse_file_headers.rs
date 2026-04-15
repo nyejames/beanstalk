@@ -46,7 +46,7 @@ use crate::compiler_frontend::token_scan::{NestingDepth, consume_balanced_templa
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
 use crate::compiler_frontend::type_syntax::for_each_named_type_in_data_type;
 use crate::projects::settings::{
-    MINIMUM_LIKELY_DECLARATIONS, IMPLICIT_START_FUNC_NAME, TOKEN_TO_DECLARATION_RATIO,
+    IMPLICIT_START_FUNC_NAME, MINIMUM_LIKELY_DECLARATIONS, TOKEN_TO_DECLARATION_RATIO,
     TOKEN_TO_HEADER_RATIO, TOP_LEVEL_CONST_TEMPLATE_NAME,
 };
 use crate::{header_log, return_rule_error};
@@ -372,8 +372,9 @@ fn build_module_symbols(
                 );
             }
             HeaderKind::StartFunction => {
-                let start_name =
-                    header.source_file.join_str(IMPLICIT_START_FUNC_NAME, string_table);
+                let start_name = header
+                    .source_file
+                    .join_str(IMPLICIT_START_FUNC_NAME, string_table);
                 register_declared_symbol(
                     &mut module_symbols,
                     &start_name,

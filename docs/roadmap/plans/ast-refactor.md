@@ -1,176 +1,5 @@
 ### REVERT MISTAKEN AST DRIFT
 
-The regression began when AST was changed from:
-- a consumer of header-owned top-level declaration knowledge
-
-into:
-- a pass-driven stage that rebuilds module-wide declaration/index state from sorted headers before lowering bodies.
-
-## Correct architecture to restore
-
-Pipeline:
-
-1. Tokenize files
-2. Parse file headers
-3. Dependency sort headers
-4. Lower sorted headers directly into AST
-   - top-level declarations are already known from headers
-   - function/local declarations are added in order as encountered during body parsing
-
-Principles:
-
-- Header parsing owns top-level declaration discovery
-- Dependency sorting owns inter-header order
-- AST owns:
-  - type resolution
-  - constant folding
-  - body lowering
-  - template lowering only where genuinely required by the AST→HIR boundary
-- AST does **not** rebuild the module declaration universe from headers
-- Function/local declarations remain incremental and ordered
-
-
-# Part 4 - Fix failing tests, migrate remaining brittle fixtures, prune redundant coverage, and close the Alpha test matrix gaps
-
-Now that the integration runner supports strict goldens, normalized goldens, rendered-output assertions, and targeted artifact assertions, finish migrating brittle fixtures to the right assertion surface, remove redundant cases that no longer add value, and fill the most visible Alpha-surface coverage gaps.
-
-This will also be part of fixing the current failing tests and making sure they are correctly refactored to be less brittle and more complete with the new AST architecture.
-
-The ast refactor has broken most of the integration tests and 9 unit tests. This will require work to investigate why the tests are failing and whether the test should be updated, or the code fixed to pass the test.
-
-**Why this PR exists**
-
-The integration runner is already capable of lower-noise assertion modes. The remaining work is fixture migration and coverage curation: some fixtures are still too brittle for what they actually test, some gaps remain visible in the language surface matrix, and some older coverage is now redundant or weaker than newer canonical cases.
-
-Focus areas:
-
-* Existing test failure investigation / fixing
-* Rewrite tests for the final architecture
-* manifest-driven import visibility
-* layered local scope growth
-* no AST-side declaration recollection assumptions
-* entry `start()` as the runtime fragment producer
-* builder merge behavior for const fragments + runtime fragments
-* HTML Wasm export plan behavior after direct entry `start()` export
-
-**Goals**
-Delete or rewrite tests that are only validating the old recollection model.
-Fix / update remaining tests so they are both less brittle and pass after the current refactor.
-
-* Migrate remaining brittle fixtures to normalized, rendered-output, or targeted artifact assertions where appropriate.
-* Keep strict byte-for-byte goldens only where exact output shape is actually the contract.
-* Fill the clearest remaining Alpha-surface gaps.
-* Remove or rewrite redundant tests that duplicate stronger canonical coverage.
-* Keep the matrix and manifest aligned with the real supported surface.
-
-**Non-goals**
-
-* No weakening of semantic checks just to reduce failures.
-* No mass deletion of tests without replacing lost confidence.
-
-**Implementation guidance**
-
-#### 1. Audit all remaining brittle fixtures by assertion intent
-
-For each currently noisy fixture, decide what it is really testing:
-
-* **Strict golden** when exact HTML/JS/Wasm shape is the contract
-* **Normalized golden** when emitted code structure matters but counter-name drift is noise
-* **Rendered output** when runtime behavior is the contract
-* **Artifact assertions** when only a few targeted output properties matter
-
-Document the migration reason in the PR notes so future fixture authors can follow the pattern.
-
-#### 2. Migrate the remaining runtime-fragment-heavy brittle cases
-
-Prioritize fixtures where full generated-output snapshots are still too noisy compared with the semantic intent.
-
-Common candidates:
-
-* runtime fragment ordering / interleave behavior
-* result propagation/fallback through generated output
-* runtime collection read/write flows
-* call/lowering paths where helper/counter drift is noisy
-* short-circuit/runtime behavior cases where rendered output is the real contract
-
-#### 3. Fill the explicit matrix gaps
-
-Add or strengthen canonical cases for the most visible remaining gaps:
-
-* choice / match backend-runtime coverage
-* char failure diagnostics
-* HTML-Wasm collection runtime coverage
-* cross-platform newline / rendering drift-sensitive surfaces
-* any remaining receiver-method runtime-sensitive cases outside plain JS coverage
-
-Where possible, prefer one strong canonical fixture over several narrow redundant fixtures.
-
-#### 4. Prune or rewrite redundant coverage
-
-Audit tests that are now redundant because newer canonical cases cover the same behavior more clearly.
-
-Candidates to prune or rewrite:
-
-* older fixtures that assert emitted-shape noise rather than semantics
-* overlapping frontend-only tests that add little beyond stronger integration cases
-* repeated narrow cases that can be merged into one clearer canonical scenario
-
-Do not delete coverage blindly. Replace weak/redundant tests with stronger intent-aligned tests.
-
-#### 5. Harden the integration harness itself where needed
-
-Use this PR to remove remaining obvious harness rough edges that affect trust in the suite.
-
-In particular:
-
-* remove any remaining `todo!`/panic-shaped paths in integration assertion code that can still be exercised during normal test workflows
-* add small runner-level tests around normalization / rendered-output behavior where confidence is still thin
-* keep harness failures clearly distinct from semantic mismatches
-
-#### 6. Keep matrix and manifest ownership disciplined
-
-For every test migration or new canonical fixture:
-
-* update `docs/roadmap/language-surface-integration-matrix.md`
-* update `tests/cases/manifest.toml`
-* remove vague “temporary” coverage where the new canonical case supersedes it
-
-The goal is that the matrix describes the real supported Alpha surface and the canonical fixtures that prove it.
-
-**Suggested migration heuristic**
-
-Use this decision rule consistently:
-
-* exact emitted shape matters → strict golden
-* emitted structure matters but generated counters do not → normalized golden
-* runtime behavior matters → rendered output
-* only a few output facts matter → artifact assertions
-
-**Checklist**
-
-* Audit remaining brittle fixtures by semantic intent.
-* Migrate noisy full-file goldens to normalized/rendered/artifact modes where appropriate.
-* Add missing canonical cases for the visible Alpha matrix gaps.
-* Rewrite or remove redundant weaker tests that no longer add confidence.
-* Remove remaining avoidable `todo!`/panic-shaped harness paths in active test code.
-* Update the language surface matrix and test manifest alongside fixture changes.
-* Add small runner-level regression tests where the assertion infrastructure itself needs confidence.
-
-**Done when**
-
-* Remaining broad golden failures mostly indicate real semantic regressions, not generator noise.
-* The visible Alpha matrix gaps are materially reduced.
-* The suite has fewer redundant fixtures and stronger canonical cases.
-* Harness failures are clearly infrastructure failures, not mixed with semantic mismatches.
-* The matrix and manifest accurately reflect the current supported surface.
-
-**Implementation notes for the later execution plan**
-
-* Treat this as a curation PR, not a random grab-bag.
-* Migrate fixtures in small themed batches so failures stay interpretable.
-* Prefer behavior-first assertions for runtime semantics.
-* Keep strict goldens only where exact emitted shape is intentionally contractual.
-
 # Part 5 — finalize, audit, document, and clean tests
 
 ## Overview
@@ -179,7 +8,8 @@ The goal is to finish the refactor cleanly. This phase makes the new AST pipelin
 
 Desired design:
 
-* the AST pipeline is easy to follow in `orchestrate.rs`
+* Move the current orchestration code in `orchestrate.rs` to `ast/mod.rs`
+* the AST pipeline is easy to follow in `ast/mod.rs`
 * comments explain what each stage is doing and why it exists in the overall compiler pipeline
 * touched code follows the style guide and compiler design docs
 * tests reflect the new ownership model, not the old recollection model
@@ -191,14 +21,17 @@ Done so far:
 
 ## Work to do
 
-### 1. Simplify `orchestrate.rs` to match the final architecture 
+### 0. Move `orchestrate.rs` code to `ast/mod.rs`
+
+### 1. Simplify `mod.rs` to match the final architecture 
 
 Files:
 
 * `src/compiler_frontend/ast/module_ast/orchestrate.rs`
+* `src/compiler_frontend/ast/mod.rs`
 * `src/compiler_frontend/mod.rs`
 
-After Parts 1–3, rewrite `orchestrate.rs` so the pass sequence reflects the real pipeline:
+After Parts 1–3, rewrite `ast/mod.rs` so the pass sequence reflects the real pipeline:
 
 1. consume shared top-level symbol manifest
 2. resolve import visibility and type/signature tables
@@ -229,7 +62,7 @@ Do a deliberate alignment pass:
 
 Files:
 
-* `src/compiler_frontend/ast/module_ast/orchestrate.rs`
+* `src/compiler_frontend/ast/mod.rs`
 * `src/compiler_frontend/ast/module_ast/build_state.rs`
 * `src/compiler_frontend/ast/module_ast/scope_context.rs`
 * `src/compiler_frontend/ast/import_bindings.rs`

@@ -31,9 +31,12 @@ impl<'a> AstBuildState<'a> {
         .map_err(|error| self.error_messages(error, string_table))?;
 
         for binding in bindings.values_mut() {
-            binding
-                .visible_symbol_paths
-                .extend(self.module_symbols.builtin_visible_symbol_paths.iter().cloned());
+            binding.visible_symbol_paths.extend(
+                self.module_symbols
+                    .builtin_visible_symbol_paths
+                    .iter()
+                    .cloned(),
+            );
         }
 
         Ok(bindings)

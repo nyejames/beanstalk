@@ -229,10 +229,7 @@ impl CompilerFrontend {
     /// type-checking and signature resolution in AST construction proceed in a deterministic order.
     /// The header-owned `ModuleSymbols` is also finalized here: declarations are built from the
     /// sorted headers and staged builtin declarations are appended.
-    pub fn sort_headers(
-        &mut self,
-        headers: Headers,
-    ) -> Result<SortedHeaders, Vec<CompilerError>> {
+    pub fn sort_headers(&mut self, headers: Headers) -> Result<SortedHeaders, Vec<CompilerError>> {
         resolve_module_dependencies(headers, &mut self.string_table)
     }
 

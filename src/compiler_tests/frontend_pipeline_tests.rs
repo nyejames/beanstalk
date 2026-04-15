@@ -375,9 +375,10 @@ fn ast_stage_errors_preserve_string_table_context() {
     );
 
     let sorted = project.sorted_headers();
-    let Err(messages) = project
-        .frontend
-        .headers_to_ast(sorted, &project.entry_file, FrontendBuildProfile::Dev)
+    let Err(messages) =
+        project
+            .frontend
+            .headers_to_ast(sorted, &project.entry_file, FrontendBuildProfile::Dev)
     else {
         panic!("const host calls should fail during AST construction");
     };

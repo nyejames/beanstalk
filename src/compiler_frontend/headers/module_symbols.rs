@@ -147,8 +147,9 @@ impl ModuleSymbols {
                     //       which is the Beanstalk frontend type for Vec<String>.
                     // WHY: must match the signature emitted by pass_emit_nodes for the same
                     //      implicit start function so call-site type checking succeeds.
-                    let start_name =
-                        header.source_file.join_str(IMPLICIT_START_FUNC_NAME, string_table);
+                    let start_name = header
+                        .source_file
+                        .join_str(IMPLICIT_START_FUNC_NAME, string_table);
                     self.declarations.push(Declaration {
                         id: start_name,
                         value: Expression::new(
