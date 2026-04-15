@@ -13,6 +13,7 @@ pub(crate) mod optimizers {
 }
 
 pub(crate) mod module_dependencies;
+pub(crate) mod symbol_manifest;
 
 pub(crate) mod basic_utility_functions;
 pub(crate) mod builtins;
@@ -66,6 +67,7 @@ use crate::compiler_frontend::paths::path_format::{OutputPathStyle, PathStringFo
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
+use crate::compiler_frontend::symbol_manifest::{SymbolManifest, build_symbol_manifest};
 use crate::compiler_frontend::tokenizer::lexer::tokenize;
 use crate::compiler_frontend::tokenizer::newline_handling::NewlineMode;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenizeMode};
@@ -229,15 +231,29 @@ impl CompilerFrontend {
         resolve_module_dependencies(headers, &mut self.string_table)
     }
 
+    /// ---------------------------
+    /// SYMBOL MANIFEST
+    /// ---------------------------
+    /// Build the module-wide symbol manifest from dependency-sorted headers.
+    /// Must be called after `sort_headers` and before `headers_to_ast`.
+    /// WHY: declaration discovery is owned by the header/dependency stages; the manifest
+    /// packages that knowledge so AST can consume it without re-iterating headers.
+    pub fn build_symbol_manifest(
+        &mut self,
+        sorted_headers: &[Header],
+    ) -> Result<SymbolManifest, CompilerMessages> {
+        build_symbol_manifest(sorted_headers, &mut self.string_table)
+    }
+
     /// -----------------------------
     /// AST CREATION
     /// -----------------------------
-    /// This assumes that the `Vec<FileTokens>` contains all dependencies for each file.
-    /// The headers of each file will be parsed first, then each file will be combined into one module.
-    /// The AST also provides a list of exports from the module.
+    /// Consumes sorted headers and a pre-built symbol manifest to construct the module AST.
+    /// Call `build_symbol_manifest` first to obtain the manifest.
     pub fn headers_to_ast(
         &mut self,
         headers: Vec<Header>,
+        manifest: SymbolManifest,
         top_level_const_fragments: Vec<TopLevelConstFragment>,
         entry_file_path: &Path,
         build_profile: FrontendBuildProfile,
@@ -253,6 +269,7 @@ impl CompilerFrontend {
         Ast::new(
             headers,
             top_level_const_fragments,
+            manifest,
             AstBuildContext {
                 host_registry: &self.host_function_registry,
                 style_directives: &self.style_directives,

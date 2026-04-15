@@ -7,17 +7,15 @@
 //!
 //! ## Pass sequence (see each sub-module for details)
 //!
-//! 1. `pass_declarations` — register all symbols module-wide
-//! 2. `pass_import_bindings` — build per-file visibility gates
-//! 3. `pass_type_resolution` — resolve constants and struct field types
-//! 4. `pass_function_signatures` — resolve function signatures; build receiver catalog
-//! 5. `pass_emit_nodes` — lower function/template bodies into AST nodes
-//! 6. `orchestrate` — normalize templates; assemble final `Ast`
+//! 1. `pass_import_bindings` — build per-file visibility gates
+//! 2. `pass_type_resolution` — resolve constants and struct field types
+//! 3. `pass_function_signatures` — resolve function signatures; build receiver catalog
+//! 4. `pass_emit_nodes` — lower function/template bodies into AST nodes
+//! 5. `orchestrate` — normalize templates; assemble final `Ast`
 
 mod build_state;
 mod finalization;
 mod orchestrate;
-mod pass_declarations;
 mod pass_emit_nodes;
 mod pass_function_signatures;
 mod pass_import_bindings;
@@ -40,7 +38,7 @@ use crate::compiler_frontend::string_interning::StringTable;
 /// Falls back to the logical source-file path when no OS path is recorded.
 /// WHY: const-template scopes use synthetic paths; the canonical path is needed for
 /// project-path-resolver lookups and rendered-path-usage tracking.
-pub(super) fn canonical_source_file_for_header(
+pub(crate) fn canonical_source_file_for_header(
     header: &Header,
     string_table: &mut StringTable,
 ) -> crate::compiler_frontend::interned_path::InternedPath {

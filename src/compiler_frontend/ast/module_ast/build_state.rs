@@ -12,6 +12,7 @@ use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringId;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
+use crate::compiler_frontend::symbol_manifest::SymbolManifest;
 use crate::projects::settings;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::cell::RefCell;
@@ -66,6 +67,7 @@ impl<'a> AstBuildState<'a> {
         project_path_resolver: &'a Option<ProjectPathResolver>,
         path_format_config: &'a PathStringFormatConfig,
         header_count: usize,
+        manifest: SymbolManifest,
     ) -> Self {
         Self {
             host_registry,
@@ -75,20 +77,20 @@ impl<'a> AstBuildState<'a> {
             path_format_config,
             ast: Vec::with_capacity(header_count * settings::TOKEN_TO_NODE_RATIO),
             warnings: Vec::new(),
-            declarations: Vec::new(),
+            declarations: manifest.declarations,
             module_constants: Vec::new(),
             const_templates_by_path: FxHashMap::default(),
             rendered_path_usages: Rc::new(RefCell::new(Vec::new())),
-            importable_symbol_exported: FxHashMap::default(),
-            file_imports_by_source: FxHashMap::default(),
-            declared_paths_by_file: FxHashMap::default(),
-            declared_names_by_file: FxHashMap::default(),
-            module_file_paths: FxHashSet::default(),
-            canonical_source_by_symbol_path: FxHashMap::default(),
-            builtin_visible_symbol_paths: FxHashSet::default(),
-            builtin_struct_ast_nodes: Vec::new(),
-            resolved_struct_fields_by_path: FxHashMap::default(),
-            struct_source_by_path: FxHashMap::default(),
+            importable_symbol_exported: manifest.importable_symbol_exported,
+            file_imports_by_source: manifest.file_imports_by_source,
+            declared_paths_by_file: manifest.declared_paths_by_file,
+            declared_names_by_file: manifest.declared_names_by_file,
+            module_file_paths: manifest.module_file_paths,
+            canonical_source_by_symbol_path: manifest.canonical_source_by_symbol_path,
+            builtin_visible_symbol_paths: manifest.builtin_visible_symbol_paths,
+            builtin_struct_ast_nodes: manifest.builtin_struct_ast_nodes,
+            resolved_struct_fields_by_path: manifest.resolved_struct_fields_by_path,
+            struct_source_by_path: manifest.struct_source_by_path,
             resolved_function_signatures_by_path: FxHashMap::default(),
         }
     }
@@ -101,30 +103,4 @@ impl<'a> AstBuildState<'a> {
         CompilerMessages::from_error_with_warnings(error, self.warnings.clone(), string_table)
     }
 
-    /// Registers a symbol into the module-wide declared-path and declared-name tables.
-    /// When `exported` is `Some`, also records the symbol's export visibility for import gates.
-    /// WHY: this pattern was repeated for every importable header variant (Function, Struct,
-    /// Constant, StartFunction). Centralising it prevents a missed insert from silently
-    /// breaking visibility.
-    pub(super) fn register_declared_symbol(
-        &mut self,
-        symbol_path: &InternedPath,
-        source_file: &InternedPath,
-        exported: Option<bool>,
-    ) {
-        if let Some(is_exported) = exported {
-            self.importable_symbol_exported
-                .insert(symbol_path.to_owned(), is_exported);
-        }
-        self.declared_paths_by_file
-            .entry(source_file.to_owned())
-            .or_default()
-            .insert(symbol_path.to_owned());
-        if let Some(name) = symbol_path.name() {
-            self.declared_names_by_file
-                .entry(source_file.to_owned())
-                .or_default()
-                .insert(name);
-        }
-    }
 }

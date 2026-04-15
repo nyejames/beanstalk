@@ -236,8 +236,12 @@ impl FrontendModuleBuildContext<'_> {
         warnings: &mut Vec<CompilerWarning>,
     ) -> Result<Ast, CompilerMessages> {
         let (sorted_modules, top_level_const_fragments) = module_headers;
+        let manifest = compiler
+            .build_symbol_manifest(&sorted_modules)
+            .map_err(|messages| merge_stage_messages(messages, warnings, &compiler.string_table))?;
         match compiler.headers_to_ast(
             sorted_modules,
+            manifest,
             top_level_const_fragments,
             entry_file_path,
             self.build_profile,

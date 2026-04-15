@@ -156,9 +156,14 @@ impl FrontendProject {
 
     fn ast(&mut self) -> crate::compiler_frontend::ast::ast::Ast {
         let (sorted_headers, top_level_const_fragments) = self.sorted_headers();
+        let manifest = self
+            .frontend
+            .build_symbol_manifest(&sorted_headers)
+            .expect("manifest build should succeed");
         self.frontend
             .headers_to_ast(
                 sorted_headers,
+                manifest,
                 top_level_const_fragments,
                 &self.entry_file,
                 FrontendBuildProfile::Dev,
@@ -384,8 +389,13 @@ fn ast_stage_errors_preserve_string_table_context() {
     );
 
     let (sorted_headers, top_level_template_items) = project.sorted_headers();
+    let manifest = project
+        .frontend
+        .build_symbol_manifest(&sorted_headers)
+        .expect("manifest build should succeed");
     let Err(messages) = project.frontend.headers_to_ast(
         sorted_headers,
+        manifest,
         top_level_template_items,
         &project.entry_file,
         FrontendBuildProfile::Dev,

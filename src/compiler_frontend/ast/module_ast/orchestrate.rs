@@ -1,8 +1,8 @@
 //! AST construction orchestration and entry point.
 //!
-//! WHAT: Orchestrates all AST construction passes in sequence, from symbol registration
-//! through finalization, then assembles the final `Ast` output. This is the entry point
-//! for building a complete typed AST from sorted headers.
+//! WHAT: Orchestrates all AST construction passes in sequence, consuming a pre-built symbol
+//! manifest through finalization, then assembles the final `Ast` output. This is the entry
+//! point for building a complete typed AST from sorted headers.
 //!
 //! WHY: Centralizes the pass sequence so the full compilation pipeline is readable in
 //! one place without implementation details. Normalization logic is extracted into the
@@ -10,13 +10,12 @@
 //!
 //! ## Pass Sequence
 //!
-//! 1. **collect_declarations** — Register all symbols module-wide
-//! 2. **resolve_import_bindings** — Build per-file visibility gates
-//! 3. **resolve_types** — Resolve constants and struct field types
-//! 4. **resolve_function_signatures** — Resolve function signatures
-//! 5. **build_receiver_catalog** — Build receiver method catalog
-//! 6. **emit_ast_nodes** — Lower function/template bodies
-//! 7. **finalize** — Normalize templates and assemble output
+//! 1. **resolve_import_bindings** — Build per-file visibility gates
+//! 2. **resolve_types** — Resolve constants and struct field types
+//! 3. **resolve_function_signatures** — Resolve function signatures
+//! 4. **build_receiver_catalog** — Build receiver method catalog
+//! 5. **emit_ast_nodes** — Lower function/template bodies
+//! 6. **finalize** — Normalize templates and assemble output
 
 use super::build_state::AstBuildState;
 use crate::compiler_frontend::FrontendBuildProfile;
@@ -36,6 +35,7 @@ use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::paths::rendered_path_usage::RenderedPathUsage;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
+use crate::compiler_frontend::symbol_manifest::SymbolManifest;
 
 /// Unified AST output for all source files in one compilation unit.
 pub struct Ast {
@@ -131,26 +131,27 @@ impl<'a> AstBuildState<'a> {
 }
 
 impl Ast {
-    /// Constructs a complete typed AST from sorted headers.
+    /// Constructs a complete typed AST from sorted headers and a pre-built symbol manifest.
     ///
-    /// WHAT: Orchestrates all AST construction passes in sequence, from symbol
-    /// registration through finalization, then assembles the final `Ast` output.
+    /// WHAT: Orchestrates all AST construction passes in sequence, consuming the manifest
+    /// through finalization, then assembles the final `Ast` output.
     ///
     /// WHY: Centralizes the pass sequence so the full compilation pipeline is
-    /// readable in one place without implementation details.
+    /// readable in one place without implementation details. Symbol discovery is
+    /// owned by the header/dependency stages and passed in via `manifest`.
     ///
     /// ## Pass Sequence
     ///
-    /// 1. collect_declarations      — Register all symbols module-wide
-    /// 2. resolve_import_bindings   — Build per-file visibility gates
-    /// 3. resolve_types             — Resolve constants and struct field types
-    /// 4. resolve_function_signatures — Resolve function signatures
-    /// 5. build_receiver_catalog    — Build receiver method catalog
-    /// 6. emit_ast_nodes            — Lower function/template bodies
-    /// 7. finalize                  — Normalize templates and assemble output
+    /// 1. resolve_import_bindings   — Build per-file visibility gates
+    /// 2. resolve_types             — Resolve constants and struct field types
+    /// 3. resolve_function_signatures — Resolve function signatures
+    /// 4. build_receiver_catalog    — Build receiver method catalog
+    /// 5. emit_ast_nodes            — Lower function/template bodies
+    /// 6. finalize                  — Normalize templates and assemble output
     pub fn new(
         sorted_headers: Vec<Header>,
         top_level_const_fragments: Vec<TopLevelConstFragment>,
+        manifest: SymbolManifest,
         context: AstBuildContext<'_>,
     ) -> Result<Ast, CompilerMessages> {
         let AstBuildContext {
@@ -170,9 +171,8 @@ impl Ast {
             &project_path_resolver,
             &path_format_config,
             sorted_headers.len(),
+            manifest,
         );
-
-        state.collect_declarations(&sorted_headers, string_table)?;
 
         let file_import_bindings = state.resolve_import_bindings(string_table)?;
 

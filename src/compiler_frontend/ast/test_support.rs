@@ -19,6 +19,7 @@ use crate::compiler_frontend::module_dependencies::resolve_module_dependencies;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
+use crate::compiler_frontend::symbol_manifest::build_symbol_manifest;
 use crate::compiler_frontend::test_support::test_project_path_resolver;
 use crate::compiler_frontend::tokenizer::lexer::tokenize;
 use crate::compiler_frontend::tokenizer::newline_handling::NewlineMode;
@@ -58,10 +59,14 @@ fn parse_single_file_ast_result(source: &str) -> Result<(Ast, StringTable), Comp
     let sorted_headers = resolve_module_dependencies(headers.headers, &mut string_table)
         .map_err(|mut errors| errors.remove(0))?;
 
+    let manifest = build_symbol_manifest(&sorted_headers, &mut string_table)
+        .map_err(|mut messages| messages.errors.remove(0))?;
+
     let entry_path = InternedPath::from_single_str("#page.bst", &mut string_table);
     let ast = Ast::new(
         sorted_headers,
         headers.top_level_const_fragments,
+        manifest,
         AstBuildContext {
             host_registry: &host_registry,
             style_directives: &style_directives,
