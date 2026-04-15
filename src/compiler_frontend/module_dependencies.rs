@@ -1,14 +1,35 @@
 //! Stage 3 dependency ordering for parsed Beanstalk headers.
 //!
-//! This pass topologically sorts header definitions after header parsing so AST construction sees
+//! WHAT: topologically sorts header definitions after header parsing so AST construction sees
 //! import, constant, and soft struct-default dependencies in a deterministic order.
+//!
+//! After sorting, the header-owned `ModuleSymbols` package is finalized: user declarations are
+//! built from the sorted headers and appended with the staged builtin declarations, giving AST a
+//! complete, pre-sorted symbol table without any separate manifest-building step.
 
 use crate::compiler_frontend::compiler_errors::{CompilerError, SourceLocation};
-use crate::compiler_frontend::headers::parse_file_headers::{Header, HeaderKind};
+use crate::compiler_frontend::headers::module_symbols::ModuleSymbols;
+use crate::compiler_frontend::headers::parse_file_headers::{
+    Header, HeaderKind, Headers, TopLevelConstFragment,
+};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::{header_log, return_rule_error};
 use std::collections::{HashMap, HashSet};
+
+/// Dependency-sorted module headers with a finalized symbol package.
+///
+/// WHAT: the output of `resolve_module_dependencies` — sorted headers and a `ModuleSymbols`
+/// whose `declarations` Vec is in dependency order and includes builtin declarations.
+/// WHY: all downstream stages (AST construction, build orchestration) consume this single bundle
+/// without re-sorting or re-packaging the top-level symbol data.
+#[derive(Debug)]
+pub(crate) struct SortedHeaders {
+    pub(crate) headers: Vec<Header>,
+    pub(crate) top_level_const_fragments: Vec<TopLevelConstFragment>,
+    pub(crate) entry_runtime_fragment_count: usize,
+    pub(crate) module_symbols: ModuleSymbols,
+}
 
 /// Tracks which modules are temporarily marked (in the current DFS stack)
 /// and which have been permanently visited.
@@ -26,12 +47,25 @@ impl DependencyTracker {
     }
 }
 
-/// Given a list of, possibly errored, `TokenContext`
-/// builds a graph of successful ones and topologically sorts them.
+/// Topologically sort headers and finalize the header-owned module symbol package.
+///
+/// WHAT: sorts headers by their dependency edges (imports, struct defaults, constant symbols),
+/// then builds the `declarations` Vec in sorted order and appends builtin declarations.
+///
+/// WHY: declarations must follow topological header order so AST passes see dependencies before
+/// dependents. All order-independent symbol maps were already built during `parse_headers`; only
+/// the `declarations` Vec requires the sorted header sequence.
 pub fn resolve_module_dependencies(
-    headers: Vec<Header>,
+    parsed: Headers,
     string_table: &mut StringTable,
-) -> Result<Vec<Header>, Vec<CompilerError>> {
+) -> Result<SortedHeaders, Vec<CompilerError>> {
+    let Headers {
+        headers,
+        top_level_const_fragments,
+        entry_runtime_fragment_count,
+        mut module_symbols,
+    } = parsed;
+
     let mut graph: HashMap<InternedPath, Header> = HashMap::with_capacity(headers.len());
     let mut errors: Vec<CompilerError> = Vec::with_capacity(headers.len());
     let mut ordered_paths: Vec<InternedPath> = Vec::with_capacity(headers.len());
@@ -73,10 +107,19 @@ pub fn resolve_module_dependencies(
     }
 
     if !errors.is_empty() {
-        Err(errors)
-    } else {
-        Ok(sorted)
+        return Err(errors);
     }
+
+    // Build sorted declarations from the topologically ordered headers and append builtins.
+    // WHY: declarations must be in sorted order so AST passes see dependencies before dependents.
+    module_symbols.build_sorted_declarations(&sorted, string_table);
+
+    Ok(SortedHeaders {
+        headers: sorted,
+        top_level_const_fragments,
+        entry_runtime_fragment_count,
+        module_symbols,
+    })
 }
 
 /// DFS visit for one module node, pushing clones into `sorted`.

@@ -1,9 +1,12 @@
 //! File-header parsing for the frontend pre-AST stage.
 //!
 //! WHAT: splits tokenized source files into function/struct/choice/constant/start-function headers
-//! plus const-fragment placement metadata for the entry file.
+//! plus const-fragment placement metadata for the entry file. Also collects the header-owned
+//! `ModuleSymbols` package: all order-independent declaration metadata and builtin symbol data
+//! needed by dependency sorting and AST construction.
 //! WHY: later AST passes need declaration-shaped inputs before body parsing, while still preserving
-//! file-local visibility, constant ordering, and entry-file template ordering.
+//! file-local visibility, constant ordering, and entry-file template ordering. Owning the full
+//! top-level symbol collection here removes the need for a separate manifest-building stage.
 //!
 //! Top-level declaration discovery is header-owned. AST lowers sorted headers directly.
 //! Top-level runtime templates are evaluated in entry `start()` in source order.
@@ -19,8 +22,12 @@ use crate::compiler_frontend::ast::statements::declaration_syntax::{
     DeclarationSyntax, parse_declaration_syntax,
 };
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
+use crate::compiler_frontend::builtins::error_type::{
+    is_reserved_builtin_symbol, register_builtin_error_types,
+};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::{CompilerWarning, WarningKind};
+use crate::compiler_frontend::headers::module_symbols::{ModuleSymbols, register_declared_symbol};
 use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::const_paths::parse_import_clause_tokens;
@@ -39,8 +46,8 @@ use crate::compiler_frontend::token_scan::{NestingDepth, consume_balanced_templa
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
 use crate::compiler_frontend::type_syntax::for_each_named_type_in_data_type;
 use crate::projects::settings::{
-    MINIMUM_LIKELY_DECLARATIONS, TOKEN_TO_DECLARATION_RATIO, TOKEN_TO_HEADER_RATIO,
-    TOP_LEVEL_CONST_TEMPLATE_NAME,
+    MINIMUM_LIKELY_DECLARATIONS, IMPLICIT_START_FUNC_NAME, TOKEN_TO_DECLARATION_RATIO,
+    TOKEN_TO_HEADER_RATIO, TOP_LEVEL_CONST_TEMPLATE_NAME,
 };
 use crate::{header_log, return_rule_error};
 use std::collections::HashSet;
@@ -53,6 +60,9 @@ use std::rc::Rc;
 /// WHY: const fragments carry runtime insertion indices so the builder can merge them with the
 /// runtime fragment list returned by entry `start()`. Runtime fragments are not tracked here —
 /// they are evaluated directly inside `start()` in source order.
+///
+/// `module_symbols` carries all order-independent top-level symbol metadata collected during
+/// header parsing. `declarations` inside it is empty until dependency sorting completes.
 pub struct Headers {
     pub headers: Vec<Header>,
     pub top_level_const_fragments: Vec<TopLevelConstFragment>,
@@ -61,6 +71,11 @@ pub struct Headers {
     /// WHY: only the entry file produces runtime slots; header parsing is the single authoritative
     /// counter so builders do not need to re-scan HIR for `PushRuntimeFragment` statements.
     pub entry_runtime_fragment_count: usize,
+    /// Header-owned module symbol package.
+    ///
+    /// WHY: top-level symbol discovery is owned by the header stage; dependency sorting and AST
+    /// construction consume this directly without a separate manifest-building step.
+    pub module_symbols: ModuleSymbols,
 }
 
 /// Placement metadata for one compile-time top-level template in the entry file.
@@ -177,6 +192,21 @@ impl Display for Header {
     }
 }
 
+impl Header {
+    /// Returns the canonical (real OS) filesystem path for the source file that owns this header.
+    /// Falls back to the logical source-file path when no OS path is recorded.
+    ///
+    /// WHY: const-template scopes use synthetic paths; the canonical path is needed for
+    /// project-path-resolver lookups and rendered-path-usage tracking.
+    pub(crate) fn canonical_source_file(&self, string_table: &mut StringTable) -> InternedPath {
+        self.tokens
+            .canonical_os_path
+            .as_ref()
+            .map(|canonical_path| InternedPath::from_path_buf(canonical_path, string_table))
+            .unwrap_or_else(|| self.source_file.to_owned())
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct FileImport {
     pub header_path: InternedPath,
@@ -255,11 +285,136 @@ pub fn parse_headers_with_path_resolver(
         return Err(errors);
     }
 
+    let module_symbols =
+        build_module_symbols(&headers, string_table).map_err(|mut symbol_errors| {
+            errors.append(&mut symbol_errors);
+            errors
+        })?;
+
     Ok(Headers {
         headers,
         top_level_const_fragments,
         entry_runtime_fragment_count: runtime_fragment_count,
+        module_symbols,
     })
+}
+
+/// Collect all order-independent top-level symbol metadata from parsed (unsorted) headers.
+///
+/// WHAT: validates symbol names, builds import/export/source maps, registers builtins.
+/// WHY: all this work depends only on the per-header data available immediately after parsing;
+/// it does not require dependency order. `declarations` is intentionally left empty here
+/// and filled by `resolve_module_dependencies` once headers are sorted.
+fn build_module_symbols(
+    headers: &[Header],
+    string_table: &mut StringTable,
+) -> Result<ModuleSymbols, Vec<CompilerError>> {
+    let mut module_symbols = ModuleSymbols::empty();
+    let mut errors: Vec<CompilerError> = Vec::new();
+
+    for header in headers {
+        if let Some(symbol_name) = header.tokens.src_path.name() {
+            let symbol_name_text = string_table.resolve(symbol_name).to_owned();
+
+            if let Err(error) = ensure_not_keyword_shadow_identifier(
+                &symbol_name_text,
+                header.name_location.to_owned(),
+                "Module Declaration Collection",
+            ) {
+                errors.push(error);
+                continue;
+            }
+
+            if is_reserved_builtin_symbol(&symbol_name_text) {
+                errors.push(CompilerError::new_rule_error(
+                    format!("'{symbol_name_text}' is reserved as a builtin language type."),
+                    header.name_location.to_owned(),
+                ));
+                continue;
+            }
+        }
+
+        module_symbols
+            .module_file_paths
+            .insert(header.source_file.to_owned());
+        module_symbols.canonical_source_by_symbol_path.insert(
+            header.tokens.src_path.to_owned(),
+            header.canonical_source_file(string_table),
+        );
+        module_symbols
+            .file_imports_by_source
+            .entry(header.source_file.to_owned())
+            .or_insert_with(|| header.file_imports.to_owned());
+
+        match &header.kind {
+            HeaderKind::Function { .. } => {
+                register_declared_symbol(
+                    &mut module_symbols,
+                    &header.tokens.src_path,
+                    &header.source_file,
+                    Some(header.exported),
+                );
+            }
+            HeaderKind::Struct { .. } => {
+                register_declared_symbol(
+                    &mut module_symbols,
+                    &header.tokens.src_path,
+                    &header.source_file,
+                    Some(header.exported),
+                );
+            }
+            HeaderKind::Choice { .. } => {
+                register_declared_symbol(
+                    &mut module_symbols,
+                    &header.tokens.src_path,
+                    &header.source_file,
+                    Some(header.exported),
+                );
+            }
+            HeaderKind::StartFunction => {
+                let start_name =
+                    header.source_file.join_str(IMPLICIT_START_FUNC_NAME, string_table);
+                register_declared_symbol(
+                    &mut module_symbols,
+                    &start_name,
+                    &header.source_file,
+                    None,
+                );
+            }
+            HeaderKind::Constant { .. } => {
+                register_declared_symbol(
+                    &mut module_symbols,
+                    &header.tokens.src_path,
+                    &header.source_file,
+                    Some(header.exported),
+                );
+            }
+            _ => {}
+        }
+    }
+
+    if !errors.is_empty() {
+        return Err(errors);
+    }
+
+    // Register builtin error types: visible paths, struct fields, AST nodes, and declarations.
+    // WHY: builtins are merged once here so AST passes see them without a separate absorption step.
+    let builtin_manifest = register_builtin_error_types(string_table);
+    module_symbols
+        .builtin_visible_symbol_paths
+        .extend(builtin_manifest.visible_symbol_paths.iter().cloned());
+    module_symbols.builtin_declarations = builtin_manifest.declarations;
+    module_symbols
+        .resolved_struct_fields_by_path
+        .extend(builtin_manifest.resolved_struct_fields_by_path);
+    module_symbols
+        .struct_source_by_path
+        .extend(builtin_manifest.struct_source_by_path);
+    module_symbols
+        .builtin_struct_ast_nodes
+        .extend(builtin_manifest.ast_struct_nodes);
+
+    Ok(module_symbols)
 }
 
 // Top-level declarations are module-visible; non-declaration statements are collected into the

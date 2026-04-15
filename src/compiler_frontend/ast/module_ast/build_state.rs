@@ -12,7 +12,7 @@ use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringId;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
-use crate::compiler_frontend::symbol_manifest::SymbolManifest;
+use crate::compiler_frontend::headers::module_symbols::ModuleSymbols;
 use crate::projects::settings;
 use rustc_hash::FxHashMap;
 use std::cell::RefCell;
@@ -24,10 +24,10 @@ use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::paths::rendered_path_usage::RenderedPathUsage;
 
 pub(super) struct AstBuildState<'a> {
-    // Read-only symbol manifest from the header/dependency-sort phase.
+    // Header-owned module symbol package from the header/dependency-sort phase.
     // Symbol-DB fields (importable_symbol_exported, file_imports_by_source, etc.)
-    // live here and are accessed via self.manifest.xxx.
-    pub(super) manifest: SymbolManifest,
+    // live here and are accessed via self.module_symbols.xxx.
+    pub(super) module_symbols: ModuleSymbols,
 
     // Immutable configuration shared across passes.
     pub(super) host_registry: &'a HostRegistry,
@@ -65,18 +65,18 @@ impl<'a> AstBuildState<'a> {
         project_path_resolver: &'a Option<ProjectPathResolver>,
         path_format_config: &'a PathStringFormatConfig,
         header_count: usize,
-        mut manifest: SymbolManifest,
+        mut module_symbols: ModuleSymbols,
     ) -> Self {
-        // Extract the fields that AstBuildState mutates during passes so the manifest
-        // can be stored whole for its read-only symbol-DB fields.
-        let declarations = std::mem::take(&mut manifest.declarations);
-        let builtin_struct_ast_nodes = std::mem::take(&mut manifest.builtin_struct_ast_nodes);
+        // Extract the fields that AstBuildState mutates during passes so the module_symbols
+        // package can be stored whole for its read-only symbol-DB fields.
+        let declarations = std::mem::take(&mut module_symbols.declarations);
+        let builtin_struct_ast_nodes = std::mem::take(&mut module_symbols.builtin_struct_ast_nodes);
         let resolved_struct_fields_by_path =
-            std::mem::take(&mut manifest.resolved_struct_fields_by_path);
-        let struct_source_by_path = std::mem::take(&mut manifest.struct_source_by_path);
+            std::mem::take(&mut module_symbols.resolved_struct_fields_by_path);
+        let struct_source_by_path = std::mem::take(&mut module_symbols.struct_source_by_path);
 
         Self {
-            manifest,
+            module_symbols,
             host_registry,
             style_directives,
             build_profile,

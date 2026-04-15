@@ -139,35 +139,17 @@ impl FrontendProject {
             .expect("header parsing should succeed")
     }
 
-    fn sorted_headers(
-        &mut self,
-    ) -> (
-        Vec<crate::compiler_frontend::headers::parse_file_headers::Header>,
-        Vec<crate::compiler_frontend::headers::parse_file_headers::TopLevelConstFragment>,
-    ) {
+    fn sorted_headers(&mut self) -> crate::compiler_frontend::module_dependencies::SortedHeaders {
         let headers = self.headers();
-        let sorted_headers = self
-            .frontend
-            .sort_headers(headers.headers)
-            .expect("header sorting should succeed");
-
-        (sorted_headers, headers.top_level_const_fragments)
+        self.frontend
+            .sort_headers(headers)
+            .expect("header sorting should succeed")
     }
 
     fn ast(&mut self) -> crate::compiler_frontend::ast::ast::Ast {
-        let (sorted_headers, top_level_const_fragments) = self.sorted_headers();
-        let manifest = self
-            .frontend
-            .build_symbol_manifest(&sorted_headers)
-            .expect("manifest build should succeed");
+        let sorted = self.sorted_headers();
         self.frontend
-            .headers_to_ast(
-                sorted_headers,
-                manifest,
-                top_level_const_fragments,
-                &self.entry_file,
-                FrontendBuildProfile::Dev,
-            )
+            .headers_to_ast(sorted, &self.entry_file, FrontendBuildProfile::Dev)
             .expect("AST construction should succeed")
     }
 
@@ -204,12 +186,13 @@ fn sorts_cross_module_start_function_dependencies_through_frontend_entrypoints()
     );
 
     let headers = project.headers();
-    let sorted_headers = project
+    let sorted = project
         .frontend
-        .sort_headers(headers.headers)
+        .sort_headers(headers)
         .expect("dependency sorting should succeed");
 
-    let start_order = sorted_headers
+    let start_order = sorted
+        .headers
         .iter()
         .filter(|header| matches!(header.kind, HeaderKind::StartFunction))
         .map(|header| header.source_file.clone())
@@ -238,7 +221,7 @@ fn reports_circular_imports_through_frontend_header_sorting() {
     let headers = project.headers();
     let errors = project
         .frontend
-        .sort_headers(headers.headers)
+        .sort_headers(headers)
         .expect_err("cycle should fail dependency sorting");
 
     assert!(
@@ -260,12 +243,13 @@ fn preserves_symbol_resolution_order_for_struct_defaults_and_constants() {
     );
 
     let headers = project.headers();
-    let sorted_headers = project
+    let sorted = project
         .frontend
-        .sort_headers(headers.headers)
+        .sort_headers(headers)
         .expect("dependency sorting should succeed");
 
-    let base_pos = sorted_headers
+    let base_pos = sorted
+        .headers
         .iter()
         .position(|header| {
             matches!(
@@ -274,11 +258,13 @@ fn preserves_symbol_resolution_order_for_struct_defaults_and_constants() {
             )
         })
         .expect("base constant should exist");
-    let struct_pos = sorted_headers
+    let struct_pos = sorted
+        .headers
         .iter()
         .position(|header| matches!(header.kind, HeaderKind::Struct { .. }))
         .expect("struct header should exist");
-    let derived_pos = sorted_headers
+    let derived_pos = sorted
+        .headers
         .iter()
         .position(|header| {
             matches!(
@@ -388,18 +374,11 @@ fn ast_stage_errors_preserve_string_table_context() {
         "src/#page.bst",
     );
 
-    let (sorted_headers, top_level_template_items) = project.sorted_headers();
-    let manifest = project
+    let sorted = project.sorted_headers();
+    let Err(messages) = project
         .frontend
-        .build_symbol_manifest(&sorted_headers)
-        .expect("manifest build should succeed");
-    let Err(messages) = project.frontend.headers_to_ast(
-        sorted_headers,
-        manifest,
-        top_level_template_items,
-        &project.entry_file,
-        FrontendBuildProfile::Dev,
-    ) else {
+        .headers_to_ast(sorted, &project.entry_file, FrontendBuildProfile::Dev)
+    else {
         panic!("const host calls should fail during AST construction");
     };
 

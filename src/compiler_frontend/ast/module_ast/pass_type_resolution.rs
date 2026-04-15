@@ -5,7 +5,6 @@
 //! both use file-scoped visibility gates from pass 2.
 
 use super::build_state::AstBuildState;
-use super::canonical_source_file_for_header;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::import_bindings::{
@@ -39,7 +38,7 @@ impl<'a> AstBuildState<'a> {
                 .get(&header.source_file)
                 .cloned()
                 .unwrap_or_default();
-            let source_file_scope = canonical_source_file_for_header(header, string_table);
+            let source_file_scope = header.canonical_source_file(string_table);
 
             match &header.kind {
                 HeaderKind::Constant { .. } => {

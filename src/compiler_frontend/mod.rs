@@ -12,7 +12,6 @@ pub(crate) mod optimizers {
 }
 
 pub(crate) mod module_dependencies;
-pub(crate) mod symbol_manifest;
 
 pub(crate) mod basic_utility_functions;
 pub(crate) mod builtins;
@@ -62,18 +61,17 @@ use crate::compiler_frontend::ast::ast::{Ast, AstBuildContext};
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::headers::parse_file_headers::{
-    Header, HeaderParseOptions, Headers, TopLevelConstFragment, parse_headers_with_path_resolver,
+    HeaderParseOptions, Headers, parse_headers_with_path_resolver,
 };
 use crate::compiler_frontend::hir::hir_builder::lower_module;
 use crate::compiler_frontend::hir::hir_nodes::HirModule;
 use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::module_dependencies::resolve_module_dependencies;
+use crate::compiler_frontend::module_dependencies::{SortedHeaders, resolve_module_dependencies};
 use crate::compiler_frontend::paths::path_format::{OutputPathStyle, PathStringFormatConfig};
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
-use crate::compiler_frontend::symbol_manifest::{SymbolManifest, build_symbol_manifest};
 use crate::compiler_frontend::symbols::identity::SourceFileTable;
 use crate::compiler_frontend::tokenizer::lexer::tokenize;
 use crate::compiler_frontend::tokenizer::newline_handling::NewlineMode;
@@ -225,46 +223,40 @@ impl CompilerFrontend {
     /// ---------------------------
     /// DEPENDENCY SORTING
     /// ---------------------------
-    /// Now, as we parse the headers and combine the files,
-    /// the types of each dependency will be known.
-    /// Every dependency needed for each file should be known before its headers are parsed.
-    /// This is so structs that contain imported structs can know the shape of the imports first.
-    /// This section answers the following question:
-    /// - In what order must the headers be defined so that symbol resolution and type-checking of bodies can proceed deterministically?
+    /// Topologically sorts parsed headers and finalizes the header-owned module symbol package.
+    ///
+    /// WHY: every dependency must be sorted before the symbols that depend on it, so that
+    /// type-checking and signature resolution in AST construction proceed in a deterministic order.
+    /// The header-owned `ModuleSymbols` is also finalized here: declarations are built from the
+    /// sorted headers and staged builtin declarations are appended.
     pub fn sort_headers(
         &mut self,
-        headers: Vec<Header>,
-    ) -> Result<Vec<Header>, Vec<CompilerError>> {
+        headers: Headers,
+    ) -> Result<SortedHeaders, Vec<CompilerError>> {
         resolve_module_dependencies(headers, &mut self.string_table)
-    }
-
-    /// ---------------------------
-    /// SYMBOL MANIFEST
-    /// ---------------------------
-    /// Build the module-wide symbol manifest from dependency-sorted headers.
-    /// Must be called after `sort_headers` and before `headers_to_ast`.
-    /// WHY: declaration discovery is owned by the header/dependency stages; the manifest
-    /// packages that knowledge so AST can consume it without re-iterating headers.
-    pub fn build_symbol_manifest(
-        &mut self,
-        sorted_headers: &[Header],
-    ) -> Result<SymbolManifest, CompilerMessages> {
-        build_symbol_manifest(sorted_headers, &mut self.string_table)
     }
 
     /// -----------------------------
     /// AST CREATION
     /// -----------------------------
-    /// Consumes sorted headers and a pre-built symbol manifest to construct the module AST.
-    /// Call `build_symbol_manifest` first to obtain the manifest.
+    /// Consumes sorted headers and the header-owned module symbol package to construct the AST.
+    ///
+    /// WHY: header parsing and dependency sorting together own top-level symbol discovery;
+    /// AST focuses on semantic lowering — import visibility, type/signature resolution,
+    /// receiver catalog construction, and body emission.
     pub fn headers_to_ast(
         &mut self,
-        headers: Vec<Header>,
-        manifest: SymbolManifest,
-        top_level_const_fragments: Vec<TopLevelConstFragment>,
+        sorted: SortedHeaders,
         entry_file_path: &Path,
         build_profile: FrontendBuildProfile,
     ) -> Result<Ast, CompilerMessages> {
+        let SortedHeaders {
+            headers,
+            top_level_const_fragments,
+            entry_runtime_fragment_count: _,
+            module_symbols,
+        } = sorted;
+
         let interned_entry_dir = self
             .source_files
             .get_by_canonical_path(entry_file_path)
@@ -276,7 +268,7 @@ impl CompilerFrontend {
         Ast::new(
             headers,
             top_level_const_fragments,
-            manifest,
+            module_symbols,
             AstBuildContext {
                 host_registry: &self.host_function_registry,
                 style_directives: &self.style_directives,

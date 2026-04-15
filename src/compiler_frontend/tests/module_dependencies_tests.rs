@@ -1,5 +1,5 @@
 use super::*;
-use crate::compiler_frontend::headers::parse_file_headers::{Header, HeaderKind, parse_headers};
+use crate::compiler_frontend::headers::parse_file_headers::{HeaderKind, Headers, parse_headers};
 use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::tokenizer::lexer::tokenize;
@@ -7,7 +7,7 @@ use crate::compiler_frontend::tokenizer::newline_handling::NewlineMode;
 use crate::compiler_frontend::tokenizer::tokens::TokenizeMode;
 use std::path::PathBuf;
 
-fn parse_module_headers(files: &[(&str, &str)], entry_path: &str) -> (Vec<Header>, StringTable) {
+fn parse_module_headers(files: &[(&str, &str)], entry_path: &str) -> (Headers, StringTable) {
     let mut string_table = StringTable::new();
     let style_directives = StyleDirectiveRegistry::built_ins();
 
@@ -30,7 +30,7 @@ fn parse_module_headers(files: &[(&str, &str)], entry_path: &str) -> (Vec<Header
 
     let host_registry = HostRegistry::new();
     let mut warnings = Vec::new();
-    let parsed_headers = parse_headers(
+    let headers = parse_headers(
         tokenized_files,
         &host_registry,
         &mut warnings,
@@ -39,10 +39,13 @@ fn parse_module_headers(files: &[(&str, &str)], entry_path: &str) -> (Vec<Header
     )
     .expect("header parsing should succeed");
 
-    (parsed_headers.headers, string_table)
+    (headers, string_table)
 }
 
-fn header_name(header: &Header, string_table: &StringTable) -> String {
+fn header_name(
+    header: &crate::compiler_frontend::headers::parse_file_headers::Header,
+    string_table: &StringTable,
+) -> String {
     header
         .tokens
         .src_path
@@ -66,6 +69,7 @@ fn sorts_strict_import_dependencies_before_dependents() {
         .expect("dependency sort should pass");
 
     let start_order = sorted
+        .headers
         .iter()
         .filter(|header| matches!(header.kind, HeaderKind::StartFunction))
         .map(|header| header.source_file.to_portable_string(&string_table))
@@ -88,14 +92,17 @@ fn applies_soft_struct_and_constant_edges_when_resolvable() {
         .expect("dependency sort should pass");
 
     let base_pos = sorted
+        .headers
         .iter()
         .position(|header| header_name(header, &string_table) == "base")
         .expect("base constant should exist");
     let user_pos = sorted
+        .headers
         .iter()
         .position(|header| header_name(header, &string_table) == "User")
         .expect("User struct should exist");
     let derived_pos = sorted
+        .headers
         .iter()
         .position(|header| header_name(header, &string_table) == "derived")
         .expect("derived constant should exist");
@@ -123,6 +130,7 @@ fn reports_circular_dependencies() {
     let errors = resolve_module_dependencies(headers, &mut string_table)
         .expect_err("cycle should fail dependency sorting");
 
+    // resolve_module_dependencies now returns Vec<CompilerError>
     assert!(
         errors
             .iter()

@@ -9,6 +9,7 @@ use crate::compiler_frontend::ast::ast::Ast;
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::headers::parse_file_headers::Headers;
+use crate::compiler_frontend::module_dependencies::SortedHeaders;
 use crate::compiler_frontend::hir::hir_nodes::HirModule;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::string_interning::StringTable;
@@ -69,17 +70,12 @@ impl FrontendModuleBuildContext<'_> {
                     entry_file_path,
                 )
             })?;
-            let (sorted_headers, sorted_const_fragments, entry_runtime_fragment_count) =
-                timed_frontend_stage("Dependency graph created in: ", || {
-                    Self::sort_headers(&mut compiler, module_headers, &warnings)
-                })?;
+            let sorted = timed_frontend_stage("Dependency graph created in: ", || {
+                Self::sort_headers(&mut compiler, module_headers, &warnings)
+            })?;
+            let entry_runtime_fragment_count = sorted.entry_runtime_fragment_count;
             let module_ast = timed_frontend_stage("AST created in: ", || {
-                self.build_ast(
-                    &mut compiler,
-                    (sorted_headers, sorted_const_fragments),
-                    entry_file_path,
-                    &mut warnings,
-                )
+                self.build_ast(&mut compiler, sorted, entry_file_path, &mut warnings)
             })?;
 
             // Resolve const fragment StringIds to strings before AST is consumed by HIR.
@@ -201,55 +197,24 @@ impl FrontendModuleBuildContext<'_> {
         compiler: &mut CompilerFrontend,
         module_headers: Headers,
         warnings: &[CompilerWarning],
-    ) -> Result<
-        (
-            Vec<crate::compiler_frontend::headers::parse_file_headers::Header>,
-            Vec<crate::compiler_frontend::headers::parse_file_headers::TopLevelConstFragment>,
-            usize,
-        ),
-        CompilerMessages,
-    > {
-        let Headers {
-            headers,
-            top_level_const_fragments,
-            entry_runtime_fragment_count,
-        } = module_headers;
-        let sorted_headers = compiler.sort_headers(headers).map_err(|errors| {
+    ) -> Result<SortedHeaders, CompilerMessages> {
+        compiler.sort_headers(module_headers).map_err(|errors| {
             CompilerMessages::from_errors_with_warnings(
                 errors,
                 warnings.to_vec(),
                 &compiler.string_table,
             )
-        })?;
-
-        Ok((
-            sorted_headers,
-            top_level_const_fragments,
-            entry_runtime_fragment_count,
-        ))
+        })
     }
 
     fn build_ast(
         &self,
         compiler: &mut CompilerFrontend,
-        module_headers: (
-            Vec<crate::compiler_frontend::headers::parse_file_headers::Header>,
-            Vec<crate::compiler_frontend::headers::parse_file_headers::TopLevelConstFragment>,
-        ),
+        sorted: SortedHeaders,
         entry_file_path: &Path,
         warnings: &mut Vec<CompilerWarning>,
     ) -> Result<Ast, CompilerMessages> {
-        let (sorted_modules, top_level_const_fragments) = module_headers;
-        let manifest = compiler
-            .build_symbol_manifest(&sorted_modules)
-            .map_err(|messages| merge_stage_messages(messages, warnings, &compiler.string_table))?;
-        match compiler.headers_to_ast(
-            sorted_modules,
-            manifest,
-            top_level_const_fragments,
-            entry_file_path,
-            self.build_profile,
-        ) {
+        match compiler.headers_to_ast(sorted, entry_file_path, self.build_profile) {
             Ok(ast) => {
                 warnings.extend(ast.warnings.clone());
                 Ok(ast)

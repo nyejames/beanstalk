@@ -6,7 +6,6 @@
 //! only collect metadata so emission can proceed in a single, well-typed traversal.
 
 use super::build_state::AstBuildState;
-use super::canonical_source_file_for_header;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::function_body_to_ast;
 use crate::compiler_frontend::ast::import_bindings::FileImportBindings;
@@ -47,7 +46,7 @@ impl<'a> AstBuildState<'a> {
                 .get(&header.source_file)
                 .cloned()
                 .unwrap_or_default();
-            let source_file_scope = canonical_source_file_for_header(&header, string_table);
+            let source_file_scope = header.canonical_source_file(string_table);
 
             match header.kind {
                 // --- Functions ---

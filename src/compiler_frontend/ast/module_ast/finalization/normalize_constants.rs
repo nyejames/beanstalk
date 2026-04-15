@@ -65,7 +65,7 @@ impl<'a> AstBuildState<'a> {
             }
 
             let source_file_scope = self
-                .manifest
+                .module_symbols
                 .canonical_source_by_symbol_path
                 .get(&declaration.id)
                 .unwrap_or(&declaration.value.location.scope);

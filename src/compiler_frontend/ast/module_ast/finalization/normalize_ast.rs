@@ -66,7 +66,7 @@ impl<'a> AstBuildState<'a> {
         project_path_resolver: &ProjectPathResolver,
         string_table: &mut StringTable,
     ) -> Result<(), CompilerError> {
-        let canonical_source_by_symbol_path = &self.manifest.canonical_source_by_symbol_path;
+        let canonical_source_by_symbol_path = &self.module_symbols.canonical_source_by_symbol_path;
         let path_format_config = self.path_format_config;
 
         for node in &mut self.ast {

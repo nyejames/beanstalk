@@ -31,30 +31,6 @@ pub use scope_context::{ContextKind, ScopeContext};
 #[cfg(test)]
 pub(crate) use scope_context::{ReceiverMethodCatalog, ReceiverMethodEntry};
 
-use crate::compiler_frontend::headers::parse_file_headers::Header;
-use crate::compiler_frontend::string_interning::StringTable;
-
-/// Returns the canonical (real OS) filesystem path for the source file that owns this header.
-/// Falls back to the logical source-file path when no OS path is recorded.
-/// WHY: const-template scopes use synthetic paths; the canonical path is needed for
-/// project-path-resolver lookups and rendered-path-usage tracking.
-pub(crate) fn canonical_source_file_for_header(
-    header: &Header,
-    string_table: &mut StringTable,
-) -> crate::compiler_frontend::interned_path::InternedPath {
-    header
-        .tokens
-        .canonical_os_path
-        .as_ref()
-        .map(|canonical_path| {
-            crate::compiler_frontend::interned_path::InternedPath::from_path_buf(
-                canonical_path,
-                string_table,
-            )
-        })
-        .unwrap_or_else(|| header.source_file.to_owned())
-}
-
 #[cfg(test)]
 #[path = "../tests/module_ast_receiver_method_tests.rs"]
 mod module_ast_receiver_method_tests;

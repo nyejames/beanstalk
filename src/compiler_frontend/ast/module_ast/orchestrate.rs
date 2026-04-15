@@ -35,7 +35,7 @@ use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::paths::rendered_path_usage::RenderedPathUsage;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
-use crate::compiler_frontend::symbol_manifest::SymbolManifest;
+use crate::compiler_frontend::headers::module_symbols::ModuleSymbols;
 
 /// Unified AST output for all source files in one compilation unit.
 pub struct Ast {
@@ -142,16 +142,16 @@ impl Ast {
     ///
     /// ## Pass Sequence
     ///
-    /// 1. resolve_import_bindings   — Build per-file visibility gates
-    /// 2. resolve_types             — Resolve constants and struct field types
+    /// 1. resolve_import_bindings     — Build per-file visibility gates from header-owned symbol data
+    /// 2. resolve_types               — Resolve constants and struct field types
     /// 3. resolve_function_signatures — Resolve function signatures
-    /// 4. build_receiver_catalog    — Build receiver method catalog
-    /// 5. emit_ast_nodes            — Lower function/template bodies
+    /// 4. build_receiver_catalog      — Build receiver method catalog
+    /// 5. emit_ast_nodes              — Lower function/template bodies
     /// 6. finalize                  — Normalize templates and assemble output
     pub fn new(
         sorted_headers: Vec<Header>,
         top_level_const_fragments: Vec<TopLevelConstFragment>,
-        manifest: SymbolManifest,
+        module_symbols: ModuleSymbols,
         context: AstBuildContext<'_>,
     ) -> Result<Ast, CompilerMessages> {
         let AstBuildContext {
@@ -171,7 +171,7 @@ impl Ast {
             &project_path_resolver,
             &path_format_config,
             sorted_headers.len(),
-            manifest,
+            module_symbols,
         );
 
         let file_import_bindings = state.resolve_import_bindings(string_table)?;
