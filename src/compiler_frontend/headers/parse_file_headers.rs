@@ -137,7 +137,6 @@ pub enum HeaderKind {
     Function {
         signature: FunctionSignature,
     },
-
     Constant {
         metadata: ConstantHeaderMetadata,
     },

@@ -139,15 +139,6 @@ impl Ast {
     /// WHY: Centralizes the pass sequence so the full compilation pipeline is
     /// readable in one place without implementation details. Symbol discovery is
     /// owned by the header/dependency stages and passed in via `manifest`.
-    ///
-    /// ## Pass Sequence
-    ///
-    /// 1. resolve_import_bindings     — Build per-file visibility gates from header-owned symbol data
-    /// 2. resolve_types               — Resolve constants and struct field types
-    /// 3. resolve_function_signatures — Resolve function signatures
-    /// 4. build_receiver_catalog      — Build receiver method catalog
-    /// 5. emit_ast_nodes              — Lower function/template bodies
-    /// 6. finalize                  — Normalize templates and assemble output
     pub fn new(
         sorted_headers: Vec<Header>,
         top_level_const_fragments: Vec<TopLevelConstFragment>,
@@ -174,17 +165,9 @@ impl Ast {
             module_symbols,
         );
 
-        let file_import_bindings = state.resolve_import_bindings(string_table)?;
-
-        state.resolve_types(&sorted_headers, &file_import_bindings, string_table)?;
-
-        state.resolve_function_signatures(&sorted_headers, &file_import_bindings, string_table)?;
-
-        let receiver_methods = state.build_receiver_catalog(&sorted_headers, string_table)?;
-
         state.emit_ast_nodes(
             sorted_headers,
-            &file_import_bindings,
+            &module_symbols,
             &receiver_methods,
             string_table,
         )?;

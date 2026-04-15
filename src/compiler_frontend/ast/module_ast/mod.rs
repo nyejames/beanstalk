@@ -17,9 +17,6 @@ mod build_state;
 mod finalization;
 mod orchestrate;
 mod pass_emit_nodes;
-mod pass_function_signatures;
-mod pass_import_bindings;
-mod pass_type_resolution;
 pub(crate) mod scope_context;
 
 // Public AST surface consumed by later compiler stages.

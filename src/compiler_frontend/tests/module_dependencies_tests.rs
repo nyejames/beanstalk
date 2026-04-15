@@ -1,5 +1,5 @@
 use super::*;
-use crate::compiler_frontend::headers::parse_file_headers::{HeaderKind, Headers, parse_headers};
+use crate::compiler_frontend::headers::parse_file_headers::{Headers, parse_headers};
 use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::tokenizer::lexer::tokenize;
@@ -56,11 +56,13 @@ fn header_name(
 
 #[test]
 fn sorts_strict_import_dependencies_before_dependents() {
+    // Non-entry files use named functions only; entry a.bst can have top-level code.
+    // Function names match import path names so the dependency edges are created correctly.
     let (headers, mut string_table) = parse_module_headers(
         &[
-            ("src/a.bst", "import @b\nb()\nio(\"a\")\n"),
-            ("src/b.bst", "import @c\nc()\nio(\"b\")\n"),
-            ("src/c.bst", "io(\"c\")\n"),
+            ("src/a.bst", "import @b\nb()\n"),
+            ("src/b.bst", "import @c\n#b ||:\n    c()\n;\n"),
+            ("src/c.bst", "#c ||:\n    io(\"c\")\n;\n"),
         ],
         "src/a.bst",
     );
@@ -68,14 +70,34 @@ fn sorts_strict_import_dependencies_before_dependents() {
     let sorted = resolve_module_dependencies(headers, &mut string_table)
         .expect("dependency sort should pass");
 
-    let start_order = sorted
+    // Verify dependency ordering via source_file positions: c must precede b, b must precede a.
+    let file_positions: Vec<String> = sorted
         .headers
         .iter()
-        .filter(|header| matches!(header.kind, HeaderKind::StartFunction))
         .map(|header| header.source_file.to_portable_string(&string_table))
-        .collect::<Vec<_>>();
+        .collect();
 
-    assert_eq!(start_order, vec!["src/c.bst", "src/b.bst", "src/a.bst"]);
+    let pos_c = file_positions
+        .iter()
+        .position(|f| f.contains("c.bst"))
+        .expect("c.bst should have at least one header");
+    let pos_b = file_positions
+        .iter()
+        .position(|f| f.contains("b.bst"))
+        .expect("b.bst should have at least one header");
+    let pos_a = file_positions
+        .iter()
+        .position(|f| f.contains("a.bst"))
+        .expect("a.bst should have at least one header");
+
+    assert!(
+        pos_c < pos_b,
+        "c.bst (dependency) must sort before b.bst (dependent), got order: {file_positions:?}"
+    );
+    assert!(
+        pos_b < pos_a,
+        "b.bst (dependency) must sort before a.bst (entry), got order: {file_positions:?}"
+    );
 }
 
 #[test]
@@ -119,10 +141,12 @@ fn applies_soft_struct_and_constant_edges_when_resolvable() {
 
 #[test]
 fn reports_circular_dependencies() {
+    // Function names match import names to wire dependency edges.
+    // b.bst needs a declaration so it appears in the graph and the cycle is detectable.
     let (headers, mut string_table) = parse_module_headers(
         &[
-            ("src/a.bst", "import @b\nb()\nio(\"a\")\n"),
-            ("src/b.bst", "import @a\na()\nio(\"b\")\n"),
+            ("src/a.bst", "import @b\nb()\n"),
+            ("src/b.bst", "import @a\n#b ||:\n    a()\n;\n"),
         ],
         "src/a.bst",
     );
@@ -141,11 +165,18 @@ fn reports_circular_dependencies() {
 
 #[test]
 fn reports_ambiguous_suffix_import_resolution() {
+    // Each util.bst has a declaration so it appears in the graph; ambiguity is detectable.
     let (headers, mut string_table) = parse_module_headers(
         &[
-            ("src/app.bst", "import @shared/util\nutil()\nio(\"app\")\n"),
-            ("src/features/shared/util.bst", "io(\"feature util\")\n"),
-            ("src/lib/shared/util.bst", "io(\"lib util\")\n"),
+            ("src/app.bst", "import @shared/util\nutil()\n"),
+            (
+                "src/features/shared/util.bst",
+                "#util ||:\n    io(\"feature util\")\n;\n",
+            ),
+            (
+                "src/lib/shared/util.bst",
+                "#util ||:\n    io(\"lib util\")\n;\n",
+            ),
         ],
         "src/app.bst",
     );
