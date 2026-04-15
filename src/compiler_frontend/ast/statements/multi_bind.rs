@@ -16,13 +16,12 @@ use crate::compiler_frontend::ast::statements::declaration_syntax::{
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
-use crate::compiler_frontend::identifier_policy::{
+use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::identifier_policy::{
     IdentifierNamingKind, ensure_not_keyword_shadow_identifier, naming_warning_for_identifier,
 };
-use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::token_scan::has_top_level_comma_before_statement_end;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
-use crate::compiler_frontend::traits::ContainsReferences;
 use crate::compiler_frontend::type_syntax::resolve_named_types_in_data_type;
 use crate::{return_rule_error, return_syntax_error, return_type_error};
 use std::collections::HashSet;

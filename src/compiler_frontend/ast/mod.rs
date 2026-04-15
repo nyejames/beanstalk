@@ -69,5 +69,3 @@ pub(crate) fn function_body_to_ast(
 #[cfg(test)]
 #[path = "tests/parser_error_recovery_tests.rs"]
 mod parser_error_recovery_tests;
-#[cfg(test)]
-pub(crate) mod test_support;

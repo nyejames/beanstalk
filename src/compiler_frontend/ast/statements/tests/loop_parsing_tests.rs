@@ -6,10 +6,10 @@
 use super::*;
 use crate::compiler_frontend::ast::ast::Ast;
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
-use crate::compiler_frontend::ast::test_support::{
+use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorMetaDataKey, ErrorType};
+use crate::compiler_frontend::tests::test_support::{
     function_body_by_name, parse_single_file_ast, parse_single_file_ast_error,
 };
-use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorMetaDataKey, ErrorType};
 
 fn loop_fixture_source(loop_body_source: &str) -> String {
     let indented_body = loop_body_source

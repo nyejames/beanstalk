@@ -22,10 +22,6 @@ use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::{CompilerWarning, WarningKind};
 use crate::compiler_frontend::host_functions::HostRegistry;
-use crate::compiler_frontend::identifier_policy::{
-    IdentifierNamingKind, ensure_not_keyword_shadow_identifier, naming_warning_for_identifier,
-};
-use crate::compiler_frontend::identity::FileId;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::const_paths::parse_import_clause_tokens;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
@@ -35,6 +31,10 @@ use crate::compiler_frontend::reserved_trait_syntax::{
     reserved_trait_keyword_error,
 };
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
+use crate::compiler_frontend::symbols::identifier_policy::{
+    IdentifierNamingKind, ensure_not_keyword_shadow_identifier, naming_warning_for_identifier,
+};
+use crate::compiler_frontend::symbols::identity::FileId;
 use crate::compiler_frontend::token_scan::{NestingDepth, consume_balanced_template_region};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
 use crate::compiler_frontend::type_syntax::for_each_named_type_in_data_type;
@@ -46,6 +46,7 @@ use crate::{header_log, return_rule_error};
 use std::collections::HashSet;
 use std::fmt::Display;
 use std::path::Path;
+use std::rc::Rc;
 
 /// Parsed headers for one module plus const-fragment placement metadata for the entry file.
 ///
@@ -689,7 +690,7 @@ fn create_header(
             let signature_context = ScopeContext::new(
                 ContextKind::ConstantHeader,
                 full_name.to_owned(),
-                &[],
+                Rc::new(vec![]),
                 context.host_function_registry.to_owned(),
                 vec![],
             )

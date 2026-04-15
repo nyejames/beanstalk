@@ -9,7 +9,7 @@ use crate::compiler_frontend::hir::hir_nodes::{
 };
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
-use crate::compiler_frontend::test_support::test_source_location;
+use crate::compiler_frontend::tests::test_support::test_source_location;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
 #[derive(Clone, Copy)]

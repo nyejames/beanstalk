@@ -43,7 +43,7 @@ fn context_for_source_file(
     ScopeContext::new(
         ContextKind::Function,
         InternedPath::new(),
-        &[],
+        Rc::new(vec![]),
         HostRegistry::new(),
         vec![],
     )

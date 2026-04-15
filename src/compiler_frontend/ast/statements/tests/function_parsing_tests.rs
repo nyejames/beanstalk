@@ -7,11 +7,11 @@ use super::*;
 use crate::compiler_frontend::ast::ast_nodes::NodeKind;
 use crate::compiler_frontend::ast::expressions::expression::{ExpressionKind, ResultCallHandling};
 use crate::compiler_frontend::ast::statements::functions::ReturnSlot;
-use crate::compiler_frontend::ast::test_support::{
+use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::tests::test_support::{
     function_body_by_name, function_signature_by_name, parse_single_file_ast,
     parse_single_file_ast_error, start_function_body,
 };
-use crate::compiler_frontend::datatypes::{DataType, Ownership};
 
 #[test]
 fn parses_function_parameters_and_return_types() {

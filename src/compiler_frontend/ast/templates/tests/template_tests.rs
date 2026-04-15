@@ -6,14 +6,14 @@ use crate::compiler_frontend::ast::statements::functions::{
 };
 use crate::compiler_frontend::ast::templates::template::{CommentDirectiveKind, TemplateType};
 use crate::compiler_frontend::ast::templates::template_types::Template;
-use crate::compiler_frontend::ast::test_support::{
-    parse_single_file_ast, parse_single_file_ast_error,
-};
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::tests::test_support::{
+    parse_single_file_ast, parse_single_file_ast_error,
+};
 use crate::compiler_frontend::tokenizer::tokens::{CharPosition, SourceLocation};
 use crate::projects::settings::IMPLICIT_START_FUNC_NAME;
 

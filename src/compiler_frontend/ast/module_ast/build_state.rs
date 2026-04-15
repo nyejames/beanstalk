@@ -14,7 +14,7 @@ use crate::compiler_frontend::string_interning::StringId;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbol_manifest::SymbolManifest;
 use crate::projects::settings;
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashMap;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -24,6 +24,11 @@ use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::paths::rendered_path_usage::RenderedPathUsage;
 
 pub(super) struct AstBuildState<'a> {
+    // Read-only symbol manifest from the header/dependency-sort phase.
+    // Symbol-DB fields (importable_symbol_exported, file_imports_by_source, etc.)
+    // live here and are accessed via self.manifest.xxx.
+    pub(super) manifest: SymbolManifest,
+
     // Immutable configuration shared across passes.
     pub(super) host_registry: &'a HostRegistry,
     pub(super) style_directives: &'a StyleDirectiveRegistry,
@@ -34,25 +39,18 @@ pub(super) struct AstBuildState<'a> {
     // Mutable output state.
     pub(super) ast: Vec<AstNode>,
     pub(super) warnings: Vec<CompilerWarning>,
+    // Starts as manifest declaration stubs; grows with resolved constants and struct types
+    // in passes 3–4. Separate from manifest because it is mutated during AST construction.
     pub(super) declarations: Vec<Declaration>,
     pub(super) module_constants: Vec<Declaration>,
     pub(super) const_templates_by_path: FxHashMap<InternedPath, StringId>,
     pub(super) rendered_path_usages: Rc<RefCell<Vec<RenderedPathUsage>>>,
 
-    // Symbol registration tables (populated in pass 1).
-    pub(super) importable_symbol_exported: FxHashMap<InternedPath, bool>,
-    pub(super) file_imports_by_source: FxHashMap<
-        InternedPath,
-        Vec<crate::compiler_frontend::headers::parse_file_headers::FileImport>,
-    >,
-    pub(super) declared_paths_by_file: FxHashMap<InternedPath, FxHashSet<InternedPath>>,
-    pub(super) declared_names_by_file: FxHashMap<InternedPath, FxHashSet<StringId>>,
-    pub(super) module_file_paths: FxHashSet<InternedPath>,
-    pub(super) canonical_source_by_symbol_path: FxHashMap<InternedPath, InternedPath>,
-    pub(super) builtin_visible_symbol_paths: FxHashSet<InternedPath>,
+    // Builtin AST nodes seeded from the manifest; merged into output at finalization.
     pub(super) builtin_struct_ast_nodes: Vec<AstNode>,
 
     // Type resolution tables (populated in passes 2–4).
+    // Seeded with builtin struct data from the manifest; extended with user-defined types.
     pub(super) resolved_struct_fields_by_path: FxHashMap<InternedPath, Vec<Declaration>>,
     pub(super) struct_source_by_path: FxHashMap<InternedPath, InternedPath>,
     pub(super) resolved_function_signatures_by_path:
@@ -67,9 +65,18 @@ impl<'a> AstBuildState<'a> {
         project_path_resolver: &'a Option<ProjectPathResolver>,
         path_format_config: &'a PathStringFormatConfig,
         header_count: usize,
-        manifest: SymbolManifest,
+        mut manifest: SymbolManifest,
     ) -> Self {
+        // Extract the fields that AstBuildState mutates during passes so the manifest
+        // can be stored whole for its read-only symbol-DB fields.
+        let declarations = std::mem::take(&mut manifest.declarations);
+        let builtin_struct_ast_nodes = std::mem::take(&mut manifest.builtin_struct_ast_nodes);
+        let resolved_struct_fields_by_path =
+            std::mem::take(&mut manifest.resolved_struct_fields_by_path);
+        let struct_source_by_path = std::mem::take(&mut manifest.struct_source_by_path);
+
         Self {
+            manifest,
             host_registry,
             style_directives,
             build_profile,
@@ -77,20 +84,13 @@ impl<'a> AstBuildState<'a> {
             path_format_config,
             ast: Vec::with_capacity(header_count * settings::TOKEN_TO_NODE_RATIO),
             warnings: Vec::new(),
-            declarations: manifest.declarations,
+            declarations,
             module_constants: Vec::new(),
             const_templates_by_path: FxHashMap::default(),
             rendered_path_usages: Rc::new(RefCell::new(Vec::new())),
-            importable_symbol_exported: manifest.importable_symbol_exported,
-            file_imports_by_source: manifest.file_imports_by_source,
-            declared_paths_by_file: manifest.declared_paths_by_file,
-            declared_names_by_file: manifest.declared_names_by_file,
-            module_file_paths: manifest.module_file_paths,
-            canonical_source_by_symbol_path: manifest.canonical_source_by_symbol_path,
-            builtin_visible_symbol_paths: manifest.builtin_visible_symbol_paths,
-            builtin_struct_ast_nodes: manifest.builtin_struct_ast_nodes,
-            resolved_struct_fields_by_path: manifest.resolved_struct_fields_by_path,
-            struct_source_by_path: manifest.struct_source_by_path,
+            builtin_struct_ast_nodes,
+            resolved_struct_fields_by_path,
+            struct_source_by_path,
             resolved_function_signatures_by_path: FxHashMap::default(),
         }
     }
@@ -102,5 +102,4 @@ impl<'a> AstBuildState<'a> {
     ) -> CompilerMessages {
         CompilerMessages::from_error_with_warnings(error, self.warnings.clone(), string_table)
     }
-
 }

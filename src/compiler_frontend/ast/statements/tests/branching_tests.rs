@@ -7,11 +7,11 @@ use super::*;
 use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, Operator,
 };
-use crate::compiler_frontend::ast::test_support::{
-    parse_single_file_ast, parse_single_file_ast_error, start_function_body,
-};
 use crate::compiler_frontend::compiler_errors::{ErrorMetaDataKey, ErrorType};
 use crate::compiler_frontend::datatypes::DataType;
+use crate::compiler_frontend::tests::test_support::{
+    parse_single_file_ast, parse_single_file_ast_error, start_function_body,
+};
 
 #[test]
 fn parses_if_else_statements() {

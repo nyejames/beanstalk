@@ -29,7 +29,6 @@ use crate::compiler_frontend::deferred_feature_diagnostics::unsupported_style_di
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::style_directives::{StyleDirectiveKind, StyleDirectiveSpec};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
-use crate::compiler_frontend::traits::ContainsReferences;
 use crate::projects::settings::BS_VAR_PREFIX;
 use crate::{ast_log, return_syntax_error};
 

@@ -6,11 +6,11 @@
 use crate::compiler_frontend::basic_utility_functions::{NumericalParsing, is_valid_var_char};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::deferred_feature_diagnostics::unsupported_style_directive_syntax_error;
-use crate::compiler_frontend::identity::FileId;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::const_paths::parse_file_path;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
+use crate::compiler_frontend::symbols::identity::FileId;
 use crate::compiler_frontend::tokenizer::newline_handling::{
     NewlineMode, consume_carriage_return_newline,
 };

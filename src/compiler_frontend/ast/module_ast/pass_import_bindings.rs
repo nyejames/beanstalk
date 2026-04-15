@@ -20,11 +20,11 @@ impl<'a> AstBuildState<'a> {
         string_table: &mut StringTable,
     ) -> Result<FxHashMap<InternedPath, FileImportBindings>, CompilerMessages> {
         let mut bindings = resolve_file_import_bindings(
-            &self.file_imports_by_source,
-            &self.module_file_paths,
-            &self.importable_symbol_exported,
-            &self.declared_paths_by_file,
-            &self.declared_names_by_file,
+            &self.manifest.file_imports_by_source,
+            &self.manifest.module_file_paths,
+            &self.manifest.importable_symbol_exported,
+            &self.manifest.declared_paths_by_file,
+            &self.manifest.declared_names_by_file,
             self.host_registry,
             string_table,
         )
@@ -33,7 +33,7 @@ impl<'a> AstBuildState<'a> {
         for binding in bindings.values_mut() {
             binding
                 .visible_symbol_paths
-                .extend(self.builtin_visible_symbol_paths.iter().cloned());
+                .extend(self.manifest.builtin_visible_symbol_paths.iter().cloned());
         }
 
         Ok(bindings)

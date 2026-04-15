@@ -11,14 +11,14 @@ use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::deferred_feature_diagnostics::deferred_feature_rule_error;
-use crate::compiler_frontend::identifier_policy::{
-    IdentifierNamingKind, ensure_not_keyword_shadow_identifier, naming_warning_for_identifier,
-};
 use crate::compiler_frontend::reserved_trait_syntax::{
     reserved_trait_keyword, reserved_trait_keyword_error,
     reserved_trait_keyword_or_dispatch_mismatch,
 };
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
+use crate::compiler_frontend::symbols::identifier_policy::{
+    IdentifierNamingKind, ensure_not_keyword_shadow_identifier, naming_warning_for_identifier,
+};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
 use crate::{return_compiler_error, return_rule_error};
 use std::collections::HashSet;

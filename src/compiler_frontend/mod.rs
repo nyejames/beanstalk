@@ -5,7 +5,6 @@
 
 pub(crate) mod ast;
 pub(crate) mod headers;
-pub(crate) mod source_location;
 pub(crate) mod style_directives;
 pub(crate) mod tokenizer;
 pub(crate) mod optimizers {
@@ -18,7 +17,7 @@ pub(crate) mod symbol_manifest;
 pub(crate) mod basic_utility_functions;
 pub(crate) mod builtins;
 pub(crate) mod deferred_feature_diagnostics;
-pub(crate) mod identifier_policy;
+
 pub(crate) mod reserved_trait_syntax;
 
 pub(crate) mod compiler_messages {
@@ -26,7 +25,14 @@ pub(crate) mod compiler_messages {
     pub(crate) mod compiler_errors;
     pub(crate) mod compiler_warnings;
     pub(crate) mod display_messages;
+    pub(crate) mod source_location;
 }
+
+pub(crate) mod symbols {
+    pub(crate) mod identifier_policy;
+    pub(crate) mod identity;
+}
+
 pub(crate) use compiler_messages::compiler_errors;
 pub(crate) use compiler_messages::compiler_warnings;
 pub(crate) use compiler_messages::display_messages;
@@ -34,7 +40,6 @@ pub(crate) mod datatypes;
 pub(crate) mod interned_path;
 pub(crate) mod string_interning;
 pub(crate) mod token_scan;
-pub(crate) mod traits;
 pub(crate) mod type_coercion;
 pub(crate) mod type_syntax;
 
@@ -43,10 +48,12 @@ pub(crate) mod host_functions;
 pub(crate) mod hir;
 
 pub(crate) mod analysis;
-pub(crate) mod identity;
+
 pub(crate) mod paths;
 #[cfg(test)]
-pub(crate) mod test_support;
+pub(crate) mod tests {
+    pub(crate) mod test_support;
+}
 
 use crate::compiler_frontend::analysis::borrow_checker::{
     BorrowCheckReport, check_borrows as run_borrow_checker,
@@ -60,7 +67,6 @@ use crate::compiler_frontend::headers::parse_file_headers::{
 use crate::compiler_frontend::hir::hir_builder::lower_module;
 use crate::compiler_frontend::hir::hir_nodes::HirModule;
 use crate::compiler_frontend::host_functions::HostRegistry;
-use crate::compiler_frontend::identity::SourceFileTable;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::module_dependencies::resolve_module_dependencies;
 use crate::compiler_frontend::paths::path_format::{OutputPathStyle, PathStringFormatConfig};
@@ -68,6 +74,7 @@ use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbol_manifest::{SymbolManifest, build_symbol_manifest};
+use crate::compiler_frontend::symbols::identity::SourceFileTable;
 use crate::compiler_frontend::tokenizer::lexer::tokenize;
 use crate::compiler_frontend::tokenizer::newline_handling::NewlineMode;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenizeMode};

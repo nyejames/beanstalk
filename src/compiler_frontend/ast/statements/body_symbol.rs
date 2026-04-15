@@ -21,7 +21,6 @@ use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
-use crate::compiler_frontend::traits::ContainsReferences;
 use crate::{return_rule_error, return_syntax_error};
 
 fn push_accessed_symbol_statement(

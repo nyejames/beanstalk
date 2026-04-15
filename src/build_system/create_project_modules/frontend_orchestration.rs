@@ -10,10 +10,10 @@ use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::headers::parse_file_headers::Headers;
 use crate::compiler_frontend::hir::hir_nodes::HirModule;
-use crate::compiler_frontend::identity::SourceFileTable;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
+use crate::compiler_frontend::symbols::identity::SourceFileTable;
 use crate::compiler_frontend::tokenizer::newline_handling::NewlineMode;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenizeMode};
 use crate::compiler_frontend::{CompilerFrontend, FrontendBuildProfile};
@@ -222,7 +222,11 @@ impl FrontendModuleBuildContext<'_> {
             )
         })?;
 
-        Ok((sorted_headers, top_level_const_fragments, entry_runtime_fragment_count))
+        Ok((
+            sorted_headers,
+            top_level_const_fragments,
+            entry_runtime_fragment_count,
+        ))
     }
 
     fn build_ast(

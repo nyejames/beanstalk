@@ -180,7 +180,7 @@ pub(crate) fn resolve_file_import_bindings(
 /// WHY: Grouping these parameters keeps the resolver call sites explicit while avoiding
 /// overly-wide function signatures that are harder to maintain.
 pub(crate) struct ConstantHeaderParseContext<'a> {
-    pub declarations: &'a [Declaration],
+    pub declarations: Rc<Vec<Declaration>>,
     pub visible_declaration_ids: &'a FxHashSet<InternedPath>,
     pub host_registry: &'a HostRegistry,
     pub style_directives: &'a StyleDirectiveRegistry,
@@ -225,7 +225,7 @@ pub(crate) fn parse_constant_header_declaration(
     let context = ScopeContext::new(
         ContextKind::ConstantHeader,
         header.tokens.src_path.to_owned(),
-        declarations,
+        declarations, // already Rc<Vec<Declaration>>
         host_registry.clone(),
         vec![],
     )

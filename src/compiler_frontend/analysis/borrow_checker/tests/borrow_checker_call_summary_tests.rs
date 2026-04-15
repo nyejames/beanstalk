@@ -3,11 +3,6 @@
 //! WHAT: verifies how call return aliases and host-call access summaries affect borrow facts.
 //! WHY: call boundaries are where alias metadata is easiest to get wrong and hardest to debug.
 
-use crate::compiler_frontend::analysis::borrow_checker::tests::test_support::{
-    assignment_target, build_ast, default_host_registry, entry_and_start, function_node, location,
-    lower_hir, make_test_variable, node, param, reference_expr, register_host_function,
-    run_borrow_checker, symbol,
-};
 use crate::compiler_frontend::ast::ast_nodes::NodeKind;
 use crate::compiler_frontend::ast::expressions::call_argument::{CallAccessMode, CallArgument};
 use crate::compiler_frontend::ast::expressions::expression::{Expression, Operator};
@@ -21,14 +16,11 @@ use crate::compiler_frontend::host_functions::test_support::{
     TestHostReturnAlias as HostReturnAlias,
 };
 use crate::compiler_frontend::string_interning::StringTable;
-
-fn fresh_returns(result_types: Vec<DataType>) -> Vec<ReturnSlot> {
-    result_types
-        .into_iter()
-        .map(FunctionReturn::Value)
-        .map(ReturnSlot::success)
-        .collect()
-}
+use crate::compiler_frontend::tests::test_support::{
+    assignment_target, build_ast, default_host_registry, entry_and_start, fresh_returns,
+    function_node, lower_hir, make_test_variable, node, param, reference_expr,
+    register_host_function, run_borrow_checker, symbol, test_location,
+};
 
 #[test]
 fn user_function_returning_param_aliases_caller_root() {
@@ -44,17 +36,17 @@ fn user_function_returning_param_aliases_caller_root() {
     let callee = function_node(
         alias_fn.clone(),
         FunctionSignature {
-            parameters: vec![param(p.clone(), DataType::Int, false, location(1))],
+            parameters: vec![param(p.clone(), DataType::Int, false, test_location(1))],
             returns: vec![ReturnSlot::success(FunctionReturn::AliasCandidates {
                 parameter_indices: vec![0],
                 data_type: DataType::Int,
             })],
         },
         vec![node(
-            NodeKind::Return(vec![reference_expr(p, DataType::Int, location(2))]),
-            location(2),
+            NodeKind::Return(vec![reference_expr(p, DataType::Int, test_location(2))]),
+            test_location(2),
         )],
-        location(1),
+        test_location(1),
     );
 
     let caller = function_node(
@@ -67,31 +59,31 @@ fn user_function_returning_param_aliases_caller_root() {
             node(
                 NodeKind::VariableDeclaration(make_test_variable(
                     x.clone(),
-                    Expression::int(1, location(10), Ownership::MutableOwned),
+                    Expression::int(1, test_location(10), Ownership::MutableOwned),
                 )),
-                location(10),
+                test_location(10),
             ),
             node(
                 NodeKind::VariableDeclaration(make_test_variable(
                     y,
                     Expression::function_call(
                         alias_fn,
-                        vec![reference_expr(x.clone(), DataType::Int, location(11))],
+                        vec![reference_expr(x.clone(), DataType::Int, test_location(11))],
                         vec![DataType::Int],
-                        location(11),
+                        test_location(11),
                     ),
                 )),
-                location(11),
+                test_location(11),
             ),
             node(
                 NodeKind::Assignment {
-                    target: Box::new(assignment_target(x, DataType::Int, location(12))),
-                    value: Expression::int(2, location(12), Ownership::ImmutableOwned),
+                    target: Box::new(assignment_target(x, DataType::Int, test_location(12))),
+                    value: Expression::int(2, test_location(12), Ownership::ImmutableOwned),
                 },
-                location(12),
+                test_location(12),
             ),
         ],
-        location(10),
+        test_location(10),
     );
 
     let hir = lower_hir(
@@ -118,18 +110,18 @@ fn fresh_user_return_does_not_alias_caller_roots() {
     let callee = function_node(
         fresh_fn.clone(),
         FunctionSignature {
-            parameters: vec![param(p, DataType::Int, false, location(1))],
+            parameters: vec![param(p, DataType::Int, false, test_location(1))],
             returns: fresh_returns(vec![DataType::Int]),
         },
         vec![node(
             NodeKind::Return(vec![Expression::int(
                 42,
-                location(2),
+                test_location(2),
                 Ownership::ImmutableOwned,
             )]),
-            location(2),
+            test_location(2),
         )],
-        location(1),
+        test_location(1),
     );
 
     let caller = function_node(
@@ -142,31 +134,31 @@ fn fresh_user_return_does_not_alias_caller_roots() {
             node(
                 NodeKind::VariableDeclaration(make_test_variable(
                     x.clone(),
-                    Expression::int(1, location(10), Ownership::MutableOwned),
+                    Expression::int(1, test_location(10), Ownership::MutableOwned),
                 )),
-                location(10),
+                test_location(10),
             ),
             node(
                 NodeKind::VariableDeclaration(make_test_variable(
                     y,
                     Expression::function_call(
                         fresh_fn,
-                        vec![reference_expr(x.clone(), DataType::Int, location(11))],
+                        vec![reference_expr(x.clone(), DataType::Int, test_location(11))],
                         vec![DataType::Int],
-                        location(11),
+                        test_location(11),
                     ),
                 )),
-                location(11),
+                test_location(11),
             ),
             node(
                 NodeKind::Assignment {
-                    target: Box::new(assignment_target(x, DataType::Int, location(12))),
-                    value: Expression::int(2, location(12), Ownership::ImmutableOwned),
+                    target: Box::new(assignment_target(x, DataType::Int, test_location(12))),
+                    value: Expression::int(2, test_location(12), Ownership::ImmutableOwned),
                 },
-                location(12),
+                test_location(12),
             ),
         ],
-        location(10),
+        test_location(10),
     );
 
     let hir = lower_hir(
@@ -192,23 +184,23 @@ fn default_user_returning_param_is_fresh_by_default() {
     let callee = function_node(
         unknown_fn.clone(),
         FunctionSignature {
-            parameters: vec![param(p.clone(), DataType::Int, false, location(1))],
+            parameters: vec![param(p.clone(), DataType::Int, false, test_location(1))],
             returns: fresh_returns(vec![DataType::Int]),
         },
         vec![
             node(
                 NodeKind::VariableDeclaration(make_test_variable(
                     q.clone(),
-                    reference_expr(p, DataType::Int, location(2)),
+                    reference_expr(p, DataType::Int, test_location(2)),
                 )),
-                location(2),
+                test_location(2),
             ),
             node(
-                NodeKind::Return(vec![reference_expr(q, DataType::Int, location(3))]),
-                location(3),
+                NodeKind::Return(vec![reference_expr(q, DataType::Int, test_location(3))]),
+                test_location(3),
             ),
         ],
-        location(1),
+        test_location(1),
     );
 
     let caller = function_node(
@@ -221,31 +213,31 @@ fn default_user_returning_param_is_fresh_by_default() {
             node(
                 NodeKind::VariableDeclaration(make_test_variable(
                     x.clone(),
-                    Expression::int(1, location(10), Ownership::MutableOwned),
+                    Expression::int(1, test_location(10), Ownership::MutableOwned),
                 )),
-                location(10),
+                test_location(10),
             ),
             node(
                 NodeKind::VariableDeclaration(make_test_variable(
                     y,
                     Expression::function_call(
                         unknown_fn,
-                        vec![reference_expr(x.clone(), DataType::Int, location(11))],
+                        vec![reference_expr(x.clone(), DataType::Int, test_location(11))],
                         vec![DataType::Int],
-                        location(11),
+                        test_location(11),
                     ),
                 )),
-                location(11),
+                test_location(11),
             ),
             node(
                 NodeKind::Assignment {
-                    target: Box::new(assignment_target(x, DataType::Int, location(12))),
-                    value: Expression::int(2, location(12), Ownership::ImmutableOwned),
+                    target: Box::new(assignment_target(x, DataType::Int, test_location(12))),
+                    value: Expression::int(2, test_location(12), Ownership::ImmutableOwned),
                 },
-                location(12),
+                test_location(12),
             ),
         ],
-        location(10),
+        test_location(10),
     );
 
     let hir = lower_hir(
@@ -269,11 +261,11 @@ fn mutable_user_argument_is_accepted_without_false_shared_conflict() {
     let callee = function_node(
         mut_sink.clone(),
         FunctionSignature {
-            parameters: vec![param(p, DataType::Int, true, location(1))],
+            parameters: vec![param(p, DataType::Int, true, test_location(1))],
             returns: vec![],
         },
         vec![],
-        location(1),
+        test_location(1),
     );
 
     let caller = function_node(
@@ -286,25 +278,25 @@ fn mutable_user_argument_is_accepted_without_false_shared_conflict() {
             node(
                 NodeKind::VariableDeclaration(make_test_variable(
                     x.clone(),
-                    Expression::int(1, location(10), Ownership::MutableOwned),
+                    Expression::int(1, test_location(10), Ownership::MutableOwned),
                 )),
-                location(10),
+                test_location(10),
             ),
             node(
                 NodeKind::FunctionCall {
                     name: mut_sink,
                     args: vec![CallArgument::positional(
-                        reference_expr(x, DataType::Int, location(11)),
+                        reference_expr(x, DataType::Int, test_location(11)),
                         CallAccessMode::Shared,
-                        location(11),
+                        test_location(11),
                     )],
                     result_types: vec![],
-                    location: location(11),
+                    location: test_location(11),
                 },
-                location(11),
+                test_location(11),
             ),
         ],
-        location(10),
+        test_location(10),
     );
 
     let hir = lower_hir(
@@ -341,25 +333,25 @@ fn host_mutable_parameter_requires_mutable_access() {
             node(
                 NodeKind::VariableDeclaration(make_test_variable(
                     x.clone(),
-                    Expression::int(1, location(1), Ownership::ImmutableOwned),
+                    Expression::int(1, test_location(1), Ownership::ImmutableOwned),
                 )),
-                location(1),
+                test_location(1),
             ),
             node(
                 NodeKind::HostFunctionCall {
                     name: host_fn,
                     args: vec![CallArgument::positional(
-                        reference_expr(x, DataType::Int, location(2)),
+                        reference_expr(x, DataType::Int, test_location(2)),
                         CallAccessMode::Shared,
-                        location(2),
+                        test_location(2),
                     )],
                     result_types: vec![],
-                    location: location(2),
+                    location: test_location(2),
                 },
-                location(2),
+                test_location(2),
             ),
         ],
-        location(1),
+        test_location(1),
     );
 
     let hir = lower_hir(build_ast(vec![start], entry_path), &mut string_table);
@@ -395,25 +387,25 @@ fn host_mutable_parameter_accepts_mutable_local_argument() {
             node(
                 NodeKind::VariableDeclaration(make_test_variable(
                     x.clone(),
-                    Expression::int(1, location(1), Ownership::MutableOwned),
+                    Expression::int(1, test_location(1), Ownership::MutableOwned),
                 )),
-                location(1),
+                test_location(1),
             ),
             node(
                 NodeKind::HostFunctionCall {
                     name: host_fn,
                     args: vec![CallArgument::positional(
-                        reference_expr(x, DataType::Int, location(2)),
+                        reference_expr(x, DataType::Int, test_location(2)),
                         CallAccessMode::Shared,
-                        location(2),
+                        test_location(2),
                     )],
                     result_types: vec![],
-                    location: location(2),
+                    location: test_location(2),
                 },
-                location(2),
+                test_location(2),
             ),
         ],
-        location(1),
+        test_location(1),
     );
 
     let hir = lower_hir(build_ast(vec![start], entry_path), &mut string_table);
@@ -447,25 +439,25 @@ fn host_shared_parameter_is_shared_only() {
             node(
                 NodeKind::VariableDeclaration(make_test_variable(
                     x.clone(),
-                    Expression::int(1, location(1), Ownership::ImmutableOwned),
+                    Expression::int(1, test_location(1), Ownership::ImmutableOwned),
                 )),
-                location(1),
+                test_location(1),
             ),
             node(
                 NodeKind::HostFunctionCall {
                     name: host_fn,
                     args: vec![CallArgument::positional(
-                        reference_expr(x, DataType::Int, location(2)),
+                        reference_expr(x, DataType::Int, test_location(2)),
                         CallAccessMode::Shared,
-                        location(2),
+                        test_location(2),
                     )],
                     result_types: vec![],
-                    location: location(2),
+                    location: test_location(2),
                 },
-                location(2),
+                test_location(2),
             ),
         ],
-        location(1),
+        test_location(1),
     );
 
     let hir = lower_hir(build_ast(vec![start], entry_path), &mut string_table);
@@ -488,13 +480,13 @@ fn two_mutable_args_to_same_root_are_rejected() {
         mut2.clone(),
         FunctionSignature {
             parameters: vec![
-                param(a, DataType::Int, true, location(1)),
-                param(b, DataType::Int, true, location(1)),
+                param(a, DataType::Int, true, test_location(1)),
+                param(b, DataType::Int, true, test_location(1)),
             ],
             returns: vec![],
         },
         vec![],
-        location(1),
+        test_location(1),
     );
 
     let caller = function_node(
@@ -507,32 +499,32 @@ fn two_mutable_args_to_same_root_are_rejected() {
             node(
                 NodeKind::VariableDeclaration(make_test_variable(
                     x.clone(),
-                    Expression::int(1, location(10), Ownership::MutableOwned),
+                    Expression::int(1, test_location(10), Ownership::MutableOwned),
                 )),
-                location(10),
+                test_location(10),
             ),
             node(
                 NodeKind::FunctionCall {
                     name: mut2,
                     args: vec![
                         CallArgument::positional(
-                            reference_expr(x.clone(), DataType::Int, location(11)),
+                            reference_expr(x.clone(), DataType::Int, test_location(11)),
                             CallAccessMode::Shared,
-                            location(11),
+                            test_location(11),
                         ),
                         CallArgument::positional(
-                            reference_expr(x, DataType::Int, location(11)),
+                            reference_expr(x, DataType::Int, test_location(11)),
                             CallAccessMode::Shared,
-                            location(11),
+                            test_location(11),
                         ),
                     ],
                     result_types: vec![],
-                    location: location(11),
+                    location: test_location(11),
                 },
-                location(11),
+                test_location(11),
             ),
         ],
-        location(10),
+        test_location(10),
     );
 
     let hir = lower_hir(
@@ -559,13 +551,13 @@ fn shared_then_mutable_args_to_same_root_are_rejected() {
         read_then_mut.clone(),
         FunctionSignature {
             parameters: vec![
-                param(read, DataType::Int, false, location(1)),
-                param(mutate, DataType::Int, true, location(1)),
+                param(read, DataType::Int, false, test_location(1)),
+                param(mutate, DataType::Int, true, test_location(1)),
             ],
             returns: vec![],
         },
         vec![],
-        location(1),
+        test_location(1),
     );
 
     let caller = function_node(
@@ -578,32 +570,32 @@ fn shared_then_mutable_args_to_same_root_are_rejected() {
             node(
                 NodeKind::VariableDeclaration(make_test_variable(
                     x.clone(),
-                    Expression::int(1, location(10), Ownership::MutableOwned),
+                    Expression::int(1, test_location(10), Ownership::MutableOwned),
                 )),
-                location(10),
+                test_location(10),
             ),
             node(
                 NodeKind::FunctionCall {
                     name: read_then_mut,
                     args: vec![
                         CallArgument::positional(
-                            reference_expr(x.clone(), DataType::Int, location(11)),
+                            reference_expr(x.clone(), DataType::Int, test_location(11)),
                             CallAccessMode::Shared,
-                            location(11),
+                            test_location(11),
                         ),
                         CallArgument::positional(
-                            reference_expr(x, DataType::Int, location(11)),
+                            reference_expr(x, DataType::Int, test_location(11)),
                             CallAccessMode::Shared,
-                            location(11),
+                            test_location(11),
                         ),
                     ],
                     result_types: vec![],
-                    location: location(11),
+                    location: test_location(11),
                 },
-                location(11),
+                test_location(11),
             ),
         ],
-        location(10),
+        test_location(10),
     );
 
     let hir = lower_hir(
@@ -643,11 +635,11 @@ fn unresolved_or_mismatched_host_signature_errors() {
                 name: missing_host,
                 args: vec![],
                 result_types: vec![],
-                location: location(1),
+                location: test_location(1),
             },
-            location(1),
+            test_location(1),
         )],
-        location(1),
+        test_location(1),
     );
 
     let start_mismatch = function_node(
@@ -661,11 +653,11 @@ fn unresolved_or_mismatched_host_signature_errors() {
                 name: one_arg,
                 args: vec![],
                 result_types: vec![],
-                location: location(2),
+                location: test_location(2),
             },
-            location(2),
+            test_location(2),
         )],
-        location(2),
+        test_location(2),
     );
 
     let hir = lower_hir(
@@ -695,11 +687,11 @@ fn mutable_user_parameter_rejects_immutable_argument_reused_after_call() {
     let callee = function_node(
         mut_user.clone(),
         FunctionSignature {
-            parameters: vec![param(p, DataType::Int, true, location(1))],
+            parameters: vec![param(p, DataType::Int, true, test_location(1))],
             returns: vec![],
         },
         vec![],
-        location(1),
+        test_location(1),
     );
 
     let caller = function_node(
@@ -712,32 +704,32 @@ fn mutable_user_parameter_rejects_immutable_argument_reused_after_call() {
             node(
                 NodeKind::VariableDeclaration(make_test_variable(
                     x.clone(),
-                    Expression::int(1, location(10), Ownership::ImmutableOwned),
+                    Expression::int(1, test_location(10), Ownership::ImmutableOwned),
                 )),
-                location(10),
+                test_location(10),
             ),
             node(
                 NodeKind::FunctionCall {
                     name: mut_user,
                     args: vec![CallArgument::positional(
-                        reference_expr(x.clone(), DataType::Int, location(11)),
+                        reference_expr(x.clone(), DataType::Int, test_location(11)),
                         CallAccessMode::Shared,
-                        location(11),
+                        test_location(11),
                     )],
                     result_types: vec![],
-                    location: location(11),
+                    location: test_location(11),
                 },
-                location(11),
+                test_location(11),
             ),
             node(
                 NodeKind::VariableDeclaration(make_test_variable(
                     y,
-                    reference_expr(x, DataType::Int, location(12)),
+                    reference_expr(x, DataType::Int, test_location(12)),
                 )),
-                location(12),
+                test_location(12),
             ),
         ],
-        location(10),
+        test_location(10),
     );
 
     let hir = lower_hir(
@@ -776,25 +768,25 @@ fn out_of_range_return_alias_metadata_is_reported_at_call_site() {
             node(
                 NodeKind::VariableDeclaration(make_test_variable(
                     x.clone(),
-                    Expression::int(1, location(10), Ownership::MutableOwned),
+                    Expression::int(1, test_location(10), Ownership::MutableOwned),
                 )),
-                location(10),
+                test_location(10),
             ),
             node(
                 NodeKind::HostFunctionCall {
                     name: bad_alias_host,
                     args: vec![CallArgument::positional(
-                        reference_expr(x, DataType::Int, location(11)),
+                        reference_expr(x, DataType::Int, test_location(11)),
                         CallAccessMode::Shared,
-                        location(11),
+                        test_location(11),
                     )],
                     result_types: vec![DataType::Int],
-                    location: location(11),
+                    location: test_location(11),
                 },
-                location(11),
+                test_location(11),
             ),
         ],
-        location(10),
+        test_location(10),
     );
 
     let hir = lower_hir(build_ast(vec![start], entry_path), &mut string_table);
@@ -819,16 +811,16 @@ fn same_line_mutable_call_then_reuse_uses_order_keys() {
     let callee = function_node(
         mut_user.clone(),
         FunctionSignature {
-            parameters: vec![param(p, DataType::Int, true, location(1))],
+            parameters: vec![param(p, DataType::Int, true, test_location(1))],
             returns: vec![],
         },
         vec![],
-        location(1),
+        test_location(1),
     );
 
     // WHAT: both statements intentionally share one source line.
     // WHY: validates that borrow/move classification uses statement order keys, not line numbers.
-    let same_line = location(20);
+    let same_line = test_location(20);
     let caller = function_node(
         start_name,
         FunctionSignature {
@@ -839,9 +831,9 @@ fn same_line_mutable_call_then_reuse_uses_order_keys() {
             node(
                 NodeKind::VariableDeclaration(make_test_variable(
                     x.clone(),
-                    Expression::int(1, location(10), Ownership::MutableOwned),
+                    Expression::int(1, test_location(10), Ownership::MutableOwned),
                 )),
-                location(10),
+                test_location(10),
             ),
             node(
                 NodeKind::FunctionCall {
@@ -864,7 +856,7 @@ fn same_line_mutable_call_then_reuse_uses_order_keys() {
                 same_line,
             ),
         ],
-        location(10),
+        test_location(10),
     );
 
     let hir = lower_hir(
@@ -892,7 +884,12 @@ fn short_circuit_rhs_mutable_call_with_later_merge_use_borrows_instead_of_moving
     let rhs_function = function_node(
         rhs_name.clone(),
         FunctionSignature {
-            parameters: vec![param(param_calls.clone(), DataType::Int, true, location(1))],
+            parameters: vec![param(
+                param_calls.clone(),
+                DataType::Int,
+                true,
+                test_location(1),
+            )],
             returns: fresh_returns(vec![DataType::Bool]),
         },
         vec![
@@ -901,7 +898,7 @@ fn short_circuit_rhs_mutable_call_with_later_merge_use_borrows_instead_of_moving
                     target: Box::new(assignment_target(
                         param_calls.clone(),
                         DataType::Int,
-                        location(2),
+                        test_location(2),
                     )),
                     value: Expression::runtime(
                         vec![
@@ -909,38 +906,38 @@ fn short_circuit_rhs_mutable_call_with_later_merge_use_borrows_instead_of_moving
                                 NodeKind::Rvalue(Expression::reference(
                                     param_calls,
                                     DataType::Int,
-                                    location(2),
+                                    test_location(2),
                                     Ownership::MutableOwned,
                                 )),
-                                location(2),
+                                test_location(2),
                             ),
                             node(
                                 NodeKind::Rvalue(Expression::int(
                                     1,
-                                    location(2),
+                                    test_location(2),
                                     Ownership::ImmutableOwned,
                                 )),
-                                location(2),
+                                test_location(2),
                             ),
-                            node(NodeKind::Operator(Operator::Add), location(2)),
+                            node(NodeKind::Operator(Operator::Add), test_location(2)),
                         ],
                         DataType::Int,
-                        location(2),
+                        test_location(2),
                         Ownership::MutableOwned,
                     ),
                 },
-                location(2),
+                test_location(2),
             ),
             node(
                 NodeKind::Return(vec![Expression::bool(
                     true,
-                    location(3),
+                    test_location(3),
                     Ownership::ImmutableOwned,
                 )]),
-                location(3),
+                test_location(3),
             ),
         ],
-        location(1),
+        test_location(1),
     );
 
     let short_circuit_value = Expression::runtime(
@@ -949,10 +946,10 @@ fn short_circuit_rhs_mutable_call_with_later_merge_use_borrows_instead_of_moving
                 NodeKind::Rvalue(Expression::reference(
                     lhs.clone(),
                     DataType::Bool,
-                    location(11),
+                    test_location(11),
                     Ownership::ImmutableOwned,
                 )),
-                location(11),
+                test_location(11),
             ),
             node(
                 NodeKind::Rvalue(Expression::function_call(
@@ -960,18 +957,18 @@ fn short_circuit_rhs_mutable_call_with_later_merge_use_borrows_instead_of_moving
                     vec![Expression::reference(
                         calls.clone(),
                         DataType::Int,
-                        location(11),
+                        test_location(11),
                         Ownership::MutableOwned,
                     )],
                     vec![DataType::Bool],
-                    location(11),
+                    test_location(11),
                 )),
-                location(11),
+                test_location(11),
             ),
-            node(NodeKind::Operator(Operator::And), location(11)),
+            node(NodeKind::Operator(Operator::And), test_location(11)),
         ],
         DataType::Bool,
-        location(11),
+        test_location(11),
         Ownership::ImmutableOwned,
     );
 
@@ -985,20 +982,20 @@ fn short_circuit_rhs_mutable_call_with_later_merge_use_borrows_instead_of_moving
             node(
                 NodeKind::VariableDeclaration(make_test_variable(
                     lhs,
-                    Expression::bool(false, location(10), Ownership::ImmutableOwned),
+                    Expression::bool(false, test_location(10), Ownership::ImmutableOwned),
                 )),
-                location(10),
+                test_location(10),
             ),
             node(
                 NodeKind::VariableDeclaration(make_test_variable(
                     calls.clone(),
-                    Expression::int(0, location(10), Ownership::MutableOwned),
+                    Expression::int(0, test_location(10), Ownership::MutableOwned),
                 )),
-                location(10),
+                test_location(10),
             ),
             node(
                 NodeKind::VariableDeclaration(make_test_variable(value, short_circuit_value)),
-                location(11),
+                test_location(11),
             ),
             node(
                 NodeKind::VariableDeclaration(make_test_variable(
@@ -1006,14 +1003,14 @@ fn short_circuit_rhs_mutable_call_with_later_merge_use_borrows_instead_of_moving
                     Expression::reference(
                         calls,
                         DataType::Int,
-                        location(12),
+                        test_location(12),
                         Ownership::ImmutableReference,
                     ),
                 )),
-                location(12),
+                test_location(12),
             ),
         ],
-        location(10),
+        test_location(10),
     );
 
     let hir = lower_hir(

@@ -5,7 +5,7 @@
 
 use crate::compiler_frontend::ast::ast_nodes::NodeKind;
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
-use crate::compiler_frontend::ast::test_support::{parse_single_file_ast, start_function_body};
+use crate::compiler_frontend::tests::test_support::{parse_single_file_ast, start_function_body};
 
 #[test]
 fn parses_struct_definitions_with_field_defaults() {

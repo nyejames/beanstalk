@@ -40,10 +40,13 @@ pub struct ScopeContext {
     pub scope: InternedPath,
 
     // --- Declaration tables ---
-    // Full declaration table for path-identity lookup and type/context metadata.
-    // This stays module-wide so resolution always uses stable unique IDs.
-    pub declarations: Vec<Declaration>,
-    // Optional file-local visibility gate over `declarations`.
+    // Shared module-wide top-level declarations — stable after pass 4, cheap to clone
+    // via Rc (no data copy). All function bodies in one module share one allocation.
+    pub(crate) top_level_declarations: Rc<Vec<Declaration>>,
+    // Per-scope locals: function parameters + body-declared variables only.
+    // Grows incrementally in source order via add_var(); never carries module-wide data.
+    pub local_declarations: Vec<Declaration>,
+    // Optional file-local visibility gate over declarations.
     // When present, references must be in this set, which enforces import boundaries.
     pub visible_declaration_ids: Option<FxHashSet<InternedPath>>,
 
@@ -105,14 +108,15 @@ impl ScopeContext {
     pub fn new(
         kind: ContextKind,
         scope: InternedPath,
-        declarations: &[Declaration],
+        top_level_declarations: Rc<Vec<Declaration>>,
         host_registry: HostRegistry,
         expected_result_types: Vec<DataType>,
     ) -> ScopeContext {
         ScopeContext {
             kind,
             scope,
-            declarations: declarations.to_owned(),
+            top_level_declarations,
+            local_declarations: Vec::new(),
             visible_declaration_ids: None,
             expected_result_types,
             expected_error_type: None,
@@ -165,8 +169,9 @@ impl ScopeContext {
         new_context.scope = self.scope.append(id);
         new_context.loop_depth = 0;
 
-        new_context.declarations = self.declarations.to_owned();
-        new_context.declarations.extend(signature.parameters);
+        // Share the top-level declaration table (cheap Rc clone); reset locals to params only.
+        new_context.top_level_declarations = Rc::clone(&self.top_level_declarations);
+        new_context.local_declarations = signature.parameters;
 
         new_context
     }
@@ -192,7 +197,8 @@ impl ScopeContext {
         ScopeContext {
             kind: template_kind,
             scope: self.scope.clone(),
-            declarations: self.declarations.to_owned(),
+            top_level_declarations: Rc::clone(&self.top_level_declarations),
+            local_declarations: self.local_declarations.clone(),
             visible_declaration_ids: self.visible_declaration_ids.clone(),
             expected_result_types: vec![],
             expected_error_type: self.expected_error_type.clone(),
@@ -219,7 +225,8 @@ impl ScopeContext {
         ScopeContext {
             kind: ContextKind::Constant,
             scope,
-            declarations: parent.declarations.to_owned(),
+            top_level_declarations: Rc::clone(&parent.top_level_declarations),
+            local_declarations: parent.local_declarations.clone(),
             visible_declaration_ids: parent.visible_declaration_ids.clone(),
             expected_result_types: Vec::new(),
             expected_error_type: parent.expected_error_type.clone(),
@@ -333,6 +340,28 @@ impl ScopeContext {
         self
     }
 
+    pub(crate) fn get_reference(&self, name: &StringId) -> Option<&Declaration> {
+        let is_visible = |declaration: &&Declaration| {
+            !matches!(
+                &declaration.value.data_type,
+                DataType::Function(receiver, _) if receiver.as_ref().is_some()
+            ) && match self.visible_declaration_ids.as_ref() {
+                Some(visible) => visible.contains(&declaration.id),
+                None => true,
+            }
+        };
+
+        // Locals first — params and body-declared vars shadow top-level symbols by name.
+        self.local_declarations
+            .iter()
+            .rfind(|d| d.id.name() == Some(*name) && is_visible(d))
+            .or_else(|| {
+                self.top_level_declarations
+                    .iter()
+                    .rfind(|d| d.id.name() == Some(*name) && is_visible(d))
+            })
+    }
+
     pub(crate) fn lookup_receiver_method(
         &self,
         receiver: &ReceiverKey,
@@ -365,12 +394,12 @@ impl ScopeContext {
     }
 
     pub fn add_var(&mut self, arg: Declaration) {
-        // Keep the declaration table and visibility gate in sync for locals declared in-body.
-        // Otherwise, a newly declared local could exist in `declarations` but be invisible.
+        // Keep the local layer and visibility gate in sync for variables declared in-body.
+        // Otherwise, a newly declared local could exist in local_declarations but be invisible.
         if let Some(visible) = self.visible_declaration_ids.as_mut() {
             visible.insert(arg.id.to_owned());
         }
-        self.declarations.push(arg);
+        self.local_declarations.push(arg);
     }
 
     pub fn is_inside_loop(&self) -> bool {

@@ -37,6 +37,11 @@ impl<'a> AstBuildState<'a> {
         receiver_methods: &Rc<ReceiverMethodCatalog>,
         string_table: &mut StringTable,
     ) -> Result<(), CompilerMessages> {
+        // Build the shared top-level declaration Rc once, after passes 3–4 have
+        // fully resolved all declarations. Every function and start body clones the
+        // Rc (cheap pointer increment), not the underlying Vec.
+        let top_level = Rc::new(self.declarations.clone());
+
         for header in sorted_headers {
             let bindings = file_import_bindings
                 .get(&header.source_file)
@@ -60,19 +65,17 @@ impl<'a> AstBuildState<'a> {
                         ));
                     };
 
-                    let mut function_declarations = self.declarations.to_owned();
-                    function_declarations
-                        .extend(resolved_signature.signature.parameters.to_owned());
                     let mut visible_declarations = bindings.visible_symbol_paths.to_owned();
                     for parameter in &resolved_signature.signature.parameters {
                         visible_declarations.insert(parameter.id.to_owned());
                     }
 
-                    // Function parameters should be available in the function body scope.
+                    // Build the function body context: top-level declarations are shared via Rc
+                    // (no data copy); parameters live in local_declarations.
                     let mut context = ScopeContext::new(
                         ContextKind::Function,
                         header.tokens.src_path.to_owned(),
-                        &function_declarations,
+                        Rc::clone(&top_level),
                         self.host_registry.clone(),
                         resolved_signature.signature.return_data_types(),
                     )
@@ -88,6 +91,8 @@ impl<'a> AstBuildState<'a> {
                         .signature
                         .error_return()
                         .map(|ret| ret.data_type().to_owned());
+                    // Parameters belong in the local layer, not in top-level declarations.
+                    context.local_declarations = resolved_signature.signature.parameters.to_owned();
 
                     let mut token_stream = header.tokens;
 
@@ -127,7 +132,7 @@ impl<'a> AstBuildState<'a> {
                     let context = ScopeContext::new(
                         ContextKind::Module,
                         header.tokens.src_path.to_owned(),
-                        &self.declarations,
+                        Rc::clone(&top_level),
                         self.host_registry.clone(),
                         vec![],
                     )
@@ -211,7 +216,7 @@ impl<'a> AstBuildState<'a> {
                     let context = ScopeContext::new(
                         ContextKind::Constant,
                         template_tokens.src_path.to_owned(),
-                        &self.declarations,
+                        Rc::clone(&top_level),
                         self.host_registry.clone(),
                         vec![],
                     )

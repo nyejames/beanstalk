@@ -28,77 +28,10 @@ use crate::compiler_frontend::host_functions::CallTarget;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::string_interning::StringTable;
-
-fn test_location(line: i32) -> SourceLocation {
-    location(line)
-}
-
-fn node(kind: NodeKind, location: SourceLocation) -> AstNode {
-    AstNode {
-        kind,
-        location,
-        scope: InternedPath::new(),
-    }
-}
-
-fn make_test_variable(name: InternedPath, value: Expression) -> Declaration {
-    Declaration { id: name, value }
-}
-
-fn param(
-    name: InternedPath,
-    data_type: DataType,
-    mutable: bool,
-    location: SourceLocation,
-) -> Declaration {
-    let ownership = if mutable {
-        Ownership::MutableOwned
-    } else {
-        Ownership::ImmutableOwned
-    };
-
-    Declaration {
-        id: name,
-        value: Expression::new(ExpressionKind::NoValue, location, data_type, ownership),
-    }
-}
-
-fn function_node(
-    name: InternedPath,
-    signature: FunctionSignature,
-    body: Vec<AstNode>,
-    location: SourceLocation,
-) -> AstNode {
-    node(NodeKind::Function(name, signature, body), location)
-}
-
-fn fresh_returns(result_types: Vec<DataType>) -> Vec<ReturnSlot> {
-    result_types
-        .into_iter()
-        .map(FunctionReturn::Value)
-        .map(ReturnSlot::success)
-        .collect()
-}
-
-fn runtime_function_call_node(
-    name: InternedPath,
-    result_types: Vec<DataType>,
-    location: SourceLocation,
-) -> AstNode {
-    node(
-        NodeKind::FunctionCall {
-            name,
-            args: vec![],
-            result_types,
-            location: location.clone(),
-        },
-        location,
-    )
-}
-
-fn runtime_operator_node(operator: Operator, location: SourceLocation) -> AstNode {
-    node(NodeKind::Operator(operator), location)
-}
+use crate::compiler_frontend::tests::test_support::{
+    fresh_returns, function_node, make_test_variable, node, param, runtime_function_call_node,
+    runtime_operator_node, test_location,
+};
 
 fn build_ast(nodes: Vec<AstNode>, entry_path: InternedPath) -> Ast {
     Ast {

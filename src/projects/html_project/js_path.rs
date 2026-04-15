@@ -25,7 +25,6 @@ use crate::projects::html_project::page_metadata::extract_html_page_metadata;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-
 /// Compiles one module through the JS-only HTML builder path.
 ///
 /// WHAT: lowers HIR to JS and embeds the JS with runtime slot hydration into HTML.
@@ -137,7 +136,8 @@ pub(crate) fn render_html_document(
     function_names: &HashMap<FunctionId, String>,
     entry_runtime_fragment_count: usize,
 ) -> Result<String, CompilerError> {
-    let (body_html, slot_ids) = render_entry_fragments(const_fragments, entry_runtime_fragment_count);
+    let (body_html, slot_ids) =
+        render_entry_fragments(const_fragments, entry_runtime_fragment_count);
     let page_metadata = extract_html_page_metadata(hir_module, string_table)?;
 
     let Some(start_function_name) = function_names.get(&hir_module.start_function) else {

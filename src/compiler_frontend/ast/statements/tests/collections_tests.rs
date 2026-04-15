@@ -5,10 +5,10 @@
 
 use crate::compiler_frontend::ast::ast_nodes::NodeKind;
 use crate::compiler_frontend::ast::expressions::expression::{ExpressionKind, ResultCallHandling};
-use crate::compiler_frontend::ast::test_support::{
+use crate::compiler_frontend::builtins::BuiltinMethodKind;
+use crate::compiler_frontend::tests::test_support::{
     function_body_by_name, parse_single_file_ast, parse_single_file_ast_error, start_function_body,
 };
-use crate::compiler_frontend::builtins::BuiltinMethodKind;
 
 fn runtime_method_builtin_kind(
     expression: &crate::compiler_frontend::ast::expressions::expression::Expression,

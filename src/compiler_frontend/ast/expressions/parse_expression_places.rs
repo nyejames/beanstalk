@@ -18,7 +18,6 @@ use crate::compiler_frontend::reserved_trait_syntax::{
 };
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
-use crate::compiler_frontend::traits::ContainsReferences;
 use crate::{return_rule_error, return_syntax_error};
 
 pub(super) fn parse_mutable_receiver_expression(

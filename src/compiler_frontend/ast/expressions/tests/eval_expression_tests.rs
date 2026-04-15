@@ -3,9 +3,6 @@ use crate::compiler_frontend::ast::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::Operator;
 use crate::compiler_frontend::ast::templates::template_types::Template;
-use crate::compiler_frontend::ast::test_support::{
-    parse_single_file_ast, parse_single_file_ast_error,
-};
 use crate::compiler_frontend::compiler_errors::{ErrorMetaDataKey, ErrorType};
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::host_functions::HostRegistry;
@@ -15,7 +12,11 @@ use crate::compiler_frontend::paths::path_resolution::{
     CompileTimePath, CompileTimePathBase, CompileTimePathKind, CompileTimePaths,
 };
 use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::tests::test_support::{
+    parse_single_file_ast, parse_single_file_ast_error,
+};
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
+use std::rc::Rc;
 
 fn template_ast_node(template: Template) -> AstNode {
     AstNode {
@@ -106,7 +107,7 @@ fn ordinary_expression_rejects_path_string_concatenation() {
     let context = ScopeContext::new(
         ContextKind::Template,
         source_scope.clone(),
-        &[],
+        Rc::new(vec![]),
         HostRegistry::new(),
         vec![],
     )

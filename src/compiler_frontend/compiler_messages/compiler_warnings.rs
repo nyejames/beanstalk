@@ -1,4 +1,4 @@
-use crate::compiler_frontend::source_location::SourceLocation;
+use crate::compiler_frontend::compiler_messages::source_location::SourceLocation;
 
 #[derive(Clone, Debug)]
 pub struct CompilerWarning {

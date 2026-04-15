@@ -10,6 +10,7 @@ use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
+use std::rc::Rc;
 
 fn empty_scope(string_table: &mut StringTable) -> InternedPath {
     let mut p = InternedPath::new();
@@ -28,7 +29,7 @@ fn scope_context_new_leaves_no_visibility_gate() {
     let ctx = ScopeContext::new(
         ContextKind::Function,
         scope,
-        &[],
+        Rc::new(vec![]),
         HostRegistry::new(),
         vec![],
     );
@@ -55,7 +56,7 @@ fn add_var_extends_visibility_gate_when_gate_is_set() {
     let mut ctx = ScopeContext::new(
         ContextKind::Function,
         scope,
-        &[],
+        Rc::new(vec![]),
         HostRegistry::new(),
         vec![],
     );
@@ -83,9 +84,9 @@ fn add_var_extends_visibility_gate_when_gate_is_set() {
         "add_var must insert the new variable into the visibility gate"
     );
     assert_eq!(
-        ctx.declarations.len(),
+        ctx.local_declarations.len(),
         1,
-        "add_var must append the declaration to the declaration table"
+        "add_var must append the declaration to the local declaration layer"
     );
 }
 
@@ -100,7 +101,7 @@ fn new_template_parsing_context_preserves_constant_kind() {
     let ctx = ScopeContext::new(
         ContextKind::Constant,
         scope,
-        &[],
+        Rc::new(vec![]),
         HostRegistry::new(),
         vec![],
     );
@@ -119,7 +120,7 @@ fn new_template_parsing_context_converts_function_kind_to_template() {
     let ctx = ScopeContext::new(
         ContextKind::Function,
         scope,
-        &[],
+        Rc::new(vec![]),
         HostRegistry::new(),
         vec![],
     );
@@ -138,7 +139,7 @@ fn new_template_parsing_context_propagates_expected_error_type() {
     let mut ctx = ScopeContext::new(
         ContextKind::Function,
         scope,
-        &[],
+        Rc::new(vec![]),
         HostRegistry::new(),
         vec![],
     );
@@ -163,7 +164,7 @@ fn new_child_control_flow_increments_loop_depth_for_loop_kind() {
     let ctx = ScopeContext::new(
         ContextKind::Function,
         scope,
-        &[],
+        Rc::new(vec![]),
         HostRegistry::new(),
         vec![],
     );
@@ -195,7 +196,7 @@ fn new_constant_inherits_parent_visibility_gate() {
     let mut ctx = ScopeContext::new(
         ContextKind::Function,
         scope.to_owned(),
-        &[],
+        Rc::new(vec![]),
         HostRegistry::new(),
         vec![],
     );

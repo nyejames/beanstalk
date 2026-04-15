@@ -3,10 +3,6 @@
 //! WHAT: validates how lexical scopes and nested blocks constrain borrow visibility and drops.
 //! WHY: scope boundaries drive many lifetime rules, so regressions here tend to cascade widely.
 
-use crate::compiler_frontend::analysis::borrow_checker::tests::test_support::{
-    assignment_target, build_ast, default_host_registry, entry_and_start, function_node, location,
-    lower_hir, make_test_variable, node, reference_expr, run_borrow_checker, symbol,
-};
 use crate::compiler_frontend::ast::ast_nodes::NodeKind;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::statements::branching::MatchArm;
@@ -18,6 +14,10 @@ use crate::compiler_frontend::hir::hir_nodes::{
     ValueKind,
 };
 use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::tests::test_support::{
+    assignment_target, build_ast, default_host_registry, entry_and_start, function_node, lower_hir,
+    make_test_variable, node, reference_expr, run_borrow_checker, symbol, test_location,
+};
 
 #[test]
 fn if_branch_local_alias_does_not_escape_merge() {
@@ -38,33 +38,33 @@ fn if_branch_local_alias_does_not_escape_merge() {
             node(
                 NodeKind::VariableDeclaration(make_test_variable(
                     x.clone(),
-                    Expression::int(1, location(1), Ownership::MutableOwned),
+                    Expression::int(1, test_location(1), Ownership::MutableOwned),
                 )),
-                location(1),
+                test_location(1),
             ),
             node(
                 NodeKind::If(
-                    Expression::bool(true, location(2), Ownership::ImmutableOwned),
+                    Expression::bool(true, test_location(2), Ownership::ImmutableOwned),
                     vec![node(
                         NodeKind::VariableDeclaration(make_test_variable(
                             y,
-                            reference_expr(x.clone(), DataType::Int, location(3)),
+                            reference_expr(x.clone(), DataType::Int, test_location(3)),
                         )),
-                        location(3),
+                        test_location(3),
                     )],
                     Some(vec![]),
                 ),
-                location(2),
+                test_location(2),
             ),
             node(
                 NodeKind::Assignment {
-                    target: Box::new(assignment_target(x, DataType::Int, location(4))),
-                    value: Expression::int(2, location(4), Ownership::ImmutableOwned),
+                    target: Box::new(assignment_target(x, DataType::Int, test_location(4))),
+                    value: Expression::int(2, test_location(4), Ownership::ImmutableOwned),
                 },
-                location(4),
+                test_location(4),
             ),
         ],
-        location(1),
+        test_location(1),
     );
 
     let hir = lower_hir(build_ast(vec![start_fn], entry_path), &mut string_table);
@@ -82,13 +82,13 @@ fn match_arm_local_alias_does_not_escape_merge() {
     let y = symbol("y", &mut string_table);
 
     let arm = MatchArm {
-        condition: Expression::int(1, location(3), Ownership::ImmutableOwned),
+        condition: Expression::int(1, test_location(3), Ownership::ImmutableOwned),
         body: vec![node(
             NodeKind::VariableDeclaration(make_test_variable(
                 y,
-                reference_expr(x.clone(), DataType::Int, location(4)),
+                reference_expr(x.clone(), DataType::Int, test_location(4)),
             )),
-            location(4),
+            test_location(4),
         )],
     };
 
@@ -102,27 +102,27 @@ fn match_arm_local_alias_does_not_escape_merge() {
             node(
                 NodeKind::VariableDeclaration(make_test_variable(
                     x.clone(),
-                    Expression::int(1, location(1), Ownership::MutableOwned),
+                    Expression::int(1, test_location(1), Ownership::MutableOwned),
                 )),
-                location(1),
+                test_location(1),
             ),
             node(
                 NodeKind::Match(
-                    Expression::int(1, location(2), Ownership::ImmutableOwned),
+                    Expression::int(1, test_location(2), Ownership::ImmutableOwned),
                     vec![arm],
                     None,
                 ),
-                location(2),
+                test_location(2),
             ),
             node(
                 NodeKind::Assignment {
-                    target: Box::new(assignment_target(x, DataType::Int, location(5))),
-                    value: Expression::int(2, location(5), Ownership::ImmutableOwned),
+                    target: Box::new(assignment_target(x, DataType::Int, test_location(5))),
+                    value: Expression::int(2, test_location(5), Ownership::ImmutableOwned),
                 },
-                location(5),
+                test_location(5),
             ),
         ],
-        location(1),
+        test_location(1),
     );
 
     let hir = lower_hir(build_ast(vec![start_fn], entry_path), &mut string_table);
@@ -149,32 +149,32 @@ fn while_body_local_alias_does_not_escape_exit() {
             node(
                 NodeKind::VariableDeclaration(make_test_variable(
                     x.clone(),
-                    Expression::int(1, location(1), Ownership::MutableOwned),
+                    Expression::int(1, test_location(1), Ownership::MutableOwned),
                 )),
-                location(1),
+                test_location(1),
             ),
             node(
                 NodeKind::WhileLoop(
-                    Expression::bool(false, location(2), Ownership::ImmutableOwned),
+                    Expression::bool(false, test_location(2), Ownership::ImmutableOwned),
                     vec![node(
                         NodeKind::VariableDeclaration(make_test_variable(
                             y,
-                            reference_expr(x.clone(), DataType::Int, location(3)),
+                            reference_expr(x.clone(), DataType::Int, test_location(3)),
                         )),
-                        location(3),
+                        test_location(3),
                     )],
                 ),
-                location(2),
+                test_location(2),
             ),
             node(
                 NodeKind::Assignment {
-                    target: Box::new(assignment_target(x, DataType::Int, location(4))),
-                    value: Expression::int(2, location(4), Ownership::ImmutableOwned),
+                    target: Box::new(assignment_target(x, DataType::Int, test_location(4))),
+                    value: Expression::int(2, test_location(4), Ownership::ImmutableOwned),
                 },
-                location(4),
+                test_location(4),
             ),
         ],
-        location(1),
+        test_location(1),
     );
 
     let hir = lower_hir(build_ast(vec![start_fn], entry_path), &mut string_table);
@@ -201,33 +201,33 @@ fn dead_local_access_reports_borrow_error() {
             node(
                 NodeKind::VariableDeclaration(make_test_variable(
                     x.clone(),
-                    Expression::int(1, location(1), Ownership::MutableOwned),
+                    Expression::int(1, test_location(1), Ownership::MutableOwned),
                 )),
-                location(1),
+                test_location(1),
             ),
             node(
                 NodeKind::If(
-                    Expression::bool(true, location(2), Ownership::ImmutableOwned),
+                    Expression::bool(true, test_location(2), Ownership::ImmutableOwned),
                     vec![node(
                         NodeKind::VariableDeclaration(make_test_variable(
                             y.clone(),
-                            reference_expr(x.clone(), DataType::Int, location(3)),
+                            reference_expr(x.clone(), DataType::Int, test_location(3)),
                         )),
-                        location(3),
+                        test_location(3),
                     )],
                     Some(vec![]),
                 ),
-                location(2),
+                test_location(2),
             ),
             node(
                 NodeKind::Assignment {
-                    target: Box::new(assignment_target(x, DataType::Int, location(4))),
-                    value: Expression::int(2, location(4), Ownership::ImmutableOwned),
+                    target: Box::new(assignment_target(x, DataType::Int, test_location(4))),
+                    value: Expression::int(2, test_location(4), Ownership::ImmutableOwned),
                 },
-                location(4),
+                test_location(4),
             ),
         ],
-        location(1),
+        test_location(1),
     );
 
     let mut hir = lower_hir(build_ast(vec![start_fn], entry_path), &mut string_table);
@@ -271,7 +271,7 @@ fn dead_local_access_reports_borrow_error() {
     let synthetic_statement = HirStatement {
         id: HirNodeId(77_000),
         kind: HirStatementKind::Expr(synthetic_value),
-        location: location(100),
+        location: test_location(100),
     };
     hir.blocks[merge_block.0 as usize]
         .statements

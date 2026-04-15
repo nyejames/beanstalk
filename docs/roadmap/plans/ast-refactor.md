@@ -29,94 +29,339 @@ Principles:
 - AST does **not** rebuild the module declaration universe from headers
 - Function/local declarations remain incremental and ordered
 
-# Part 3 — shrink AST state and replace cloned declaration scopes
+# MERGE TOP-LEVEL SYMBOL COLLECTION BACK INTO HEADER PARSING
 
-## Overview
+The current `symbol_manifest` stage fixes AST ownership drift, but it does so by introducing an extra packaging pass between dependency sorting and AST construction.
 
-The goal is to finish the real AST simplification. Once recollection is removed, `AstBuildState` and `ScopeContext` can be reduced to true AST-stage responsibilities and layered scope growth.
+That is cleaner than AST recollecting declarations itself, but it is still one pass too many.
 
-Desired design:
+The intended architecture is simpler:
 
-* `AstBuildState` only carries AST-stage state
-* `ScopeContext` does not clone a full module declaration vec into every child scope
-* top-level declarations come from the shared manifest
-* parameters and locals grow incrementally in source order
+1. Tokenize files
+2. Parse file headers
+   - collect all top-level declaration knowledge here
+   - collect file/import/export/source metadata here
+   - merge builtin/reserved top-level symbol visibility here
+3. Dependency sort headers
+4. Lower sorted headers directly into AST
+   - AST consumes header-owned top-level knowledge
+   - AST still performs module-wide type/signature/catalog preparation before body emission
+   - AST does not rebuild or repackage the module symbol universe as a separate stage
 
-Done so far:
+## Correct architecture to restore
 
-* the AST body-lowering path already has the right semantic direction for start/runtime template handling
-* import semantics are already simpler because start aliasing is gone
-* the remaining complexity is now concentrated in `AstBuildState`, `ScopeContext`, and the orchestration around them
+Header parsing should own the full top-level symbol collection package for the module.
+
+That package should include:
+
+- top-level declaration stubs
+- file import metadata
+- export visibility metadata
+- declared symbol paths by file
+- declared symbol names by file
+- canonical source-file mapping for declarations
+- module file path set
+- builtin-visible symbol paths
+- builtin struct/type payloads needed by AST
+- any other top-level symbol facts AST/import visibility need later
+
+Dependency sorting should then reorder headers without forcing a second top-level recollection or manifest-construction step.
+
+AST should receive:
+
+- sorted headers
+- header-owned top-level symbol data already prepared for consumption
+
+AST still needs module-wide pre-body semantic preparation where the language requires it:
+
+- import visibility resolution
+- constant/type resolution
+- function signature resolution
+- receiver-method catalog construction
+
+But this is AST semantic work, not top-level declaration recollection.
+
+## Why this change exists
+
+The current `symbol_manifest` stage is mostly packaging work, not new language work.
+
+It exists because AST had drifted into rebuilding module-wide declaration/index state from sorted headers before lowering bodies.
+
+That drift should be fixed at the ownership boundary, not preserved as a first-class compiler stage.
+
+The simpler model is:
+
+- header parsing discovers top-level declarations once
+- dependency sorting orders them
+- AST consumes them
+
+This reduces extra pass churn, keeps stage ownership sharper, and makes the frontend easier to reason about.
+
+## Goals
+
+- Remove `symbol_manifest` as a distinct frontend stage
+- Move top-level symbol collection fully into header parsing ownership
+- Preserve the current cleaner AST ownership split
+- Keep AST focused on semantic lowering work, not declaration packaging
+- Avoid reintroducing AST-side recollection or duplicate symbol databases
+- Keep the pipeline aligned with the compiler design docs
+
+## Non-goals
+
+- Do not force AST into a purely streaming one-header-at-a-time model if current language semantics still require module-wide pre-body semantic preparation
+- Do not move function-signature resolution, receiver catalog construction, or similar AST semantic work into header parsing
+- Do not add compatibility wrappers or parallel transitional APIs
+- Do not preserve `symbol_manifest` under a different name if it is still just a separate packaging stage
+
+## Target frontend shape
+
+Desired flow:
+
+1. `parse_headers(...)`
+   - parses headers
+   - collects top-level declarations and metadata
+   - merges builtin/reserved top-level symbol knowledge
+   - returns a header-owned module symbol package together with headers / fragment metadata
+
+2. `resolve_module_dependencies(...)`
+   - sorts headers
+   - preserves or reorders the header-owned declaration package as needed
+   - returns one sorted-header result object
+
+3. `Ast::new(...)`
+   - consumes sorted headers plus header-owned symbol data
+   - resolves import visibility
+   - resolves types/constants/signatures
+   - builds receiver catalog
+   - emits AST nodes
+   - finalizes templates / const fragments / module constants
 
 ## Work to do
 
-### 1. Shrink `AstBuildState`
-
-File:
-
-* `src/compiler_frontend/ast/module_ast/build_state.rs`
-
-`AstBuildState` still stores a second symbol database:
-
-* `importable_symbol_exported`
-* `file_imports_by_source`
-* `declared_paths_by_file`
-* `declared_names_by_file`
-* `module_file_paths`
-* `canonical_source_by_symbol_path`
-* `register_declared_symbol(...)` 
-
-Move that state to the shared manifest layer. Keep only true AST-stage state:
-
-* emitted AST nodes
-* warnings
-* module constants
-* folded const template values
-* resolved type/signature tables
-* rendered path usage sink
-* builtin AST payloads only if still needed after manifest construction
-
-### 2. Rewrite `ScopeContext` around layered scope data
+### 1. Move symbol-manifest construction logic into header parsing ownership
 
 Files:
 
-* `src/compiler_frontend/ast/module_ast/scope_context.rs`
-* `src/compiler_frontend/ast/module_ast/pass_emit_nodes.rs`
-* any body-lowering helpers that assume cloned full declaration vectors
+- `src/compiler_frontend/headers/parse_file_headers.rs`
+- helper files extracted from header parsing if needed
+- `src/compiler_frontend/symbol_manifest.rs` (remove after migration)
 
-`ScopeContext` still stores `declarations: Vec<Declaration>` and clones it into child contexts. `new_child_function`, `new_template_parsing_context`, `new_constant`, and `add_var(...)` still operate in that model 
+The logic currently in `build_symbol_manifest(...)` should be relocated into header parsing ownership.
 
-Replace it with:
+Header parsing should directly collect:
 
-* immutable shared top-level declaration view from the manifest
-* small local declaration layer for parameters and locals
-* `add_var(...)` only extends the local layer
-* visibility gating still applied per file as needed
+- `declarations`
+- `canonical_source_by_symbol_path`
+- `module_file_paths`
+- `file_imports_by_source`
+- `importable_symbol_exported`
+- `declared_paths_by_file`
+- `declared_names_by_file`
+- builtin-visible symbol paths
+- builtin struct/type metadata needed later by AST
 
-This is the core fix for source-ordered local growth without carrying a cloned module declaration vec everywhere.
+This does not mean everything must stay in one giant file.
+Helpers can and should be extracted if they improve readability.
 
-### 3. Rework AST emission and import visibility to use the manifest + layered scopes
+But ownership should be header-stage ownership, not a later manifest-building stage.
+
+### 2. Introduce a header-owned module symbol data type
 
 Files:
 
-* `src/compiler_frontend/ast/module_ast/pass_emit_nodes.rs`
-* `src/compiler_frontend/ast/import_bindings.rs`
-* constant-header/type-resolution call sites
+- `src/compiler_frontend/headers/parse_file_headers.rs`
+- possibly a new header-adjacent helper file if needed
 
-`import_bindings.rs` already enforces the correct import rules, but it still resolves visibility against AST-owned symbol tables populated by recollection 
+Create a single header-owned struct returned by header parsing.
 
-Rewire it so:
+Possible shape:
 
-* visibility gates come from the shared manifest
-* constant-header resolution consumes manifest data plus per-file visible symbols
-* `pass_emit_nodes.rs` builds function/start contexts from the manifest + layered local scope model, not from large prebuilt declaration vecs
+- `Headers`
+  - `headers`
+  - `top_level_const_fragments`
+  - `entry_runtime_fragment_count`
+  - `module_symbols` or similar
+
+The important part is not the exact name.
+The important part is that the data is clearly owned by the header stage.
+
+This struct should replace the need for a later standalone `SymbolManifest`.
+
+### 3. Merge builtin/reserved top-level symbol registration into the header-owned package
+
+Files:
+
+- `src/compiler_frontend/headers/parse_file_headers.rs`
+- builtin registration helpers currently used by `symbol_manifest`
+- any identifier/reserved-symbol helpers that fit better near header collection
+
+Builtin error types and reserved builtin symbol validation should be merged into the same top-level symbol collection flow.
+
+That means:
+
+- reserved builtin symbol rejection still happens before illegal declarations are accepted
+- builtin-visible symbols are registered once
+- builtin struct/type payloads are prepared once
+- AST no longer needs a later “absorb builtins into manifest” step
+
+### 4. Rework dependency sorting to preserve header-owned symbol data
+
+Files:
+
+- `src/compiler_frontend/module_dependencies.rs`
+- `src/compiler_frontend/mod.rs`
+
+Dependency sorting should operate on the header-owned package, not force a later reconstruction step.
+
+Two acceptable shapes:
+
+- sort only `headers` while carrying the already-collected symbol package alongside them
+- or return a new sorted wrapper object that includes both sorted headers and the already-prepared top-level symbol data
+
+The result should be that nothing after dependency sorting needs to “rebuild the manifest.”
+
+### 5. Remove `symbol_manifest` from the public frontend pipeline
+
+Files:
+
+- `src/compiler_frontend/mod.rs`
+- `src/compiler_frontend/symbol_manifest.rs`
+- any tests or helper code referencing the separate stage
+
+Delete:
+
+- `pub fn build_symbol_manifest(...)`
+- the `symbol_manifest` module from the visible pipeline
+- the extra call site between `sort_headers()` and `headers_to_ast()`
+
+The frontend flow should go directly from:
+
+- header parsing
+- dependency sorting
+- AST construction
+
+with no standalone manifest step in between.
+
+### 6. Update AST construction to consume header-owned symbol data directly
+
+Files:
+
+- `src/compiler_frontend/ast/module_ast/build_state.rs`
+- `src/compiler_frontend/ast/module_ast/orchestrate.rs`
+- `src/compiler_frontend/mod.rs`
+
+`AstBuildState::new(...)` should take the header-owned symbol package directly.
+
+This should preserve the good part of the current refactor:
+
+- AST starts with the top-level symbol data already known
+- AST does not recollect declarations from headers
+
+But the source of that data is now header-owned, not manifest-stage-owned.
+
+### 7. Keep AST semantic pre-body passes, but make their ownership explicit
+
+Files:
+
+- `src/compiler_frontend/ast/module_ast/pass_import_bindings.rs`
+- `src/compiler_frontend/ast/module_ast/pass_type_resolution.rs`
+- `src/compiler_frontend/ast/module_ast/pass_function_signatures.rs`
+- `src/compiler_frontend/ast/module_ast/pass_emit_nodes.rs`
+- `src/compiler_frontend/ast/module_ast/orchestrate.rs`
+
+Do not collapse these semantic passes into header parsing.
+
+Instead, clarify the boundary:
+
+Header parsing owns:
+- top-level symbol discovery
+- top-level symbol metadata collection
+- builtin/reserved top-level symbol package assembly
+
+AST owns:
+- import visibility resolution from that package
+- semantic type/signature resolution
+- receiver-method catalog construction
+- body lowering
+- template normalization/finalization
+
+This is the clean split.
+
+### 8. Remove stale terminology that still describes a separate manifest stage
+
+Files:
+
+- `src/compiler_frontend/mod.rs`
+- `src/compiler_frontend/ast/module_ast/orchestrate.rs`
+- `src/compiler_frontend/headers/parse_file_headers.rs`
+- `docs/compiler-design-overview.md`
+- `docs/roadmap/plans/...` files touched by the refactor
+
+Update comments/docs so they no longer describe:
+
+- `symbol_manifest` as a real pipeline stage
+- AST as consuming a separately-built manifest stage
+- header parsing as discovering headers but not owning the full top-level symbol package
+
+The docs should consistently describe the restored ownership model.
+
+## Suggested implementation order
+
+### Phase 1 — move ownership without changing semantics
+
+- create the header-owned module symbol package type
+- move `symbol_manifest` data-building logic under header parsing ownership
+- keep AST call sites semantically identical
+- keep sorting behavior identical
+- do not attempt broader AST simplification in the same step
+
+### Phase 2 — remove the standalone stage
+
+- thread the header-owned symbol package through dependency sorting
+- remove `build_symbol_manifest(...)`
+- remove the extra frontend stage wiring
+- update AST to consume the header-owned package directly
+
+### Phase 3 — cleanup and documentation alignment
+
+- delete `symbol_manifest.rs`
+- simplify comments and stage docs
+- remove stale wording about manifest construction
+- clean up dead fields / unused helpers / transitional names
+
+## Checklist
+
+- Move top-level symbol-package construction under header parsing ownership
+- Merge builtin/reserved top-level symbol registration into that ownership boundary
+- Return header-owned symbol data alongside parsed headers
+- Thread that data through dependency sorting without rebuilding it
+- Remove `symbol_manifest` as a standalone frontend stage
+- Update AST to consume header-owned top-level symbol data directly
+- Keep AST semantic pre-body passes intact and clearly documented
+- Delete stale manifest-stage docs/comments/code
+- Run:
+  - `cargo clippy`
+  - `cargo test`
+  - `cargo run tests`
 
 ## Done when
 
-* `AstBuildState` no longer stores a second symbol registration database
-* `ScopeContext` no longer clones the full module declaration vec into child contexts
-* file visibility is resolved from the shared manifest
-* function and start bodies grow only local/parameter scope incrementally
+- `symbol_manifest` no longer exists as a distinct compiler/frontend stage
+- header parsing owns the full top-level symbol collection package
+- dependency sorting preserves that package instead of forcing a later rebuild
+- AST consumes header-owned top-level symbol data directly
+- AST no longer rebuilds or repackages module-wide top-level symbol knowledge
+- docs/comments consistently describe the restored ownership split
+- touched code passes linting and tests
+
+## Notes for the later implementation PR
+
+- Keep this change narrowly about stage ownership and pass removal
+- Do not mix it with unrelated AST simplifications unless they are required by the threading change
+- Prefer one clear data flow over parallel temporary structs
+- Prefer deleting the manifest stage cleanly over renaming it and keeping the same architecture
+- If helper extraction is needed, extract helpers from header parsing, but keep ownership there
+
 
 # Part 4 - Migrate remaining brittle fixtures, prune redundant coverage, and close the Alpha test matrix gaps
 

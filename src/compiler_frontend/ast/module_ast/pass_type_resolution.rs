@@ -22,6 +22,7 @@ use crate::compiler_frontend::headers::parse_file_headers::{Header, HeaderKind};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
 use rustc_hash::FxHashMap;
+use std::rc::Rc;
 
 impl<'a> AstBuildState<'a> {
     /// Pass 3: Resolve constants and struct field types in dependency order.
@@ -45,7 +46,7 @@ impl<'a> AstBuildState<'a> {
                     let declaration = parse_constant_header_declaration(
                         header,
                         ConstantHeaderParseContext {
-                            declarations: &self.declarations,
+                            declarations: Rc::new(self.declarations.clone()),
                             visible_declaration_ids: &bindings.visible_symbol_paths,
                             host_registry: self.host_registry,
                             style_directives: self.style_directives,
@@ -66,7 +67,7 @@ impl<'a> AstBuildState<'a> {
                     let context = ScopeContext::new(
                         ContextKind::Constant,
                         header.tokens.src_path.to_owned(),
-                        &self.declarations,
+                        Rc::new(self.declarations.clone()),
                         self.host_registry.clone(),
                         vec![],
                     )

@@ -4,10 +4,6 @@
 //! WHY: incorrect drop placement can silently change borrow lifetimes and ownership outcomes.
 
 use crate::compiler_frontend::analysis::borrow_checker::BorrowDropSiteKind;
-use crate::compiler_frontend::analysis::borrow_checker::tests::test_support::{
-    assignment_target, build_ast, default_host_registry, entry_and_start, function_node, location,
-    make_test_variable, node, run_borrow_checker, symbol,
-};
 use crate::compiler_frontend::ast::ast_nodes::NodeKind;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
@@ -15,6 +11,10 @@ use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::tests::test_support::{
+    assignment_target, build_ast, default_host_registry, entry_and_start, function_node,
+    make_test_variable, node, run_borrow_checker, symbol, test_location,
+};
 
 fn lower_hir(
     ast: crate::compiler_frontend::ast::ast::Ast,
@@ -41,11 +41,11 @@ fn emits_advisory_return_drop_sites() {
         vec![node(
             NodeKind::VariableDeclaration(make_test_variable(
                 value,
-                Expression::int(1, location(1), Ownership::MutableOwned),
+                Expression::int(1, test_location(1), Ownership::MutableOwned),
             )),
-            location(1),
+            test_location(1),
         )],
-        location(1),
+        test_location(1),
     );
 
     let hir = lower_hir(build_ast(vec![start_fn], entry_path), &mut string_table);
@@ -90,43 +90,43 @@ fn emits_advisory_break_and_region_exit_drop_sites() {
             node(
                 NodeKind::VariableDeclaration(make_test_variable(
                     x.clone(),
-                    Expression::int(1, location(1), Ownership::MutableOwned),
+                    Expression::int(1, test_location(1), Ownership::MutableOwned),
                 )),
-                location(1),
+                test_location(1),
             ),
             node(
                 NodeKind::If(
-                    Expression::bool(true, location(2), Ownership::ImmutableOwned),
+                    Expression::bool(true, test_location(2), Ownership::ImmutableOwned),
                     vec![node(
                         NodeKind::Assignment {
                             target: Box::new(assignment_target(
                                 x.clone(),
                                 DataType::Int,
-                                location(3),
+                                test_location(3),
                             )),
-                            value: Expression::int(2, location(3), Ownership::ImmutableOwned),
+                            value: Expression::int(2, test_location(3), Ownership::ImmutableOwned),
                         },
-                        location(3),
+                        test_location(3),
                     )],
                     Some(vec![node(
                         NodeKind::Assignment {
-                            target: Box::new(assignment_target(x, DataType::Int, location(4))),
-                            value: Expression::int(3, location(4), Ownership::ImmutableOwned),
+                            target: Box::new(assignment_target(x, DataType::Int, test_location(4))),
+                            value: Expression::int(3, test_location(4), Ownership::ImmutableOwned),
                         },
-                        location(4),
+                        test_location(4),
                     )]),
                 ),
-                location(2),
+                test_location(2),
             ),
             node(
                 NodeKind::WhileLoop(
-                    Expression::bool(true, location(5), Ownership::ImmutableOwned),
-                    vec![node(NodeKind::Break, location(6))],
+                    Expression::bool(true, test_location(5), Ownership::ImmutableOwned),
+                    vec![node(NodeKind::Break, test_location(6))],
                 ),
-                location(5),
+                test_location(5),
             ),
         ],
-        location(1),
+        test_location(1),
     );
 
     let hir = lower_hir(build_ast(vec![start_fn], entry_path), &mut string_table);

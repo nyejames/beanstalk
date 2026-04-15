@@ -29,6 +29,7 @@ use crate::compiler_frontend::tokenizer::tokens::{
     CharPosition, FileTokens, SourceLocation, TemplateBodyMode, Token, TokenKind,
 };
 use crate::projects::html_project::style_directives::html_project_style_directives;
+use std::rc::Rc;
 
 fn frontend_test_style_directives() -> StyleDirectiveRegistry {
     StyleDirectiveRegistry::built_ins()
@@ -136,7 +137,7 @@ fn new_constant_context_with_style_directives(
         ScopeContext::new(
             ContextKind::Constant,
             scope.to_owned(),
-            &[],
+            Rc::new(vec![]),
             HostRegistry::default(),
             vec![],
         ),
@@ -193,7 +194,7 @@ fn runtime_template_context_with_style_directives(
         ScopeContext::new(
             ContextKind::Template,
             scope.to_owned(),
-            &[declaration],
+            Rc::new(vec![declaration]),
             HostRegistry::default(),
             vec![],
         ),
@@ -216,7 +217,7 @@ fn constant_template_context_with_style_directives(
         ScopeContext::new(
             ContextKind::Constant,
             scope.to_owned(),
-            declarations,
+            Rc::new(declarations.to_vec()),
             HostRegistry::default(),
             vec![],
         ),
@@ -2053,7 +2054,7 @@ fn constant_context_template_head_with_constant_references_folds_to_string_slice
         ScopeContext::new(
             ContextKind::Constant,
             scope.to_owned(),
-            &declarations,
+            Rc::new(declarations.clone()),
             HostRegistry::default(),
             vec![],
         ),
@@ -2479,7 +2480,7 @@ fn fills_nested_slots_for_runtime_wrappers() {
     let wrapper_context = ScopeContext::new(
         ContextKind::Template,
         scope.to_owned(),
-        &[value_declaration.to_owned()],
+        Rc::new(vec![value_declaration.to_owned()]),
         HostRegistry::default(),
         vec![],
     );
@@ -2504,7 +2505,7 @@ fn fills_nested_slots_for_runtime_wrappers() {
     let consuming_context = ScopeContext::new(
         ContextKind::Template,
         scope,
-        &declarations,
+        Rc::new(declarations),
         HostRegistry::default(),
         vec![],
     );

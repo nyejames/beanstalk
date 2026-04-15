@@ -6,8 +6,8 @@
 //! and diagnostics consistent.
 
 use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorMetaDataKey};
+use crate::compiler_frontend::compiler_messages::source_location::SourceLocation;
 use crate::compiler_frontend::compiler_warnings::{CompilerWarning, WarningKind};
-use crate::compiler_frontend::source_location::SourceLocation;
 
 /// Canonical keyword set used by the tokenizer's `keyword_or_variable()` mapping.
 ///
@@ -197,5 +197,5 @@ pub(crate) fn ensure_not_keyword_shadow_identifier(
 }
 
 #[cfg(test)]
-#[path = "tests/identifier_policy_tests.rs"]
+#[path = "identifier_policy_tests.rs"]
 mod identifier_policy_tests;

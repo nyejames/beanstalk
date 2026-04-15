@@ -13,7 +13,6 @@ use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
-use crate::compiler_frontend::traits::ContainsReferences;
 use rustc_hash::{FxHashMap, FxHashSet};
 
 pub(crate) const ERROR_TYPE_NAME: &str = "Error";

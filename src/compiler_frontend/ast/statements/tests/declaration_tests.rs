@@ -5,11 +5,11 @@
 
 use crate::compiler_frontend::ast::ast_nodes::NodeKind;
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
-use crate::compiler_frontend::ast::test_support::{
-    parse_single_file_ast, parse_single_file_ast_error, start_function_body,
-};
 use crate::compiler_frontend::compiler_errors::{ErrorMetaDataKey, ErrorType};
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::tests::test_support::{
+    parse_single_file_ast, parse_single_file_ast_error, start_function_body,
+};
 
 #[test]
 fn parses_mutable_and_explicitly_typed_declarations() {

@@ -24,7 +24,7 @@ use crate::compiler_frontend::hir::hir_nodes::{
 };
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
-use crate::compiler_frontend::test_support::test_source_location;
+use crate::compiler_frontend::tests::test_support::test_location;
 
 // ============================================================
 // Type context helpers
@@ -74,14 +74,6 @@ pub(crate) fn build_type_context() -> (TypeContext, TypeIds) {
             string,
         },
     )
-}
-
-// ============================================================
-// HIR source location helper
-// ============================================================
-
-pub(crate) fn loc(line: i32) -> crate::compiler_frontend::tokenizer::tokens::SourceLocation {
-    test_source_location(line)
 }
 
 // ============================================================
@@ -207,7 +199,7 @@ pub(crate) fn statement(id: u32, kind: HirStatementKind, line: i32) -> HirStatem
     HirStatement {
         id: HirNodeId(id),
         kind,
-        location: loc(line),
+        location: test_location(line),
     }
 }
 
@@ -217,7 +209,7 @@ pub(crate) fn local(local_id: u32, ty: TypeId, region: RegionId) -> HirLocal {
         ty,
         mutable: true,
         region,
-        source_info: Some(loc(1)),
+        source_info: Some(test_location(1)),
     }
 }
 

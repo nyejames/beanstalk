@@ -15,6 +15,7 @@ use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::tokenizer::lexer::tokenize;
 use crate::compiler_frontend::tokenizer::newline_handling::NewlineMode;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
+use std::rc::Rc;
 
 fn template_tokens_from_source(source: &str, string_table: &mut StringTable) -> FileTokens {
     let scope = InternedPath::from_single_str("main.bst/#const_template0", string_table);
@@ -46,7 +47,7 @@ fn test_constant_context(scope: InternedPath) -> ScopeContext {
     ScopeContext::new(
         ContextKind::Constant,
         scope.clone(),
-        &[],
+        Rc::new(vec![]),
         HostRegistry::default(),
         vec![],
     )

@@ -82,7 +82,7 @@ impl<'a> AstBuildState<'a> {
             &self.resolved_function_signatures_by_path,
             &self.resolved_struct_fields_by_path,
             &self.struct_source_by_path,
-            &self.canonical_source_by_symbol_path,
+            &self.manifest.canonical_source_by_symbol_path,
             string_table,
         )
         .map(Rc::new)
