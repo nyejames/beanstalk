@@ -34,40 +34,25 @@ pub(crate) enum TypeAnnotationContext {
     SignatureReturn,
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) struct TypeAnnotationSyntax {
-    pub(crate) data_type: DataType,
-}
-
-impl TypeAnnotationSyntax {
-    pub(crate) fn inferred() -> Self {
-        Self {
-            data_type: DataType::Inferred,
-        }
-    }
-
-    pub(crate) fn has_explicit_type(&self) -> bool {
-        !matches!(self.data_type, DataType::Inferred)
-    }
-}
-
 pub(crate) fn parse_type_annotation(
     token_stream: &mut FileTokens,
     context: TypeAnnotationContext,
-) -> Result<TypeAnnotationSyntax, CompilerError> {
+) -> Result<DataType, CompilerError> {
+
+    // Regular declarations can be inferred datatypes
+    // So they can break out early with an Inferred type.
     if matches!(context, TypeAnnotationContext::DeclarationTarget)
         && matches!(
             token_stream.current_token_kind(),
             TokenKind::Assign | TokenKind::Newline | TokenKind::Comma
         )
     {
-        return Ok(TypeAnnotationSyntax::inferred());
+        return Ok(DataType::Inferred);
     }
 
+    // Otherwise, parse the type that must be there
     let parsed_type = parse_required_type(token_stream, context)?;
-    Ok(TypeAnnotationSyntax {
-        data_type: parsed_type,
-    })
+    Ok(parsed_type)
 }
 
 fn parse_required_type(
@@ -325,14 +310,6 @@ fn compilation_stage(context: TypeAnnotationContext) -> &'static str {
         TypeAnnotationContext::SignatureParameter => "Parameter Type Parsing",
         TypeAnnotationContext::SignatureReturn => "Function Signature Parsing",
     }
-}
-
-pub(crate) fn append_type_annotation_tokens(
-    tokens: &mut Vec<Token>,
-    annotation: &TypeAnnotationSyntax,
-    location: &SourceLocation,
-) {
-    append_data_type_tokens(tokens, &annotation.data_type, location);
 }
 
 pub(crate) fn append_data_type_tokens(

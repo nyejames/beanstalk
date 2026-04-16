@@ -12,7 +12,7 @@ use crate::compiler_frontend::declaration_syntax::signature_members::parse_signa
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
-use crate::compiler_frontend::type_syntax::{TypeAnnotationContext, parse_type_annotation};
+use crate::compiler_frontend::declaration_syntax::type_syntax::{TypeAnnotationContext, parse_type_annotation};
 use crate::{return_syntax_error, return_type_error};
 
 /// One function return slot, either a concrete value type or a parameter-alias set.

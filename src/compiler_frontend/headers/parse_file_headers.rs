@@ -26,7 +26,7 @@
 
 use crate::compiler_frontend::ast::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
-use crate::compiler_frontend::ast::statements::declaration_syntax::{
+use crate::compiler_frontend::declaration_syntax::declaration_shell::{
     DeclarationSyntax, parse_declaration_syntax,
 };
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
@@ -35,10 +35,8 @@ use crate::compiler_frontend::builtins::error_type::{
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::{CompilerWarning, WarningKind};
-use crate::compiler_frontend::declaration_syntax::choice_shell::{
-    ChoiceHeaderMetadata, parse_choice_shell as parse_choice_header_payload,
-};
-use crate::compiler_frontend::declaration_syntax::struct_shell::parse_struct_shell;
+use crate::compiler_frontend::declaration_syntax::choice::{parse_choice_shell as parse_choice_header_payload, ChoiceVariant};
+use crate::compiler_frontend::declaration_syntax::r#struct::parse_struct_shell;
 use crate::compiler_frontend::headers::module_symbols::{ModuleSymbols, register_declared_symbol};
 use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
@@ -56,7 +54,7 @@ use crate::compiler_frontend::symbols::identifier_policy::{
 use crate::compiler_frontend::symbols::identity::FileId;
 use crate::compiler_frontend::token_scan::consume_balanced_template_region;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
-use crate::compiler_frontend::type_syntax::for_each_named_type_in_data_type;
+use crate::compiler_frontend::declaration_syntax::type_syntax::for_each_named_type_in_data_type;
 use crate::projects::settings::{
     IMPLICIT_START_FUNC_NAME, MINIMUM_LIKELY_DECLARATIONS, TOKEN_TO_DECLARATION_RATIO,
     TOKEN_TO_HEADER_RATIO, TOP_LEVEL_CONST_TEMPLATE_NAME,
@@ -150,13 +148,13 @@ pub enum HeaderKind {
         signature: FunctionSignature,
     },
     Constant {
-        declaration_syntax: DeclarationSyntax,
+        declaration: DeclarationSyntax,
     },
     Struct {
         fields: Vec<Declaration>,
     },
     Choice {
-        metadata: ChoiceHeaderMetadata,
+        variants: Vec<ChoiceVariant>,
     },
 
     ConstTemplate,
@@ -178,8 +176,9 @@ pub struct Header {
     pub dependencies: HashSet<InternedPath>,
     pub name_location: SourceLocation,
 
-    // Header-local token stream consumed later by AST construction.
+    // Token Body (for functions / templates) and info about canonical_os_path
     pub tokens: FileTokens,
+
     pub source_file: InternedPath,
     pub file_imports: Vec<FileImport>,
 }
@@ -212,23 +211,6 @@ pub struct FileImport {
 }
 
 pub fn parse_headers(
-    tokenized_files: Vec<FileTokens>,
-    host_registry: &HostRegistry,
-    warnings: &mut Vec<CompilerWarning>,
-    entry_file_path: &Path,
-    string_table: &mut StringTable,
-) -> Result<Headers, Vec<CompilerError>> {
-    parse_headers_with_path_resolver(
-        tokenized_files,
-        host_registry,
-        warnings,
-        entry_file_path,
-        HeaderParseOptions::default(),
-        string_table,
-    )
-}
-
-pub fn parse_headers_with_path_resolver(
     tokenized_files: Vec<FileTokens>,
     host_registry: &HostRegistry,
     warnings: &mut Vec<CompilerWarning>,
@@ -443,24 +425,14 @@ fn parse_headers_in_file(
 
         match current_token.kind.to_owned() {
             TokenKind::Symbol(name_id) => {
+
+                // Unique non-host registry symbol
                 if context
                     .host_function_registry
                     .get_function(context.string_table.resolve(name_id))
                     .is_none()
                 {
-                    // Only symbols that begin a top-level statement can start a header
-                    // declaration. Symbols in expression positions (for example loop bindings)
-                    // must stay in the implicit start-function body.
-                    if !symbol_is_at_top_level_statement_start(token_stream) {
-                        start_function_body.push(current_token);
-                        if let Some(path) =
-                            file_import_paths.iter().find(|f| f.name() == Some(name_id))
-                        {
-                            start_function_dependencies.insert(path.to_owned());
-                        }
-                        continue;
-                    }
-
+                    // Reference to an existing symbol in scope
                     if encountered_symbols.contains(&name_id) {
                         if starts_duplicate_top_level_header_declaration(
                             token_stream,
@@ -489,13 +461,21 @@ fn parse_headers_in_file(
 
                         start_function_body.push(current_token);
 
-                        // Only imported symbols create inter-header dependency edges here.
-                        // Local start-function bindings are resolved later during AST construction.
-                        if let Some(path) =
-                            file_import_paths.iter().find(|f| f.name() == Some(name_id))
-                        {
-                            start_function_dependencies.insert(path.to_owned());
+                        // Start function is always the last of all the dependencies.
+                        // So all that needs to be checked:
+                        // - Is this dependency imported into the entry file?
+                        if !file_import_paths.iter().any(|f| f.name() == Some(name_id)) {
+                            return_rule_error!(
+                                "This symbol is not imported into the entry file. Make sure it's imported into this file.",
+                                token_stream.current_location(), {
+                                    CompilationStage => "Header Parsing",
+                                    ConflictType => "MissingImport",
+                                    PrimarySuggestion => "Import this symbol into the entry file",
+                                }
+                            )
                         }
+
+                    // NEW DECLARATION IN TOP-LEVEL SCOPE
                     } else {
                         let source_file = token_stream.src_path.to_owned();
                         let mut build_context = HeaderBuildContext {
@@ -715,6 +695,7 @@ fn parse_headers_in_file(
 }
 
 /// Detect whether a repeated top-level symbol is starting another header declaration.
+/// Already in the context of parsing a variable name that exists in this scope.
 ///
 /// WHAT: peeks at the token sequence immediately after an already-seen symbol name.
 /// WHY: duplicate header declarations must fail during header parsing instead of being
@@ -742,23 +723,9 @@ fn starts_duplicate_top_level_header_declaration(
             Some(TokenKind::TypeParameterBracket)
         ),
         // `name :: ...` starts a choice declaration.
-        TokenKind::DoubleColon => symbol_is_at_top_level_statement_start(token_stream),
+        TokenKind::DoubleColon => true,
         _ => false,
     }
-}
-
-fn symbol_is_at_top_level_statement_start(token_stream: &FileTokens) -> bool {
-    // `parse_headers_in_file` advances once before calling duplicate detection, so:
-    // - `index - 1` is the current symbol token
-    // - `index - 2` is the token immediately before that symbol (if any)
-    if token_stream.index <= 1 {
-        return true;
-    }
-
-    matches!(
-        token_stream.tokens[token_stream.index - 2].kind,
-        TokenKind::Newline | TokenKind::End | TokenKind::ModuleStart | TokenKind::Hash
-    )
 }
 
 fn normalize_import_dependency_path(
@@ -851,6 +818,7 @@ fn create_header(
             .with_project_path_resolver(context.project_path_resolver.clone())
             .with_source_file_scope(context.source_file.to_owned())
             .with_path_format_config(context.path_format_config.clone());
+
             let signature = FunctionSignature::new(
                 token_stream,
                 context.warnings,
@@ -860,7 +828,6 @@ fn create_header(
             )?;
 
             // Strict edges: parameter + return type references only.
-            // WHY: body-derived import symbols are NOT strict edges; AST owns body parsing.
             for param in &signature.parameters {
                 for_each_named_type_in_data_type(&param.value.data_type, &mut |type_name| {
                     let edge = context
@@ -872,6 +839,7 @@ fn create_header(
                     dependencies.insert(edge);
                 });
             }
+
             for ret in &signature.returns {
                 for_each_named_type_in_data_type(ret.value.data_type(), &mut |type_name| {
                     let edge = context
@@ -984,7 +952,7 @@ fn create_header(
                     &mut dependencies,
                 )?;
 
-                kind = HeaderKind::Constant { declaration_syntax: constant_header };
+                kind = HeaderKind::Constant { declaration: constant_header };
             }
         }
 
@@ -1020,7 +988,7 @@ fn create_header(
                 )?;
 
                 kind = HeaderKind::Constant {
-                    declaration_syntax: constant_header,
+                    declaration: constant_header,
                 };
             }
         }
@@ -1041,9 +1009,9 @@ fn create_header(
 
             let choice_header =
                 parse_choice_header_payload(token_stream, context.string_table, context.warnings)?;
-            body = choice_header.body;
+
             kind = HeaderKind::Choice {
-                metadata: choice_header.metadata,
+                variants: choice_header,
             };
         }
 
@@ -1169,7 +1137,7 @@ fn collect_constant_type_dependencies(
     dependencies: &mut HashSet<InternedPath>,
 ) {
     for_each_named_type_in_data_type(
-        &declaration_syntax.type_annotation.data_type,
+        &declaration_syntax.type_annotation,
         &mut |type_name| {
             let edge = context
                 .file_imports

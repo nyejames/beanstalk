@@ -55,7 +55,7 @@ fn apply_config_constants_from_headers(
     let mut errors = Vec::new();
 
     for header in headers {
-        let HeaderKind::Constant { metadata } = &header.kind else {
+        let HeaderKind::Constant { declaration } = &header.kind else {
             continue;
         };
 

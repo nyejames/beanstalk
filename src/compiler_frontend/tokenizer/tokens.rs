@@ -489,17 +489,6 @@ impl TokenKind {
         )
     }
 
-    pub fn to_datatype(&self) -> Option<DataType> {
-        match self {
-            TokenKind::DatatypeInt => Some(DataType::Int),
-            TokenKind::DatatypeFloat => Some(DataType::Float),
-            TokenKind::DatatypeBool => Some(DataType::Bool),
-            TokenKind::DatatypeString => Some(DataType::StringSlice),
-            TokenKind::DatatypeChar => Some(DataType::Char),
-            _ => None,
-        }
-    }
-
     // For figuring out when to break out of or continue expressions and statements
     pub fn continues_expression(&self) -> bool {
         matches!(

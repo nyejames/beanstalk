@@ -2,7 +2,7 @@ use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
-use crate::compiler_frontend::type_syntax::{
+use crate::compiler_frontend::declaration_syntax::type_syntax::{
     TypeAnnotationContext, TypeAnnotationSyntax, parse_type_annotation,
     resolve_named_types_in_data_type,
 };

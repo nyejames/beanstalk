@@ -118,26 +118,13 @@ impl ModuleSymbols {
                         ),
                     });
                 }
-                HeaderKind::Choice { metadata } => {
-                    let variants = metadata
-                        .variants
-                        .iter()
-                        .map(|variant| Declaration {
-                            id: header.tokens.src_path.append(variant.name),
-                            value: Expression::no_value(
-                                variant.location.to_owned(),
-                                DataType::None,
-                                Ownership::ImmutableOwned,
-                            ),
-                        })
-                        .collect::<Vec<_>>();
-
+                HeaderKind::Choice { variants } => {
                     self.declarations.push(Declaration {
                         id: header.tokens.src_path.to_owned(),
                         value: Expression::new(
                             ExpressionKind::NoValue,
                             header.name_location.to_owned(),
-                            DataType::Choices(variants),
+                            DataType::Choices(variants.to_owned()),
                             Ownership::ImmutableReference,
                         ),
                     });

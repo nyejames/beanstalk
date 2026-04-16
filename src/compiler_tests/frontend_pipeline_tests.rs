@@ -254,7 +254,7 @@ fn preserves_symbol_resolution_order_for_struct_defaults_and_constants() {
         .position(|header| {
             matches!(
                 &header.kind,
-                HeaderKind::Constant { metadata } if metadata.file_constant_order == 0
+                HeaderKind::Constant { declaration } if header.file_constant_order == 0
             )
         })
         .expect("base constant should exist");
@@ -269,7 +269,7 @@ fn preserves_symbol_resolution_order_for_struct_defaults_and_constants() {
         .position(|header| {
             matches!(
                 &header.kind,
-                HeaderKind::Constant { metadata } if metadata.file_constant_order == 1
+                HeaderKind::Constant { declaration } if metadata.file_constant_order == 1
             )
         })
         .expect("derived constant should exist");

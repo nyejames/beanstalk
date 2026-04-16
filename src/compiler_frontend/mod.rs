@@ -41,7 +41,6 @@ pub(crate) mod interned_path;
 pub(crate) mod string_interning;
 pub(crate) mod token_scan;
 pub(crate) mod type_coercion;
-pub(crate) mod type_syntax;
 
 pub(crate) mod host_functions;
 
@@ -56,19 +55,17 @@ pub(crate) mod tests {
 }
 
 use crate::compiler_frontend::analysis::borrow_checker::{
-    BorrowCheckReport, check_borrows as run_borrow_checker,
+    check_borrows as run_borrow_checker, BorrowCheckReport,
 };
 use crate::compiler_frontend::ast::ast::{Ast, AstBuildContext};
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
-use crate::compiler_frontend::headers::parse_file_headers::{
-    HeaderParseOptions, Headers, parse_headers_with_path_resolver,
-};
+use crate::compiler_frontend::headers::parse_file_headers::{parse_headers, HeaderParseOptions, Headers};
 use crate::compiler_frontend::hir::hir_builder::lower_module;
 use crate::compiler_frontend::hir::hir_nodes::HirModule;
 use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::module_dependencies::{SortedHeaders, resolve_module_dependencies};
+use crate::compiler_frontend::module_dependencies::{resolve_module_dependencies, SortedHeaders};
 use crate::compiler_frontend::paths::path_format::{OutputPathStyle, PathStringFormatConfig};
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::string_interning::StringTable;
@@ -207,7 +204,7 @@ impl CompilerFrontend {
             .get_by_canonical_path(entry_file_path)
             .map(|identity| identity.file_id);
 
-        parse_headers_with_path_resolver(
+        parse_headers(
             files,
             &self.host_function_registry,
             warnings,

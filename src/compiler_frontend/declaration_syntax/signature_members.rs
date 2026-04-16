@@ -24,7 +24,7 @@ use crate::compiler_frontend::symbols::identifier_policy::{
     IdentifierNamingKind, ensure_not_keyword_shadow_identifier, naming_warning_for_identifier,
 };
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
-use crate::compiler_frontend::type_syntax::{TypeAnnotationContext, parse_type_annotation};
+use crate::compiler_frontend::declaration_syntax::type_syntax::{TypeAnnotationContext, parse_type_annotation};
 use crate::return_syntax_error;
 
 /// Parses a `| name [~]Type [= default], ... |` member list.
@@ -170,11 +170,13 @@ fn parse_signature_member(
         .name()
         .map(|id| string_table.resolve(id).to_owned())
         .unwrap_or_else(|| String::from("<unknown>"));
+
     ensure_not_keyword_shadow_identifier(
         &member_name,
         token_stream.current_location(),
         "Struct/Parameter Parsing",
     )?;
+
     if let Some(warning) = naming_warning_for_identifier(
         &member_name,
         token_stream.current_location(),
@@ -198,7 +200,7 @@ fn parse_signature_member(
     }
 
     let parsed_type =
-        parse_type_annotation(token_stream, TypeAnnotationContext::SignatureParameter)?.data_type;
+        parse_type_annotation(token_stream, TypeAnnotationContext::SignatureParameter)?;
     let mut data_type = apply_collection_ownership(parsed_type, &ownership);
 
     match token_stream.current_token_kind() {

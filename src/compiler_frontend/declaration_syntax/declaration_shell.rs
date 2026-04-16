@@ -3,8 +3,8 @@ use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::token_scan::collect_declaration_initializer_tokens;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
-use crate::compiler_frontend::type_syntax::{
-    TypeAnnotationContext, TypeAnnotationSyntax, append_type_annotation_tokens,
+use crate::compiler_frontend::declaration_syntax::type_syntax::{
+    TypeAnnotationContext,
     parse_type_annotation,
 };
 use crate::{return_rule_error, return_syntax_error};
@@ -17,7 +17,7 @@ use crate::{return_rule_error, return_syntax_error};
 pub struct DeclarationSyntax {
     pub name: StringId,
     pub mutable_marker: bool,
-    pub type_annotation: TypeAnnotationSyntax,
+    pub type_annotation: DataType,
     pub initializer_tokens: Vec<Token>,
     pub location: SourceLocation,
 }
@@ -26,42 +26,18 @@ pub struct DeclarationSyntax {
 pub struct BindingTargetSyntax {
     pub name: StringId,
     pub mutable_marker: bool,
-    pub type_annotation: TypeAnnotationSyntax,
+    pub type_annotation: DataType,
     pub location: SourceLocation,
 }
 
-impl BindingTargetSyntax {
-    pub fn has_explicit_type(&self) -> bool {
-        self.type_annotation.has_explicit_type()
-    }
-}
-
 impl DeclarationSyntax {
-    pub fn to_tokens(&self) -> Vec<Token> {
-        let mut tokens = Vec::with_capacity(4 + self.initializer_tokens.len());
-        tokens.push(Token::new(
-            TokenKind::Symbol(self.name),
-            self.location.clone(),
-        ));
-
-        if self.mutable_marker {
-            tokens.push(Token::new(TokenKind::Mutable, self.location.clone()));
-        }
-
-        append_type_annotation_tokens(&mut tokens, &self.type_annotation, &self.location);
-
-        tokens.push(Token::new(TokenKind::Assign, self.location.clone()));
-        tokens.extend(self.initializer_tokens.clone());
-        tokens
-    }
-
     pub fn to_data_type(&self, declaration_ownership: &Ownership) -> DataType {
-        match &self.type_annotation.data_type {
+        match &self.type_annotation {
             DataType::Collection(inner, _) => {
                 if matches!(inner.as_ref(), DataType::Inferred) {
-                    DataType::Collection(Box::new((**inner).clone()), Ownership::MutableOwned)
+                    DataType::Collection(Box::new(*inner.clone()), Ownership::MutableOwned)
                 } else {
-                    DataType::Collection(Box::new((**inner).clone()), declaration_ownership.clone())
+                    DataType::Collection(Box::new(*inner.clone()), declaration_ownership.clone())
                 }
             }
             other => other.clone(),
@@ -69,12 +45,16 @@ impl DeclarationSyntax {
     }
 }
 
+// Declaration Syntax for general variables / constants or parameters
 pub fn parse_declaration_syntax(
     token_stream: &mut FileTokens,
     name: StringId,
     string_table: &mut StringTable,
 ) -> Result<DeclarationSyntax, CompilerError> {
-    let target_syntax = parse_binding_target_syntax(token_stream, name, string_table)?;
+
+    // This checks for mutability marker first (in the case of mutable methods)
+    // Or whether the declaration has an explicit Type
+    let target = parse_binding_target_syntax(token_stream, name)?;
 
     // Require assignment for declarations.
     match token_stream.current_token_kind() {
@@ -111,7 +91,7 @@ pub fn parse_declaration_syntax(
         let var_name = string_table.resolve(name);
         return_rule_error!(
             format!("Variable '{}' must be initialized with a value", var_name),
-            target_syntax.location.clone(), {
+            target.location.clone(), {
                 CompilationStage => "Variable Declaration",
                 PrimarySuggestion => "Add an initializer expression after '='",
             }
@@ -119,18 +99,17 @@ pub fn parse_declaration_syntax(
     }
 
     Ok(DeclarationSyntax {
-        name: target_syntax.name,
-        mutable_marker: target_syntax.mutable_marker,
-        type_annotation: target_syntax.type_annotation,
+        name: target.name,
+        mutable_marker: target.mutable_marker,
+        type_annotation: target.type_annotation,
         initializer_tokens,
-        location: target_syntax.location,
+        location: target.location,
     })
 }
 
 pub fn parse_binding_target_syntax(
     token_stream: &mut FileTokens,
     name: StringId,
-    _string_table: &mut StringTable,
 ) -> Result<BindingTargetSyntax, CompilerError> {
     let target_location = token_stream.current_location();
 

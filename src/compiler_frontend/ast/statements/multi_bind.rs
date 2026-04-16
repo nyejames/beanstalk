@@ -11,7 +11,7 @@ use crate::compiler_frontend::ast::ast_nodes::{
 };
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
-use crate::compiler_frontend::ast::statements::declaration_syntax::{
+use crate::compiler_frontend::declaration_syntax::declaration_shell::{
     BindingTargetSyntax, parse_binding_target_syntax,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
@@ -22,7 +22,7 @@ use crate::compiler_frontend::symbols::identifier_policy::{
 };
 use crate::compiler_frontend::token_scan::has_top_level_comma_before_statement_end;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
-use crate::compiler_frontend::type_syntax::resolve_named_types_in_data_type;
+use crate::compiler_frontend::declaration_syntax::type_syntax::resolve_named_types_in_data_type;
 use crate::{return_rule_error, return_syntax_error, return_type_error};
 use std::collections::HashSet;
 

@@ -38,10 +38,8 @@ pub(crate) mod statements {
     pub(crate) mod body_return;
     pub(crate) mod body_symbol;
     pub(crate) mod branching;
-    pub(crate) mod choices;
     pub(crate) mod collections;
     pub(crate) mod condition_validation;
-    pub(crate) mod declaration_syntax;
     pub(crate) mod declarations;
     pub(crate) mod functions;
     pub(crate) mod loops;

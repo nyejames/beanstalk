@@ -16,6 +16,8 @@
 //! - `declaration_syntax` → `ast` for `ScopeContext` (read-only, no cycle at the item level)
 //! - `declaration_syntax` must NOT import from `headers`
 
-pub(crate) mod choice_shell;
+pub(crate) mod choice;
 pub(crate) mod signature_members;
-pub(crate) mod struct_shell;
+pub(crate) mod r#struct;
+pub(crate) mod declaration_shell;
+pub(crate) mod type_syntax;

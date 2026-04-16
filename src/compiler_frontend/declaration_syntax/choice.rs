@@ -9,7 +9,6 @@
 //! Body-context choice expression parsing (`Choice::Variant` values) lives in
 //! `ast/statements/choices.rs` and is intentionally separate.
 
-use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::deferred_feature_diagnostics::deferred_feature_rule_error;
@@ -21,13 +20,15 @@ use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::symbols::identifier_policy::{
     IdentifierNamingKind, ensure_not_keyword_shadow_identifier, naming_warning_for_identifier,
 };
-use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
+use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
 use crate::return_rule_error;
 use std::collections::HashSet;
+use crate::compiler_frontend::datatypes::DataType;
 
 #[derive(Clone, Debug)]
 pub struct ChoiceVariant {
-    pub declaration: Declaration,
+    pub id: StringId,
+    pub data_type: DataType,
     pub location: SourceLocation,
 }
 
@@ -56,8 +57,7 @@ pub(crate) fn parse_choice_shell(
     token_stream: &mut FileTokens,
     string_table: &StringTable,
     warnings: &mut Vec<CompilerWarning>,
-) -> Result<ParsedChoiceHeaderPayload, CompilerError> {
-    let mut body = Vec::new();
+) -> Result<Vec<ChoiceVariant>, CompilerError> {
     let mut variants = Vec::new();
     let mut seen_variants: HashSet<StringId> = HashSet::new();
 
@@ -70,6 +70,8 @@ pub(crate) fn parse_choice_shell(
         let current_token = token_stream.current_token_kind().to_owned();
 
         match current_token {
+
+            // RESERVED SYNTAX ERROR
             TokenKind::Must | TokenKind::TraitThis => {
                 let keyword = reserved_trait_keyword_or_dispatch_mismatch(
                     token_stream.current_token_kind(),
@@ -86,6 +88,7 @@ pub(crate) fn parse_choice_shell(
                 ));
             }
 
+            // FOR NOW: no explicit union types
             TokenKind::Symbol(variant_name) => {
                 ensure_not_keyword_shadow_identifier(
                     string_table.resolve(variant_name),
@@ -93,6 +96,7 @@ pub(crate) fn parse_choice_shell(
                     "Header Parsing",
                 )?;
 
+                // Make sure this is not a duplicate variant name
                 if !seen_variants.insert(variant_name) {
                     return_rule_error!(
                         format!(
@@ -116,12 +120,9 @@ pub(crate) fn parse_choice_shell(
                     warnings.push(warning);
                 }
 
-                variants.push(ChoiceVariantMetadata {
-                    name: variant_name,
-                    location: current_location.clone(),
-                });
-                body.push(token_stream.current_token());
+                // Advance past the variant name
                 token_stream.advance();
+                token_stream.skip_newlines();
 
                 // The token immediately after a parsed variant decides whether this stays in
                 // alpha-scope syntax or enters deferred territory.
@@ -134,6 +135,7 @@ pub(crate) fn parse_choice_shell(
                         "Use a normal choice variant form until traits are implemented",
                     ));
                 }
+
                 if starts_choice_payload_type(&next_token) {
                     return Err(deferred_feature_rule_error(
                         "Choice payload variants are deferred for Alpha.",
@@ -142,6 +144,15 @@ pub(crate) fn parse_choice_shell(
                         "Declare this as a unit variant for now, for example: 'Choice :: VariantA, VariantB;'.",
                     ));
                 }
+
+                // Will be moved to the end when more than just basic enum names are supported
+                variants.push(ChoiceVariant {
+                    id: variant_name,
+
+                    // Tagged unions not supported yet
+                    data_type: DataType::None,
+                    location: current_location.clone(),
+                });
 
                 match next_token {
                     TokenKind::OpenParenthesis => {
@@ -169,7 +180,6 @@ pub(crate) fn parse_choice_shell(
                         ));
                     }
                     TokenKind::Comma => {
-                        body.push(token_stream.current_token());
                         token_stream.advance();
                         continue;
                     }
@@ -181,7 +191,6 @@ pub(crate) fn parse_choice_shell(
                         token_stream.skip_newlines();
                         match token_stream.current_token_kind() {
                             TokenKind::Comma => {
-                                body.push(token_stream.current_token());
                                 token_stream.advance();
                                 continue;
                             }
@@ -313,8 +322,5 @@ pub(crate) fn parse_choice_shell(
         }
     }
 
-    Ok(ParsedChoiceHeaderPayload {
-        body,
-        metadata: ChoiceHeaderMetadata { variants },
-    })
+    Ok(variants)
 }

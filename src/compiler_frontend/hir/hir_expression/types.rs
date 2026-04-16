@@ -134,7 +134,7 @@ impl<'a> HirBuilder<'a> {
             DataType::Choices(variants) => {
                 let variant_types = variants
                     .iter()
-                    .map(|variant| self.lower_data_type(&variant.value.data_type, location))
+                    .map(|variant| self.lower_data_type(&variant.data_type, location))
                     .collect::<Result<Vec<_>, _>>()?;
                 HirTypeKind::Union {
                     variants: variant_types,

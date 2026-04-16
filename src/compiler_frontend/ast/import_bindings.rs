@@ -209,7 +209,7 @@ pub(crate) fn parse_constant_header_declaration(
         string_table,
     } = context;
 
-    let HeaderKind::Constant { metadata } = &header.kind else {
+    let HeaderKind::Constant { declaration } = &header.kind else {
         return Err(CompilerError::compiler_error(
             "Constant header resolver called for a non-constant header.",
         ));
@@ -240,7 +240,7 @@ pub(crate) fn parse_constant_header_declaration(
     .with_source_file_scope(source_file_scope);
 
     let declaration_result = resolve_declaration_syntax(
-        metadata.declaration_syntax.clone(),
+        declaration.clone(),
         header.tokens.src_path.to_owned(),
         &context,
         string_table,

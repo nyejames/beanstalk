@@ -1,5 +1,6 @@
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
+use crate::compiler_frontend::declaration_syntax::choice::ChoiceVariant;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_resolution::CompileTimePathKind;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
@@ -112,7 +113,7 @@ pub enum DataType {
     #[allow(dead_code)] // Planned: explicit parameter/record type surfaces.
     Parameters(Vec<Declaration>), // Struct definitions and parameters
     #[allow(dead_code)] // Planned: tagged choice/union surface types.
-    Choices(Vec<Declaration>), // Union of types
+    Choices(Vec<ChoiceVariant>), // Union of types
     #[allow(dead_code)] // Planned: Option<T> language-level type support.
     Option(Box<DataType>), // Shorthand for a choice of a type or None
     Result {
@@ -319,16 +320,10 @@ impl DataType {
                     err.display_with_table(string_table)
                 )
             }
-            DataType::Choices(inner_types) => {
+            DataType::Choices(variants) => {
                 let mut inner_types_str = String::new();
-                for inner_type in inner_types {
-                    inner_types_str.push_str(
-                        &inner_type
-                            .value
-                            .data_type
-                            .display_with_table(string_table)
-                            .to_string(),
-                    );
+                for variant in variants {
+                    inner_types_str.push_str(variant.data_type.display_with_table(string_table).as_str());
                 }
                 format!("Choices({inner_types_str})")
             }
