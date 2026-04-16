@@ -1,8 +1,8 @@
 //! AST construction orchestration and entry point.
 //!
-//! WHAT: Orchestrates all AST construction passes in sequence, consuming a pre-built symbol
-//! manifest through finalization, then assembles the final `Ast` output. This is the entry
-//! point for building a complete typed AST from sorted headers.
+//! WHAT: Orchestrates all AST construction passes in sequence, consuming pre-sorted, already-shaped
+//! headers. No top-level shell reparsing occurs in any AST pass — declaration shells were fully
+//! parsed by the header stage and are consumed here directly.
 //!
 //! WHY: Centralizes the pass sequence so the full compilation pipeline is readable in
 //! one place without implementation details. Normalization logic is extracted into the
@@ -10,11 +10,11 @@
 //!
 //! ## Pass Sequence
 //!
-//! 1. **resolve_import_bindings** — Build per-file visibility gates
-//! 2. **resolve_types** — Resolve constants and struct field types
-//! 3. **resolve_function_signatures** — Resolve function signatures
-//! 4. **build_receiver_catalog** — Build receiver method catalog
-//! 5. **emit_ast_nodes** — Lower function/template bodies
+//! 1. **resolve_import_bindings** — Build per-file visibility gates from header import data
+//! 2. **resolve_types** — Consume constant `DeclarationSyntax` + struct `fields` shell; resolve types
+//! 3. **resolve_function_signatures** — Resolve already-parsed `FunctionSignature` type names
+//! 4. **build_receiver_catalog** — Build receiver method index from resolved signatures
+//! 5. **emit_ast_nodes** — Lower function/template bodies (body parsing happens here)
 //! 6. **finalize** — Normalize templates and assemble output
 
 use super::build_state::AstBuildState;
@@ -165,12 +165,11 @@ impl Ast {
             module_symbols,
         );
 
-        state.emit_ast_nodes(
-            sorted_headers,
-            &module_symbols,
-            &receiver_methods,
-            string_table,
-        )?;
+        let file_import_bindings = state.resolve_import_bindings(string_table)?;
+        state.resolve_types(&sorted_headers, &file_import_bindings, string_table)?;
+        state.resolve_function_signatures(&sorted_headers, &file_import_bindings, string_table)?;
+        let receiver_methods = state.build_receiver_catalog(&sorted_headers, string_table)?;
+        state.emit_ast_nodes(sorted_headers, &file_import_bindings, &receiver_methods, string_table)?;
 
         state.finalize(entry_dir, &top_level_const_fragments, string_table)
     }

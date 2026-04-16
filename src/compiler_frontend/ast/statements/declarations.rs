@@ -8,7 +8,6 @@ use crate::compiler_frontend::ast::statements::declaration_syntax::{
     DeclarationSyntax, parse_declaration_syntax,
 };
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
-use crate::compiler_frontend::ast::statements::structs::create_struct_definition;
 use crate::compiler_frontend::ast::{
     ast_nodes::Declaration, expressions::parse_expression::create_expression,
 };
@@ -16,6 +15,7 @@ use crate::compiler_frontend::builtins::error_type::is_reserved_builtin_symbol;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::declaration_syntax::struct_shell::parse_struct_shell;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::symbols::identifier_policy::{
@@ -196,8 +196,7 @@ pub fn resolve_declaration_syntax(
     let mut parsed_expr = match initializer_stream.current_token_kind() {
         // Struct Definition
         TokenKind::TypeParameterBracket => {
-            let params =
-                create_struct_definition(&mut initializer_stream, &const_context, string_table)?;
+            let params = parse_struct_shell(&mut initializer_stream, &const_context, string_table)?;
 
             Expression::struct_definition(
                 params,

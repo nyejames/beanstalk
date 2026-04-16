@@ -3,6 +3,7 @@
 //! WHAT: wires tokenization, header parsing, dependency sorting, AST/HIR construction, and borrow
 //! validation into the stage flow described in the compiler design overview.
 
+pub(crate) mod declaration_syntax;
 pub(crate) mod ast;
 pub(crate) mod headers;
 pub(crate) mod style_directives;

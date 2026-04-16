@@ -76,10 +76,9 @@ impl<'hir> JsEmitter<'hir> {
                 // WHAT: lower a fragment push into a JS vec push call.
                 // WHY: entry start() accumulates runtime fragments in a JS array;
                 //      each push appends one evaluated string.
-                // NOTE: vec_local is a __bs_binding wrapper; __bs_read unwraps it to the array.
                 let vec_name = self.local_name(*vec_local)?.to_owned();
                 let value_expr = self.lower_expr(value)?;
-                self.emit_line(&format!("__bs_read({vec_name}).push({value_expr});"));
+                self.emit_line(&format!("{vec_name}.push({value_expr});"));
             }
         }
 

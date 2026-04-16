@@ -3,8 +3,10 @@
 //! WHAT: owns the shared syntax for parameter/field declarations inside `| ... |` delimiters,
 //! covering name, optional `~` mutability, explicit type, and optional `= default`.
 //! WHY: function signatures and struct definitions use an identical syntactic form. Centralising
-//! the shared parser here keeps `statements/functions.rs` and `statements/structs.rs` free of
-//! duplicated implementation and makes the shared concept visible at the module level.
+//! the shared parser here keeps `ast/statements/functions.rs` and `ast/statements/structs.rs`
+//! free of duplicated implementation and makes the shared concept visible at the module level.
+//! This module is part of `declaration_syntax`, which is the neutral home for top-level shell
+//! parsers shared between the header stage and the AST stage.
 
 use crate::ast_log;
 use crate::compiler_frontend::ast::ast::ScopeContext;
@@ -262,7 +264,7 @@ fn parse_signature_member(
     })
 }
 
-fn apply_collection_ownership(data_type: DataType, ownership: &Ownership) -> DataType {
+pub(crate) fn apply_collection_ownership(data_type: DataType, ownership: &Ownership) -> DataType {
     match data_type {
         DataType::Collection(inner, _) => DataType::Collection(
             Box::new(apply_collection_ownership(*inner, ownership)),

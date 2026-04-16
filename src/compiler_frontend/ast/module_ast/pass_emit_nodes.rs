@@ -2,8 +2,13 @@
 //!
 //! WHAT: iterates sorted headers with full context (resolved signatures, receiver catalog,
 //! per-file visibility) and lowers each header into typed AST nodes.
-//! WHY: emission is the first pass that touches function/template bodies; all prior passes
-//! only collect metadata so emission can proceed in a single, well-typed traversal.
+//! WHY: emission is the ONLY pass that parses executable bodies (function bodies, template
+//! bodies, start body). All prior passes consume header shells without body parsing.
+//! Top-level declaration shell reparsing does NOT happen here — shells were fully parsed
+//! by the header stage and resolved by passes 2–5.
+//!
+//! Constants and choices are handled in earlier passes; they do not emit nodes here.
+//! Struct node emission reads `resolved_struct_fields_by_path` populated in pass 3.
 
 use super::build_state::AstBuildState;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};

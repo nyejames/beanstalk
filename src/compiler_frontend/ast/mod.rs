@@ -11,7 +11,6 @@ use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::FileTokens;
 
 pub(crate) mod module_ast;
-pub(crate) mod signatures;
 pub(crate) use module_ast as ast;
 pub(crate) mod ast_nodes;
 pub(crate) mod import_bindings;
@@ -48,7 +47,6 @@ pub(crate) mod statements {
     pub(crate) mod loops;
     pub(crate) mod multi_bind;
     pub(crate) mod result_handling;
-    pub(crate) mod structs;
 }
 pub(crate) mod field_access;
 pub(crate) mod place_access;

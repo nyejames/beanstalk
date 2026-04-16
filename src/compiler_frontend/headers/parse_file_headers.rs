@@ -8,16 +8,24 @@
 //! file-local visibility, constant ordering, and entry-file template ordering. Owning the full
 //! top-level symbol collection here removes the need for a separate manifest-building stage.
 //!
-//! Top-level declaration discovery is header-owned. AST lowers sorted headers directly.
+//! ## Stage contract
+//!
+//! Headers parse the declaration shell of every top-level kind:
+//! - **Functions**: full `FunctionSignature` (parameter types + return types). Strict edges come
+//!   from signature type references only. Body tokens are captured but not parsed.
+//! - **Structs**: full field list (`parse_struct_shell`). Strict edges come from field type refs.
+//! - **Choices**: variant list (alpha: unit-only). Strict edges from variant payload types.
+//! - **Constants**: `DeclarationSyntax` (type annotation + initializer tokens). Strict edges from
+//!   the declared type annotation only; initializer expression symbols are NOT strict edges.
+//! - **StartFunction**: body tokens captured for AST emission; NOT part of dependency sorting.
+//!
 //! Top-level runtime templates are evaluated in entry `start()` in source order.
 //! Entry `start()` returns `Vec<String>`.
 //! Only const top-level fragments carry placement metadata; they do not pass through HIR.
-//! Start functions are build-system-only and are not importable or callable from modules.
+//! Start functions are build-system-only; they are not importable or callable from modules.
 
 use crate::compiler_frontend::ast::ast::{ContextKind, ScopeContext};
-use crate::compiler_frontend::ast::statements::choices::{
-    ChoiceHeaderMetadata, parse_choice_header_payload,
-};
+use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::statements::declaration_syntax::{
     DeclarationSyntax, parse_declaration_syntax,
 };
@@ -27,6 +35,10 @@ use crate::compiler_frontend::builtins::error_type::{
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::{CompilerWarning, WarningKind};
+use crate::compiler_frontend::declaration_syntax::choice_shell::{
+    ChoiceHeaderMetadata, parse_choice_shell as parse_choice_header_payload,
+};
+use crate::compiler_frontend::declaration_syntax::struct_shell::parse_struct_shell;
 use crate::compiler_frontend::headers::module_symbols::{ModuleSymbols, register_declared_symbol};
 use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
@@ -42,7 +54,7 @@ use crate::compiler_frontend::symbols::identifier_policy::{
     IdentifierNamingKind, ensure_not_keyword_shadow_identifier, naming_warning_for_identifier,
 };
 use crate::compiler_frontend::symbols::identity::FileId;
-use crate::compiler_frontend::token_scan::{NestingDepth, consume_balanced_template_region};
+use crate::compiler_frontend::token_scan::consume_balanced_template_region;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
 use crate::compiler_frontend::type_syntax::for_each_named_type_in_data_type;
 use crate::projects::settings::{
@@ -138,10 +150,10 @@ pub enum HeaderKind {
         signature: FunctionSignature,
     },
     Constant {
-        metadata: ConstantHeaderMetadata,
+        declaration_syntax: DeclarationSyntax,
     },
     Struct {
-        metadata: StructHeaderMetadata,
+        fields: Vec<Declaration>,
     },
     Choice {
         metadata: ChoiceHeaderMetadata,
@@ -156,19 +168,6 @@ pub enum HeaderKind {
     /// non-trivial top-level executable code are rejected as a rule error.
     /// Start functions are build-system-only; they are not importable or callable from modules.
     StartFunction,
-}
-
-#[derive(Clone, Debug)]
-pub struct ConstantHeaderMetadata {
-    pub declaration_syntax: DeclarationSyntax,
-    #[allow(dead_code)] // Used by header-order assertions in unit and integration tests.
-    pub file_constant_order: usize,
-    pub symbol_dependencies: HashSet<InternedPath>,
-}
-
-#[derive(Clone, Debug)]
-pub struct StructHeaderMetadata {
-    pub default_value_dependencies: HashSet<InternedPath>,
 }
 
 #[derive(Clone, Debug)]
@@ -860,12 +859,32 @@ fn create_header(
                 &signature_context,
             )?;
 
-            capture_function_body_tokens(
-                token_stream,
-                context.file_imports,
-                &mut body,
-                &mut dependencies,
-            )?;
+            // Strict edges: parameter + return type references only.
+            // WHY: body-derived import symbols are NOT strict edges; AST owns body parsing.
+            for param in &signature.parameters {
+                for_each_named_type_in_data_type(&param.value.data_type, &mut |type_name| {
+                    let edge = context
+                        .file_imports
+                        .iter()
+                        .find(|import_path| import_path.name() == Some(type_name))
+                        .cloned()
+                        .unwrap_or_else(|| context.source_file.append(type_name));
+                    dependencies.insert(edge);
+                });
+            }
+            for ret in &signature.returns {
+                for_each_named_type_in_data_type(ret.value.data_type(), &mut |type_name| {
+                    let edge = context
+                        .file_imports
+                        .iter()
+                        .find(|import_path| import_path.name() == Some(type_name))
+                        .cloned()
+                        .unwrap_or_else(|| context.source_file.append(type_name));
+                    dependencies.insert(edge);
+                });
+            }
+
+            capture_function_body_tokens(token_stream, &mut body)?;
 
             kind = HeaderKind::Function { signature };
         }
@@ -905,20 +924,46 @@ fn create_header(
 
                 token_stream.advance();
 
-                capture_struct_field_tokens(
-                    token_stream,
-                    context.file_imports,
-                    &mut body,
-                    &mut dependencies,
-                )?;
+                // Parse field shell directly — avoids reparsing in the AST type-resolution pass.
+                // WHY: the header stage owns top-level shell parsing; AST owns body/executable parsing.
+                let struct_context = ScopeContext::new(
+                    ContextKind::ConstantHeader,
+                    full_name.to_owned(),
+                    Rc::new(vec![]),
+                    context.host_function_registry.to_owned(),
+                    vec![],
+                )
+                .with_project_path_resolver(context.project_path_resolver.clone())
+                .with_source_file_scope(context.source_file.to_owned())
+                .with_path_format_config(context.path_format_config.clone());
 
-                let default_value_dependencies =
-                    collect_struct_default_dependencies(&body, context);
-                kind = HeaderKind::Struct {
-                    metadata: StructHeaderMetadata {
-                        default_value_dependencies,
-                    },
-                };
+                // Field IDs are built as `token_stream.src_path.append(field_name)` inside
+                // parse_signature_members. Set src_path to the struct's own path so field IDs
+                // are `struct_path/field_name` — matching what resolve_struct_field_types expects.
+                // WHY: token_stream.src_path is the file path at this point; fields need to be
+                // children of the struct path, not siblings of the struct in the file namespace.
+                let saved_src_path = token_stream.src_path.to_owned();
+                token_stream.src_path = full_name.to_owned();
+                let fields =
+                    parse_struct_shell(token_stream, &struct_context, context.string_table);
+                token_stream.src_path = saved_src_path;
+                let fields = fields?;
+
+                // Collect strict type edges from field types only (no default-expression edges).
+                // WHY: struct field type refs are the only struct edges that constrain sort order.
+                for field in &fields {
+                    for_each_named_type_in_data_type(&field.value.data_type, &mut |type_name| {
+                        let edge = context
+                            .file_imports
+                            .iter()
+                            .find(|import_path| import_path.name() == Some(type_name))
+                            .cloned()
+                            .unwrap_or_else(|| context.source_file.append(type_name));
+                        dependencies.insert(edge);
+                    });
+                }
+
+                kind = HeaderKind::Struct { fields };
             } else if exported {
                 ensure_not_keyword_shadow_identifier(
                     declaration_name_text,
@@ -938,10 +983,8 @@ fn create_header(
                     context,
                     &mut dependencies,
                 )?;
-                body = constant_header.body;
-                kind = HeaderKind::Constant {
-                    metadata: constant_header.metadata,
-                };
+
+                kind = HeaderKind::Constant { declaration_syntax: constant_header };
             }
         }
 
@@ -975,9 +1018,9 @@ fn create_header(
                     context,
                     &mut dependencies,
                 )?;
-                body = constant_header.body;
+
                 kind = HeaderKind::Constant {
-                    metadata: constant_header.metadata,
+                    declaration_syntax: constant_header,
                 };
             }
         }
@@ -1034,16 +1077,15 @@ fn emit_header_naming_warning(
 
 // WHAT: collects all tokens that make up a function body (`:` … `;`) into `body`,
 // tracking scope depth to handle nested scopes (inner `if`/`loop`/etc.) correctly.
-// Also records any symbol references that match known file imports as dependency edges.
 //
 // WHY: extracted from `create_header` to reduce its length and make the scope-balancing
 // contract explicit. The token stream must already be positioned on the first body token
 // (i.e. `FunctionSignature::new` has already consumed the signature).
+// Strict dependency edges are derived from the signature only; body tokens are captured but
+// not scanned for imports — that is AST's responsibility at body-lowering time.
 fn capture_function_body_tokens(
     token_stream: &mut FileTokens,
-    file_imports: &HashSet<InternedPath>,
     body: &mut Vec<Token>,
-    dependencies: &mut HashSet<InternedPath>,
 ) -> Result<(), CompilerError> {
     let mut scopes_opened = 1;
     let mut scopes_closed = 0;
@@ -1084,13 +1126,6 @@ fn capture_function_body_tokens(
                 )
             }
 
-            TokenKind::Symbol(name_id) => {
-                if let Some(path) = file_imports.iter().find(|f| f.name() == Some(*name_id)) {
-                    dependencies.insert(path.to_owned());
-                }
-                body.push(token_stream.current_token());
-            }
-
             _ => {
                 body.push(token_stream.current_token());
             }
@@ -1101,76 +1136,12 @@ fn capture_function_body_tokens(
 
     Ok(())
 }
-
-// WHAT: collects all tokens that make up a struct field list (`|fields|`) into `body`,
-// tracking the opening and closing `|` (TypeParameterBracket) delimiters.
-// Also records any symbol references that match known file imports as dependency edges.
-//
-// WHY: extracted from `create_header` to reduce its length and make the struct-body
-// boundary contract explicit. The token stream must be positioned on the first token
-// inside or at the opening `|` (the caller has already advanced past `=`).
-fn capture_struct_field_tokens(
-    token_stream: &mut FileTokens,
-    file_imports: &HashSet<InternedPath>,
-    body: &mut Vec<Token>,
-    dependencies: &mut HashSet<InternedPath>,
-) -> Result<(), CompilerError> {
-    let mut seen_opening_bracket = false;
-
-    loop {
-        match token_stream.current_token_kind() {
-            TokenKind::TypeParameterBracket => {
-                body.push(token_stream.current_token());
-
-                if seen_opening_bracket {
-                    token_stream.advance();
-                    break;
-                }
-
-                seen_opening_bracket = true;
-            }
-
-            TokenKind::Eof => {
-                return_rule_error!(
-                    "Unexpected end of file while parsing struct definition. Missing closing '|'.",
-                    token_stream.current_location(),
-                    {
-                        PrimarySuggestion => "Close the struct fields with a final '|'",
-                        SuggestedInsertion => "|",
-                    }
-                )
-            }
-
-            TokenKind::Symbol(name_id) => {
-                body.push(token_stream.current_token());
-
-                if let Some(path) = file_imports.iter().find(|f| f.name() == Some(*name_id)) {
-                    dependencies.insert(path.to_owned());
-                }
-            }
-
-            _ => {
-                body.push(token_stream.current_token());
-            }
-        }
-
-        token_stream.advance();
-    }
-
-    Ok(())
-}
-
-struct ConstantHeaderPayload {
-    body: Vec<Token>,
-    metadata: ConstantHeaderMetadata,
-}
-
 fn create_constant_header_payload(
     full_name: &InternedPath,
     token_stream: &mut FileTokens,
     context: &mut HeaderBuildContext<'_>,
     dependencies: &mut HashSet<InternedPath>,
-) -> Result<ConstantHeaderPayload, CompilerError> {
+) -> Result<DeclarationSyntax, CompilerError> {
     let Some(declaration_name) = full_name.name() else {
         return Err(CompilerError::compiler_error(
             "Constant header path is missing its declaration name.",
@@ -1178,140 +1149,37 @@ fn create_constant_header_payload(
     };
     let declaration_syntax =
         parse_declaration_syntax(token_stream, declaration_name, context.string_table)?;
-    let declaration_tokens = declaration_syntax.to_tokens();
 
-    for token in &declaration_tokens {
-        if let TokenKind::Symbol(name_id) = token.kind
-            && let Some(path) = context
-                .file_imports
-                .iter()
-                .find(|import| import.name() == Some(name_id))
-        {
-            dependencies.insert(path.to_owned());
-        }
-    }
+    // Strict edges: declared type annotation only.
+    // WHY: initializer-expression symbols are soft ordering hints, not strict structural deps.
+    collect_constant_type_dependencies(&declaration_syntax, context, dependencies);
 
-    let symbol_dependencies = collect_constant_symbol_dependencies(&declaration_syntax, context);
-    let metadata = ConstantHeaderMetadata {
-        declaration_syntax,
-        file_constant_order: *context.file_constant_order,
-        symbol_dependencies,
-    };
     *context.file_constant_order += 1;
 
-    Ok(ConstantHeaderPayload {
-        body: declaration_tokens,
-        metadata,
-    })
+    Ok(declaration_syntax)
 }
 
-fn collect_constant_symbol_dependencies(
+/// Collect strict dependency edges from a constant's declared type annotation.
+///
+/// WHY: only the declared type creates a structural ordering constraint; initializer-expression
+/// symbol references are soft hints that are intentionally excluded from strict graph edges.
+fn collect_constant_type_dependencies(
     declaration_syntax: &DeclarationSyntax,
     context: &HeaderBuildContext<'_>,
-) -> HashSet<InternedPath> {
-    let mut dependencies = HashSet::new();
-    let mut previous_token_was_dot = false;
-
+    dependencies: &mut HashSet<InternedPath>,
+) {
     for_each_named_type_in_data_type(
         &declaration_syntax.type_annotation.data_type,
         &mut |type_name| {
-            if let Some(import_path) = context
+            let edge = context
                 .file_imports
                 .iter()
                 .find(|import_path| import_path.name() == Some(type_name))
-            {
-                dependencies.insert(import_path.to_owned());
-            } else {
-                dependencies.insert(context.source_file.append(type_name));
-            }
+                .cloned()
+                .unwrap_or_else(|| context.source_file.append(type_name));
+            dependencies.insert(edge);
         },
     );
-
-    for token in &declaration_syntax.initializer_tokens {
-        let token_kind = &token.kind;
-
-        if let TokenKind::Symbol(symbol_id) = token_kind {
-            if previous_token_was_dot {
-                previous_token_was_dot = false;
-                continue;
-            }
-
-            if let Some(import_path) = context
-                .file_imports
-                .iter()
-                .find(|import_path| import_path.name() == Some(*symbol_id))
-            {
-                dependencies.insert(import_path.to_owned());
-            } else {
-                dependencies.insert(context.source_file.append(*symbol_id));
-            }
-        }
-
-        previous_token_was_dot = matches!(token_kind, TokenKind::Dot);
-    }
-
-    dependencies
-}
-
-fn collect_struct_default_dependencies(
-    tokens: &[Token],
-    context: &HeaderBuildContext<'_>,
-) -> HashSet<InternedPath> {
-    let mut dependencies = HashSet::new();
-    let mut saw_opening_bracket = false;
-    let mut inside_default_expression = false;
-    let mut depth = NestingDepth::default();
-    let mut previous_token_was_dot = false;
-
-    for token in tokens {
-        let token_kind = &token.kind;
-
-        if !saw_opening_bracket {
-            if matches!(token_kind, TokenKind::TypeParameterBracket) {
-                saw_opening_bracket = true;
-            }
-            previous_token_was_dot = matches!(token_kind, TokenKind::Dot);
-            continue;
-        }
-
-        if !inside_default_expression {
-            if matches!(token_kind, TokenKind::Assign) {
-                inside_default_expression = true;
-                depth = NestingDepth::default();
-            }
-            previous_token_was_dot = matches!(token_kind, TokenKind::Dot);
-            continue;
-        }
-
-        if matches!(
-            token_kind,
-            TokenKind::Comma | TokenKind::TypeParameterBracket
-        ) && depth.is_top_level()
-        {
-            inside_default_expression = false;
-            previous_token_was_dot = matches!(token_kind, TokenKind::Dot);
-            continue;
-        }
-
-        if let TokenKind::Symbol(symbol_id) = token_kind
-            && !previous_token_was_dot
-        {
-            if let Some(import_path) = context
-                .file_imports
-                .iter()
-                .find(|import_path| import_path.name() == Some(*symbol_id))
-            {
-                dependencies.insert(import_path.to_owned());
-            } else {
-                dependencies.insert(context.source_file.append(*symbol_id));
-            }
-        }
-
-        depth.step(token_kind);
-        previous_token_was_dot = matches!(token_kind, TokenKind::Dot);
-    }
-
-    dependencies
 }
 
 fn create_top_level_const_template(

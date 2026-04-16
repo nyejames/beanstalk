@@ -1588,8 +1588,11 @@ fn build_project_const_top_level_header_with_unfilled_named_slots_folds_to_empty
         let _cwd_guard = CurrentDirGuard::set_to(&root);
 
         let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
-        let build_result = build_project(&builder, "main.bst", &[])
-            .expect("top-level const wrappers should fold even when named slots are unfilled");
+        let build_result = build_project(&builder, "main.bst", &[]);
+        if let Err(ref e) = build_result {
+            panic!("top-level const wrappers should fold even when named slots are unfilled: {}", e.errors.iter().map(|e| e.msg.as_str()).collect::<Vec<_>>().join("; "));
+        }
+        let build_result = build_result.unwrap();
 
         let html = match build_result.project.output_files[0].file_kind() {
             FileKind::Html(content) => content,

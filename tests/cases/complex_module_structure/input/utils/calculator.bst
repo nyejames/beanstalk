@@ -10,3 +10,6 @@
     io([: Multiplying: [a] * [b] = [result]])
     return result
 ;
+
+-- Calculator module initialization
+io("Calculator module initialized")

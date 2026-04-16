@@ -1,11 +1,18 @@
 //! Stage 3 dependency ordering for parsed Beanstalk headers.
 //!
-//! WHAT: topologically sorts header definitions after header parsing so AST construction sees
-//! import, constant, and soft struct-default dependencies in a deterministic order.
+//! WHAT: topologically sorts top-level headers by their strict dependency edges, then appends
+//! `StartFunction` headers in source order. Finalizes the header-owned `ModuleSymbols` package:
+//! declarations are built from the sorted headers and appended with builtin declarations.
 //!
-//! After sorting, the header-owned `ModuleSymbols` package is finalized: user declarations are
-//! built from the sorted headers and appended with the staged builtin declarations, giving AST a
-//! complete, pre-sorted symbol table without any separate manifest-building step.
+//! ## Stage contract
+//!
+//! **Strict-edges-only sort.** Dependency edges are structural: function signature type refs,
+//! struct field type refs, constant declared-type refs. Initializer-expression symbols are NOT
+//! edges; they are soft hints handled at AST body-parsing time.
+//!
+//! **`start` excluded from the graph.** `StartFunction` headers are not graph participants — they
+//! have no dependents and cannot be imported. They are appended after the sorted top-level
+//! headers so AST emission sees all top-level declarations before processing the start body.
 
 use crate::compiler_frontend::compiler_errors::{CompilerError, SourceLocation};
 use crate::compiler_frontend::headers::module_symbols::ModuleSymbols;
@@ -49,12 +56,13 @@ impl DependencyTracker {
 
 /// Topologically sort headers and finalize the header-owned module symbol package.
 ///
-/// WHAT: sorts headers by their dependency edges (imports, struct defaults, constant symbols),
-/// then builds the `declarations` Vec in sorted order and appends builtin declarations.
+/// WHAT: sorts top-level (non-start) headers by their strict dependency edges, then appends
+/// `StartFunction` headers in source order. Builds the `declarations` Vec in sorted order and
+/// appends builtin declarations.
 ///
-/// WHY: declarations must follow topological header order so AST passes see dependencies before
-/// dependents. All order-independent symbol maps were already built during `parse_headers`; only
-/// the `declarations` Vec requires the sorted header sequence.
+/// WHY: `StartFunction` is excluded from the dependency graph — it is build-system-only and
+/// cannot be imported by other headers. All other headers are sorted by strict structural edges
+/// (signature types, field types, declared constant types) so AST sees dependencies first.
 pub fn resolve_module_dependencies(
     parsed: Headers,
     string_table: &mut StringTable,
@@ -66,19 +74,23 @@ pub fn resolve_module_dependencies(
         mut module_symbols,
     } = parsed;
 
-    let mut graph: HashMap<InternedPath, Header> = HashMap::with_capacity(headers.len());
-    let mut errors: Vec<CompilerError> = Vec::with_capacity(headers.len());
-    let mut ordered_paths: Vec<InternedPath> = Vec::with_capacity(headers.len());
+    // Partition: StartFunction headers are appended last, not sorted.
+    // WHY: start is build-system-only and has no dependents; it must not participate in
+    // cycle detection or strict-edge traversal.
+    let (top_level_headers, start_headers): (Vec<Header>, Vec<Header>) = headers
+        .into_iter()
+        .partition(|h| !matches!(h.kind, HeaderKind::StartFunction));
 
-    // Build graph or collect errors
-    for header in headers {
+    let mut graph: HashMap<InternedPath, Header> =
+        HashMap::with_capacity(top_level_headers.len());
+    let mut errors: Vec<CompilerError> = Vec::with_capacity(top_level_headers.len());
+    let mut ordered_paths: Vec<InternedPath> = Vec::with_capacity(top_level_headers.len());
+
+    // Build graph
+    for header in top_level_headers {
         header_log!(header);
         ordered_paths.push(header.tokens.src_path.to_owned());
         graph.insert(header.tokens.src_path.to_owned(), header);
-    }
-
-    if !errors.is_empty() {
-        return Err(errors);
     }
 
     let order_lookup = ordered_paths
@@ -87,7 +99,7 @@ pub fn resolve_module_dependencies(
         .map(|(index, path)| (path.to_owned(), index))
         .collect::<HashMap<_, _>>();
 
-    // Perform topological sort
+    // Perform topological sort on strict-edge graph only.
     let mut tracker = DependencyTracker::new(graph.len());
     let mut sorted: Vec<Header> = Vec::with_capacity(graph.len());
 
@@ -109,6 +121,10 @@ pub fn resolve_module_dependencies(
     if !errors.is_empty() {
         return Err(errors);
     }
+
+    // Append start headers after the sorted top-level headers.
+    // WHY: start sees all top-level declarations during AST emission, so it must come last.
+    sorted.extend(start_headers);
 
     // Build sorted declarations from the topologically ordered headers and append builtins.
     // WHY: declarations must be in sorted order so AST passes see dependencies before dependents.
@@ -171,7 +187,9 @@ fn visit_node(
         // mark temporarily
         tracker.temp_mark.insert(resolved_path.to_owned());
 
-        // recurse on strict imports first
+        // Recurse on strict dependency edges only.
+        // WHY: strict edges are structural (signature types, field types, declared constant types).
+        // Body / initializer expression references are soft and excluded from the graph.
         let mut strict_imports = header.dependencies.iter().cloned().collect::<Vec<_>>();
         strict_imports.sort_by(|left, right| {
             let left_order = resolve_graph_path(left, graph, string_table)
@@ -191,50 +209,6 @@ fn visit_node(
             visit_node(&import, tracker, graph, order_lookup, sorted, string_table)?;
         }
 
-        // Soft edges: struct default-value dependencies.
-        // WHY: resolved when possible but never fail sorting — AST validation owns those errors.
-        if let HeaderKind::Struct { metadata } = &header.kind {
-            let soft_edges = collect_struct_default_soft_edges(
-                &metadata.default_value_dependencies,
-                &resolved_path,
-                graph,
-                order_lookup,
-                string_table,
-            );
-            for dependency in soft_edges {
-                visit_node(
-                    &dependency,
-                    tracker,
-                    graph,
-                    order_lookup,
-                    sorted,
-                    string_table,
-                )?;
-            }
-        }
-
-        // Soft edges: constant symbol dependencies.
-        // WHY: same policy as struct defaults — order when resolvable, never block on failure.
-        if let HeaderKind::Constant { metadata } = &header.kind {
-            let soft_edges = collect_constant_symbol_soft_edges(
-                &metadata.symbol_dependencies,
-                &resolved_path,
-                graph,
-                order_lookup,
-                string_table,
-            );
-            for dependency in soft_edges {
-                visit_node(
-                    &dependency,
-                    tracker,
-                    graph,
-                    order_lookup,
-                    sorted,
-                    string_table,
-                )?;
-            }
-        }
-
         // when children are done, push this node (clone of context)
         sorted.push(header.clone());
 
@@ -246,73 +220,6 @@ fn visit_node(
     Ok(())
 }
 
-/// Collect soft sort edges for a struct's default-expression dependencies.
-///
-/// WHY: only Constant headers are valid soft targets here; unresolved candidates are silently
-/// ignored so dependency sorting never fails on a missing struct default dependency.
-fn collect_struct_default_soft_edges(
-    dependencies: &HashSet<InternedPath>,
-    resolved_self: &InternedPath,
-    graph: &HashMap<InternedPath, Header>,
-    order_lookup: &HashMap<InternedPath, usize>,
-    string_table: &StringTable,
-) -> Vec<InternedPath> {
-    let mut soft_edges = dependencies
-        .iter()
-        .filter_map(|dep| resolve_graph_path(dep, graph, string_table))
-        .filter(|dep| {
-            matches!(
-                graph.get(dep).map(|h| &h.kind),
-                Some(HeaderKind::Constant { .. })
-            )
-        })
-        .filter(|dep| dep != resolved_self)
-        .collect::<Vec<_>>();
-    sort_and_dedup_soft_edges(&mut soft_edges, order_lookup, string_table);
-    soft_edges
-}
-
-/// Collect soft sort edges for a constant declaration's symbol dependencies.
-///
-/// WHY: Struct and Constant headers are valid soft targets; unresolved candidates are silently
-/// ignored so dependency sorting never fails on a missing constant symbol reference.
-fn collect_constant_symbol_soft_edges(
-    dependencies: &HashSet<InternedPath>,
-    resolved_self: &InternedPath,
-    graph: &HashMap<InternedPath, Header>,
-    order_lookup: &HashMap<InternedPath, usize>,
-    string_table: &StringTable,
-) -> Vec<InternedPath> {
-    let mut soft_edges = dependencies
-        .iter()
-        .filter_map(|dep| resolve_graph_path(dep, graph, string_table))
-        .filter(|dep| {
-            matches!(
-                graph.get(dep).map(|h| &h.kind),
-                Some(HeaderKind::Struct { .. }) | Some(HeaderKind::Constant { .. })
-            )
-        })
-        .filter(|dep| dep != resolved_self)
-        .collect::<Vec<_>>();
-    sort_and_dedup_soft_edges(&mut soft_edges, order_lookup, string_table);
-    soft_edges
-}
-
-fn sort_and_dedup_soft_edges(
-    edges: &mut Vec<InternedPath>,
-    order_lookup: &HashMap<InternedPath, usize>,
-    string_table: &StringTable,
-) {
-    edges.sort_by(|left, right| {
-        let left_order = order_lookup.get(left).copied().unwrap_or(usize::MAX);
-        let right_order = order_lookup.get(right).copied().unwrap_or(usize::MAX);
-        left_order.cmp(&right_order).then_with(|| {
-            left.to_portable_string(string_table)
-                .cmp(&right.to_portable_string(string_table))
-        })
-    });
-    edges.dedup();
-}
 
 fn resolve_graph_path(
     requested_path: &InternedPath,

@@ -176,16 +176,11 @@ impl FrontendProject {
 
 #[test]
 fn sorts_cross_module_start_function_dependencies_through_frontend_entrypoints() {
-    // Non-entry files use named functions only; the entry #page.bst can have top-level calls.
-    // Function names match import path names so the dependency edges are wired correctly.
     let mut project = FrontendProject::new(
         &[
-            ("src/#page.bst", "import @helper\nhelper()\n"),
-            (
-                "src/helper.bst",
-                "import @leaf\n#helper ||:\n    leaf()\n;\n",
-            ),
-            ("src/leaf.bst", "#leaf ||:\n    io(\"leaf\")\n;\n"),
+            ("src/#page.bst", "import @helper\nhelper()\nio(\"page\")\n"),
+            ("src/helper.bst", "import @leaf\nleaf()\nio(\"helper\")\n"),
+            ("src/leaf.bst", "io(\"leaf\")\n"),
         ],
         "src/#page.bst",
     );
@@ -196,48 +191,29 @@ fn sorts_cross_module_start_function_dependencies_through_frontend_entrypoints()
         .sort_headers(headers)
         .expect("dependency sorting should succeed");
 
-    // Verify dependency ordering via source_file positions across all sorted headers.
-    let file_positions: Vec<_> = sorted
+    let start_order = sorted
         .headers
         .iter()
+        .filter(|header| matches!(header.kind, HeaderKind::StartFunction))
         .map(|header| header.source_file.clone())
-        .collect();
+        .collect::<Vec<_>>();
 
-    let leaf_path = project.logical_path("src/leaf.bst");
-    let helper_path = project.logical_path("src/helper.bst");
-    let page_path = project.logical_path("src/#page.bst");
-
-    let pos_leaf = file_positions
-        .iter()
-        .position(|p| *p == leaf_path)
-        .expect("leaf.bst should have at least one header");
-    let pos_helper = file_positions
-        .iter()
-        .position(|p| *p == helper_path)
-        .expect("helper.bst should have at least one header");
-    let pos_page = file_positions
-        .iter()
-        .position(|p| *p == page_path)
-        .expect("#page.bst should have at least one header");
-
-    assert!(
-        pos_leaf < pos_helper,
-        "leaf.bst (dependency) must sort before helper.bst (dependent)"
-    );
-    assert!(
-        pos_helper < pos_page,
-        "helper.bst (dependency) must sort before #page.bst (entry)"
+    assert_eq!(
+        start_order,
+        vec![
+            project.logical_path("src/leaf.bst"),
+            project.logical_path("src/helper.bst"),
+            project.logical_path("src/#page.bst"),
+        ]
     );
 }
 
 #[test]
 fn reports_circular_imports_through_frontend_header_sorting() {
-    // b.bst needs a declaration so it appears in the graph and the cycle is detectable.
-    // Function names match import names to wire dependency edges.
     let mut project = FrontendProject::new(
         &[
-            ("src/a.bst", "import @b\nb()\n"),
-            ("src/b.bst", "import @a\n#b ||:\n    a()\n;\n"),
+            ("src/a.bst", "import @b\nb()\nio(\"a\")\n"),
+            ("src/b.bst", "import @a\na()\nio(\"b\")\n"),
         ],
         "src/a.bst",
     );

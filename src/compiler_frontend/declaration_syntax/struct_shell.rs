@@ -3,17 +3,28 @@
 //! WHAT: parses `Struct = | ... |` field declarations using the shared signature-member parser.
 //! WHY: struct defaults have extra compile-time constraints that should stay separate from the
 //! general shared `| ... |` parsing logic.
+//!
+//! This module is the authoritative home for the struct shell parser. Both the header stage
+//! (which calls `parse_struct_shell` to populate `StructHeaderMetadata.fields`) and AST body
+//! declarations (inline struct-literal expressions) use `parse_struct_shell`. This avoids
+//! top-level struct field syntax being rediscovered twice.
 
 use crate::compiler_frontend::ast::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
-use crate::compiler_frontend::ast::signatures::parse_signature_members;
+use crate::compiler_frontend::declaration_syntax::signature_members::parse_signature_members;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::FileTokens;
 use crate::return_rule_error;
 
-pub fn create_struct_definition(
+/// Parse a struct field-list shell from `| field Type [= default], ... |` syntax.
+///
+/// WHAT: advances past the opening `|`, parses all fields via `parse_signature_members`,
+/// advances past the closing `|`, and validates that any default values are compile-time constants.
+/// WHY: this is the single canonical struct field parser. Used by header parsing to populate
+/// `StructHeaderMetadata.fields` and by body-declaration parsing for inline struct literals.
+pub fn parse_struct_shell(
     token_stream: &mut FileTokens,
     context: &ScopeContext,
     string_table: &mut StringTable,
@@ -55,7 +66,3 @@ fn validate_struct_default_values(
 
     Ok(())
 }
-
-#[cfg(test)]
-#[path = "tests/struct_parsing_tests.rs"]
-mod struct_parsing_tests;
