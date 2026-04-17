@@ -20,7 +20,7 @@ use crate::compiler_frontend::ast::templates::template_render_plan::TemplateRend
 use crate::compiler_frontend::ast::templates::template_slots::ensure_no_slot_insertions_remain;
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::FileTokens;
 use crate::return_syntax_error;
 

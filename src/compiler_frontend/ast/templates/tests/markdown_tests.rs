@@ -7,7 +7,7 @@ use crate::compiler_frontend::ast::templates::template_render_plan::{
     FormatterAnchorId, FormatterInput, FormatterInputPiece, FormatterOpaqueKind,
     FormatterOpaquePiece, FormatterOutputPiece, FormatterTextPiece,
 };
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
 fn child_anchor(id: usize) -> FormatterOpaquePiece {

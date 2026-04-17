@@ -11,7 +11,7 @@ use crate::compiler_frontend::display_messages::{
     resolved_display_path,
 };
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::projects::dev_server::dev_client::dev_client_snippet;
 use std::fmt::Write;
 use std::path::Path;

@@ -13,7 +13,7 @@ use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
-use crate::compiler_frontend::string_interning::{StringId, StringTable};
+use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 
 /// Folds a compile-time template into a `StringSlice` expression.
 ///

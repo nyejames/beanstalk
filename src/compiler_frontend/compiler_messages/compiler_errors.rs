@@ -136,7 +136,7 @@
 pub use crate::compiler_frontend::compiler_messages::source_location::SourceLocation;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use std::collections::HashMap;
 use std::path::Path;
 

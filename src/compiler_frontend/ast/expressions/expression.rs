@@ -11,7 +11,7 @@ use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::datatypes::{DataType, Ownership, PathTypeKind, ReceiverKey};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_resolution::CompileTimePaths;
-use crate::compiler_frontend::string_interning::{StringId, StringTable};
+use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
 // Expressions represent anything that will turn into a value

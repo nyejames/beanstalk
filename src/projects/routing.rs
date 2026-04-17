@@ -4,7 +4,7 @@
 //! WHY: keeping one parser avoids drift between builder validation and dev-server runtime behavior.
 
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::projects::settings::Config;
 
 /// Canonical page URL style used for directory-backed HTML routes.

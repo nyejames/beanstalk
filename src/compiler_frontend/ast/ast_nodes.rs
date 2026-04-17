@@ -17,7 +17,7 @@ use crate::compiler_frontend::builtins::BuiltinMethodKind;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::string_interning::StringId;
+use crate::compiler_frontend::symbols::string_interning::StringId;
 pub(crate) use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::return_compiler_error;
 

@@ -16,9 +16,7 @@ use crate::compiler_frontend::ast::statements::functions::{
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
-use crate::compiler_frontend::headers::parse_file_headers::{
-    HeaderParseOptions, parse_headers_with_path_resolver,
-};
+use crate::compiler_frontend::headers::parse_file_headers::{HeaderParseOptions, parse_headers};
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::host_functions::test_support::register_test_host_function;
@@ -26,8 +24,8 @@ use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::module_dependencies::resolve_module_dependencies;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
-use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::lexer::tokenize;
 use crate::compiler_frontend::tokenizer::newline_handling::NewlineMode;
 use crate::compiler_frontend::tokenizer::tokens::{CharPosition, TokenizeMode};
@@ -73,7 +71,7 @@ fn parse_single_file_ast_result(source: &str) -> Result<(Ast, StringTable), Comp
     )?;
 
     let mut warnings = Vec::new();
-    let headers = parse_headers_with_path_resolver(
+    let headers = parse_headers(
         vec![file_tokens],
         &host_registry,
         &mut warnings,

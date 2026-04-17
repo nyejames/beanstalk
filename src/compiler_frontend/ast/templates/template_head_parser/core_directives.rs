@@ -22,8 +22,8 @@ use crate::compiler_frontend::ast::templates::template_slots::{
 };
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::style_directives::{CoreStyleDirectiveKind, StyleDirectiveKind};
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::FileTokens;
 use crate::{return_compiler_error, return_syntax_error};
 

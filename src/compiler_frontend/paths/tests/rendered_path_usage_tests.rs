@@ -6,7 +6,7 @@ use crate::compiler_frontend::paths::path_resolution::{
     CompileTimePathBase, CompileTimePathKind, ProjectPathResolver,
 };
 use crate::compiler_frontend::paths::rendered_path_usage::resolve_compile_time_paths_for_rendered_output;
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{CharPosition, SourceLocation};
 use std::fs;
 use std::path::PathBuf;

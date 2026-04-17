@@ -8,21 +8,12 @@
 
 ### Frontend structure at a glance
 - `src/compiler_frontend/mod.rs` wires stages together
+- `src/compiler_frontend/headers/` parses top-level declarations, defering parsing the bodies of functions or type checking until AST stage.
 - `src/compiler_frontend/ast/` builds the typed AST
+- `src/compiler_frontend/declaration_syntax/` stores the shared syntax parsing for both header and AST stage
 - `src/compiler_frontend/type_coercion/` owns type compatibility and contextual coercion rules
 - `src/compiler_frontend/hir/` lowers AST into HIR
 - `src/compiler_frontend/analysis/borrow_checker/` validates borrow/exclusivity rules
-
-**Ownership contract**
-
-The frontend is intentionally eager about top-level structure.
-
-- Header parsing owns top-level declaration discovery and top-level declaration-shell parsing.
-- Dependency sorting owns ordering those parsed top-level headers by strict dependency edges.
-- AST consumes the already-shaped, already-sorted top-level headers directly.
-- AST resolves, validates, and lowers those headers.
-- AST owns executable body parsing and body-local declarations.
-- AST must not reparse top-level declaration shells that header parsing already produced.
 
 ## Overview
 Build systems create a `BackendBuilder` implementation and wrap it in a `ProjectBuilder` struct.
@@ -135,7 +126,7 @@ The Beanstalk compiler frontend and build system processes modules through these
 
 0. **Project Structure** – Parses the config file and determines the boundaries of each module in the project
 1. **Tokenization** – Convert source text to tokens
-2. **Header Parsing** – Discover top-level declarations, parse their declaration shells, collect strict top-level dependency edges, and build the implicit entry `start` body separately from top-level declarations
+2. **Header Parsing** – Discover top-level declarations, collect strict top-level dependency edges, and build the implicit entry `start` body separately from top-level declarations
 3. **Dependency Sorting** – Order parsed top-level declaration headers by strict dependency edges, detect cycles in the top-level graph, and append the implicit entry `start` header last
 4. **AST Construction** – Lower the already-shaped, already-sorted top-level headers, resolve and validate them, and parse executable bodies and body-local declarations. All type checking happens here.
 5. **HIR Generation** – Semantic lowering with explicit control flow
@@ -180,22 +171,22 @@ Converts raw source code into structured tokens with location information.
 - Context switching for delimiter handling templates / strings (`[]` vs `""`)
 
 ### Stage 2: Header Parsing (`src/compiler_frontend/headers/parse_file_headers.rs`)
-Top-level declaration discovery and top-level declaration-shell parsing.
-Does not merely classify declarations, but parses the top-level shape of each declaration kind so later stages do not need to reconstruct it.
-Does not parse executable bodies beyond capturing their token streams for later AST lowering.
+Top-level declaration discovery and parsing of top-level structs, choices and constants.
+Parses the top-level shape of each declaration kind so later stages do not need to reconstruct it.
+Does not parse anything in function bodies beyond capturing their token streams and tracking their dependencies.
 
 - **Top-Level Declaration Discovery**: Header parsing is the only stage that discovers module-wide top-level declarations.
-- **Declaration-Shell Parsing**: Function signatures, exported constant declaration shells, struct shells, and choice shells are parsed here.
-- **Strict Dependency Edge Collection**: Header parsing collects strict top-level dependency edges from declaration-shell type references.
+- **Declaration Parsing**: Top-level Function signatures, exported constant declarations and structs/choices are parsed here.
+- **Strict Dependency Edge Collection**: Header parsing collects strict top-level dependency edges.
 - **Implicit Entry Start Capture**: Entry-file top-level executable code is collected into a `HeaderKind::StartFunction` header for later AST lowering.
 - **Import Collection**: Imports needed by top-level declarations are collected here for top-level dependency analysis.
 - **Top-Level Const Fragments**: Entry-file top-level const templates are recorded as compile-time fragment headers plus builder-facing placement metadata.
 - **Runtime Fragment Counting**: Entry-file top-level runtime templates remain in the entry `start` body, while header parsing tracks how many runtime fragments precede each const fragment so builders can merge outputs correctly.
 
-Exported constants are parsed as top-level declaration shells in header parsing. Their declared type shape is header-owned, while AST later resolves and validates the initializer. Struct field shapes and choice variant shapes are parsed in the header stage so AST can resolve and validate them without reparsing their top-level declaration syntax.
+Exported constants are parsed as top-level declarations. Their declared type shape is header-owned, the AST later resolves and validates the initializer. Top-level struct field shapes and choice variant shapes are fully parsed in the header stage, but validated and type checked at the AST stage.
 
 ### Stage 3: Dependency Sorting (`src/compiler_frontend/module_dependencies.rs`)
-Operates only on top-level declaration headers and only on strict dependency edges known from their parsed declaration shells.
+Operates only on top-level declaration headers and only on strict dependency edges.
 Allows the AST to lower the whole module in declaration order without rebuilding module-wide top-level symbol knowledge.
 Does not use executable body references or soft expression-derived edges.
 This enables full-module type checking while keeping top-level declaration ownership in the header stage.
@@ -209,28 +200,25 @@ This enables full-module type checking while keeping top-level declaration owner
 
 ### Stage 4: AST Construction (`src/compiler_frontend/ast/mod.rs`)
 Consumes the already-shaped, already-sorted top-level headers from the header and dependency stages.
-Resolves, validates and lowers those header. Does not reparse the header top-level declaration syntax.
+Resolves, validates headers and lowers templates and function bodies. Does not reparse the header top-level declaration syntax.
 Transforms dependency-sorted headers into the typed AST and performs the compiler's main semantic frontend work.
 
-- **Header-Payload Lowering**: AST lowers the parsed top-level header payloads produced by header parsing rather than reconstructing top-level declaration shells from raw tokens.
 - **Top-Level Resolution**: AST resolves type and symbol references against the known sorted top-level symbol set.
 - **Final Validation**: AST performs final semantic and type validation once dependency order is known.
 - **Body Parsing**: Function bodies and the entry `start` body are parsed and lowered here.
-- **Local Scope Growth**: Executable bodies register local declarations incrementally as they are encountered in source order.
+- **Local Scope Growth**: Executable bodies register local declarations incrementally as they are encountered in source order. Uses the shared `src/compiler_frontend/declaration_syntax` as the header stage for lowering declarations inside bodies.
 - **Namespace Resolution**: Variables store their full path including parent scope information, and uniqueness is enforced by scope rules rather than post-hoc recollection
 - **Type Checking**: Early type resolution and validation
 - **Template Preparation**: AST performs template composition, compile-time folding, and runtime render-plan preparation before HIR
 
 **Top-level vs body parsing**
 
-Top-level declaration-shell parsing and executable body parsing are intentionally separated.
-
-- Top-level declaration-shell parsing belongs to header parsing.
+- Top-level declaration parsing belongs to header parsing.
 - Executable body parsing belongs to AST construction.
 - Body-local declarations are parsed in source order during AST lowering of executable code.
 - Dependency sorting exists only to order top-level declarations before AST begins; it does not apply inside executable bodies.
 
-AST resolves and validates parsed struct and choice shells; it does not rediscover their top-level shape.
+AST resolves and validates parsed struct, choice and constant headers.
 
 **Type checking and coercion**
 
@@ -243,12 +231,12 @@ Generic expression evaluation determines the natural type of an expression and s
 - Declarations and returns may apply coercion after expression parsing; generic expression evaluation itself stays strict.
 - Int -> Float is supported in explicit declaration / return contexts
 - function arguments and match patterns still require exact compatibility
-- templates and template wrappers are accepted where string slices are expected because they lower to the same HIR/string representation
+- Templates and template wrappers are accepted where string slices are expected because they lower to the same HIR/string representation
 - builtin casts like Float(x) / Int(x) remain explicit frontend-owned syntax
 
 **Constants**
 
-The AST consumes the parsed exported-constant shell directly and type-checks the initializer without rebuilding the declaration shell from raw top-level syntax.
+The AST consumes the parsed exported-constant directly and type-checks the initializer without rebuilding the declaration from raw top-level syntax.
 
 - Constant declarations share declaration syntax with normal variables
 - Constants cannot be mutable
@@ -257,7 +245,6 @@ The AST consumes the parsed exported-constant shell directly and type-checks the
 - Constants must be fully foldable at compile time
 - Top-level const templates are entry-file only and must fully fold
 - Slots are supported in const templates if they resolve to constant values
-
 
 **Compile-Time Folding**: The AST stage performs aggressive constant folding in `src/compiler_frontend/optimizers/constant_folding.rs`:
 - Pure literal expressions (e.g., `2 + 3`) are evaluated immediately

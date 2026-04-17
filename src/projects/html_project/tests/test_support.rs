@@ -15,7 +15,7 @@ use crate::compiler_frontend::hir::hir_nodes::{
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_resolution::{CompileTimePathBase, CompileTimePathKind};
 use crate::compiler_frontend::paths::rendered_path_usage::RenderedPathUsage;
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use std::path::PathBuf;
 use std::time::SystemTime;

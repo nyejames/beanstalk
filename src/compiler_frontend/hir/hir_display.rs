@@ -15,7 +15,7 @@ use crate::compiler_frontend::hir::hir_nodes::{
 };
 use crate::compiler_frontend::hir::hir_side_table::HirSideTable;
 use crate::compiler_frontend::host_functions::CallTarget;
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use std::fmt::{Display, Formatter, Result as FmtResult, Write as _};
 
 const MAX_TYPE_RENDER_DEPTH: usize = 24;

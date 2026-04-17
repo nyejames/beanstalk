@@ -9,7 +9,7 @@ use crate::compiler_frontend::ast::expressions::parse_expression::create_express
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::Ownership::MutableOwned;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::compiler_frontend::type_coercion::numeric::coerce_expression_to_declared_type;
 use crate::compiler_frontend::type_coercion::parse_context::parse_expectation_for_target_type;

@@ -19,7 +19,7 @@ use crate::compiler_frontend::ast::expressions::expression::{Expression, Express
 #[cfg(test)]
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::type_coercion::compatibility::is_type_compatible;
 use crate::compiler_frontend::type_coercion::diagnostics::expected_found_clause;
 #[cfg(test)]

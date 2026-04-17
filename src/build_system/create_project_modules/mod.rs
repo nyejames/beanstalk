@@ -23,8 +23,8 @@ pub use source_loading::extract_source_code;
 use crate::build_system::build::Module;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
-use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::{Flag, FrontendBuildProfile};
 #[cfg(test)]
 use crate::projects::settings;

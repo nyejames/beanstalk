@@ -1,6 +1,6 @@
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::projects::settings::{BEANSTALK_FILE_EXTENSION, Config};
 use crate::return_file_error;
 use std::collections::HashSet;

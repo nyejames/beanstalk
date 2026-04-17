@@ -8,7 +8,7 @@ use crate::compiler_frontend::builtins::error_type::{
     ERROR_FIELD_TRACE, ERROR_KIND_TYPE_NAME, ERROR_LOCATION_TYPE_NAME, ERROR_TYPE_NAME,
     STACK_FRAME_TYPE_NAME, is_reserved_builtin_symbol, register_builtin_error_types,
 };
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 
 #[test]
 fn registers_builtin_error_manifest_with_canonical_symbols() {

@@ -14,7 +14,7 @@ use crate::compiler_frontend::ast::templates::template::{
 use crate::compiler_frontend::ast::templates::template_types::{Template, TemplateInheritance};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::Ownership;
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::token_scan::consume_balanced_template_region;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::{ast_log, return_syntax_error};

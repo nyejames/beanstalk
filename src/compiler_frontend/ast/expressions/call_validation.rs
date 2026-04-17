@@ -12,7 +12,7 @@ use crate::compiler_frontend::ast::place_access::{ast_node_is_mutable_place, ast
 use crate::compiler_frontend::compiler_errors::{CompilerError, SourceLocation};
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::host_functions::{HostAccessKind, HostFunctionDef};
-use crate::compiler_frontend::string_interning::{StringId, StringTable};
+use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::type_coercion::compatibility::is_type_compatible;
 use crate::compiler_frontend::type_coercion::diagnostics::{
     argument_conversion_hint, expected_found_clause, offending_value_clause,

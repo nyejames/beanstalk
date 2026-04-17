@@ -10,7 +10,7 @@ use crate::compiler_frontend::compiler_messages::compiler_errors::{
     CompilerError, CompilerMessages, ErrorType,
 };
 use crate::compiler_frontend::hir::hir_nodes::{FunctionId, HirModule};
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use std::collections::HashSet;
 
 pub(crate) fn lower_hir_to_wasm_lir(

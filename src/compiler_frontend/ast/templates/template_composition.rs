@@ -15,7 +15,7 @@ use crate::compiler_frontend::ast::templates::template_slots::compose_template_w
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::Ownership;
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 
 // -------------------------
 // CHILD WRAPPER APPLICATION

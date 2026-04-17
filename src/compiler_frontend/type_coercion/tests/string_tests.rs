@@ -1,7 +1,7 @@
 //! String coercion policy tests for `type_coercion::string`.
 
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::type_coercion::string::{
     FoldedStringPiece, fold_expression_kind_to_string,
 };

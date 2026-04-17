@@ -7,7 +7,7 @@ use crate::compiler_frontend::compiler_errors::{
     CompilerError, CompilerMessages, ErrorMetaDataKey, ErrorType,
 };
 use crate::compiler_frontend::paths::path_resolution::resolve_project_entry_root;
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::projects::settings::Config;
 use std::fs;
 use std::path::{Path, PathBuf};

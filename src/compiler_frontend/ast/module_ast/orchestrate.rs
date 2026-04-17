@@ -34,8 +34,8 @@ use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::paths::rendered_path_usage::RenderedPathUsage;
-use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 
 /// Unified AST output for all source files in one compilation unit.
 pub struct Ast {
@@ -169,7 +169,12 @@ impl Ast {
         state.resolve_types(&sorted_headers, &file_import_bindings, string_table)?;
         state.resolve_function_signatures(&sorted_headers, &file_import_bindings, string_table)?;
         let receiver_methods = state.build_receiver_catalog(&sorted_headers, string_table)?;
-        state.emit_ast_nodes(sorted_headers, &file_import_bindings, &receiver_methods, string_table)?;
+        state.emit_ast_nodes(
+            sorted_headers,
+            &file_import_bindings,
+            &receiver_methods,
+            string_table,
+        )?;
 
         state.finalize(entry_dir, &top_level_const_fragments, string_table)
     }

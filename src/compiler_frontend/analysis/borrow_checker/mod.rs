@@ -33,7 +33,7 @@ use crate::compiler_frontend::hir::hir_nodes::{
 };
 use crate::compiler_frontend::hir::hir_side_table::HirLocation;
 use crate::compiler_frontend::host_functions::HostRegistry;
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::return_borrow_checker_error;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::collections::VecDeque;

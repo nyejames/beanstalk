@@ -11,12 +11,11 @@ use super::struct_instance::parse_struct_constructor_expression;
 use crate::compiler_frontend::ast::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::receiver_methods::free_function_receiver_method_call_error;
-use crate::compiler_frontend::ast::statements::choices::parse_choice_variant_value;
 use crate::compiler_frontend::ast::statements::declarations::create_reference;
 use crate::compiler_frontend::ast::templates::template::TemplateType;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
 use crate::return_rule_error;
 
@@ -91,8 +90,6 @@ pub(super) fn parse_identifier_or_call(
 
         if token_stream.peek_next_token() == Some(&TokenKind::DoubleColon) {
             if matches!(&arg.value.data_type, DataType::Choices(_)) {
-                // Keep choice construction semantics centralized in `statements::choices` so
-                // parse-expression only routes the `Choice::Variant` shape.
                 let choice_value = parse_choice_variant_value(token_stream, arg, string_table)?;
                 let choice_location = choice_value.location.to_owned();
 

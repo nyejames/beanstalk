@@ -3,7 +3,7 @@
 //! Reads source file content from disk with structured error diagnostics.
 
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::return_file_error;
 use std::fs;
 use std::path::Path;

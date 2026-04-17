@@ -24,7 +24,7 @@ use crate::compiler_frontend::ast::expressions::expression::{
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::{return_rule_error, return_syntax_error};
 
 /// Perform conservative constant folding on an expression in RPN order.

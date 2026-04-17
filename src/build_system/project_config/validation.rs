@@ -7,7 +7,7 @@
 
 use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorMetaDataKey, ErrorType};
 use crate::compiler_frontend::headers::parse_file_headers::{Header, HeaderKind};
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{Token, TokenKind};
 use crate::projects::settings::Config;
 use std::collections::{HashMap, HashSet};
@@ -70,7 +70,7 @@ fn apply_config_constants_from_headers(
         let location = header.name_location.clone();
         config.setting_locations.insert(key.clone(), location);
 
-        let mut initializer_tokens = metadata.declaration_syntax.initializer_tokens.clone();
+        let mut initializer_tokens = declaration.initializer_tokens.clone();
         initializer_tokens.push(Token::new(TokenKind::Eof, header.name_location.to_owned()));
         let mut value_index = 0usize;
         skip_newlines(&initializer_tokens, &mut value_index);

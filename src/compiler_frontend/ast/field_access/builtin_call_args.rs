@@ -11,7 +11,7 @@ use crate::compiler_frontend::ast::expressions::call_validation::{
 use crate::compiler_frontend::ast::expressions::function_calls::parse_call_arguments;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
 use crate::return_rule_error;
 

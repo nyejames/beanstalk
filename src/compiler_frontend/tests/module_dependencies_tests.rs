@@ -1,5 +1,7 @@
 use super::*;
-use crate::compiler_frontend::headers::parse_file_headers::{HeaderKind, Headers, parse_headers};
+use crate::compiler_frontend::headers::parse_file_headers::{
+    HeaderKind, HeaderParseOptions, Headers, parse_headers,
+};
 use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::tokenizer::lexer::tokenize;
@@ -35,6 +37,7 @@ fn parse_module_headers(files: &[(&str, &str)], entry_path: &str) -> (Headers, S
         &host_registry,
         &mut warnings,
         &PathBuf::from(entry_path),
+        HeaderParseOptions::default(),
         &mut string_table,
     )
     .expect("header parsing should succeed");
@@ -77,7 +80,6 @@ fn sorts_strict_import_dependencies_before_dependents() {
 
     assert_eq!(start_order, vec!["src/c.bst", "src/b.bst", "src/a.bst"]);
 }
-
 
 #[test]
 fn reports_circular_dependencies() {

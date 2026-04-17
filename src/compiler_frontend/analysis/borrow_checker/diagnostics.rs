@@ -10,7 +10,7 @@ use crate::compiler_frontend::hir::hir_nodes::{
 };
 use crate::compiler_frontend::hir::hir_side_table::HirLocation;
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 
 pub(super) struct BorrowDiagnostics<'a> {
     module: &'a HirModule,

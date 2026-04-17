@@ -11,18 +11,18 @@ use crate::compiler_frontend::ast::ast_nodes::{
 };
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
+use crate::compiler_frontend::compiler_errors::CompilerError;
+use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::declaration_syntax::declaration_shell::{
     BindingTargetSyntax, parse_binding_target_syntax,
 };
-use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::datatypes::{DataType, Ownership};
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::declaration_syntax::type_syntax::resolve_named_types_in_data_type;
 use crate::compiler_frontend::symbols::identifier_policy::{
     IdentifierNamingKind, ensure_not_keyword_shadow_identifier, naming_warning_for_identifier,
 };
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::token_scan::has_top_level_comma_before_statement_end;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
-use crate::compiler_frontend::declaration_syntax::type_syntax::resolve_named_types_in_data_type;
 use crate::{return_rule_error, return_syntax_error, return_type_error};
 use std::collections::HashSet;
 
@@ -126,7 +126,7 @@ fn parse_target_list(
         };
 
         token_stream.advance();
-        let target_syntax = parse_binding_target_syntax(token_stream, name, string_table)?;
+        let target_syntax = parse_binding_target_syntax(token_stream, name)?;
         validate_target_mutability(&target_syntax, string_table)?;
         parsed_targets.push(target_syntax);
 
@@ -189,7 +189,7 @@ fn validate_target_mutability(
     target_syntax: &BindingTargetSyntax,
     string_table: &StringTable,
 ) -> Result<(), CompilerError> {
-    if target_syntax.mutable_marker && !target_syntax.has_explicit_type() {
+    if target_syntax.mutable_marker && !target_syntax.type_annotation.eq(&DataType::Inferred) {
         return_rule_error!(
             format!(
                 "Mutable multi-bind target '{}' requires an explicit type annotation",
@@ -483,12 +483,12 @@ fn resolve_target_explicit_type(
     context: &ScopeContext,
     string_table: &StringTable,
 ) -> Result<Option<DataType>, CompilerError> {
-    if !target.type_annotation.has_explicit_type() {
+    if target.type_annotation.eq(&DataType::Inferred) {
         return Ok(None);
     }
 
     let resolved_type = resolve_named_types_in_data_type(
-        &target.type_annotation.data_type,
+        &target.type_annotation,
         &target.location,
         &mut |type_name| {
             context

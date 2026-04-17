@@ -8,8 +8,8 @@ pub use crate::compiler_frontend::compiler_messages::source_location::{
 };
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::string_interning::StringId;
 use crate::compiler_frontend::symbols::identity::FileId;
+use crate::compiler_frontend::symbols::string_interning::StringId;
 use crate::compiler_frontend::tokenizer::newline_handling::NewlineMode;
 use crate::token_log;
 use std::iter::Peekable;

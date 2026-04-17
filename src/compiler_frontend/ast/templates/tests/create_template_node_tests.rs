@@ -18,11 +18,11 @@ use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
-use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::style_directives::{
     StyleDirectiveArgumentType, StyleDirectiveEffects, StyleDirectiveHandlerSpec,
     StyleDirectiveRegistry, StyleDirectiveSpec,
 };
+use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::lexer::tokenize;
 use crate::compiler_frontend::tokenizer::newline_handling::NewlineMode;
 use crate::compiler_frontend::tokenizer::tokens::{

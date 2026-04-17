@@ -5,8 +5,8 @@
 use crate::build_system::build::{BackendBuilder, CleanupPolicy, Module, OutputFile, Project};
 use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages, ErrorType};
-use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::style_directives::StyleDirectiveSpec;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::projects::html_project::document_config::parse_html_document_config;
 use crate::projects::html_project::js_path::{compile_html_module_js, html_output_path};
 use crate::projects::html_project::path_policy::HtmlEntryPathPlan;

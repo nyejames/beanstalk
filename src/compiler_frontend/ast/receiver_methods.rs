@@ -11,7 +11,7 @@ use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorMetaDataKey}
 use crate::compiler_frontend::datatypes::{BuiltinScalarReceiver, ReceiverKey};
 use crate::compiler_frontend::headers::parse_file_headers::{Header, HeaderKind};
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::string_interning::{StringId, StringTable};
+use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::return_rule_error;
 use rustc_hash::FxHashMap;

@@ -7,7 +7,7 @@ use crate::compiler_frontend::ast::place_access::{ast_node_is_mutable_place, ast
 use crate::compiler_frontend::builtins::BuiltinMethodKind;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::compiler_frontend::type_coercion::compatibility::is_declaration_compatible;
 use crate::compiler_frontend::type_coercion::diagnostics::{

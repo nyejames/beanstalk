@@ -13,7 +13,7 @@ use crate::backends::rust_interpreter::runtime::RuntimeEngine;
 use crate::compiler_frontend::analysis::borrow_checker::BorrowFacts;
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::hir::hir_nodes::{FunctionId, HirModule};
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 
 pub(crate) fn lower_hir_to_exec_program(
     hir_module: &HirModule,

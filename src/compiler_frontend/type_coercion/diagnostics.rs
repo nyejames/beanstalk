@@ -7,7 +7,7 @@
 
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::datatypes::DataType;
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 
 pub(crate) const NUMERIC_MIX_HINT: &str =
     "Only Int + Float and Float + Int mix numeric types implicitly.";

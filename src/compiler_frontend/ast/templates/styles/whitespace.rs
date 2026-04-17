@@ -16,7 +16,7 @@ use crate::compiler_frontend::ast::templates::template_render_plan::{
     FormatterOutputPiece,
 };
 use crate::compiler_frontend::basic_utility_functions::NumericalParsing;
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 
 /// Shared whitespace passes that template formatters and default template parsing can run.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

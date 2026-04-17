@@ -14,7 +14,7 @@ use crate::compiler_frontend::paths::path_format::{
 use crate::compiler_frontend::paths::path_resolution::{
     CompileTimePathBase, CompileTimePathKind, CompileTimePaths, ProjectPathResolver,
 };
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use std::path::{Path, PathBuf};
 

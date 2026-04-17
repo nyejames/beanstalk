@@ -8,7 +8,7 @@ use crate::compiler_frontend::hir::hir_nodes::{
     HirValueId, LocalId, StructId,
 };
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use rustc_hash::FxHashMap;
 use std::fmt::{Display, Formatter, Result as FmtResult};

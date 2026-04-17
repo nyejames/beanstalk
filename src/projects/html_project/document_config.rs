@@ -5,7 +5,7 @@
 //!      gives the HTML builder a single source of truth for shell defaults.
 
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::projects::settings::Config;
 
 #[derive(Debug, Clone, PartialEq, Eq)]

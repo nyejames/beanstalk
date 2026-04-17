@@ -34,6 +34,7 @@ fn parse_single_file_headers(source: &str) -> Headers {
         &host_registry,
         &mut warnings,
         &file_path,
+        HeaderParseOptions::default(),
         &mut string_table,
     )
     .expect("headers should parse")
@@ -68,6 +69,7 @@ fn parse_single_file_headers_with_warnings(
         &host_registry,
         &mut warnings,
         &file_path,
+        HeaderParseOptions::default(),
         &mut string_table,
     )
     .expect("headers should parse");
@@ -99,6 +101,7 @@ fn parse_single_file_headers_with_table(source: &str) -> (Headers, StringTable) 
         &host_registry,
         &mut warnings,
         &file_path,
+        HeaderParseOptions::default(),
         &mut string_table,
     )
     .expect("headers should parse");
@@ -135,6 +138,7 @@ fn parse_single_file_headers_with_entry(
         &host_registry,
         &mut warnings,
         &entry_file_path,
+        HeaderParseOptions::default(),
         &mut string_table,
     )
 }
@@ -244,7 +248,6 @@ fn exported_typed_constant_headers_are_parsed_and_follow_on_constant_stays_heade
         "follow-on '# test = ...' should remain a constant header"
     );
 }
-
 
 #[test]
 fn top_level_const_template_outside_entry_file_errors() {
@@ -634,14 +637,14 @@ fn choice_headers_parse_unit_variants_in_declaration_order() {
         .find(|header| matches!(header.kind, HeaderKind::Choice { .. }))
         .expect("expected choice header");
 
-    let HeaderKind::Choice { metadata } = &choice_header.kind else {
+    let HeaderKind::Choice { variants } = &choice_header.kind else {
         panic!("expected choice metadata");
     };
 
-    assert_eq!(metadata.variants.len(), 3, "expected three parsed variants");
-    assert_eq!(string_table.resolve(metadata.variants[0].name), "Ready");
-    assert_eq!(string_table.resolve(metadata.variants[1].name), "Busy");
-    assert_eq!(string_table.resolve(metadata.variants[2].name), "Idle");
+    assert_eq!(variants.len(), 3, "expected three parsed variants");
+    assert_eq!(string_table.resolve(variants[0].id), "Ready");
+    assert_eq!(string_table.resolve(variants[1].id), "Busy");
+    assert_eq!(string_table.resolve(variants[2].id), "Idle");
 }
 
 #[test]

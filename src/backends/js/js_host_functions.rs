@@ -8,7 +8,7 @@ use crate::compiler_frontend::host_functions::{
     ERROR_WITH_LOCATION_HOST_NAME, IO_FUNC_NAME,
 };
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 
 pub(crate) fn resolve_host_function_path(
     path: &InternedPath,

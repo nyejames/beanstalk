@@ -8,7 +8,7 @@
 //! lives in the respective `js_path` and `wasm/artifacts` modules.
 
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use std::path::{Path, PathBuf};
 
 /// A resolved output plan for one HTML route.

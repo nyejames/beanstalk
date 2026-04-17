@@ -9,7 +9,7 @@ use super::*;
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use std::rc::Rc;
 
 fn empty_scope(string_table: &mut StringTable) -> InternedPath {

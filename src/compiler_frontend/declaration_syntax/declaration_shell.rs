@@ -1,12 +1,11 @@
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
-use crate::compiler_frontend::string_interning::{StringId, StringTable};
+use crate::compiler_frontend::declaration_syntax::type_syntax::{
+    TypeAnnotationContext, parse_type_annotation,
+};
+use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::token_scan::collect_declaration_initializer_tokens;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
-use crate::compiler_frontend::declaration_syntax::type_syntax::{
-    TypeAnnotationContext,
-    parse_type_annotation,
-};
 use crate::{return_rule_error, return_syntax_error};
 
 // All the component parts of a declaration before it is resolved / parsed.
@@ -51,7 +50,6 @@ pub fn parse_declaration_syntax(
     name: StringId,
     string_table: &mut StringTable,
 ) -> Result<DeclarationSyntax, CompilerError> {
-
     // This checks for mutability marker first (in the case of mutable methods)
     // Or whether the declaration has an explicit Type
     let target = parse_binding_target_syntax(token_stream, name)?;

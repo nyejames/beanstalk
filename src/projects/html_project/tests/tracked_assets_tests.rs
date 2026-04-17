@@ -3,7 +3,7 @@
 use super::*;
 use crate::compiler_frontend::compiler_warnings::WarningKind;
 use crate::compiler_frontend::paths::path_resolution::{CompileTimePathBase, CompileTimePathKind};
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::projects::html_project::tests::test_support::{
     RenderedPathUsageInput, create_test_module, expect_bytes_output, rendered_path_usage, temp_dir,
 };

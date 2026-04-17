@@ -21,7 +21,7 @@ use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
 use crate::compiler_frontend::hir::hir_nodes::{
     BlockId, FieldId, FunctionId, HirBlock, HirModule, LocalId,
 };
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use std::collections::{HashMap, HashSet};
 
 /// Configuration for JS lowering.

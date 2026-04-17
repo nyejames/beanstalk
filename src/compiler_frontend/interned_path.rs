@@ -1,4 +1,4 @@
-use crate::compiler_frontend::string_interning::{StringId, StringTable};
+use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use std::path::{Path, PathBuf};
 
 /// An efficient path representation using interned string components.

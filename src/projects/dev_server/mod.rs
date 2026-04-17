@@ -18,7 +18,7 @@ use crate::build_system::build::{
 use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::basic_utility_functions::check_if_valid_path;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages, ErrorType};
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::projects::dev_server::build_loop::{ProjectBuildExecutor, dev_server_error_messages};
 use crate::projects::dev_server::state::DevServerState;
 use saying::say;

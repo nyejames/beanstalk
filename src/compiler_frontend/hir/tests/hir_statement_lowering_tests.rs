@@ -27,7 +27,7 @@ use crate::compiler_frontend::hir::tests::hir_expression_lowering_tests::locatio
 use crate::compiler_frontend::host_functions::CallTarget;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tests::test_support::{
     fresh_returns, function_node, make_test_variable, node, param, runtime_function_call_node,
     runtime_operator_node, test_location,

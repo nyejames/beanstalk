@@ -7,7 +7,7 @@ use crate::compiler_frontend::ast::ast_nodes::AstNode;
 use crate::compiler_frontend::ast::statements::body_dispatch::parse_function_body_statements;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::FileTokens;
 
 pub(crate) mod module_ast;

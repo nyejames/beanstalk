@@ -16,7 +16,7 @@ use crate::compiler_frontend::ast::templates::top_level_templates::{
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 
 pub(in crate::compiler_frontend::ast::templates) fn collect_and_strip_comment_templates(
     ast_nodes: &mut [AstNode],

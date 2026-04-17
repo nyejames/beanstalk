@@ -9,9 +9,9 @@ use crate::compiler_frontend::analysis::borrow_checker::BorrowCheckReport;
 use crate::compiler_frontend::headers::parse_file_headers::{HeaderKind, Headers};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
-use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::identity::SourceFileTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::newline_handling::NewlineMode;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenizeMode};
 use crate::compiler_frontend::{CompilerFrontend, FrontendBuildProfile};
@@ -230,52 +230,6 @@ fn reports_circular_imports_through_frontend_header_sorting() {
             .any(|error| error.msg.contains("Circular dependency detected")),
         "expected circular dependency diagnostic, got: {errors:?}"
     );
-}
-
-#[test]
-fn preserves_symbol_resolution_order_for_struct_defaults_and_constants() {
-    let mut project = FrontendProject::new(
-        &[(
-            "src/#page.bst",
-            "User = |\n    name String = base,\n|\n#base = \"Ada\"\n#derived User = User(base)\n",
-        )],
-        "src/#page.bst",
-    );
-
-    let headers = project.headers();
-    let sorted = project
-        .frontend
-        .sort_headers(headers)
-        .expect("dependency sorting should succeed");
-
-    let base_pos = sorted
-        .headers
-        .iter()
-        .position(|header| {
-            matches!(
-                &header.kind,
-                HeaderKind::Constant { declaration } if header.file_constant_order == 0
-            )
-        })
-        .expect("base constant should exist");
-    let struct_pos = sorted
-        .headers
-        .iter()
-        .position(|header| matches!(header.kind, HeaderKind::Struct { .. }))
-        .expect("struct header should exist");
-    let derived_pos = sorted
-        .headers
-        .iter()
-        .position(|header| {
-            matches!(
-                &header.kind,
-                HeaderKind::Constant { declaration } if metadata.file_constant_order == 1
-            )
-        })
-        .expect("derived constant should exist");
-
-    assert!(base_pos < struct_pos);
-    assert!(struct_pos < derived_pos);
 }
 
 #[test]

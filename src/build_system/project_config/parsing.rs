@@ -9,11 +9,13 @@ use crate::build_system::create_project_modules::extract_source_code;
 use crate::compiler_frontend::compiler_errors::{
     CompilerError, CompilerMessages, ErrorMetaDataKey, ErrorType,
 };
-use crate::compiler_frontend::headers::parse_file_headers::{Header, parse_headers};
+use crate::compiler_frontend::headers::parse_file_headers::{
+    Header, HeaderParseOptions, parse_headers,
+};
 use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::lexer::tokenize;
 use crate::compiler_frontend::tokenizer::newline_handling::NewlineMode;
 use crate::compiler_frontend::tokenizer::tokens::{Token, TokenKind, TokenizeMode};
@@ -75,6 +77,7 @@ pub(super) fn parse_config_file(
         &host_registry,
         &mut warnings,
         config_path,
+        HeaderParseOptions::default(),
         string_table,
     ) {
         Ok(headers) => headers,

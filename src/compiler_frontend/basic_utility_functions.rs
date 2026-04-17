@@ -4,7 +4,7 @@
 //! still reused in parsing and path-validation code.
 
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::return_file_error;
 use std::fmt::Write;
 use std::path::{Path, PathBuf};

@@ -13,7 +13,7 @@ use crate::compiler_frontend::hir::hir_nodes::{
     HirTerminator, HirValueId,
 };
 use crate::compiler_frontend::hir::hir_side_table::HirLocation;
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tests::test_support::{
     build_ast, default_host_registry, entry_and_start, function_node, lower_hir,
     make_test_variable, node, reference_expr, run_borrow_checker, symbol, test_location,

@@ -7,7 +7,7 @@
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
 use crate::compiler_frontend::builtins::BuiltinMethodKind;
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 
 /// Returns true when the node resolves to a valid place expression.
 pub(crate) fn ast_node_is_place(node: &AstNode) -> bool {

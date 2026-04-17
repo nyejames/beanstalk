@@ -3,7 +3,7 @@ use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::declaration_syntax::choice::ChoiceVariant;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_resolution::CompileTimePathKind;
-use crate::compiler_frontend::string_interning::{StringId, StringTable};
+use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 
 /// Type-level distinction for compile-time path values.
 ///
@@ -112,7 +112,7 @@ pub enum DataType {
     // Reserved or not-yet-wired variants kept for planned language work.
     #[allow(dead_code)] // Planned: explicit parameter/record type surfaces.
     Parameters(Vec<Declaration>), // Struct definitions and parameters
-    #[allow(dead_code)] // Planned: tagged choice/union surface types.
+
     Choices(Vec<ChoiceVariant>), // Union of types
     #[allow(dead_code)] // Planned: Option<T> language-level type support.
     Option(Box<DataType>), // Shorthand for a choice of a type or None
@@ -120,7 +120,6 @@ pub enum DataType {
         ok: Box<DataType>,
         err: Box<DataType>,
     },
-    #[allow(dead_code)] // Planned: template wrapper values for slot-aware folding.
     TemplateWrapper, // Foldable template with a slot (becomes two string slices)
     #[allow(dead_code)] // Planned: explicit None literal/type flows.
     None, // The None result of an option, or empty argument
@@ -323,7 +322,8 @@ impl DataType {
             DataType::Choices(variants) => {
                 let mut inner_types_str = String::new();
                 for variant in variants {
-                    inner_types_str.push_str(variant.data_type.display_with_table(string_table).as_str());
+                    inner_types_str
+                        .push_str(variant.data_type.display_with_table(string_table).as_str());
                 }
                 format!("Choices({inner_types_str})")
             }

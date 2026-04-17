@@ -1,6 +1,6 @@
 use super::compile_project_frontend;
-use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::projects::settings::Config;
 use std::fs;
 use std::path::PathBuf;

@@ -7,7 +7,7 @@ use crate::compiler_frontend::paths::path_format::{
 use crate::compiler_frontend::paths::path_resolution::{
     CompileTimePath, CompileTimePathBase, CompileTimePathKind, CompileTimePaths,
 };
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use std::path::PathBuf;
 
 fn make_path(

@@ -11,8 +11,8 @@ use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::headers::module_symbols::ModuleSymbols;
 use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::string_interning::StringId;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
+use crate::compiler_frontend::symbols::string_interning::StringId;
 use crate::projects::settings;
 use rustc_hash::FxHashMap;
 use std::cell::RefCell;
@@ -98,7 +98,7 @@ impl<'a> AstBuildState<'a> {
     pub(super) fn error_messages(
         &self,
         error: CompilerError,
-        string_table: &crate::compiler_frontend::string_interning::StringTable,
+        string_table: &crate::compiler_frontend::symbols::string_interning::StringTable,
     ) -> CompilerMessages {
         CompilerMessages::from_error_with_warnings(error, self.warnings.clone(), string_table)
     }

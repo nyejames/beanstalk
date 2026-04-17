@@ -18,7 +18,7 @@ use crate::compiler_frontend::host_functions::{
     COLLECTION_REMOVE_HOST_NAME,
 };
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::string_interning::{StringId, StringTable};
+use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::return_rule_error;
 

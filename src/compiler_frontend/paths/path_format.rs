@@ -11,7 +11,7 @@ use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_resolution::{
     CompileTimePath, CompileTimePathBase, CompileTimePathKind, CompileTimePaths,
 };
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 
 /// Output path separator style.
 ///

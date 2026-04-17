@@ -12,7 +12,7 @@ use crate::compiler_frontend::hir::hir_nodes::{
     StructId,
 };
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 
 pub(crate) fn validate_module_for_tests(
     module: &HirModule,

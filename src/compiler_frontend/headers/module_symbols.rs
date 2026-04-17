@@ -29,7 +29,7 @@ use crate::compiler_frontend::ast::statements::functions::{
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::headers::parse_file_headers::{FileImport, Header, HeaderKind};
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::string_interning::{StringId, StringTable};
+use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::projects::settings::IMPLICIT_START_FUNC_NAME;
 use rustc_hash::{FxHashMap, FxHashSet};
 

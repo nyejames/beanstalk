@@ -4,9 +4,6 @@ use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::expressions::function_calls::parse_function_call;
 use crate::compiler_frontend::ast::field_access::parse_field_access;
 use crate::compiler_frontend::ast::function_body_to_ast;
-use crate::compiler_frontend::declaration_syntax::declaration_shell::{
-    DeclarationSyntax, parse_declaration_syntax,
-};
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::ast::{
     ast_nodes::Declaration, expressions::parse_expression::create_expression,
@@ -15,12 +12,16 @@ use crate::compiler_frontend::builtins::error_type::is_reserved_builtin_symbol;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::declaration_syntax::declaration_shell::{
+    DeclarationSyntax, parse_declaration_syntax,
+};
 use crate::compiler_frontend::declaration_syntax::r#struct::parse_struct_shell;
+use crate::compiler_frontend::declaration_syntax::type_syntax::resolve_named_types_in_data_type;
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::symbols::identifier_policy::{
     IdentifierNamingKind, ensure_not_keyword_shadow_identifier, naming_warning_for_identifier,
 };
+use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, Token, TokenKind};
 use crate::compiler_frontend::type_coercion::compatibility::is_declaration_compatible;
 use crate::compiler_frontend::type_coercion::diagnostics::{
@@ -28,7 +29,6 @@ use crate::compiler_frontend::type_coercion::diagnostics::{
 };
 use crate::compiler_frontend::type_coercion::numeric::coerce_expression_to_declared_type;
 use crate::compiler_frontend::type_coercion::parse_context::parse_expectation_for_target_type;
-use crate::compiler_frontend::declaration_syntax::type_syntax::resolve_named_types_in_data_type;
 use crate::{ast_log, return_rule_error, return_type_error};
 
 pub fn create_reference(

@@ -11,19 +11,19 @@
 
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::deferred_feature_diagnostics::deferred_feature_rule_error;
 use crate::compiler_frontend::reserved_trait_syntax::{
     reserved_trait_keyword, reserved_trait_keyword_error,
     reserved_trait_keyword_or_dispatch_mismatch,
 };
-use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::symbols::identifier_policy::{
     IdentifierNamingKind, ensure_not_keyword_shadow_identifier, naming_warning_for_identifier,
 };
+use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
 use crate::return_rule_error;
 use std::collections::HashSet;
-use crate::compiler_frontend::datatypes::DataType;
 
 #[derive(Clone, Debug)]
 pub struct ChoiceVariant {
@@ -70,7 +70,6 @@ pub(crate) fn parse_choice_shell(
         let current_token = token_stream.current_token_kind().to_owned();
 
         match current_token {
-
             // RESERVED SYNTAX ERROR
             TokenKind::Must | TokenKind::TraitThis => {
                 let keyword = reserved_trait_keyword_or_dispatch_mismatch(

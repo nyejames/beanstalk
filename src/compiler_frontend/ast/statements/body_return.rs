@@ -12,7 +12,7 @@ use crate::compiler_frontend::ast::expressions::parse_expression::{
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::compiler_frontend::type_coercion::compatibility::is_numeric_coercible;
 use crate::compiler_frontend::type_coercion::diagnostics::{

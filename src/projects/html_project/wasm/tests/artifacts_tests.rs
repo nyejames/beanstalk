@@ -1,7 +1,7 @@
 //! Tests for HTML+Wasm artifact planning and emission.
 
 use super::*;
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::projects::html_project::document_config::HtmlDocumentConfig;
 use crate::projects::html_project::tests::test_support::{create_test_module, expect_js_output};
 use std::path::{Path, PathBuf};

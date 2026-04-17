@@ -2,7 +2,7 @@
 
 use super::*;
 use crate::build_system::build::ResolvedConstFragment;
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::projects::html_project::document_config::HtmlDocumentConfig;
 use crate::projects::html_project::tests::test_support::{
     create_test_hir_module, create_test_module,
@@ -136,7 +136,7 @@ fn inline_js_bundle_with_closing_script_tag_is_escaped_in_html() {
     let html = render_html_document(
         &hir_module,
         &[],
-        &crate::compiler_frontend::string_interning::StringTable::new(),
+        &crate::compiler_frontend::symbols::string_interning::StringTable::new(),
         &HtmlDocumentConfig::default(),
         Path::new("index.html"),
         "",

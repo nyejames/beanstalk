@@ -17,7 +17,7 @@ use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::headers::parse_file_headers::{Header, HeaderKind};
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use rustc_hash::FxHashMap;
 use std::rc::Rc;
 

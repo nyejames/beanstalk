@@ -1,5 +1,5 @@
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::token_scan::{
     consume_balanced_template_region, find_expression_end_index,
     has_top_level_comma_before_statement_end,

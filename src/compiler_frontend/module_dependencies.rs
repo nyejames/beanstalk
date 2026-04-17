@@ -20,7 +20,7 @@ use crate::compiler_frontend::headers::parse_file_headers::{
     Header, HeaderKind, Headers, TopLevelConstFragment,
 };
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::{header_log, return_rule_error};
 use std::collections::{HashMap, HashSet};
 
@@ -81,8 +81,7 @@ pub fn resolve_module_dependencies(
         .into_iter()
         .partition(|h| !matches!(h.kind, HeaderKind::StartFunction));
 
-    let mut graph: HashMap<InternedPath, Header> =
-        HashMap::with_capacity(top_level_headers.len());
+    let mut graph: HashMap<InternedPath, Header> = HashMap::with_capacity(top_level_headers.len());
     let mut errors: Vec<CompilerError> = Vec::with_capacity(top_level_headers.len());
     let mut ordered_paths: Vec<InternedPath> = Vec::with_capacity(top_level_headers.len());
 
@@ -219,7 +218,6 @@ fn visit_node(
 
     Ok(())
 }
-
 
 fn resolve_graph_path(
     requested_path: &InternedPath,
@@ -408,8 +406,8 @@ fn suffix_matches_with_optional_bst_extension(
 }
 
 fn components_match_with_optional_bst_extension(
-    candidate_components: &[crate::compiler_frontend::string_interning::StringId],
-    requested_components: &[crate::compiler_frontend::string_interning::StringId],
+    candidate_components: &[crate::compiler_frontend::symbols::string_interning::StringId],
+    requested_components: &[crate::compiler_frontend::symbols::string_interning::StringId],
     string_table: &StringTable,
 ) -> bool {
     if candidate_components.len() != requested_components.len() {

@@ -6,7 +6,7 @@
 
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::compiler_errors::SourceLocation;
-use crate::compiler_frontend::string_interning::StringId;
+use crate::compiler_frontend::symbols::string_interning::StringId;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CallAccessMode {

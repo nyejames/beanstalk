@@ -19,8 +19,8 @@ use crate::compiler_frontend::ast::templates::template_render_plan::{
     FormatterOutput, FormatterOutputPiece,
 };
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
-use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::style_directives::StyleDirectiveArgumentValue;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use std::sync::Arc;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -14,7 +14,7 @@ use crate::compiler_frontend::compiler_messages::source_location::SourceLocation
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::hir::hir_nodes::FunctionId;
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 #[cfg(test)]
 use crate::return_compiler_error;
 use std::collections::HashMap;

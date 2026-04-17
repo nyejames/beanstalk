@@ -8,7 +8,7 @@ use super::parse_expression::{create_expression, create_expression_with_trailing
 use crate::compiler_frontend::ast::ast::ScopeContext;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::token_scan::find_expression_end_index;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, Token, TokenKind};
 use crate::compiler_frontend::type_coercion::parse_context::parse_expectation_for_target_type;

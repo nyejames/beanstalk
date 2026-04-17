@@ -9,10 +9,10 @@ use crate::compiler_frontend::ast::statements::functions::{
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, ReceiverKey};
-use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::string_interning::{StringId, StringTable};
-use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::compiler_frontend::declaration_syntax::type_syntax::resolve_named_types_in_data_type;
+use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
+use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::return_rule_error;
 use rustc_hash::{FxHashMap, FxHashSet};
 

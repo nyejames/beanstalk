@@ -8,7 +8,7 @@ use crate::compiler_frontend::ast::expressions::function_calls::parse_call_argum
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::Ownership;
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::string_interning::{StringId, StringTable};
+use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::compiler_frontend::type_coercion::numeric::coerce_expression_to_declared_type;
 use crate::{return_compiler_error, return_rule_error};

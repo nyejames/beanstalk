@@ -1,23 +1,13 @@
 //! Neutral top-level declaration shell parsers shared between the header stage and AST.
 //!
-//! WHAT: houses the parsers that produce top-level declaration shells from token streams.
-//! These shells are produced in the header stage and consumed by AST — neither stage should
-//! need to re-derive the syntax of the other's shells.
+//! Top level declarations can be fully parsed by the header stage if they are structs or choices ,
+//! So the AST stage and the header stage need to share the basic syntaxes of all these declarations.
 //!
-//! WHY: keeping shell parsers in a module that both `headers` and `ast` can depend on removes
-//! the need for direct cross-stage imports. The header stage calls these parsers to populate
-//! header payloads; the AST stage re-uses them only for body-context expressions that share
-//! the same syntax (e.g. inline struct literals).
-//!
-//! ## Stage contract
-//!
-//! - `headers` → `declaration_syntax` for shell parsers
-//! - `ast`     → `declaration_syntax` for shell parsers
-//! - `declaration_syntax` → `ast` for `ScopeContext` (read-only, no cycle at the item level)
-//! - `declaration_syntax` must NOT import from `headers`
+//! AST stage and headers also want to parse function signatures and type the same way,
+//! so that logic is centralized in this module.
 
 pub(crate) mod choice;
+pub(crate) mod declaration_shell;
 pub(crate) mod signature_members;
 pub(crate) mod r#struct;
-pub(crate) mod declaration_shell;
 pub(crate) mod type_syntax;

@@ -23,7 +23,7 @@ use crate::compiler_frontend::deferred_feature_diagnostics::deferred_feature_rul
 use crate::compiler_frontend::reserved_trait_syntax::{
     reserved_trait_keyword_error, reserved_trait_keyword_or_dispatch_mismatch,
 };
-use crate::compiler_frontend::string_interning::{StringId, StringTable};
+use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
 use crate::return_syntax_error;
 
@@ -38,7 +38,6 @@ pub(crate) fn parse_type_annotation(
     token_stream: &mut FileTokens,
     context: TypeAnnotationContext,
 ) -> Result<DataType, CompilerError> {
-
     // Regular declarations can be inferred datatypes
     // So they can break out early with an Inferred type.
     if matches!(context, TypeAnnotationContext::DeclarationTarget)

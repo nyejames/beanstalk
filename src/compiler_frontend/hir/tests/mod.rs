@@ -4,7 +4,7 @@
 //! WHY: HIR tests should discover one another through a single module entry.
 
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::projects::settings::IMPLICIT_START_FUNC_NAME;
 
 mod hir_expression_lowering_tests;

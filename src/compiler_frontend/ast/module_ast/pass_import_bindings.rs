@@ -10,7 +10,7 @@ use crate::compiler_frontend::ast::import_bindings::{
 };
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use rustc_hash::FxHashMap;
 
 impl<'a> AstBuildState<'a> {

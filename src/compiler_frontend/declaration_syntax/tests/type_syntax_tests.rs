@@ -1,11 +1,10 @@
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
-use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::string_interning::StringTable;
-use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
 use crate::compiler_frontend::declaration_syntax::type_syntax::{
-    TypeAnnotationContext, TypeAnnotationSyntax, parse_type_annotation,
-    resolve_named_types_in_data_type,
+    TypeAnnotationContext, parse_type_annotation, resolve_named_types_in_data_type,
 };
+use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
 
 fn stream_from_tokens(tokens: Vec<Token>, string_table: &mut StringTable) -> FileTokens {
     FileTokens::new(
@@ -29,7 +28,7 @@ fn declaration_context_allows_inferred_annotations() {
     let parsed = parse_type_annotation(&mut stream, TypeAnnotationContext::DeclarationTarget)
         .expect("declaration type annotation should parse");
 
-    assert_eq!(parsed, TypeAnnotationSyntax::inferred());
+    assert_eq!(parsed, DataType::Inferred);
 }
 
 #[test]
@@ -50,7 +49,7 @@ fn declaration_context_parses_named_optional_type() {
         .expect("named optional declaration type annotation should parse");
 
     assert_eq!(
-        parsed.data_type,
+        parsed,
         DataType::Option(Box::new(DataType::NamedType(point)))
     );
 }

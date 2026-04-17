@@ -15,8 +15,9 @@ use crate::compiler_frontend::ast::statements::condition_validation::ensure_if_s
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::declaration_syntax::choice::ChoiceVariant;
 use crate::compiler_frontend::deferred_feature_diagnostics::deferred_feature_rule_error;
-use crate::compiler_frontend::string_interning::{StringId, StringTable};
+use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
 use crate::compiler_frontend::type_coercion::compatibility::is_type_compatible;
 use crate::{ast_log, return_rule_error, return_syntax_error};
@@ -430,16 +431,13 @@ fn parse_case_arm(
 /// treat choice arms identically to literal-int arms.
 fn parse_choice_variant_pattern(
     token_stream: &mut FileTokens,
-    variants: &[Declaration],
+    variants: &[ChoiceVariant],
     string_table: &StringTable,
 ) -> Result<(Expression, StringId, SourceLocation), CompilerError> {
     // Alpha only supports exact choice-variant names in match patterns.
     reject_deferred_pattern_lead_token(token_stream)?;
 
-    let choice_name = choice_type_name_id(variants);
-    let choice_name_display = choice_name
-        .map(|id| string_table.resolve(id))
-        .unwrap_or("<choice>");
+    let choice_name_display = string_table.resolve(choice_name).unwrap_or("<choice>");
 
     let leading_token = token_stream.current_token_kind().to_owned();
     let (variant_name, variant_location) = match leading_token {
@@ -533,12 +531,11 @@ fn parse_choice_variant_pattern(
     // Match lowering compares tag indices today, so we normalize variant names to their index.
     let Some(variant_index) = variants
         .iter()
-        .position(|variant| variant.id.name() == Some(variant_name))
+        .position(|variant| variant.id == variant_name)
     else {
         let available_variants = variants
             .iter()
-            .filter_map(|variant| variant.id.name())
-            .map(|name| string_table.resolve(name).to_owned())
+            .map(|variant| string_table.resolve(variant.id).to_owned())
             .collect::<Vec<_>>()
             .join(", ");
 
@@ -724,20 +721,6 @@ fn normalized_subject_type(data_type: &DataType) -> &DataType {
     }
 }
 
-/// Extract the parent choice type name shared by all variant declarations for diagnostics.
-fn choice_type_name_id(variants: &[Declaration]) -> Option<StringId> {
-    let mut names = variants
-        .iter()
-        .filter_map(|variant| variant.id.parent().and_then(|parent| parent.name()));
-
-    let first = names.next()?;
-    if names.all(|name| name == first) {
-        Some(first)
-    } else {
-        None
-    }
-}
-
 /// Verify that a match statement covers all possible values.
 ///
 /// WHAT: for choice scrutinees, checks that every declared variant has an arm or an
@@ -761,9 +744,8 @@ fn enforce_match_exhaustiveness(
 
             let missing_variants = variants
                 .iter()
-                .filter_map(|variant| variant.id.name())
-                .filter(|variant_name| !matched_choice_variants.contains(variant_name))
-                .map(|variant_name| string_table.resolve(variant_name).to_owned())
+                .filter(|variant| !matched_choice_variants.contains(&variant.id))
+                .map(|variant| string_table.resolve(variant.id).to_owned())
                 .collect::<Vec<_>>();
 
             if missing_variants.is_empty() {

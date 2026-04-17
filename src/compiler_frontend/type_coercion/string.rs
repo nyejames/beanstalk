@@ -8,7 +8,7 @@
 
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
 use crate::compiler_frontend::ast::templates::template::TemplateType;
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 
 /// Attempts to coerce a constant expression kind to its string representation
 /// for use in template folding.

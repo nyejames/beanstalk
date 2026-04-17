@@ -14,7 +14,7 @@ use crate::compiler_frontend::hir::hir_datatypes::{HirTypeKind, TypeId};
 use crate::compiler_frontend::hir::hir_nodes::{
     BlockId, FunctionId, HirFunction, HirModule, LocalId,
 };
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use rustc_hash::FxHashMap;
 
 pub(crate) struct WasmLirLoweringContext<'a> {

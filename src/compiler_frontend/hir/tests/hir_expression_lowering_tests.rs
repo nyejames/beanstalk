@@ -22,7 +22,7 @@ use crate::compiler_frontend::hir::hir_nodes::{
 use crate::compiler_frontend::host_functions::CallTarget;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{CharPosition, SourceLocation};
 
 fn setup_builder(string_table: &'_ mut StringTable) -> HirBuilder<'_> {

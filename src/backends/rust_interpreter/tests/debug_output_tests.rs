@@ -16,7 +16,7 @@ use crate::compiler_frontend::hir::hir_nodes::{
     BlockId, FunctionId, HirBlock, HirFunction, HirFunctionOrigin, HirTerminator, RegionId,
 };
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 
 // ============================================================
 // Test 1: lowering plan text reports expected counts

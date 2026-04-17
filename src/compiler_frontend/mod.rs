@@ -3,8 +3,8 @@
 //! WHAT: wires tokenization, header parsing, dependency sorting, AST/HIR construction, and borrow
 //! validation into the stage flow described in the compiler design overview.
 
-pub(crate) mod declaration_syntax;
 pub(crate) mod ast;
+pub(crate) mod declaration_syntax;
 pub(crate) mod headers;
 pub(crate) mod style_directives;
 pub(crate) mod tokenizer;
@@ -31,6 +31,7 @@ pub(crate) mod compiler_messages {
 pub(crate) mod symbols {
     pub(crate) mod identifier_policy;
     pub(crate) mod identity;
+    pub(crate) mod string_interning;
 }
 
 pub(crate) use compiler_messages::compiler_errors;
@@ -38,7 +39,6 @@ pub(crate) use compiler_messages::compiler_warnings;
 pub(crate) use compiler_messages::display_messages;
 pub(crate) mod datatypes;
 pub(crate) mod interned_path;
-pub(crate) mod string_interning;
 pub(crate) mod token_scan;
 pub(crate) mod type_coercion;
 
@@ -55,22 +55,24 @@ pub(crate) mod tests {
 }
 
 use crate::compiler_frontend::analysis::borrow_checker::{
-    check_borrows as run_borrow_checker, BorrowCheckReport,
+    BorrowCheckReport, check_borrows as run_borrow_checker,
 };
 use crate::compiler_frontend::ast::ast::{Ast, AstBuildContext};
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
-use crate::compiler_frontend::headers::parse_file_headers::{parse_headers, HeaderParseOptions, Headers};
+use crate::compiler_frontend::headers::parse_file_headers::{
+    HeaderParseOptions, Headers, parse_headers,
+};
 use crate::compiler_frontend::hir::hir_builder::lower_module;
 use crate::compiler_frontend::hir::hir_nodes::HirModule;
 use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::module_dependencies::{resolve_module_dependencies, SortedHeaders};
+use crate::compiler_frontend::module_dependencies::{SortedHeaders, resolve_module_dependencies};
 use crate::compiler_frontend::paths::path_format::{OutputPathStyle, PathStringFormatConfig};
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
-use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::identity::SourceFileTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::lexer::tokenize;
 use crate::compiler_frontend::tokenizer::newline_handling::NewlineMode;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenizeMode};

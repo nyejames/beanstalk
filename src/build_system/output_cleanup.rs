@@ -7,7 +7,7 @@
 
 use crate::build_system::build::WriteMode;
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use saying::say;
 use std::collections::{BTreeSet, HashSet};
 use std::fs;

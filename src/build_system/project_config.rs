@@ -8,8 +8,8 @@ mod parsing;
 mod validation;
 
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
-use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::projects::settings::{self, Config};
 use std::path::Path;
 

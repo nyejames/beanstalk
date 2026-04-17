@@ -8,7 +8,7 @@ use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
 use crate::compiler_frontend::ast::templates::template::{
     SlotPlaceholder, TemplateAtom, TemplateContent, TemplateSegmentOrigin,
 };
-use crate::compiler_frontend::string_interning::StringId;
+use crate::compiler_frontend::symbols::string_interning::StringId;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
 /// A template's content after composition, represented as an ordered

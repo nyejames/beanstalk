@@ -26,17 +26,20 @@
 
 use crate::compiler_frontend::ast::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
-use crate::compiler_frontend::declaration_syntax::declaration_shell::{
-    DeclarationSyntax, parse_declaration_syntax,
-};
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::builtins::error_type::{
     is_reserved_builtin_symbol, register_builtin_error_types,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::{CompilerWarning, WarningKind};
-use crate::compiler_frontend::declaration_syntax::choice::{parse_choice_shell as parse_choice_header_payload, ChoiceVariant};
+use crate::compiler_frontend::declaration_syntax::choice::{
+    ChoiceVariant, parse_choice_shell as parse_choice_header_payload,
+};
+use crate::compiler_frontend::declaration_syntax::declaration_shell::{
+    DeclarationSyntax, parse_declaration_syntax,
+};
 use crate::compiler_frontend::declaration_syntax::r#struct::parse_struct_shell;
+use crate::compiler_frontend::declaration_syntax::type_syntax::for_each_named_type_in_data_type;
 use crate::compiler_frontend::headers::module_symbols::{ModuleSymbols, register_declared_symbol};
 use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
@@ -47,14 +50,13 @@ use crate::compiler_frontend::reserved_trait_syntax::{
     ReservedTraitKeyword, reserved_trait_declaration_error, reserved_trait_keyword,
     reserved_trait_keyword_error,
 };
-use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::symbols::identifier_policy::{
     IdentifierNamingKind, ensure_not_keyword_shadow_identifier, naming_warning_for_identifier,
 };
 use crate::compiler_frontend::symbols::identity::FileId;
+use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::token_scan::consume_balanced_template_region;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
-use crate::compiler_frontend::declaration_syntax::type_syntax::for_each_named_type_in_data_type;
 use crate::projects::settings::{
     IMPLICIT_START_FUNC_NAME, MINIMUM_LIKELY_DECLARATIONS, TOKEN_TO_DECLARATION_RATIO,
     TOKEN_TO_HEADER_RATIO, TOP_LEVEL_CONST_TEMPLATE_NAME,
@@ -425,7 +427,6 @@ fn parse_headers_in_file(
 
         match current_token.kind.to_owned() {
             TokenKind::Symbol(name_id) => {
-
                 // Unique non-host registry symbol
                 if context
                     .host_function_registry
@@ -952,7 +953,9 @@ fn create_header(
                     &mut dependencies,
                 )?;
 
-                kind = HeaderKind::Constant { declaration: constant_header };
+                kind = HeaderKind::Constant {
+                    declaration: constant_header,
+                };
             }
         }
 
@@ -1136,18 +1139,15 @@ fn collect_constant_type_dependencies(
     context: &HeaderBuildContext<'_>,
     dependencies: &mut HashSet<InternedPath>,
 ) {
-    for_each_named_type_in_data_type(
-        &declaration_syntax.type_annotation,
-        &mut |type_name| {
-            let edge = context
-                .file_imports
-                .iter()
-                .find(|import_path| import_path.name() == Some(type_name))
-                .cloned()
-                .unwrap_or_else(|| context.source_file.append(type_name));
-            dependencies.insert(edge);
-        },
-    );
+    for_each_named_type_in_data_type(&declaration_syntax.type_annotation, &mut |type_name| {
+        let edge = context
+            .file_imports
+            .iter()
+            .find(|import_path| import_path.name() == Some(type_name))
+            .cloned()
+            .unwrap_or_else(|| context.source_file.append(type_name));
+        dependencies.insert(edge);
+    });
 }
 
 fn create_top_level_const_template(

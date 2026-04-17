@@ -12,7 +12,7 @@ use crate::compiler_frontend::ast::statements::collections::new_collection;
 use crate::compiler_frontend::builtins::error_type::resolve_builtin_error_type;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::return_compiler_error;
 use crate::{return_syntax_error, return_type_error};

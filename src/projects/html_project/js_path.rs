@@ -18,7 +18,7 @@ use crate::build_system::build::{FileKind, OutputFile, ResolvedConstFragment};
 use crate::compiler_frontend::analysis::borrow_checker::BorrowCheckReport;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::hir::hir_nodes::{FunctionId, HirModule};
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::projects::html_project::document_config::HtmlDocumentConfig;
 use crate::projects::html_project::document_shell::render_html_document_shell;
 use crate::projects::html_project::page_metadata::extract_html_page_metadata;

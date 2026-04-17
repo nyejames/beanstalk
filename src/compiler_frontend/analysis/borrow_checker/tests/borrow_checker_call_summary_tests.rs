@@ -15,7 +15,7 @@ use crate::compiler_frontend::host_functions::test_support::{
     TestHostAbiType as HostAbiType, TestHostAccessKind as HostAccessKind,
     TestHostReturnAlias as HostReturnAlias,
 };
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tests::test_support::{
     assignment_target, build_ast, default_host_registry, entry_and_start, fresh_returns,
     function_node, lower_hir, make_test_variable, node, param, reference_expr,

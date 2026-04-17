@@ -13,7 +13,7 @@ use crate::compiler_frontend::ast::templates::template_render_plan::{
     FormatterInput, FormatterInputPiece, FormatterOutput, FormatterOutputPiece,
 };
 use crate::compiler_frontend::compiler_warnings::{CompilerWarning, WarningKind};
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{CharPosition, SourceLocation};
 
 #[derive(Clone, Debug)]

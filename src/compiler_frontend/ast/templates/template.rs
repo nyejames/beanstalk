@@ -3,7 +3,7 @@ use crate::compiler_frontend::ast::templates::styles::whitespace::TemplateWhites
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
-use crate::compiler_frontend::string_interning::StringId;
+use crate::compiler_frontend::symbols::string_interning::StringId;
 use std::sync::Arc;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -282,7 +282,7 @@ pub trait TemplateFormatter {
     fn format(
         &self,
         input: crate::compiler_frontend::ast::templates::template_render_plan::FormatterInput,
-        string_table: &mut crate::compiler_frontend::string_interning::StringTable,
+        string_table: &mut crate::compiler_frontend::symbols::string_interning::StringTable,
     ) -> Result<FormatterResult, CompilerMessages>;
 }
 

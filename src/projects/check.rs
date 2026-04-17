@@ -14,7 +14,7 @@ use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::display_messages::{
     print_compiler_messages, print_terse_compiler_messages,
 };
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::projects::html_project::html_project_builder::HtmlProjectBuilder;
 use saying::say;
 use std::time::{Duration, Instant};

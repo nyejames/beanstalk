@@ -12,8 +12,8 @@ use crate::compiler_frontend::compiler_errors::{
     CompilerError, CompilerMessages, ErrorMetaDataKey, ErrorType, SourceLocation,
 };
 use crate::compiler_frontend::compiler_warnings::{CompilerWarning, WarningKind};
-use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::style_directives::StyleDirectiveSpec;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::projects::dev_server::error_page::format_compiler_messages;
 use crate::projects::dev_server::state::DevServerState;
 use crate::projects::dev_server::watch;

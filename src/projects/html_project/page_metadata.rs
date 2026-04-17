@@ -6,7 +6,7 @@
 
 use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorType, SourceLocation};
 use crate::compiler_frontend::hir::hir_nodes::{HirConstValue, HirModule};
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 
 const PAGE_TITLE: &str = "page_title";
 const PAGE_DESCRIPTION: &str = "page_description";

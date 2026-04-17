@@ -9,10 +9,12 @@ use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::declaration_syntax::signature_members::parse_signature_members;
+use crate::compiler_frontend::declaration_syntax::type_syntax::{
+    TypeAnnotationContext, parse_type_annotation,
+};
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
-use crate::compiler_frontend::declaration_syntax::type_syntax::{TypeAnnotationContext, parse_type_annotation};
 use crate::{return_syntax_error, return_type_error};
 
 /// One function return slot, either a concrete value type or a parameter-alias set.
@@ -336,8 +338,8 @@ fn parse_value_return_type(
     token_stream: &mut FileTokens,
     _string_table: &StringTable,
 ) -> Result<ReturnSlot, CompilerError> {
-    let data_type =
-        parse_type_annotation(token_stream, TypeAnnotationContext::SignatureReturn)?.data_type;
+    let data_type = parse_type_annotation(token_stream, TypeAnnotationContext::SignatureReturn)?;
+
     if token_stream.current_token_kind() == &TokenKind::Bang {
         token_stream.advance();
         return Ok(ReturnSlot::error(FunctionReturn::Value(data_type)));
@@ -516,7 +518,7 @@ fn validate_return_slots(
 
 fn parameter_alias_symbol(
     token_kind: &TokenKind,
-) -> Option<crate::compiler_frontend::string_interning::StringId> {
+) -> Option<crate::compiler_frontend::symbols::string_interning::StringId> {
     match token_kind {
         TokenKind::Symbol(symbol) => Some(*symbol),
         _ => None,

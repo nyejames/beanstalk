@@ -4,7 +4,7 @@ use super::shared::is_optional_like;
 use crate::compiler_frontend::ast::expressions::expression::Operator;
 use crate::compiler_frontend::compiler_errors::{CompilerError, SourceLocation};
 use crate::compiler_frontend::datatypes::DataType;
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::return_type_error;
 
 pub(super) fn is_logical_operator(op: &Operator) -> bool {

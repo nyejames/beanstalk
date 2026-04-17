@@ -17,8 +17,8 @@ use crate::compiler_frontend::compiler_errors::{
 };
 use crate::compiler_frontend::compiler_messages::display_messages::resolve_source_file_path;
 use crate::compiler_frontend::compiler_warnings::{CompilerWarning, WarningKind};
-use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::style_directives::StyleDirectiveSpec;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::projects::html_project::html_project_builder::HtmlProjectBuilder;
 use crate::projects::settings::Config;
 use std::fs;
@@ -1590,7 +1590,14 @@ fn build_project_const_top_level_header_with_unfilled_named_slots_folds_to_empty
         let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
         let build_result = build_project(&builder, "main.bst", &[]);
         if let Err(ref e) = build_result {
-            panic!("top-level const wrappers should fold even when named slots are unfilled: {}", e.errors.iter().map(|e| e.msg.as_str()).collect::<Vec<_>>().join("; "));
+            panic!(
+                "top-level const wrappers should fold even when named slots are unfilled: {}",
+                e.errors
+                    .iter()
+                    .map(|e| e.msg.as_str())
+                    .collect::<Vec<_>>()
+                    .join("; ")
+            );
         }
         let build_result = build_result.unwrap();
 

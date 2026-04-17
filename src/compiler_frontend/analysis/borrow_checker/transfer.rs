@@ -18,7 +18,7 @@ use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::hir::hir_nodes::HirBlock;
 use crate::compiler_frontend::hir::hir_nodes::{BlockId, FunctionId, HirNodeId, HirValueId};
 use crate::compiler_frontend::host_functions::HostRegistry;
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use rustc_hash::FxHashMap;
 
 use access::{transfer_statement, transfer_terminator};

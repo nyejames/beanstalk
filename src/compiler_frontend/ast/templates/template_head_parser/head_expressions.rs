@@ -19,7 +19,7 @@ use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::datatypes::Ownership;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::rendered_path_usage::resolve_compile_time_paths_for_rendered_output;
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation};
 use crate::{ast_log, return_syntax_error};
 
