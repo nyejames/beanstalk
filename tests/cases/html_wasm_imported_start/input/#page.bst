@@ -1,4 +1,4 @@
-import @helper
+import @helper/get_message
 
-helper()
-#[:entry]
+msg = get_message()
+[:entry: [msg]]

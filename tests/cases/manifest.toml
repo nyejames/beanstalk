@@ -1743,3 +1743,23 @@ tags = ["integration", "diagnostics"]
 id = "not_requires_bool"
 path = "not_requires_bool"
 tags = ["integration", "diagnostics"]
+
+[[case]]
+id = "html_wasm_vec_start_abi"
+path = "html_wasm_vec_start_abi"
+tags = ["html-wasm", "abi", "vec-runtime"]
+
+[[case]]
+id = "top_level_code_non_entry_file_rejected"
+path = "top_level_code_non_entry_file_rejected"
+tags = ["error", "frontend-contract"]
+
+[[case]]
+id = "top_level_runtime_template_non_entry_file_rejected"
+path = "top_level_runtime_template_non_entry_file_rejected"
+tags = ["error", "frontend-contract"]
+
+[[case]]
+id = "entry_start_sees_sorted_declarations"
+path = "entry_start_sees_sorted_declarations"
+tags = ["integration", "frontend-contract", "dependency-sort"]

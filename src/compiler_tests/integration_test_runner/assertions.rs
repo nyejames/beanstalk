@@ -471,7 +471,7 @@ fn validate_html_wasm_baseline_contract(build_result: &BuildResult) -> Option<St
 
     for required_fragment in [
         "__bst_instantiate_wasm",
-        "__bst_install_wasm_wrappers",
+        "instance.exports.bst_start()",
         "\"./page.wasm\"",
     ] {
         if !js.contains(required_fragment) {
@@ -553,9 +553,12 @@ fn collect_wasm_imports(bytes: &[u8]) -> Result<Vec<String>, String> {
                 let import = match import {
                     Ok(imports) => match imports {
                         Imports::Single(_, import) => import,
-                        _ => todo!(
-                            "Update to use the new wasm_parser imports enum 'Compact1' and 'Compact2'."
-                        ),
+                        Imports::Compact1 { module, .. } | Imports::Compact2 { module, .. } => {
+                            return Err(format!(
+                                "collect_wasm_imports: compact import group for module '{module}' \
+                                 is not supported; Beanstalk does not emit compact imports"
+                            ));
+                        }
                     },
                     Err(e) => return Err(e.to_string()),
                 };

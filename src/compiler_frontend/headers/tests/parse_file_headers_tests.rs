@@ -863,3 +863,79 @@ fn entry_runtime_fragment_count_is_zero_when_parsed_as_non_entry_file() {
         "entry_runtime_fragment_count must be 0 when the file is not the entry file"
     );
 }
+
+#[test]
+fn typed_constant_creates_strict_dependency_on_declared_type() {
+    // WHY: the declared type creates a structural ordering constraint so that the type
+    // is sorted before any constant that references it. Initializer-expression references
+    // do NOT create strict deps — only the declared type annotation does.
+    let (headers, string_table) = parse_single_file_headers_with_table(
+        "import @styles/NavBar\n#theme NavBar = default_navbar\n",
+    );
+
+    let constant_header = headers
+        .headers
+        .iter()
+        .find(|header| matches!(header.kind, HeaderKind::Constant { .. }))
+        .expect("expected constant header");
+
+    assert!(
+        !constant_header.dependencies.is_empty(),
+        "typed constant must create a strict dependency on its declared type"
+    );
+    assert!(
+        constant_header
+            .dependencies
+            .iter()
+            .any(|dep| dep.name_str(&string_table) == Some("NavBar")),
+        "strict dependency must reference the declared type name 'NavBar'"
+    );
+}
+
+#[test]
+fn struct_fields_create_strict_dependencies_on_named_field_types() {
+    // WHY: struct fields whose types are user-defined names create strict sort edges so that
+    // the named type is always sorted before the struct that depends on it.
+    let (headers, string_table) = parse_single_file_headers_with_table(
+        "Point = |x Int, y Int|\nSpan = |start Point, end Point|\n",
+    );
+
+    let span_header = headers
+        .headers
+        .iter()
+        .find(|header| {
+            matches!(header.kind, HeaderKind::Struct { .. })
+                && header.tokens.src_path.name_str(&string_table) == Some("Span")
+        })
+        .expect("expected Span struct header");
+
+    assert!(
+        span_header
+            .dependencies
+            .iter()
+            .any(|dep| dep.name_str(&string_table) == Some("Point")),
+        "Span must carry a strict dependency on Point via its field type annotations"
+    );
+}
+
+#[test]
+fn constant_header_with_declared_type_captures_type_in_declaration() {
+    // Confirms the header-stage contract: declared type annotation is present in the
+    // Constant header's declaration, proving initializer resolution is deferred to AST.
+    let headers = parse_single_file_headers("#threshold Int = 42\n");
+
+    let constant_header = headers
+        .headers
+        .iter()
+        .find(|header| matches!(header.kind, HeaderKind::Constant { .. }))
+        .expect("expected constant header");
+
+    let HeaderKind::Constant { declaration } = &constant_header.kind else {
+        panic!("expected Constant header kind");
+    };
+
+    assert!(
+        !matches!(declaration.type_annotation, DataType::Inferred),
+        "declared type annotation on a typed constant must be resolved at the header stage, not left as Inferred"
+    );
+}

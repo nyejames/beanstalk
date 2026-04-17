@@ -2,5 +2,6 @@ render_fragment || -> String:
     return [:runtime template]
 ;
 
-render_fragment()
+result = render_fragment()
+[: [result]]
 #[:entry]

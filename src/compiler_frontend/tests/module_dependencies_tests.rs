@@ -120,6 +120,42 @@ fn reports_circular_dependencies() {
 }
 
 #[test]
+fn constant_initializer_does_not_create_strict_sort_dependency() {
+    // WHY: only declared-type annotations create strict graph edges for constants.
+    // Initializer-expression symbol references are excluded so that the sort only
+    // constrains ordering by structural type dependencies, not by runtime value flow.
+    let (headers, mut string_table) = parse_module_headers(
+        &[
+            // Config's initializer references Value, but Config has no declared type.
+            // That reference must NOT create a strict sort edge from Config to Value.
+            ("src/a.bst", "import @b/Value\n#Config = Value\n"),
+            ("src/b.bst", "#Value Int = 42\n"),
+        ],
+        "src/a.bst",
+    );
+
+    let sorted = resolve_module_dependencies(headers, &mut string_table)
+        .expect("sort must succeed — initializer refs do not produce unresolvable strict edges");
+
+    let non_start_names: Vec<_> = sorted
+        .headers
+        .iter()
+        .filter(|h| !matches!(h.kind, HeaderKind::StartFunction))
+        .map(|h| header_name(h, &string_table))
+        .collect();
+
+    // Both headers must be present in the sorted output.
+    assert!(
+        non_start_names.contains(&"Config".to_string()),
+        "Config header must appear in sorted output"
+    );
+    assert!(
+        non_start_names.contains(&"Value".to_string()),
+        "Value header must appear in sorted output"
+    );
+}
+
+#[test]
 fn reports_ambiguous_suffix_import_resolution() {
     let (headers, mut string_table) = parse_module_headers(
         &[

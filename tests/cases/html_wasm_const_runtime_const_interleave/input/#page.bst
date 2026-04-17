@@ -5,5 +5,6 @@ render_middle || -> String:
     return [:runtime_middle_content]
 ;
 
-render_middle()
+middle = render_middle()
+[: [middle]]
 #[:entry]

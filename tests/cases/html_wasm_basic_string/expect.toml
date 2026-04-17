@@ -21,10 +21,10 @@ must_contain = ["<script src=\"./page.js\"></script>"]
 [[backends.html_wasm.artifact_assertions]]
 path = "page.js"
 kind = "js"
-must_contain = ["__bst_instantiate_wasm", "__bst_install_wasm_wrappers", "\"./page.wasm\""]
+must_contain = ["__bst_instantiate_wasm", "instance.exports.bst_start()", "\"./page.wasm\""]
 
 [[backends.html_wasm.artifact_assertions]]
 path = "page.wasm"
 kind = "wasm"
 validate_wasm = true
-must_export = ["memory", "bst_str_ptr", "bst_str_len", "bst_release"]
+must_export = ["memory", "bst_str_ptr", "bst_str_len", "bst_release", "bst_start", "bst_vec_new", "bst_vec_push", "bst_vec_len", "bst_vec_get"]

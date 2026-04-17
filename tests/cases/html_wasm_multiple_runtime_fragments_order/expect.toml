@@ -8,7 +8,7 @@ warnings = "forbid"
 path = "page.wasm"
 kind = "wasm"
 validate_wasm = true
-must_export = ["memory", "bst_str_ptr", "bst_str_len", "bst_release"]
+must_export = ["memory", "bst_str_ptr", "bst_str_len", "bst_release", "bst_start", "bst_vec_new", "bst_vec_push", "bst_vec_len", "bst_vec_get"]
 
 [[backends.html_wasm.artifact_assertions]]
 path = "page.js"
@@ -16,6 +16,6 @@ kind = "js"
 must_contain_in_order = [
     "bst-slot-0",
     "bst-slot-1",
-    "insertAdjacentHTML(\"beforeend\", fn())",
+    "insertAdjacentHTML(\"beforeend\", bst_text)",
 ]
-must_contain_exactly_once = ["function __bst_install_wasm_wrappers("]
+must_contain_exactly_once = ["function __bst_instantiate_wasm("]

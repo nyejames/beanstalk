@@ -13,6 +13,7 @@ pub(crate) mod names;
 pub(crate) mod sections;
 pub(crate) mod types;
 pub(crate) mod validate;
+pub(crate) mod vec_helpers;
 
 #[derive(Debug, Clone, Default)]
 pub(crate) struct WasmEmitDebugOutputs {

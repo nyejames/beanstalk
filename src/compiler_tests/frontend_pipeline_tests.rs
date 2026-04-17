@@ -178,8 +178,14 @@ impl FrontendProject {
 fn start_function_is_excluded_from_dependency_graph_and_appended_last() {
     let mut project = FrontendProject::new(
         &[
-            ("src/#page.bst", "import @helper\n#helper_const = \"page_helper\"\nio(\"page\")\n"),
-            ("src/helper.bst", "import @leaf\n#leaf_const = \"helper_leaf\"\n"),
+            (
+                "src/#page.bst",
+                "import @helper\n#helper_const = \"page_helper\"\nio(\"page\")\n",
+            ),
+            (
+                "src/helper.bst",
+                "import @leaf\n#leaf_const = \"helper_leaf\"\n",
+            ),
             ("src/leaf.bst", "#leaf_const = \"leaf_value\"\n"),
         ],
         "src/#page.bst",
@@ -217,7 +223,10 @@ fn start_function_is_excluded_from_dependency_graph_and_appended_last() {
         .collect();
 
     assert!(
-        matches!(entry_file_headers.last().unwrap().kind, HeaderKind::StartFunction),
+        matches!(
+            entry_file_headers.last().unwrap().kind,
+            HeaderKind::StartFunction
+        ),
         "start should be appended last for the entry file"
     );
 }
