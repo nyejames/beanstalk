@@ -258,8 +258,9 @@ Templates unlock the full power of Beanstalk's HTML / CSS generation capabilitie
 ### Template Styles
 Templates can be used to build complex UI components. They can use slots to insert content from other templates and have **style metadata** attached to them.
 
-In the HTML project builder, top-level template expressions in the entry file are inserted into the generated HTML body.
-Only direct file-scope template expressions do this. Function calls that return templates, or templates assigned to variables, do not.
+In the HTML project builder, only direct top-level template expressions in the entry file contribute page fragments.
+Top-level runtime templates are evaluated by the entry `start()` function in source order, while top-level const templates are folded at compile time and merged separately.
+Templates assigned to variables or returned from functions do not contribute page fragments by themselves.
 
 A template’s style is defined in the **template head** using `$` directives. 
 `$` introduces **compiler-handled directives** (so they don’t collide with normal variables and can be extended in the future), such as formatter-like built-ins, precedence controls, and default child templates that are automatically applied to direct child templates.
@@ -608,45 +609,48 @@ Example:
 
 **Import syntax:**
 ```beanstalk
--- Import a file start function as a callable alias:
-import @path/to/file
-
 -- Import one exported symbol:
 import @path/to/file/symbol
 
--- Grouped relative path expansion from one shared base:
+-- Import several exported symbols from one shared file path:
 import @path/to/file {symbol_a, symbol_b}
 
--- Grouped entries can include nested relative paths:
+-- Grouped entries can include nested relative symbol paths:
 import @docs {
-    intro.md,
-    guides/getting-started.md,
+    pages/home/render,
+    pages/about/render,
 }
 ```
 
+Imports target exported symbols, not file-level start functions.
+Bare file imports such as import @path/to/file are invalid.
+
 **Entry files and implicit start functions:**
-- Every Beanstalk file has an **implicit start function** containing all top-level code
-- The **entry file** selected for a module (for example `#page.bst`) has its implicit start chosen as that module's entry start function. Only that file's top-level code executes automatically
-- Imported files' implicit start functions are callable but don't execute automatically.
+- The module entry file has an implicit `start` function containing its top-level runtime code.
+- Only the entry file executes top-level runtime code automatically.
+- Non-entry files may contain imports and top-level declarations, but not top-level executable statements.
+- The implicit `start` function is build-system-only and cannot be imported or called directly from Beanstalk code.
 
 **File execution semantics:**
 ```beanstalk
 -- main.bst (entry file)
-import @utils/helper
+import @utils/helper/run_helper
 import @utils/helper/another_func
 
--- This executes automatically when the module starts
 io("Starting main")
-helper()  -- Call imported file's implicit start function
 
-another_func() -- Call imported exported symbol directly
+run_helper()
+another_func()
 ```
+
+Only the entry file's top-level runtime code executes automatically.
+Other files contribute declarations that must be imported explicitly by symbol.
 
 **Import resolution rules:**
 - Relative imports (`@./x` / `@..`) resolve from the importing file's directory
 - Non-relative imports whose first segment matches `#root_folders` resolve from the project root
 - Other non-relative imports resolve from the configured module entry root
-- Grouped import paths are expanded into individual dependency edges
+- Grouped imports expand into multiple individual symbol imports.
 - Circular imports are detected and cause compilation errors
 
 ### Hash (`#`) semantics
@@ -655,7 +659,7 @@ At top level, `#` changes behavior by declaration kind:
 - Variable declaration: exported constant declaration (compile-time only)
 - Function declaration: exported function (visibility only)
 - Struct or choice declaration: exported type/symbol (visibility only)
-- Template head (`#[...]`): top-level const template declaration
+- Template head (`#[...]`): entry-file-only top-level const template declaration that must fully fold at compile time
 
 Non-`#` top-level declarations are module-private.
 
@@ -685,6 +689,8 @@ Constant rules:
 - Must fully fold at compile time (runtime expressions are compile errors)
 - Same-file constant evaluation follows source order
 - Cross-file constant dependencies are resolved in dependency order so constants can reference constants from imported files
+
+Top-level const templates follow the same compile-time rule and are currently entry-file only.
 
 ```beanstalk
 # site_name String = "Beanstalk"

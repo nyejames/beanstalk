@@ -185,6 +185,8 @@ Does not parse anything in function bodies beyond capturing their token streams 
 
 Exported constants are parsed as top-level declarations. Their declared type shape is header-owned, the AST later resolves and validates the initializer. Top-level struct field shapes and choice variant shapes are fully parsed in the header stage, but validated and type checked at the AST stage.
 
+Header parsing also builds the header-owned `ModuleSymbols` package: the order-independent top-level symbol, import, export, builtin, and source-file metadata needed by dependency sorting and AST construction. Dependency sorting later finalizes only the sorted `declarations` list inside that package; AST consumes the package directly rather than rediscovering top-level symbols.
+
 ### Stage 3: Dependency Sorting (`src/compiler_frontend/module_dependencies.rs`)
 Operates only on top-level declaration headers and only on strict dependency edges.
 Allows the AST to lower the whole module in declaration order without rebuilding module-wide top-level symbol knowledge.
@@ -199,17 +201,16 @@ This enables full-module type checking while keeping top-level declaration owner
 - The implicit entry `start` header is not part of the dependency graph and is appended after sorting
 
 ### Stage 4: AST Construction (`src/compiler_frontend/ast/mod.rs`)
-Consumes the already-shaped, already-sorted top-level headers from the header and dependency stages.
-Resolves, validates headers and lowers templates and function bodies. Does not reparse the header top-level declaration syntax.
-Transforms dependency-sorted headers into the typed AST and performs the compiler's main semantic frontend work.
+Consumes the already-shaped, already-sorted top-level headers and the header-owned `ModuleSymbols` package from the header and dependency stages.
+AST resolves and validates those headers, enforces file-local import visibility, lowers executable bodies, and prepares templates for HIR.
+It does not rediscover top-level symbols or reparse top-level declaration shells.
 
-- **Top-Level Resolution**: AST resolves type and symbol references against the known sorted top-level symbol set.
-- **Final Validation**: AST performs final semantic and type validation once dependency order is known.
+- **Import Visibility**: AST resolves per-file import visibility while still using the shared module-wide top-level symbol package.
+- **Top-Level Resolution**: AST resolves and validates constants, struct field types, and function signatures from the parsed header payloads.
 - **Body Parsing**: Function bodies and the entry `start` body are parsed and lowered here.
-- **Local Scope Growth**: Executable bodies register local declarations incrementally as they are encountered in source order. Uses the shared `src/compiler_frontend/declaration_syntax` as the header stage for lowering declarations inside bodies.
-- **Namespace Resolution**: Variables store their full path including parent scope information, and uniqueness is enforced by scope rules rather than post-hoc recollection
-- **Type Checking**: Early type resolution and validation
-- **Template Preparation**: AST performs template composition, compile-time folding, and runtime render-plan preparation before HIR
+- **Local Scope Growth**: Executable bodies register local declarations incrementally in source order. Body-local declarations reuse shared declaration syntax, but top-level declaration shells remain header-owned.
+- **Namespace Resolution**: Variables keep full scoped paths, and uniqueness is enforced by scope rules rather than post-hoc recollection.
+- **Template Preparation**: AST performs template composition, compile-time folding, helper elimination, and runtime render-plan preparation before HIR.
 
 **Top-level vs body parsing**
 
@@ -218,7 +219,7 @@ Transforms dependency-sorted headers into the typed AST and performs the compile
 - Body-local declarations are parsed in source order during AST lowering of executable code.
 - Dependency sorting exists only to order top-level declarations before AST begins; it does not apply inside executable bodies.
 
-AST resolves and validates parsed struct, choice and constant headers.
+Internally, AST runs in this order: resolve file import bindings, resolve constants and struct field types, resolve function signatures, build the receiver-method catalog, emit AST nodes for executable bodies, then finalize template and constant metadata for HIR and builders.
 
 **Type checking and coercion**
 
