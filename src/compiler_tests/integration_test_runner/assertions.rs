@@ -730,6 +730,7 @@ fn validate_golden_outputs(
 /// - `bst___template_fn_1_fn4`→ `bst___template_fn_N_fnN`
 /// - `bst___bst_frag_0_fn2`   → `bst___bst_frag_N_fnN`
 pub(crate) fn normalize_text_for_comparison(text: &str) -> String {
+    let text = strip_embedded_css(text);
     let mut result = String::with_capacity(text.len());
     let mut token_start: Option<usize> = None;
 
@@ -749,6 +750,35 @@ pub(crate) fn normalize_text_for_comparison(text: &str) -> String {
     if let Some(start) = token_start {
         result.push_str(&normalize_bst_identifier(&text[start..]));
     }
+    result
+}
+
+/// Strips the embedded core CSS block so golden files stay stable when
+/// `bs-css-core.css` changes.
+///
+/// WHAT: replaces the content of the `<style>...</style>` block (which contains the
+///       inlined BS CSS CORE reset) with a fixed placeholder.
+/// WHY: the core CSS is boilerplate injected into every page; tests should not break
+///      when custom properties are reordered or added. Custom CSS from `$css:` goes
+///      into JS runtime code, not the `<style>` block, so this only removes stable
+///      boilerplate.
+fn strip_embedded_css(text: &str) -> String {
+    const STYLE_OPEN: &str = "<style>\n";
+    const STYLE_CLOSE: &str = "</style>";
+
+    let Some(start) = text.find(STYLE_OPEN) else {
+        return text.to_owned();
+    };
+    let after_open = start + STYLE_OPEN.len();
+    let Some(close_start) = text[after_open..].find(STYLE_CLOSE) else {
+        return text.to_owned();
+    };
+    let close_end = after_open + close_start + STYLE_CLOSE.len();
+
+    let mut result = String::with_capacity(text.len() - (close_end - start) + 28);
+    result.push_str(&text[..start]);
+    result.push_str("<style>/* CORE_CSS */</style>");
+    result.push_str(&text[close_end..]);
     result
 }
 

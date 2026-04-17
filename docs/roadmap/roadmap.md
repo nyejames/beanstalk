@@ -21,10 +21,8 @@ These are the non-negotiable conditions for starting Alpha.
 
 ## Next Plans
 
-- `docs/roadmap/plans/ast-refactor.md`
-Finish reverting back to simple AST / template fragment design.
-This should be a huge cleanup that removes a ton of overly complex code.
-Goal is to also fix a lot of golden test brittleness during the final stages.
+- Codebase review
+Main goal is to make sure the codebase is following the style guide, avoiding duplication of work and working towards the correct patterns for the compiler's design. Removing any legacy compatibility code / wrappers, outdated comments or unneeded / unused code.
 
 - `docs/roadmap/plans/integer-division.md`
 Makes `/` float division only. `//` becomes the integer division symbol.
