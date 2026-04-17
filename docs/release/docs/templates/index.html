@@ -8,7 +8,6 @@
     <meta name="description" content="Template syntax, slots, directives, and formatting in Beanstalk.">
     <link rel="icon" href="/assets/favicon.ico">
     <style>
-@charset "UTF-8";
 /*!
   BS CSS CORE (absolute basics CSS reset)
   This is inspired by Pico.css, but is an even more minimal reset.
@@ -20,12 +19,6 @@
   color-scheme: light dark;
 
   --bst-font-size: 100%;
-
-  /* Default Background Colours */
-  --bst-bg-lightmode: #fff;
-  --bst-bg-darkmode: #13171f;
-  --bst-text-lightmode: #373c44;
-  --bst-text-darkmode: #e0e3e7;
 
   --bst-font-family-emoji: "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
   --bst-font-family-sans-serif: system-ui, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, Helvetica, Arial, "Helvetica Neue", sans-serif, var(--bst-font-family-emoji);
@@ -181,145 +174,166 @@ body {
   vertical-align: inherit;
 }
     </style>
+    <style>body {
+        background-color: light-dark(hsl(199, 21%, 74%), hsl(203, 68%, 8%));
+    }
 
-        <style>
+    a {
+        color: light-dark(hsl(111, 96%, 26%), hsl(235, 87%, 67%));
+    }
+
+    .container {
+        width: 100%;
+        margin-right: auto;
+        margin-left: auto;
+        padding-right: var(--bst-spacing-small);
+        padding-left: var(--bst-spacing-small);
+    }
+
+    @media (min-width: 576px) {
         .container {
-            width: 100%;
-            margin-right: auto;
-            margin-left: auto;
-            padding-right: var(--bst-spacing-small);
-            padding-left: var(--bst-spacing-small);
+            max-width: 510px;
+            padding-right: var(--bst-spacing);
+            padding-left: var(--bst-spacing);
+            padding-bottom: var(--bst-spacing);
         }
+    }
 
-        @media (min-width: 576px) {
-            .container {
-                max-width: 510px;
-                padding-right: var(--bst-spacing);
-                padding-left: var(--bst-spacing);
-                padding-bottom: var(--bst-spacing);
-            }
+    @media (min-width: 768px) {
+        .container {
+            max-width: 700px;
         }
+    }
 
-        @media (min-width: 768px) {
-            .container {
-                max-width: 700px;
-            }
+    @media (min-width: 1024px) {
+        .container {
+            max-width: 950px;
         }
+    }
 
-        @media (min-width: 1024px) {
-            .container {
-                max-width: 950px;
-            }
+    @media (min-width: 1280px) {
+        .container {
+            max-width: 1200px;
         }
+    }
 
-        @media (min-width: 1280px) {
-            .container {
-                max-width: 1200px;
-            }
+    @media (min-width: 1536px) {
+        .container {
+            max-width: 1450px;
         }
+    }
 
-        @media (min-width: 1536px) {
-            .container {
-                max-width: 1450px;
-            }
-        }
+    .bst-nav-1 {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom-color: grey;
+        border-bottom-style: solid;
+        border-bottom-width: 1px;
+        padding: 0rem 2rem 0rem 2rem;
+    }</style>
 
-        .bst-nav-1 {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom-color: grey;
-            border-bottom-style: solid;
-            border-bottom-width: 1px;
-            padding: 0rem 2rem 0rem 2rem;
-        }
-    </style>
   </head>
   <body style="">
-
-        <nav class="bst-nav-1" aria-label="Primary">
-            <a
-                href="/beanstalk/"
+    <nav class="bst-nav-1" aria-label="Primary">
+        <a
+            href="/beanstalk/"
+            style="
+                display: flex;
+                align-items: center;
+                gap: 0.6rem;
+                padding: 0.9rem 0;
+                color: light-dark(var(--bst-text-lightmode), var(--bst-text-darkmode));
+                text-decoration: none;
+                font-weight: 700;
+                letter-spacing: 0.04rem;
+            "
+        >
+            <span
+                aria-hidden="true"
                 style="
-                    display: flex;
-                    align-items: center;
-                    gap: 0.6rem;
-                    padding: 0.9rem 0;
+                    font-family: var(--bst-font-family-emoji);
+                    font-size: 1.4rem;
+                    line-height: 1;
+                "
+            >🌱</span>
+
+            <span>Beanstalk</span>
+        </a>
+
+        <div
+            style="
+                display: flex;
+                align-items: center;
+                gap: 1rem;
+            "
+        >
+            <a
+                href="/beanstalk/docs/"
+                style="
                     color: light-dark(var(--bst-text-lightmode), var(--bst-text-darkmode));
                     text-decoration: none;
-                    font-weight: 700;
-                    letter-spacing: 0.04rem;
+                    font-weight: 500;
+                    padding: 0.35rem 0;
                 "
             >
-                <span
-                    aria-hidden="true"
-                    style="
-                        font-family: var(--bst-font-family-emoji);
-                        font-size: 1.4rem;
-                        line-height: 1;
-                    "
-                >🌱</span>
-
-                <span>Beanstalk</span>
+                Docs
             </a>
 
-            <div
+            <a
+                href="https://github.com/nyejames/beanstalk"
+                target="_blank"
+                rel="noreferrer"
+                aria-label="Beanstalk GitHub repository"
                 style="
-                    display: flex;
+                    display: inline-flex;
                     align-items: center;
-                    gap: 1rem;
+                    justify-content: center;
+                    color: light-dark(var(--bst-text-lightmode), var(--bst-text-darkmode));
+                    padding: 0.35rem 0;
                 "
             >
-                <a
-                    href="/beanstalk/docs/"
-                    style="
-                        color: light-dark(var(--bst-text-lightmode), var(--bst-text-darkmode));
-                        text-decoration: none;
-                        font-weight: 500;
-                        padding: 0.35rem 0;
-                    "
+                <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 16 16"
+                    width="22"
+                    height="22"
+                    fill="currentColor"
+                    aria-hidden="true"
                 >
-                    Docs
-                </a>
-
-                <a
-                    href="https://github.com/nyejames/beanstalk"
-                    target="_blank"
-                    rel="noreferrer"
-                    aria-label="Beanstalk GitHub repository"
-                    style="
-                        display: inline-flex;
-                        align-items: center;
-                        justify-content: center;
-                        color: light-dark(var(--bst-text-lightmode), var(--bst-text-darkmode));
-                        padding: 0.35rem 0;
-                    "
-                >
-                    <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        viewBox="0 0 16 16"
-                        width="22"
-                        height="22"
-                        fill="currentColor"
-                        aria-hidden="true"
-                    >
-                        <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38
-                        0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52
-                        -.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07
-                        -1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21
-                        2.2.82a7.65 7.65 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82
-                        1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2
-                        0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/>
-                    </svg>
-                </a>
-            </div>
-        </nav>
-
+                    <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38
+                    0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52
+                    -.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07
+                    -1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21
+                    2.2.82a7.65 7.65 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82
+                    1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2
+                    0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/>
+                </svg>
+            </a>
+        </div>
+    </nav>
      <h1 style="font-size: 2em;text-align: center;"> TEMPLATES</h1>
-
-        <section class="container"><p>Beanstalk has unique, superpowered templating strings. Templates use <code class='codeblock'><span class='bst-code-parenthesis'>[</span><span class='bst-code-parenthesis'>]</span></code> exclusively - never confuse with collections <code class='codeblock'><span class='bst-code-parenthesis'>{</span><span class='bst-code-parenthesis'>}</span></code>.</p><p>These are the only way to create mutable strings, as double quotes are only used for string slices.</p><p>The main purpose of a template is to generate either complex text content, markdown, HTML or just regular formatted strings.</p><p>Templates have two sections, the head and the body, separated with a colon. </p><p>Templates are scoped using square brackets and can be passed special types called Styles to change their behavior, content and styling.</p><p>Templates are either folded to strings at compile time, or become functions that return strings at runtime. </p><h2>Structure</h2><ul><li>Head and body separated by &quot;<code class='codeblock'><span class='bst-code-operator'>:</span></code>&quot;</li><li>Variable capture from the surrounding scope</li></ul><p>Templates unlock the full power of Beanstalk&#39;s HTML / CSS generation capabilities.</p><h2>Styles</h2><p>Templates can be used to build complex UI components. They can use slots to insert content from other templates and have <strong>style metadata</strong> attached to them.</p><p>A template&#39;s style is defined in the <strong>template head</strong> using `$` directives.  `$` introduces <strong>compiler-handled directives</strong> (so they don&#39;t collide with normal variables and can be extended in the future), such as formatter-like built-ins, precedence controls, and default child templates that are automatically applied to direct child templates.</p><p>Directive availability is frontend-registry based:</p><ul><li>Frontend built-ins are available by default (`$markdown`, `$code`, `$raw`, slots, etc.).</li><li>Project builders can register additional project-specific directives using the same `$name` syntax. In the HTML project, that includes `$html`, `$css`, and `$escape_html`.</li><li>Unknown directives fail as syntax/rule errors unless they are registered.</li></ul>
-        <pre style="background-color: hsla(0, 0%, 42%, 0.12); padding-left: 1em; border-radius: 5px; max-width: 100%; white-space: pre; overflow-x: auto;">
-            <code class='codeblock'>
+    <section class="container"><p>Beanstalk has unique, superpowered templating strings. Templates use <code class='codeblock'><span class='bst-code-parenthesis'>[</span><span class='bst-code-parenthesis'>]</span></code> exclusively - never confuse with collections <code class='codeblock'><span class='bst-code-parenthesis'>{</span><span class='bst-code-parenthesis'>}</span></code>.</p><p>These are the only way to create mutable strings, as double quotes are only used for string slices.</p><p>The main purpose of a template is to generate either complex text content, markdown, HTML or just regular formatted strings.</p><p>Templates have two sections separated by a colon:</p><ul><li>Head</li><li>Body</li></ul><p>This example creates the string <span style="
+        color: #c444aff9; 
+        padding: 0.1em; 
+        font-family: var(--bst-font-family-monospace);
+    "> "head body"</span></p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-parenthesis'>[</span><span class='bst-code-string'>&quot;head&quot;</span><span class='bst-code-operator'>:</span> body<span class='bst-code-parenthesis'>]</span>
+    </code></pre><p>Templates are scoped using square brackets and can be passed special types called Styles to change their behavior, content and styling.</p><p>Templates are either folded to strings at compile time, or become functions that return strings at runtime. </p><h2>Structure</h2><ul><li>Head and body separated by &quot;<code class='codeblock'><span class='bst-code-operator'>:</span></code>&quot;</li><li>Variable capture from the surrounding scope</li></ul><p>Templates unlock the full power of Beanstalk&#39;s HTML / CSS generation capabilities.</p><h2>Styles</h2><p>Templates can be used to build complex UI components. They can use slots to insert content from other templates and have <strong>style metadata</strong> attached to them.</p><p>A template&#39;s style is defined in the <strong>template head</strong> using `$` directives. `$` introduces <strong>compiler-handled directives</strong> (so they don&#39;t collide with normal variables and can be extended in the future), such as formatter-like built-ins, precedence controls, and default child templates that are automatically applied to direct child templates.</p><p>Directive availability is frontend-registry based:</p><ul><li>Frontend built-ins are available by default (`$markdown`, `$code`, `$raw`, slots, etc.).</li><li>Project builders can register additional project-specific directives using the same `$name` syntax. In the HTML project, that includes `$html`, `$css`, and `$escape_html`.</li><li>Unknown directives fail as syntax/rule errors unless they are registered.</li></ul><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
     <span class='bst-code-comment'>-- Define a template style</span>
     <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>markdown, <span class='bst-code-operator'>$</span>children<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>All</span> children start with this prefix<span class='bst-code-operator'>!</span> <span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>:</span>
         <span class='bst-code-operator'>#</span> <span class='bst-code-struct'>Hello</span>
@@ -331,11 +345,14 @@ body {
 
         <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>This</span> child is prefixed<span class='bst-code-operator'>!</span><span class='bst-code-parenthesis'>]</span>
     <span class='bst-code-parenthesis'>]</span>
-    </code>
-        </pre>
-    <p><strong>Frontend Built-in Style Directives</strong></p><ul><li>$slot / $insert(..) - See slots below!</li><li>$fresh              - Opts this child template out of wrappers applied by the immediate parent&#39;s `$children(..)` directive</li><li>$markdown           - Parses the template bodies with a custom flavour of Markdown</li><li>$code               - Highlights code blocks using the compiler&#39;s built-in formatter</li><li>$raw                - Parses the template body as a raw string (no escaping, no formatting)</li><li>$note / $todo       - Comments (ignored by final output)</li><li>$doc                - Turns the template into a documentation comment</li><li>$children(..)       - Accepts a template (or string slice) that will be applied only to this template&#39;s direct child templates</li></ul><p><strong>HTML Project Directives</strong></p><ul><li>$html               - Parses the template body as raw HTML (no escaping)</li><li>$css                - Provides some basic warnings for malformed CSS</li><li>$escape_html        - Escapes HTML-sensitive characters in the template body</li></ul><p>Formatting directives do not automatically flow into nested child templates. If a child template should keep using a formatter such as `$markdown`, redeclare it in that child template&#39;s head.</p><p>`$fresh` is per-child and only affects wrapper application from the immediate parent. Siblings without `$fresh` still receive the parent wrappers:</p>
-        <pre style="background-color: hsla(0, 0%, 42%, 0.12); padding-left: 1em; border-radius: 5px; max-width: 100%; white-space: pre; overflow-x: auto;">
-            <code class='codeblock'>
+    </code></pre><p><strong>Frontend Built-in Style Directives</strong></p><ul><li>$slot / $insert(..) - See slots below!</li><li>$fresh              - Opts this child template out of wrappers applied by the immediate parent&#39;s `$children(..)` directive</li><li>$markdown           - Parses the template bodies with a custom flavour of Markdown</li><li>$code               - Highlights code blocks using the compiler&#39;s built-in formatter</li><li>$raw                - Parses the template body as a raw string (no escaping, no formatting)</li><li>$note / $todo       - Comments (ignored by final output)</li><li>$doc                - Turns the template into a documentation comment</li><li>$children(..)       - Accepts a template (or string slice) that will be applied only to this template&#39;s direct child templates</li></ul><p><strong>HTML Project Directives</strong></p><ul><li>$html               - Parses the template body as raw HTML (no escaping)</li><li>$css                - Provides some basic warnings for malformed CSS</li><li>$escape_html        - Escapes HTML-sensitive characters in the template body</li></ul><p>Formatting directives do not automatically flow into nested child templates.If a child template should keep using a formatter such as `$markdown`, redeclare it in that child template&#39;s head.</p><p>`$fresh` is per-child and only affects wrapper application from the immediate parent. Siblings without `$fresh` still receive the parent wrappers:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
     <span class='bst-code-operator'>#</span> list <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>children<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span><span class='bst-code-operator'>&lt;</span>li<span class='bst-code-operator'>&gt;</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>slot<span class='bst-code-parenthesis'>]</span><span class='bst-code-operator'>&lt;</span><span class='bst-code-operator'>/</span>li<span class='bst-code-operator'>&gt;</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>:</span>
         <span class='bst-code-operator'>&lt;</span>ul<span class='bst-code-operator'>&gt;</span>
             <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>slot<span class='bst-code-parenthesis'>]</span>
@@ -346,21 +363,27 @@ body {
         <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> one <span class='bst-code-parenthesis'>]</span>
         <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>fresh<span class='bst-code-operator'>:</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> two <span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>]</span>
     <span class='bst-code-parenthesis'>]</span>
-    </code>
-        </pre>
-    <p>In this example, `one` is wrapped with `&lt;li&gt;...&lt;/li&gt;`, while `two` opts out and is rendered without the parent `$children(..)` wrapper.</p><h2>Slots</h2><p>Template slots let one template receive content from another template. The default slot is written as `</p><p>` and marks where the main body content should be inserted.</p><p>    Named slots can also be declared with `</p><p>`. These allow helper templates to insert content into a specific part of another template using `$insert(&quot;name&quot;)`.</p><p>    Positional slots can be declared using positive integers, such as `</p><p>`, `</p><p>`, etc. Loose contributions (those not explicitly targetting a named slot) are assigned to positional slots first, in ascending numeric order. Any remaining loose contributions go to the default slot if it exists.</p>
-        <pre style="background-color: hsla(0, 0%, 42%, 0.12); padding-left: 1em; border-radius: 5px; max-width: 100%; white-space: pre; overflow-x: auto;">
-            <code class='codeblock'>
+    </code></pre><p>In this example, `one` is wrapped with `&lt;li&gt;...&lt;/li&gt;`, while `two` opts out and is rendered without the parent `$children(..)` wrapper.</p><h2>Slots</h2><p>Template slots let one template receive content from another template. The default slot is written as `</p><p>` and marks where the main body content should be inserted.</p><p>    Named slots can also be declared with `</p><p>`. These allow helper templates to insert content into a specific part of another template using `$insert(&quot;name&quot;)`.</p><p>    Positional slots can be declared using positive integers, such as `</p><p>`, `</p><p>`, etc. Loose contributions (those not explicitly targetting a named slot) are assigned to positional slots first, in ascending numeric order. Any remaining loose contributions go to the default slot if it exists.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
     img <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span>
         <span class='bst-code-operator'>&lt;</span>img src<span class='bst-code-operator'>=</span><span class='bst-code-string'>&quot;[$slot(1)]&quot;</span> alt<span class='bst-code-operator'>=</span><span class='bst-code-string'>&quot;[$slot]&quot;</span><span class='bst-code-operator'>&gt;</span>
     <span class='bst-code-parenthesis'>]</span>
 
     <span class='bst-code-parenthesis'>[</span>img, <span class='bst-code-string'>&quot;logo.png&quot;</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>Site</span> logo<span class='bst-code-parenthesis'>]</span>
-    </code>
-        </pre>
-    <p>    In this example, `&quot;logo.png&quot;` fills the first positional slot `</p><p>`, and `&quot;Site logo&quot;` fills the default slot `</p><p>`.</p><p>    Named inserts:</p>
-        <pre style="background-color: hsla(0, 0%, 42%, 0.12); padding-left: 1em; border-radius: 5px; max-width: 100%; white-space: pre; overflow-x: auto;">
-            <code class='codeblock'>
+    </code></pre><p>    In this example, `&quot;logo.png&quot;` fills the first positional slot `</p><p>`, and `&quot;Site logo&quot;` fills the default slot `</p><p>`.</p><p>    Named inserts:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
     title <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span>
         <span class='bst-code-operator'>&lt;</span>h<span class='bst-code-number'>1</span> style<span class='bst-code-operator'>=</span><span class='bst-code-string'>&quot;[$slot(&quot;</span>style<span class='bst-code-string'>&quot;)]&quot;</span><span class='bst-code-operator'>&gt;</span>
             <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>slot<span class='bst-code-parenthesis'>]</span>
@@ -372,11 +395,14 @@ body {
     <span class='bst-code-parenthesis'>[</span>title, blue<span class='bst-code-operator'>:</span>
         <span class='bst-code-struct'>Hello</span> world
     <span class='bst-code-parenthesis'>]</span>
-    </code>
-        </pre>
-    <p>    In this example, `blue` inserts `color: blue;` into the `style` slot of `title`, while `Hello world` is inserted into the default slot.</p><p>    If a template has named or positional slots but no default slot, any loose body content that cannot be assigned to a positional slot is an error.      If a slot receives no content, it expands to an empty string.     Repeated slots, such as two occurrences of `</p><p>`, will replay the same content in both places.</p><p>    Because `$children(..)` only applies to direct children, nested helpers can scope row and cell wrappers independently:</p>
-        <pre style="background-color: hsla(0, 0%, 42%, 0.12); padding-left: 1em; border-radius: 5px; max-width: 100%; white-space: pre; overflow-x: auto;">
-            <code class='codeblock'>
+    </code></pre><p>    In this example, `blue` inserts `color: blue;` into the `style` slot of `title`, while `Hello world` is inserted into the default slot.</p><p>    If a template has named or positional slots but no default slot, any loose body content that cannot be assigned to a positional slot is an error.     If a slot receives no content, it expands to an empty string.    Repeated slots, such as two occurrences of `</p><p>`, will replay the same content in both places.</p><p>    Because `$children(..)` only applies to direct children, nested helpers can scope row and cell wrappers independently:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
     <span class='bst-code-operator'>#</span> table <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>children<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span><span class='bst-code-operator'>&lt;</span>tr<span class='bst-code-operator'>&gt;</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>slot<span class='bst-code-parenthesis'>]</span><span class='bst-code-operator'>&lt;</span><span class='bst-code-operator'>/</span>tr<span class='bst-code-operator'>&gt;</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>:</span>
         <span class='bst-code-operator'>&lt;</span>table style<span class='bst-code-operator'>=</span><span class='bst-code-string'>&quot;[$slot(&quot;</span>style<span class='bst-code-string'>&quot;)]&quot;</span><span class='bst-code-operator'>&gt;</span>
             <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>children<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span><span class='bst-code-operator'>&lt;</span>td<span class='bst-code-operator'>&gt;</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>slot<span class='bst-code-parenthesis'>]</span><span class='bst-code-operator'>&lt;</span><span class='bst-code-operator'>/</span>td<span class='bst-code-operator'>&gt;</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>:</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>slot<span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>]</span>
@@ -387,24 +413,24 @@ body {
         <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>Type</span><span class='bst-code-parenthesis'>]</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>Description</span><span class='bst-code-parenthesis'>]</span> <span class='bst-code-parenthesis'>]</span>
         <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> float <span class='bst-code-parenthesis'>]</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-number'>64</span> bit floating point number<span class='bst-code-parenthesis'>]</span> <span class='bst-code-parenthesis'>]</span>
     <span class='bst-code-parenthesis'>]</span>
-    </code>
-        </pre>
-    <p>    In that example, each direct child of `table` becomes a row, while each direct child of a row becomes a cell. The outer `&lt;tr&gt;` wrapper does not leak into the inner cell templates.</p><h2>Template control flow examples</h2>
-        <pre style="background-color: hsla(0, 0%, 42%, 0.12); padding-left: 1em; border-radius: 5px; max-width: 100%; white-space: pre; overflow-x: auto;">
-            <code class='codeblock'>
+    </code></pre><p>    In that example, each direct child of `table` becomes a row, while each direct child of a row becomes a cell. The outer `&lt;tr&gt;` wrapper does not leak into the inner cell templates.</p><h2>Template control flow examples</h2><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
     <span class='bst-code-parenthesis'>[</span>head_of_element<span class='bst-code-operator'>:</span> content of element that renders <span class='bst-code-keyword'>as</span> text <span class='bst-code-parenthesis'>(</span>markdown <span class='bst-code-operator'>/</span> metadata <span class='bst-code-operator'>/</span> alt tag <span class='bst-code-operator'>/</span> code ..etc<span class='bst-code-parenthesis'>)</span><span class='bst-code-parenthesis'>]</span>
 
-    <span class='bst-code-parenthesis'>[</span> <span class='bst-code-keyword'>loop</span> text <span class='bst-code-keyword'>in</span> text_array<span class='bst-code-operator'>:</span> 
+    <span class='bst-code-parenthesis'>[</span> <span class='bst-code-keyword'>loop</span> text_array <span class='bst-code-operator'>|</span>text<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
         <span class='bst-code-parenthesis'>[</span>text<span class='bst-code-parenthesis'>]</span>
     <span class='bst-code-parenthesis'>]</span>
 
     <span class='bst-code-parenthesis'>[</span><span class='bst-code-keyword'>if</span> not text.isBlank<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>:</span>
         <span class='bst-code-parenthesis'>[</span> text<span class='bst-code-operator'>:</span> plus some extra text <span class='bst-code-keyword'>in</span> the same element <span class='bst-code-keyword'>as</span> the variable text <span class='bst-code-parenthesis'>]</span>
     <span class='bst-code-parenthesis'>]</span>
-    </code>
-        </pre>
-    <h2>Errors</h2><p>    If an error is added to a template at runtime, it will be displayed in the console, rather than injected into the template. </p></section>
-
+    </code></pre><h2>Errors</h2><p>    If an error is added to a template at runtime, it will be displayed in the console, rather than injected into the template. </p></section>
     <script>
     function __bs_is_ref(value) {
     return value !== null && typeof value === "object" && value.__bs_ref === true;
@@ -508,6 +534,54 @@ body {
     return value;
     }
 
+    function __bs_error_normalize_file(file) {
+    if (typeof file !== "string") {
+    return "";
+    }
+    if (file.startsWith("/")) {
+    const parts = file.split(/[\\/]/).filter(Boolean);
+    return parts.length > 0 ? parts[parts.length - 1] : file;
+    }
+    if (/^[A-Za-z]:[\\/]/.test(file)) {
+    const parts = file.split(/[\\/]/).filter(Boolean);
+    return parts.length > 0 ? parts[parts.length - 1] : file;
+    }
+    return file;
+    }
+
+    function __bs_make_error(kind, code, message, location, trace) {
+    return {
+    kind,
+    code,
+    message,
+    location: location ?? null,
+    trace: trace ?? null
+    };
+    }
+
+    function __bs_error_with_location(error, location) {
+    return __bs_make_error(error.kind, error.code, error.message, location, error.trace);
+    }
+
+    function __bs_error_push_trace(error, frame) {
+    const nextTrace = error.trace ? error.trace.concat([frame]) : [frame];
+    return __bs_make_error(error.kind, error.code, error.message, error.location, nextTrace);
+    }
+
+    function __bs_error_bubble(error, file, line, column, functionName) {
+    const safeFunction = typeof functionName === "string" && functionName.length > 0 ? functionName : "<unknown>";
+    const location = {
+    file: __bs_error_normalize_file(file),
+    line,
+    column,
+    function: safeFunction === "<unknown>" ? null : safeFunction
+    };
+    const frame = { function: safeFunction, location };
+    const nextLocation = error.location ?? location;
+    const located = __bs_error_with_location(error, nextLocation);
+    return __bs_error_push_trace(located, frame);
+    }
+
     function __bs_result_propagate(result) {
     if (result && result.tag === "ok") {
     return result.value;
@@ -528,35 +602,114 @@ body {
     throw new Error("Expected internal Result carrier during fallback handling");
     }
 
+    function __bs_collection_get(collection, index) {
+    if (!Array.isArray(collection)) {
+    const err = __bs_make_error("InvalidArgument", "collection.expected_ordered_collection", "Collection get(...) expects an ordered collection", null, null);
+    return { tag: "err", value: err };
+    }
+    if (!Number.isInteger(index) || index < 0 || index >= collection.length) {
+    const err = __bs_make_error("OutOfBounds", "collection.index_out_of_bounds", "Collection index out of bounds", null, null);
+    return { tag: "err", value: err };
+    }
+    return { tag: "ok", value: collection[index] };
+    }
+
+    function __bs_collection_push(collection, value) {
+    if (Array.isArray(collection)) {
+    collection.push(value);
+    }
+    }
+
+    function __bs_collection_remove(collection, index) {
+    if (Array.isArray(collection) && Number.isInteger(index) && index >= 0 && index < collection.length) {
+    collection.splice(index, 1);
+    }
+    }
+
+    function __bs_collection_length(collection) {
+    if (!Array.isArray(collection)) {
+    return 0;
+    }
+    return collection.length;
+    }
+
+    function __bs_value_to_string(value) {
+    if (value === undefined || value === null) {
+    return "";
+    }
+    return String(value);
+    }
+
+    function __bs_io(value) {
+    console.log(__bs_value_to_string(value));
+    }
+
+    function __bs_normalize_numeric_text(value) {
+    return value.trim().replace(/_/g, "");
+    }
+
+    function __bs_cast_int(value) {
+    if (typeof value === "number") {
+    if (!Number.isFinite(value) || !Number.isSafeInteger(value)) {
+    return { tag: "err", value: __bs_make_error("Parse", "int.parse_out_of_range", "Int value is out of supported range", null, null) };
+    }
+    if (Number.isInteger(value)) {
+    return { tag: "ok", value };
+    }
+    return { tag: "err", value: __bs_make_error("Parse", "int.parse_invalid_format", "Float value is not an exact integer", null, null) };
+    }
+    if (typeof value === "string") {
+    const normalized = __bs_normalize_numeric_text(value);
+    if (/^[+-]?[0-9]+$/.test(normalized)) {
+    const parsed = Number.parseInt(normalized, 10);
+    if (!Number.isSafeInteger(parsed)) {
+    return { tag: "err", value: __bs_make_error("Parse", "int.parse_out_of_range", "Int value is out of supported range", null, null) };
+    }
+    return { tag: "ok", value: parsed };
+    }
+    if (/^[+-]?[0-9]+\.[0-9]+$/.test(normalized)) {
+    const parsed = Number.parseFloat(normalized);
+    if (Number.isInteger(parsed) && Number.isSafeInteger(parsed)) {
+    return { tag: "ok", value: parsed };
+    }
+    }
+    return { tag: "err", value: __bs_make_error("Parse", "int.parse_invalid_format", "Cannot parse Int from text", null, null) };
+    }
+    return { tag: "err", value: __bs_make_error("Parse", "int.parse_invalid_format", "Int(...) only accepts Int, Float, or string values", null, null) };
+    }
+
+    function __bs_cast_float(value) {
+    if (typeof value === "number") {
+    if (!Number.isFinite(value)) {
+    return { tag: "err", value: __bs_make_error("Parse", "float.parse_out_of_range", "Float value is out of supported range", null, null) };
+    }
+    return { tag: "ok", value };
+    }
+    if (typeof value === "string") {
+    const normalized = __bs_normalize_numeric_text(value);
+    if (/^[+-]?[0-9]+$/.test(normalized) || /^[+-]?[0-9]+\.[0-9]+$/.test(normalized)) {
+    const parsed = Number.parseFloat(normalized);
+    if (!Number.isFinite(parsed)) {
+    return { tag: "err", value: __bs_make_error("Parse", "float.parse_out_of_range", "Float value is out of supported range", null, null) };
+    }
+    return { tag: "ok", value: parsed };
+    }
+    return { tag: "err", value: __bs_make_error("Parse", "float.parse_invalid_format", "Cannot parse Float from text", null, null) };
+    }
+    return { tag: "err", value: __bs_make_error("Parse", "float.parse_invalid_format", "Float(...) only accepts Int, Float, or string values", null, null) };
+    }
+
     function b_fn0() {
+    let b_l0 = __bs_binding(undefined);
 
-    return "";
-    }
-
-    function b_fn1() {
-
-    return "";
-    }
-
-    function b_fn2() {
-
-    return "";
+    __bs_assign_value(b_l0, []);
+    return __bs_read(b_l0);
     }
 
     </script>
     <script>
     (function () {
-      const slots = [
-      ];
-
-      for (const [id, fn] of slots) {
-        const el = document.getElementById(id);
-        if (!el) throw new Error("Missing runtime mount slot: " + id);
-        el.insertAdjacentHTML("beforeend", fn());
-      }
-
-      // start() remains the lifecycle entrypoint and runs after fragment hydration.
-      if (typeof b_fn1 === "function") b_fn1();
+      if (typeof b_fn0 === "function") b_fn0();
     })();
     </script>
   </body>

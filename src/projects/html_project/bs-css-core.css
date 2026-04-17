@@ -10,12 +10,6 @@
 
   --bst-font-size: 100%;
 
-  /* Default Background Colours */
-  --bst-bg-lightmode: #fff;
-  --bst-bg-darkmode: #13171f;
-  --bst-text-lightmode: #373c44;
-  --bst-text-darkmode: #e0e3e7;
-
   --bst-font-family-emoji: "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
   --bst-font-family-sans-serif: system-ui, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, Helvetica, Arial, "Helvetica Neue", sans-serif, var(--bst-font-family-emoji);
   --bst-font-family-monospace: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace, var(--bst-font-family-emoji);

@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light dark">
-    <title>Documentation | Beanstalk</title>
-    <meta name="description" content="Beanstalk documentation index.">
+    <title>Structs | Beanstalk</title>
+    <meta name="description" content="Structs in Beanstalk.">
     <link rel="icon" href="/assets/favicon.ico">
     <style>
 /*!
@@ -312,8 +312,63 @@ body {
             </a>
         </div>
     </nav>
-     <h1 style="font-size: 2em;text-align: center;"> THE DOCS</h1>
-    <section class="container"><large style=""> Welcome to the Beanstalk documentation</large> <br><p>This website is built using Beanstalk&#39;s built in HTML project builder, and all the content you see here is written in Beanstalk code.</p><p>You can find the source code for this website on <a href="https://github.com/nyejames/beanstalk/tree/main/docs">Github</a>.</p><h2>Documentation</h2><p>The documentation is currently being written in Beanstalk one file at a time.</p><h3>Introduction</h3><ul><li><a href="./basics">Basics</a></li></ul><h3>Core Language Features</h3><ul><li><a href="./templates">Templates</a></li><li><a href="./functions">Functions</a></li><li><a href="./if-statements">If Statements</a></li><li><a href="./loops">Loops</a></li><li><a href="./collections">Collections</a></li><li><a href="./structs">Structs</a></li><li><a href="./pattern-matching">Pattern Matching</a></li></ul></section>
+     <h1 style="font-size: 2em;text-align: center;"> STRUCTS</h1>
+    <section class="container"><h1>The Struct</h1><p>    A struct is a collection of named fields, similar to a struct in other languages.</p><p>    Runtime structs are nominal types. Two structs with the same field shape are still different runtime types.</p><p>    They can implement statically resolved receiver methods by defining a top-level function whose first argument is literally named `this`.    `this Type` is immutable, `this ~Type` is mutable, and receiver methods can only be called with `value.method(...)`.    User-defined struct methods must be declared in the same file as the struct definition.</p><p>    Receiver methods are also supported on built-in scalar types (`Int`, `Float`, `Bool`, `String`) and use the same `this` rules. The same-file restriction applies to user-defined struct methods.</p><p>    Structs can be assigned with default arguments, these can be any constant expression.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-struct'>Person</span> <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>|</span>
+        name <span class='bst-code-struct'>String,</span>
+        age <span class='bst-code-struct'>Int,</span>
+    <span class='bst-code-operator'>|</span>
+
+    <span class='bst-code-comment'>-- Create a new instance of the type</span>
+    person <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Person</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Alice&quot;</span>, <span class='bst-code-number'>30</span><span class='bst-code-parenthesis'>)</span>
+
+    <span class='bst-code-comment'>-- Access fields using dot notation</span>
+    io<span class='bst-code-parenthesis'>(</span>person.name<span class='bst-code-parenthesis'>)</span> <span class='bst-code-comment'>-- &quot;Alice&quot;</span>
+    io<span class='bst-code-parenthesis'>(</span>person.age<span class='bst-code-parenthesis'>)</span>  <span class='bst-code-comment'>-- 30</span>
+
+    <span class='bst-code-comment'>-- Defining a struct, then defining a method for it</span>
+    <span class='bst-code-struct'>Vector</span><span class='bst-code-number'>2</span> <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>|</span>
+        x <span class='bst-code-type'>Float</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>0</span>,
+        y <span class='bst-code-type'>Float</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>0</span>,
+    <span class='bst-code-operator'>|</span>
+
+    reset <span class='bst-code-operator'>|</span>this <span class='bst-code-operator'>~</span><span class='bst-code-struct'>Vector</span><span class='bst-code-number'>2</span><span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
+        this.x <span class='bst-code-operator'>=</span> <span class='bst-code-number'>0</span>
+        this.y <span class='bst-code-operator'>=</span> <span class='bst-code-number'>0</span>
+    ;
+
+    vec <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Vector</span><span class='bst-code-number'>2</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>12</span>, <span class='bst-code-number'>87</span><span class='bst-code-parenthesis'>)</span>
+    <span class='bst-code-operator'>~</span>vec.reset<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre></section>
+    <section class="container"><h2>Methods</h2><p>Methods in Beanstalk are created using the special `this` receiver parameter.</p><p>You define a receiver by making the first parameter literally named `this`.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-comment'>-- Define a struct</span>
+    <span class='bst-code-struct'>Rectangle</span> <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>|</span>
+        width <span class='bst-code-struct'>Float,</span>
+        height <span class='bst-code-struct'>Float,</span>
+    <span class='bst-code-operator'>|</span>
+
+    <span class='bst-code-comment'>-- Define an immutable method for the Rectangle struct</span>
+    area <span class='bst-code-operator'>|</span>this <span class='bst-code-struct'>Rectangle</span><span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>return</span> this.width <span class='bst-code-operator'>*</span> this.height
+    ;
+
+    rect <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Rectangle</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>10</span>, <span class='bst-code-number'>5</span><span class='bst-code-parenthesis'>)</span>
+    io<span class='bst-code-parenthesis'>(</span>rect.area<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-parenthesis'>)</span> <span class='bst-code-comment'>-- 50</span>
+    </code></pre><p>`this` is reserved for method receivers. You are limited to one `this` parameter per method, and `method(value, ...)` is not valid syntax for calling receiver methods.</p><p>Const-coerced struct values are data-only records. They can be read, but they do not expose runtime methods.</p></section>
     <script>
     function __bs_is_ref(value) {
     return value !== null && typeof value === "object" && value.__bs_ref === true;

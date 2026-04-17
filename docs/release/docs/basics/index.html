@@ -8,7 +8,6 @@
     <meta name="description" content="Core language syntax and semantics in Beanstalk.">
     <link rel="icon" href="/assets/favicon.ico">
     <style>
-@charset "UTF-8";
 /*!
   BS CSS CORE (absolute basics CSS reset)
   This is inspired by Pico.css, but is an even more minimal reset.
@@ -20,12 +19,6 @@
   color-scheme: light dark;
 
   --bst-font-size: 100%;
-
-  /* Default Background Colours */
-  --bst-bg-lightmode: #fff;
-  --bst-bg-darkmode: #13171f;
-  --bst-text-lightmode: #373c44;
-  --bst-text-darkmode: #e0e3e7;
 
   --bst-font-family-emoji: "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
   --bst-font-family-sans-serif: system-ui, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, Helvetica, Arial, "Helvetica Neue", sans-serif, var(--bst-font-family-emoji);
@@ -181,145 +174,157 @@ body {
   vertical-align: inherit;
 }
     </style>
+    <style>body {
+        background-color: light-dark(hsl(199, 21%, 74%), hsl(203, 68%, 8%));
+    }
 
-        <style>
+    a {
+        color: light-dark(hsl(111, 96%, 26%), hsl(235, 87%, 67%));
+    }
+
+    .container {
+        width: 100%;
+        margin-right: auto;
+        margin-left: auto;
+        padding-right: var(--bst-spacing-small);
+        padding-left: var(--bst-spacing-small);
+    }
+
+    @media (min-width: 576px) {
         .container {
-            width: 100%;
-            margin-right: auto;
-            margin-left: auto;
-            padding-right: var(--bst-spacing-small);
-            padding-left: var(--bst-spacing-small);
+            max-width: 510px;
+            padding-right: var(--bst-spacing);
+            padding-left: var(--bst-spacing);
+            padding-bottom: var(--bst-spacing);
         }
+    }
 
-        @media (min-width: 576px) {
-            .container {
-                max-width: 510px;
-                padding-right: var(--bst-spacing);
-                padding-left: var(--bst-spacing);
-                padding-bottom: var(--bst-spacing);
-            }
+    @media (min-width: 768px) {
+        .container {
+            max-width: 700px;
         }
+    }
 
-        @media (min-width: 768px) {
-            .container {
-                max-width: 700px;
-            }
+    @media (min-width: 1024px) {
+        .container {
+            max-width: 950px;
         }
+    }
 
-        @media (min-width: 1024px) {
-            .container {
-                max-width: 950px;
-            }
+    @media (min-width: 1280px) {
+        .container {
+            max-width: 1200px;
         }
+    }
 
-        @media (min-width: 1280px) {
-            .container {
-                max-width: 1200px;
-            }
+    @media (min-width: 1536px) {
+        .container {
+            max-width: 1450px;
         }
+    }
 
-        @media (min-width: 1536px) {
-            .container {
-                max-width: 1450px;
-            }
-        }
+    .bst-nav-1 {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom-color: grey;
+        border-bottom-style: solid;
+        border-bottom-width: 1px;
+        padding: 0rem 2rem 0rem 2rem;
+    }</style>
 
-        .bst-nav-1 {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom-color: grey;
-            border-bottom-style: solid;
-            border-bottom-width: 1px;
-            padding: 0rem 2rem 0rem 2rem;
-        }
-    </style>
   </head>
   <body style="">
-
-        <nav class="bst-nav-1" aria-label="Primary">
-            <a
-                href="/beanstalk/"
+    <nav class="bst-nav-1" aria-label="Primary">
+        <a
+            href="/beanstalk/"
+            style="
+                display: flex;
+                align-items: center;
+                gap: 0.6rem;
+                padding: 0.9rem 0;
+                color: light-dark(var(--bst-text-lightmode), var(--bst-text-darkmode));
+                text-decoration: none;
+                font-weight: 700;
+                letter-spacing: 0.04rem;
+            "
+        >
+            <span
+                aria-hidden="true"
                 style="
-                    display: flex;
-                    align-items: center;
-                    gap: 0.6rem;
-                    padding: 0.9rem 0;
+                    font-family: var(--bst-font-family-emoji);
+                    font-size: 1.4rem;
+                    line-height: 1;
+                "
+            >🌱</span>
+
+            <span>Beanstalk</span>
+        </a>
+
+        <div
+            style="
+                display: flex;
+                align-items: center;
+                gap: 1rem;
+            "
+        >
+            <a
+                href="/beanstalk/docs/"
+                style="
                     color: light-dark(var(--bst-text-lightmode), var(--bst-text-darkmode));
                     text-decoration: none;
-                    font-weight: 700;
-                    letter-spacing: 0.04rem;
+                    font-weight: 500;
+                    padding: 0.35rem 0;
                 "
             >
-                <span
-                    aria-hidden="true"
-                    style="
-                        font-family: var(--bst-font-family-emoji);
-                        font-size: 1.4rem;
-                        line-height: 1;
-                    "
-                >🌱</span>
-
-                <span>Beanstalk</span>
+                Docs
             </a>
 
-            <div
+            <a
+                href="https://github.com/nyejames/beanstalk"
+                target="_blank"
+                rel="noreferrer"
+                aria-label="Beanstalk GitHub repository"
                 style="
-                    display: flex;
+                    display: inline-flex;
                     align-items: center;
-                    gap: 1rem;
+                    justify-content: center;
+                    color: light-dark(var(--bst-text-lightmode), var(--bst-text-darkmode));
+                    padding: 0.35rem 0;
                 "
             >
-                <a
-                    href="/beanstalk/docs/"
-                    style="
-                        color: light-dark(var(--bst-text-lightmode), var(--bst-text-darkmode));
-                        text-decoration: none;
-                        font-weight: 500;
-                        padding: 0.35rem 0;
-                    "
+                <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 16 16"
+                    width="22"
+                    height="22"
+                    fill="currentColor"
+                    aria-hidden="true"
                 >
-                    Docs
-                </a>
-
-                <a
-                    href="https://github.com/nyejames/beanstalk"
-                    target="_blank"
-                    rel="noreferrer"
-                    aria-label="Beanstalk GitHub repository"
-                    style="
-                        display: inline-flex;
-                        align-items: center;
-                        justify-content: center;
-                        color: light-dark(var(--bst-text-lightmode), var(--bst-text-darkmode));
-                        padding: 0.35rem 0;
-                    "
-                >
-                    <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        viewBox="0 0 16 16"
-                        width="22"
-                        height="22"
-                        fill="currentColor"
-                        aria-hidden="true"
-                    >
-                        <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38
-                        0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52
-                        -.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07
-                        -1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21
-                        2.2.82a7.65 7.65 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82
-                        1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2
-                        0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/>
-                    </svg>
-                </a>
-            </div>
-        </nav>
-
+                    <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38
+                    0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52
+                    -.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07
+                    -1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21
+                    2.2.82a7.65 7.65 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82
+                    1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2
+                    0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/>
+                </svg>
+            </a>
+        </div>
+    </nav>
      <h1 style="font-size: 2em;text-align: center;"> LANGUAGE BASICS</h1>
-
-        <section class="container"><p>Every project has a #config.bst file that defines the entry points and dependencies of the project.</p><p>If instead, you build or run a specific Beanstalk file, it will create a single module from that entry point and pull in all the file&#39;s dependencies.</p>
-        <pre style="background-color: hsla(0, 0%, 42%, 0.12); padding-left: 1em; border-radius: 5px; max-width: 100%; white-space: pre; overflow-x: auto;">
-            <code class='codeblock'>
+    <section class="container"><p>Every project has a <span style="
+        color: #c444aff9; 
+        padding: 0.1em; 
+        font-family: var(--bst-font-family-monospace);
+    ">#config.bst</span> file that defines the entry points and dependencies of the project.</p><p>If instead, you build or run a specific Beanstalk file,it will create a single module from that entry point and pull in all the file&#39;s dependencies.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
     <span class='bst-code-operator'>#</span> page_title <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;Welcome&quot;</span>
 
     say_hello <span class='bst-code-operator'>|</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
@@ -327,182 +332,80 @@ body {
     ;
 
     <span class='bst-code-parenthesis'>[</span>say_hello<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-parenthesis'>]</span>
-    </code>
-        </pre>
-    <h1>Quick Syntax Summary</h1><p>For developers coming from most other languages,  here are some key idiosyncrasies from other C-like languages to note:</p><ul><li>Colon opens a scope, semicolon closes it. Semicolon does not end statements</li></ul><ul><li>Square brackets are NOT used for arrays, curly braces are used instead Square brackets are only used for string templates. Items in collections are accessed via methods</li></ul><ul><li>Equality and other logical operators use keywords like &quot;is&quot; and &quot;not&quot; (you can&#39;t use == or ! for example)</li></ul><ul><li>~ tilde symbol to indicate mutability (mutability must be explicit). This comes before the type if there is an explicit type declaration.</li></ul><ul><li>Double dashes for single line comments (--)</li></ul><ul><li>Immutable Reference semantics are the default for all stack and heap allocated types.</li></ul><ul><li>All copies have to be explicit unless they are used in part of a new expression. Even for primitive types such as integers.</li></ul><h2>Formatting</h2><ul><li>4 spaces are recommended for indentation.</li><li>Types use UpperCamelCase</li><li>Everything else uses regular_snake_case</li></ul><h1>Comments</h1><p>Comments use a double minus sign.  Documentation comments will eventually be created via special templates.</p>
-        <pre style="background-color: hsla(0, 0%, 42%, 0.12); padding-left: 1em; border-radius: 5px; max-width: 100%; white-space: pre; overflow-x: auto;">
-            <code class='codeblock'>
+    </code></pre><h1>Quick Syntax Summary</h1><p>For developers coming from most other languages, here are some key idiosyncrasies from other C-like languages to note:</p><ul><li>Colon opens a scope, semicolon closes it. Semicolon does not end statements</li></ul><ul><li>Square brackets are NOT used for arrays, curly braces are used insteadSquare brackets are only used for string templates. Items in collections are accessed via methods</li></ul><ul><li>Equality and other logical operators use keywords like &quot;is&quot; and &quot;not&quot;(you can&#39;t use <span style="
+        color: #c444aff9; 
+        padding: 0.1em; 
+        font-family: var(--bst-font-family-monospace);
+    ">==</span> or <span style="
+        color: #c444aff9; 
+        padding: 0.1em; 
+        font-family: var(--bst-font-family-monospace);
+    ">!</span> for example)</li></ul><ul><li>tilde symbol <span style="
+        color: #c444aff9; 
+        padding: 0.1em; 
+        font-family: var(--bst-font-family-monospace);
+    "> ~</span> to indicate mutability (mutability must be explicit).This comes before the type if there is an explicit type declaration.</li></ul><ul><li>Immutable Reference semantics are the default for all stack and heap allocated types.</li></ul><ul><li>All copies have to be explicit unless they are used in part of a new expression.Even for primitive types such as integers.</li></ul><h2>Formatting</h2><ul><li>4 spaces are recommended for indentation.</li><li>Types use UpperCamelCase</li><li>Everything else uses regular_snake_case</li></ul><h1>Comments</h1><p>Comments use a double minus sign. <span style="
+        color: #c444aff9; 
+        padding: 0.1em; 
+        font-family: var(--bst-font-family-monospace);
+    "> --</span></p><p>Documentation comments will eventually be created via special templates.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
     <span class='bst-code-comment'>-- normal comment</span>
-    </code>
-        </pre>
-    </section>
-
-
-        <section class="container"><h1>Variables</h1><p>Equals means assign. Tilde ~ means this is a mutable and can change.</p><p>All variables must be assigned a value when they are declared.</p>
-        <pre style="background-color: hsla(0, 0%, 42%, 0.12); padding-left: 1em; border-radius: 5px; max-width: 100%; white-space: pre; overflow-x: auto;">
-            <code class='codeblock'>
-    int <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-number'>0</span>
-    float <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-number'>0.0</span>
-
-    string_slice <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;wow!&quot;</span>
-    char <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-string'>&#39;😊&#39;</span>
-    raw_string_slice <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-operator'>`</span>hi<span class='bst-code-operator'>`</span>
-
-    string_template <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span>
-        <span class='bst-code-struct'>This</span> is the <span class='bst-code-struct'>Beanstalk</span> programming language
-    <span class='bst-code-parenthesis'>]</span>
-
-    bool <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> true
-
-    mutable_collection <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-parenthesis'>}</span>
-    immutable_collection <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-parenthesis'>}</span>
-
-    <span class='bst-code-struct'>NewStruct</span> <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>|</span>
-        value <span class='bst-code-struct'>Float,</span>
-        another_value <span class='bst-code-struct'>String,</span>
-    <span class='bst-code-operator'>|</span>
-
-    instance <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-struct'>NewStruct</span><span class='bst-code-parenthesis'>(</span>
-        value <span class='bst-code-operator'>=</span> <span class='bst-code-number'>1.2</span>, 
-        another_value <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;hey&quot;</span>
-    <span class='bst-code-parenthesis'>)</span>
-    </code>
-        </pre>
-    <p>By default, Beanstalk code will create immutable references to values. <strong>This is true for all types.</strong></p><p>The compiler might decide to make an immutable copy of a primative value, but the assignment will <strong>always</strong> behave the same way no matter what the type is.</p>
-        <pre style="background-color: hsla(0, 0%, 42%, 0.12); padding-left: 1em; border-radius: 5px; max-width: 100%; white-space: pre; overflow-x: auto;">
-            <code class='codeblock'>
-    <span class='bst-code-comment'>-- 64 bit immutable float</span>
-    number <span class='bst-code-operator'>=</span> <span class='bst-code-number'>420.69</span>
-
-    <span class='bst-code-comment'>-- Becomes an immutable reference to the value</span>
-    another_number <span class='bst-code-operator'>=</span> number
-
-    <span class='bst-code-comment'>-- Becomes a mutable reference to the number</span>
-    <span class='bst-code-comment'>-- or moves the value if it isn&#39;t used again later in the scope</span>
-    another_mutable_number <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> number
-
-    <span class='bst-code-comment'>-- Even with primative stack types,</span>
-    <span class='bst-code-comment'>-- Copying is still explicit</span>
-    a_copy_of_a_number <span class='bst-code-operator'>~</span><span class='bst-code-struct'>Copy</span> <span class='bst-code-operator'>=</span> another_mutable_number
-
-    <span class='bst-code-comment'>-- Type error (number is not mutable)</span>
-    number <span class='bst-code-operator'>=</span> <span class='bst-code-number'>1</span>
-
-    <span class='bst-code-comment'>-- Type error (another_mutable_number is a float type)</span>
-    another_mutable_number <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;A string instead. Whoops.&quot;</span>
-
-    <span class='bst-code-comment'>-- Explicit type declarations</span>
-    a_float <span class='bst-code-operator'>~</span><span class='bst-code-type'>Float</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>84</span>
-    string_slice <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;Hello &quot;</span>
-    a_mutable_string <span class='bst-code-operator'>~</span><span class='bst-code-type'>String</span> <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>World</span><span class='bst-code-operator'>!</span><span class='bst-code-parenthesis'>]</span>
-
-    <span class='bst-code-comment'>-- You can&#39;t use the &#39;+&#39; operator on strings,</span>
-    <span class='bst-code-comment'>-- They can be concatenated using templates</span>
-    concatenated_strings <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span>string_slice, a_mutable_string<span class='bst-code-parenthesis'>]</span>
-    </code>
-        </pre>
-    <p>All copies are explicit and must use the &#39;copy&#39; keyword in place of a type.</p>
-        <pre style="background-color: hsla(0, 0%, 42%, 0.12); padding-left: 1em; border-radius: 5px; max-width: 100%; white-space: pre; overflow-x: auto;">
-            <code class='codeblock'>
-    <span class='bst-code-comment'>-- Create a new collection of integers</span>
-    a_collection <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-number'>1</span>, <span class='bst-code-number'>2</span>, <span class='bst-code-number'>3</span>, <span class='bst-code-number'>4</span>, <span class='bst-code-number'>5</span><span class='bst-code-parenthesis'>}</span>
-
-    <span class='bst-code-comment'>-- Deep mutable copy of a collection</span>
-    a_copy <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-keyword'>copy</span> a_collection
-
-    <span class='bst-code-comment'>-- Immutable reference to a_collection</span>
-    a_reference <span class='bst-code-operator'>=</span> a_collection
-
-    <span class='bst-code-comment'>-- Ownership passed or mutable reference depending on context</span>
-    a_reference <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> a_collection
-
-    <span class='bst-code-comment'>-- a_reference is still a reference to the original collection</span>
-    a_reference.push<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>5</span><span class='bst-code-parenthesis'>)</span>
-    io<span class='bst-code-parenthesis'>(</span>a_collection<span class='bst-code-parenthesis'>)</span> <span class='bst-code-comment'>-- {1, 2, 3, 4, 5, 5}</span>
-
-    a_collection.pull<span class='bst-code-parenthesis'>(</span>a_collection.length<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>-</span> <span class='bst-code-number'>1</span><span class='bst-code-parenthesis'>)</span>
-    io<span class='bst-code-parenthesis'>(</span>a_collection<span class='bst-code-parenthesis'>)</span> <span class='bst-code-comment'>-- {23.0}</span>
-    </code>
-        </pre>
-    <p>Expressions can span over multiple lines.</p><p>But new statements must start after a newline.</p>
-        <pre style="background-color: hsla(0, 0%, 42%, 0.12); padding-left: 1em; border-radius: 5px; max-width: 100%; white-space: pre; overflow-x: auto;">
-            <code class='codeblock'>
-    <span class='bst-code-comment'>-- Valid</span>
-    some_int <span class='bst-code-operator'>=</span>
-        <span class='bst-code-number'>4</span> <span class='bst-code-operator'>+</span> <span class='bst-code-number'>5</span> <span class='bst-code-operator'>+</span> <span class='bst-code-number'>6</span> <span class='bst-code-operator'>+</span> <span class='bst-code-number'>7</span> <span class='bst-code-operator'>+</span> 
-        <span class='bst-code-number'>8</span> <span class='bst-code-operator'>+</span> <span class='bst-code-number'>9</span> <span class='bst-code-operator'>+</span> <span class='bst-code-number'>10</span>
-
-    <span class='bst-code-comment'>-- Also valid</span>
-    some_int <span class='bst-code-operator'>=</span>
-        <span class='bst-code-number'>4</span> <span class='bst-code-operator'>+</span> <span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>5</span> <span class='bst-code-operator'>+</span> <span class='bst-code-number'>6</span><span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>*</span> <span class='bst-code-number'>7</span>
-        <span class='bst-code-operator'>+</span> <span class='bst-code-number'>8</span> <span class='bst-code-operator'>/</span> <span class='bst-code-number'>9</span> <span class='bst-code-operator'>+</span> <span class='bst-code-number'>10</span>
-    </code>
-        </pre>
-    </section>
-
-
-        <section class="container"><h1>Data Types</h1><p>Beanstalk data type keywords use UpperCamelCase. Mutibility can change the underlaying data type but is not actually part of the type.</p>
-          <table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+    </code></pre></section>
+    <div id="bst-slot-0"></div>
+    <section class="container"><h1>Data Types</h1><p>Beanstalk data type keywords use UpperCamelCase.Mutibility can change the underlaying data type but is not actually part of the type.</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
             
+    <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
         
-        <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
-            
-        </tr>
-        
+    </tr>
+
              <tr style="border-bottom: 1px dotted grey;"> Type</tr> <tr style="border-bottom: 1px dotted grey;"> Description</tr>  
 
-    <tr style="border-bottom: 1px dotted grey;">
-        <td style="padding: 0.2em 0.5em;">  Float   64-bit floating point number </td>
-    </tr>
+    <tr style="border-bottom: 1px dotted grey;"><td style="padding: 0.2em 0.5em;">  Float   64-bit floating point number </td></tr>
 
-    <tr style="border-bottom: 1px dotted grey;">
-        <td style="padding: 0.2em 0.5em;">  Int    64-bit signed integer  </td>
-    </tr>
+    <tr style="border-bottom: 1px dotted grey;"><td style="padding: 0.2em 0.5em;">  Int    64-bit signed integer  </td></tr>
 
-    <tr style="border-bottom: 1px dotted grey;">
-        <td style="padding: 0.2em 0.5em;">  String   UTF-8 string slice or string template </td>
-    </tr>
+    <tr style="border-bottom: 1px dotted grey;"><td style="padding: 0.2em 0.5em;">  String   UTF-8 string slice or string template </td></tr>
         
-
-          </table>
-        <h2>Numerical Types</h2><p>These will be extended to smaller sized and unsigned variants in the future. By default, &quot;Float&quot; and &quot;Int&quot; will become 64 bit signed types.</p><p>The language currently supports a small set of core types but may be extended in the future.</p><h1>Strings and String slices</h1><p>String is the keyword for string types in Beanstalk.  Double quotes are automatically string slices. </p><p>`&quot;Double quotes for a UTF-8 string slice&quot;`</p><p>Backticks are used for RAW strings. To escape a backtick it must be preceded with a backslash .</p><p>Scenes are used instead of format strings.</p><h1>Operators</h1><h2>Logical and Comparison Operators</h2><p>The &#39;is&#39; keyword is used to check equality.  The &quot;and / or&quot; keywords are used for logical and / or and &#39;not&#39; is used to invert a truthy value to falsy or vice versa.</p><h2>Mathematical Operators</h2>
-          <table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+    </table><h2>Numerical Types</h2><p>These will be extended to smaller sized and unsigned variants in the future.By default, <span style="
+        color: #c444aff9; 
+        padding: 0.1em; 
+        font-family: var(--bst-font-family-monospace);
+    ">"Float"</span> and <span style="
+        color: #c444aff9; 
+        padding: 0.1em; 
+        font-family: var(--bst-font-family-monospace);
+    ">"Int"</span> will become 64 bit signed types.</p><p>The language currently supports a small set of core types but may be extended in the future.</p><h1>Strings and String slices</h1><p>String is the keyword for string types in Beanstalk. Double quotes are automatically string slices. </p><span style="
+        color: #c444aff9; 
+        padding: 0.1em; 
+        font-family: var(--bst-font-family-monospace);
+    "> "Double quotes for a UTF-8 string slice"`</span><p>Backticks are used for RAW strings. To escape a backtick it must be preceded with a backslash <span style="
+        color: #c444aff9; 
+        padding: 0.1em; 
+        font-family: var(--bst-font-family-monospace);
+    "> \</span>.</p><p>Scenes are used instead of format strings.</p><h1>Operators</h1><h2>Logical and Comparison Operators</h2><p>The &#39;is&#39; keyword is used to check equality. The &quot;and / or&quot; keywords are used for logical and / or and &#39;not&#39; is used to invert a truthy value to falsy or vice versa.</p><h2>Mathematical Operators</h2><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
             
+    <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
         
-        <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
-            
-        </tr>
-        
+    </tr>
+
              <tr style="border-bottom: 1px dotted grey;"> Operator</tr> <tr style="border-bottom: 1px dotted grey;"> Description</tr>          <tr style="border-bottom: 1px dotted grey;"> Precedence</tr> 
-    <tr style="border-bottom: 1px dotted grey;">
-        <td style="padding: 0.2em 0.5em;">  ^         Exponent             4 </td>
-    </tr>
-    <tr style="border-bottom: 1px dotted grey;">
-        <td style="padding: 0.2em 0.5em;">  //        Root                 4 </td>
-    </tr>
-    <tr style="border-bottom: 1px dotted grey;">
-        <td style="padding: 0.2em 0.5em;">  *         Multiplication        3 </td>
-    </tr>
-    <tr style="border-bottom: 1px dotted grey;">
-        <td style="padding: 0.2em 0.5em;">  /         Division              3 </td>
-    </tr>
-    <tr style="border-bottom: 1px dotted grey;">
-        <td style="padding: 0.2em 0.5em;">  %           Modulo (truncated)    3 </td>
-    </tr>
-    <tr style="border-bottom: 1px dotted grey;">
-        <td style="padding: 0.2em 0.5em;">  %%          Remainder (floored)   3 </td>
-    </tr>
-    <tr style="border-bottom: 1px dotted grey;">
-        <td style="padding: 0.2em 0.5em;">  +           Sum                   2 </td>
-    </tr>
-    <tr style="border-bottom: 1px dotted grey;">
-        <td style="padding: 0.2em 0.5em;">  -         Subtraction           2 </td>
-    </tr>
+    <tr style="border-bottom: 1px dotted grey;"><td style="padding: 0.2em 0.5em;">  ^         Exponent             4 </td></tr>
+    <tr style="border-bottom: 1px dotted grey;"><td style="padding: 0.2em 0.5em;">  //        Root                 4 </td></tr>
+    <tr style="border-bottom: 1px dotted grey;"><td style="padding: 0.2em 0.5em;">  *         Multiplication        3 </td></tr>
+    <tr style="border-bottom: 1px dotted grey;"><td style="padding: 0.2em 0.5em;">  /         Division              3 </td></tr>
+    <tr style="border-bottom: 1px dotted grey;"><td style="padding: 0.2em 0.5em;">  %           Modulo (truncated)    3 </td></tr>
+    <tr style="border-bottom: 1px dotted grey;"><td style="padding: 0.2em 0.5em;">  %%          Remainder (floored)   3 </td></tr>
+    <tr style="border-bottom: 1px dotted grey;"><td style="padding: 0.2em 0.5em;">  +           Sum                   2 </td></tr>
+    <tr style="border-bottom: 1px dotted grey;"><td style="padding: 0.2em 0.5em;">  -         Subtraction           2 </td></tr>
         
-
-          </table>
-        </section>
-
+    </table></section>
     <script>
     function __bs_is_ref(value) {
     return value !== null && typeof value === "object" && value.__bs_ref === true;
@@ -606,6 +509,54 @@ body {
     return value;
     }
 
+    function __bs_error_normalize_file(file) {
+    if (typeof file !== "string") {
+    return "";
+    }
+    if (file.startsWith("/")) {
+    const parts = file.split(/[\\/]/).filter(Boolean);
+    return parts.length > 0 ? parts[parts.length - 1] : file;
+    }
+    if (/^[A-Za-z]:[\\/]/.test(file)) {
+    const parts = file.split(/[\\/]/).filter(Boolean);
+    return parts.length > 0 ? parts[parts.length - 1] : file;
+    }
+    return file;
+    }
+
+    function __bs_make_error(kind, code, message, location, trace) {
+    return {
+    kind,
+    code,
+    message,
+    location: location ?? null,
+    trace: trace ?? null
+    };
+    }
+
+    function __bs_error_with_location(error, location) {
+    return __bs_make_error(error.kind, error.code, error.message, location, error.trace);
+    }
+
+    function __bs_error_push_trace(error, frame) {
+    const nextTrace = error.trace ? error.trace.concat([frame]) : [frame];
+    return __bs_make_error(error.kind, error.code, error.message, error.location, nextTrace);
+    }
+
+    function __bs_error_bubble(error, file, line, column, functionName) {
+    const safeFunction = typeof functionName === "string" && functionName.length > 0 ? functionName : "<unknown>";
+    const location = {
+    file: __bs_error_normalize_file(file),
+    line,
+    column,
+    function: safeFunction === "<unknown>" ? null : safeFunction
+    };
+    const frame = { function: safeFunction, location };
+    const nextLocation = error.location ?? location;
+    const located = __bs_error_with_location(error, nextLocation);
+    return __bs_error_push_trace(located, frame);
+    }
+
     function __bs_result_propagate(result) {
     if (result && result.tag === "ok") {
     return result.value;
@@ -626,35 +577,123 @@ body {
     throw new Error("Expected internal Result carrier during fallback handling");
     }
 
+    function __bs_collection_get(collection, index) {
+    if (!Array.isArray(collection)) {
+    const err = __bs_make_error("InvalidArgument", "collection.expected_ordered_collection", "Collection get(...) expects an ordered collection", null, null);
+    return { tag: "err", value: err };
+    }
+    if (!Number.isInteger(index) || index < 0 || index >= collection.length) {
+    const err = __bs_make_error("OutOfBounds", "collection.index_out_of_bounds", "Collection index out of bounds", null, null);
+    return { tag: "err", value: err };
+    }
+    return { tag: "ok", value: collection[index] };
+    }
+
+    function __bs_collection_push(collection, value) {
+    if (Array.isArray(collection)) {
+    collection.push(value);
+    }
+    }
+
+    function __bs_collection_remove(collection, index) {
+    if (Array.isArray(collection) && Number.isInteger(index) && index >= 0 && index < collection.length) {
+    collection.splice(index, 1);
+    }
+    }
+
+    function __bs_collection_length(collection) {
+    if (!Array.isArray(collection)) {
+    return 0;
+    }
+    return collection.length;
+    }
+
+    function __bs_value_to_string(value) {
+    if (value === undefined || value === null) {
+    return "";
+    }
+    return String(value);
+    }
+
+    function __bs_io(value) {
+    console.log(__bs_value_to_string(value));
+    }
+
+    function __bs_normalize_numeric_text(value) {
+    return value.trim().replace(/_/g, "");
+    }
+
+    function __bs_cast_int(value) {
+    if (typeof value === "number") {
+    if (!Number.isFinite(value) || !Number.isSafeInteger(value)) {
+    return { tag: "err", value: __bs_make_error("Parse", "int.parse_out_of_range", "Int value is out of supported range", null, null) };
+    }
+    if (Number.isInteger(value)) {
+    return { tag: "ok", value };
+    }
+    return { tag: "err", value: __bs_make_error("Parse", "int.parse_invalid_format", "Float value is not an exact integer", null, null) };
+    }
+    if (typeof value === "string") {
+    const normalized = __bs_normalize_numeric_text(value);
+    if (/^[+-]?[0-9]+$/.test(normalized)) {
+    const parsed = Number.parseInt(normalized, 10);
+    if (!Number.isSafeInteger(parsed)) {
+    return { tag: "err", value: __bs_make_error("Parse", "int.parse_out_of_range", "Int value is out of supported range", null, null) };
+    }
+    return { tag: "ok", value: parsed };
+    }
+    if (/^[+-]?[0-9]+\.[0-9]+$/.test(normalized)) {
+    const parsed = Number.parseFloat(normalized);
+    if (Number.isInteger(parsed) && Number.isSafeInteger(parsed)) {
+    return { tag: "ok", value: parsed };
+    }
+    }
+    return { tag: "err", value: __bs_make_error("Parse", "int.parse_invalid_format", "Cannot parse Int from text", null, null) };
+    }
+    return { tag: "err", value: __bs_make_error("Parse", "int.parse_invalid_format", "Int(...) only accepts Int, Float, or string values", null, null) };
+    }
+
+    function __bs_cast_float(value) {
+    if (typeof value === "number") {
+    if (!Number.isFinite(value)) {
+    return { tag: "err", value: __bs_make_error("Parse", "float.parse_out_of_range", "Float value is out of supported range", null, null) };
+    }
+    return { tag: "ok", value };
+    }
+    if (typeof value === "string") {
+    const normalized = __bs_normalize_numeric_text(value);
+    if (/^[+-]?[0-9]+$/.test(normalized) || /^[+-]?[0-9]+\.[0-9]+$/.test(normalized)) {
+    const parsed = Number.parseFloat(normalized);
+    if (!Number.isFinite(parsed)) {
+    return { tag: "err", value: __bs_make_error("Parse", "float.parse_out_of_range", "Float value is out of supported range", null, null) };
+    }
+    return { tag: "ok", value: parsed };
+    }
+    return { tag: "err", value: __bs_make_error("Parse", "float.parse_invalid_format", "Cannot parse Float from text", null, null) };
+    }
+    return { tag: "err", value: __bs_make_error("Parse", "float.parse_invalid_format", "Float(...) only accepts Int, Float, or string values", null, null) };
+    }
+
     function b_fn0() {
+    let b_l0 = __bs_binding(undefined);
 
-    return "";
-    }
-
-    function b_fn1() {
-
-    return "";
-    }
-
-    function b_fn2() {
-
-    return "";
+    __bs_assign_value(b_l0, []);
+    __bs_read(b_l0).push("<section class=\"container\"><h1>Variables<\/h1><p>Equals means assign. Tilde <span style=\"\n    color: #c444aff9; \n    padding: 0.1em; \n    font-family: var(--bst-font-family-monospace);\n\"> ~<\/span> means this is a mutable and can change.<\/p><p>All variables must be assigned a value when they are declared.<\/p><pre style=\"\n    background-color: hsla(0, 0%, 42%, 0.12); \n    padding-left: 1em; \n    border-radius: 5px;\n    max-width: 100%; \n    white-space: pre; \n    overflow-x: auto;\n\"><code class='codeblock'>\nint <span class='bst-code-operator'>~<\/span><span class='bst-code-operator'>=<\/span> <span class='bst-code-number'>0<\/span>\nfloat <span class='bst-code-operator'>~<\/span><span class='bst-code-operator'>=<\/span> <span class='bst-code-number'>0.0<\/span>\n\nstring_slice <span class='bst-code-operator'>~<\/span><span class='bst-code-operator'>=<\/span> <span class='bst-code-string'>&quot;wow!&quot;<\/span>\nchar <span class='bst-code-operator'>~<\/span><span class='bst-code-operator'>=<\/span> <span class='bst-code-string'>&#39;😊&#39;<\/span>\nraw_string_slice <span class='bst-code-operator'>~<\/span><span class='bst-code-operator'>=<\/span> <span class='bst-code-operator'>`<\/span>hi<span class='bst-code-operator'>`<\/span>\n\nstring_template <span class='bst-code-operator'>~<\/span><span class='bst-code-operator'>=<\/span> <span class='bst-code-parenthesis'>[<\/span><span class='bst-code-operator'>:<\/span>\n    <span class='bst-code-struct'>This<\/span> is the <span class='bst-code-struct'>Beanstalk<\/span> programming language\n<span class='bst-code-parenthesis'>]<\/span>\n\nbool <span class='bst-code-operator'>~<\/span><span class='bst-code-operator'>=<\/span> true\n\nmutable_collection <span class='bst-code-operator'>~<\/span><span class='bst-code-operator'>=<\/span> <span class='bst-code-parenthesis'>{<\/span><span class='bst-code-parenthesis'>}<\/span>\nimmutable_collection <span class='bst-code-operator'>=<\/span> <span class='bst-code-parenthesis'>{<\/span><span class='bst-code-parenthesis'>}<\/span>\n\n<span class='bst-code-struct'>NewStruct<\/span> <span class='bst-code-operator'>=<\/span> <span class='bst-code-operator'>|<\/span>\n    value <span class='bst-code-struct'>Float,<\/span>\n    another_value <span class='bst-code-struct'>String,<\/span>\n<span class='bst-code-operator'>|<\/span>\n\ninstance <span class='bst-code-operator'>~<\/span><span class='bst-code-operator'>=<\/span> <span class='bst-code-struct'>NewStruct<\/span><span class='bst-code-parenthesis'>(<\/span>\n    value <span class='bst-code-operator'>=<\/span> <span class='bst-code-number'>1.2<\/span>, \n    another_value <span class='bst-code-operator'>=<\/span> <span class='bst-code-string'>&quot;hey&quot;<\/span>\n<span class='bst-code-parenthesis'>)<\/span>\n<\/code><\/pre><p>By default, Beanstalk code will create immutable references to values.<\/p><p><strong>This is true for all types.<\/strong><\/p><p>The compiler might decide to make an immutable copy of a primative value,but the assignment will <strong>always<\/strong> behave the same way no matter what the type is.<\/p><pre style=\"\n    background-color: hsla(0, 0%, 42%, 0.12); \n    padding-left: 1em; \n    border-radius: 5px;\n    max-width: 100%; \n    white-space: pre; \n    overflow-x: auto;\n\"><code class='codeblock'>\n<span class='bst-code-comment'>-- 64 bit immutable float<\/span>\nnumber <span class='bst-code-operator'>=<\/span> <span class='bst-code-number'>420.69<\/span>\n\n<span class='bst-code-comment'>-- Becomes an immutable reference to the value<\/span>\nanother_number <span class='bst-code-operator'>=<\/span> number\n\n<span class='bst-code-comment'>-- Becomes a mutable reference to the number<\/span>\n<span class='bst-code-comment'>-- or moves the value if it isn&#39;t used again later in the scope<\/span>\nanother_mutable_number <span class='bst-code-operator'>~<\/span><span class='bst-code-operator'>=<\/span> number\n\n<span class='bst-code-comment'>-- Even with primative stack types,<\/span>\n<span class='bst-code-comment'>-- Copying is still explicit<\/span>\na_copy_of_a_number <span class='bst-code-operator'>~<\/span><span class='bst-code-struct'>Copy<\/span> <span class='bst-code-operator'>=<\/span> another_mutable_number\n\n<span class='bst-code-comment'>-- Type error (number is not mutable)<\/span>\nnumber <span class='bst-code-operator'>=<\/span> <span class='bst-code-number'>1<\/span>\n\n<span class='bst-code-comment'>-- Type error (another_mutable_number is a float type)<\/span>\nanother_mutable_number <span class='bst-code-operator'>~<\/span><span class='bst-code-operator'>=<\/span> <span class='bst-code-string'>&quot;A string instead. Whoops.&quot;<\/span>\n\n<span class='bst-code-comment'>-- Explicit type declarations<\/span>\na_float <span class='bst-code-operator'>~<\/span><span class='bst-code-type'>Float<\/span> <span class='bst-code-operator'>=<\/span> <span class='bst-code-number'>84<\/span>\nstring_slice <span class='bst-code-operator'>=<\/span> <span class='bst-code-string'>&quot;Hello &quot;<\/span>\na_mutable_string <span class='bst-code-operator'>~<\/span><span class='bst-code-type'>String<\/span> <span class='bst-code-operator'>=<\/span> <span class='bst-code-parenthesis'>[<\/span><span class='bst-code-operator'>:<\/span><span class='bst-code-struct'>World<\/span><span class='bst-code-operator'>!<\/span><span class='bst-code-parenthesis'>]<\/span>\n\n<span class='bst-code-comment'>-- You can&#39;t use the &#39;+&#39; operator on strings,<\/span>\n<span class='bst-code-comment'>-- They can be concatenated using templates<\/span>\nconcatenated_strings <span class='bst-code-operator'>=<\/span> <span class='bst-code-parenthesis'>[<\/span>string_slice, a_mutable_string<span class='bst-code-parenthesis'>]<\/span>\n<\/code><\/pre><p>All copies are explicit and must use the <span style=\"\n    color: #c444aff9; \n    padding: 0.1em; \n    font-family: var(--bst-font-family-monospace);\n\">copy<\/span> keyword in place of a type.<\/p><pre style=\"\n    background-color: hsla(0, 0%, 42%, 0.12); \n    padding-left: 1em; \n    border-radius: 5px;\n    max-width: 100%; \n    white-space: pre; \n    overflow-x: auto;\n\"><code class='codeblock'>\n<span class='bst-code-comment'>-- Create a new collection of integers<\/span>\na_collection <span class='bst-code-operator'>~<\/span><span class='bst-code-operator'>=<\/span> <span class='bst-code-parenthesis'>{<\/span><span class='bst-code-number'>1<\/span>, <span class='bst-code-number'>2<\/span>, <span class='bst-code-number'>3<\/span>, <span class='bst-code-number'>4<\/span>, <span class='bst-code-number'>5<\/span><span class='bst-code-parenthesis'>}<\/span>\n\n<span class='bst-code-comment'>-- Deep mutable copy of a collection<\/span>\na_copy <span class='bst-code-operator'>~<\/span><span class='bst-code-operator'>=<\/span> <span class='bst-code-keyword'>copy<\/span> a_collection\n\n<span class='bst-code-comment'>-- Immutable reference to a_collection<\/span>\na_reference <span class='bst-code-operator'>=<\/span> a_collection\n\n<span class='bst-code-comment'>-- Ownership passed or mutable reference depending on context<\/span>\na_reference <span class='bst-code-operator'>~<\/span><span class='bst-code-operator'>=<\/span> a_collection\n\n<span class='bst-code-comment'>-- a_reference is still a reference to the original collection<\/span>\na_reference.push<span class='bst-code-parenthesis'>(<\/span><span class='bst-code-number'>5<\/span><span class='bst-code-parenthesis'>)<\/span>\nio<span class='bst-code-parenthesis'>(<\/span>a_collection<span class='bst-code-parenthesis'>)<\/span> <span class='bst-code-comment'>-- {1, 2, 3, 4, 5, 5}<\/span>\n\na_collection.pull<span class='bst-code-parenthesis'>(<\/span>a_collection.length<span class='bst-code-parenthesis'>(<\/span><span class='bst-code-parenthesis'>)<\/span> <span class='bst-code-operator'>-<\/span> <span class='bst-code-number'>1<\/span><span class='bst-code-parenthesis'>)<\/span>\nio<span class='bst-code-parenthesis'>(<\/span>a_collection<span class='bst-code-parenthesis'>)<\/span> <span class='bst-code-comment'>-- {23.0}<\/span>\n<\/code><\/pre><p>Expressions can span over multiple lines.<\/p><p>But new statements must start after a newline.<\/p><pre style=\"\n    background-color: hsla(0, 0%, 42%, 0.12); \n    padding-left: 1em; \n    border-radius: 5px;\n    max-width: 100%; \n    white-space: pre; \n    overflow-x: auto;\n\"><code class='codeblock'>\n<span class='bst-code-comment'>-- Valid<\/span>\nsome_int <span class='bst-code-operator'>=<\/span>\n    <span class='bst-code-number'>4<\/span> <span class='bst-code-operator'>+<\/span> <span class='bst-code-number'>5<\/span> <span class='bst-code-operator'>+<\/span> <span class='bst-code-number'>6<\/span> <span class='bst-code-operator'>+<\/span> <span class='bst-code-number'>7<\/span> <span class='bst-code-operator'>+<\/span> \n    <span class='bst-code-number'>8<\/span> <span class='bst-code-operator'>+<\/span> <span class='bst-code-number'>9<\/span> <span class='bst-code-operator'>+<\/span> <span class='bst-code-number'>10<\/span>\n\n<span class='bst-code-comment'>-- Also valid<\/span>\nsome_int <span class='bst-code-operator'>=<\/span>\n    <span class='bst-code-number'>4<\/span> <span class='bst-code-operator'>+<\/span> <span class='bst-code-parenthesis'>(<\/span><span class='bst-code-number'>5<\/span> <span class='bst-code-operator'>+<\/span> <span class='bst-code-number'>6<\/span><span class='bst-code-parenthesis'>)<\/span> <span class='bst-code-operator'>*<\/span> <span class='bst-code-number'>7<\/span>\n    <span class='bst-code-operator'>+<\/span> <span class='bst-code-number'>8<\/span> <span class='bst-code-operator'>/<\/span> <span class='bst-code-number'>9<\/span> <span class='bst-code-operator'>+<\/span> <span class='bst-code-number'>10<\/span>\n<\/code><\/pre><\/section>");
+    return __bs_read(b_l0);
     }
 
     </script>
     <script>
     (function () {
-      const slots = [
+      var bst_frags = b_fn0();
+      var bst_slots = [
+        "bst-slot-0",
       ];
-
-      for (const [id, fn] of slots) {
-        const el = document.getElementById(id);
-        if (!el) throw new Error("Missing runtime mount slot: " + id);
-        el.insertAdjacentHTML("beforeend", fn());
+      for (var i = 0; i < bst_slots.length; i++) {
+        var el = document.getElementById(bst_slots[i]);
+        if (!el) throw new Error("Missing runtime mount slot: " + bst_slots[i]);
+        el.insertAdjacentHTML("beforeend", bst_frags[i] || "");
       }
-
-      // start() remains the lifecycle entrypoint and runs after fragment hydration.
-      if (typeof b_fn1 === "function") b_fn1();
     })();
     </script>
   </body>

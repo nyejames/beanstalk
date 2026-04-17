@@ -2,6 +2,14 @@ import @lib/html {format}
 -- Some basic testing styles for the documentation website
 
 # theme_css = [$css:
+    body {
+        background-color: light-dark(hsl(199, 21%, 74%), hsl(203, 68%, 8%));
+    }
+
+    a {
+        color: light-dark(hsl(111, 96%, 26%), hsl(235, 87%, 67%));
+    }
+    
     .container {
         width: 100%;
         margin-right: auto;
@@ -184,10 +192,8 @@ import @lib/html {format}
 # title = [$html: <h1 style="font-size: 2em;[$slot("style")]">[$slot]</h1>]
 
 Palette = |
-    -- Colors for the documentation website
-    red String = [$html:<span style="color: hsl(0, 73%, 55%);">[$slot]</span>],
-    green String = [$html:<span style="color: green;">[$slot]</span>],
-    blue String = [$html:<span style="color: blue;">[$slot]</span>],
+    red String = [$html:<span style="color: light-dark(hsl(0, 84%, 35%), hsl(0, 73%, 65%));">[$slot]</span>],
+    highlight String = [$html:<span style="color: light-dark(hsl(88, 85%, 28%), hsl(70, 92%, 54%));">[$slot]</span>],
 |
 
 # palette = Palette()

@@ -1,6 +1,6 @@
 ### REVERT MISTAKEN AST DRIFT
 
-# Part 5 — finalize, audit, document, and clean tests
+# Finalize, audit, document, and clean tests
 
 ## Overview
 

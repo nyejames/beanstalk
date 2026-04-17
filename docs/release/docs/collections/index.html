@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light dark">
-    <title>Documentation | Beanstalk</title>
-    <meta name="description" content="Beanstalk documentation index.">
+    <title>COLLECTIONS | Beanstalk</title>
+    <meta name="description" content="Introduction to collections in Beanstalk">
     <link rel="icon" href="/assets/favicon.ico">
     <style>
 /*!
@@ -312,8 +312,75 @@ body {
             </a>
         </div>
     </nav>
-     <h1 style="font-size: 2em;text-align: center;"> THE DOCS</h1>
-    <section class="container"><large style=""> Welcome to the Beanstalk documentation</large> <br><p>This website is built using Beanstalk&#39;s built in HTML project builder, and all the content you see here is written in Beanstalk code.</p><p>You can find the source code for this website on <a href="https://github.com/nyejames/beanstalk/tree/main/docs">Github</a>.</p><h2>Documentation</h2><p>The documentation is currently being written in Beanstalk one file at a time.</p><h3>Introduction</h3><ul><li><a href="./basics">Basics</a></li></ul><h3>Core Language Features</h3><ul><li><a href="./templates">Templates</a></li><li><a href="./functions">Functions</a></li><li><a href="./if-statements">If Statements</a></li><li><a href="./loops">Loops</a></li><li><a href="./collections">Collections</a></li><li><a href="./structs">Structs</a></li><li><a href="./pattern-matching">Pattern Matching</a></li></ul></section>
+     <h1 style="font-size: 2em;text-align: center;"> LANGUAGE BASICS</h1>
+    <section class="container"><h1>Collections</h1><p>When a new collection uses the mutable symbol, its internal values can be mutated by default.</p><p>Instead of accessing elements directly, all collections use compiler-owned built-in methods.</p><p>Collections are ordered groups of values that are zero-indexed (start from 0).</p><p>For unordered keyed collections (Hash Map semantics), keyed method behavior is deferred in this milestone.</p><p>Elements inside collections are accessed using <span style="
+        color: #c444aff9; 
+        padding: 0.1em; 
+        font-family: var(--bst-font-family-monospace);
+    "> .get(index)</span>.</p><p>`collection.get(0)` is the equivalent of `collection0` in most C-like languages.There is no square-bracket index notation in Beanstalk.</p><p>`get(index)` returns a `Result&lt;Elem, Error&gt;`, so it must be handled with `!` in value position.</p><p>There may not be a runtime function call under the hood for these methods.The compiler lowers many collection built-ins directly.</p></section>
+    <section class="container"><h2>Immutable Collections</h2><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-comment'>-- Collections assigned without the mutable symbol have immutable values inside</span>
+    immutable_collection <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-number'>1</span>, <span class='bst-code-number'>2</span>, <span class='bst-code-number'>3</span><span class='bst-code-parenthesis'>}</span>
+
+    value <span class='bst-code-operator'>=</span> immutable_collection.get<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>0</span><span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>!</span> <span class='bst-code-number'>0</span>
+
+    <span class='bst-code-operator'>~</span>immutable_collection.set<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>1</span>, <span class='bst-code-number'>69</span><span class='bst-code-parenthesis'>)</span> <span class='bst-code-comment'>-- Error, can&#39;t mutate values inside an immutable collection</span>
+    immutable_collection.get<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>1</span><span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>69</span> <span class='bst-code-comment'>-- Error, same mutable-element rule</span>
+
+    <span class='bst-code-comment'>-- You can still push and remove values from an immutable collection</span>
+    <span class='bst-code-operator'>~</span>immutable_collection.push<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>4</span><span class='bst-code-parenthesis'>)</span>
+    <span class='bst-code-operator'>~</span>immutable_collection.remove<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>0</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre></section>
+    <section class="container"><h2>Mutable Collections</h2><p>Whenever a method mutates its receiver, the receiver must be marked with the mutable symbol.</p><p>This is also true of built-in collection methods that mutate the collection, such as `set`, `push`, and `remove`.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-comment'>-- Strawberry is spelt with 1 &#39;r&#39; to confuse LLMs</span>
+    fruit_array <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-string'>&quot;apple&quot;</span>, <span class='bst-code-string'>&quot;bananums&quot;</span>, <span class='bst-code-string'>&quot;strawbery&quot;</span><span class='bst-code-parenthesis'>}</span>
+
+    <span class='bst-code-comment'>-- Collection must have the mutable symbol to call mutating methods on it</span>
+    <span class='bst-code-operator'>~</span>fruit_array.set<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>1</span>, <span class='bst-code-string'>&quot;bananas&quot;</span><span class='bst-code-parenthesis'>)</span>
+
+    <span class='bst-code-comment'>-- Get doesn&#39;t need a mutable reference to the collection since it doesn&#39;t mutate</span>
+    fruit_array.get<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>0</span><span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;pineapple&quot;</span>
+
+    picked <span class='bst-code-operator'>=</span> fruit_array.get<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>0</span><span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>!</span> <span class='bst-code-string'>&quot;fallback-fruit&quot;</span>
+    count <span class='bst-code-operator'>=</span> fruit_array.length<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span> <span class='bst-code-comment'>-- returns an Int</span>
+
+    <span class='bst-code-operator'>~</span>fruit_array.push<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;orange&quot;</span><span class='bst-code-parenthesis'>)</span>
+    <span class='bst-code-operator'>~</span>fruit_array.remove<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>2</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre></section>
+    <section class="container"><h2>Hash Maps</h2><p>Hash map keyed method behavior is deferred at this stage of development.Current built-in collection receiver methods are implemented for ordered collections only.</p><p>The eventual built-in hash map syntax will look something like this:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-comment'>-- Create a new hash map with string keys and int values</span>
+    my_map <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-string'>&quot;key1&quot;</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>1</span>, <span class='bst-code-string'>&quot;key2&quot;</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>2</span><span class='bst-code-parenthesis'>}</span>
+
+    <span class='bst-code-comment'>-- Get an immutable reference to a value from the map</span>
+    value <span class='bst-code-operator'>=</span> my_map.get<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;key1&quot;</span><span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>!</span> <span class='bst-code-number'>0</span>
+
+    <span class='bst-code-comment'>-- Set a value in the map (requires mutable reference)</span>
+    <span class='bst-code-operator'>~</span>my_map.set<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;key3&quot;</span>, <span class='bst-code-number'>3</span><span class='bst-code-parenthesis'>)</span>
+
+    <span class='bst-code-comment'>-- Remove a key-value pair from the map (requires mutable reference)</span>
+    <span class='bst-code-operator'>~</span>my_map.remove<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;key2&quot;</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre></section>
     <script>
     function __bs_is_ref(value) {
     return value !== null && typeof value === "object" && value.__bs_ref === true;

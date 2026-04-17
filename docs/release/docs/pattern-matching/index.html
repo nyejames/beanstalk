@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light dark">
-    <title>Documentation | Beanstalk</title>
-    <meta name="description" content="Beanstalk documentation index.">
+    <title>Pattern Matching | Beanstalk</title>
+    <meta name="description" content="Pattern matching in Beanstalk.">
     <link rel="icon" href="/assets/favicon.ico">
     <style>
 /*!
@@ -312,8 +312,36 @@ body {
             </a>
         </div>
     </nav>
-     <h1 style="font-size: 2em;text-align: center;"> THE DOCS</h1>
-    <section class="container"><large style=""> Welcome to the Beanstalk documentation</large> <br><p>This website is built using Beanstalk&#39;s built in HTML project builder, and all the content you see here is written in Beanstalk code.</p><p>You can find the source code for this website on <a href="https://github.com/nyejames/beanstalk/tree/main/docs">Github</a>.</p><h2>Documentation</h2><p>The documentation is currently being written in Beanstalk one file at a time.</p><h3>Introduction</h3><ul><li><a href="./basics">Basics</a></li></ul><h3>Core Language Features</h3><ul><li><a href="./templates">Templates</a></li><li><a href="./functions">Functions</a></li><li><a href="./if-statements">If Statements</a></li><li><a href="./loops">Loops</a></li><li><a href="./collections">Collections</a></li><li><a href="./structs">Structs</a></li><li><a href="./pattern-matching">Pattern Matching</a></li></ul></section>
+     <h1 style="font-size: 2em;text-align: center;"> PATTERN MATCHING</h1>
+    <section class="container"><h1>Pattern matching</h1><p>    Pattern matching is a powerful tool for control flow in Beanstalk.     It provides the next level of expressiveness beyond simple if statements.     When you need to check more than one condition, this is what you use.</p><p>    It allows you to match on the value of an expression and execute different code based on the pattern that matches.    Pattern matching is also exhaustive, meaning that the compiler will check that all possible cases are handled, which can help prevent bugs.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-comment'>-- Pattern matching</span>
+    thing <span class='bst-code-operator'>=</span> <span class='bst-code-number'>69</span>
+
+    <span class='bst-code-keyword'>if</span> thing is<span class='bst-code-operator'>:</span>
+        case <span class='bst-code-number'>0</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;zero&quot;</span><span class='bst-code-parenthesis'>)</span>
+        case <span class='bst-code-operator'>&lt;</span> <span class='bst-code-number'>0</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;negative&quot;</span><span class='bst-code-parenthesis'>)</span>
+        case <span class='bst-code-operator'>&gt;</span> <span class='bst-code-number'>1</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;big number&quot;</span><span class='bst-code-parenthesis'>)</span>
+        case not <span class='bst-code-number'>5</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;not 5&quot;</span><span class='bst-code-parenthesis'>)</span>
+        <span class='bst-code-keyword'>else</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;only one&quot;</span><span class='bst-code-parenthesis'>)</span>
+    ;
+
+    <span class='bst-code-comment'>-- Matching choices</span>
+    <span class='bst-code-keyword'>if</span> <span class='bst-code-struct'>Catagory</span> is<span class='bst-code-operator'>:</span>
+    case <span class='bst-code-struct'>A</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span>
+        io<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Category A&quot;</span><span class='bst-code-parenthesis'>)</span>
+    case <span class='bst-code-struct'>B</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span>
+        io<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Category B&quot;</span><span class='bst-code-parenthesis'>)</span>
+    case <span class='bst-code-struct'>C</span> <span class='bst-code-operator'>|</span>message<span class='bst-code-operator'>|</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span>
+        io<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Category</span> <span class='bst-code-struct'>C</span> with message<span class='bst-code-operator'>:</span> <span class='bst-code-parenthesis'>[</span>message<span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>)</span>
+    ;
+    </code></pre></section>
     <script>
     function __bs_is_ref(value) {
     return value !== null && typeof value === "object" && value.__bs_ref === true;

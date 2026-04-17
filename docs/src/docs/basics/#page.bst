@@ -1,5 +1,5 @@
 import @lib/html {format, style}
-import @styles/docs {navbar, title, section, palette, table, data, codeblock, theme_head}
+import @styles/docs {navbar, title, section, palette, table, data, codeblock, codesnippet,theme_head}
 
 # page_title = "Language Basics"
 # page_description = "Core language syntax and semantics in Beanstalk."
@@ -9,7 +9,7 @@ import @styles/docs {navbar, title, section, palette, table, data, codeblock, th
 #[title, style.center: LANGUAGE BASICS]
 
 #[section, $markdown:
-    Every project has a #config.bst file that defines the entry points and dependencies of the project.
+    Every project has a [codesnippet:#config.bst] file that defines the entry points and dependencies of the project.
 
     If instead, you build or run a specific Beanstalk file,
     it will create a single module from that entry point and pull in all the file's dependencies.
@@ -34,12 +34,10 @@ import @styles/docs {navbar, title, section, palette, table, data, codeblock, th
     Square brackets are only used for string templates. Items in collections are accessed via methods
 
     - Equality and other logical operators use keywords like "is" and "not" 
-    (you can't use == or ! for example)
+    (you can't use [codesnippet:==] or [codesnippet:!] for example)
 
-    - ~ tilde symbol to indicate mutability (mutability must be explicit). 
+    - tilde symbol [codesnippet: ~] to indicate mutability (mutability must be explicit). 
     This comes before the type if there is an explicit type declaration.
-
-    - Double dashes for single line comments (--)
 
     - Immutable Reference semantics are the default for all stack and heap allocated types. 
 
@@ -52,7 +50,8 @@ import @styles/docs {navbar, title, section, palette, table, data, codeblock, th
     - Everything else uses regular_snake_case
 
     # Comments
-    Comments use a double minus sign. 
+    Comments use a double minus sign. [codesnippet: --]
+    
     Documentation comments will eventually be created via special templates.
 
     [codeblock, $code("bst"):
@@ -63,7 +62,8 @@ import @styles/docs {navbar, title, section, palette, table, data, codeblock, th
 
 [section, $markdown:
     # Variables
-    Equals means assign. Tilde ~ means this is a mutable and can change.
+
+    Equals means assign. Tilde [codesnippet: ~] means this is a mutable and can change.
 
     All variables must be assigned a value when they are declared.
 
@@ -96,6 +96,7 @@ import @styles/docs {navbar, title, section, palette, table, data, codeblock, th
     ]
 
     By default, Beanstalk code will create immutable references to values.
+    
     **This is true for all types.**
 
     The compiler might decide to make an immutable copy of a primative value,
@@ -132,7 +133,7 @@ import @styles/docs {navbar, title, section, palette, table, data, codeblock, th
         concatenated_strings = [string_slice, a_mutable_string]
     ]
 
-    All copies are explicit and must use the 'copy' keyword in place of a type.
+    All copies are explicit and must use the [codesnippet:copy] keyword in place of a type.
 
     [codeblock, $code("bst"):
         -- Create a new collection of integers
@@ -189,17 +190,17 @@ import @styles/docs {navbar, title, section, palette, table, data, codeblock, th
 
     ## Numerical Types
     These will be extended to smaller sized and unsigned variants in the future.
-    By default, "Float" and "Int" will become 64 bit signed types.
+    By default, [codesnippet:"Float"] and [codesnippet:"Int"] will become 64 bit signed types.
 
     The language currently supports a small set of core types but may be extended in the future.
 
     # Strings and String slices
     String is the keyword for string types in Beanstalk. 
     Double quotes are automatically string slices. 
+    
+    [codesnippet: "Double quotes for a UTF-8 string slice"`]
 
-    `"Double quotes for a UTF-8 string slice"`
-
-    Backticks are used for RAW strings. To escape a backtick it must be preceded with a backslash \.
+    Backticks are used for RAW strings. To escape a backtick it must be preceded with a backslash [codesnippet: \\].
 
     Scenes are used instead of format strings.
 

@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light dark">
-    <title>Documentation | Beanstalk</title>
-    <meta name="description" content="Beanstalk documentation index.">
+    <title>If Statements | Beanstalk</title>
+    <meta name="description" content="If statements in Beanstalk">
     <link rel="icon" href="/assets/favicon.ico">
     <style>
 /*!
@@ -312,8 +312,25 @@ body {
             </a>
         </div>
     </nav>
-     <h1 style="font-size: 2em;text-align: center;"> THE DOCS</h1>
-    <section class="container"><large style=""> Welcome to the Beanstalk documentation</large> <br><p>This website is built using Beanstalk&#39;s built in HTML project builder, and all the content you see here is written in Beanstalk code.</p><p>You can find the source code for this website on <a href="https://github.com/nyejames/beanstalk/tree/main/docs">Github</a>.</p><h2>Documentation</h2><p>The documentation is currently being written in Beanstalk one file at a time.</p><h3>Introduction</h3><ul><li><a href="./basics">Basics</a></li></ul><h3>Core Language Features</h3><ul><li><a href="./templates">Templates</a></li><li><a href="./functions">Functions</a></li><li><a href="./if-statements">If Statements</a></li><li><a href="./loops">Loops</a></li><li><a href="./collections">Collections</a></li><li><a href="./structs">Structs</a></li><li><a href="./pattern-matching">Pattern Matching</a></li></ul></section>
+     <h1 style="font-size: 2em;text-align: center;"> IF STATEMENTS</h1>
+    <section class="container"><h2>Basic Syntax</h2><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    v <span class='bst-code-operator'>=</span> <span class='bst-code-number'>1</span>
+
+    <span class='bst-code-keyword'>if</span> v is not <span class='bst-code-number'>1</span><span class='bst-code-operator'>:</span>
+        io<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;nope&quot;</span><span class='bst-code-parenthesis'>)</span>
+    <span class='bst-code-keyword'>else</span>
+        io<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;yep&quot;</span><span class='bst-code-parenthesis'>)</span>
+    ;
+
+    io<span class='bst-code-parenthesis'>(</span>msg<span class='bst-code-parenthesis'>)</span> <span class='bst-code-comment'>-- prints &quot;nope&quot;</span>
+    </code></pre></section>
     <script>
     function __bs_is_ref(value) {
     return value !== null && typeof value === "object" && value.__bs_ref === true;

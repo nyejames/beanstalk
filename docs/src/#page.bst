@@ -1,4 +1,4 @@
-import @styles/docs {navbar, section, theme_head}
+import @styles/docs {navbar, section, theme_head, palette}
 
 # page_title = "What is Beanstalk?"
 # page_description = "Introduction to the Beanstalk language and toolchain."
@@ -9,10 +9,18 @@ import @styles/docs {navbar, section, theme_head}
     # What is Beanstalk?
     Beanstalk is a new programming language and toolchain.
 
-    **This website was created using Beanstalk.**
+    
+
+    [palette.highlight: This website was created using Beanstalk.]
+
+
+
 
     Everything you see on this page, including the layout, styles, and even the text content 
-    was created using Beanstalk code and the built-in HTML project builder.
+    was written in Beanstalk files and generated using the compiler's built-in HTML project builder.
 
     The source code for this website can be found on @https://github.com/nyejames/beanstalk/tree/main/docs/src (Github).
+
+    ## Documentation
+    The @./docs (docs for the basic language syntax) are unfinished and not all features are fully implemented or stable.
 ]
