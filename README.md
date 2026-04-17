@@ -142,7 +142,7 @@ Beanstalk not being saturated in LLM training data may provide a the long term a
 
 </div>
 
-Here is the current <a href="https://github.com/nyejames/beanstalk/blob/main/docs/roadmap.md">Roadmap to the first alpha release</a>.
+Here is the current <a href="https://github.com/nyejames/beanstalk/blob/main/docs/roadmap/roadmap.md">Roadmap to the first alpha release</a>.
 
 The language is nearly at the first alpha stage, but already has a broad set of tooling, build system work and backend scaffolding already done. The upcoming alpha will be about taking an already powerful set of tools and language and making it stable and usable.
 
