@@ -9,7 +9,7 @@
 //! declarations (inline struct-literal expressions) use `parse_struct_shell`. This avoids
 //! top-level struct field syntax being rediscovered twice.
 
-use crate::compiler_frontend::ast::ast::ScopeContext;
+use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
 use crate::compiler_frontend::compiler_errors::CompilerError;

@@ -24,7 +24,7 @@ impl<'a> AstBuildState<'a> {
     /// Pass 4: Resolve function signatures after struct declarations are available.
     /// WHY: late resolution lets signatures use named struct types and receiver syntax
     /// without adding a second nominal-type system just for headers.
-    pub(super) fn resolve_function_signatures(
+    pub(in crate::compiler_frontend::ast) fn resolve_function_signatures(
         &mut self,
         sorted_headers: &[Header],
         file_import_bindings: &FxHashMap<InternedPath, FileImportBindings>,
@@ -72,7 +72,7 @@ impl<'a> AstBuildState<'a> {
     }
 
     /// Pass 5: Build the receiver method catalog from resolved function signatures.
-    pub(super) fn build_receiver_catalog(
+    pub(in crate::compiler_frontend::ast) fn build_receiver_catalog(
         &self,
         sorted_headers: &[Header],
         string_table: &mut StringTable,

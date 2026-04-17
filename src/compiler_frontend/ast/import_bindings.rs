@@ -1,18 +1,33 @@
 //! Import-binding and constant-header resolution for AST construction.
 //!
-//! This module separates *file-local visibility* from *module declarations*:
-//! - `declarations` keeps every declaration known in the module so lookups can resolve full paths.
-//! - `visible_symbol_paths` limits what a specific source file is allowed to reference.
+//! WHAT: builds per-file visibility gates and resolves constant header declarations.
+//!
+//! WHY: this module enforces the boundary between header parsing (Stage 2) and AST
+//! lowering (Stage 4). Header parsing discovers imports and declaration shells; AST
+//! resolves those imports into concrete symbol paths and validates that constants are
+//! compile-time foldable.
+//!
+//! ## Header/AST responsibility split
+//!
+//! *Header parsing owns:*
+//! - discovering which files import which symbols
+//! - parsing the syntactic shape of constant headers
+//!
+//! *AST owns:*
+//! - resolving import paths to concrete `InternedPath` symbols
+//! - validating that imported symbols are actually exported
+//! - building the per-file `visible_symbol_paths` gate used during body parsing
+//! - folding constant expressions and rejecting non-constant references
 //!
 //! Bare file imports (`@path/to/file` without an explicit symbol) are rejected: start functions
 //! are build-system-only and are not importable or callable from modules.
 
 use crate::compiler_frontend::FrontendBuildProfile;
-use crate::compiler_frontend::ast::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::statements::declarations::resolve_declaration_syntax;
 use crate::compiler_frontend::ast::templates::template::TemplateAtom;
+use crate::compiler_frontend::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_errors::ErrorMetaDataKey;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
@@ -317,14 +332,14 @@ fn find_unresolved_constant_reference(
         }
         ExpressionKind::Template(template) => {
             for atom in &template.content.atoms {
-                if let TemplateAtom::Content(segment) = atom {
-                    if let Some(path) = find_unresolved_constant_reference(
+                if let TemplateAtom::Content(segment) = atom
+                    && let Some(path) = find_unresolved_constant_reference(
                         &segment.expression,
                         declarations,
                         visible_declaration_ids,
-                    ) {
-                        return Some(path);
-                    }
+                    )
+                {
+                    return Some(path);
                 }
             }
             None

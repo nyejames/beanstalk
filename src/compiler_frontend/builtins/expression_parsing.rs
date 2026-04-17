@@ -4,7 +4,7 @@
 //! WHY: builtin parsing logic should live with builtin metadata so extending language-owned
 //! surfaces does not keep bloating the generic expression parser.
 
-use crate::compiler_frontend::ast::ast::ScopeContext;
+use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression_with_trailing_newline_policy;

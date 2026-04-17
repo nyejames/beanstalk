@@ -4,7 +4,7 @@
 //! WHY: loop lowering depends on parser output staying stable across the new loop header syntax.
 
 use super::*;
-use crate::compiler_frontend::ast::ast::Ast;
+use crate::compiler_frontend::ast::Ast;
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
 use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorMetaDataKey, ErrorType};
 use crate::compiler_frontend::tests::test_support::{

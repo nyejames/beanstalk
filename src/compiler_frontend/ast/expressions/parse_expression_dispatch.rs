@@ -12,7 +12,7 @@ use super::parse_expression_places::{
     parse_copy_place_expression, parse_mutable_receiver_expression,
 };
 use super::parse_expression_templates::parse_template_expression;
-use crate::compiler_frontend::ast::ast::ScopeContext;
+use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::field_access::{ReceiverAccessMode, parse_postfix_chain};
 use crate::compiler_frontend::ast::statements::result_handling::parse_result_handling_suffix_for_expression;

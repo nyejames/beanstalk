@@ -4,8 +4,8 @@
 //! including AST node normalization, module constant normalization, and shared
 //! template folding helpers.
 //!
-//! WHY: Separates finalization concerns from the entry point orchestration in
-//! `pass_finalize.rs`, making both the high-level pass sequence and detailed
+//! WHY: Separates finalization concerns from the entry-point orchestration in
+//! `ast/mod.rs`, making both the high-level pass sequence and detailed
 //! normalization logic easier to understand independently.
 
 pub(super) mod normalize_ast;

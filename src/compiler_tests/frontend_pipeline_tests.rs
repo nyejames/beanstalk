@@ -148,7 +148,7 @@ impl FrontendProject {
             .expect("header sorting should succeed")
     }
 
-    fn ast(&mut self) -> crate::compiler_frontend::ast::ast::Ast {
+    fn ast(&mut self) -> crate::compiler_frontend::ast::Ast {
         let sorted = self.sorted_headers();
         self.frontend
             .headers_to_ast(sorted, &self.entry_file, FrontendBuildProfile::Dev)

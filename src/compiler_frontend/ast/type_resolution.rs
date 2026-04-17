@@ -3,13 +3,13 @@
 //! WHAT: resolves AST `NamedType` placeholders to concrete declaration-backed `DataType`s.
 //! WHY: AST emission and receiver-method validation require fully resolved types up front.
 
-use crate::compiler_frontend::ast::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
 use crate::compiler_frontend::ast::expressions::eval_expression::evaluate_expression;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::statements::functions::{
     FunctionReturn, FunctionSignature, ReturnSlot,
 };
+use crate::compiler_frontend::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, ReceiverKey};
 use crate::compiler_frontend::declaration_syntax::type_syntax::resolve_named_types_in_data_type;
@@ -469,12 +469,10 @@ fn collect_runtime_struct_dependencies(
     match data_type {
         DataType::Struct {
             nominal_path,
-            const_record,
+            const_record: false,
             ..
         } => {
-            if !const_record {
-                dependencies.insert(nominal_path.to_owned());
-            }
+            dependencies.insert(nominal_path.to_owned());
         }
         DataType::Collection(inner, _) | DataType::Reference(inner) | DataType::Option(inner) => {
             collect_runtime_struct_dependencies(inner, dependencies)

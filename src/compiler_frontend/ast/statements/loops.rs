@@ -5,7 +5,7 @@
 //! WHY: loop headers now support richer syntax than the legacy `loop <binder> in ...` shape,
 //! so parsing/validation needs one dedicated module with explicit helpers.
 
-use crate::compiler_frontend::ast::ast::ScopeContext;
+use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::{
     AstNode, Declaration, LoopBindings, NodeKind, RangeEndKind, RangeLoopSpec,
 };

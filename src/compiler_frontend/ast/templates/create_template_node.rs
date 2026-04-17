@@ -8,7 +8,7 @@
 //! been refactored into an orchestrator that coordinates the pipeline stages
 //! defined in sibling modules while keeping the overall flow readable.
 
-use crate::compiler_frontend::ast::ast::ScopeContext;
+use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::templates::template::{CommentDirectiveKind, TemplateType};
 use crate::compiler_frontend::ast::templates::template_body_parser::parse_template_body;
 use crate::compiler_frontend::ast::templates::template_composition::compose_template_head_chain;

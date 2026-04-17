@@ -3,7 +3,7 @@
 //! WHAT: validates range/collection loop lowering into explicit HIR CFG blocks.
 //! WHY: loop header refactors must preserve control-flow semantics and loop-target routing.
 
-use crate::compiler_frontend::ast::ast::Ast;
+use crate::compiler_frontend::ast::Ast;
 use crate::compiler_frontend::ast::ast_nodes::{
     AstNode, Declaration, LoopBindings, NodeKind, RangeEndKind, RangeLoopSpec, SourceLocation,
 };

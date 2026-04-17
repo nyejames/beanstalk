@@ -14,7 +14,7 @@ use self::collection_builtin::parse_collection_builtin_member;
 use self::error_builtin::parse_error_builtin_member;
 use self::field_member::{parse_field_member_access, parse_member_name};
 use self::receiver_calls::parse_receiver_method_call;
-use crate::compiler_frontend::ast::ast::ScopeContext;
+use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::place_access::ast_node_is_place;

@@ -8,7 +8,7 @@ mod operator_policy;
 mod ordering;
 mod result_type;
 
-use crate::compiler_frontend::ast::ast::ScopeContext;
+use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::compiler_errors::{CompilerError, SourceLocation};
 use crate::compiler_frontend::optimizers::constant_folding::{
     constant_fold, fold_compile_time_expression,

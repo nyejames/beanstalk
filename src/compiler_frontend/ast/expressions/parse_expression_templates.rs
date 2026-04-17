@@ -4,7 +4,7 @@
 //! WHY: template expressions have distinct constant/runtime behavior and should not be buried in general token dispatch.
 
 use super::expression::Expression;
-use crate::compiler_frontend::ast::ast::ScopeContext;
+use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::templates::template::TemplateType;
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::compiler_errors::CompilerError;

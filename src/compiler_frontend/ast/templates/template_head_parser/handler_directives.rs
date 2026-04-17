@@ -9,7 +9,7 @@
 //! - Project-owned directives and frontend handler directives share one execution
 //!   contract, so this logic should be centralized and isolated from core directives.
 
-use crate::compiler_frontend::ast::ast::ScopeContext;
+use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
 use crate::compiler_frontend::ast::templates::template_types::Template;

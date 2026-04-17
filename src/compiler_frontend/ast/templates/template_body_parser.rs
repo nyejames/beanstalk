@@ -6,7 +6,7 @@
 //! WHY: Separates body token consumption from head parsing and composition,
 //! keeping each parsing phase focused and testable.
 
-use crate::compiler_frontend::ast::ast::ScopeContext;
+use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::templates::template::{
     CommentDirectiveKind, TemplateAtom, TemplateSegmentOrigin, TemplateType,

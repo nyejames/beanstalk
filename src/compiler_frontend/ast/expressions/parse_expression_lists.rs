@@ -5,7 +5,7 @@
 
 use super::expression::Expression;
 use super::parse_expression::{create_expression, create_expression_with_trailing_newline_policy};
-use crate::compiler_frontend::ast::ast::ScopeContext;
+use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::symbols::string_interning::StringTable;

@@ -3,12 +3,12 @@
 //! WHAT: exercises the post-lowering HIR validator against valid and intentionally broken modules.
 //! WHY: validator coverage needs focused tests that isolate invariants from the rest of lowering.
 
-use crate::compiler_frontend::ast::ast::{Ast, AstDocFragment, AstDocFragmentKind};
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind, SourceLocation};
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::statements::functions::{
     FunctionReturn, FunctionSignature, ReturnSlot,
 };
+use crate::compiler_frontend::ast::{Ast, AstDocFragment, AstDocFragmentKind};
 use crate::compiler_frontend::compiler_errors::{CompilerMessages, ErrorType};
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::hir::hir_builder::{HirBuilder, validate_module_for_tests};

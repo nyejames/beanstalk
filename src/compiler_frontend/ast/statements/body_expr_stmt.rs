@@ -5,7 +5,7 @@
 //! WHY: expression parsing is broader than statement grammar, so this module centralizes
 //! statement-position filtering and targeted diagnostics.
 
-use crate::compiler_frontend::ast::ast::ScopeContext;
+use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::NodeKind;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;

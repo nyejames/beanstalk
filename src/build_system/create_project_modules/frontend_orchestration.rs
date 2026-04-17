@@ -5,7 +5,7 @@
 
 use crate::build_system::build::{InputFile, Module, ResolvedConstFragment};
 use crate::compiler_frontend::analysis::borrow_checker::BorrowCheckReport;
-use crate::compiler_frontend::ast::ast::Ast;
+use crate::compiler_frontend::ast::Ast;
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::headers::parse_file_headers::Headers;

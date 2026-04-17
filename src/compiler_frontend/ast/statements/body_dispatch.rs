@@ -4,7 +4,6 @@
 //! WHY: centralized dispatch keeps control flow readable while specialized helpers own detailed
 //! syntax handling (symbol statements, returns, expression statements).
 
-use crate::compiler_frontend::ast::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::statements::body_expr_stmt::parse_expression_statement_candidate;
@@ -13,6 +12,7 @@ use crate::compiler_frontend::ast::statements::body_symbol::parse_symbol_stateme
 use crate::compiler_frontend::ast::statements::branching::create_branch;
 use crate::compiler_frontend::ast::statements::loops::create_loop;
 use crate::compiler_frontend::ast::templates::template_types::Template;
+use crate::compiler_frontend::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorMetaDataKey};
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::datatypes::Ownership;

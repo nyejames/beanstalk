@@ -1,4 +1,4 @@
-use crate::compiler_frontend::ast::ast::ScopeContext;
+use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::call_validation::{
     CallDiagnosticContext, expectations_from_struct_fields, resolve_call_arguments,

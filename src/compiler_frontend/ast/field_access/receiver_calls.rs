@@ -4,7 +4,7 @@
 //! WHY: user receiver methods follow different rules than compiler-owned builtin members.
 
 use super::{MemberStepContext, ReceiverAccessMode};
-use crate::compiler_frontend::ast::ast::ScopeContext;
+use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::expressions::call_validation::{
     CallDiagnosticContext, expectations_from_receiver_method_signature, resolve_call_arguments,

@@ -13,7 +13,7 @@ mod validation;
 
 use self::fallback::result_success_types;
 use self::named_handler::{NamedResultHandler, NamedResultHandlerSite, parse_named_result_handler};
-use crate::compiler_frontend::ast::ast::ScopeContext;
+use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::expressions::call_argument::CallArgument;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ResultCallHandling};

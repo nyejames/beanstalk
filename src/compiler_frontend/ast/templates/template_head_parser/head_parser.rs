@@ -18,7 +18,7 @@ use super::head_expressions::{
     handle_template_value_in_template_head, push_template_head_expression,
     push_template_head_path_expression,
 };
-use crate::compiler_frontend::ast::ast::ScopeContext;
+use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
 use crate::compiler_frontend::ast::templates::template::{CommentDirectiveKind, TemplateType};

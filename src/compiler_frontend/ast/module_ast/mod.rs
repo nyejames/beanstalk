@@ -9,25 +9,26 @@
 //!
 //! 1. `pass_import_bindings` — build per-file visibility gates
 //! 2. `pass_type_resolution` — resolve constants and struct field types
-//! 3. `pass_function_signatures` — resolve function signatures; build receiver catalog
-//! 4. `pass_emit_nodes` — lower function/template bodies into AST nodes
-//! 5. `orchestrate` — normalize templates; assemble final `Ast`
+//! 3. `pass_function_signatures` — resolve function signatures
+//! 4. `build_receiver_catalog` — build receiver method index from resolved signatures
+//! 5. `pass_emit_nodes` — lower function/template bodies into AST nodes
+//! 6. `finalization` — normalize templates and assemble final [`Ast`]
+//!
+//! The entry point and final assembly live in [`crate::compiler_frontend::ast::Ast::new`].
 
-mod build_state;
+pub(in crate::compiler_frontend::ast) mod build_state;
 mod finalization;
-mod orchestrate;
 mod pass_emit_nodes;
 mod pass_function_signatures;
 mod pass_import_bindings;
 mod pass_type_resolution;
 pub(crate) mod scope_context;
 
-// Public AST surface consumed by later compiler stages.
-#[cfg(test)]
-pub use crate::compiler_frontend::ast::templates::top_level_templates::AstDocFragment;
-pub use crate::compiler_frontend::ast::templates::top_level_templates::AstDocFragmentKind;
-pub use orchestrate::{Ast, AstBuildContext};
-pub use scope_context::{ContextKind, ScopeContext};
+// Internal re-exports so `ast/mod.rs` can surface the minimal public API.
+//
+// `Ast` and `AstBuildContext` live in `ast/mod.rs` (the strict module entry point).
+// The types below are re-exported here only so `ast/mod.rs` can re-export them;
+// callers should import through `ast::` directly.
 #[cfg(test)]
 pub(crate) use scope_context::{ReceiverMethodCatalog, ReceiverMethodEntry};
 

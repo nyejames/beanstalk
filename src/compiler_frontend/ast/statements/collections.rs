@@ -3,7 +3,7 @@
 //! WHAT: parses `{...}` literals into `ExpressionKind::Collection` during AST construction.
 //! WHY: collection parsing must share the normal expression parser for item type-checking.
 
-use crate::compiler_frontend::ast::ast::ScopeContext;
+use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
 use crate::compiler_frontend::compiler_errors::CompilerError;

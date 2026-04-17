@@ -5,7 +5,7 @@
 //! WHY: multi-bind syntax mixes statement parsing, declaration rules, and target validation, so it
 //! deserves a dedicated module instead of living inside the general function-body dispatcher.
 
-use crate::compiler_frontend::ast::ast::ScopeContext;
+use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::{
     AstNode, Declaration, MultiBindTarget, MultiBindTargetKind, NodeKind,
 };

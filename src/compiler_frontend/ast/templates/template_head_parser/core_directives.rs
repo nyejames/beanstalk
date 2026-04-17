@@ -10,7 +10,7 @@
 //!   control flow belongs in one dedicated module.
 
 use super::children_directive::parse_children_style_directive;
-use crate::compiler_frontend::ast::ast::ScopeContext;
+use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::templates::styles::code::configure_code_style;
 use crate::compiler_frontend::ast::templates::styles::markdown::markdown_formatter;
 use crate::compiler_frontend::ast::templates::styles::raw::configure_raw_style;

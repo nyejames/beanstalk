@@ -5,7 +5,7 @@
 //! WHY: builtin error metadata should be centralized so parser/lowering/backend code cannot drift
 //! on type names, field names, or error-code mapping.
 
-use crate::compiler_frontend::ast::ast::ScopeContext;
+use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::compiler_errors::CompilerError;

@@ -5,7 +5,7 @@
 //! WHY: call parsing sits at the boundary between general expression parsing and call-specific
 //! validation, so keeping that flow together makes the refactor seams easier to follow.
 
-use crate::compiler_frontend::ast::ast::ScopeContext;
+use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
 use crate::compiler_frontend::ast::expressions::call_argument::{CallAccessMode, CallArgument};
 use crate::compiler_frontend::ast::expressions::call_validation::{

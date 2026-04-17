@@ -1,7 +1,21 @@
 //! Mutable accumulation state for AST construction across all passes.
 //!
-//! WHAT: `AstBuildState` bundles all the maps that `Ast::new()` manages so each pass can be
-//! extracted into a focused method without repeating large parameter lists.
+//! WHAT: `AstBuildState` bundles all the maps that [`Ast::new`](crate::compiler_frontend::ast::Ast::new)
+//! manages so each pass can be extracted into a focused method without repeating large parameter lists.
+//!
+//! WHY: one long-lived struct owns the pass-to-pass accumulation, the output vectors, and the
+//! header-owned `ModuleSymbols` package. It is NOT a parser context — per-body scope growth is
+//! owned by [`ScopeContext`](crate::compiler_frontend::ast::ScopeContext), which receives cloned
+//! snapshots of `AstBuildState` data (e.g. `Rc<ReceiverMethodCatalog>`, declaration tables) for
+//! each function/template body.
+//!
+//! ## Context boundary
+//!
+//! | Concern | Owner |
+//! |---|---|
+//! | Module-wide pass accumulation + output assembly | `AstBuildState` |
+//! | Per-body parser state (locals, loops, type expectations) | `ScopeContext` |
+//! | Input dependency bag for `Ast::new` | `AstBuildContext` |
 
 use crate::compiler_frontend::FrontendBuildProfile;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration};
@@ -23,42 +37,45 @@ use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::paths::rendered_path_usage::RenderedPathUsage;
 
-pub(super) struct AstBuildState<'a> {
+pub(in crate::compiler_frontend::ast) struct AstBuildState<'a> {
     // Header-owned module symbol package from the header/dependency-sort phase.
     // Symbol-DB fields (importable_symbol_exported, file_imports_by_source, etc.)
     // live here and are accessed via self.module_symbols.xxx.
-    pub(super) module_symbols: ModuleSymbols,
+    pub(in crate::compiler_frontend::ast) module_symbols: ModuleSymbols,
 
     // Immutable configuration shared across passes.
-    pub(super) host_registry: &'a HostRegistry,
-    pub(super) style_directives: &'a StyleDirectiveRegistry,
-    pub(super) build_profile: FrontendBuildProfile,
-    pub(super) project_path_resolver: &'a Option<ProjectPathResolver>,
-    pub(super) path_format_config: &'a PathStringFormatConfig,
+    pub(in crate::compiler_frontend::ast) host_registry: &'a HostRegistry,
+    pub(in crate::compiler_frontend::ast) style_directives: &'a StyleDirectiveRegistry,
+    pub(in crate::compiler_frontend::ast) build_profile: FrontendBuildProfile,
+    pub(in crate::compiler_frontend::ast) project_path_resolver: &'a Option<ProjectPathResolver>,
+    pub(in crate::compiler_frontend::ast) path_format_config: &'a PathStringFormatConfig,
 
     // Mutable output state.
-    pub(super) ast: Vec<AstNode>,
-    pub(super) warnings: Vec<CompilerWarning>,
+    pub(in crate::compiler_frontend::ast) ast: Vec<AstNode>,
+    pub(in crate::compiler_frontend::ast) warnings: Vec<CompilerWarning>,
     // Starts as manifest declaration stubs; grows with resolved constants and struct types
     // in passes 3–4. Separate from manifest because it is mutated during AST construction.
-    pub(super) declarations: Vec<Declaration>,
-    pub(super) module_constants: Vec<Declaration>,
-    pub(super) const_templates_by_path: FxHashMap<InternedPath, StringId>,
-    pub(super) rendered_path_usages: Rc<RefCell<Vec<RenderedPathUsage>>>,
+    pub(in crate::compiler_frontend::ast) declarations: Vec<Declaration>,
+    pub(in crate::compiler_frontend::ast) module_constants: Vec<Declaration>,
+    pub(in crate::compiler_frontend::ast) const_templates_by_path:
+        FxHashMap<InternedPath, StringId>,
+    pub(in crate::compiler_frontend::ast) rendered_path_usages: Rc<RefCell<Vec<RenderedPathUsage>>>,
 
     // Builtin AST nodes seeded from the manifest; merged into output at finalization.
-    pub(super) builtin_struct_ast_nodes: Vec<AstNode>,
+    pub(in crate::compiler_frontend::ast) builtin_struct_ast_nodes: Vec<AstNode>,
 
     // Type resolution tables (populated in passes 2–4).
     // Seeded with builtin struct data from the manifest; extended with user-defined types.
-    pub(super) resolved_struct_fields_by_path: FxHashMap<InternedPath, Vec<Declaration>>,
-    pub(super) struct_source_by_path: FxHashMap<InternedPath, InternedPath>,
-    pub(super) resolved_function_signatures_by_path:
+    pub(in crate::compiler_frontend::ast) resolved_struct_fields_by_path:
+        FxHashMap<InternedPath, Vec<Declaration>>,
+    pub(in crate::compiler_frontend::ast) struct_source_by_path:
+        FxHashMap<InternedPath, InternedPath>,
+    pub(in crate::compiler_frontend::ast) resolved_function_signatures_by_path:
         FxHashMap<InternedPath, ResolvedFunctionSignature>,
 }
 
 impl<'a> AstBuildState<'a> {
-    pub(super) fn new(
+    pub(in crate::compiler_frontend::ast) fn new(
         host_registry: &'a HostRegistry,
         style_directives: &'a StyleDirectiveRegistry,
         build_profile: FrontendBuildProfile,
@@ -104,7 +121,7 @@ impl<'a> AstBuildState<'a> {
         }
     }
 
-    pub(super) fn error_messages(
+    pub(in crate::compiler_frontend::ast) fn error_messages(
         &self,
         error: CompilerError,
         string_table: &crate::compiler_frontend::symbols::string_interning::StringTable,

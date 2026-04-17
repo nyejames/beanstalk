@@ -4,7 +4,7 @@
 //! WHY: place rules differ from general expression parsing and benefit from one focused module.
 
 use super::parse_expression_dispatch::push_expression_node;
-use crate::compiler_frontend::ast::ast::ScopeContext;
+use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::AstNode;
 use crate::compiler_frontend::ast::field_access::{
     ReceiverAccessMode, parse_field_access_with_receiver_access,

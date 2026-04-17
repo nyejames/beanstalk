@@ -3,7 +3,7 @@
 //! WHAT: validates builtin argument lists and adapts them to call-validation expectations.
 //! WHY: collection and error builtins share positional-only parsing and type validation rules.
 
-use crate::compiler_frontend::ast::ast::ScopeContext;
+use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::expressions::call_argument::CallArgument;
 use crate::compiler_frontend::ast::expressions::call_validation::{
     CallDiagnosticContext, ExpectedAccessMode, ParameterExpectation, resolve_call_arguments,

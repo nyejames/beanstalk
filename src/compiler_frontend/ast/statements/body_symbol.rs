@@ -4,7 +4,7 @@
 //! WHY: symbol-led statements are the densest statement branch (mutation, calls, declarations,
 //! access chains, and start-import callability), so isolating them keeps dispatch readable.
 
-use crate::compiler_frontend::ast::ast::ScopeContext;
+use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
 use crate::compiler_frontend::ast::expressions::function_calls::parse_function_call;

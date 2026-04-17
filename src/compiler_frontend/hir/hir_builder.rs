@@ -15,8 +15,8 @@
 //!
 //! Those occur in later compilation phases.
 
-use crate::compiler_frontend::ast::ast::Ast;
-use crate::compiler_frontend::ast::ast::AstDocFragmentKind;
+use crate::compiler_frontend::ast::Ast;
+use crate::compiler_frontend::ast::AstDocFragmentKind;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, SourceLocation};
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::hir::hir_datatypes::{HirTypeKind, TypeContext, TypeId};

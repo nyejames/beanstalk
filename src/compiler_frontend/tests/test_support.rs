@@ -6,7 +6,6 @@
 
 use crate::compiler_frontend::FrontendBuildProfile;
 use crate::compiler_frontend::analysis::borrow_checker::{BorrowCheckReport, check_borrows};
-use crate::compiler_frontend::ast::ast::{Ast, AstBuildContext};
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind, SourceLocation};
 use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, Operator,
@@ -14,6 +13,7 @@ use crate::compiler_frontend::ast::expressions::expression::{
 use crate::compiler_frontend::ast::statements::functions::{
     FunctionReturn, FunctionSignature, ReturnSlot,
 };
+use crate::compiler_frontend::ast::{Ast, AstBuildContext};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::headers::parse_file_headers::{HeaderParseOptions, parse_headers};

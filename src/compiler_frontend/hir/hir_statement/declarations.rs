@@ -4,7 +4,7 @@
 //! WHY: these paths build the HIR symbol tables and compile-time data pool that later control-flow
 //! lowering depends on.
 
-use crate::compiler_frontend::ast::ast::Ast;
+use crate::compiler_frontend::ast::Ast;
 use crate::compiler_frontend::ast::ast_nodes::{Declaration, NodeKind, SourceLocation};
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;

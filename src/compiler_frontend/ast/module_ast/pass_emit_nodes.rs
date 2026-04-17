@@ -34,7 +34,7 @@ use std::rc::Rc;
 
 impl<'a> AstBuildState<'a> {
     /// Pass 6: Emit AST nodes for each header kind (functions, structs, templates).
-    pub(super) fn emit_ast_nodes(
+    pub(in crate::compiler_frontend::ast) fn emit_ast_nodes(
         &mut self,
         sorted_headers: Vec<Header>,
         file_import_bindings: &FxHashMap<InternedPath, FileImportBindings>,

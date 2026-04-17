@@ -57,7 +57,7 @@ pub(crate) mod tests {
 use crate::compiler_frontend::analysis::borrow_checker::{
     BorrowCheckReport, check_borrows as run_borrow_checker,
 };
-use crate::compiler_frontend::ast::ast::{Ast, AstBuildContext};
+use crate::compiler_frontend::ast::{Ast, AstBuildContext};
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::headers::parse_file_headers::{

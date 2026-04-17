@@ -1,3 +1,4 @@
+use super::scope_context::{ContextKind, ScopeContext};
 use super::*;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};

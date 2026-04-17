@@ -17,7 +17,7 @@ use crate::compiler_frontend::tests::test_support::{
 };
 
 fn lower_hir(
-    ast: crate::compiler_frontend::ast::ast::Ast,
+    ast: crate::compiler_frontend::ast::Ast,
     string_table: &mut StringTable,
 ) -> crate::compiler_frontend::hir::hir_nodes::HirModule {
     HirBuilder::new(string_table, PathStringFormatConfig::default())

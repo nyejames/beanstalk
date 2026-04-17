@@ -2,8 +2,20 @@
 //!
 //! WHAT: `ScopeContext` carries all state needed to parse/lower a single scope — declarations,
 //! visibility gates, type expectations, and optional path-resolution capability.
+//!
 //! WHY: passing it as one struct avoids large parameter lists across recursive parsing calls,
 //! and makes clone-to-child easy while keeping shared mutation through `Rc<RefCell<>>`.
+//!
+//! ## Relationship to `AstBuildState`
+//!
+//! `AstBuildState` owns the module-wide accumulation across passes (output vectors, type tables,
+//! the manifest). `ScopeContext` is created fresh for each function/template body in pass 6
+//! ([`pass_emit_nodes`](crate::compiler_frontend::ast::module_ast::pass_emit_nodes)) and owns
+//! only local scope growth (`local_declarations`, `loop_depth`, type expectations).
+//!
+//! `ScopeContext` receives cloned/copied state from `AstBuildState` (e.g. `Rc<Vec<Declaration>>`
+//! for top-level symbols, `Rc<ReceiverMethodCatalog>` for method lookup, `HostRegistry` clone)
+//! so body parsing is self-contained without referencing the mutable build state directly.
 
 use crate::compiler_frontend::FrontendBuildProfile;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;

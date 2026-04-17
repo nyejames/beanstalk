@@ -9,7 +9,7 @@
 //! - Head parsing needs one place for foldability and const-context checks so the
 //!   orchestration loop remains readable and consistent.
 
-use crate::compiler_frontend::ast::ast::ScopeContext;
+use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::templates::template::{TemplateSegmentOrigin, TemplateType};

@@ -3,7 +3,7 @@
 //! WHAT: parses function signatures, return lists, and host/user call metadata used by AST construction.
 //! WHY: function syntax has enough dedicated parsing and type-shape rules to live outside the general statement parser.
 
-use crate::compiler_frontend::ast::ast::ScopeContext;
+use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;

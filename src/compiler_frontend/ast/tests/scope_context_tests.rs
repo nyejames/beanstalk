@@ -5,7 +5,7 @@
 //! WHY: these properties are refactor seams — subtle mismatches (e.g. dropping
 //! `expected_error_type` on context clone) silently corrupt later passes.
 
-use super::*;
+use super::scope_context::{ContextKind, ScopeContext};
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;

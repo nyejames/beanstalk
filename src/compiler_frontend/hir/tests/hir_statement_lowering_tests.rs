@@ -3,9 +3,8 @@
 //! WHAT: checks how statement-level AST nodes become HIR blocks, statements, and terminators.
 //! WHY: statement lowering owns most CFG construction and benefits from targeted regression coverage.
 
-use crate::compiler_frontend::ast::ast::{Ast, AstDocFragment, AstDocFragmentKind};
 use crate::compiler_frontend::ast::ast_nodes::{
-    AstNode, Declaration, MultiBindTarget, MultiBindTargetKind, NodeKind, SourceLocation,
+    AstNode, MultiBindTarget, MultiBindTargetKind, NodeKind,
 };
 use crate::compiler_frontend::ast::expressions::call_argument::{CallAccessMode, CallArgument};
 use crate::compiler_frontend::ast::expressions::expression::{
@@ -16,6 +15,7 @@ use crate::compiler_frontend::ast::statements::functions::{
     FunctionReturn, FunctionSignature, ReturnSlot,
 };
 use crate::compiler_frontend::ast::templates::template_types::Template;
+use crate::compiler_frontend::ast::{Ast, AstDocFragment, AstDocFragmentKind};
 use crate::compiler_frontend::compiler_errors::{CompilerMessages, ErrorType};
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
@@ -23,7 +23,6 @@ use crate::compiler_frontend::hir::hir_nodes::{
     FunctionId, HirConstValue, HirDocFragmentKind, HirExpressionKind, HirModule, HirPattern,
     HirPlace, HirStatementKind, HirTerminator,
 };
-use crate::compiler_frontend::hir::tests::hir_expression_lowering_tests::location;
 use crate::compiler_frontend::host_functions::CallTarget;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;

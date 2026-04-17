@@ -27,7 +27,7 @@ impl<'a> AstBuildState<'a> {
     /// Pass 3: Resolve constants and struct field types in dependency order.
     /// WHY: struct defaults require constant-context parsing and import gates, so defaults
     /// can consume constants deterministically.
-    pub(super) fn resolve_types(
+    pub(in crate::compiler_frontend::ast) fn resolve_types(
         &mut self,
         sorted_headers: &[Header],
         file_import_bindings: &FxHashMap<InternedPath, FileImportBindings>,
