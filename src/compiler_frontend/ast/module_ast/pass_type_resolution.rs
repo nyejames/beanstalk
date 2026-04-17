@@ -16,12 +16,11 @@ use crate::compiler_frontend::ast::type_resolution::{
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::compiler_errors::ErrorMetaDataKey;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
-use crate::compiler_frontend::headers::module_symbols::DeclarationStubKind;
+use crate::compiler_frontend::headers::module_symbols::{DeclarationStub, DeclarationStubKind};
 use crate::compiler_frontend::headers::parse_file_headers::{Header, HeaderKind};
-use crate::compiler_frontend::headers::visible_scope::HeaderStageVisibleScope;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use std::rc::Rc;
 
 impl<'a> AstBuildState<'a> {
@@ -92,9 +91,6 @@ impl<'a> AstBuildState<'a> {
             .iter()
             .filter(|header| matches!(header.kind, HeaderKind::Constant { .. }))
             .collect::<Vec<_>>();
-        let visible_scope =
-            HeaderStageVisibleScope::new(&self.module_symbols, self.style_directives);
-
         while !pending_headers.is_empty() {
             let mut deferred_headers = Vec::new();
             let mut deferred_error = None;
@@ -128,9 +124,9 @@ impl<'a> AstBuildState<'a> {
                     }
                     Err(error)
                         if is_deferrable_constant_resolution_error(
-                            header,
                             &error,
-                            &visible_scope,
+                            &bindings.visible_symbol_paths,
+                            &self.module_symbols.declaration_stubs_by_path,
                             string_table,
                         ) =>
                     {
@@ -160,9 +156,9 @@ impl<'a> AstBuildState<'a> {
 }
 
 fn is_deferrable_constant_resolution_error(
-    header: &Header,
     error: &crate::compiler_frontend::compiler_errors::CompilerError,
-    visible_scope: &HeaderStageVisibleScope<'_>,
+    visible_symbol_paths: &FxHashSet<InternedPath>,
+    declaration_stubs_by_path: &FxHashMap<InternedPath, DeclarationStub>,
     string_table: &mut StringTable,
 ) -> bool {
     let Some(variable_name) = error.metadata.get(&ErrorMetaDataKey::VariableName) else {
@@ -170,10 +166,10 @@ fn is_deferrable_constant_resolution_error(
     };
 
     let variable_id = string_table.intern(variable_name);
-    let Some(stub) = visible_scope.visible_stub(variable_id, &header.source_file, string_table)
-    else {
-        return false;
-    };
 
-    matches!(stub.kind, DeclarationStubKind::Constant)
+    visible_symbol_paths
+        .iter()
+        .filter(|path| path.name() == Some(variable_id))
+        .filter_map(|path| declaration_stubs_by_path.get(path))
+        .any(|stub| matches!(stub.kind, DeclarationStubKind::Constant))
 }
