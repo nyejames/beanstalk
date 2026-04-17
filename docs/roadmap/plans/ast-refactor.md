@@ -8,7 +8,7 @@ The goal is to restore the intended frontend architecture and remove the AST dri
 Beanstalk’s frontend is intentionally eager. Earlier stages should do the declaration-level work needed so later stages can stay focused and avoid reparsing or rebuilding the same top-level information again.
 
 The tests are currnently broken and some simplification to the Choice code currently is causing errors due this being an unfinished refactor.
-This part does not focus on fixing, migrating or updating tests yet.
+This part does not focus on fixing, migrating or updating tests yet. This will be a following up "Part 4".
 
 This refactor has been gradually taking place and is focused on removing redunancy and simplifying the frontnend wherever possible.
 
