@@ -2,44 +2,13 @@
 
 ## Updated plan
 
-### 1. Header-stage directive visibility + deferred constant/default resolution
-
-**Status:** mostly completed
-
-This matches the current frontend contract: header parsing owns top-level discovery and builds the `ModuleSymbols` package, while AST consumes that package directly and must not re-discover top-level declarations  .
-
-#### Completed
-
-* Style directives are now threaded into header parsing early via `HeaderParseOptions.style_directives`, which is the right direction given that directive availability is registry-based and `$html` is a valid HTML-project directive  .
-* Header parsing now discovers visible constant placeholders up front for imports and exported constants.
-* `ModuleSymbols` now carries `declaration_stubs_by_path`.
-* AST now has a fixed-point constant-header resolution pass.
-* Struct field default resolution was extended so unresolved constant references can defer during header-owned shaping and get resolved later in AST.
-* Missing same-file strict-edge “hints” no longer hard-fail dependency sorting when the target never becomes a real header; later type resolution emits the user-facing diagnostic instead.
-
-#### Correction for drift
-
-* **Do not keep `src/compiler_frontend/headers/visible_scope.rs` in the plan.**
-* It was removed in the next commit, which was the correct cleanup. That file was redundant once AST used `visible_symbol_paths` plus `declaration_stubs_by_path` directly.
-* That correction fits the style guide: avoid extra layers, wrappers, and parallel structures; keep one current shape, not transitional indirection  .
-
-#### Remaining
-
-* Verify that `cargo run build docs` is now green and that the `$html` error is fully gone.
-* Add explicit regression tests around:
-
-  * header-stage access to build-system directives
-  * struct defaults referencing visible constants
-  * constant-header deferral across files/import visibility
-* Review whether placeholder discovery in `parse_file_headers.rs` can stay contained without further spreading.
-
----
-
 ### 2. `html_wasm` direct `bst_start() -> Vec<String>` runtime ABI
 
 **Status:** mostly completed
 
 This is aligned with the current compiler docs: the entry `start()` returns runtime fragment strings in source order, and builders hydrate slots from that result rather than using a separate wrapper pipeline .
+
+ONLY the entry file has a top level start function. There should be an error for files that are using the top-level scope for regular code or top level templates outside of the entry file. Other headers like functions, choices, structs and constants are fine though.
 
 #### Completed
 
