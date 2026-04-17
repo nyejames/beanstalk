@@ -1,1 +1,3 @@
-io("content reached")
+#content_text || -> String:
+    return "content reached"
+;

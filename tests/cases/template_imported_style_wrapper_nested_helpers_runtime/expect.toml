@@ -7,7 +7,6 @@ path = "index.html"
 kind = "html"
 must_contain = [
     "<div id=\"bst-slot-0\"></div>",
-    "function bst___bst_frag_",
     "template_imported_style_wrapper_nested_helpers_runtime",
     "border-collapse: collapse;",
     "<td>",

@@ -93,6 +93,7 @@ pub(crate) struct JsEmitter<'hir> {
     pub(crate) function_name_by_id: HashMap<FunctionId, String>,
     pub(crate) local_name_by_id: HashMap<LocalId, String>,
     pub(crate) field_name_by_id: HashMap<FieldId, String>,
+    pub(crate) current_function: Option<FunctionId>,
 
     used_identifiers: HashSet<String>,
     temp_counter: usize,
@@ -122,6 +123,7 @@ impl<'hir> JsEmitter<'hir> {
             function_name_by_id: HashMap::new(),
             local_name_by_id: HashMap::new(),
             field_name_by_id: HashMap::new(),
+            current_function: None,
             used_identifiers: HashSet::new(),
             temp_counter: 0,
         }

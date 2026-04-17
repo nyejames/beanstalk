@@ -11,5 +11,6 @@
     return result
 ;
 
--- Calculator module initialization
-io("Calculator module initialized")
+#init_calculator ||:
+    io("Calculator module initialized")
+;

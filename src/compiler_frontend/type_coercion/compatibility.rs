@@ -28,6 +28,22 @@ pub(crate) fn is_type_compatible(expected: &DataType, actual: &DataType) -> bool
         return true;
     }
 
+    if let (
+        DataType::Struct {
+            nominal_path: expected_path,
+            const_record: expected_const_record,
+            ..
+        },
+        DataType::Struct {
+            nominal_path: actual_path,
+            const_record: actual_const_record,
+            ..
+        },
+    ) = (expected, actual)
+    {
+        return expected_path == actual_path && expected_const_record == actual_const_record;
+    }
+
     if let DataType::Option(expected_inner) = expected {
         if matches!(actual, DataType::None) {
             return true;

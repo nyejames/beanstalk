@@ -45,7 +45,8 @@ impl<'hir> JsEmitter<'hir> {
         self.emit_parameter_binding_setup(function)?;
 
         let strategy = self.choose_control_flow_strategy(function, &reachable_blocks)?;
-        if self.function_returns_result(function) {
+        self.current_function = Some(function.id);
+        let emit_body_result = if self.function_returns_result(function) {
             self.emit_line("try {");
             self.indent += 1;
             match strategy {
@@ -67,6 +68,7 @@ impl<'hir> JsEmitter<'hir> {
             self.emit_line("throw __bs_err;");
             self.indent -= 1;
             self.emit_line("}");
+            Ok(())
         } else {
             match strategy {
                 ControlFlowStrategy::Structured => {
@@ -76,7 +78,10 @@ impl<'hir> JsEmitter<'hir> {
                     self.emit_dispatcher_for_function(function, &reachable_blocks)?;
                 }
             }
-        }
+            Ok(())
+        };
+        self.current_function = None;
+        emit_body_result?;
 
         self.indent -= 1;
         self.emit_line("}");

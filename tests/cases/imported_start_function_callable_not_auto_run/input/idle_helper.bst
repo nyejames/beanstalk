@@ -1,1 +1,3 @@
-io("idle helper start")
+#idle_helper ||:
+    io("idle helper start")
+;

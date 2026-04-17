@@ -1,6 +1,8 @@
 //! Compatibility check tests for `type_coercion::compatibility`.
 
-use crate::compiler_frontend::datatypes::DataType;
+use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::type_coercion::compatibility::{
     is_declaration_compatible, is_type_compatible,
 };
@@ -61,4 +63,16 @@ fn identical_types_are_always_compatible() {
     assert!(is_type_compatible(&DataType::Int, &DataType::Int));
     assert!(is_type_compatible(&DataType::Float, &DataType::Float));
     assert!(is_type_compatible(&DataType::Bool, &DataType::Bool));
+}
+
+#[test]
+fn struct_nominal_compatibility_ignores_ownership() {
+    let mut string_table = StringTable::new();
+    let nominal_path = InternedPath::from_single_str("Inner", &mut string_table);
+
+    let expected =
+        DataType::runtime_struct(nominal_path.to_owned(), vec![], Ownership::ImmutableOwned);
+    let actual = DataType::runtime_struct(nominal_path, vec![], Ownership::MutableOwned);
+
+    assert!(is_type_compatible(&expected, &actual));
 }

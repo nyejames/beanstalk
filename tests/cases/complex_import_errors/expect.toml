@@ -1,5 +1,5 @@
 [backends.html]
 mode = "failure"
 warnings = "forbid"
-error_type = "Syntax"
-message_contains = ["Expected '=' after declaration type"]
+error_type = "Rule"
+message_contains = ["Unexpected end of file while parsing function body"]

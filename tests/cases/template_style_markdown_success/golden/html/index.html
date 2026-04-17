@@ -180,7 +180,7 @@ body {
     </style>
   </head>
   <body style="">
-    <h1>Docs</h1><p>Hello from markdown.</p>
+    <div id="bst-slot-0"></div>
     <script>
     function __bs_is_ref(value) {
         return value !== null && typeof value === "object" && value.__bs_ref === true;
@@ -450,24 +450,25 @@ body {
     }
 
     function bst_start_fn0() {
+        let bst___hir_tmp_0_l0 = __bs_binding(undefined);
         
-        return "";
+        __bs_assign_value(bst___hir_tmp_0_l0, []);
+        __bs_read(bst___hir_tmp_0_l0).push("<h1>Docs<\/h1><p>Hello from markdown.<\/p>");
+        return __bs_read(bst___hir_tmp_0_l0);
     }
 
     </script>
     <script>
     (function () {
-      const slots = [
+      var bst_frags = bst_start_fn0();
+      var bst_slots = [
+        "bst-slot-0",
       ];
-
-      for (const [id, fn] of slots) {
-        const el = document.getElementById(id);
-        if (!el) throw new Error("Missing runtime mount slot: " + id);
-        el.insertAdjacentHTML("beforeend", fn());
+      for (var i = 0; i < bst_slots.length; i++) {
+        var el = document.getElementById(bst_slots[i]);
+        if (!el) throw new Error("Missing runtime mount slot: " + bst_slots[i]);
+        el.insertAdjacentHTML("beforeend", bst_frags[i] || "");
       }
-
-      // start() remains the lifecycle entrypoint and runs after fragment hydration.
-      if (typeof bst_start_fn0 === "function") bst_start_fn0();
     })();
     </script>
   </body>

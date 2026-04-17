@@ -1,1 +1,3 @@
-io("called helper start")
+#called_helper ||:
+    io("called helper start")
+;

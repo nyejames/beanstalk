@@ -205,6 +205,20 @@ impl<'hir> JsEmitter<'hir> {
             })
     }
 
+    fn current_function_returns_alias_reference(&self) -> bool {
+        let Some(function_id) = self.current_function else {
+            return false;
+        };
+
+        self.hir
+            .functions
+            .iter()
+            .find(|function| function.id == function_id)
+            .is_some_and(|function| {
+                function.return_aliases.len() == 1 && function.return_aliases[0].is_some()
+            })
+    }
+
     pub(crate) fn emit_return_terminator(
         &mut self,
         expression: &HirExpression,
@@ -214,7 +228,11 @@ impl<'hir> JsEmitter<'hir> {
             return Ok(());
         }
 
-        let value = self.lower_return_value_expression(expression)?;
+        let value = if self.current_function_returns_alias_reference() {
+            self.lower_return_value_expression(expression)?
+        } else {
+            self.lower_expr(expression)?
+        };
         self.emit_line(&format!("return {value};"));
         Ok(())
     }

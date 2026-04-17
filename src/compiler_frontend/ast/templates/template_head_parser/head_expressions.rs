@@ -10,6 +10,7 @@
 //!   orchestration loop remains readable and consistent.
 
 use crate::compiler_frontend::ast::ast::ScopeContext;
+use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::templates::template::{TemplateSegmentOrigin, TemplateType};
 use crate::compiler_frontend::ast::templates::template_types::Template;
@@ -22,6 +23,16 @@ use crate::compiler_frontend::paths::rendered_path_usage::resolve_compile_time_p
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation};
 use crate::{ast_log, return_syntax_error};
+
+fn is_unresolved_constant_placeholder_reference(expr: &Expression, context: &ScopeContext) -> bool {
+    let ExpressionKind::Reference(path) = &expr.kind else {
+        return false;
+    };
+
+    path.name()
+        .and_then(|name| context.get_reference(&name))
+        .is_some_and(Declaration::is_unresolved_constant_placeholder)
+}
 
 fn validate_template_head_value_type(
     expr: &Expression,
@@ -124,9 +135,20 @@ pub(super) fn push_template_head_expression(
         );
     }
 
-    validate_template_head_value_type(&expr, location, string_table)?;
+    let defer_inferred_type_validation = matches!(expr.data_type, DataType::Inferred)
+        && context
+            .top_level_declarations
+            .iter()
+            .any(Declaration::is_unresolved_constant_placeholder);
 
-    if context.kind.is_constant_context() && !expr.is_compile_time_constant() {
+    if !defer_inferred_type_validation {
+        validate_template_head_value_type(&expr, location, string_table)?;
+    }
+
+    if context.kind.is_constant_context()
+        && !expr.is_compile_time_constant()
+        && !is_unresolved_constant_placeholder_reference(&expr, context)
+    {
         return_syntax_error!(
             "Const templates can only capture compile-time values in the template head.",
             location.to_owned()

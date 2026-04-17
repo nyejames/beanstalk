@@ -449,38 +449,30 @@ body {
         return { tag: "err", value: __bs_make_error("Parse", "float.parse_invalid_format", "Float(...) only accepts Int, Float, or string values", null, null) };
     }
 
-    function bst_start_fn0() {
+    function bst_called_helper_fn0() {
         
         __bs_io("called helper start");
-        return "";
+        return;
     }
 
-    function bst_start_fn1() {
+    function bst_idle_helper_fn1() {
         
-        bst_start_fn0();
-        return "";
+        __bs_io("idle helper start");
+        return;
     }
 
     function bst_start_fn2() {
+        let bst___hir_tmp_0_l0 = __bs_binding(undefined);
         
-        __bs_io("idle helper start");
-        return "";
+        __bs_assign_value(bst___hir_tmp_0_l0, []);
+        bst_called_helper_fn0();
+        return __bs_read(bst___hir_tmp_0_l0);
     }
 
     </script>
     <script>
     (function () {
-      const slots = [
-      ];
-
-      for (const [id, fn] of slots) {
-        const el = document.getElementById(id);
-        if (!el) throw new Error("Missing runtime mount slot: " + id);
-        el.insertAdjacentHTML("beforeend", fn());
-      }
-
-      // start() remains the lifecycle entrypoint and runs after fragment hydration.
-      if (typeof bst_start_fn1 === "function") bst_start_fn1();
+      if (typeof bst_start_fn2 === "function") bst_start_fn2();
     })();
     </script>
   </body>

@@ -6,6 +6,8 @@
 //! compiler pipeline while unit tests still pass in isolation.
 
 use crate::compiler_frontend::analysis::borrow_checker::BorrowCheckReport;
+use crate::compiler_frontend::ast::ast_nodes::NodeKind;
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::headers::parse_file_headers::{HeaderKind, Headers};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
@@ -19,7 +21,7 @@ use crate::compiler_frontend::{
     hir::hir_nodes::{HirPlace, HirStatementKind},
     host_functions::CallTarget,
 };
-use crate::projects::settings::Config;
+use crate::projects::settings::{Config, IMPLICIT_START_FUNC_NAME};
 use std::fs;
 use std::path::PathBuf;
 use tempfile::TempDir;
@@ -228,6 +230,72 @@ fn start_function_is_excluded_from_dependency_graph_and_appended_last() {
             HeaderKind::StartFunction
         ),
         "start should be appended last for the entry file"
+    );
+}
+
+#[test]
+fn ast_resolves_struct_constructor_field_types_and_emits_start_last() {
+    let mut project = FrontendProject::new(
+        &[(
+            "src/#page.bst",
+            "Inner = |\n    value Int,\n|\n\nOuter = |\n    inner Inner,\n|\n\nwrapper = Outer(Inner(1))\nio(wrapper.inner.value)\n",
+        )],
+        "src/#page.bst",
+    );
+
+    let ast = project.ast();
+    let mut inner_path = None;
+    let mut outer_field_type = None;
+    let mut start_function_index = None;
+
+    for (index, node) in ast.nodes.iter().enumerate() {
+        match &node.kind {
+            NodeKind::StructDefinition(path, fields)
+                if path.name_str(&project.frontend.string_table) == Some("Inner") =>
+            {
+                inner_path = Some(path.clone());
+                assert_eq!(fields.len(), 1, "Inner should expose exactly one field");
+            }
+            NodeKind::StructDefinition(path, fields)
+                if path.name_str(&project.frontend.string_table) == Some("Outer") =>
+            {
+                assert_eq!(fields.len(), 1, "Outer should expose exactly one field");
+                outer_field_type = Some(fields[0].value.data_type.clone());
+            }
+            NodeKind::Function(path, _, _)
+                if path.name_str(&project.frontend.string_table)
+                    == Some(IMPLICIT_START_FUNC_NAME) =>
+            {
+                start_function_index = Some(index);
+            }
+            _ => {}
+        }
+    }
+
+    let inner_path = inner_path.expect("Inner struct definition should be emitted");
+    let outer_field_type = outer_field_type.expect("Outer struct definition should be emitted");
+
+    match outer_field_type {
+        DataType::Struct { nominal_path, .. } => {
+            assert_eq!(
+                nominal_path, inner_path,
+                "Outer.inner should resolve to the concrete Inner struct type",
+            );
+        }
+        DataType::NamedType(_) => {
+            panic!("Outer.inner should not retain unresolved NamedType placeholders in AST");
+        }
+        other => {
+            panic!("Outer.inner should resolve to struct type, got: {other:?}");
+        }
+    }
+
+    let start_function_index =
+        start_function_index.expect("entry start function should be emitted by AST");
+    assert_eq!(
+        start_function_index,
+        ast.nodes.len() - 1,
+        "entry start function should be emitted after top-level declarations",
     );
 }
 

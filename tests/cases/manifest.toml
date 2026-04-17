@@ -321,12 +321,12 @@ tags = ["integration","borrows"]
 [[case]]
 id = "complex_import_errors"
 path = "complex_import_errors"
-tags = ["integration","diagnostics"]
+tags = ["integration","diagnostics","imports"]
 
 [[case]]
 id = "complex_module_structure"
 path = "complex_module_structure"
-tags = ["integration","structs"]
+tags = ["integration","structs","imports","entry-start"]
 
 [[case]]
 id = "config_backward_compat"
@@ -811,17 +811,17 @@ tags = ["integration","borrows"]
 [[case]]
 id = "implicit_main_call"
 path = "implicit_main_call"
-tags = ["integration","language"]
+tags = ["integration","language","entry-start"]
 
 [[case]]
 id = "import_syntax_test"
 path = "import_syntax_test"
-tags = ["integration","language"]
+tags = ["integration","language","imports"]
 
 [[case]]
 id = "imported_start_function_callable_not_auto_run"
 path = "imported_start_function_callable_not_auto_run"
-tags = ["integration","functions"]
+tags = ["integration","functions","imports","entry-start"]
 
 [[case]]
 id = "integer_assignment_smoke"
@@ -1101,7 +1101,7 @@ tags = ["integration","language"]
 [[case]]
 id = "multi_file_module"
 path = "multi_file_module"
-tags = ["integration","language"]
+tags = ["integration","language","imports"]
 
 [[case]]
 id = "multiple_print_statements"
@@ -1251,7 +1251,7 @@ tags = ["integration","receivers","diagnostics"]
 [[case]]
 id = "relative_import_dot_segments"
 path = "relative_import_dot_segments"
-tags = ["integration","language"]
+tags = ["integration","language","imports","paths"]
 
 [[case]]
 id = "result_handler_without_fallback_fallthrough_rejected"
@@ -1351,7 +1351,7 @@ tags = ["integration","borrows"]
 [[case]]
 id = "struct_using_constant"
 path = "struct_using_constant"
-tags = ["integration","structs"]
+tags = ["integration","structs","constants"]
 
 [[case]]
 id = "structs_and_collections"
@@ -1748,6 +1748,16 @@ tags = ["integration", "diagnostics"]
 id = "html_wasm_vec_start_abi"
 path = "html_wasm_vec_start_abi"
 tags = ["html-wasm", "abi", "vec-runtime"]
+
+[[case]]
+id = "html_wasm_collection_runtime_coverage"
+path = "html_wasm_collection_runtime_coverage"
+tags = ["html-wasm", "collections", "runtime"]
+
+[[case]]
+id = "char_requires_char_literal_diagnostic"
+path = "char_requires_char_literal_diagnostic"
+tags = ["integration", "char", "diagnostics"]
 
 [[case]]
 id = "top_level_code_non_entry_file_rejected"

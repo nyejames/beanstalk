@@ -1,0 +1,5 @@
+[backends.html]
+mode = "failure"
+warnings = "forbid"
+error_type = "Type"
+message_contains = ["Declaration 'value' has incompatible initializer type", "Expected 'Char', but found 'String'"]

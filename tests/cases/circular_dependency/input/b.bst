@@ -1,4 +1,6 @@
--- Completes the circular dependency back to a
-import @a
+-- Completes strict top-level cycle back to A.
+import @a/A
 
-a()
+#B = |
+    peer A,
+|

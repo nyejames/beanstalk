@@ -180,7 +180,7 @@ body {
     </style>
   </head>
   <body style="">
-    relative imports ok
+    <div id="bst-slot-0"></div>
     <script>
     function __bs_is_ref(value) {
         return value !== null && typeof value === "object" && value.__bs_ref === true;
@@ -449,37 +449,78 @@ body {
         return { tag: "err", value: __bs_make_error("Parse", "float.parse_invalid_format", "Float(...) only accepts Int, Float, or string values", null, null) };
     }
 
-    function bst_start_fn0() {
+    function bst_widget_status_fn0() {
+        let bst___hir_tmp_0_l3 = __bs_binding(undefined);
+        let bst___hir_tmp_1_l4 = __bs_binding(undefined);
+        let bst___hir_tmp_2_l5 = __bs_binding(undefined);
         
-        return "";
+        __bs_assign_value(bst___hir_tmp_0_l3, bst_content_text_fn1());
+        __bs_assign_value(bst___hir_tmp_1_l4, bst___template_fn_1_fn4(bst___hir_tmp_0_l3));
+        __bs_assign_value(bst___hir_tmp_2_l5, bst___template_fn_0_fn3(__bs_binding("widget loaded "), bst___hir_tmp_1_l4));
+        return __bs_clone_value(__bs_read(bst___hir_tmp_2_l5));
     }
 
-    function bst_start_fn1() {
+    function bst_content_text_fn1() {
         
-        __bs_io("widget loaded");
-        return "";
+        return "content reached";
     }
 
     function bst_start_fn2() {
+        let bst___hir_tmp_3_l6 = __bs_binding(undefined);
+        let bst___hir_tmp_4_l10 = __bs_binding(undefined);
+        let bst___hir_tmp_5_l11 = __bs_binding(undefined);
+        let bst___hir_tmp_6_l12 = __bs_binding(undefined);
         
-        __bs_io("content reached");
-        return "";
+        __bs_assign_value(bst___hir_tmp_3_l6, []);
+        __bs_assign_value(bst___hir_tmp_4_l10, bst_widget_status_fn0());
+        __bs_assign_value(bst___hir_tmp_5_l11, bst___template_fn_3_fn6(bst___hir_tmp_4_l10));
+        __bs_assign_value(bst___hir_tmp_6_l12, bst___template_fn_2_fn5(__bs_binding("relative imports ok "), bst___hir_tmp_5_l11));
+        __bs_read(bst___hir_tmp_3_l6).push(__bs_read(bst___hir_tmp_6_l12));
+        return __bs_read(bst___hir_tmp_3_l6);
+    }
+
+    function bst___template_fn_0_fn3(bst_chunk_0_l0, bst_chunk_1_l1) {
+        
+        bst_chunk_0_l0 = __bs_param_binding(bst_chunk_0_l0);
+        bst_chunk_1_l1 = __bs_param_binding(bst_chunk_1_l1);
+        
+        return (("" + __bs_read(bst_chunk_0_l0)) + __bs_read(bst_chunk_1_l1));
+    }
+
+    function bst___template_fn_1_fn4(bst_chunk_0_l2) {
+        
+        bst_chunk_0_l2 = __bs_param_binding(bst_chunk_0_l2);
+        
+        return ("" + __bs_read(bst_chunk_0_l2));
+    }
+
+    function bst___template_fn_2_fn5(bst_chunk_0_l7, bst_chunk_1_l8) {
+        
+        bst_chunk_0_l7 = __bs_param_binding(bst_chunk_0_l7);
+        bst_chunk_1_l8 = __bs_param_binding(bst_chunk_1_l8);
+        
+        return (("" + __bs_read(bst_chunk_0_l7)) + __bs_read(bst_chunk_1_l8));
+    }
+
+    function bst___template_fn_3_fn6(bst_chunk_0_l9) {
+        
+        bst_chunk_0_l9 = __bs_param_binding(bst_chunk_0_l9);
+        
+        return ("" + __bs_read(bst_chunk_0_l9));
     }
 
     </script>
     <script>
     (function () {
-      const slots = [
+      var bst_frags = bst_start_fn2();
+      var bst_slots = [
+        "bst-slot-0",
       ];
-
-      for (const [id, fn] of slots) {
-        const el = document.getElementById(id);
-        if (!el) throw new Error("Missing runtime mount slot: " + id);
-        el.insertAdjacentHTML("beforeend", fn());
+      for (var i = 0; i < bst_slots.length; i++) {
+        var el = document.getElementById(bst_slots[i]);
+        if (!el) throw new Error("Missing runtime mount slot: " + bst_slots[i]);
+        el.insertAdjacentHTML("beforeend", bst_frags[i] || "");
       }
-
-      // start() remains the lifecycle entrypoint and runs after fragment hydration.
-      if (typeof bst_start_fn0 === "function") bst_start_fn0();
     })();
     </script>
   </body>

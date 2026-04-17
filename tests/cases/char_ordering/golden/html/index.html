@@ -450,96 +450,91 @@ body {
     }
 
     function bst_start_fn0() {
-        
-        return "";
-    }
-
-    function bst___bst_frag_0_fn1() {
-        let bst_a_l0 = __bs_binding(undefined);
-        let bst_b_l1 = __bs_binding(undefined);
-        let bst_z_l2 = __bs_binding(undefined);
-        let bst_a_lt_b_l3 = __bs_binding(undefined);
-        let bst_z_gt_a_l4 = __bs_binding(undefined);
-        let bst_a_le_a_l5 = __bs_binding(undefined);
-        let bst_b_ge_a_l6 = __bs_binding(undefined);
-        let bst___hir_tmp_0_l16 = __bs_binding(undefined);
-        let bst___hir_tmp_1_l18 = __bs_binding(undefined);
-        let bst___hir_tmp_2_l20 = __bs_binding(undefined);
-        let bst___hir_tmp_3_l22 = __bs_binding(undefined);
+        let bst___hir_tmp_0_l0 = __bs_binding(undefined);
+        let bst_a_l1 = __bs_binding(undefined);
+        let bst_b_l2 = __bs_binding(undefined);
+        let bst_z_l3 = __bs_binding(undefined);
+        let bst_a_lt_b_l4 = __bs_binding(undefined);
+        let bst_z_gt_a_l5 = __bs_binding(undefined);
+        let bst_a_le_a_l6 = __bs_binding(undefined);
+        let bst_b_ge_a_l7 = __bs_binding(undefined);
+        let bst___hir_tmp_1_l17 = __bs_binding(undefined);
+        let bst___hir_tmp_2_l19 = __bs_binding(undefined);
+        let bst___hir_tmp_3_l21 = __bs_binding(undefined);
         let bst___hir_tmp_4_l23 = __bs_binding(undefined);
+        let bst___hir_tmp_5_l24 = __bs_binding(undefined);
         
-        __bs_assign_value(bst_a_l0, "a");
-        __bs_assign_value(bst_b_l1, "b");
-        __bs_assign_value(bst_z_l2, "z");
-        __bs_assign_value(bst_a_lt_b_l3, (__bs_read(bst_a_l0) < __bs_read(bst_b_l1)));
-        __bs_assign_value(bst_z_gt_a_l4, (__bs_read(bst_z_l2) > __bs_read(bst_a_l0)));
-        __bs_assign_value(bst_a_le_a_l5, (__bs_read(bst_a_l0) <= __bs_read(bst_a_l0)));
-        __bs_assign_value(bst_b_ge_a_l6, (__bs_read(bst_b_l1) >= __bs_read(bst_a_l0)));
-        __bs_assign_value(bst___hir_tmp_0_l16, bst___template_fn_1_fn3(bst_a_lt_b_l3));
-        __bs_assign_value(bst___hir_tmp_1_l18, bst___template_fn_2_fn4(bst_z_gt_a_l4));
-        __bs_assign_value(bst___hir_tmp_2_l20, bst___template_fn_3_fn5(bst_a_le_a_l5));
-        __bs_assign_value(bst___hir_tmp_3_l22, bst___template_fn_4_fn6(bst_b_ge_a_l6));
-        __bs_assign_value(bst___hir_tmp_4_l23, bst___template_fn_0_fn2(__bs_binding("char_ordering lt="), bst___hir_tmp_0_l16, __bs_binding(" gt="), bst___hir_tmp_1_l18, __bs_binding(" le="), bst___hir_tmp_2_l20, __bs_binding(" ge="), bst___hir_tmp_3_l22));
-        return __bs_clone_value(__bs_read(bst___hir_tmp_4_l23));
+        __bs_assign_value(bst___hir_tmp_0_l0, []);
+        __bs_assign_value(bst_a_l1, "a");
+        __bs_assign_value(bst_b_l2, "b");
+        __bs_assign_value(bst_z_l3, "z");
+        __bs_assign_value(bst_a_lt_b_l4, (__bs_read(bst_a_l1) < __bs_read(bst_b_l2)));
+        __bs_assign_value(bst_z_gt_a_l5, (__bs_read(bst_z_l3) > __bs_read(bst_a_l1)));
+        __bs_assign_value(bst_a_le_a_l6, (__bs_read(bst_a_l1) <= __bs_read(bst_a_l1)));
+        __bs_assign_value(bst_b_ge_a_l7, (__bs_read(bst_b_l2) >= __bs_read(bst_a_l1)));
+        __bs_assign_value(bst___hir_tmp_1_l17, bst___template_fn_1_fn2(bst_a_lt_b_l4));
+        __bs_assign_value(bst___hir_tmp_2_l19, bst___template_fn_2_fn3(bst_z_gt_a_l5));
+        __bs_assign_value(bst___hir_tmp_3_l21, bst___template_fn_3_fn4(bst_a_le_a_l6));
+        __bs_assign_value(bst___hir_tmp_4_l23, bst___template_fn_4_fn5(bst_b_ge_a_l7));
+        __bs_assign_value(bst___hir_tmp_5_l24, bst___template_fn_0_fn1(__bs_binding("char_ordering lt="), bst___hir_tmp_1_l17, __bs_binding(" gt="), bst___hir_tmp_2_l19, __bs_binding(" le="), bst___hir_tmp_3_l21, __bs_binding(" ge="), bst___hir_tmp_4_l23));
+        __bs_read(bst___hir_tmp_0_l0).push(__bs_read(bst___hir_tmp_5_l24));
+        return __bs_read(bst___hir_tmp_0_l0);
     }
 
-    function bst___template_fn_0_fn2(bst_chunk_0_l7, bst_chunk_1_l8, bst_chunk_2_l9, bst_chunk_3_l10, bst_chunk_4_l11, bst_chunk_5_l12, bst_chunk_6_l13, bst_chunk_7_l14) {
+    function bst___template_fn_0_fn1(bst_chunk_0_l8, bst_chunk_1_l9, bst_chunk_2_l10, bst_chunk_3_l11, bst_chunk_4_l12, bst_chunk_5_l13, bst_chunk_6_l14, bst_chunk_7_l15) {
         
-        bst_chunk_0_l7 = __bs_param_binding(bst_chunk_0_l7);
-        bst_chunk_1_l8 = __bs_param_binding(bst_chunk_1_l8);
-        bst_chunk_2_l9 = __bs_param_binding(bst_chunk_2_l9);
-        bst_chunk_3_l10 = __bs_param_binding(bst_chunk_3_l10);
-        bst_chunk_4_l11 = __bs_param_binding(bst_chunk_4_l11);
-        bst_chunk_5_l12 = __bs_param_binding(bst_chunk_5_l12);
-        bst_chunk_6_l13 = __bs_param_binding(bst_chunk_6_l13);
-        bst_chunk_7_l14 = __bs_param_binding(bst_chunk_7_l14);
+        bst_chunk_0_l8 = __bs_param_binding(bst_chunk_0_l8);
+        bst_chunk_1_l9 = __bs_param_binding(bst_chunk_1_l9);
+        bst_chunk_2_l10 = __bs_param_binding(bst_chunk_2_l10);
+        bst_chunk_3_l11 = __bs_param_binding(bst_chunk_3_l11);
+        bst_chunk_4_l12 = __bs_param_binding(bst_chunk_4_l12);
+        bst_chunk_5_l13 = __bs_param_binding(bst_chunk_5_l13);
+        bst_chunk_6_l14 = __bs_param_binding(bst_chunk_6_l14);
+        bst_chunk_7_l15 = __bs_param_binding(bst_chunk_7_l15);
         
-        return (((((((("" + __bs_read(bst_chunk_0_l7)) + __bs_read(bst_chunk_1_l8)) + __bs_read(bst_chunk_2_l9)) + __bs_read(bst_chunk_3_l10)) + __bs_read(bst_chunk_4_l11)) + __bs_read(bst_chunk_5_l12)) + __bs_read(bst_chunk_6_l13)) + __bs_read(bst_chunk_7_l14));
+        return (((((((("" + __bs_read(bst_chunk_0_l8)) + __bs_read(bst_chunk_1_l9)) + __bs_read(bst_chunk_2_l10)) + __bs_read(bst_chunk_3_l11)) + __bs_read(bst_chunk_4_l12)) + __bs_read(bst_chunk_5_l13)) + __bs_read(bst_chunk_6_l14)) + __bs_read(bst_chunk_7_l15));
     }
 
-    function bst___template_fn_1_fn3(bst_chunk_0_l15) {
+    function bst___template_fn_1_fn2(bst_chunk_0_l16) {
         
-        bst_chunk_0_l15 = __bs_param_binding(bst_chunk_0_l15);
+        bst_chunk_0_l16 = __bs_param_binding(bst_chunk_0_l16);
         
-        return ("" + ("" + __bs_read(bst_chunk_0_l15)));
+        return ("" + ("" + __bs_read(bst_chunk_0_l16)));
     }
 
-    function bst___template_fn_2_fn4(bst_chunk_0_l17) {
+    function bst___template_fn_2_fn3(bst_chunk_0_l18) {
         
-        bst_chunk_0_l17 = __bs_param_binding(bst_chunk_0_l17);
+        bst_chunk_0_l18 = __bs_param_binding(bst_chunk_0_l18);
         
-        return ("" + ("" + __bs_read(bst_chunk_0_l17)));
+        return ("" + ("" + __bs_read(bst_chunk_0_l18)));
     }
 
-    function bst___template_fn_3_fn5(bst_chunk_0_l19) {
+    function bst___template_fn_3_fn4(bst_chunk_0_l20) {
         
-        bst_chunk_0_l19 = __bs_param_binding(bst_chunk_0_l19);
+        bst_chunk_0_l20 = __bs_param_binding(bst_chunk_0_l20);
         
-        return ("" + ("" + __bs_read(bst_chunk_0_l19)));
+        return ("" + ("" + __bs_read(bst_chunk_0_l20)));
     }
 
-    function bst___template_fn_4_fn6(bst_chunk_0_l21) {
+    function bst___template_fn_4_fn5(bst_chunk_0_l22) {
         
-        bst_chunk_0_l21 = __bs_param_binding(bst_chunk_0_l21);
+        bst_chunk_0_l22 = __bs_param_binding(bst_chunk_0_l22);
         
-        return ("" + ("" + __bs_read(bst_chunk_0_l21)));
+        return ("" + ("" + __bs_read(bst_chunk_0_l22)));
     }
 
     </script>
     <script>
     (function () {
-      const slots = [
-        ["bst-slot-0", bst___bst_frag_0_fn1],
+      var bst_frags = bst_start_fn0();
+      var bst_slots = [
+        "bst-slot-0",
       ];
-
-      for (const [id, fn] of slots) {
-        const el = document.getElementById(id);
-        if (!el) throw new Error("Missing runtime mount slot: " + id);
-        el.insertAdjacentHTML("beforeend", fn());
+      for (var i = 0; i < bst_slots.length; i++) {
+        var el = document.getElementById(bst_slots[i]);
+        if (!el) throw new Error("Missing runtime mount slot: " + bst_slots[i]);
+        el.insertAdjacentHTML("beforeend", bst_frags[i] || "");
       }
-
-      // start() remains the lifecycle entrypoint and runs after fragment hydration.
-      if (typeof bst_start_fn0 === "function") bst_start_fn0();
     })();
     </script>
   </body>

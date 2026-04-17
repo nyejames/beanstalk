@@ -1,6 +1,4 @@
 -- Storage utility module
-storage_data ~= {}
-
 #save |key String, value Int|:
     io([: Saving [key] = [value]])
     -- In a real implementation, this would store to the collection
@@ -12,5 +10,6 @@ storage_data ~= {}
     return 42
 ;
 
--- Storage module initialization
-io("Storage module initialized")
+#init_storage ||:
+    io("Storage module initialized")
+;

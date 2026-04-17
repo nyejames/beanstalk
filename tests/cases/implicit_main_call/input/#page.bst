@@ -1,9 +1,8 @@
--- Test calling imported file's implicit main function
-import @config
-import @config/get_database_url
+-- Test calling imported config entrypoints explicitly.
+import @config {init_config, get_database_url}
 
 io("Before config initialization")
-config() -- Call config's implicit main
+init_config()
 io("After config initialization")
 
 database_url = get_database_url()

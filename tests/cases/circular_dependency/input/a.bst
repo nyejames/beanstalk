@@ -1,4 +1,6 @@
--- Intermediate module in a circular import chain
-import @b
+-- Intermediate module in strict top-level cycle.
+import @b/B
 
-b()
+#A = |
+    peer B,
+|

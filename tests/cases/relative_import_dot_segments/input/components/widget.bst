@@ -1,3 +1,5 @@
-import @../shared/content
+import @../shared/content/content_text
 
-io("widget loaded")
+#widget_status || -> String:
+    return [:widget loaded [content_text()]]
+;

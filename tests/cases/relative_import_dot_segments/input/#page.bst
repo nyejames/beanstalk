@@ -1,3 +1,3 @@
-import @./components/widget
+import @./components/widget/widget_status
 
-#[:relative imports ok]
+[:relative imports ok [widget_status()]]

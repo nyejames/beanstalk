@@ -209,7 +209,7 @@ pub(crate) fn resolve_struct_field_types(
             string_table,
         )?;
         resolved_field.value = inline_visible_constant_references(
-            &field.value,
+            &resolved_field.value,
             declarations,
             visible_declaration_ids,
             string_table,

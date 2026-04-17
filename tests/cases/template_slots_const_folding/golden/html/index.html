@@ -449,25 +449,17 @@ body {
     }
 
     function bst_start_fn0() {
+        let bst___hir_tmp_0_l0 = __bs_binding(undefined);
         
+        __bs_assign_value(bst___hir_tmp_0_l0, []);
         __bs_io(" before  this content is now wrapped after");
         __bs_io(" before  This goes into the first slot in the middle  This goes into the second slot afterwards");
-        return "";
+        return __bs_read(bst___hir_tmp_0_l0);
     }
 
     </script>
     <script>
     (function () {
-      const slots = [
-      ];
-
-      for (const [id, fn] of slots) {
-        const el = document.getElementById(id);
-        if (!el) throw new Error("Missing runtime mount slot: " + id);
-        el.insertAdjacentHTML("beforeend", fn());
-      }
-
-      // start() remains the lifecycle entrypoint and runs after fragment hydration.
       if (typeof bst_start_fn0 === "function") bst_start_fn0();
     })();
     </script>

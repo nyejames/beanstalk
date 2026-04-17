@@ -457,55 +457,50 @@ body {
     }
 
     function bst_start_fn1() {
-        
-        return "";
-    }
-
-    function bst___bst_frag_0_fn2() {
-        let bst_c_l1 = __bs_binding(undefined);
-        let bst___hir_tmp_0_l5 = __bs_binding(undefined);
+        let bst___hir_tmp_0_l1 = __bs_binding(undefined);
+        let bst_c_l2 = __bs_binding(undefined);
         let bst___hir_tmp_1_l6 = __bs_binding(undefined);
         let bst___hir_tmp_2_l7 = __bs_binding(undefined);
         let bst___hir_tmp_3_l8 = __bs_binding(undefined);
+        let bst___hir_tmp_4_l9 = __bs_binding(undefined);
         
-        __bs_assign_value(bst_c_l1, { bst_count_fld11: 1 });
-        __bs_assign_value(bst___hir_tmp_0_l5, bst_bumped_fn0(bst_c_l1));
-        __bs_assign_value(bst___hir_tmp_1_l6, bst_bumped_fn0(bst___hir_tmp_0_l5));
-        __bs_assign_value(bst___hir_tmp_2_l7, bst___template_fn_1_fn4(__bs_field(bst___hir_tmp_1_l6, "bst_count_fld11")));
-        __bs_assign_value(bst___hir_tmp_3_l8, bst___template_fn_0_fn3(__bs_binding("struct_chained_immutable_receiver_method_call value="), bst___hir_tmp_2_l7));
-        return __bs_clone_value(__bs_read(bst___hir_tmp_3_l8));
+        __bs_assign_value(bst___hir_tmp_0_l1, []);
+        __bs_assign_value(bst_c_l2, { bst_count_fld11: 1 });
+        __bs_assign_value(bst___hir_tmp_1_l6, bst_bumped_fn0(bst_c_l2));
+        __bs_assign_value(bst___hir_tmp_2_l7, bst_bumped_fn0(bst___hir_tmp_1_l6));
+        __bs_assign_value(bst___hir_tmp_3_l8, bst___template_fn_1_fn3(__bs_field(bst___hir_tmp_2_l7, "bst_count_fld11")));
+        __bs_assign_value(bst___hir_tmp_4_l9, bst___template_fn_0_fn2(__bs_binding("struct_chained_immutable_receiver_method_call value="), bst___hir_tmp_3_l8));
+        __bs_read(bst___hir_tmp_0_l1).push(__bs_read(bst___hir_tmp_4_l9));
+        return __bs_read(bst___hir_tmp_0_l1);
     }
 
-    function bst___template_fn_0_fn3(bst_chunk_0_l2, bst_chunk_1_l3) {
+    function bst___template_fn_0_fn2(bst_chunk_0_l3, bst_chunk_1_l4) {
         
-        bst_chunk_0_l2 = __bs_param_binding(bst_chunk_0_l2);
-        bst_chunk_1_l3 = __bs_param_binding(bst_chunk_1_l3);
+        bst_chunk_0_l3 = __bs_param_binding(bst_chunk_0_l3);
+        bst_chunk_1_l4 = __bs_param_binding(bst_chunk_1_l4);
         
-        return (("" + __bs_read(bst_chunk_0_l2)) + __bs_read(bst_chunk_1_l3));
+        return (("" + __bs_read(bst_chunk_0_l3)) + __bs_read(bst_chunk_1_l4));
     }
 
-    function bst___template_fn_1_fn4(bst_chunk_0_l4) {
+    function bst___template_fn_1_fn3(bst_chunk_0_l5) {
         
-        bst_chunk_0_l4 = __bs_param_binding(bst_chunk_0_l4);
+        bst_chunk_0_l5 = __bs_param_binding(bst_chunk_0_l5);
         
-        return ("" + ("" + __bs_read(bst_chunk_0_l4)));
+        return ("" + ("" + __bs_read(bst_chunk_0_l5)));
     }
 
     </script>
     <script>
     (function () {
-      const slots = [
-        ["bst-slot-0", bst___bst_frag_0_fn2],
+      var bst_frags = bst_start_fn1();
+      var bst_slots = [
+        "bst-slot-0",
       ];
-
-      for (const [id, fn] of slots) {
-        const el = document.getElementById(id);
-        if (!el) throw new Error("Missing runtime mount slot: " + id);
-        el.insertAdjacentHTML("beforeend", fn());
+      for (var i = 0; i < bst_slots.length; i++) {
+        var el = document.getElementById(bst_slots[i]);
+        if (!el) throw new Error("Missing runtime mount slot: " + bst_slots[i]);
+        el.insertAdjacentHTML("beforeend", bst_frags[i] || "");
       }
-
-      // start() remains the lifecycle entrypoint and runs after fragment hydration.
-      if (typeof bst_start_fn1 === "function") bst_start_fn1();
     })();
     </script>
   </body>

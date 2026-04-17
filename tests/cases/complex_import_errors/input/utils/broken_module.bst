@@ -1,4 +1,3 @@
--- Broken module with syntax errors
-export broken_function |param|:
-    ["This has syntax errors"]
-;
+-- Broken module with declaration syntax error.
+#broken_function |param String| -> String:
+    return param

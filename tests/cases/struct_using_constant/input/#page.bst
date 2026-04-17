@@ -1,8 +1,6 @@
-# const_before = [: Hello]
+# const_message = "Hello World!"
 
 Basic = |
     nothing String,
-    complex_const String = [const_before, const_after]
+    complex_const String = const_message
 |
-
-# const_after = [: World!]

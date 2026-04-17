@@ -1,4 +1,3 @@
 -- Test circular dependency detection
-import @a
-
-a()
+import @a/A
+io("cycle trigger")

@@ -156,6 +156,36 @@ fn constant_initializer_does_not_create_strict_sort_dependency() {
 }
 
 #[test]
+fn function_body_references_do_not_influence_strict_header_sort_order() {
+    // WHY: function body references are AST/body-phase concerns (soft edges), not
+    // strict top-level header dependencies. Sorting should preserve source order
+    // for otherwise-independent declarations.
+    let (headers, mut string_table) = parse_module_headers(
+        &[(
+            "src/a.bst",
+            "#first || -> Int:\n    return second()\n;\n\n#second || -> Int:\n    return 1\n;\n",
+        )],
+        "src/a.bst",
+    );
+
+    let sorted = resolve_module_dependencies(headers, &mut string_table)
+        .expect("dependency sort should ignore body-only references");
+
+    let non_start_names: Vec<_> = sorted
+        .headers
+        .iter()
+        .filter(|header| !matches!(header.kind, HeaderKind::StartFunction))
+        .map(|header| header_name(header, &string_table))
+        .collect();
+
+    assert_eq!(
+        non_start_names,
+        vec!["first", "second"],
+        "function body call graph must not perturb strict header sorting"
+    );
+}
+
+#[test]
 fn reports_ambiguous_suffix_import_resolution() {
     let (headers, mut string_table) = parse_module_headers(
         &[
