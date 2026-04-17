@@ -69,7 +69,16 @@ impl<'a> AstBuildState<'a> {
     ) -> Self {
         // Extract the fields that AstBuildState mutates during passes so the module_symbols
         // package can be stored whole for its read-only symbol-DB fields.
-        let declarations = std::mem::take(&mut module_symbols.declarations);
+        let mut declarations = std::mem::take(&mut module_symbols.declarations);
+        for stub in module_symbols.declaration_stubs_by_path.values() {
+            if declarations
+                .iter()
+                .any(|declaration| declaration.id == stub.path)
+            {
+                continue;
+            }
+            declarations.push(stub.declaration.to_owned());
+        }
         let builtin_struct_ast_nodes = std::mem::take(&mut module_symbols.builtin_struct_ast_nodes);
         let resolved_struct_fields_by_path =
             std::mem::take(&mut module_symbols.resolved_struct_fields_by_path);

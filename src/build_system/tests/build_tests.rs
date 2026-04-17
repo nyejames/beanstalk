@@ -437,9 +437,15 @@ fn html_project_directives_are_available_under_html_builder() {
                 _ => None,
             })
             .expect("expected an HTML output file");
+        let escaped_runtime_fragment = expected_html_fragment.replace("</", "<\\/");
 
         assert!(
-            rendered_html.contains(expected_html_fragment),
+            rendered_html.contains("bst-slot-0"),
+            "expected rendered HTML for '${directive_name}' to include a runtime slot placeholder, got: {rendered_html}"
+        );
+        assert!(
+            rendered_html.contains(expected_html_fragment)
+                || rendered_html.contains(&escaped_runtime_fragment),
             "expected rendered HTML for '${directive_name}' to contain '{expected_html_fragment}', got: {rendered_html}"
         );
     }
@@ -1687,10 +1693,11 @@ fn build_project_const_slot_children_wrap_table_rows_and_cells_without_cross_app
             ),
         };
 
+        assert!(html.contains("bst-slot-0"));
         assert_eq!(html.matches("<tr>").count(), 2);
-        assert!(html.contains("<td>Type</td>"));
-        assert!(html.contains("<td>Description</td>"));
-        assert!(html.contains("<td>float</td>"));
+        assert!(html.contains("<td>Type"));
+        assert!(html.contains("<td>Description"));
+        assert!(html.contains("<td>float"));
         assert_eq!(html.matches("<td>").count(), 4);
     }
 
@@ -1734,9 +1741,10 @@ fn build_project_markdown_page_reexported_table_keeps_rows_and_cells_inside_tabl
         };
 
         assert!(!html.contains('\u{FFFC}'));
+        assert!(html.contains("bst-slot-0"));
         assert_eq!(html.matches("<tr>").count(), 2);
-        assert!(html.contains("<td>Type</td>"));
-        assert!(html.contains("<td>Description</td>"));
+        assert!(html.contains("<td>Type"));
+        assert!(html.contains("<td>Description"));
         assert_eq!(html.matches("<td>").count(), 4);
         assert!(!html.contains("<p>"));
     }
@@ -1834,15 +1842,12 @@ fn build_project_markdown_docs_row_wrappers_render_plain_cells_and_headers() {
         };
 
         assert!(!html.contains('\u{FFFC}'));
+        assert!(html.contains("bst-slot-0"));
         assert!(html.contains("border-collapse: collapse; border: 1px solid; padding: 0.5em;"));
-        assert_eq!(
-            html.matches("<th style=\"border: 1px solid; padding: 0.5em; text-align: left;\">")
-                .count(),
-            2
-        );
+        assert_eq!(html.matches("<th style=").count(), 2);
         assert_eq!(html.matches("<td>").count(), 4);
-        assert!(html.contains("Type</th>"));
-        assert!(html.contains("Description</th>"));
+        assert!(html.contains("Type"));
+        assert!(html.contains("Description"));
         assert!(html.contains("float"));
         assert!(html.contains("64 bit floating point number"));
         assert!(!html.contains("<p>"));

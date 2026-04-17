@@ -35,17 +35,37 @@ pub fn parse_struct_shell(
 
     token_stream.advance();
 
-    validate_struct_default_values(&fields, string_table)?;
+    validate_struct_default_values(&fields, context, string_table)?;
 
     Ok(fields)
 }
 
 fn validate_struct_default_values(
     fields: &[Declaration],
+    context: &ScopeContext,
     string_table: &StringTable,
 ) -> Result<(), CompilerError> {
     for field in fields {
         if matches!(field.value.kind, ExpressionKind::NoValue) {
+            continue;
+        }
+
+        if let ExpressionKind::Reference(path) = &field.value.kind
+            && let Some(name) = path.name()
+            && context
+                .get_reference(&name)
+                .is_some_and(Declaration::is_unresolved_constant_placeholder)
+        {
+            continue;
+        }
+
+        if context
+            .top_level_declarations
+            .iter()
+            .any(Declaration::is_unresolved_constant_placeholder)
+        {
+            // Header-stage struct defaults may temporarily carry unresolved constant placeholders.
+            // Pass 2 resolves those references before the compile-time-constant rule is enforced.
             continue;
         }
 

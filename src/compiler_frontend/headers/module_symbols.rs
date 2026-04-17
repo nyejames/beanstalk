@@ -27,6 +27,7 @@ use crate::compiler_frontend::ast::statements::functions::{
     FunctionReturn, FunctionSignature, ReturnSlot,
 };
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::declaration_syntax::declaration_shell::DeclarationSyntax;
 use crate::compiler_frontend::headers::parse_file_headers::{FileImport, Header, HeaderKind};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
@@ -65,6 +66,7 @@ pub(crate) struct ModuleSymbols {
     pub(crate) importable_symbol_exported: FxHashMap<InternedPath, bool>,
     pub(crate) declared_paths_by_file: FxHashMap<InternedPath, FxHashSet<InternedPath>>,
     pub(crate) declared_names_by_file: FxHashMap<InternedPath, FxHashSet<StringId>>,
+    pub(crate) declaration_stubs_by_path: FxHashMap<InternedPath, DeclarationStub>,
 
     // Builtin data merged during header parsing.
     pub(crate) builtin_visible_symbol_paths: FxHashSet<InternedPath>,
@@ -84,6 +86,7 @@ impl ModuleSymbols {
             importable_symbol_exported: FxHashMap::default(),
             declared_paths_by_file: FxHashMap::default(),
             declared_names_by_file: FxHashMap::default(),
+            declaration_stubs_by_path: FxHashMap::default(),
             builtin_visible_symbol_paths: FxHashSet::default(),
             builtin_struct_ast_nodes: Vec::new(),
             resolved_struct_fields_by_path: FxHashMap::default(),
@@ -106,67 +109,166 @@ impl ModuleSymbols {
         string_table: &mut StringTable,
     ) {
         for header in sorted_headers {
-            match &header.kind {
-                HeaderKind::Function { signature } => {
-                    self.declarations.push(Declaration {
-                        id: header.tokens.src_path.to_owned(),
-                        value: Expression::new(
-                            ExpressionKind::NoValue,
-                            header.name_location.to_owned(),
-                            DataType::Function(Box::new(None), signature.to_owned()),
-                            Ownership::ImmutableReference,
-                        ),
-                    });
-                }
-                HeaderKind::Choice { variants } => {
-                    self.declarations.push(Declaration {
-                        id: header.tokens.src_path.to_owned(),
-                        value: Expression::new(
-                            ExpressionKind::NoValue,
-                            header.name_location.to_owned(),
-                            DataType::Choices {
-                                nominal_path: header.tokens.src_path.to_owned(),
-                                variants: variants.to_owned(),
-                            },
-                            Ownership::ImmutableReference,
-                        ),
-                    });
-                }
-                HeaderKind::StartFunction => {
-                    // WHAT: entry start() signature uses Collection(StringSlice, MutableOwned),
-                    //       which is the Beanstalk frontend type for Vec<String>.
-                    // WHY: must match the signature emitted by pass_emit_nodes for the same
-                    //      implicit start function so call-site type checking succeeds.
-                    let start_name = header
-                        .source_file
-                        .join_str(IMPLICIT_START_FUNC_NAME, string_table);
-                    self.declarations.push(Declaration {
-                        id: start_name,
-                        value: Expression::new(
-                            ExpressionKind::NoValue,
-                            header.name_location.to_owned(),
-                            DataType::Function(
-                                Box::new(None),
-                                FunctionSignature {
-                                    parameters: vec![],
-                                    returns: vec![ReturnSlot::success(FunctionReturn::Value(
-                                        DataType::Collection(
-                                            Box::new(DataType::StringSlice),
-                                            Ownership::MutableOwned,
-                                        ),
-                                    ))],
-                                },
-                            ),
-                            Ownership::ImmutableReference,
-                        ),
-                    });
-                }
-                _ => {}
+            if let Some(stub) = declaration_stub_from_header(header, string_table)
+                && matches!(
+                    stub.kind,
+                    DeclarationStubKind::Function
+                        | DeclarationStubKind::Choice
+                        | DeclarationStubKind::StartFunction
+                )
+            {
+                self.declarations.push(stub.declaration);
             }
         }
 
         // Append staged builtin declarations after all user-defined declarations.
         self.declarations.append(&mut self.builtin_declarations);
+    }
+
+    pub(crate) fn seed_declaration_stubs(
+        &mut self,
+        headers: &[Header],
+        string_table: &mut StringTable,
+    ) {
+        self.declaration_stubs_by_path.clear();
+
+        for header in headers {
+            if let Some(stub) = declaration_stub_from_header(header, string_table) {
+                self.declaration_stubs_by_path
+                    .insert(stub.path.to_owned(), stub);
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum DeclarationStubKind {
+    Function,
+    Constant,
+    Struct,
+    Choice,
+    StartFunction,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct DeclarationStub {
+    pub(crate) path: InternedPath,
+    pub(crate) kind: DeclarationStubKind,
+    pub(crate) declaration: Declaration,
+}
+
+fn declaration_stub_from_header(
+    header: &Header,
+    string_table: &mut StringTable,
+) -> Option<DeclarationStub> {
+    match &header.kind {
+        HeaderKind::Function { signature } => Some(DeclarationStub {
+            path: header.tokens.src_path.to_owned(),
+            kind: DeclarationStubKind::Function,
+            declaration: Declaration {
+                id: header.tokens.src_path.to_owned(),
+                value: Expression::new(
+                    ExpressionKind::NoValue,
+                    header.name_location.to_owned(),
+                    DataType::Function(Box::new(None), signature.to_owned()),
+                    Ownership::ImmutableReference,
+                ),
+            },
+        }),
+        HeaderKind::Constant { declaration } => Some(DeclarationStub {
+            path: header.tokens.src_path.to_owned(),
+            kind: DeclarationStubKind::Constant,
+            declaration: constant_declaration_stub(
+                &header.tokens.src_path,
+                declaration,
+                &header.name_location,
+            ),
+        }),
+        HeaderKind::Struct { fields } => Some(DeclarationStub {
+            path: header.tokens.src_path.to_owned(),
+            kind: DeclarationStubKind::Struct,
+            declaration: Declaration {
+                id: header.tokens.src_path.to_owned(),
+                value: Expression::new(
+                    ExpressionKind::NoValue,
+                    header.name_location.to_owned(),
+                    DataType::runtime_struct(
+                        header.tokens.src_path.to_owned(),
+                        fields.to_owned(),
+                        Ownership::MutableOwned,
+                    ),
+                    Ownership::ImmutableReference,
+                ),
+            },
+        }),
+        HeaderKind::Choice { variants } => Some(DeclarationStub {
+            path: header.tokens.src_path.to_owned(),
+            kind: DeclarationStubKind::Choice,
+            declaration: Declaration {
+                id: header.tokens.src_path.to_owned(),
+                value: Expression::new(
+                    ExpressionKind::NoValue,
+                    header.name_location.to_owned(),
+                    DataType::Choices {
+                        nominal_path: header.tokens.src_path.to_owned(),
+                        variants: variants.to_owned(),
+                    },
+                    Ownership::ImmutableReference,
+                ),
+            },
+        }),
+        HeaderKind::StartFunction => {
+            let start_name = header
+                .source_file
+                .join_str(IMPLICIT_START_FUNC_NAME, string_table);
+            Some(DeclarationStub {
+                path: start_name.to_owned(),
+                kind: DeclarationStubKind::StartFunction,
+                declaration: Declaration {
+                    id: start_name,
+                    value: Expression::new(
+                        ExpressionKind::NoValue,
+                        header.name_location.to_owned(),
+                        DataType::Function(
+                            Box::new(None),
+                            FunctionSignature {
+                                parameters: vec![],
+                                returns: vec![ReturnSlot::success(FunctionReturn::Value(
+                                    DataType::Collection(
+                                        Box::new(DataType::StringSlice),
+                                        Ownership::MutableOwned,
+                                    ),
+                                ))],
+                            },
+                        ),
+                        Ownership::ImmutableReference,
+                    ),
+                },
+            })
+        }
+        HeaderKind::ConstTemplate => None,
+    }
+}
+
+fn constant_declaration_stub(
+    path: &InternedPath,
+    declaration: &DeclarationSyntax,
+    location: &crate::compiler_frontend::tokenizer::tokens::SourceLocation,
+) -> Declaration {
+    let ownership = if declaration.mutable_marker {
+        Ownership::MutableOwned
+    } else {
+        Ownership::ImmutableOwned
+    };
+
+    Declaration {
+        id: path.to_owned(),
+        value: Expression::new(
+            ExpressionKind::NoValue,
+            location.to_owned(),
+            declaration.to_data_type(&ownership),
+            ownership,
+        ),
     }
 }
 

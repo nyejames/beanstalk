@@ -131,7 +131,7 @@ pub(crate) fn build_emit_plan(
     })
 }
 
-pub(crate) fn helper_emit_order() -> [WasmRuntimeHelper; 10] {
+pub(crate) fn helper_emit_order() -> [WasmRuntimeHelper; 14] {
     // WHAT: canonical helper declaration order.
     // WHY: helper function indices must be deterministic for stable exports/debug output.
     [
@@ -143,6 +143,10 @@ pub(crate) fn helper_emit_order() -> [WasmRuntimeHelper; 10] {
         WasmRuntimeHelper::StringPtr,
         WasmRuntimeHelper::StringLen,
         WasmRuntimeHelper::StringFromI64,
+        WasmRuntimeHelper::VecNew,
+        WasmRuntimeHelper::VecPushHandle,
+        WasmRuntimeHelper::VecLen,
+        WasmRuntimeHelper::VecGet,
         WasmRuntimeHelper::Release,
         WasmRuntimeHelper::DropIfOwned,
     ]
@@ -184,6 +188,22 @@ pub(crate) fn helper_signature(helper: WasmRuntimeHelper) -> WasmLirSignature {
             params: vec![I64],
             results: vec![Handle],
         },
+        WasmRuntimeHelper::VecNew => WasmLirSignature {
+            params: vec![],
+            results: vec![Handle],
+        },
+        WasmRuntimeHelper::VecPushHandle => WasmLirSignature {
+            params: vec![Handle, Handle],
+            results: vec![],
+        },
+        WasmRuntimeHelper::VecLen => WasmLirSignature {
+            params: vec![Handle],
+            results: vec![I32],
+        },
+        WasmRuntimeHelper::VecGet => WasmLirSignature {
+            params: vec![Handle, I32],
+            results: vec![Handle],
+        },
         WasmRuntimeHelper::Release => WasmLirSignature {
             params: vec![Handle],
             results: vec![],
@@ -200,6 +220,10 @@ pub(crate) fn helper_exports_requested(request: &WasmBackendRequest) -> bool {
     helpers.export_memory
         || helpers.export_str_ptr
         || helpers.export_str_len
+        || helpers.export_vec_new
+        || helpers.export_vec_push
+        || helpers.export_vec_len
+        || helpers.export_vec_get
         || helpers.export_release
 }
 
@@ -213,6 +237,10 @@ pub(crate) fn helper_name(helper: WasmRuntimeHelper) -> &'static str {
         WasmRuntimeHelper::StringPtr => "rt_string_ptr",
         WasmRuntimeHelper::StringLen => "rt_string_len",
         WasmRuntimeHelper::StringFromI64 => "rt_string_from_i64",
+        WasmRuntimeHelper::VecNew => "rt_vec_new",
+        WasmRuntimeHelper::VecPushHandle => "rt_vec_push_handle",
+        WasmRuntimeHelper::VecLen => "rt_vec_len",
+        WasmRuntimeHelper::VecGet => "rt_vec_get",
         WasmRuntimeHelper::Release => "rt_release",
         WasmRuntimeHelper::DropIfOwned => "rt_drop_if_owned",
     }
@@ -337,6 +365,8 @@ fn module_uses_runtime_helpers(module: &WasmLirModule) -> bool {
                         | WasmLirStmt::StringPushHandle { .. }
                         | WasmLirStmt::StringFromI64 { .. }
                         | WasmLirStmt::StringFinish { .. }
+                        | WasmLirStmt::VecNew { .. }
+                        | WasmLirStmt::VecPushHandle { .. }
                         | WasmLirStmt::DropIfOwned { .. }
                 ) {
                     return true;

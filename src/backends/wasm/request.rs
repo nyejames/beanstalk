@@ -42,6 +42,14 @@ pub(crate) struct WasmHelperExportPolicy {
     pub export_str_ptr: bool,
     /// Export runtime string-length helper as `bst_str_len`.
     pub export_str_len: bool,
+    /// Export runtime Vec handle constructor as `bst_vec_new`.
+    pub export_vec_new: bool,
+    /// Export runtime Vec append helper as `bst_vec_push`.
+    pub export_vec_push: bool,
+    /// Export runtime Vec length helper as `bst_vec_len`.
+    pub export_vec_len: bool,
+    /// Export runtime Vec element reader as `bst_vec_get`.
+    pub export_vec_get: bool,
     /// Export runtime release helper as `bst_release`.
     pub export_release: bool,
 }

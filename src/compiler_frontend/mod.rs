@@ -215,6 +215,7 @@ impl CompilerFrontend {
                 entry_file_id,
                 project_path_resolver: self.project_path_resolver.clone(),
                 path_format_config: self.path_format_config.clone(),
+                style_directives: self.style_directives.clone(),
             },
             &mut self.string_table,
         )

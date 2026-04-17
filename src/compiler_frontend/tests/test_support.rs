@@ -80,6 +80,7 @@ fn parse_single_file_ast_result(source: &str) -> Result<(Ast, StringTable), Comp
             entry_file_id: None,
             project_path_resolver: Some(test_project_path_resolver()),
             path_format_config: PathStringFormatConfig::default(),
+            style_directives: style_directives.clone(),
         },
         &mut string_table,
     )

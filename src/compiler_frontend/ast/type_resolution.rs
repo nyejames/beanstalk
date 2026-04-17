@@ -3,18 +3,23 @@
 //! WHAT: resolves AST `NamedType` placeholders to concrete declaration-backed `DataType`s.
 //! WHY: AST emission and receiver-method validation require fully resolved types up front.
 
-use crate::compiler_frontend::ast::ast_nodes::Declaration;
+use crate::compiler_frontend::ast::ast::{ContextKind, ScopeContext};
+use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
+use crate::compiler_frontend::ast::expressions::eval_expression::evaluate_expression;
+use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::statements::functions::{
     FunctionReturn, FunctionSignature, ReturnSlot,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, ReceiverKey};
 use crate::compiler_frontend::declaration_syntax::type_syntax::resolve_named_types_in_data_type;
+use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::return_rule_error;
 use rustc_hash::{FxHashMap, FxHashSet};
+use std::rc::Rc;
 
 #[derive(Clone)]
 /// Function signature after resolving all named types and receiver metadata.
@@ -187,7 +192,7 @@ pub(crate) fn resolve_struct_field_types(
     fields: &[Declaration],
     declarations: &[Declaration],
     visible_declaration_ids: Option<&FxHashSet<InternedPath>>,
-    string_table: &StringTable,
+    string_table: &mut StringTable,
 ) -> Result<Vec<Declaration>, CompilerError> {
     // WHAT: resolves field types against the declaration table visible to this struct header.
     // WHY: struct fields must enter AST/HIR in fully resolved nominal form so later phases do not
@@ -203,6 +208,31 @@ pub(crate) fn resolve_struct_field_types(
             visible_declaration_ids,
             string_table,
         )?;
+        resolved_field.value = inline_visible_constant_references(
+            &field.value,
+            declarations,
+            visible_declaration_ids,
+            string_table,
+        );
+        if !matches!(resolved_field.value.kind, ExpressionKind::NoValue)
+            && !resolved_field.value.is_compile_time_constant()
+        {
+            let field_name = resolved_field
+                .id
+                .name_str(string_table)
+                .unwrap_or("<field>");
+            return_rule_error!(
+                format!(
+                    "Struct field '{}' default value must fold to a single compile-time value.",
+                    field_name
+                ),
+                resolved_field.value.location.clone(),
+                {
+                    CompilationStage => "AST Construction",
+                    PrimarySuggestion => "Use only compile-time constants and constant expressions in struct default values",
+                }
+            );
+        }
         resolved_fields.push(resolved_field);
     }
 
@@ -233,6 +263,201 @@ pub(crate) fn resolve_struct_field_types(
     }
 
     Ok(resolved_fields)
+}
+
+fn inline_visible_constant_references(
+    expression: &Expression,
+    declarations: &[Declaration],
+    visible_declaration_ids: Option<&FxHashSet<InternedPath>>,
+    string_table: &mut StringTable,
+) -> Expression {
+    inline_visible_constant_references_impl(
+        expression,
+        declarations,
+        visible_declaration_ids,
+        string_table,
+    )
+}
+
+fn inline_visible_constant_references_impl(
+    expression: &Expression,
+    declarations: &[Declaration],
+    visible_declaration_ids: Option<&FxHashSet<InternedPath>>,
+    string_table: &mut StringTable,
+) -> Expression {
+    match &expression.kind {
+        ExpressionKind::Reference(path) => declarations
+            .iter()
+            .rfind(|declaration| {
+                declaration.id == *path
+                    && !declaration.is_unresolved_constant_placeholder()
+                    && declaration.value.is_compile_time_constant()
+                    && match visible_declaration_ids {
+                        Some(visible) => visible.contains(&declaration.id),
+                        None => true,
+                    }
+            })
+            .or_else(|| {
+                path.name().and_then(|name| {
+                    visible_declaration_by_name(declarations, visible_declaration_ids, name).filter(
+                        |declaration| {
+                            !declaration.is_unresolved_constant_placeholder()
+                                && declaration.value.is_compile_time_constant()
+                        },
+                    )
+                })
+            })
+            .map(|declaration| {
+                let mut resolved = declaration.value.to_owned();
+                resolved.location = expression.location.clone();
+                resolved
+            })
+            .unwrap_or_else(|| expression.to_owned()),
+        ExpressionKind::Runtime(nodes) => {
+            let rewritten_nodes = nodes
+                .iter()
+                .map(|node| {
+                    inline_visible_constant_references_in_node(
+                        node,
+                        declarations,
+                        visible_declaration_ids,
+                        string_table,
+                    )
+                })
+                .collect::<Vec<_>>();
+
+            let mut current_type = expression.data_type.to_owned();
+            let evaluation_context = ScopeContext::new(
+                ContextKind::ConstantHeader,
+                expression.location.scope.to_owned(),
+                Rc::new(Vec::new()),
+                HostRegistry::new(),
+                Vec::new(),
+            );
+
+            evaluate_expression(
+                &evaluation_context,
+                rewritten_nodes,
+                &mut current_type,
+                &expression.ownership,
+                string_table,
+            )
+            .unwrap_or_else(|_| expression.to_owned())
+        }
+        ExpressionKind::Collection(items) => Expression::new(
+            ExpressionKind::Collection(
+                items
+                    .iter()
+                    .map(|item| {
+                        inline_visible_constant_references_impl(
+                            item,
+                            declarations,
+                            visible_declaration_ids,
+                            string_table,
+                        )
+                    })
+                    .collect(),
+            ),
+            expression.location.clone(),
+            expression.data_type.to_owned(),
+            expression.ownership.to_owned(),
+        ),
+        ExpressionKind::StructInstance(fields) => Expression::new(
+            ExpressionKind::StructInstance(
+                fields
+                    .iter()
+                    .map(|field| Declaration {
+                        id: field.id.to_owned(),
+                        value: inline_visible_constant_references_impl(
+                            &field.value,
+                            declarations,
+                            visible_declaration_ids,
+                            string_table,
+                        ),
+                    })
+                    .collect(),
+            ),
+            expression.location.clone(),
+            expression.data_type.to_owned(),
+            expression.ownership.to_owned(),
+        ),
+        ExpressionKind::Range(start, end) => Expression::new(
+            ExpressionKind::Range(
+                Box::new(inline_visible_constant_references(
+                    start,
+                    declarations,
+                    visible_declaration_ids,
+                    string_table,
+                )),
+                Box::new(inline_visible_constant_references(
+                    end,
+                    declarations,
+                    visible_declaration_ids,
+                    string_table,
+                )),
+            ),
+            expression.location.clone(),
+            expression.data_type.to_owned(),
+            expression.ownership.to_owned(),
+        ),
+        ExpressionKind::ResultConstruct { variant, value } => Expression::new(
+            ExpressionKind::ResultConstruct {
+                variant: *variant,
+                value: Box::new(inline_visible_constant_references(
+                    value,
+                    declarations,
+                    visible_declaration_ids,
+                    string_table,
+                )),
+            },
+            expression.location.clone(),
+            expression.data_type.to_owned(),
+            expression.ownership.to_owned(),
+        ),
+        ExpressionKind::Coerced { value, to_type } => Expression::new(
+            ExpressionKind::Coerced {
+                value: Box::new(inline_visible_constant_references(
+                    value,
+                    declarations,
+                    visible_declaration_ids,
+                    string_table,
+                )),
+                to_type: to_type.to_owned(),
+            },
+            expression.location.clone(),
+            expression.data_type.to_owned(),
+            expression.ownership.to_owned(),
+        ),
+        _ => expression.to_owned(),
+    }
+}
+
+fn inline_visible_constant_references_in_node(
+    node: &AstNode,
+    declarations: &[Declaration],
+    visible_declaration_ids: Option<&FxHashSet<InternedPath>>,
+    string_table: &mut StringTable,
+) -> AstNode {
+    let mut rewritten = node.to_owned();
+    rewritten.kind = match &node.kind {
+        NodeKind::Rvalue(expression) => NodeKind::Rvalue(inline_visible_constant_references_impl(
+            expression,
+            declarations,
+            visible_declaration_ids,
+            string_table,
+        )),
+        NodeKind::VariableDeclaration(declaration) => NodeKind::VariableDeclaration(Declaration {
+            id: declaration.id.to_owned(),
+            value: inline_visible_constant_references_impl(
+                &declaration.value,
+                declarations,
+                visible_declaration_ids,
+                string_table,
+            ),
+        }),
+        _ => node.kind.to_owned(),
+    };
+    rewritten
 }
 
 fn collect_runtime_struct_dependencies(

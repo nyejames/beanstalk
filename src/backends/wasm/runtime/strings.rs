@@ -27,6 +27,14 @@ pub(crate) enum WasmRuntimeHelper {
     StringLen,
     /// Convert i64 scalar values into finalized string handles for template interpolation.
     StringFromI64,
+    /// Allocate an empty Vec-handle header for `Vec<String>` runtime fragments.
+    VecNew,
+    /// Append a finalized string handle into a Vec handle.
+    VecPushHandle,
+    /// Read the logical element count from a Vec handle.
+    VecLen,
+    /// Read one element handle from a Vec handle.
+    VecGet,
     /// Reserved release helper for ownership tuning.
     Release,
     /// Conditional drop hook used at `possible_drop` sites.

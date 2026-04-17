@@ -101,6 +101,10 @@ fn rejects_invalid_helper_export_policy() {
         export_memory: true,
         export_str_ptr: true,
         export_str_len: false,
+        export_vec_new: false,
+        export_vec_push: false,
+        export_vec_len: false,
+        export_vec_get: false,
         export_release: false,
     };
 
@@ -339,6 +343,10 @@ fn request_with_helper_exports() -> WasmBackendRequest {
                 export_memory: true,
                 export_str_ptr: true,
                 export_str_len: true,
+                export_vec_new: true,
+                export_vec_push: true,
+                export_vec_len: true,
+                export_vec_get: true,
                 export_release: true,
             },
         },

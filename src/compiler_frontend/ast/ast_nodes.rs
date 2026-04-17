@@ -9,7 +9,7 @@ use crate::compiler_frontend::ast::expressions::call_argument::{
     CallArgument, normalize_call_argument_values,
 };
 use crate::compiler_frontend::ast::expressions::expression::{
-    Expression, Operator, ResultCallHandling,
+    Expression, ExpressionKind, Operator, ResultCallHandling,
 };
 use crate::compiler_frontend::ast::statements::branching::MatchArm;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
@@ -25,6 +25,13 @@ use crate::return_compiler_error;
 pub struct Declaration {
     pub id: InternedPath,
     pub value: Expression,
+}
+
+impl Declaration {
+    pub(crate) fn is_unresolved_constant_placeholder(&self) -> bool {
+        matches!(self.value.kind, ExpressionKind::NoValue)
+            && matches!(self.value.data_type, DataType::Inferred)
+    }
 }
 
 #[derive(Debug, Clone)]

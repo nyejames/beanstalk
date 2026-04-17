@@ -75,6 +75,13 @@ pub(crate) enum WasmLirStmt {
         dst: WasmLirLocalId,
         buffer: WasmLirLocalId,
     },
+    VecNew {
+        dst: WasmLirLocalId,
+    },
+    VecPushHandle {
+        vec: WasmLirLocalId,
+        handle: WasmLirLocalId,
+    },
     DropIfOwned {
         value: WasmLirLocalId,
     },

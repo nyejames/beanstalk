@@ -59,6 +59,34 @@ pub(crate) fn build_export_section(
             helper_index(plan, WasmRuntimeHelper::StringLen)?,
         );
     }
+    if helper_exports.export_vec_new {
+        section.export(
+            "bst_vec_new",
+            ExportKind::Func,
+            helper_index(plan, WasmRuntimeHelper::VecNew)?,
+        );
+    }
+    if helper_exports.export_vec_push {
+        section.export(
+            "bst_vec_push",
+            ExportKind::Func,
+            helper_index(plan, WasmRuntimeHelper::VecPushHandle)?,
+        );
+    }
+    if helper_exports.export_vec_len {
+        section.export(
+            "bst_vec_len",
+            ExportKind::Func,
+            helper_index(plan, WasmRuntimeHelper::VecLen)?,
+        );
+    }
+    if helper_exports.export_vec_get {
+        section.export(
+            "bst_vec_get",
+            ExportKind::Func,
+            helper_index(plan, WasmRuntimeHelper::VecGet)?,
+        );
+    }
     if helper_exports.export_release {
         section.export(
             "bst_release",

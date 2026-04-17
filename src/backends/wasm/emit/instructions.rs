@@ -160,6 +160,21 @@ pub(crate) fn emit_statement(
             )?));
             function.instruction(&Instruction::LocalSet(local_index(*dst, context)?));
         }
+        WasmLirStmt::VecNew { dst } => {
+            function.instruction(&Instruction::Call(helper_index(
+                plan,
+                WasmRuntimeHelper::VecNew,
+            )?));
+            function.instruction(&Instruction::LocalSet(local_index(*dst, context)?));
+        }
+        WasmLirStmt::VecPushHandle { vec, handle } => {
+            function.instruction(&Instruction::LocalGet(local_index(*vec, context)?));
+            function.instruction(&Instruction::LocalGet(local_index(*handle, context)?));
+            function.instruction(&Instruction::Call(helper_index(
+                plan,
+                WasmRuntimeHelper::VecPushHandle,
+            )?));
+        }
         WasmLirStmt::DropIfOwned { value } => {
             function.instruction(&Instruction::LocalGet(local_index(*value, context)?));
             function.instruction(&Instruction::Call(helper_index(

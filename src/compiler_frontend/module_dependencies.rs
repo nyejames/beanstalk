@@ -205,6 +205,15 @@ fn visit_node(
         });
 
         for import in strict_imports {
+            if resolve_graph_path(&import, graph, string_table).is_none()
+                && is_same_file_symbol_hint(&import, &header.source_file)
+            {
+                // Same-file named-type edges are only ordering hints while header parsing is
+                // still discovering the file. If the target never materializes as a header, let
+                // later type resolution emit the user-facing "Unknown type" diagnostic.
+                continue;
+            }
+
             visit_node(&import, tracker, graph, order_lookup, sorted, string_table)?;
         }
 
@@ -339,6 +348,10 @@ fn resolve_graph_path(
     }
 
     None
+}
+
+fn is_same_file_symbol_hint(path: &InternedPath, source_file: &InternedPath) -> bool {
+    path.parent().as_ref() == Some(source_file)
 }
 
 fn exact_path_matches_candidate(

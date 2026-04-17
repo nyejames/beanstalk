@@ -188,9 +188,9 @@ pub(crate) fn build_html_wasm_plan(
 ) -> Result<HtmlWasmBuildPlan, CompilerError> {
     let export_plan = build_html_wasm_export_plan(hir_module)?;
     let wasm_request = build_wasm_backend_request(&export_plan);
-    // WHY: entry start() is exported as "bst_start"; JS calls it directly on the Wasm instance.
-    //      No JS-side function-name lookup is needed — the export name is the contract.
-    let js_start_invocation = String::from("instance.exports.bst_start();");
+    // WHY: entry start() is exported as "bst_start"; JS evaluates it directly and consumes the
+    //      returned fragment Vec handle. No JS-side wrapper installation is part of the contract.
+    let js_start_invocation = String::from("instance.exports.bst_start()");
 
     Ok(HtmlWasmBuildPlan {
         export_plan,
@@ -285,8 +285,15 @@ fn build_debug_outputs(
 
     let helper = &plan.export_plan.helper_exports;
     debug.helper_exports_summary = Some(format!(
-        "helper_exports: memory={} bst_str_ptr={} bst_str_len={} bst_release={}",
-        helper.export_memory, helper.export_str_ptr, helper.export_str_len, helper.export_release
+        "helper_exports: memory={} bst_str_ptr={} bst_str_len={} bst_vec_new={} bst_vec_push={} bst_vec_len={} bst_vec_get={} bst_release={}",
+        helper.export_memory,
+        helper.export_str_ptr,
+        helper.export_str_len,
+        helper.export_vec_new,
+        helper.export_vec_push,
+        helper.export_vec_len,
+        helper.export_vec_get,
+        helper.export_release
     ));
 
     debug.artifact_summary = Some(format!(

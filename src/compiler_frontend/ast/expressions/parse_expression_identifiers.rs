@@ -125,14 +125,19 @@ pub(super) fn parse_identifier_or_call(
             );
         }
 
-        if context.kind.is_constant_context() && !arg.value.is_compile_time_constant() {
+        if context.kind.is_constant_context()
+            && !arg.value.is_compile_time_constant()
+            && !arg.is_unresolved_constant_placeholder()
+        {
+            let variable_name = string_table.resolve(id).to_owned();
             return_rule_error!(
                 format!(
                     "Constants can only reference other constants. '{}' resolves to a non-constant value.",
-                    string_table.resolve(id)
+                    variable_name
                 ),
                 token_stream.current_location(),
                 {
+                    VariableName => variable_name,
                     CompilationStage => "Expression Parsing",
                     PrimarySuggestion => "Only reference constants in constant declarations and const templates",
                 }

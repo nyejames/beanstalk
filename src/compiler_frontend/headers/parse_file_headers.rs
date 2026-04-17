@@ -28,12 +28,14 @@
 
 use crate::compiler_frontend::ast::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
+use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::builtins::error_type::{
     is_reserved_builtin_symbol, register_builtin_error_types,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::{CompilerWarning, WarningKind};
+use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::declaration_syntax::choice::{
     ChoiceVariant, parse_choice_shell as parse_choice_header_payload,
 };
@@ -52,6 +54,7 @@ use crate::compiler_frontend::reserved_trait_syntax::{
     ReservedTraitKeyword, reserved_trait_declaration_error, reserved_trait_keyword,
     reserved_trait_keyword_error,
 };
+use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::identifier_policy::{
     IdentifierNamingKind, ensure_not_keyword_shadow_identifier, naming_warning_for_identifier,
 };
@@ -111,16 +114,29 @@ pub struct TopLevelConstFragment {
 ///
 /// WHAT: bundles optional entry identity and path-resolution behavior for one parse invocation.
 /// WHY: the parser is called from both production and tests, and grouping these keeps the API concise.
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct HeaderParseOptions {
     pub entry_file_id: Option<FileId>,
     pub project_path_resolver: Option<ProjectPathResolver>,
     pub path_format_config: PathStringFormatConfig,
+    pub style_directives: StyleDirectiveRegistry,
+}
+
+impl Default for HeaderParseOptions {
+    fn default() -> Self {
+        Self {
+            entry_file_id: None,
+            project_path_resolver: None,
+            path_format_config: PathStringFormatConfig::default(),
+            style_directives: StyleDirectiveRegistry::built_ins(),
+        }
+    }
 }
 
 // Shared file-level state that stays live while one source file is being split into headers.
 struct HeaderParseContext<'a> {
     host_function_registry: &'a HostRegistry,
+    style_directives: &'a StyleDirectiveRegistry,
     warnings: &'a mut Vec<CompilerWarning>,
     is_entry_file: bool,
     project_path_resolver: Option<ProjectPathResolver>,
@@ -136,9 +152,11 @@ struct HeaderParseContext<'a> {
 // Shared per-header builder inputs that stay stable while one declaration is classified.
 struct HeaderBuildContext<'a> {
     host_function_registry: &'a HostRegistry,
+    style_directives: &'a StyleDirectiveRegistry,
     warnings: &'a mut Vec<CompilerWarning>,
     project_path_resolver: Option<ProjectPathResolver>,
     path_format_config: PathStringFormatConfig,
+    visible_constant_placeholders: Rc<Vec<Declaration>>,
     source_file: &'a InternedPath,
     file_imports: &'a HashSet<InternedPath>,
     file_import_entries: &'a [FileImport],
@@ -226,6 +244,7 @@ pub fn parse_headers(
         entry_file_id,
         project_path_resolver,
         path_format_config,
+        style_directives,
     } = options;
 
     let mut headers: Vec<Header> = Vec::new();
@@ -243,6 +262,7 @@ pub fn parse_headers(
 
         let mut parse_context = HeaderParseContext {
             host_function_registry: host_registry,
+            style_directives: &style_directives,
             warnings,
             is_entry_file,
             project_path_resolver: project_path_resolver.clone(),
@@ -398,6 +418,7 @@ fn build_module_symbols(
     module_symbols
         .builtin_struct_ast_nodes
         .extend(builtin_manifest.ast_struct_nodes);
+    module_symbols.seed_declaration_stubs(headers, string_table);
 
     Ok(module_symbols)
 }
@@ -408,6 +429,9 @@ fn parse_headers_in_file(
     token_stream: &mut FileTokens,
     context: &mut HeaderParseContext<'_>,
 ) -> Result<Vec<Header>, CompilerError> {
+    let visible_constant_placeholders =
+        discover_visible_constant_placeholders(token_stream, context.string_table)?;
+
     // Tracks names introduced by real top-level declarations/imports only.
     let mut headers = Vec::with_capacity(token_stream.length / TOKEN_TO_HEADER_RATIO);
     let mut encountered_symbols: HashSet<StringId> = HashSet::with_capacity(
@@ -497,9 +521,13 @@ fn parse_headers_in_file(
                         let source_file = token_stream.src_path.to_owned();
                         let mut build_context = HeaderBuildContext {
                             host_function_registry: context.host_function_registry,
+                            style_directives: context.style_directives,
                             warnings: context.warnings,
                             project_path_resolver: context.project_path_resolver.clone(),
                             path_format_config: context.path_format_config.clone(),
+                            visible_constant_placeholders: Rc::clone(
+                                &visible_constant_placeholders,
+                            ),
                             source_file: &source_file,
                             file_imports: &file_import_paths,
                             file_import_entries: &file_imports,
@@ -600,9 +628,11 @@ fn parse_headers_in_file(
                     let source_file = token_stream.src_path.to_owned();
                     let mut build_context = HeaderBuildContext {
                         host_function_registry: context.host_function_registry,
+                        style_directives: context.style_directives,
                         warnings: context.warnings,
                         project_path_resolver: context.project_path_resolver.clone(),
                         path_format_config: context.path_format_config.clone(),
+                        visible_constant_placeholders: Rc::clone(&visible_constant_placeholders),
                         source_file: &source_file,
                         file_imports: &file_import_paths,
                         file_import_entries: &file_imports,
@@ -815,7 +845,7 @@ fn create_header(
             let signature_context = ScopeContext::new(
                 ContextKind::ConstantHeader,
                 full_name.to_owned(),
-                Rc::new(vec![]),
+                Rc::clone(&context.visible_constant_placeholders),
                 context.host_function_registry.to_owned(),
                 vec![],
             )
@@ -901,10 +931,11 @@ fn create_header(
                 let struct_context = ScopeContext::new(
                     ContextKind::ConstantHeader,
                     full_name.to_owned(),
-                    Rc::new(vec![]),
+                    Rc::clone(&context.visible_constant_placeholders),
                     context.host_function_registry.to_owned(),
                     vec![],
                 )
+                .with_style_directives(context.style_directives)
                 .with_project_path_resolver(context.project_path_resolver.clone())
                 .with_source_file_scope(context.source_file.to_owned())
                 .with_path_format_config(context.path_format_config.clone());
@@ -1131,6 +1162,109 @@ fn create_constant_header_payload(
     *context.file_constant_order += 1;
 
     Ok(declaration_syntax)
+}
+
+fn discover_visible_constant_placeholders(
+    token_stream: &FileTokens,
+    string_table: &mut StringTable,
+) -> Result<Rc<Vec<Declaration>>, CompilerError> {
+    let mut placeholders = Vec::new();
+    let mut seen_paths = HashSet::new();
+    let mut next_statement_exported = false;
+    let mut scope_depth = 0usize;
+    let tokens = &token_stream.tokens;
+
+    let mut index = 0usize;
+    while index < tokens.len() {
+        if scope_depth == 0 && matches!(tokens[index].kind, TokenKind::Import) {
+            let (paths, next_index) = parse_import_clause_tokens(tokens, index)?;
+            for path in paths {
+                let normalized =
+                    normalize_import_dependency_path(&path, &token_stream.src_path, string_table)?;
+                if normalized.name().is_some() {
+                    let placeholder = header_constant_placeholder_declaration(
+                        normalized,
+                        tokens[index].location.clone(),
+                    );
+                    if seen_paths.insert(placeholder.id.clone()) {
+                        placeholders.push(placeholder);
+                    }
+                }
+            }
+            index = next_index;
+            continue;
+        }
+
+        if scope_depth == 0 && matches!(tokens[index].kind, TokenKind::Hash) {
+            next_statement_exported = true;
+            index += 1;
+            continue;
+        }
+
+        if scope_depth == 0
+            && next_statement_exported
+            && let TokenKind::Symbol(name_id) = tokens[index].kind
+            && exported_symbol_starts_constant(tokens, index + 1)
+        {
+            let placeholder = header_constant_placeholder_declaration(
+                token_stream.src_path.append(name_id),
+                tokens[index].location.clone(),
+            );
+            if seen_paths.insert(placeholder.id.clone()) {
+                placeholders.push(placeholder);
+            }
+        }
+
+        match tokens[index].kind {
+            TokenKind::Colon => {
+                scope_depth += 1;
+                next_statement_exported = false;
+            }
+            TokenKind::End => {
+                scope_depth = scope_depth.saturating_sub(1);
+                next_statement_exported = false;
+            }
+            TokenKind::Newline | TokenKind::ModuleStart => {}
+            _ => {
+                if scope_depth == 0 {
+                    next_statement_exported = false;
+                }
+            }
+        }
+
+        index += 1;
+    }
+
+    Ok(Rc::new(placeholders))
+}
+
+fn exported_symbol_starts_constant(tokens: &[Token], next_index: usize) -> bool {
+    match tokens.get(next_index).map(|token| &token.kind) {
+        Some(TokenKind::TypeParameterBracket) | Some(TokenKind::DoubleColon) => false,
+        Some(TokenKind::Assign) => !matches!(
+            tokens.get(next_index + 1).map(|token| &token.kind),
+            Some(TokenKind::TypeParameterBracket)
+        ),
+        Some(TokenKind::Mutable)
+        | Some(TokenKind::DatatypeInt)
+        | Some(TokenKind::DatatypeFloat)
+        | Some(TokenKind::DatatypeBool)
+        | Some(TokenKind::DatatypeString)
+        | Some(TokenKind::DatatypeChar)
+        | Some(TokenKind::OpenCurly)
+        | Some(TokenKind::Symbol(_)) => true,
+        _ => false,
+    }
+}
+
+fn header_constant_placeholder_declaration(
+    id: InternedPath,
+    location: SourceLocation,
+) -> Declaration {
+    Declaration {
+        id,
+        value: Expression::no_value(location, DataType::Inferred, Ownership::ImmutableOwned),
+    }
 }
 
 /// Collect strict dependency edges from a constant's declared type annotation.

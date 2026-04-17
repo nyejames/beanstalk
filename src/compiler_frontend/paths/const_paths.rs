@@ -646,11 +646,7 @@ fn parse_bare_component(
 ) -> Result<ParsedComponent, CompilerError> {
     let mut value = String::new();
 
-    loop {
-        let Some(next) = stream.peek().copied() else {
-            break;
-        };
-
+    while let Some(next) = stream.peek().copied() {
         if is_component_terminator(stream.mode, context, next) || next.is_whitespace() {
             break;
         }

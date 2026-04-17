@@ -200,6 +200,20 @@ fn validate_helper_export_policy(
         .with_error_type(ErrorType::WasmGeneration));
     }
 
+    if helpers.export_vec_new != helpers.export_vec_push {
+        return Err(CompilerError::compiler_error(
+            "Wasm helper exports must request both bst_vec_new and bst_vec_push together",
+        )
+        .with_error_type(ErrorType::WasmGeneration));
+    }
+
+    if helpers.export_vec_len != helpers.export_vec_get {
+        return Err(CompilerError::compiler_error(
+            "Wasm helper exports must request both bst_vec_len and bst_vec_get together",
+        )
+        .with_error_type(ErrorType::WasmGeneration));
+    }
+
     if (helpers.export_str_ptr || helpers.export_str_len) && !helpers.export_memory {
         return Err(CompilerError::compiler_error(
             "Wasm helper exports requesting string pointer/length must also export memory",
@@ -226,6 +240,10 @@ fn validate_helper_export_policy(
     add_reserved_export(helpers.export_memory, "memory")?;
     add_reserved_export(helpers.export_str_ptr, "bst_str_ptr")?;
     add_reserved_export(helpers.export_str_len, "bst_str_len")?;
+    add_reserved_export(helpers.export_vec_new, "bst_vec_new")?;
+    add_reserved_export(helpers.export_vec_push, "bst_vec_push")?;
+    add_reserved_export(helpers.export_vec_len, "bst_vec_len")?;
+    add_reserved_export(helpers.export_vec_get, "bst_vec_get")?;
     add_reserved_export(helpers.export_release, "bst_release")?;
 
     Ok(())

@@ -111,29 +111,46 @@ pub(crate) fn generate_wasm_bootstrap_js(
     out.push('\n');
 
     if slot_ids.is_empty() {
-        // No runtime slots — call bst_start() directly for any lifecycle effects.
-        out.push_str("  ");
+        // No runtime slots — still call bst_start() once for lifecycle effects, then release
+        // the returned fragment Vec handle.
+        out.push_str("  const bst_frag_vec = ");
         out.push_str(start_invocation_js);
-        out.push('\n');
+        out.push_str(";\n");
+        out.push_str("  instance.exports.bst_release(bst_frag_vec);\n");
     } else {
         // WHAT: call bst_start() and decode the returned runtime fragment list to hydrate slots.
         // WHY: entry start() is the sole runtime fragment producer; builders call it once and
         //      use the returned Vec<String> elements to fill source-order slot placeholders.
-        // TODO: Vec<String> decoding from a Wasm handle requires Wasm Vec support.
-        //       See lower_push_runtime_fragment TODO in backends/wasm/hir_to_lir/stmt.rs.
-        //       Until that is implemented, programs with runtime templates fail to compile
-        //       in Wasm mode. The slot structure below is the correct target shape.
         out.push_str("  const bst_slot_ids = [\n");
         for slot_id in slot_ids {
             out.push_str(&format!("    \"{slot_id}\",\n"));
         }
         out.push_str("  ];\n");
-        out.push_str("  ");
+        out.push_str("  const bst_frag_vec = ");
         out.push_str(start_invocation_js);
-        out.push('\n');
+        out.push_str(";\n");
+        out.push_str("  try {\n");
+        out.push_str("    const bst_frag_count = instance.exports.bst_vec_len(bst_frag_vec);\n");
+        out.push_str("    for (let i = 0; i < bst_slot_ids.length; i += 1) {\n");
+        out.push_str("      const el = document.getElementById(bst_slot_ids[i]);\n");
         out.push_str(
-            "  // TODO: decode Vec<String> from bst_start() return and hydrate bst_slot_ids.\n",
+            "      if (!el) throw new Error(\"Missing runtime mount slot: \" + bst_slot_ids[i]);\n",
         );
+        out.push_str("      if (i >= bst_frag_count) continue;\n");
+        out.push_str(
+            "      const bst_str_handle = instance.exports.bst_vec_get(bst_frag_vec, i);\n",
+        );
+        out.push_str("      const bst_ptr = instance.exports.bst_str_ptr(bst_str_handle);\n");
+        out.push_str("      const bst_len = instance.exports.bst_str_len(bst_str_handle);\n");
+        out.push_str(
+            "      const bst_bytes = new Uint8Array(instance.exports.memory.buffer, bst_ptr, bst_len);\n",
+        );
+        out.push_str("      const bst_text = __bst_decoder.decode(bst_bytes);\n");
+        out.push_str("      el.insertAdjacentHTML(\"beforeend\", bst_text);\n");
+        out.push_str("    }\n");
+        out.push_str("  } finally {\n");
+        out.push_str("    instance.exports.bst_release(bst_frag_vec);\n");
+        out.push_str("  }\n");
     }
 
     out.push_str("})().catch((error) => {\n");

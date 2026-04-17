@@ -38,6 +38,14 @@ pub(crate) struct HtmlWasmHelperExports {
     pub export_str_ptr: bool,
     /// Export helper that returns string byte length for a string handle.
     pub export_str_len: bool,
+    /// Export helper that allocates a runtime fragment Vec handle.
+    pub export_vec_new: bool,
+    /// Export helper that appends a string handle to a runtime fragment Vec handle.
+    pub export_vec_push: bool,
+    /// Export helper that returns the runtime fragment Vec length.
+    pub export_vec_len: bool,
+    /// Export helper that reads one runtime fragment string handle from the Vec.
+    pub export_vec_get: bool,
     /// Export helper that releases a moved string handle after JS consumption.
     pub export_release: bool,
 }
@@ -52,6 +60,10 @@ impl HtmlWasmHelperExports {
             export_memory: true,
             export_str_ptr: true,
             export_str_len: true,
+            export_vec_new: true,
+            export_vec_push: true,
+            export_vec_len: true,
+            export_vec_get: true,
             export_release: true,
         }
     }

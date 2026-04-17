@@ -82,6 +82,10 @@ fn wasm_export_plan_wires_required_helper_exports() {
     assert!(helper.export_memory);
     assert!(helper.export_str_ptr);
     assert!(helper.export_str_len);
+    assert!(helper.export_vec_new);
+    assert!(helper.export_vec_push);
+    assert!(helper.export_vec_len);
+    assert!(helper.export_vec_get);
     assert!(helper.export_release);
 }
 

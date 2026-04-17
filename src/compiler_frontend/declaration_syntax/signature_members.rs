@@ -244,7 +244,8 @@ fn parse_signature_member(
         }
     }
 
-    let parameter_context = expression_context.to_owned();
+    let mut parameter_context = expression_context.to_owned();
+    parameter_context.expected_result_types = vec![data_type.clone()];
 
     let parsed_expr = create_expression(
         token_stream,

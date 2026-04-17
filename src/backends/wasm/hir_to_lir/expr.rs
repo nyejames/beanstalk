@@ -5,6 +5,7 @@ use crate::backends::wasm::hir_to_lir::static_data::intern_static_utf8;
 use crate::backends::wasm::lir::instructions::WasmLirStmt;
 use crate::backends::wasm::lir::types::{WasmAbiType, WasmLirLocalId, WasmLocalRole};
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
+use crate::compiler_frontend::hir::hir_datatypes::HirTypeKind;
 use crate::compiler_frontend::hir::hir_nodes::{
     HirBinOp, HirExpression, HirExpressionKind, HirPlace,
 };
@@ -106,8 +107,22 @@ pub(crate) fn lower_expression(
         HirExpressionKind::UnaryOp { op, .. } => Err(CompilerError::lir_transformation(format!(
             "Wasm lowering does not yet support unary operator {op:?}"
         ))),
+        HirExpressionKind::Collection(items) => {
+            if is_empty_string_collection(context, expression, items) {
+                let dst =
+                    context.alloc_local(None, WasmAbiType::Handle, WasmLocalRole::ValueHandle);
+                statements.push(WasmLirStmt::VecNew { dst });
+                return Ok(ExprLoweringOutput {
+                    value: dst,
+                    prefer_move: false,
+                });
+            }
+
+            Err(CompilerError::lir_transformation(
+                "Wasm lowering only supports empty Vec<String> collection literals in this pass",
+            ))
+        }
         HirExpressionKind::StructConstruct { .. }
-        | HirExpressionKind::Collection(_)
         | HirExpressionKind::Range { .. }
         | HirExpressionKind::TupleConstruct { .. }
         | HirExpressionKind::TupleGet { .. }
@@ -381,6 +396,36 @@ fn is_handle_type(
     expression: &HirExpression,
 ) -> bool {
     matches!(expression_abi(context, expression), WasmAbiType::Handle)
+}
+
+fn is_empty_string_collection(
+    context: &WasmFunctionLoweringContext<'_, '_>,
+    expression: &HirExpression,
+    items: &[HirExpression],
+) -> bool {
+    if !items.is_empty() {
+        return false;
+    }
+
+    let HirTypeKind::Collection { element } = &context
+        .module_context
+        .hir_module
+        .type_context
+        .get(expression.ty)
+        .kind
+    else {
+        return false;
+    };
+
+    matches!(
+        context
+            .module_context
+            .hir_module
+            .type_context
+            .get(*element)
+            .kind,
+        HirTypeKind::String
+    )
 }
 
 fn expression_abi(

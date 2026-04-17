@@ -50,6 +50,24 @@ fn receiver_reference_node(
     base_location: SourceLocation,
 ) -> AstNode {
     if context.kind.is_constant_context() {
+        if reference_arg.is_unresolved_constant_placeholder() {
+            let placeholder_type = context
+                .expected_result_types
+                .first()
+                .cloned()
+                .unwrap_or_else(|| reference_arg.value.data_type.to_owned());
+            return AstNode {
+                kind: NodeKind::Rvalue(Expression::reference(
+                    reference_arg.id.to_owned(),
+                    placeholder_type,
+                    base_location.clone(),
+                    Ownership::ImmutableOwned,
+                )),
+                location: base_location,
+                scope: context.scope.clone(),
+            };
+        }
+
         let mut inlined_expression = reference_arg.value.to_owned();
         inlined_expression.ownership = Ownership::ImmutableOwned;
         AstNode {

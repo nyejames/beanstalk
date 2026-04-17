@@ -141,15 +141,34 @@ fn lower_assignment(
 }
 
 fn lower_push_runtime_fragment(
-    _context: &mut WasmFunctionLoweringContext<'_, '_>,
-    _vec_local: &LocalId,
-    _value: &HirExpression,
-    _statements: &mut Vec<WasmLirStmt>,
+    context: &mut WasmFunctionLoweringContext<'_, '_>,
+    vec_local: &LocalId,
+    value: &HirExpression,
+    statements: &mut Vec<WasmLirStmt>,
 ) -> Result<(), CompilerError> {
-    // TODO: implement Vec<String> push lowering for Wasm entry start().
-    // WHY: the Wasm backend will need host-call or intrinsic support for appending
-    //      string handles to a Vec accumulator once Vec<String> return is wired up.
-    Err(CompilerError::lir_transformation(
-        "Wasm: PushRuntimeFragment lowering not yet implemented. Vec<String> return from entry start() requires Wasm Vec support.",
-    ))
+    let vec_handle = context.local_map.get(vec_local).copied().ok_or_else(|| {
+        CompilerError::lir_transformation(format!(
+            "Wasm lowering could not resolve runtime fragment vec local {vec_local:?}",
+        ))
+    })?;
+
+    if !context.is_handle_local(vec_handle) {
+        return Err(CompilerError::lir_transformation(format!(
+            "Wasm lowering expected runtime fragment vec local {vec_local:?} to lower as a handle",
+        )));
+    }
+
+    let lowered_value = lower_expression(context, value, statements)?;
+    if !context.is_handle_local(lowered_value.value) {
+        return Err(CompilerError::lir_transformation(
+            "Wasm lowering expected runtime fragment values to lower as string handles",
+        ));
+    }
+
+    statements.push(WasmLirStmt::VecPushHandle {
+        vec: vec_handle,
+        handle: lowered_value.value,
+    });
+
+    Ok(())
 }
