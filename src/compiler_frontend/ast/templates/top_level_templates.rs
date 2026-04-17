@@ -27,7 +27,7 @@ pub struct AstConstTopLevelFragment {
     /// Number of runtime fragments preceding this const fragment in source order.
     pub runtime_insertion_index: usize,
     pub value: StringId,
-    pub location: SourceLocation,
+    pub _location: SourceLocation,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -65,7 +65,7 @@ pub(crate) fn collect_const_top_level_fragments(
         result.push(AstConstTopLevelFragment {
             runtime_insertion_index: fragment.runtime_insertion_index,
             value,
-            location: fragment.location.clone(),
+            _location: fragment.location.clone(),
         });
     }
     Ok(result)

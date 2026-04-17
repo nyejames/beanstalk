@@ -126,7 +126,7 @@ fn parse_target_list(
         };
 
         token_stream.advance();
-        let target_syntax = parse_binding_target_syntax(token_stream, name)?;
+        let target_syntax = parse_binding_target_syntax(name, token_stream)?;
         validate_target_mutability(&target_syntax, string_table)?;
         parsed_targets.push(target_syntax);
 

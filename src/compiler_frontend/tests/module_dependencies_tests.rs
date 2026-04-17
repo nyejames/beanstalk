@@ -58,18 +58,34 @@ fn header_name(
 }
 
 #[test]
-fn sorts_strict_import_dependencies_before_dependents() {
+fn sorts_strict_top_level_dependencies_before_dependents_and_appends_start_last() {
     let (headers, mut string_table) = parse_module_headers(
         &[
-            ("src/a.bst", "import @b\nb()\nio(\"a\")\n"),
-            ("src/b.bst", "import @c\nc()\nio(\"b\")\n"),
-            ("src/c.bst", "io(\"c\")\n"),
+            ("src/a.bst", "import @b/Middle\n#Top Middle = Middle\n"),
+            ("src/b.bst", "import @c/Thing\n#Middle Thing = Thing\n"),
+            ("src/c.bst", "#Thing Int = 1\n"),
         ],
         "src/a.bst",
     );
 
     let sorted = resolve_module_dependencies(headers, &mut string_table)
         .expect("dependency sort should pass");
+
+    let non_start_order = sorted
+        .headers
+        .iter()
+        .filter(|header| !matches!(header.kind, HeaderKind::StartFunction))
+        .map(|header| header_name(header, &string_table))
+        .collect::<Vec<_>>();
+
+    assert_eq!(non_start_order, vec!["Thing", "Middle", "Top"]);
+    assert!(
+        matches!(
+            sorted.headers.last().map(|header| &header.kind),
+            Some(HeaderKind::StartFunction)
+        ),
+        "entry start header must be appended after sorted top-level declarations"
+    );
 
     let start_order = sorted
         .headers
@@ -78,15 +94,15 @@ fn sorts_strict_import_dependencies_before_dependents() {
         .map(|header| header.source_file.to_portable_string(&string_table))
         .collect::<Vec<_>>();
 
-    assert_eq!(start_order, vec!["src/c.bst", "src/b.bst", "src/a.bst"]);
+    assert_eq!(start_order, vec!["src/a.bst"]);
 }
 
 #[test]
 fn reports_circular_dependencies() {
     let (headers, mut string_table) = parse_module_headers(
         &[
-            ("src/a.bst", "import @b\nb()\nio(\"a\")\n"),
-            ("src/b.bst", "import @a\na()\nio(\"b\")\n"),
+            ("src/a.bst", "import @b/Middle\n#Top Middle = Middle\n"),
+            ("src/b.bst", "import @a/Top\n#Middle Top = Top\n"),
         ],
         "src/a.bst",
     );
@@ -107,9 +123,12 @@ fn reports_circular_dependencies() {
 fn reports_ambiguous_suffix_import_resolution() {
     let (headers, mut string_table) = parse_module_headers(
         &[
-            ("src/app.bst", "import @shared/util\nutil()\nio(\"app\")\n"),
-            ("src/features/shared/util.bst", "io(\"feature util\")\n"),
-            ("src/lib/shared/util.bst", "io(\"lib util\")\n"),
+            (
+                "src/app.bst",
+                "import @shared/util/Thing\n#Top Thing = Thing\n",
+            ),
+            ("src/features/shared/util.bst", "#Thing Int = 1\n"),
+            ("src/lib/shared/util.bst", "#Thing Int = 2\n"),
         ],
         "src/app.bst",
     );
@@ -121,7 +140,7 @@ fn reports_ambiguous_suffix_import_resolution() {
         errors
             .iter()
             .any(|error| error.msg.contains("Missing import target")
-                && error.msg.contains("shared/util")),
+                && error.msg.contains("shared/util/Thing")),
         "expected an ambiguous-import diagnostic, got: {errors:?}"
     );
 }

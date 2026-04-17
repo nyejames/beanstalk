@@ -124,7 +124,10 @@ impl ModuleSymbols {
                         value: Expression::new(
                             ExpressionKind::NoValue,
                             header.name_location.to_owned(),
-                            DataType::Choices(variants.to_owned()),
+                            DataType::Choices {
+                                nominal_path: header.tokens.src_path.to_owned(),
+                                variants: variants.to_owned(),
+                            },
                             Ownership::ImmutableReference,
                         ),
                     });

@@ -1,6 +1,21 @@
 //! AST stage modules for module-wide typed syntax construction.
 //!
 //! WHAT: groups expression/statement parsing, header-to-AST lowering, and template AST handling.
+//! WHY: AST consumes already-shaped, already-sorted top-level headers from stages 2-3 and
+//! performs semantic resolution/validation plus executable body parsing.
+//!
+//! ## Ownership contract
+//!
+//! Header parsing + dependency sorting own:
+//! - top-level declaration discovery
+//! - top-level declaration shell parsing
+//! - strict top-level dependency ordering
+//! - appending implicit `start` header last (outside dependency graph)
+//!
+//! AST owns:
+//! - lowering sorted header payloads (no top-level shell reparsing)
+//! - resolving and validating top-level types/symbols
+//! - parsing function bodies and other executable/body-local declarations
 
 use crate::compiler_frontend::ast::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::AstNode;

@@ -46,9 +46,12 @@ fn resolves_choice_variant_expressions_with_choice_types() {
     assert!(
         matches!(
             &current_declaration.value.data_type,
-            DataType::Choices(variants) if variants.len() == 2
+            DataType::Choices {
+                nominal_path,
+                variants,
+            } if nominal_path.name_str(&string_table) == Some("Status") && variants.len() == 2
         ),
-        "choice literal should keep choice type identity"
+        "choice literal should keep declaration-backed choice identity"
     );
 
     let make_status_body = function_body_by_name(&ast, &string_table, "make_status");
@@ -71,7 +74,10 @@ fn resolves_choice_variant_expressions_with_choice_types() {
     assert!(
         matches!(
             &selected_declaration.value.data_type,
-            DataType::Choices(variants) if variants.len() == 2
+            DataType::Choices {
+                nominal_path,
+                variants,
+            } if nominal_path.name_str(&string_table) == Some("Status") && variants.len() == 2
         ),
         "choice literal should preserve declaration-backed choice type"
     );

@@ -64,7 +64,7 @@ impl<'a> AstBuildState<'a> {
                 HeaderKind::Struct { fields } => {
                     let fields = resolve_struct_field_types(
                         &header.tokens.src_path,
-                        &fields,
+                        fields,
                         &self.declarations,
                         Some(&bindings.visible_symbol_paths),
                         string_table,

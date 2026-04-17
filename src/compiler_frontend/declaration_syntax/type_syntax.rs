@@ -24,7 +24,7 @@ use crate::compiler_frontend::reserved_trait_syntax::{
     reserved_trait_keyword_error, reserved_trait_keyword_or_dispatch_mismatch,
 };
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
-use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
+use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
 use crate::return_syntax_error;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -308,36 +308,6 @@ fn compilation_stage(context: TypeAnnotationContext) -> &'static str {
         TypeAnnotationContext::DeclarationTarget => "Variable Declaration",
         TypeAnnotationContext::SignatureParameter => "Parameter Type Parsing",
         TypeAnnotationContext::SignatureReturn => "Function Signature Parsing",
-    }
-}
-
-pub(crate) fn append_data_type_tokens(
-    tokens: &mut Vec<Token>,
-    data_type: &DataType,
-    location: &SourceLocation,
-) {
-    match data_type {
-        DataType::Inferred => {}
-        DataType::Int => tokens.push(Token::new(TokenKind::DatatypeInt, location.clone())),
-        DataType::Float => tokens.push(Token::new(TokenKind::DatatypeFloat, location.clone())),
-        DataType::Bool => tokens.push(Token::new(TokenKind::DatatypeBool, location.clone())),
-        DataType::StringSlice => {
-            tokens.push(Token::new(TokenKind::DatatypeString, location.clone()))
-        }
-        DataType::Char => tokens.push(Token::new(TokenKind::DatatypeChar, location.clone())),
-        DataType::NamedType(type_name) => {
-            tokens.push(Token::new(TokenKind::Symbol(*type_name), location.clone()))
-        }
-        DataType::Collection(inner, _) => {
-            tokens.push(Token::new(TokenKind::OpenCurly, location.clone()));
-            append_data_type_tokens(tokens, inner.as_ref(), location);
-            tokens.push(Token::new(TokenKind::CloseCurly, location.clone()));
-        }
-        DataType::Option(inner) => {
-            append_data_type_tokens(tokens, inner.as_ref(), location);
-            tokens.push(Token::new(TokenKind::QuestionMark, location.clone()));
-        }
-        _ => {}
     }
 }
 

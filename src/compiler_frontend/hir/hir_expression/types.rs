@@ -131,7 +131,7 @@ impl<'a> HirBuilder<'a> {
                 HirTypeKind::Result { ok, err }
             }
 
-            DataType::Choices(variants) => {
+            DataType::Choices { variants, .. } => {
                 let variant_types = variants
                     .iter()
                     .map(|variant| self.lower_data_type(&variant.data_type, location))

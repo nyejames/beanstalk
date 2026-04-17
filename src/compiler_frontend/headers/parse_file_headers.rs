@@ -14,10 +14,12 @@
 //! - **Functions**: full `FunctionSignature` (parameter types + return types). Strict edges come
 //!   from signature type references only. Body tokens are captured but not parsed.
 //! - **Structs**: full field list (`parse_struct_shell`). Strict edges come from field type refs.
-//! - **Choices**: variant list (alpha: unit-only). Strict edges from variant payload types.
+//! - **Choices**: nominal path + variant list (alpha: unit-only). In alpha, variant payload edges
+//!   do not exist because payload variants are deferred.
 //! - **Constants**: `DeclarationSyntax` (type annotation + initializer tokens). Strict edges from
 //!   the declared type annotation only; initializer expression symbols are NOT strict edges.
-//! - **StartFunction**: body tokens captured for AST emission; NOT part of dependency sorting.
+//! - **StartFunction**: body tokens captured for AST emission; NOT part of dependency sorting and
+//!   stores no graph edges.
 //!
 //! Top-level runtime templates are evaluated in entry `start()` in source order.
 //! Entry `start()` returns `Vec<String>`.
@@ -61,7 +63,7 @@ use crate::projects::settings::{
     IMPLICIT_START_FUNC_NAME, MINIMUM_LIKELY_DECLARATIONS, TOKEN_TO_DECLARATION_RATIO,
     TOKEN_TO_HEADER_RATIO, TOP_LEVEL_CONST_TEMPLATE_NAME,
 };
-use crate::{header_log, return_rule_error};
+use crate::return_rule_error;
 use std::collections::HashSet;
 use std::fmt::Display;
 use std::path::Path;
@@ -406,15 +408,17 @@ fn parse_headers_in_file(
     token_stream: &mut FileTokens,
     context: &mut HeaderParseContext<'_>,
 ) -> Result<Vec<Header>, CompilerError> {
+    // Tracks names introduced by real top-level declarations/imports only.
     let mut headers = Vec::with_capacity(token_stream.length / TOKEN_TO_HEADER_RATIO);
     let mut encountered_symbols: HashSet<StringId> = HashSet::with_capacity(
         MINIMUM_LIKELY_DECLARATIONS + (token_stream.tokens.len() / TOKEN_TO_DECLARATION_RATIO),
     );
+    // Tracks names first seen in executable start-body statements so repeat uses don't get
+    // reclassified as header declarations.
+    let mut start_body_symbols: HashSet<StringId> = HashSet::new();
 
     let mut next_statement_exported = false;
     let mut start_function_body = Vec::new();
-
-    let mut start_function_dependencies: HashSet<InternedPath> = HashSet::new();
 
     let mut file_import_paths: HashSet<InternedPath> = HashSet::new();
     let mut file_imports: Vec<FileImport> = Vec::new();
@@ -427,6 +431,22 @@ fn parse_headers_in_file(
 
         match current_token.kind.to_owned() {
             TokenKind::Symbol(name_id) => {
+                let symbol_may_start_top_level_statement = next_statement_exported
+                    || token_stream
+                        .tokens
+                        .get(token_stream.index.saturating_sub(2))
+                        .map(|previous_token| {
+                            matches!(
+                                previous_token.kind,
+                                TokenKind::ModuleStart | TokenKind::Newline | TokenKind::End
+                            )
+                        })
+                        .unwrap_or(true);
+                if !symbol_may_start_top_level_statement {
+                    start_function_body.push(current_token);
+                    continue;
+                }
+
                 // Unique non-host registry symbol
                 if context
                     .host_function_registry
@@ -461,22 +481,18 @@ fn parse_headers_in_file(
                         }
 
                         start_function_body.push(current_token);
+                        // Body-level symbol/import resolution belongs to AST passes. Header parsing
+                        // only validates duplicate top-level declaration starts at this stage.
 
-                        // Start function is always the last of all the dependencies.
-                        // So all that needs to be checked:
-                        // - Is this dependency imported into the entry file?
-                        if !file_import_paths.iter().any(|f| f.name() == Some(name_id)) {
-                            return_rule_error!(
-                                "This symbol is not imported into the entry file. Make sure it's imported into this file.",
-                                token_stream.current_location(), {
-                                    CompilationStage => "Header Parsing",
-                                    ConflictType => "MissingImport",
-                                    PrimarySuggestion => "Import this symbol into the entry file",
-                                }
-                            )
-                        }
-
-                    // NEW DECLARATION IN TOP-LEVEL SCOPE
+                        // NEW DECLARATION IN TOP-LEVEL SCOPE
+                    } else if start_body_symbols.contains(&name_id)
+                        && !next_statement_exported
+                        && !starts_duplicate_top_level_header_declaration(
+                            token_stream,
+                            next_statement_exported,
+                        )
+                    {
+                        start_function_body.push(current_token);
                     } else {
                         let source_file = token_stream.src_path.to_owned();
                         let mut build_context = HeaderBuildContext {
@@ -501,18 +517,13 @@ fn parse_headers_in_file(
                         match header.kind {
                             HeaderKind::StartFunction => {
                                 start_function_body.push(current_token);
-                                if let Some(path) =
-                                    file_import_paths.iter().find(|f| f.name() == Some(name_id))
-                                {
-                                    start_function_dependencies.insert(path.to_owned());
-                                }
+                                start_body_symbols.insert(name_id);
                             }
                             _ => {
                                 headers.push(header);
+                                encountered_symbols.insert(name_id);
                             }
                         }
-
-                        encountered_symbols.insert(name_id);
                         next_statement_exported = false;
                     };
                 } else {
@@ -625,8 +636,6 @@ fn parse_headers_in_file(
                     push_runtime_template_tokens_to_start_function(
                         current_token,
                         token_stream,
-                        &file_import_paths,
-                        &mut start_function_dependencies,
                         &mut start_function_body,
                     )?;
                     if context.is_entry_file {
@@ -666,14 +675,8 @@ fn parse_headers_in_file(
         return Ok(headers);
     }
 
-    // Entry file: build the start function header with all file-local declarations as dependencies.
-    for header in headers.iter() {
-        header_log!(#header.tokens.src_path);
-
-        if !matches!(header.kind, HeaderKind::ConstTemplate) {
-            start_function_dependencies.insert(header.tokens.src_path.to_owned());
-        }
-    }
+    // Entry file: build the start function header for later AST body parsing.
+    // `start` is never a dependency-graph participant, so this header keeps no graph edges.
 
     let mut start_tokens = FileTokens::new_with_file_id(
         token_stream.src_path.to_owned(),
@@ -685,7 +688,7 @@ fn parse_headers_in_file(
     headers.push(Header {
         kind: HeaderKind::StartFunction,
         exported: false,
-        dependencies: start_function_dependencies,
+        dependencies: HashSet::new(),
         name_location: SourceLocation::default(),
         tokens: start_tokens,
         source_file: token_stream.src_path.to_owned(),
@@ -831,25 +834,25 @@ fn create_header(
             // Strict edges: parameter + return type references only.
             for param in &signature.parameters {
                 for_each_named_type_in_data_type(&param.value.data_type, &mut |type_name| {
-                    let edge = context
-                        .file_imports
-                        .iter()
-                        .find(|import_path| import_path.name() == Some(type_name))
-                        .cloned()
-                        .unwrap_or_else(|| context.source_file.append(type_name));
-                    dependencies.insert(edge);
+                    collect_named_type_dependency_edge(
+                        type_name,
+                        context.file_imports,
+                        context.source_file,
+                        context.string_table,
+                        &mut dependencies,
+                    );
                 });
             }
 
             for ret in &signature.returns {
                 for_each_named_type_in_data_type(ret.value.data_type(), &mut |type_name| {
-                    let edge = context
-                        .file_imports
-                        .iter()
-                        .find(|import_path| import_path.name() == Some(type_name))
-                        .cloned()
-                        .unwrap_or_else(|| context.source_file.append(type_name));
-                    dependencies.insert(edge);
+                    collect_named_type_dependency_edge(
+                        type_name,
+                        context.file_imports,
+                        context.source_file,
+                        context.string_table,
+                        &mut dependencies,
+                    );
                 });
             }
 
@@ -922,13 +925,13 @@ fn create_header(
                 // WHY: struct field type refs are the only struct edges that constrain sort order.
                 for field in &fields {
                     for_each_named_type_in_data_type(&field.value.data_type, &mut |type_name| {
-                        let edge = context
-                            .file_imports
-                            .iter()
-                            .find(|import_path| import_path.name() == Some(type_name))
-                            .cloned()
-                            .unwrap_or_else(|| context.source_file.append(type_name));
-                        dependencies.insert(edge);
+                        collect_named_type_dependency_edge(
+                            type_name,
+                            context.file_imports,
+                            context.source_file,
+                            context.string_table,
+                            &mut dependencies,
+                        );
                     });
                 }
 
@@ -1140,14 +1143,33 @@ fn collect_constant_type_dependencies(
     dependencies: &mut HashSet<InternedPath>,
 ) {
     for_each_named_type_in_data_type(&declaration_syntax.type_annotation, &mut |type_name| {
-        let edge = context
-            .file_imports
-            .iter()
-            .find(|import_path| import_path.name() == Some(type_name))
-            .cloned()
-            .unwrap_or_else(|| context.source_file.append(type_name));
-        dependencies.insert(edge);
+        collect_named_type_dependency_edge(
+            type_name,
+            context.file_imports,
+            context.source_file,
+            context.string_table,
+            dependencies,
+        );
     });
+}
+
+fn collect_named_type_dependency_edge(
+    type_name: StringId,
+    file_imports: &HashSet<InternedPath>,
+    source_file: &InternedPath,
+    string_table: &StringTable,
+    dependencies: &mut HashSet<InternedPath>,
+) {
+    if is_reserved_builtin_symbol(string_table.resolve(type_name)) {
+        return;
+    }
+
+    let edge = file_imports
+        .iter()
+        .find(|import_path| import_path.name() == Some(type_name))
+        .cloned()
+        .unwrap_or_else(|| source_file.append(type_name));
+    dependencies.insert(edge);
 }
 
 fn create_top_level_const_template(
@@ -1229,20 +1251,13 @@ fn create_top_level_const_template(
 fn push_runtime_template_tokens_to_start_function(
     opening_template_token: Token,
     token_stream: &mut FileTokens,
-    file_imports: &HashSet<InternedPath>,
-    start_function_dependencies: &mut HashSet<InternedPath>,
     start_function_body: &mut Vec<Token>,
 ) -> Result<(), CompilerError> {
     start_function_body.push(opening_template_token);
 
     consume_balanced_template_region(
         token_stream,
-        |token, token_kind| {
-            if let TokenKind::Symbol(name_id) = token_kind
-                && let Some(path) = file_imports.iter().find(|path| path.name() == Some(*name_id))
-            {
-                start_function_dependencies.insert(path.to_owned());
-            }
+        |token, _token_kind| {
             start_function_body.push(token);
         },
         |location| {

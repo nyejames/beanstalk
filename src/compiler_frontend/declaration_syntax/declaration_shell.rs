@@ -14,7 +14,6 @@ use crate::{return_rule_error, return_syntax_error};
 // dependency/type resolution is available.
 #[derive(Clone, Debug)]
 pub struct DeclarationSyntax {
-    pub name: StringId,
     pub mutable_marker: bool,
     pub type_annotation: DataType,
     pub initializer_tokens: Vec<Token>,
@@ -52,7 +51,7 @@ pub fn parse_declaration_syntax(
 ) -> Result<DeclarationSyntax, CompilerError> {
     // This checks for mutability marker first (in the case of mutable methods)
     // Or whether the declaration has an explicit Type
-    let target = parse_binding_target_syntax(token_stream, name)?;
+    let target = parse_binding_target_syntax(name, token_stream)?;
 
     // Require assignment for declarations.
     match token_stream.current_token_kind() {
@@ -97,7 +96,6 @@ pub fn parse_declaration_syntax(
     }
 
     Ok(DeclarationSyntax {
-        name: target.name,
         mutable_marker: target.mutable_marker,
         type_annotation: target.type_annotation,
         initializer_tokens,
@@ -106,8 +104,8 @@ pub fn parse_declaration_syntax(
 }
 
 pub fn parse_binding_target_syntax(
-    token_stream: &mut FileTokens,
     name: StringId,
+    token_stream: &mut FileTokens,
 ) -> Result<BindingTargetSyntax, CompilerError> {
     let target_location = token_stream.current_location();
 

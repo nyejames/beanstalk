@@ -1,7 +1,7 @@
 //! Stage 3 dependency ordering for parsed Beanstalk headers.
 //!
-//! WHAT: topologically sorts top-level headers by their strict dependency edges, then appends
-//! `StartFunction` headers in source order. Finalizes the header-owned `ModuleSymbols` package:
+//! WHAT: topologically sorts top-level declaration headers by their strict dependency edges, then
+//! appends `StartFunction` headers in source order. Finalizes the header-owned `ModuleSymbols` package:
 //! declarations are built from the sorted headers and appended with builtin declarations.
 //!
 //! ## Stage contract
@@ -56,9 +56,9 @@ impl DependencyTracker {
 
 /// Topologically sort headers and finalize the header-owned module symbol package.
 ///
-/// WHAT: sorts top-level (non-start) headers by their strict dependency edges, then appends
-/// `StartFunction` headers in source order. Builds the `declarations` Vec in sorted order and
-/// appends builtin declarations.
+/// WHAT: sorts top-level declaration headers (non-start) by their strict dependency edges, then
+/// appends `StartFunction` headers in source order. Builds the `declarations` Vec in sorted order
+/// and appends builtin declarations.
 ///
 /// WHY: `StartFunction` is excluded from the dependency graph — it is build-system-only and
 /// cannot be imported by other headers. All other headers are sorted by strict structural edges

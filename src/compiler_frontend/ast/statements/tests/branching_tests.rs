@@ -280,7 +280,7 @@ fn parses_choice_match_arms_with_bare_and_qualified_variants() {
     };
 
     assert!(
-        matches!(subject.data_type, DataType::Choices(_)),
+        matches!(subject.data_type, DataType::Choices { .. }),
         "choice match subject should preserve choice type identity"
     );
     assert_eq!(arms.len(), 2);
@@ -303,6 +303,27 @@ fn rejects_legacy_colon_match_arm_syntax() {
         error
             .msg
             .contains("Legacy match arm syntax is no longer supported"),
+        "{}",
+        error.msg
+    );
+}
+
+#[test]
+fn rejects_choice_match_arm_qualifier_for_other_choice() {
+    let error = parse_single_file_ast_error(
+        "#Status :: Ready, Busy;\n\
+         #OtherStatus :: Busy;\n\
+         current Status = Status::Ready\n\
+         if current is:\n\
+             case OtherStatus::Busy => io(\"busy\");\n\
+         ;\n",
+    );
+
+    assert_eq!(error.error_type, ErrorType::Rule);
+    assert!(
+        error
+            .msg
+            .contains("does not match the scrutinee choice 'Status'"),
         "{}",
         error.msg
     );

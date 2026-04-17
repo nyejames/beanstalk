@@ -180,7 +180,7 @@ Does not parse anything in function bodies beyond capturing their token streams 
 - **Strict Dependency Edge Collection**: Header parsing collects strict top-level dependency edges.
 - **Implicit Entry Start Capture**: Entry-file top-level executable code is collected into a `HeaderKind::StartFunction` header for later AST lowering.
 - **Import Collection**: Imports needed by top-level declarations are collected here for top-level dependency analysis.
-- **Top-Level Const Fragments**: Entry-file top-level const templates are recorded as compile-time fragment headers plus builder-facing placement metadata.
+- **Top-Level Const Fragments**: Entry-file top-level const templates are recorded as ordered compile-time fragment headers.
 - **Runtime Fragment Counting**: Entry-file top-level runtime templates remain in the entry `start` body, while header parsing tracks how many runtime fragments precede each const fragment so builders can merge outputs correctly.
 
 Exported constants are parsed as top-level declarations. Their declared type shape is header-owned, the AST later resolves and validates the initializer. Top-level struct field shapes and choice variant shapes are fully parsed in the header stage, but validated and type checked at the AST stage.

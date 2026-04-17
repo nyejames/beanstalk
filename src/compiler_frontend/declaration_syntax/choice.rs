@@ -7,7 +7,7 @@
 //! direct AST imports for the choice shell contract.
 //!
 //! Body-context choice expression parsing (`Choice::Variant` values) lives in
-//! `ast/statements/choices.rs` and is intentionally separate.
+//! `ast/expressions/parse_expression_identifiers.rs` and is intentionally separate.
 
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;

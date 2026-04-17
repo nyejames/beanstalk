@@ -6,7 +6,6 @@
 pub use crate::compiler_frontend::compiler_messages::source_location::{
     CharPosition, SourceLocation,
 };
-use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::identity::FileId;
 use crate::compiler_frontend::symbols::string_interning::StringId;

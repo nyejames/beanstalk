@@ -113,7 +113,10 @@ pub enum DataType {
     #[allow(dead_code)] // Planned: explicit parameter/record type surfaces.
     Parameters(Vec<Declaration>), // Struct definitions and parameters
 
-    Choices(Vec<ChoiceVariant>), // Union of types
+    Choices {
+        nominal_path: InternedPath,
+        variants: Vec<ChoiceVariant>,
+    }, // Choice declaration identity + variant list
     #[allow(dead_code)] // Planned: Option<T> language-level type support.
     Option(Box<DataType>), // Shorthand for a choice of a type or None
     Result {
@@ -319,7 +322,7 @@ impl DataType {
                     err.display_with_table(string_table)
                 )
             }
-            DataType::Choices(variants) => {
+            DataType::Choices { variants, .. } => {
                 let mut inner_types_str = String::new();
                 for variant in variants {
                     inner_types_str
@@ -394,11 +397,22 @@ impl PartialEq for DataType {
                         .zip(signature2.returns.iter())
                         .all(|(return1, return2)| return1.data_type() == return2.data_type())
             }
-            (DataType::Choices(a), DataType::Choices(b)) => {
-                a.len() == b.len()
-                    && a.iter()
-                        .zip(b.iter())
-                        .all(|(arg_a, arg_b)| arg_a.id == arg_b.id)
+            (
+                DataType::Choices {
+                    nominal_path: path_a,
+                    variants: variants_a,
+                },
+                DataType::Choices {
+                    nominal_path: path_b,
+                    variants: variants_b,
+                },
+            ) => {
+                path_a == path_b
+                    && variants_a.len() == variants_b.len()
+                    && variants_a
+                        .iter()
+                        .zip(variants_b.iter())
+                        .all(|(variant_a, variant_b)| variant_a.id == variant_b.id)
             }
             _ => false,
         }

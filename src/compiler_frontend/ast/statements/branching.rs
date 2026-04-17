@@ -7,7 +7,7 @@
 //! receives validated, normalized match structures.
 
 use crate::compiler_frontend::ast::ast::{ContextKind, ScopeContext};
-use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
+use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
 use crate::compiler_frontend::ast::function_body_to_ast;
@@ -17,6 +17,7 @@ use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::declaration_syntax::choice::ChoiceVariant;
 use crate::compiler_frontend::deferred_feature_diagnostics::deferred_feature_rule_error;
+use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
 use crate::compiler_frontend::type_coercion::compatibility::is_type_compatible;
@@ -348,9 +349,12 @@ fn parse_case_arm(
 
     // Choice scrutinees resolve symbols to variants; all other scrutinees stay literal-only.
     let (condition, matched_choice_variant, pattern_location) = match normalized_subject_type {
-        DataType::Choices(variants) => {
+        DataType::Choices {
+            nominal_path,
+            variants,
+        } => {
             let (choice_pattern, matched_variant_name, location) =
-                parse_choice_variant_pattern(token_stream, variants, string_table)?;
+                parse_choice_variant_pattern(token_stream, nominal_path, variants, string_table)?;
             (choice_pattern, Some(matched_variant_name), location)
         }
         subject_type => {
@@ -431,13 +435,17 @@ fn parse_case_arm(
 /// treat choice arms identically to literal-int arms.
 fn parse_choice_variant_pattern(
     token_stream: &mut FileTokens,
+    choice_nominal_path: &InternedPath,
     variants: &[ChoiceVariant],
     string_table: &StringTable,
 ) -> Result<(Expression, StringId, SourceLocation), CompilerError> {
     // Alpha only supports exact choice-variant names in match patterns.
     reject_deferred_pattern_lead_token(token_stream)?;
 
-    let choice_name_display = string_table.resolve(choice_name).unwrap_or("<choice>");
+    let choice_name = choice_nominal_path.name();
+    let choice_name_display = choice_name
+        .map(|name| string_table.resolve(name).to_owned())
+        .unwrap_or_else(|| String::from("<choice>"));
 
     let leading_token = token_stream.current_token_kind().to_owned();
     let (variant_name, variant_location) = match leading_token {
@@ -736,7 +744,7 @@ fn enforce_match_exhaustiveness(
     let normalized_subject_type = normalized_subject_type(&subject.data_type);
 
     match normalized_subject_type {
-        DataType::Choices(variants) => {
+        DataType::Choices { variants, .. } => {
             // `else` intentionally acts as an explicit "future variants" fallback in Alpha.
             if else_block.is_some() {
                 return Ok(());

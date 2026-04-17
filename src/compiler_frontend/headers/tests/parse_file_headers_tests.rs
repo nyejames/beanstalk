@@ -190,7 +190,7 @@ fn symbol_tokens_in_header_body(header: &Header, string_table: &StringTable) -> 
 }
 
 #[test]
-fn import_paths_are_captured_for_start_function_dependencies() {
+fn start_function_dependencies_stay_empty_even_with_imported_runtime_template_tokens() {
     let headers = parse_single_file_headers("import @libs/html/basic\n[basic]\n");
     let start_header = headers
         .headers
@@ -199,8 +199,8 @@ fn import_paths_are_captured_for_start_function_dependencies() {
         .expect("expected start function header");
 
     assert!(
-        !start_header.dependencies.is_empty(),
-        "start function should depend on imported symbol path"
+        start_header.dependencies.is_empty(),
+        "start function headers must not carry dependency-graph edges"
     );
 }
 
@@ -217,7 +217,7 @@ fn exported_constant_headers_are_parsed() {
 }
 
 #[test]
-fn exported_constant_dependency_tracks_imported_symbol() {
+fn exported_untyped_constant_has_no_strict_dependencies() {
     let headers = parse_single_file_headers("import @styles/docs/navbar\n#theme = navbar\n");
     let constant_header = headers
         .headers
@@ -225,7 +225,10 @@ fn exported_constant_dependency_tracks_imported_symbol() {
         .find(|header| matches!(header.kind, HeaderKind::Constant { .. }))
         .expect("expected constant header");
 
-    assert_eq!(constant_header.dependencies.len(), 1);
+    assert!(
+        constant_header.dependencies.is_empty(),
+        "strict constant dependencies come from declared type syntax only"
+    );
 }
 
 #[test]
