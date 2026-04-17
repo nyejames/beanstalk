@@ -73,12 +73,12 @@ impl<'hir> JsEmitter<'hir> {
             }
 
             HirStatementKind::PushRuntimeFragment { vec_local, value } => {
-                // WHAT: lower a fragment push into a JS vec push call.
-                // WHY: entry start() accumulates runtime fragments in a JS array;
-                //      each push appends one evaluated string.
+                // WHAT: lower a fragment push into a JS vec push call against the unwrapped array.
+                // WHY: locals are stored as binding wrappers `{ value: ... }` so `.push` cannot be
+                //      called on the binding itself. __bs_read returns the underlying array.
                 let vec_name = self.local_name(*vec_local)?.to_owned();
                 let value_expr = self.lower_expr(value)?;
-                self.emit_line(&format!("{vec_name}.push({value_expr});"));
+                self.emit_line(&format!("__bs_read({vec_name}).push({value_expr});"));
             }
         }
 

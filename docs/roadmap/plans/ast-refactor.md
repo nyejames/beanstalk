@@ -20,7 +20,7 @@ The correct contract is:
 The tests are currnently broken and now need to be fixed or updated after this large frontend refactor.
 
 There are also some unexpected errors when trying to build the docs `cargo run build docs` involving no longer finding the $html directive.
-This should also be investigated as part of this pass.
+This should also be investigated as part of this pass. "ERROR: Style directive '$html' is unsupported here."
 
 # Part 4 - Rebuild tests around the restored contract
 
