@@ -24,10 +24,11 @@
 </div>
 <p>Beanstalk is designed to be an opinionated and refreshing take on modern app building.</p>
 
+<p>This project is focused on the long term and designed to be versatile and future proof. A carefully designed, high-level language for the future.</p>
+
 <p>The main build system is web based, but the compiler can have any number of pluggable backends through its builder interface. This opens up a future where Beanstalk can be ran or embedded anywhere.</p>
 
 <p>This is a serious attempt to never have to use TypeScript, web frameworks or bloated UI/web ecosystems again.</p>
-<p>Beanstalk is an attempt to make something fresh, future aware and carefully designed from the ground up for a wide variety of applications with the sleek feel of a modern high-level language, but without the technical debt and poor design principles</p>
 
 <br>
 
