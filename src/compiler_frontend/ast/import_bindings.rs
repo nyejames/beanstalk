@@ -10,8 +10,11 @@
 use crate::compiler_frontend::FrontendBuildProfile;
 use crate::compiler_frontend::ast::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
+use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::statements::declarations::resolve_declaration_syntax;
+use crate::compiler_frontend::ast::templates::template::TemplateAtom;
 use crate::compiler_frontend::compiler_errors::CompilerError;
+use crate::compiler_frontend::compiler_errors::ErrorMetaDataKey;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::headers::parse_file_headers::{FileImport, Header, HeaderKind};
 use crate::compiler_frontend::host_functions::HostRegistry;
@@ -249,6 +252,30 @@ pub(crate) fn parse_constant_header_declaration(
     let declaration = declaration_result?;
 
     if !declaration.value.is_compile_time_constant() {
+        // Check if the expression contains a reference to a visible constant that
+        // hasn't been resolved yet. If so, this is a deferrable error — the fixed-point
+        // loop will retry after its dependencies are resolved.
+        if let Some(unresolved_path) = find_unresolved_constant_reference(
+            &declaration.value,
+            &context.top_level_declarations,
+            visible_declaration_ids,
+        ) {
+            let variable_name = unresolved_path
+                .name()
+                .map(|name| string_table.resolve(name).to_owned())
+                .unwrap_or_default();
+            let mut error = CompilerError::new_rule_error(
+                format!(
+                    "Constant '{}' depends on '{}' which has not been resolved yet.",
+                    declaration.id.to_portable_string(string_table),
+                    unresolved_path.to_portable_string(string_table)
+                ),
+                header.name_location.clone(),
+            );
+            error.new_metadata_entry(ErrorMetaDataKey::VariableName, variable_name);
+            return Err(error);
+        }
+
         return Err(CompilerError::new_rule_error(
             format!(
                 "Constant '{}' is not compile-time resolvable. Constants may only contain compile-time values and constant references.",
@@ -259,6 +286,84 @@ pub(crate) fn parse_constant_header_declaration(
     }
 
     Ok(declaration)
+}
+
+/// Recursively scans an expression for references to visible declarations that are
+/// still unresolved constant placeholders.
+///
+/// WHAT: when a constant header references another constant that hasn't been resolved
+/// yet (e.g. due to cross-file or soft-dependency ordering), the expression will contain
+/// a `Reference` to a `NoValue` placeholder. Detecting this allows the fixed-point loop
+/// to defer the constant instead of failing permanently.
+///
+/// WHY: the deferred resolution mechanism relies on `ErrorMetaDataKey::VariableName` to
+/// identify deferrable errors. This helper bridges the gap between "expression parsed as
+/// Reference" and "variable not found" by surfacing the unresolved path name.
+fn find_unresolved_constant_reference(
+    expression: &Expression,
+    declarations: &[Declaration],
+    visible_declaration_ids: &FxHashSet<InternedPath>,
+) -> Option<InternedPath> {
+    match &expression.kind {
+        ExpressionKind::Reference(path) => {
+            if visible_declaration_ids.contains(path)
+                && declarations
+                    .iter()
+                    .any(|d| &d.id == path && d.is_unresolved_constant_placeholder())
+            {
+                return Some(path.clone());
+            }
+            None
+        }
+        ExpressionKind::Template(template) => {
+            for atom in &template.content.atoms {
+                if let TemplateAtom::Content(segment) = atom {
+                    if let Some(path) = find_unresolved_constant_reference(
+                        &segment.expression,
+                        declarations,
+                        visible_declaration_ids,
+                    ) {
+                        return Some(path);
+                    }
+                }
+            }
+            None
+        }
+        ExpressionKind::Collection(items) => {
+            for item in items {
+                if let Some(path) =
+                    find_unresolved_constant_reference(item, declarations, visible_declaration_ids)
+                {
+                    return Some(path);
+                }
+            }
+            None
+        }
+        ExpressionKind::StructInstance(fields) | ExpressionKind::StructDefinition(fields) => {
+            for field in fields {
+                if let Some(path) = find_unresolved_constant_reference(
+                    &field.value,
+                    declarations,
+                    visible_declaration_ids,
+                ) {
+                    return Some(path);
+                }
+            }
+            None
+        }
+        ExpressionKind::Range(start, end) => {
+            find_unresolved_constant_reference(start, declarations, visible_declaration_ids)
+                .or_else(|| {
+                    find_unresolved_constant_reference(end, declarations, visible_declaration_ids)
+                })
+        }
+        ExpressionKind::BuiltinCast { value, .. }
+        | ExpressionKind::ResultConstruct { value, .. }
+        | ExpressionKind::Coerced { value, .. } => {
+            find_unresolved_constant_reference(value, declarations, visible_declaration_ids)
+        }
+        _ => None,
+    }
 }
 
 fn resolve_import_target_path(

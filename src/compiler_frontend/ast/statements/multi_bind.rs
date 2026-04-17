@@ -189,7 +189,7 @@ fn validate_target_mutability(
     target_syntax: &BindingTargetSyntax,
     string_table: &StringTable,
 ) -> Result<(), CompilerError> {
-    if target_syntax.mutable_marker && !target_syntax.type_annotation.eq(&DataType::Inferred) {
+    if target_syntax.mutable_marker && target_syntax.type_annotation.eq(&DataType::Inferred) {
         return_rule_error!(
             format!(
                 "Mutable multi-bind target '{}' requires an explicit type annotation",

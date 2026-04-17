@@ -175,12 +175,12 @@ impl FrontendProject {
 }
 
 #[test]
-fn sorts_cross_module_start_function_dependencies_through_frontend_entrypoints() {
+fn start_function_is_excluded_from_dependency_graph_and_appended_last() {
     let mut project = FrontendProject::new(
         &[
-            ("src/#page.bst", "import @helper\nhelper()\nio(\"page\")\n"),
-            ("src/helper.bst", "import @leaf\nleaf()\nio(\"helper\")\n"),
-            ("src/leaf.bst", "io(\"leaf\")\n"),
+            ("src/#page.bst", "import @helper\n#helper_const = \"page_helper\"\nio(\"page\")\n"),
+            ("src/helper.bst", "import @leaf\n#leaf_const = \"helper_leaf\"\n"),
+            ("src/leaf.bst", "#leaf_const = \"leaf_value\"\n"),
         ],
         "src/#page.bst",
     );
@@ -191,20 +191,34 @@ fn sorts_cross_module_start_function_dependencies_through_frontend_entrypoints()
         .sort_headers(headers)
         .expect("dependency sorting should succeed");
 
-    let start_order = sorted
+    // `start` does not participate in graph sorting; only the entry file has one.
+    let start_headers: Vec<_> = sorted
         .headers
         .iter()
         .filter(|header| matches!(header.kind, HeaderKind::StartFunction))
-        .map(|header| header.source_file.clone())
-        .collect::<Vec<_>>();
+        .collect();
 
     assert_eq!(
-        start_order,
-        vec![
-            project.logical_path("src/leaf.bst"),
-            project.logical_path("src/helper.bst"),
-            project.logical_path("src/#page.bst"),
-        ]
+        start_headers.len(),
+        1,
+        "only the entry file should produce a StartFunction header"
+    );
+    assert_eq!(
+        start_headers[0].source_file,
+        project.logical_path("src/#page.bst"),
+        "entry start should be the only StartFunction header"
+    );
+
+    // `start` is appended last among all headers for the entry file.
+    let entry_file_headers: Vec<_> = sorted
+        .headers
+        .iter()
+        .filter(|header| header.source_file == project.logical_path("src/#page.bst"))
+        .collect();
+
+    assert!(
+        matches!(entry_file_headers.last().unwrap().kind, HeaderKind::StartFunction),
+        "start should be appended last for the entry file"
     );
 }
 
@@ -212,8 +226,14 @@ fn sorts_cross_module_start_function_dependencies_through_frontend_entrypoints()
 fn reports_circular_imports_through_frontend_header_sorting() {
     let mut project = FrontendProject::new(
         &[
-            ("src/a.bst", "import @b\nb()\nio(\"a\")\n"),
-            ("src/b.bst", "import @a\na()\nio(\"b\")\n"),
+            (
+                "src/a.bst",
+                "import @b/BStruct\n#AStruct = | value String, link BStruct |\n",
+            ),
+            (
+                "src/b.bst",
+                "import @a/AStruct\n#BStruct = | value String, link AStruct |\n",
+            ),
         ],
         "src/a.bst",
     );
