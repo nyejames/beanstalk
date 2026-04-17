@@ -1,5 +1,282 @@
 ### REVERT MISTAKEN AST DRIFT
 
+## Updated plan
+
+### 1. Header-stage directive visibility + deferred constant/default resolution
+
+**Status:** mostly completed
+
+This matches the current frontend contract: header parsing owns top-level discovery and builds the `ModuleSymbols` package, while AST consumes that package directly and must not re-discover top-level declarations  .
+
+#### Completed
+
+* Style directives are now threaded into header parsing early via `HeaderParseOptions.style_directives`, which is the right direction given that directive availability is registry-based and `$html` is a valid HTML-project directive  .
+* Header parsing now discovers visible constant placeholders up front for imports and exported constants.
+* `ModuleSymbols` now carries `declaration_stubs_by_path`.
+* AST now has a fixed-point constant-header resolution pass.
+* Struct field default resolution was extended so unresolved constant references can defer during header-owned shaping and get resolved later in AST.
+* Missing same-file strict-edge “hints” no longer hard-fail dependency sorting when the target never becomes a real header; later type resolution emits the user-facing diagnostic instead.
+
+#### Correction for drift
+
+* **Do not keep `src/compiler_frontend/headers/visible_scope.rs` in the plan.**
+* It was removed in the next commit, which was the correct cleanup. That file was redundant once AST used `visible_symbol_paths` plus `declaration_stubs_by_path` directly.
+* That correction fits the style guide: avoid extra layers, wrappers, and parallel structures; keep one current shape, not transitional indirection  .
+
+#### Remaining
+
+* Verify that `cargo run build docs` is now green and that the `$html` error is fully gone.
+* Add explicit regression tests around:
+
+  * header-stage access to build-system directives
+  * struct defaults referencing visible constants
+  * constant-header deferral across files/import visibility
+* Review whether placeholder discovery in `parse_file_headers.rs` can stay contained without further spreading.
+
+---
+
+### 2. `html_wasm` direct `bst_start() -> Vec<String>` runtime ABI
+
+**Status:** mostly completed
+
+This is aligned with the current compiler docs: the entry `start()` returns runtime fragment strings in source order, and builders hydrate slots from that result rather than using a separate wrapper pipeline .
+
+#### Completed
+
+* Wasm helper export policy now includes:
+
+  * `bst_vec_new`
+  * `bst_vec_push`
+  * `bst_vec_len`
+  * `bst_vec_get`
+* Wasm helper emission and export sections were extended for the vec-handle runtime.
+* LIR gained `VecNew` and `VecPushHandle`.
+* HIR→LIR lowering now supports:
+
+  * empty `Vec<String>` collection literal construction
+  * runtime fragment push lowering
+* HTML Wasm bootstrap now:
+
+  * calls `instance.exports.bst_start()`
+  * reads vec length/items
+  * decodes string handles through `bst_str_ptr` / `bst_str_len`
+  * hydrates slots directly
+  * releases the vec handle afterwards
+* HTML Wasm export-plan/request plumbing was updated accordingly.
+
+#### Correction for drift
+
+* The original plan described this as a narrow ABI addition. That is still true.
+* But the implementation is **not** generic collection lowering. It only handles the runtime-fragment accumulator path plus empty string-vec construction. Keep that scope explicit.
+
+#### Remaining
+
+* Validate full backend behavior through the actual `html_wasm` suite.
+* Add canonical integration coverage for the Wasm runtime fragment collection path, which the roadmap still calls out as a gap .
+* Consider splitting vec-helper emission out of the giant helper emitter before more runtime helpers land. That file is trending toward “does too much” per the style guide’s single-responsibility and function-size guidance .
+
+---
+
+### 3. Unit / frontend contract test rewrites
+
+**Status:** started, not completed
+
+The ast-refactor plan says tests should assert the restored architecture directly: strict top-level sorting, `start` excluded from the graph, AST consuming headers directly, and no top-level reparse assumptions .
+
+#### Completed
+
+* Some `build_system::build` tests were updated to reflect runtime slot placeholders and the new HTML/Wasm output shape.
+* A few assertions were loosened to avoid brittle exact-shape failures.
+
+#### Still missing
+
+* Dedicated dependency-sorting tests for:
+
+  * strict-edge sort behavior
+  * cycle rejection
+  * `start` excluded from graph
+  * `start` appended last
+  * no soft-edge behavior
+* AST contract tests for:
+
+  * consuming parsed header payloads directly
+  * no top-level reparse
+  * entry `start` body seeing resolved top-level declarations
+* Focused tests for constant-header deferral and struct-default resolution.
+
+---
+
+### 4. Integration fixture migration and curation
+
+**Status:** not done in these two commits
+
+This remains one of the main unfinished parts of Part 4 of the roadmap plan .
+
+#### Still needed
+
+* Audit failing fixtures by semantic intent.
+* Rewrite stale fixtures that assumed old top-level execution behavior.
+* Move brittle output checks to:
+
+  * normalized golden
+  * rendered-output assertions
+  * targeted artifact assertions
+* Add stronger canonical cases for remaining alpha gaps.
+
+---
+
+### 5. Harness hardening
+
+**Status:** not done in these two commits
+
+#### Still needed
+
+* Remove remaining `todo!` / panic-shaped assertion paths in the integration runner.
+* Add runner-level regression tests for normalization and wasm import/export assertion handling.
+* Keep harness failure vs semantic mismatch classification clean.
+
+This is explicitly still part of the plan and also required by the no-user-input-panics rule in the style guide .
+
+---
+
+### 6. Manifest / matrix ownership
+
+**Status:** not done in these two commits
+
+#### Still needed
+
+* Update `tests/cases/manifest.toml` alongside fixture migrations.
+* Update `docs/roadmap/language-surface-integration-matrix.md` alongside canonical coverage changes.
+* Keep those in the same commits as fixture work.
+
+---
+
+### 7. Part 5 cleanup after the functional fixes
+
+**Status:** still pending
+
+The broader AST cleanup from the roadmap remains separate and still active:
+
+* remove remaining transitional structure
+* keep `ast/mod.rs` as the strict entry point
+* tighten context ownership
+* trim public surface
+* clean lints/dead code/comments/tests 
+
+Nothing in these two commits closes that work.
+
+---
+
+## Drift / excessive code corrections
+
+### `visible_scope.rs`
+
+You were right to be suspicious.
+
+That file is **not needed** in the final shape. The second commit removed it, and that was the correct move. The information needed for deferral is already present through:
+
+* file-local `visible_symbol_paths`
+* `declaration_stubs_by_path`
+
+Reintroducing a separate visibility helper would push the code back toward duplication and stage-overlap, which the refactor is trying to remove  .
+
+### `type_resolution.rs`
+
+This is the main place where the implementation now looks heavier than ideal.
+
+The new `inline_visible_constant_references*` machinery is doing a lot:
+
+* rewriting expressions
+* inlining constants
+* partially re-evaluating runtime-node shapes
+* supporting struct default folding
+
+That is probably justified functionally, but it is now the clearest candidate for follow-up extraction into a dedicated AST constant-resolution helper/module. As it stands, it is drifting toward mixed responsibility.
+
+### `parse_file_headers.rs`
+
+The new placeholder discovery scan is defensible because header parsing owns top-level discovery and AST should not re-scan top-level syntax later . But it should stay there and not spawn another parallel visibility/discovery path.
+
+### Wasm helper emission
+
+`emit/helpers.rs` is getting bulky. Before more helpers are added, split vec helper emission into dedicated helper functions or a vec-runtime helper file. That would better match the style guide’s organization rules .
+
+### Test softening
+
+Some unit-test assertion loosening is acceptable for this transition, but this should not become the permanent solution. The roadmap already points toward fixture-level assertion migration instead of broad, softer unit tests .
+
+---
+
+## Cleaned-up replacement for the plan
+
+### Part 4 — Rebuild tests around the restored frontend contract
+
+#### 1. Header-stage directive visibility + deferred constant/default resolution
+
+**Completed**
+
+* Thread build-system style directives into header parsing early.
+* Seed declaration stubs on `ModuleSymbols`.
+* Allow header-owned constant/default shaping to defer unresolved constant references.
+* Resolve deferred constant headers in AST using visible symbol paths plus declaration stubs.
+* Remove redundant header-stage visibility helper file.
+
+**Remaining**
+
+* Verify docs build is green.
+* Add focused regression tests for `$html`, constant deferral, and struct defaults.
+
+#### 2. `html_wasm` direct `bst_start()` fragment vec ABI
+
+**Completed**
+
+* Add vec runtime helper exports and lowering support.
+* Return vec handle directly from `bst_start()`.
+* Decode runtime fragment vec in JS bootstrap and hydrate slots.
+
+**Remaining**
+
+* Validate full `html_wasm` suite.
+* Add canonical integration coverage for this path.
+* Keep generic collection lowering out of scope for now.
+
+#### 3. Rebuild unit/frontend tests around the final contract
+
+**Started**
+
+* Some build tests were updated for slot-placeholder/runtime-fragment behavior.
+
+**Remaining**
+
+* Add dependency-sort contract tests.
+* Add AST contract tests.
+* Add regression tests for deferred constant resolution.
+
+#### 4. Curate and migrate integration fixtures
+
+**Not done**
+
+* Rewrite stale fixtures.
+* Move noisy cases to intent-aligned assertion modes.
+* Add stronger canonical fixtures for remaining matrix gaps.
+
+#### 5. Harden the integration harness
+
+**Not done**
+
+* Remove panic/todo paths.
+* Add runner regression tests.
+* Keep failure classes distinct.
+
+#### 6. Keep manifest and matrix in sync
+
+**Not done**
+
+* Update manifest and matrix with fixture batches.
+
+
+
+
 # Overview
 The goal is to restore the intended frontend architecture and remove the AST drift that duplicated header-stage work. 
 This refactor has been gradually taking place and is focused on removing redunancy and simplifying the frontnend wherever possible.
