@@ -8,9 +8,9 @@
 
 # 🌱
 
-<p>⚠️ This is a pre-alpha work-in-progress compiler ⚠️</p> 
+<p>⚠️ This is a pre-alpha work-in-progress compiler - nearly at alpha! ⚠️</p> 
 
-<p><a href="https://nyejames.github.io/beanstalk/">The documentation site for Beanstalk</a> was created using the language itself. This is the main testing ground for building static websites with Beanstalk. </p>
+<p><a href="https://nyejames.github.io/beanstalk/">The documentation site for Beanstalk</a> was created using the <a href="https://github.com/nyejames/beanstalk/blob/main/docs/">Language Itself</a>. </p>
 
 <p>The language is under rapid active development and evolving constantly. See <a href="https://github.com/nyejames/beanstalk/blob/main/CONTRIBUTING.md">CONTRIBUTING</a> if you're inspired to help out</p>
 </div>
@@ -22,10 +22,11 @@
 ## First Class String Template Syntax
 
 </div>
-<p>Beanstalk is designed to be an opinionated and refreshing take on modern app building</p>
+<p>Beanstalk is designed to be an opinionated and refreshing take on modern app building.</p>
 
-<p>The main build system is web based, but the compiler can have any number of pluggable backends through its builder interface. This opens up a future where Beanstalk can be ran or embedded anywhere.
-This comes from a string desire to never have to use TypeScript, web frameworks or bloated UI/web ecosystems again.</p>
+<p>The main build system is web based, but the compiler can have any number of pluggable backends through its builder interface. This opens up a future where Beanstalk can be ran or embedded anywhere.</p>
+
+<p>This is a serious attempt to never have to use TypeScript, web frameworks or bloated UI/web ecosystems again.</p>
 <p>Beanstalk is an attempt to make something fresh, future aware and carefully designed from the ground up for a wide variety of applications with the sleek feel of a modern high-level language, but without the technical debt and poor design principles</p>
 
 <br>
@@ -89,6 +90,7 @@ post = create_post("Boring Title", date, [$markdown:
 - Simple, static and strong type system with a borrow checker for writing confident, safe and correct code
 - A memory model that can allow for future static optimizations. The GC can be  completly elided in ideal cases.
 - Backend agnostic. Could be used as the baseline for a whole web framework, a Wasm module builder or eventually an embedded UI engine for Rust. Designed to be extendable to any target in the future.
+- Keep compiler dependencies as few as possible
 
 <div align="center">
 
@@ -98,7 +100,7 @@ post = create_post("Boring Title", date, [$markdown:
 
 Beanstalk is designed for a future where LLM workflows are inevitable: 
 
-Humans should validate, review and write the more declarative and creative parts of the codebase while LLMs provide the churn. 
+Humans should validate, review and write the more declarative, creative and fun parts of the codebase while LLMs cover the boring churn. 
 
 This is one reason why readability is the primary goal of the language.
 
