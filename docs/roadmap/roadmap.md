@@ -2,7 +2,7 @@
 
 This catalogues the todo list for the language and compiler.
 
-The current major goal is getting to a credible alpha stage.
+The current major goal is getting to a healthy alpha stage.
 Each plan or PR that is needed will be linked here.
 
 Use the language surface integration matrix as a reference for what is currently implemented: `./language-surface-integration-matrix.md`
@@ -28,7 +28,7 @@ Main goal is to make sure the codebase is following the style guide, avoiding du
 Makes `/` float division only. `//` becomes the integer division symbol.
 Using `/` in an expression with only integers and no explicit type will coerse to a float expression.
 
--`docs/roadmap/plans/mutable-literal-mutable-params-hidden-locals.md`
+- `docs/roadmap/plans/mutable-literal-mutable-params-hidden-locals.md`
 Support fresh rvalues directly in mutable (`~T`) function-parameter slots by lowering them through synthesized hidden locals in HIR. Keeps `~` place-only, keeps `~literal` invalid, avoids adding a new HIR node kind, and extends tests/docs for the new call-site rule.
 
 - `docs/roadmap/plans/collection-builtins-refactor.md`
@@ -45,6 +45,11 @@ This is due to things like CRLF in golden outputs and OS path drifts.
 - `docs/roadmap/plans/js-backend-hardening.md`
 Reviewing the JS backend and making sure it implements the full suite of alpha features.
 
+### Additional TODOs
+- Explicit error for compile time number overflows (2 ^ 63) should not just be a rust panic, should be a graceful compile time error.
+- Loops can accept a single integer as a condition and it will automatically create a random from 0 to {integer}.
+- Move to more specific explicit type declarations for numbers (I32, I64, F32, F64) - JS backend just makes all an F64 and accepts the precision loss, more for future Wasm backend. 
+- Review built in "Error" type and reserved keywords. Should this be build-system provided (like IO) rather than a compiler built in? So Error is reserved in a similar way to io and IO, and must always be provided by the build system, but the specific shape beyond the core parameters must be defined by the build system.
 
 ## Final pre-alpha sweep
 
@@ -88,6 +93,7 @@ This is a collection of notes and findings for future roadmaps once the roadmap 
 - full pattern-matching design
 - full interfaces implementation
 - richer numeric redesign work not required by Alpha
+- Compile time arbitary precision aritmetic + Decimals Type support
 
 **Wasm**
 
