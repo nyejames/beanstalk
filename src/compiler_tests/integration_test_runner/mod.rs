@@ -24,6 +24,7 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 pub(crate) const CANONICAL_TESTS_PATH: &str = "tests/cases";
+pub(crate) const DEFAULT_EXPECT_STUB_PATH: &str = "tests/fixtures/stubs/expect.toml";
 pub(crate) const MANIFEST_FILE_NAME: &str = "manifest.toml";
 pub(crate) const EXPECT_FILE_NAME: &str = "expect.toml";
 pub(crate) const INPUT_DIR_NAME: &str = "input";

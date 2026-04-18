@@ -6,9 +6,9 @@
 //!      each piece a single clear responsibility.
 
 use super::{
-    BackendId, CANONICAL_TESTS_PATH, EXPECT_FILE_NAME, ExpectationMode, ExpectedOutcome,
-    FailureExpectation, GOLDEN_DIR_NAME, INPUT_DIR_NAME, MANIFEST_FILE_NAME, ManifestCaseSpec,
-    ParsedExpectationFile, SuccessExpectation, TestCaseSpec, TestSuiteSpec,
+    BackendId, CANONICAL_TESTS_PATH, DEFAULT_EXPECT_STUB_PATH, EXPECT_FILE_NAME, ExpectationMode,
+    ExpectedOutcome, FailureExpectation, GOLDEN_DIR_NAME, INPUT_DIR_NAME, MANIFEST_FILE_NAME,
+    ManifestCaseSpec, ParsedExpectationFile, SuccessExpectation, TestCaseSpec, TestSuiteSpec,
 };
 use crate::compiler_frontend::Flag;
 use std::collections::HashSet;
@@ -118,7 +118,7 @@ fn discover_canonical_fixture_roots(root: &Path) -> Result<Vec<PathBuf>, String>
             continue;
         }
 
-        if !(path.join(INPUT_DIR_NAME).is_dir() && path.join(EXPECT_FILE_NAME).is_file()) {
+        if !path.join(INPUT_DIR_NAME).is_dir() {
             continue;
         }
 
@@ -145,7 +145,18 @@ pub(crate) fn load_canonical_case_specs(
         ));
     }
 
-    let parsed_expectation = super::expectations::parse_expectation_file(&expect_path)?;
+    let parsed_expectation = if expect_path.is_file() {
+        super::expectations::parse_expectation_file(&expect_path)?
+    } else {
+        let default_stub_path = Path::new(DEFAULT_EXPECT_STUB_PATH);
+        let source = fs::read_to_string(default_stub_path).map_err(|error| {
+            format!(
+                "Failed to read default expectation stub '{}': {error}",
+                default_stub_path.display()
+            )
+        })?;
+        super::expectations::parse_expectation_source(&source, &expect_path)?
+    };
     validate_fixture_contract(fixture_root, &parsed_expectation)?;
     let entry_path = resolve_case_entry_path(&input_root, parsed_expectation.entry.as_deref())?;
     let case_id = explicit_id.unwrap_or_else(|| {
