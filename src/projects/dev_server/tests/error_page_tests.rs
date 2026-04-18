@@ -13,14 +13,8 @@ use crate::compiler_frontend::tokenizer::tokens::CharPosition;
 use std::fs;
 use std::path::PathBuf;
 use std::time::SystemTime;
+use crate::compiler_tests::test_support::temp_dir;
 
-fn temp_dir(prefix: &str) -> PathBuf {
-    let unique = SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .expect("time should be after unix epoch")
-        .as_nanos();
-    std::env::temp_dir().join(format!("beanstalk_dev_server_error_page_{prefix}_{unique}"))
-}
 
 #[test]
 fn escape_html_rewrites_special_characters() {

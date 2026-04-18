@@ -55,7 +55,9 @@ pub(super) struct LoopTargets {
 #[path = "tests/hir_builder_test_support.rs"]
 mod hir_builder_test_support;
 #[cfg(test)]
-pub(crate) use hir_builder_test_support::validate_module_for_tests;
+pub(crate) use hir_builder_test_support::{
+    assert_no_placeholder_terminators, build_ast, lower_ast, validate_module_for_tests,
+};
 // -------------------
 // HIR Builder Context
 // -------------------

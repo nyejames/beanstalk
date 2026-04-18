@@ -11,11 +11,12 @@ use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::projects::html_project::tests::test_support::{
     RenderedPathUsageInput, assert_fragment_before_body_close, assert_has_basic_shell,
     collect_output_paths, create_test_module, expect_bytes_output, expect_html_output,
-    expect_js_output, rendered_path_usage, temp_dir,
+    expect_js_output, rendered_path_usage,
 };
 use crate::projects::settings::Config;
 use std::fs;
 use std::path::PathBuf;
+use crate::compiler_tests::test_support::temp_dir;
 
 fn build_with_test_modules(
     builder: &HtmlProjectBuilder,

@@ -16,7 +16,6 @@ use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
 use crate::compiler_frontend::hir::hir_nodes::{BlockId, HirBlock, HirFunction, HirLocal, LocalId};
 use crate::compiler_frontend::hir::utils::terminator_targets;
 use rustc_hash::{FxHashMap, FxHashSet};
-use std::collections::VecDeque;
 
 pub(crate) fn lower_function_shell(
     context: &mut LoweringContext<'_>,
@@ -171,28 +170,13 @@ fn collect_reachable_block_ids(
     context: &LoweringContext<'_>,
     entry_block_id: BlockId,
 ) -> Result<Vec<BlockId>, CompilerError> {
-    let mut worklist = VecDeque::new();
-    let mut seen = FxHashSet::default();
-    let mut ordered_blocks = Vec::new();
-
-    worklist.push_back(entry_block_id);
-
-    while let Some(block_id) = worklist.pop_front() {
-        if !seen.insert(block_id) {
-            continue;
-        }
-
-        ordered_blocks.push(block_id);
-
-        let block = context.hir_block_by_id(block_id)?;
-        for successor in terminator_targets(&block.terminator) {
-            if !seen.contains(&successor) {
-                worklist.push_back(successor);
-            }
-        }
-    }
-
-    Ok(ordered_blocks)
+    crate::compiler_frontend::hir::utils::collect_reachable_blocks(
+        entry_block_id,
+        |block_id| {
+            let block = context.hir_block_by_id(block_id)?;
+            Ok(terminator_targets(&block.terminator))
+        },
+    )
 }
 
 fn collect_function_local_ids(

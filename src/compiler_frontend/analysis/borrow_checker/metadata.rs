@@ -516,26 +516,13 @@ impl<'a> BorrowChecker<'a> {
         function: &HirFunction,
     ) -> Result<Vec<BlockId>, CompilerError> {
         // Breadth-first traversal over explicit terminator successors.
-        let mut visited = FxHashSet::default();
-        let mut order = Vec::new();
-        let mut queue = VecDeque::new();
-
-        queue.push_back(function.entry);
-
-        while let Some(block_id) = queue.pop_front() {
-            if !visited.insert(block_id) {
-                continue;
-            }
-
-            order.push(block_id);
-
-            let block = self.block_by_id_or_error(block_id, function.id)?;
-            for next in successors(&block.terminator) {
-                queue.push_back(next);
-            }
-        }
-
-        Ok(order)
+        crate::compiler_frontend::hir::utils::collect_reachable_blocks(
+            function.entry,
+            |block_id| {
+                let block = self.block_by_id_or_error(block_id, function.id)?;
+                Ok(successors(&block.terminator))
+            },
+        )
     }
 }
 

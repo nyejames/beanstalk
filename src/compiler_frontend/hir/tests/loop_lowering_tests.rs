@@ -11,12 +11,10 @@ use crate::compiler_frontend::ast::expressions::expression::{Expression, Express
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
-use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::hir::hir_nodes::{
     BlockId, HirBinOp, HirExpressionKind, HirModule, HirPlace, HirStatementKind, HirTerminator,
 };
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 
 fn test_location(line: i32) -> SourceLocation {
@@ -67,31 +65,9 @@ fn range_loop_spec(
     }
 }
 
-fn build_ast(nodes: Vec<AstNode>, entry_path: InternedPath) -> Ast {
-    Ast {
-        nodes,
-        module_constants: vec![],
-        doc_fragments: vec![],
-        entry_path,
-        const_top_level_fragments: vec![],
-        rendered_path_usages: vec![],
-        warnings: vec![],
-    }
-}
-
-fn lower_ast(ast: Ast, string_table: &mut StringTable) -> Result<HirModule, CompilerMessages> {
-    HirBuilder::new(string_table, PathStringFormatConfig::default()).build_hir_module(ast)
-}
-
-fn assert_no_placeholder_terminators(module: &HirModule) {
-    assert!(
-        module
-            .blocks
-            .iter()
-            .all(|block| !matches!(block.terminator, HirTerminator::Panic { message: None })),
-        "expected no placeholder Panic(None) terminators in lowered HIR"
-    );
-}
+use crate::compiler_frontend::hir::hir_builder::{
+    assert_no_placeholder_terminators, build_ast, lower_ast,
+};
 
 fn range_loop_cfg_blocks(module: &HirModule) -> (BlockId, BlockId, BlockId, BlockId, BlockId) {
     let start = &module.functions[module.start_function.0 as usize];

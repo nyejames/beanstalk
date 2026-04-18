@@ -9,14 +9,8 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime};
+use crate::compiler_tests::test_support::temp_dir;
 
-fn temp_dir(prefix: &str) -> PathBuf {
-    let unique = SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .expect("system time should be after unix epoch")
-        .as_nanos();
-    std::env::temp_dir().join(format!("beanstalk_dev_server_{prefix}_{unique}"))
-}
 
 #[test]
 fn detects_added_and_removed_files() {

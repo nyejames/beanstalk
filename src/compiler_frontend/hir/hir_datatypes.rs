@@ -136,3 +136,40 @@ pub enum HirTypeKind {
         variants: Vec<TypeId>,
     },
 }
+
+/// Backend-agnostic classification of a HIR type.
+///
+/// WHAT: collapses the full `HirTypeKind` taxonomy into the coarse categories backends care about
+/// (scalar vs heap vs void vs function) so each backend only needs a small match table.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HirTypeClass {
+    Unit,
+    Bool,
+    Char,
+    Int,
+    Float,
+    Decimal,
+    Function,
+    HeapAllocated,
+}
+
+/// Classifies a `HirTypeKind` into a backend-agnostic category.
+pub fn classify_hir_type(kind: &HirTypeKind) -> HirTypeClass {
+    match kind {
+        HirTypeKind::Unit => HirTypeClass::Unit,
+        HirTypeKind::Bool => HirTypeClass::Bool,
+        HirTypeKind::Char => HirTypeClass::Char,
+        HirTypeKind::Int => HirTypeClass::Int,
+        HirTypeKind::Float => HirTypeClass::Float,
+        HirTypeKind::Decimal => HirTypeClass::Decimal,
+        HirTypeKind::Function { .. } => HirTypeClass::Function,
+        HirTypeKind::String
+        | HirTypeKind::Range
+        | HirTypeKind::Tuple { .. }
+        | HirTypeKind::Collection { .. }
+        | HirTypeKind::Struct { .. }
+        | HirTypeKind::Option { .. }
+        | HirTypeKind::Result { .. }
+        | HirTypeKind::Union { .. } => HirTypeClass::HeapAllocated,
+    }
+}

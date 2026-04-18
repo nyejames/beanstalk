@@ -23,14 +23,8 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
+use crate::compiler_tests::test_support::temp_dir;
 
-fn temp_dir(prefix: &str) -> PathBuf {
-    let unique = SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .expect("time should be after unix epoch")
-        .as_nanos();
-    std::env::temp_dir().join(format!("beanstalk_dev_server_build_{prefix}_{unique}"))
-}
 
 fn html_build_result() -> BuildResult {
     BuildResult {

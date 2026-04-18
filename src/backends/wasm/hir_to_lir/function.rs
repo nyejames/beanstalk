@@ -12,10 +12,9 @@ use crate::backends::wasm::lir::types::{WasmAbiType, WasmLirSignature, WasmLocal
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
 use crate::compiler_frontend::hir::hir_datatypes::TypeId;
 use crate::compiler_frontend::hir::hir_nodes::{
-    BlockId, FunctionId, HirFunction, HirFunctionOrigin, HirTerminator, LocalId,
+    BlockId, FunctionId, HirFunction, HirFunctionOrigin, LocalId,
 };
 use rustc_hash::{FxHashMap, FxHashSet};
-use std::collections::VecDeque;
 
 pub(crate) fn lower_function(
     module_context: &mut WasmLirLoweringContext<'_>,
@@ -209,41 +208,15 @@ fn collect_reachable_blocks(
 ) -> Result<Vec<BlockId>, CompilerError> {
     // WHAT: explicit CFG reachability walk.
     // WHY: avoids lowering dead blocks and keeps block-id mapping canonical.
-    let mut visited = FxHashSet::default();
-    let mut queue = VecDeque::new();
-    queue.push_back(function.entry);
-    visited.insert(function.entry);
-
-    while let Some(block_id) = queue.pop_front() {
-        let block = block_by_id_or_error(context, block_id, function.id)?;
-        let mut successors = block_successors(&block.terminator);
-        successors.sort_by_key(|id| id.0);
-
-        for successor in successors {
-            if visited.insert(successor) {
-                queue.push_back(successor);
-            }
-        }
-    }
-
-    let mut block_ids = visited.into_iter().collect::<Vec<_>>();
+    let mut block_ids = crate::compiler_frontend::hir::utils::collect_reachable_blocks(
+        function.entry,
+        |block_id| {
+            let block = block_by_id_or_error(context, block_id, function.id)?;
+            Ok(crate::compiler_frontend::hir::utils::terminator_targets(&block.terminator))
+        },
+    )?;
     block_ids.sort_by_key(|id| id.0);
     Ok(block_ids)
-}
-
-fn block_successors(terminator: &HirTerminator) -> Vec<BlockId> {
-    match terminator {
-        HirTerminator::Jump { target, .. }
-        | HirTerminator::Break { target }
-        | HirTerminator::Continue { target } => vec![*target],
-        HirTerminator::If {
-            then_block,
-            else_block,
-            ..
-        } => vec![*then_block, *else_block],
-        HirTerminator::Match { arms, .. } => arms.iter().map(|arm| arm.body).collect(),
-        HirTerminator::Return(_) | HirTerminator::Panic { .. } => Vec::new(),
-    }
 }
 
 fn block_by_id_or_error<'a>(

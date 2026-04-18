@@ -7,7 +7,6 @@ use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
 use crate::compiler_frontend::hir::hir_nodes::{BlockId, FieldId, FunctionId, HirBlock, LocalId};
 use crate::compiler_frontend::hir::utils::terminator_targets;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
-use std::collections::{HashSet, VecDeque};
 
 impl<'hir> JsEmitter<'hir> {
     pub(crate) fn next_temp_identifier(&mut self, prefix: &str) -> String {
@@ -68,25 +67,13 @@ impl<'hir> JsEmitter<'hir> {
         &self,
         entry_block: BlockId,
     ) -> Result<Vec<BlockId>, CompilerError> {
-        let mut queue = VecDeque::new();
-        let mut visited = HashSet::new();
-        let mut order = Vec::new();
-
-        queue.push_back(entry_block);
-
-        while let Some(block_id) = queue.pop_front() {
-            if !visited.insert(block_id) {
-                continue;
-            }
-
-            let block = self.block_by_id(block_id)?;
-            order.push(block_id);
-
-            for successor in terminator_targets(&block.terminator) {
-                queue.push_back(successor);
-            }
-        }
-
+        let mut order = crate::compiler_frontend::hir::utils::collect_reachable_blocks(
+            entry_block,
+            |block_id| {
+                let block = self.block_by_id(block_id)?;
+                Ok(terminator_targets(&block.terminator))
+            },
+        )?;
         order.sort_by_key(|block_id| block_id.0);
         Ok(order)
     }

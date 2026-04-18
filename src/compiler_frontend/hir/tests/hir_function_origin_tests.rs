@@ -43,17 +43,7 @@ fn function_node(name: InternedPath, location: SourceLocation) -> AstNode {
     )
 }
 
-fn build_ast(nodes: Vec<AstNode>, entry_path: InternedPath) -> Ast {
-    Ast {
-        nodes,
-        module_constants: vec![],
-        doc_fragments: vec![],
-        entry_path,
-        const_top_level_fragments: vec![],
-        rendered_path_usages: vec![],
-        warnings: vec![],
-    }
-}
+use crate::compiler_frontend::hir::hir_builder::build_ast;
 
 fn find_function_id_by_path(
     module: &crate::compiler_frontend::hir::hir_nodes::HirModule,

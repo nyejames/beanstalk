@@ -6,6 +6,9 @@ mod compiler_tests {
     #[cfg(test)]
     mod frontend_pipeline_tests;
     pub(crate) mod integration_test_runner; // For running all integration tests and report back the results
+
+    #[cfg(test)]
+    pub mod test_support;
 }
 pub mod build_system;
 mod compiler_frontend;

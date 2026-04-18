@@ -27,13 +27,6 @@ use std::sync::{Mutex, MutexGuard, OnceLock};
 use std::thread;
 use std::time::{Duration, SystemTime};
 
-fn temp_dir(prefix: &str) -> PathBuf {
-    let unique = SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .expect("time should be after unix epoch")
-        .as_nanos();
-    std::env::temp_dir().join(format!("beanstalk_build_core_{prefix}_{unique}"))
-}
 
 struct CurrentDirGuard {
     _lock: MutexGuard<'static, ()>,
@@ -1998,6 +1991,7 @@ use crate::build_system::output_cleanup::{
     write_build_manifest,
 };
 use std::collections::HashSet;
+use crate::compiler_tests::test_support::temp_dir;
 
 #[test]
 fn cleanup_manifest_diff_removes_stale_managed_files() {

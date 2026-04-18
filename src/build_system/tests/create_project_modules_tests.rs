@@ -10,14 +10,8 @@ use std::collections::HashSet;
 use std::ffi::OsStr;
 use std::path::PathBuf;
 use std::time::SystemTime;
+use crate::compiler_tests::test_support::temp_dir;
 
-fn temp_dir(prefix: &str) -> PathBuf {
-    let unique = SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .expect("time should be after unix epoch")
-        .as_nanos();
-    std::env::temp_dir().join(format!("beanstalk_project_modules_{prefix}_{unique}"))
-}
 
 fn configured_resolver(config: &Config) -> ProjectPathResolver {
     // WHAT: rebuilds the same canonical resolver the real project build uses.

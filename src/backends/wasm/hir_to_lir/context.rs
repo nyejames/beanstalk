@@ -10,7 +10,7 @@ use crate::backends::wasm::lir::types::{
 use crate::backends::wasm::request::WasmBackendRequest;
 use crate::backends::wasm::runtime::imports::WasmHostFunction;
 use crate::compiler_frontend::analysis::borrow_checker::BorrowFacts;
-use crate::compiler_frontend::hir::hir_datatypes::{HirTypeKind, TypeId};
+use crate::compiler_frontend::hir::hir_datatypes::{HirTypeClass, TypeId, classify_hir_type};
 use crate::compiler_frontend::hir::hir_nodes::{
     BlockId, FunctionId, HirFunction, HirModule, LocalId,
 };
@@ -173,19 +173,11 @@ pub(crate) fn lower_type_to_abi(
     type_id: TypeId,
 ) -> WasmAbiType {
     let hir_type = context.hir_module.type_context.get(type_id);
-    match &hir_type.kind {
-        HirTypeKind::Bool | HirTypeKind::Char => WasmAbiType::I32,
-        HirTypeKind::Int => WasmAbiType::I64,
-        HirTypeKind::Float | HirTypeKind::Decimal => WasmAbiType::F64,
-        HirTypeKind::Unit => WasmAbiType::Void,
-        HirTypeKind::String
-        | HirTypeKind::Range
-        | HirTypeKind::Tuple { .. }
-        | HirTypeKind::Collection { .. }
-        | HirTypeKind::Struct { .. }
-        | HirTypeKind::Function { .. }
-        | HirTypeKind::Option { .. }
-        | HirTypeKind::Result { .. }
-        | HirTypeKind::Union { .. } => WasmAbiType::Handle,
+    match classify_hir_type(&hir_type.kind) {
+        HirTypeClass::Unit => WasmAbiType::Void,
+        HirTypeClass::Bool | HirTypeClass::Char => WasmAbiType::I32,
+        HirTypeClass::Int => WasmAbiType::I64,
+        HirTypeClass::Float | HirTypeClass::Decimal => WasmAbiType::F64,
+        HirTypeClass::Function | HirTypeClass::HeapAllocated => WasmAbiType::Handle,
     }
 }

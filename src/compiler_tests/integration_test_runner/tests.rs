@@ -17,14 +17,8 @@ use super::{
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
+use crate::compiler_tests::test_support::temp_dir;
 
-fn temp_dir(prefix: &str) -> PathBuf {
-    let unique = SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .expect("time should be after unix epoch")
-        .as_nanos();
-    std::env::temp_dir().join(format!("beanstalk_integration_runner_{prefix}_{unique}"))
-}
 
 fn write_success_fixture(root: &Path, case_name: &str) {
     let case_root = root.join(case_name);

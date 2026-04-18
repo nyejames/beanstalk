@@ -15,14 +15,8 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
 use std::time::SystemTime;
+use crate::compiler_tests::test_support::temp_dir;
 
-fn temp_dir(prefix: &str) -> PathBuf {
-    let unique = SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .expect("time should be after unix epoch")
-        .as_nanos();
-    std::env::temp_dir().join(format!("beanstalk_dev_server_http_{prefix}_{unique}"))
-}
 
 fn bind_loopback_listener() -> Option<TcpListener> {
     match TcpListener::bind("127.0.0.1:0") {

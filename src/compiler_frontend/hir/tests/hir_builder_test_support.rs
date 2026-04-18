@@ -3,15 +3,17 @@
 //! WHAT: exposes extra builder utilities needed only by HIR unit tests.
 //! WHY: tests need direct access to internal builder state without widening the production API.
 
-use crate::compiler_frontend::ast::ast_nodes::{Declaration, SourceLocation};
+use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, SourceLocation};
 use crate::compiler_frontend::ast::expressions::expression::Expression;
-use crate::compiler_frontend::compiler_errors::CompilerError;
+use crate::compiler_frontend::ast::Ast;
+use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::hir::hir_nodes::{
-    BlockId, FieldId, FunctionId, HirBlock, HirField, HirLocal, HirModule, HirStruct, RegionId,
-    StructId,
+    BlockId, FieldId, FunctionId, HirBlock, HirField, HirLocal, HirModule, HirStruct, HirTerminator,
+    RegionId, StructId,
 };
 use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 
 pub(crate) fn validate_module_for_tests(
@@ -90,4 +92,40 @@ impl<'a> HirBuilder<'a> {
         self.module_constants_by_name
             .insert(name.to_owned(), Declaration { id: name, value });
     }
+}
+
+// ---------------------------------------------------------------------------
+// Shared AST → HIR test helpers
+// ---------------------------------------------------------------------------
+
+/// Build a minimal `Ast` from nodes for HIR lowering tests.
+pub(crate) fn build_ast(nodes: Vec<AstNode>, entry_path: InternedPath) -> Ast {
+    Ast {
+        nodes,
+        module_constants: vec![],
+        doc_fragments: vec![],
+        entry_path,
+        const_top_level_fragments: vec![],
+        rendered_path_usages: vec![],
+        warnings: vec![],
+    }
+}
+
+/// Lower a test `Ast` into a `HirModule`.
+pub(crate) fn lower_ast(
+    ast: Ast,
+    string_table: &mut StringTable,
+) -> Result<HirModule, CompilerMessages> {
+    HirBuilder::new(string_table, PathStringFormatConfig::default()).build_hir_module(ast)
+}
+
+/// Assert that no block ends with a placeholder `Panic(None)` terminator.
+pub(crate) fn assert_no_placeholder_terminators(module: &HirModule) {
+    assert!(
+        module
+            .blocks
+            .iter()
+            .all(|block| !matches!(block.terminator, HirTerminator::Panic { message: None })),
+        "expected no placeholder Panic(None) terminators in lowered HIR"
+    );
 }

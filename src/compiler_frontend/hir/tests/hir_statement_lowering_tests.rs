@@ -18,45 +18,21 @@ use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::ast::{Ast, AstDocFragment, AstDocFragmentKind};
 use crate::compiler_frontend::compiler_errors::{CompilerMessages, ErrorType};
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
-use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::hir::hir_nodes::{
     FunctionId, HirConstValue, HirDocFragmentKind, HirExpressionKind, HirModule, HirPattern,
     HirPlace, HirStatementKind, HirTerminator,
 };
 use crate::compiler_frontend::host_functions::CallTarget;
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tests::test_support::{
     fresh_returns, function_node, make_test_variable, node, param, runtime_function_call_node,
     runtime_operator_node, test_location,
 };
 
-fn build_ast(nodes: Vec<AstNode>, entry_path: InternedPath) -> Ast {
-    Ast {
-        nodes,
-        module_constants: vec![],
-        doc_fragments: vec![],
-        entry_path,
-        const_top_level_fragments: vec![],
-        rendered_path_usages: vec![],
-        warnings: vec![],
-    }
-}
-
-fn lower_ast(ast: Ast, string_table: &mut StringTable) -> Result<HirModule, CompilerMessages> {
-    HirBuilder::new(string_table, PathStringFormatConfig::default()).build_hir_module(ast)
-}
-
-fn assert_no_placeholder_terminators(module: &HirModule) {
-    assert!(
-        module
-            .blocks
-            .iter()
-            .all(|block| !matches!(block.terminator, HirTerminator::Panic { message: None })),
-        "expected no placeholder Panic(None) terminators in lowered HIR"
-    );
-}
+use crate::compiler_frontend::hir::hir_builder::{
+    assert_no_placeholder_terminators, build_ast, lower_ast,
+};
 
 #[test]
 fn statement_result_propagation_with_unit_success_emits_runtime_propagate_expression() {

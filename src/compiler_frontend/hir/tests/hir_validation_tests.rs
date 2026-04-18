@@ -11,14 +11,14 @@ use crate::compiler_frontend::ast::statements::functions::{
 use crate::compiler_frontend::ast::{Ast, AstDocFragment, AstDocFragmentKind};
 use crate::compiler_frontend::compiler_errors::{CompilerMessages, ErrorType};
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
-use crate::compiler_frontend::hir::hir_builder::{HirBuilder, validate_module_for_tests};
+use crate::compiler_frontend::hir::hir_builder::HirBuilder;
+use crate::compiler_frontend::hir::hir_builder::validate_module_for_tests;
 use crate::compiler_frontend::hir::hir_nodes::{
     HirExpression, HirExpressionKind, HirMatchArm, HirPattern, HirPlace, HirRegion, HirTerminator,
     HirValueId, RegionId, ValueKind,
 };
 use crate::compiler_frontend::hir::tests::hir_expression_lowering_tests::location;
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 
 fn test_location(line: i32) -> SourceLocation {
@@ -64,24 +64,7 @@ fn function_node(
     node(NodeKind::Function(name, signature, body), location)
 }
 
-fn build_ast(nodes: Vec<AstNode>, entry_path: InternedPath) -> Ast {
-    Ast {
-        nodes,
-        module_constants: vec![],
-        doc_fragments: vec![],
-        entry_path,
-        const_top_level_fragments: vec![],
-        rendered_path_usages: vec![],
-        warnings: vec![],
-    }
-}
-
-fn lower_ast(
-    ast: Ast,
-    string_table: &mut StringTable,
-) -> Result<crate::compiler_frontend::hir::hir_nodes::HirModule, CompilerMessages> {
-    HirBuilder::new(string_table, PathStringFormatConfig::default()).build_hir_module(ast)
-}
+use crate::compiler_frontend::hir::hir_builder::{build_ast, lower_ast};
 
 #[test]
 fn valid_module_passes_explicit_validation() {

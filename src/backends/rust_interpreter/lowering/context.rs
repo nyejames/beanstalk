@@ -8,7 +8,7 @@ use crate::backends::rust_interpreter::exec_ir::{
     ExecModule, ExecProgram, ExecStorageType,
 };
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
-use crate::compiler_frontend::hir::hir_datatypes::{HirTypeKind, TypeId};
+use crate::compiler_frontend::hir::hir_datatypes::{HirTypeClass, TypeId, classify_hir_type};
 use crate::compiler_frontend::hir::hir_nodes::{BlockId, FunctionId, HirBlock, HirModule, LocalId};
 use rustc_hash::FxHashMap;
 
@@ -50,24 +50,15 @@ impl<'a> LoweringContext<'a> {
 
     pub(crate) fn lower_storage_type(&self, type_id: TypeId) -> ExecStorageType {
         let hir_type = self.hir_module.type_context.get(type_id);
-
-        match &hir_type.kind {
-            HirTypeKind::Unit => ExecStorageType::Unit,
-            HirTypeKind::Bool => ExecStorageType::Bool,
-            HirTypeKind::Int => ExecStorageType::Int,
-            HirTypeKind::Float => ExecStorageType::Float,
-            HirTypeKind::Char => ExecStorageType::Char,
-            HirTypeKind::Function { .. } => ExecStorageType::FunctionRef,
-
-            HirTypeKind::Decimal
-            | HirTypeKind::String
-            | HirTypeKind::Range
-            | HirTypeKind::Tuple { .. }
-            | HirTypeKind::Collection { .. }
-            | HirTypeKind::Struct { .. }
-            | HirTypeKind::Option { .. }
-            | HirTypeKind::Result { .. }
-            | HirTypeKind::Union { .. } => ExecStorageType::HeapHandle,
+        match classify_hir_type(&hir_type.kind) {
+            HirTypeClass::Unit => ExecStorageType::Unit,
+            HirTypeClass::Bool => ExecStorageType::Bool,
+            HirTypeClass::Char => ExecStorageType::Char,
+            HirTypeClass::Int => ExecStorageType::Int,
+            HirTypeClass::Float => ExecStorageType::Float,
+            HirTypeClass::Decimal => ExecStorageType::HeapHandle,
+            HirTypeClass::Function => ExecStorageType::FunctionRef,
+            HirTypeClass::HeapAllocated => ExecStorageType::HeapHandle,
         }
     }
 

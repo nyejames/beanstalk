@@ -20,14 +20,6 @@ use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use std::path::PathBuf;
 use std::time::SystemTime;
 
-/// Build a unique temp-directory path for tests that need a small on-disk project layout.
-pub(crate) fn temp_dir(prefix: &str) -> PathBuf {
-    let unique = SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .expect("time should be after unix epoch")
-        .as_nanos();
-    std::env::temp_dir().join(format!("beanstalk_html_builder_{prefix}_{unique}"))
-}
 
 /// Create the smallest valid HIR module with one entry start function.
 pub(crate) fn create_test_hir_module() -> HirModule {

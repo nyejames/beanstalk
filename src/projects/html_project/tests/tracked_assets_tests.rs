@@ -5,10 +5,11 @@ use crate::compiler_frontend::compiler_warnings::WarningKind;
 use crate::compiler_frontend::paths::path_resolution::{CompileTimePathBase, CompileTimePathKind};
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::projects::html_project::tests::test_support::{
-    RenderedPathUsageInput, create_test_module, expect_bytes_output, rendered_path_usage, temp_dir,
+    RenderedPathUsageInput, create_test_module, expect_bytes_output, rendered_path_usage,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
+use crate::compiler_tests::test_support::temp_dir;
 
 #[test]
 fn root_folder_asset_emits_site_relative_output_path() {

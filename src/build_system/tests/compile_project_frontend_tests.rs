@@ -5,14 +5,8 @@ use crate::projects::settings::Config;
 use std::fs;
 use std::path::PathBuf;
 use std::time::SystemTime;
+use crate::compiler_tests::test_support::temp_dir;
 
-fn temp_dir(prefix: &str) -> PathBuf {
-    let unique = SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .expect("time should be after unix epoch")
-        .as_nanos();
-    std::env::temp_dir().join(format!("beanstalk_frontend_tests_{prefix}_{unique}"))
-}
 
 // ── Single-file flow ──────────────────────────────────────────────────────────
 
