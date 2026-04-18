@@ -3,7 +3,7 @@ import @lib/html {format}
 
 # theme_css = [$css:
     body {
-        background-color: light-dark(hsl(199, 21%, 74%), hsl(203, 68%, 8%));
+        background-color: light-dark(hsl(125, 67%, 97%), hsl(203, 68%, 8%));
     }
 
     a {
@@ -61,6 +61,13 @@ import @lib/html {format}
         padding: 0rem 2rem 0rem 2rem;
     }
 ]
+
+Palette = |
+    red String = [$html:<span style="color: light-dark(hsl(0, 84%, 35%), hsl(0, 73%, 65%));">[$slot]</span>],
+    highlight String = [$html:<span style="color: light-dark(hsl(44, 82%, 29%), hsl(65, 80%, 62%));">[$slot]</span>],
+|
+
+# palette = Palette()
 
 # theme_head = [$html:
     <style>[theme_css]</style>
@@ -190,10 +197,3 @@ import @lib/html {format}
 ]
 
 # title = [$html: <h1 style="font-size: 2em;[$slot("style")]">[$slot]</h1>]
-
-Palette = |
-    red String = [$html:<span style="color: light-dark(hsl(0, 84%, 35%), hsl(0, 73%, 65%));">[$slot]</span>],
-    highlight String = [$html:<span style="color: light-dark(hsl(88, 85%, 28%), hsl(70, 92%, 54%));">[$slot]</span>],
-|
-
-# palette = Palette()
