@@ -268,11 +268,9 @@ impl<'a> BorrowChecker<'a> {
                             HirStatementKind::Call {
                                 result: Some(result_local),
                                 ..
-                            } => {
-                                if *result_local == local_to_scan {
-                                    saw_any_write = true;
-                                    saw_fresh_write = true;
-                                }
+                            } if *result_local == local_to_scan => {
+                                saw_any_write = true;
+                                saw_fresh_write = true;
                             }
                             _ => {}
                         }

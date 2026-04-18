@@ -25,17 +25,11 @@ pub(super) fn parse_template_expression(
 
     match template.kind {
         TemplateType::StringFunction => {
-            if context.kind.is_constant_context() {
-                return_rule_error!(
-                    "Constants and const templates require compile-time template folding. This template is runtime.",
-                    token_stream.current_location(),
-                    {
-                        CompilationStage => "Expression Parsing",
-                        PrimarySuggestion => "Remove runtime values from this template so it can fold at compile time",
-                    }
-                );
-            }
-
+            // In a constant context, return as Template rather than erroring immediately.
+            // WHY: template slots may reference unresolved constants; the deferred constant
+            // resolution loop retries after dependencies resolve. If the template is still
+            // StringFunction after all constants are known, the loop emits a permanent
+            // "not compile-time resolvable" error via parse_constant_header_declaration.
             if consume_closing_parenthesis
                 && token_stream.current_token_kind() == &TokenKind::CloseParenthesis
             {

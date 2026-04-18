@@ -23,10 +23,11 @@ pub(crate) fn synthesize_export_wrappers(
         return Ok(());
     }
 
-    let mut wrapper_id = context.lir_module.functions.len() as u32;
     let mut seen_export_names = FxHashSet::default();
 
-    for function_id in &context.request.export_policy.exported_functions {
+    for (wrapper_id, function_id) in (context.lir_module.functions.len() as u32..)
+        .zip(context.request.export_policy.exported_functions.iter())
+    {
         let export_name = context
             .request
             .export_policy
@@ -108,7 +109,6 @@ pub(crate) fn synthesize_export_wrappers(
         }];
 
         let wrapper_function_id = WasmLirFunctionId(wrapper_id);
-        wrapper_id += 1;
 
         context.lir_module.functions.push(WasmLirFunction {
             id: wrapper_function_id,

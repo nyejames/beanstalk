@@ -7,11 +7,11 @@
 use crate::backends::js::{JsLoweringConfig, lower_hir_to_js};
 use crate::backends::wasm::backend::lower_hir_to_wasm_module;
 use crate::backends::wasm::request::WasmBackendRequest;
-use crate::build_system::build::{FileKind, OutputFile, ResolvedConstFragment};
-use crate::compiler_frontend::analysis::borrow_checker::BorrowCheckReport;
+use crate::build_system::build::{FileKind, OutputFile};
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::hir::hir_nodes::HirModule;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::projects::html_project::compile_input::HtmlModuleCompileInput;
 use crate::projects::html_project::document_config::HtmlDocumentConfig;
 use crate::projects::html_project::document_shell::render_html_document_shell;
 use crate::projects::html_project::js_path::render_entry_fragments;
@@ -92,15 +92,9 @@ pub(crate) struct CompiledHtmlWasmModule {
 /// WHAT: lowers JS and Wasm artifacts, generates bootstrap JS, and emits route-indexed outputs.
 /// WHY: keeps the HTML builder in charge of artifact layout while delegating Wasm lowering.
 pub(crate) fn compile_html_module_wasm(
-    hir_module: &HirModule,
-    const_fragments: &[ResolvedConstFragment],
-    borrow_analysis: &BorrowCheckReport,
+    input: &HtmlModuleCompileInput<'_>,
     string_table: &mut StringTable,
     logical_html_output_path: &Path,
-    project_name: &str,
-    document_config: &HtmlDocumentConfig,
-    release_build: bool,
-    entry_runtime_fragment_count: usize,
 ) -> Result<CompiledHtmlWasmModule, CompilerMessages> {
     // Derive per-route artifact paths from the already-derived logical HTML path.
     // WHY: the builder has already computed the canonical route via derive_logical_html_path.
@@ -108,24 +102,24 @@ pub(crate) fn compile_html_module_wasm(
     let output_plan = plan_wasm_output_from_logical_html_path(logical_html_output_path)
         .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;
 
-    let js_lowering_config = JsLoweringConfig::standard_html(release_build);
+    let js_lowering_config = JsLoweringConfig::standard_html(input.release_build);
     let js_module = lower_hir_to_js(
-        hir_module,
-        borrow_analysis,
+        input.hir_module,
+        input.borrow_analysis,
         string_table,
         js_lowering_config,
     )
     .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;
 
     let (entry_fragment_html, slot_ids) =
-        render_entry_fragments(const_fragments, entry_runtime_fragment_count);
+        render_entry_fragments(input.const_fragments, input.entry_runtime_fragment_count);
 
-    let build_plan = build_html_wasm_plan(hir_module, slot_ids)
+    let build_plan = build_html_wasm_plan(input.hir_module, slot_ids)
         .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;
 
     let wasm_result = lower_hir_to_wasm_module(
-        hir_module,
-        borrow_analysis.borrow_facts(),
+        input.hir_module,
+        input.borrow_analysis.borrow_facts(),
         &build_plan.wasm_request,
         string_table,
     )?;
@@ -144,9 +138,9 @@ pub(crate) fn compile_html_module_wasm(
             entry_fragment_html: &entry_fragment_html,
             string_table,
             logical_html_output_path,
-            project_name,
-            document_config,
-            hir_module,
+            project_name: input.project_name,
+            document_config: input.document_config,
+            hir_module: input.hir_module,
             js_bundle: &js_module.source,
             wasm_bytes,
         },

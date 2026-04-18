@@ -9,10 +9,10 @@
 //! parsers shared between the header stage and the AST stage.
 
 use crate::ast_log;
-use crate::compiler_frontend::ast::ScopeContext;
+use crate::compiler_frontend::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
-use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
+use crate::compiler_frontend::ast::expressions::parse_expression::create_expression_until;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::declaration_syntax::type_syntax::{
@@ -244,15 +244,61 @@ fn parse_signature_member(
         }
     }
 
+    // At header stage, skip default expressions that start with a symbol not visible in the
+    // current context (e.g. function declarations or symbols from other files not yet parsed).
+    // Such defaults cannot be fully parsed here without producing false "undefined variable"
+    // errors. A synthetic Reference is returned so that AST-stage validation in
+    // resolve_struct_field_types can still catch non-compile-time defaults (e.g. functions).
+    // Literals and symbols that ARE in scope (constant placeholders) parse normally.
+    if expression_context.kind == ContextKind::ConstantHeader
+        && let TokenKind::Symbol(name) = token_stream.current_token_kind().clone()
+        && expression_context.get_reference(&name).is_none()
+    {
+        // Build a synthetic path so the AST-stage name lookup can find the declaration
+        // and determine whether it is a compile-time constant or not.
+        let ref_path = expression_context.scope.append(name);
+        let ref_location = token_stream.current_location();
+        let mut depth: usize = 0;
+        loop {
+            match token_stream.current_token_kind() {
+                TokenKind::OpenParenthesis | TokenKind::OpenCurly => {
+                    depth += 1;
+                    token_stream.advance();
+                }
+                TokenKind::CloseParenthesis | TokenKind::CloseCurly => {
+                    if depth == 0 {
+                        break;
+                    }
+                    depth -= 1;
+                    token_stream.advance();
+                }
+                TokenKind::TypeParameterBracket | TokenKind::Comma if depth == 0 => break,
+                TokenKind::Eof => break,
+                _ => {
+                    token_stream.advance();
+                }
+            }
+        }
+        return Ok(Declaration {
+            id: full_name,
+            value: Expression::new(
+                ExpressionKind::Reference(ref_path),
+                ref_location,
+                data_type,
+                ownership,
+            ),
+        });
+    }
+
     let mut parameter_context = expression_context.to_owned();
     parameter_context.expected_result_types = vec![data_type.clone()];
 
-    let parsed_expr = create_expression(
+    let parsed_expr = create_expression_until(
         token_stream,
         &parameter_context,
         &mut data_type,
         &ownership,
-        false,
+        &[TokenKind::TypeParameterBracket, TokenKind::Comma],
         string_table,
     )?;
 

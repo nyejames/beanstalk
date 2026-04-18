@@ -15,50 +15,61 @@
 
 use crate::backends::js::{JsLoweringConfig, lower_hir_to_js};
 use crate::build_system::build::{FileKind, OutputFile, ResolvedConstFragment};
-use crate::compiler_frontend::analysis::borrow_checker::BorrowCheckReport;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::hir::hir_nodes::{FunctionId, HirModule};
 use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::projects::html_project::compile_input::HtmlModuleCompileInput;
 use crate::projects::html_project::document_config::HtmlDocumentConfig;
 use crate::projects::html_project::document_shell::render_html_document_shell;
 use crate::projects::html_project::page_metadata::extract_html_page_metadata;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
+/// Inputs for rendering a JS-backed HTML document.
+///
+/// WHAT: groups all data needed to produce the final HTML document from a lowered JS module.
+/// WHY: `render_html_document` previously took 9 separate parameters; this struct keeps the
+///      call sites readable and the parameter list stable as fields are added or renamed.
+pub(crate) struct HtmlDocumentRenderInput<'a> {
+    pub hir_module: &'a HirModule,
+    pub const_fragments: &'a [ResolvedConstFragment],
+    pub string_table: &'a StringTable,
+    pub document_config: &'a HtmlDocumentConfig,
+    pub logical_html_path: &'a Path,
+    pub project_name: &'a str,
+    pub js_bundle: &'a str,
+    pub function_names: &'a HashMap<FunctionId, String>,
+    pub entry_runtime_fragment_count: usize,
+}
+
 /// Compiles one module through the JS-only HTML builder path.
 ///
 /// WHAT: lowers HIR to JS and embeds the JS with runtime slot hydration into HTML.
 /// WHY: this preserves existing builder behavior when `--html-wasm` is not enabled.
 pub(crate) fn compile_html_module_js(
-    hir_module: &HirModule,
-    const_fragments: &[ResolvedConstFragment],
-    borrow_analysis: &BorrowCheckReport,
+    input: &HtmlModuleCompileInput<'_>,
     string_table: &StringTable,
     output_path: PathBuf,
-    project_name: &str,
-    document_config: &HtmlDocumentConfig,
-    release_build: bool,
-    entry_runtime_fragment_count: usize,
 ) -> Result<OutputFile, CompilerError> {
-    let js_lowering_config = JsLoweringConfig::standard_html(release_build);
+    let js_lowering_config = JsLoweringConfig::standard_html(input.release_build);
 
     let js_module = lower_hir_to_js(
-        hir_module,
-        borrow_analysis,
+        input.hir_module,
+        input.borrow_analysis,
         string_table,
         js_lowering_config,
     )?;
-    let html = render_html_document(
-        hir_module,
-        const_fragments,
+    let html = render_html_document(&HtmlDocumentRenderInput {
+        hir_module: input.hir_module,
+        const_fragments: input.const_fragments,
         string_table,
-        document_config,
-        &output_path,
-        project_name,
-        &js_module.source,
-        &js_module.function_name_by_id,
-        entry_runtime_fragment_count,
-    )?;
+        document_config: input.document_config,
+        logical_html_path: &output_path,
+        project_name: input.project_name,
+        js_bundle: &js_module.source,
+        function_names: &js_module.function_name_by_id,
+        entry_runtime_fragment_count: input.entry_runtime_fragment_count,
+    })?;
 
     Ok(OutputFile::new(output_path, FileKind::Html(html)))
 }
@@ -126,35 +137,28 @@ pub(crate) fn render_entry_fragments(
 }
 
 pub(crate) fn render_html_document(
-    hir_module: &HirModule,
-    const_fragments: &[ResolvedConstFragment],
-    string_table: &StringTable,
-    document_config: &HtmlDocumentConfig,
-    logical_html_path: &Path,
-    project_name: &str,
-    js_bundle: &str,
-    function_names: &HashMap<FunctionId, String>,
-    entry_runtime_fragment_count: usize,
+    input: &HtmlDocumentRenderInput<'_>,
 ) -> Result<String, CompilerError> {
     let (body_html, slot_ids) =
-        render_entry_fragments(const_fragments, entry_runtime_fragment_count);
-    let page_metadata = extract_html_page_metadata(hir_module, string_table)?;
+        render_entry_fragments(input.const_fragments, input.entry_runtime_fragment_count);
+    let page_metadata = extract_html_page_metadata(input.hir_module, input.string_table)?;
 
-    let Some(start_function_name) = function_names.get(&hir_module.start_function) else {
+    let Some(start_function_name) = input.function_names.get(&input.hir_module.start_function)
+    else {
         return Err(CompilerError::compiler_error(format!(
             "HTML builder could not resolve start function {:?}",
-            hir_module.start_function
+            input.hir_module.start_function
         )));
     };
 
     let script_html =
-        render_runtime_bootstrap_script_html(start_function_name, js_bundle, &slot_ids);
+        render_runtime_bootstrap_script_html(start_function_name, input.js_bundle, &slot_ids);
 
     Ok(render_html_document_shell(
-        document_config,
+        input.document_config,
         &page_metadata,
-        logical_html_path,
-        project_name,
+        input.logical_html_path,
+        input.project_name,
         body_html,
         script_html,
     ))

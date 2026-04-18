@@ -15,7 +15,9 @@ use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::declaration_syntax::declaration_shell::{
     DeclarationSyntax, parse_declaration_syntax,
 };
-use crate::compiler_frontend::declaration_syntax::r#struct::parse_struct_shell;
+use crate::compiler_frontend::declaration_syntax::r#struct::{
+    parse_struct_shell, validate_struct_default_values,
+};
 use crate::compiler_frontend::declaration_syntax::type_syntax::resolve_named_types_in_data_type;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::identifier_policy::{
@@ -197,6 +199,7 @@ pub fn resolve_declaration_syntax(
         // Struct Definition
         TokenKind::TypeParameterBracket => {
             let params = parse_struct_shell(&mut initializer_stream, &const_context, string_table)?;
+            validate_struct_default_values(&params, string_table)?;
 
             Expression::struct_definition(
                 params,

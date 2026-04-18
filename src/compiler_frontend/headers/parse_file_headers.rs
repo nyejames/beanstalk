@@ -1003,31 +1003,31 @@ fn create_header(
         | TokenKind::DatatypeString
         | TokenKind::DatatypeChar
         | TokenKind::OpenCurly
-        | TokenKind::Symbol(_) => {
-            if exported {
-                ensure_not_keyword_shadow_identifier(
-                    declaration_name_text,
-                    name_location.to_owned(),
-                    "Header Parsing",
-                )?;
-                emit_header_naming_warning(
-                    context.warnings,
-                    declaration_name_text,
-                    name_location.to_owned(),
-                    IdentifierNamingKind::TopLevelConstant,
-                );
+        | TokenKind::Symbol(_)
+            if exported =>
+        {
+            ensure_not_keyword_shadow_identifier(
+                declaration_name_text,
+                name_location.to_owned(),
+                "Header Parsing",
+            )?;
+            emit_header_naming_warning(
+                context.warnings,
+                declaration_name_text,
+                name_location.to_owned(),
+                IdentifierNamingKind::TopLevelConstant,
+            );
 
-                let constant_header = create_constant_header_payload(
-                    &full_name,
-                    token_stream,
-                    context,
-                    &mut dependencies,
-                )?;
+            let constant_header = create_constant_header_payload(
+                &full_name,
+                token_stream,
+                context,
+                &mut dependencies,
+            )?;
 
-                kind = HeaderKind::Constant {
-                    declaration: constant_header,
-                };
-            }
+            kind = HeaderKind::Constant {
+                declaration: constant_header,
+            };
         }
 
         // `::` (DoubleColon): choice/union declaration `name :: VariantA | VariantB | ...`

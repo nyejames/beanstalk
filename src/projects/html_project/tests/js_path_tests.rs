@@ -93,17 +93,17 @@ fn no_runtime_fragments_still_emits_start_call() {
     let module = create_test_module(std::path::PathBuf::from("#page.bst"), &mut string_table);
     let function_names = HashMap::from([(module.hir.start_function, String::from("start_entry"))]);
 
-    let html = render_html_document(
-        &module.hir,
-        &[],
-        &string_table,
-        &HtmlDocumentConfig::default(),
-        Path::new("index.html"),
-        "",
-        "function start_entry() { return []; }",
-        &function_names,
-        0,
-    )
+    let html = render_html_document(&crate::projects::html_project::js_path::HtmlDocumentRenderInput {
+        hir_module: &module.hir,
+        const_fragments: &[],
+        string_table: &string_table,
+        document_config: &HtmlDocumentConfig::default(),
+        logical_html_path: Path::new("index.html"),
+        project_name: "",
+        js_bundle: "function start_entry() { return []; }",
+        function_names: &function_names,
+        entry_runtime_fragment_count: 0,
+    })
     .expect("render_html_document should succeed");
 
     assert!(
@@ -133,17 +133,17 @@ fn inline_js_bundle_with_closing_script_tag_is_escaped_in_html() {
     let hir_module = create_test_hir_module();
     let function_names = HashMap::from([(hir_module.start_function, String::from("start_entry"))]);
 
-    let html = render_html_document(
-        &hir_module,
-        &[],
-        &crate::compiler_frontend::symbols::string_interning::StringTable::new(),
-        &HtmlDocumentConfig::default(),
-        Path::new("index.html"),
-        "",
-        "const msg = \"</script>\";\n",
-        &function_names,
-        0,
-    )
+    let html = render_html_document(&crate::projects::html_project::js_path::HtmlDocumentRenderInput {
+        hir_module: &hir_module,
+        const_fragments: &[],
+        string_table: &crate::compiler_frontend::symbols::string_interning::StringTable::new(),
+        document_config: &HtmlDocumentConfig::default(),
+        logical_html_path: Path::new("index.html"),
+        project_name: "",
+        js_bundle: "const msg = \"</script>\";\n",
+        function_names: &function_names,
+        entry_runtime_fragment_count: 0,
+    })
     .expect("render_html_document should succeed");
 
     assert!(
