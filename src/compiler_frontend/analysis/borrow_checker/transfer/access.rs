@@ -109,7 +109,12 @@ pub(super) fn transfer_statement(
                     stats,
                     value_fact_buffer,
                 };
-                record_shared_reads_in_place_indices(&mut read_env, target, location.clone())?;
+                record_shared_reads_in_place_indices(
+                    &mut read_env,
+                    target,
+                    location.clone(),
+                    &mut RootSet::empty(layout.local_count()),
+                )?;
             }
             {
                 let mut read_env = SharedReadEnv {
@@ -122,7 +127,12 @@ pub(super) fn transfer_statement(
                     stats,
                     value_fact_buffer,
                 };
-                record_shared_reads_in_expression(&mut read_env, value, location.clone())?;
+                record_shared_reads_in_expression(
+                    &mut read_env,
+                    value,
+                    location.clone(),
+                    &mut RootSet::empty(layout.local_count()),
+                )?;
             }
 
             transfer_assign_target(
@@ -180,13 +190,24 @@ pub(super) fn transfer_statement(
                                 stats,
                                 value_fact_buffer,
                             };
+                            let mut arg_root_set = RootSet::empty(layout.local_count());
                             record_shared_reads_in_place_indices(
                                 &mut read_env,
                                 place,
                                 argument_location.clone(),
+                                &mut arg_root_set,
                             )?;
+                            let place_roots = roots_for_place(
+                                layout,
+                                state,
+                                place,
+                                argument_location.clone(),
+                            )?;
+                            arg_root_set.union_with(&place_roots);
+                            arg_roots[arg_index] = arg_root_set;
                         }
                         _ => {
+                            let mut arg_root_set = RootSet::empty(layout.local_count());
                             let mut read_env = SharedReadEnv {
                                 context,
                                 layout,
@@ -201,10 +222,13 @@ pub(super) fn transfer_statement(
                                 &mut read_env,
                                 argument,
                                 argument_location.clone(),
+                                &mut arg_root_set,
                             )?;
+                            arg_roots[arg_index] = arg_root_set;
                         }
                     }
                 } else {
+                    let mut arg_root_set = RootSet::empty(layout.local_count());
                     let mut read_env = SharedReadEnv {
                         context,
                         layout,
@@ -219,18 +243,10 @@ pub(super) fn transfer_statement(
                         &mut read_env,
                         argument,
                         argument_location.clone(),
+                        &mut arg_root_set,
                     )?;
+                    arg_roots[arg_index] = arg_root_set;
                 }
-
-                let mut roots = RootSet::empty(layout.local_count());
-                collect_expression_roots(
-                    layout,
-                    state,
-                    argument,
-                    &mut roots,
-                    argument_location.clone(),
-                )?;
-                arg_roots[arg_index] = roots;
 
                 match arg_effect {
                     ArgEffect::SharedBorrow => {}
@@ -422,7 +438,12 @@ pub(super) fn transfer_statement(
                 stats,
                 value_fact_buffer,
             };
-            record_shared_reads_in_expression(&mut read_env, expression, location.clone())?;
+            record_shared_reads_in_expression(
+                &mut read_env,
+                expression,
+                location.clone(),
+                &mut RootSet::empty(layout.local_count()),
+            )?;
         }
 
         HirStatementKind::Drop(_local) => {
@@ -441,7 +462,12 @@ pub(super) fn transfer_statement(
                 stats,
                 value_fact_buffer,
             };
-            record_shared_reads_in_expression(&mut read_env, value, location)?;
+            record_shared_reads_in_expression(
+                &mut read_env,
+                value,
+                location,
+                &mut RootSet::empty(layout.local_count()),
+            )?;
         }
     }
 
@@ -486,7 +512,12 @@ pub(super) fn transfer_terminator(
                 stats,
                 value_fact_buffer,
             };
-            record_shared_reads_in_expression(&mut read_env, condition, location.clone())?;
+            record_shared_reads_in_expression(
+                &mut read_env,
+                condition,
+                location.clone(),
+                &mut RootSet::empty(layout.local_count()),
+            )?;
         }
 
         HirTerminator::Match { scrutinee, arms } => {
@@ -501,7 +532,12 @@ pub(super) fn transfer_terminator(
                     stats,
                     value_fact_buffer,
                 };
-                record_shared_reads_in_expression(&mut read_env, scrutinee, location.clone())?;
+                record_shared_reads_in_expression(
+                    &mut read_env,
+                    scrutinee,
+                    location.clone(),
+                    &mut RootSet::empty(layout.local_count()),
+                )?;
             }
 
             for arm in arms {
@@ -530,7 +566,12 @@ pub(super) fn transfer_terminator(
                 stats,
                 value_fact_buffer,
             };
-            record_shared_reads_in_expression(&mut read_env, value, location.clone())?;
+            record_shared_reads_in_expression(
+                &mut read_env,
+                value,
+                location.clone(),
+                &mut RootSet::empty(layout.local_count()),
+            )?;
         }
 
         HirTerminator::Panic { message } => {
@@ -545,7 +586,12 @@ pub(super) fn transfer_terminator(
                     stats,
                     value_fact_buffer,
                 };
-                record_shared_reads_in_expression(&mut read_env, message, location.clone())?;
+                record_shared_reads_in_expression(
+                    &mut read_env,
+                    message,
+                    location.clone(),
+                    &mut RootSet::empty(layout.local_count()),
+                )?;
             }
         }
 
@@ -570,12 +616,22 @@ fn record_shared_reads_in_pattern(
 ) -> Result<(), CompilerError> {
     if let HirPattern::Literal(expression) = &arm.pattern {
         let location = env.location.clone();
-        record_shared_reads_in_expression(env, expression, location)?;
+        record_shared_reads_in_expression(
+            env,
+            expression,
+            location,
+            &mut RootSet::empty(env.layout.local_count()),
+        )?;
     }
 
     if let Some(guard) = &arm.guard {
         let location = env.location.clone();
-        record_shared_reads_in_expression(env, guard, location)?;
+        record_shared_reads_in_expression(
+            env,
+            guard,
+            location,
+            &mut RootSet::empty(env.layout.local_count()),
+        )?;
     }
 
     Ok(())
@@ -948,15 +1004,18 @@ fn record_shared_reads_in_place_indices(
     env: &mut SharedReadEnv<'_, '_>,
     place: &HirPlace,
     location: SourceLocation,
+    roots: &mut RootSet,
 ) -> Result<(), CompilerError> {
     match place {
         HirPlace::Local(_) => Ok(()),
 
-        HirPlace::Field { base, .. } => record_shared_reads_in_place_indices(env, base, location),
+        HirPlace::Field { base, .. } => {
+            record_shared_reads_in_place_indices(env, base, location, roots)
+        }
 
         HirPlace::Index { base, index } => {
-            record_shared_reads_in_place_indices(env, base, location.clone())?;
-            record_shared_reads_in_expression(env, index, location)
+            record_shared_reads_in_place_indices(env, base, location.clone(), roots)?;
+            record_shared_reads_in_expression(env, index, location, roots)
         }
     }
 }
@@ -965,6 +1024,7 @@ fn record_shared_reads_in_expression(
     env: &mut SharedReadEnv<'_, '_>,
     expression: &HirExpression,
     location: SourceLocation,
+    roots: &mut RootSet,
 ) -> Result<(), CompilerError> {
     match &expression.kind {
         HirExpressionKind::Int(_)
@@ -978,9 +1038,9 @@ fn record_shared_reads_in_expression(
                 .context
                 .diagnostics
                 .value_error_location(expression.id, location.clone());
-            record_shared_reads_in_place_indices(env, place, value_location.clone())?;
+            record_shared_reads_in_place_indices(env, place, value_location.clone(), roots)?;
 
-            let roots = roots_for_place(env.layout, env.state, place, value_location.clone())?;
+            let place_roots = roots_for_place(env.layout, env.state, place, value_location.clone())?;
             let actor_index_hint = place_root_local_index(env.layout, place);
             let mut check = AccessCheckContext {
                 context: env.context,
@@ -992,7 +1052,8 @@ fn record_shared_reads_in_expression(
                 actor_index_hint,
                 current_order: env.current_order,
             };
-            check_shared_access(&mut check, &roots)?;
+            check_shared_access(&mut check, &place_roots)?;
+            roots.union_with(&place_roots);
         }
 
         HirExpressionKind::Copy(place) => {
@@ -1000,9 +1061,9 @@ fn record_shared_reads_in_expression(
                 .context
                 .diagnostics
                 .value_error_location(expression.id, location.clone());
-            record_shared_reads_in_place_indices(env, place, value_location.clone())?;
+            record_shared_reads_in_place_indices(env, place, value_location.clone(), roots)?;
 
-            let roots = roots_for_place(env.layout, env.state, place, value_location.clone())?;
+            let place_roots = roots_for_place(env.layout, env.state, place, value_location.clone())?;
             let actor_index_hint = place_root_local_index(env.layout, place);
             let mut check = AccessCheckContext {
                 context: env.context,
@@ -1014,87 +1075,78 @@ fn record_shared_reads_in_expression(
                 actor_index_hint,
                 current_order: env.current_order,
             };
-            check_shared_access(&mut check, &roots)?;
+            check_shared_access(&mut check, &place_roots)?;
+            roots.union_with(&place_roots);
 
             env.value_fact_buffer.record(
                 expression.id,
                 ValueAccessClassification::SharedRead,
-                &roots,
+                &place_roots,
             );
             return Ok(());
         }
 
         HirExpressionKind::BinOp { left, right, .. } => {
-            record_shared_reads_in_expression(env, left, location.clone())?;
-            record_shared_reads_in_expression(env, right, location.clone())?;
+            record_shared_reads_in_expression(env, left, location.clone(), roots)?;
+            record_shared_reads_in_expression(env, right, location.clone(), roots)?;
         }
 
         HirExpressionKind::UnaryOp { operand, .. } => {
-            record_shared_reads_in_expression(env, operand, location.clone())?;
+            record_shared_reads_in_expression(env, operand, location.clone(), roots)?;
         }
 
         HirExpressionKind::StructConstruct { fields, .. } => {
             for (_, value) in fields {
-                record_shared_reads_in_expression(env, value, location.clone())?;
+                record_shared_reads_in_expression(env, value, location.clone(), roots)?;
             }
         }
 
         HirExpressionKind::Collection(elements)
         | HirExpressionKind::TupleConstruct { elements } => {
             for element in elements {
-                record_shared_reads_in_expression(env, element, location.clone())?;
+                record_shared_reads_in_expression(env, element, location.clone(), roots)?;
             }
         }
         HirExpressionKind::TupleGet { tuple, .. } => {
-            record_shared_reads_in_expression(env, tuple, location.clone())?;
+            record_shared_reads_in_expression(env, tuple, location.clone(), roots)?;
         }
 
         HirExpressionKind::Range { start, end } => {
-            record_shared_reads_in_expression(env, start, location.clone())?;
-            record_shared_reads_in_expression(env, end, location.clone())?;
+            record_shared_reads_in_expression(env, start, location.clone(), roots)?;
+            record_shared_reads_in_expression(env, end, location.clone(), roots)?;
         }
 
         HirExpressionKind::OptionConstruct { variant, value } => {
             if matches!(variant, OptionVariant::Some)
                 && let Some(inner) = value
             {
-                record_shared_reads_in_expression(env, inner, location.clone())?;
+                record_shared_reads_in_expression(env, inner, location.clone(), roots)?;
             }
         }
 
         HirExpressionKind::ResultConstruct { value, .. } => {
-            record_shared_reads_in_expression(env, value, location.clone())?;
+            record_shared_reads_in_expression(env, value, location.clone(), roots)?;
         }
 
         HirExpressionKind::ResultPropagate { result } => {
-            record_shared_reads_in_expression(env, result, location.clone())?;
+            record_shared_reads_in_expression(env, result, location.clone(), roots)?;
         }
 
         HirExpressionKind::ResultIsOk { result }
         | HirExpressionKind::ResultUnwrapOk { result }
         | HirExpressionKind::ResultUnwrapErr { result }
         | HirExpressionKind::BuiltinCast { value: result, .. } => {
-            record_shared_reads_in_expression(env, result, location.clone())?;
+            record_shared_reads_in_expression(env, result, location.clone(), roots)?;
         }
     }
 
-    let mut expression_roots = RootSet::empty(env.layout.local_count());
-    collect_expression_roots(
-        env.layout,
-        env.state,
-        expression,
-        &mut expression_roots,
-        env.context
-            .diagnostics
-            .value_error_location(expression.id, location.clone()),
-    )?;
-    let classification = if expression_roots.is_empty() {
+    let classification = if roots.is_empty() {
         ValueAccessClassification::None
     } else {
         ValueAccessClassification::SharedRead
     };
     env.value_fact_buffer
-        .record(expression.id, classification, &expression_roots);
+        .record(expression.id, classification, roots);
 
     Ok(())
 }
