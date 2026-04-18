@@ -3,7 +3,7 @@ use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::call_validation::{
     CallDiagnosticContext, expectations_from_struct_fields, resolve_call_arguments,
 };
-use crate::compiler_frontend::ast::expressions::expression::Expression;
+use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::expressions::function_calls::parse_call_arguments;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::Ownership;
@@ -66,7 +66,20 @@ pub(crate) fn parse_struct_constructor_expression(
         let mut value = coerce_expression_to_declared_type(arg.value.clone(), field_type);
 
         if enforce_const_record {
-            if !value.is_compile_time_constant() {
+            // Allow unresolved constant placeholders to pass through so the fixed-point
+            // loop can retry after dependencies are resolved.
+            let is_deferred_reference = if let ExpressionKind::Reference(path) = &value.kind
+                && path.name().is_some_and(|name| {
+                    context
+                        .get_reference(&name)
+                        .is_some_and(Declaration::is_unresolved_constant_placeholder)
+                }) {
+                true
+            } else {
+                false
+            };
+
+            if !value.is_compile_time_constant() && !is_deferred_reference {
                 let field_name = field.id.name_str(string_table).unwrap_or("<field>");
                 return_rule_error!(
                     format!(

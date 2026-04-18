@@ -7,15 +7,18 @@
 
 use crate::compiler_frontend::analysis::borrow_checker::BorrowCheckReport;
 use crate::compiler_frontend::ast::ast_nodes::NodeKind;
+use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::headers::parse_file_headers::{HeaderKind, Headers};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
-use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
+use crate::compiler_frontend::style_directives::{
+    StyleDirectiveEffects, StyleDirectiveHandlerSpec, StyleDirectiveRegistry, StyleDirectiveSpec,
+};
 use crate::compiler_frontend::symbols::identity::SourceFileTable;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::newline_handling::NewlineMode;
-use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenizeMode};
+use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TemplateBodyMode, TokenizeMode};
 use crate::compiler_frontend::{CompilerFrontend, FrontendBuildProfile};
 use crate::compiler_frontend::{
     hir::hir_nodes::{HirPlace, HirStatementKind},
@@ -36,7 +39,11 @@ struct FrontendProject {
 }
 
 impl FrontendProject {
-    fn new(files: &[(&str, &str)], entry_relative_path: &str) -> Self {
+    fn new(
+        files: &[(&str, &str)],
+        entry_relative_path: &str,
+        style_directives: StyleDirectiveRegistry,
+    ) -> Self {
         let temp_dir = tempfile::tempdir().expect("should create temp dir");
         let project_root = temp_dir.path().join("project");
         let entry_root = project_root.join("src");
@@ -87,7 +94,7 @@ impl FrontendProject {
         let mut frontend = CompilerFrontend::new(
             &Config::new(canonical_project_root),
             string_table,
-            StyleDirectiveRegistry::built_ins(),
+            style_directives,
             Some(resolver),
             NewlineMode::NormalizeToLf,
         );
@@ -191,6 +198,7 @@ fn start_function_is_excluded_from_dependency_graph_and_appended_last() {
             ("src/leaf.bst", "#leaf_const = \"leaf_value\"\n"),
         ],
         "src/#page.bst",
+        StyleDirectiveRegistry::built_ins(),
     );
 
     let headers = project.headers();
@@ -241,6 +249,7 @@ fn ast_resolves_struct_constructor_field_types_and_emits_start_last() {
             "Inner = |\n    value Int,\n|\n\nOuter = |\n    inner Inner,\n|\n\nwrapper = Outer(Inner(1))\nio(wrapper.inner.value)\n",
         )],
         "src/#page.bst",
+        StyleDirectiveRegistry::built_ins(),
     );
 
     let ast = project.ast();
@@ -313,6 +322,7 @@ fn reports_circular_imports_through_frontend_header_sorting() {
             ),
         ],
         "src/a.bst",
+        StyleDirectiveRegistry::built_ins(),
     );
 
     let headers = project.headers();
@@ -337,6 +347,7 @@ fn compiles_single_file_program_through_borrow_check() {
             "Point = |\n    value Int,\n|\npoint = Point(1)\nloop 0 to 2 |i|:\n    io(point.value)\n;\n",
         )],
         "src/#page.bst",
+        StyleDirectiveRegistry::built_ins(),
     );
 
     let report = project.borrow_checked_hir();
@@ -359,6 +370,7 @@ fn compiles_multi_file_import_program_through_borrow_check() {
             ),
         ],
         "src/#page.bst",
+        StyleDirectiveRegistry::built_ins(),
     );
 
     let report = project.borrow_checked_hir();
@@ -375,6 +387,7 @@ fn compiles_collection_builtins_and_error_propagation_through_borrow_check() {
             "first_or_error |values {Int}, idx Int| -> Int, Error!:\n    return values.get(idx)!\n;\n\nmutate_and_length || -> Int:\n    values ~= {1, 2, 3}\n    ~values.set(0, 9)\n    values.get(1) = 8\n    ~values.push(4)\n    ~values.remove(0)\n    return values.length()\n;\n\ntotal = mutate_and_length()\npicked = first_or_error({10, 20}, 1) ! 0\nio(total)\nio(picked)\n",
         )],
         "src/#page.bst",
+        StyleDirectiveRegistry::built_ins(),
     );
 
     let hir = project.hir();
@@ -423,6 +436,7 @@ fn ast_stage_errors_preserve_string_table_context() {
     let mut project = FrontendProject::new(
         &[("src/#page.bst", "#bad = io(\"runtime host call\")\n")],
         "src/#page.bst",
+        StyleDirectiveRegistry::built_ins(),
     );
 
     let sorted = project.sorted_headers();
@@ -455,6 +469,7 @@ fn borrow_checker_errors_preserve_string_table_context() {
             "data ~= [\"shared data\"]\nref1 ~= data\nref2 ~= data\nresult = [ref1, ref2]\n",
         )],
         "src/#page.bst",
+        StyleDirectiveRegistry::built_ins(),
     );
 
     let hir = project.hir();
@@ -473,5 +488,308 @@ fn borrow_checker_errors_preserve_string_table_context() {
     assert!(
         resolved_scope == expected_scope,
         "borrow checker errors should preserve the logical source path in the returned StringTable, expected '{expected_scope}', got '{resolved_scope}'",
+    );
+}
+
+// -----------------------------------------------------------------------------
+// Deferred constant-header resolution regression tests
+// -----------------------------------------------------------------------------
+#[test]
+fn deferred_constant_resolution_same_file_constant() {
+    // WHAT: a constant references another exported constant in the same file that appears
+    // later in source order. Because constant initializer references are soft edges (not
+    // strict structural dependencies), the topological sort may place the dependent constant
+    // first. The fixed-point loop must defer it until the referenced constant is resolved.
+    let mut project = FrontendProject::new(
+        &[("src/#page.bst", "#page_head = theme\n#theme = \"dark\"\n")],
+        "src/#page.bst",
+        StyleDirectiveRegistry::built_ins(),
+    );
+
+    let ast = project.ast();
+
+    let page_head = ast
+        .module_constants
+        .iter()
+        .find(|c| c.id.name_str(&project.frontend.string_table) == Some("page_head"))
+        .expect("page_head constant should exist");
+    assert!(
+        matches!(page_head.value.kind, ExpressionKind::StringSlice(_)),
+        "page_head should be resolved to a string literal, got {:?}",
+        page_head.value.kind
+    );
+}
+
+#[test]
+fn deferred_constant_resolution_imported_constant() {
+    // WHAT: a constant references an imported constant from another file. The imported
+    // constant may be processed later in the fixed-point loop. This must defer cleanly
+    // and then resolve successfully.
+    let mut project = FrontendProject::new(
+        &[
+            (
+                "src/#page.bst",
+                "import @helper/theme\n#page_head = theme\n",
+            ),
+            ("src/helper.bst", "#theme = \"dark\"\n"),
+        ],
+        "src/#page.bst",
+        StyleDirectiveRegistry::built_ins(),
+    );
+
+    let ast = project.ast();
+
+    let page_head = ast
+        .module_constants
+        .iter()
+        .find(|c| c.id.name_str(&project.frontend.string_table) == Some("page_head"))
+        .expect("page_head constant should exist");
+    assert!(
+        matches!(page_head.value.kind, ExpressionKind::StringSlice(_)),
+        "page_head should be resolved to a string literal, got {:?}",
+        page_head.value.kind
+    );
+}
+
+#[test]
+fn deferred_constant_resolution_nested_template_reference() {
+    // WHAT: a template constant references another template constant inside its body.
+    // The reference is nested inside a TemplateAtom::Content expression. The walker
+    // must find the unresolved Reference and defer the outer constant.
+    let mut project = FrontendProject::new(
+        &[(
+            "src/#page.bst",
+            "#head = [$html: <style>[css]</style>]\n#css = [$css: body {}]\n",
+        )],
+        "src/#page.bst",
+        StyleDirectiveRegistry::built_ins(),
+    );
+
+    let ast = project.ast();
+
+    let head = ast
+        .module_constants
+        .iter()
+        .find(|c| c.id.name_str(&project.frontend.string_table) == Some("head"))
+        .expect("head constant should exist");
+    assert!(
+        matches!(head.value.kind, ExpressionKind::Template(_)),
+        "head should be resolved to a template, got {:?}",
+        head.value.kind
+    );
+}
+
+#[test]
+fn deferred_constant_resolution_collection_reference() {
+    // WHAT: a collection constant contains a reference to an unresolved constant.
+    // The walker must recurse into Collection items and detect the placeholder.
+    let mut project = FrontendProject::new(
+        &[(
+            "src/#page.bst",
+            "#all = {theme, \"extra\"}\n#theme = \"dark\"\n",
+        )],
+        "src/#page.bst",
+        StyleDirectiveRegistry::built_ins(),
+    );
+
+    let ast = project.ast();
+
+    let all = ast
+        .module_constants
+        .iter()
+        .find(|c| c.id.name_str(&project.frontend.string_table) == Some("all"))
+        .expect("all constant should exist");
+    assert!(
+        matches!(all.value.kind, ExpressionKind::Collection(_)),
+        "all should be resolved to a collection, got {:?}",
+        all.value.kind
+    );
+}
+
+#[test]
+fn deferred_constant_resolution_struct_literal_reference() {
+    // WHAT: a struct-instance constant references an unresolved constant in a field
+    // position. The walker must recurse into StructInstance fields.
+    let mut project = FrontendProject::new(
+        &[(
+            "src/#page.bst",
+            "#wrapper = Wrapper(theme)\n#theme = \"dark\"\n\nWrapper = | value String |\n",
+        )],
+        "src/#page.bst",
+        StyleDirectiveRegistry::built_ins(),
+    );
+
+    let ast = project.ast();
+
+    let wrapper = ast
+        .module_constants
+        .iter()
+        .find(|c| c.id.name_str(&project.frontend.string_table) == Some("wrapper"))
+        .expect("wrapper constant should exist");
+    assert!(
+        matches!(wrapper.value.kind, ExpressionKind::StructInstance(_)),
+        "wrapper should be resolved to a struct instance, got {:?}",
+        wrapper.value.kind
+    );
+}
+
+// -----------------------------------------------------------------------------
+// Struct field default value regression tests
+// -----------------------------------------------------------------------------
+
+#[test]
+fn struct_default_references_same_file_constant() {
+    // WHAT: a struct field default references a constant declared in the same file.
+    // The constant is resolved before struct field types, so the default should inline.
+    let mut project = FrontendProject::new(
+        &[(
+            "src/#page.bst",
+            "#default_theme = \"dark\"\nConfig = | theme String = default_theme |\n",
+        )],
+        "src/#page.bst",
+        StyleDirectiveRegistry::built_ins(),
+    );
+
+    let ast = project.ast();
+
+    let config_fields = ast
+        .nodes
+        .iter()
+        .find_map(|n| match &n.kind {
+            NodeKind::StructDefinition(path, fields)
+                if path.name_str(&project.frontend.string_table) == Some("Config") =>
+            {
+                Some(fields.clone())
+            }
+            _ => None,
+        })
+        .expect("Config struct should exist");
+
+    let theme_default = config_fields
+        .iter()
+        .find(|f| f.id.name_str(&project.frontend.string_table) == Some("theme"))
+        .expect("theme field should exist");
+    assert!(
+        matches!(theme_default.value.kind, ExpressionKind::StringSlice(_)),
+        "theme default should be resolved to a string literal, got {:?}",
+        theme_default.value.kind
+    );
+}
+
+#[test]
+fn struct_default_references_imported_constant() {
+    // WHAT: a struct field default references an imported constant.
+    let mut project = FrontendProject::new(
+        &[
+            (
+                "src/#page.bst",
+                "import @helper/default_theme\nConfig = | theme String = default_theme |\n",
+            ),
+            ("src/helper.bst", "#default_theme = \"dark\"\n"),
+        ],
+        "src/#page.bst",
+        StyleDirectiveRegistry::built_ins(),
+    );
+
+    let ast = project.ast();
+
+    let config_fields = ast
+        .nodes
+        .iter()
+        .find_map(|n| match &n.kind {
+            NodeKind::StructDefinition(path, fields)
+                if path.name_str(&project.frontend.string_table) == Some("Config") =>
+            {
+                Some(fields.clone())
+            }
+            _ => None,
+        })
+        .expect("Config struct should exist");
+
+    let theme_default = config_fields
+        .iter()
+        .find(|f| f.id.name_str(&project.frontend.string_table) == Some("theme"))
+        .expect("theme field should exist");
+    assert!(
+        matches!(theme_default.value.kind, ExpressionKind::StringSlice(_)),
+        "theme default should inline the imported constant, got {:?}",
+        theme_default.value.kind
+    );
+}
+
+#[test]
+fn struct_default_errors_on_visible_non_constant() {
+    // WHAT: a struct field default references a visible symbol that is a function,
+    // not a constant. This must fail with a clear compile-time value error.
+    let mut project = FrontendProject::new(
+        &[(
+            "src/#page.bst",
+            "helper || -> String:\n    return \"value\"\n;\nConfig = | theme String = helper |\n",
+        )],
+        "src/#page.bst",
+        StyleDirectiveRegistry::built_ins(),
+    );
+
+    let sorted = project.sorted_headers();
+    let result =
+        project
+            .frontend
+            .headers_to_ast(sorted, &project.entry_file, FrontendBuildProfile::Dev);
+    let messages = match result {
+        Err(messages) => messages,
+        Ok(_) => panic!("AST should fail when struct default references a function"),
+    };
+    assert!(
+        messages
+            .errors
+            .iter()
+            .any(|e| e.msg.contains("compile-time value")),
+        "expected compile-time error for function reference in struct default, got: {:?}",
+        messages.errors
+    );
+}
+
+// -----------------------------------------------------------------------------
+// Build-system style directive regression test
+// -----------------------------------------------------------------------------
+
+#[test]
+fn html_style_directive_available_during_header_parsing() {
+    // WHAT: project-owned style directives (like $html) must be visible during header-owned
+    // parsing paths — specifically constant header expression parsing and template parsing.
+    // This covers the docs-build failure mode where [$html: ...] templates in exported
+    // constants could not be parsed because the directive registry was incomplete.
+    let html_directive = StyleDirectiveSpec::handler(
+        "html",
+        TemplateBodyMode::Normal,
+        StyleDirectiveHandlerSpec::new(
+            None,
+            StyleDirectiveEffects {
+                style_id: Some("html"),
+                ..StyleDirectiveEffects::default()
+            },
+            None,
+        ),
+    );
+    let directives = StyleDirectiveRegistry::merged(&[html_directive])
+        .expect("merged directive registry should build");
+
+    let mut project = FrontendProject::new(
+        &[("src/#page.bst", "#head = [$html: <div>Hello</div>]\n")],
+        "src/#page.bst",
+        directives,
+    );
+
+    let ast = project.ast();
+
+    let head = ast
+        .module_constants
+        .iter()
+        .find(|c| c.id.name_str(&project.frontend.string_table) == Some("head"))
+        .expect("head constant should exist");
+    assert!(
+        matches!(head.value.kind, ExpressionKind::Template(_)),
+        "head should be resolved to a template when $html directive is available, got {:?}",
+        head.value.kind
     );
 }
