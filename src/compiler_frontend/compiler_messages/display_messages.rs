@@ -1,4 +1,5 @@
 use crate::compiler_frontend::basic_utility_functions::normalize_path;
+use crate::backends::error_types::BackendErrorType;
 use crate::compiler_frontend::compiler_errors::{
     CompilerError, CompilerMessages, ErrorMetaDataKey, ErrorType,
 };
@@ -271,7 +272,7 @@ pub fn print_formatted_error(e: CompilerError, string_table: &StringTable) {
             say!(Dark Yellow "compiler_frontend developer skill issue (not your fault)");
         }
 
-        ErrorType::LirTransformation => {
+        ErrorType::Backend(BackendErrorType::LirTransformation) => {
             if !relative_dir.is_empty() {
                 say!("\nヽ༼☉ ‿ ⚆༽ﾉ  🔥🔥🔥 ", Dark Magenta relative_dir, " 🔥🔥🔥  ╰(° _ o╰) ");
             }
@@ -280,7 +281,7 @@ pub fn print_formatted_error(e: CompilerError, string_table: &StringTable) {
             say!(Dark Yellow "compiler_frontend developer skill issue (not your fault)");
         }
 
-        ErrorType::WasmGeneration => {
+        ErrorType::Backend(BackendErrorType::WasmGeneration) => {
             if !relative_dir.is_empty() {
                 say!("\nヽ༼☉ ‿ ⚆༽ﾉ  🔥🔥🔥🔥 ", Dark Magenta relative_dir, " 🔥🔥🔥🔥  ╰(° O °)╯ ");
                 say!(Yellow "WASM GENERATION BUG - ", Dark "compiler_frontend developer skill issue (not your fault)");

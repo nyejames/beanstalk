@@ -431,8 +431,7 @@ pub enum ErrorType {
     DevServer,
     BorrowChecker,
     HirTransformation,
-    LirTransformation,
-    WasmGeneration,
+    Backend(crate::backends::error_types::BackendErrorType),
 }
 
 pub fn error_type_to_str(e_type: &ErrorType) -> &'static str {
@@ -446,8 +445,7 @@ pub fn error_type_to_str(e_type: &ErrorType) -> &'static str {
         ErrorType::DevServer => "Dev Server Issue",
         ErrorType::BorrowChecker => "Borrow Checker",
         ErrorType::HirTransformation => "HIR Transformation",
-        ErrorType::LirTransformation => "LIR Transformation",
-        ErrorType::WasmGeneration => "WASM Generation",
+        ErrorType::Backend(backend) => backend.as_str(),
     }
 }
 

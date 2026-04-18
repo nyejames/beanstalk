@@ -5,7 +5,7 @@
 
 use super::state::{FunctionLayout, FunctionLayoutInputs, RootSet};
 use super::types::FunctionReturnAliasSummary;
-use super::{BorrowChecker, successors};
+use super::engine::{BorrowChecker, successors};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::hir::hir_nodes::{
     BlockId, HirExpression, HirExpressionKind, HirFunction, HirPattern, HirPlace, HirStatement,
