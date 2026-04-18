@@ -1,11 +1,10 @@
 //! Tests for the frontend-only `check` command flow.
 
 use super::{execute_check, format_terse_summary_line};
+use crate::compiler_tests::test_support::temp_dir;
 use std::fs;
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime};
-use crate::compiler_tests::test_support::temp_dir;
-
 
 #[test]
 fn check_compiles_single_file_without_writing_artifacts() {

@@ -1,12 +1,11 @@
 use super::compile_project_frontend;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_tests::test_support::temp_dir;
 use crate::projects::settings::Config;
 use std::fs;
 use std::path::PathBuf;
 use std::time::SystemTime;
-use crate::compiler_tests::test_support::temp_dir;
-
 
 // ── Single-file flow ──────────────────────────────────────────────────────────
 

@@ -170,13 +170,10 @@ fn collect_reachable_block_ids(
     context: &LoweringContext<'_>,
     entry_block_id: BlockId,
 ) -> Result<Vec<BlockId>, CompilerError> {
-    crate::compiler_frontend::hir::utils::collect_reachable_blocks(
-        entry_block_id,
-        |block_id| {
-            let block = context.hir_block_by_id(block_id)?;
-            Ok(terminator_targets(&block.terminator))
-        },
-    )
+    crate::compiler_frontend::hir::utils::collect_reachable_blocks(entry_block_id, |block_id| {
+        let block = context.hir_block_by_id(block_id)?;
+        Ok(terminator_targets(&block.terminator))
+    })
 }
 
 fn collect_function_local_ids(

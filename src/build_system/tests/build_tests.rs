@@ -27,7 +27,6 @@ use std::sync::{Mutex, MutexGuard, OnceLock};
 use std::thread;
 use std::time::{Duration, SystemTime};
 
-
 struct CurrentDirGuard {
     _lock: MutexGuard<'static, ()>,
     previous: PathBuf,
@@ -1990,8 +1989,8 @@ use crate::build_system::output_cleanup::{
     BUILD_MANIFEST_FILENAME, read_build_manifest, validate_output_root_is_safe,
     write_build_manifest,
 };
-use std::collections::HashSet;
 use crate::compiler_tests::test_support::temp_dir;
+use std::collections::HashSet;
 
 #[test]
 fn cleanup_manifest_diff_removes_stale_managed_files() {

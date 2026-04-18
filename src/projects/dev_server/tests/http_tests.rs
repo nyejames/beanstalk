@@ -4,6 +4,7 @@ use super::{
     PreparedResponse, handle_connection_with_timeouts, prepare_static_response,
     should_serve_failed_build_html,
 };
+use crate::compiler_tests::test_support::temp_dir;
 use crate::projects::dev_server::state::{BuildState, DevServerState};
 use crate::projects::dev_server::static_files::ResolvedRequestKind;
 use std::fs;
@@ -15,8 +16,6 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
 use std::time::SystemTime;
-use crate::compiler_tests::test_support::temp_dir;
-
 
 fn bind_loopback_listener() -> Option<TcpListener> {
     match TcpListener::bind("127.0.0.1:0") {

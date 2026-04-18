@@ -14,6 +14,7 @@ use crate::compiler_frontend::compiler_errors::{
 use crate::compiler_frontend::compiler_warnings::{CompilerWarning, WarningKind};
 use crate::compiler_frontend::style_directives::StyleDirectiveSpec;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_tests::test_support::temp_dir;
 use crate::projects::dev_server::error_page::format_compiler_messages;
 use crate::projects::dev_server::state::DevServerState;
 use crate::projects::dev_server::watch;
@@ -23,8 +24,6 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
-use crate::compiler_tests::test_support::temp_dir;
-
 
 fn html_build_result() -> BuildResult {
     BuildResult {

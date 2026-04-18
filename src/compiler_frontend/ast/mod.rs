@@ -53,7 +53,6 @@ pub(crate) mod expressions {
     pub(crate) mod parse_expression;
     pub(crate) mod parse_expression_dispatch;
     pub(crate) mod parse_expression_identifiers;
-    pub(crate) mod parse_expression_lists;
     pub(crate) mod parse_expression_literals;
     pub(crate) mod parse_expression_places;
     pub(crate) mod parse_expression_templates;

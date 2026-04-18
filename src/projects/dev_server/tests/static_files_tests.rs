@@ -3,12 +3,11 @@
 use super::{
     ResolvedRequest, ResolvedRequestKind, content_type_for_path, inject_dev_client, resolve_request,
 };
+use crate::compiler_tests::test_support::temp_dir;
 use crate::projects::routing::{HtmlSiteConfig, PageUrlStyle};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
-use crate::compiler_tests::test_support::temp_dir;
-
 
 fn site_config(page_url_style: PageUrlStyle, redirect_index_html: bool) -> HtmlSiteConfig {
     HtmlSiteConfig {

@@ -3,14 +3,14 @@
 //! WHAT: exposes extra builder utilities needed only by HIR unit tests.
 //! WHY: tests need direct access to internal builder state without widening the production API.
 
+use crate::compiler_frontend::ast::Ast;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, SourceLocation};
 use crate::compiler_frontend::ast::expressions::expression::Expression;
-use crate::compiler_frontend::ast::Ast;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::hir::hir_nodes::{
-    BlockId, FieldId, FunctionId, HirBlock, HirField, HirLocal, HirModule, HirStruct, HirTerminator,
-    RegionId, StructId,
+    BlockId, FieldId, FunctionId, HirBlock, HirField, HirLocal, HirModule, HirStruct,
+    HirTerminator, RegionId, StructId,
 };
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;

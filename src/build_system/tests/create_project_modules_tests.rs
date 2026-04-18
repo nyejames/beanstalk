@@ -6,12 +6,11 @@ use crate::compiler_frontend::paths::path_resolution::{
 };
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_tests::test_support::temp_dir;
 use std::collections::HashSet;
 use std::ffi::OsStr;
 use std::path::PathBuf;
 use std::time::SystemTime;
-use crate::compiler_tests::test_support::temp_dir;
-
 
 fn configured_resolver(config: &Config) -> ProjectPathResolver {
     // WHAT: rebuilds the same canonical resolver the real project build uses.

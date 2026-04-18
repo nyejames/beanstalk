@@ -8,6 +8,7 @@ use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::compiler_errors::{CompilerMessages, ErrorType};
 use crate::compiler_frontend::paths::path_resolution::{CompileTimePathBase, CompileTimePathKind};
 use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_tests::test_support::temp_dir;
 use crate::projects::html_project::tests::test_support::{
     RenderedPathUsageInput, assert_fragment_before_body_close, assert_has_basic_shell,
     collect_output_paths, create_test_module, expect_bytes_output, expect_html_output,
@@ -16,7 +17,6 @@ use crate::projects::html_project::tests::test_support::{
 use crate::projects::settings::Config;
 use std::fs;
 use std::path::PathBuf;
-use crate::compiler_tests::test_support::temp_dir;
 
 fn build_with_test_modules(
     builder: &HtmlProjectBuilder,

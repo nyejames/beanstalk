@@ -7,12 +7,11 @@ use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::style_directives::{StyleDirectiveHandlerSpec, StyleDirectiveSpec};
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::TemplateBodyMode;
+use crate::compiler_tests::test_support::temp_dir;
 use crate::projects::settings::Config;
 use std::fs;
 use std::path::PathBuf;
 use std::time::SystemTime;
-use crate::compiler_tests::test_support::temp_dir;
-
 
 struct NoopBuilder;
 

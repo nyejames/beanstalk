@@ -212,7 +212,9 @@ fn collect_reachable_blocks(
         function.entry,
         |block_id| {
             let block = block_by_id_or_error(context, block_id, function.id)?;
-            Ok(crate::compiler_frontend::hir::utils::terminator_targets(&block.terminator))
+            Ok(crate::compiler_frontend::hir::utils::terminator_targets(
+                &block.terminator,
+            ))
         },
     )?;
     block_ids.sort_by_key(|id| id.0);

@@ -4,13 +4,12 @@ use super::{
     FileFingerprint, WatchScope, WatchSession, WatchTarget, collect_fingerprints, detect_changes,
     should_ignore_path,
 };
+use crate::compiler_tests::test_support::temp_dir;
 use crate::projects::settings::Config;
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime};
-use crate::compiler_tests::test_support::temp_dir;
-
 
 #[test]
 fn detects_added_and_removed_files() {

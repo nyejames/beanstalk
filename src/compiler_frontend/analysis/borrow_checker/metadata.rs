@@ -516,13 +516,10 @@ impl<'a> BorrowChecker<'a> {
         function: &HirFunction,
     ) -> Result<Vec<BlockId>, CompilerError> {
         // Breadth-first traversal over explicit terminator successors.
-        crate::compiler_frontend::hir::utils::collect_reachable_blocks(
-            function.entry,
-            |block_id| {
-                let block = self.block_by_id_or_error(block_id, function.id)?;
-                Ok(successors(&block.terminator))
-            },
-        )
+        crate::compiler_frontend::hir::utils::collect_reachable_blocks(function.entry, |block_id| {
+            let block = self.block_by_id_or_error(block_id, function.id)?;
+            Ok(successors(&block.terminator))
+        })
     }
 }
 
