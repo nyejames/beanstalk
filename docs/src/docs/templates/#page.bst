@@ -29,7 +29,7 @@ import @styles/docs {navbar, title, section, palette, table, codeblock, codesnip
     Templates are either folded to strings at compile time, or become functions that return strings at runtime. 
 
     ## Structure
-    - Head and body separated by "[$code::]"
+    - Head and body separated by [codesnippet::]
     - Variable capture from the surrounding scope
 
     Templates unlock the full power of Beanstalk's HTML / CSS generation capabilities.
@@ -37,12 +37,12 @@ import @styles/docs {navbar, title, section, palette, table, codeblock, codesnip
     ## Styles
     Templates can be used to build complex UI components. They can use slots to insert content from other templates and have **style metadata** attached to them.
 
-    A template's style is defined in the **template head** using `$` directives. 
-    `$` introduces **compiler-handled directives** (so they don't collide with normal variables and can be extended in the future), such as formatter-like built-ins, precedence controls, and default child templates that are automatically applied to direct child templates.
+    A template's style is defined in the **template head** using [codesnippet: $] directives. 
+    [codesnippet:$] introduces **compiler-handled directives** (so they don't collide with normal variables and can be extended in the future), such as formatter-like built-ins, precedence controls, and default child templates that are automatically applied to direct child templates.
 
     Directive availability is frontend-registry based:
-    - Frontend built-ins are available by default (`$markdown`, `$code`, `$raw`, slots, etc.).
-    - Project builders can register additional project-specific directives using the same `$name` syntax. In the HTML project, that includes `$html`, `$css`, and `$escape_html`.
+    - Frontend built-ins are available by default ([codesnippet:$markdown], [codesnippet:$code], [codesnippet:$raw], [codesnippet:$slot], etc.).
+    - Project builders can register additional project-specific directives using the same [codesnippet:$name] syntax. In the HTML project, that includes [codesnippet:$html], [codesnippet:$css], and [codesnippet:$escape_html].
     - Unknown directives fail as syntax/rule errors unless they are registered.
 
     [codeblock, $code("bst"):
@@ -61,25 +61,25 @@ import @styles/docs {navbar, title, section, palette, table, codeblock, codesnip
 
     **Frontend Built-in Style Directives**
 
-    - $slot / $insert(..) - See slots below!
-    - $fresh              - Opts this child template out of wrappers applied by the immediate parent's `$children(..)` directive
-    - $markdown           - Parses the template bodies with a custom flavour of Markdown
-    - $code               - Highlights code blocks using the compiler's built-in formatter
-    - $raw                - Parses the template body as a raw string (no escaping, no formatting)
-    - $note / $todo       - Comments (ignored by final output)
-    - $doc                - Turns the template into a documentation comment
-    - $children(..)       - Accepts a template (or string slice) that will be applied only to this template's direct child templates
+    - [codesnippet:$slot] / [codesnippet:$insert(..)] - See slots below!
+    - [codesnippet:$fresh]              - Opts this child template out of wrappers applied by the immediate parent's [codesnippet:$children(..)] directive
+    - [codesnippet:$markdown]           - Parses the template bodies with a custom flavour of Markdown
+    - [codesnippet:$code]               - Highlights code blocks using the compiler's built-in formatter
+    - [codesnippet:$raw]                - Parses the template body as a raw string (no escaping, no formatting)
+    - [codesnippet:$note / $todo]       - Comments (ignored by final output)
+    - [codesnippet:$doc]                - Turns the template into a documentation comment
+    - [codesnippet:$children(..)]       - Accepts a template (or string slice) that will be applied only to this template's direct child templates
 
     **HTML Project Directives**
 
-    - $html               - Parses the template body as raw HTML (no escaping)
-    - $css                - Provides some basic warnings for malformed CSS
-    - $escape_html        - Escapes HTML-sensitive characters in the template body
+    - [codesnippet:$html]               - Parses the template body as raw HTML (no escaping)
+    - [codesnippet:$css]                - Provides some basic warnings for malformed CSS
+    - [codesnippet:$escape_html]        - Escapes HTML-sensitive characters in the template body
 
     Formatting directives do not automatically flow into nested child templates.
-    If a child template should keep using a formatter such as `$markdown`, redeclare it in that child template's head.
+    If a child template should keep using a formatter such as [codesnippet:$markdown], redeclare it in that child template's head.
 
-    `$fresh` is per-child and only affects wrapper application from the immediate parent. Siblings without `$fresh` still receive the parent wrappers:
+    [codesnippet:$fresh] is per-child and only affects wrapper application from the immediate parent. Siblings without [codesnippet:$fresh] still receive the parent wrappers:
 
     [codeblock, $code("bst"):
         # list = [$children([:<li>[$slot]</li>]):
@@ -94,15 +94,15 @@ import @styles/docs {navbar, title, section, palette, table, codeblock, codesnip
         ]
     ]
 
-    In this example, `one` is wrapped with `<li>...</li>`, while `two` opts out and is rendered without the parent `$children(..)` wrapper.
+    In this example, `one` is wrapped with `<li>...</li>`, while `two` opts out and is rendered without the parent [codesnippet:$children(..)] wrapper.
 
     ## Slots
 
-    Template slots let one template receive content from another template. The default slot is written as `[$slot]` and marks where the main body content should be inserted.
+    Template slots let one template receive content from another template. The default slot is written as [codesnippet:[$slot]] and marks where the main body content should be inserted.
 
-    Named slots can also be declared with `[$slot("name")]`. These allow helper templates to insert content into a specific part of another template using `$insert("name")`.
+    Named slots can also be declared with [codesnippet:[$slot("name")]]. These allow helper templates to insert content into a specific part of another template using [codesnippet:$insert("name")].
 
-    Positional slots can be declared using positive integers, such as `[$slot(1)]`, `[$slot(2)]`, etc. Loose contributions (those not explicitly targetting a named slot) are assigned to positional slots first, in ascending numeric order. Any remaining loose contributions go to the default slot if it exists.
+    Positional slots can be declared using positive integers, such as [codesnippet:[$slot(1)]], [codesnippet:[$slot(2)]], etc. Loose contributions (those not explicitly targetting a named slot) are assigned to positional slots first, in ascending numeric order. Any remaining loose contributions go to the default slot if it exists.
 
     [codeblock, $code("bst"):
         img = [:
@@ -112,7 +112,7 @@ import @styles/docs {navbar, title, section, palette, table, codeblock, codesnip
         [img, "logo.png": Site logo]
     ]
 
-    In this example, `"logo.png"` fills the first positional slot `[$slot(1)]`, and `"Site logo"` fills the default slot `[$slot]`.
+    In this example, [codesnippet:"logo.png"] fills the first positional slot [codesnippet:[$slot(1)]], and [codesnippet:"Site logo"] fills the default [codesnippet:$slot].
 
     Named inserts:
     [codeblock, $code("bst"):
@@ -129,13 +129,13 @@ import @styles/docs {navbar, title, section, palette, table, codeblock, codesnip
         ]
     ]
 
-    In this example, `blue` inserts `color: blue;` into the `style` slot of `title`, while `Hello world` is inserted into the default slot.
+    In this example, `blue` inserts [codesnippet:color: blue;] into the [codesnippet:$slot("style")] slot of `title`, while `Hello world` is inserted into the default [codesnippet:$slot].
 
     If a template has named or positional slots but no default slot, any loose body content that cannot be assigned to a positional slot is an error. 
     If a slot receives no content, it expands to an empty string.
-    Repeated slots, such as two occurrences of `[$slot(1)]`, will replay the same content in both places.
+    Repeated slots, such as two occurrences of [codesnippet:[$slot(1)]], will replay the same content in both places.
 
-    Because `$children(..)` only applies to direct children, nested helpers can scope row and cell wrappers independently:
+    Because [codesnippet:$children(..)] only applies to direct children, nested helpers can scope row and cell wrappers independently:
 
     [codeblock, $code("bst"):
         # table = [$children([:<tr>[$slot]</tr>]):
@@ -150,7 +150,7 @@ import @styles/docs {navbar, title, section, palette, table, codeblock, codesnip
         ]
     ]
 
-    In that example, each direct child of `table` becomes a row, while each direct child of a row becomes a cell. The outer `<tr>` wrapper does not leak into the inner cell templates.
+    In that example, each direct child of `table` becomes a row, while each direct child of a row becomes a cell. The outer [codesnippet:<tr>] wrapper does not leak into the inner cell templates.
 
     ## Template control flow examples
     [codeblock, $code("bst"):
