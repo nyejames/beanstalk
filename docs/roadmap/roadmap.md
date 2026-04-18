@@ -28,6 +28,9 @@ Main goal is to make sure the codebase is following the style guide, avoiding du
 Makes `/` float division only. `//` becomes the integer division symbol.
 Using `/` in an expression with only integers and no explicit type will coerse to a float expression.
 
+-`docs/roadmap/plans/mutable-literal-mutable-params-hidden-locals.md`
+Support fresh rvalues directly in mutable (`~T`) function-parameter slots by lowering them through synthesized hidden locals in HIR. Keeps `~` place-only, keeps `~literal` invalid, avoids adding a new HIR node kind, and extends tests/docs for the new call-site rule.
+
 - `docs/roadmap/plans/collection-builtins-refactor.md`
 Make collection methods simpler builtins that no longer lean on method-call compatilibity. 
 
