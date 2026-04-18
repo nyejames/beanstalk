@@ -2,6 +2,7 @@
 
 use super::*;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::projects::html_project::compile_input::HtmlModuleCompileInput;
 use crate::projects::html_project::document_config::HtmlDocumentConfig;
 use crate::projects::html_project::tests::test_support::{create_test_module, expect_js_output};
 use std::path::{Path, PathBuf};
@@ -14,18 +15,17 @@ fn compile_html_module_wasm_exports_bst_start_directly() {
     let mut string_table = StringTable::new();
     let module = create_test_module(PathBuf::from("#page.bst"), &mut string_table);
 
-    let compiled = compile_html_module_wasm(
-        &module.hir,
-        &[],
-        &module.borrow_analysis,
-        &mut string_table,
-        Path::new("index.html"),
-        "",
-        &HtmlDocumentConfig::default(),
-        false,
-        0,
-    )
-    .expect("wasm mode compilation should succeed");
+    let compile_input = HtmlModuleCompileInput {
+        hir_module: &module.hir,
+        const_fragments: &[],
+        borrow_analysis: &module.borrow_analysis,
+        project_name: "",
+        document_config: &HtmlDocumentConfig::default(),
+        release_build: false,
+        entry_runtime_fragment_count: 0,
+    };
+    let compiled = compile_html_module_wasm(&compile_input, &mut string_table, Path::new("index.html"))
+        .expect("wasm mode compilation should succeed");
     let js = expect_js_output(&compiled.output_files, "page.js");
 
     assert!(
@@ -94,18 +94,18 @@ fn compile_html_module_wasm_preserves_nested_logical_html_route() {
     let mut string_table = StringTable::new();
     let module = create_test_module(PathBuf::from("docs/#page.bst"), &mut string_table);
 
-    let compiled = compile_html_module_wasm(
-        &module.hir,
-        &[],
-        &module.borrow_analysis,
-        &mut string_table,
-        Path::new("docs/index.html"),
-        "",
-        &HtmlDocumentConfig::default(),
-        false,
-        0,
-    )
-    .expect("wasm mode compilation should succeed for nested route");
+    let compile_input = HtmlModuleCompileInput {
+        hir_module: &module.hir,
+        const_fragments: &[],
+        borrow_analysis: &module.borrow_analysis,
+        project_name: "",
+        document_config: &HtmlDocumentConfig::default(),
+        release_build: false,
+        entry_runtime_fragment_count: 0,
+    };
+    let compiled =
+        compile_html_module_wasm(&compile_input, &mut string_table, Path::new("docs/index.html"))
+            .expect("wasm mode compilation should succeed for nested route");
 
     let output_paths: Vec<PathBuf> = compiled
         .output_files

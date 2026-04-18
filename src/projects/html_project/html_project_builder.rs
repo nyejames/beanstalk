@@ -7,6 +7,7 @@ use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages, ErrorType};
 use crate::compiler_frontend::style_directives::StyleDirectiveSpec;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::projects::html_project::compile_input::HtmlModuleCompileInput;
 use crate::projects::html_project::document_config::parse_html_document_config;
 use crate::projects::html_project::js_path::{compile_html_module_js, html_output_path};
 use crate::projects::html_project::path_policy::HtmlEntryPathPlan;
@@ -194,32 +195,23 @@ fn compile_one_module(
     wasm_enabled: bool,
     string_table: &mut StringTable,
 ) -> Result<CompiledHtmlModuleArtifacts, CompilerMessages> {
+    let compile_input = HtmlModuleCompileInput {
+        hir_module: &module.hir,
+        const_fragments: &module.const_top_level_fragments,
+        borrow_analysis: &module.borrow_analysis,
+        project_name,
+        document_config,
+        release_build,
+        entry_runtime_fragment_count: module.entry_runtime_fragment_count,
+    };
     if wasm_enabled {
-        let compiled_wasm = compile_html_module_wasm(
-            &module.hir,
-            &module.const_top_level_fragments,
-            &module.borrow_analysis,
-            string_table,
-            logical_html_output_path,
-            project_name,
-            document_config,
-            release_build,
-            module.entry_runtime_fragment_count,
-        )?;
+        let compiled_wasm =
+            compile_html_module_wasm(&compile_input, string_table, logical_html_output_path)?;
         Ok(CompiledHtmlModuleArtifacts::from_wasm(compiled_wasm))
     } else {
-        let output_file = compile_html_module_js(
-            &module.hir,
-            &module.const_top_level_fragments,
-            &module.borrow_analysis,
-            string_table,
-            logical_html_output_path.to_path_buf(),
-            project_name,
-            document_config,
-            release_build,
-            module.entry_runtime_fragment_count,
-        )
-        .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;
+        let output_file =
+            compile_html_module_js(&compile_input, string_table, logical_html_output_path.to_path_buf())
+                .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;
         Ok(CompiledHtmlModuleArtifacts::from_js(
             logical_html_output_path.to_path_buf(),
             output_file,
