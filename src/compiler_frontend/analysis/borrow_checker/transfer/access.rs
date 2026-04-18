@@ -197,12 +197,8 @@ pub(super) fn transfer_statement(
                                 argument_location.clone(),
                                 &mut arg_root_set,
                             )?;
-                            let place_roots = roots_for_place(
-                                layout,
-                                state,
-                                place,
-                                argument_location.clone(),
-                            )?;
+                            let place_roots =
+                                roots_for_place(layout, state, place, argument_location.clone())?;
                             arg_root_set.union_with(&place_roots);
                             arg_roots[arg_index] = arg_root_set;
                         }
@@ -1040,7 +1036,8 @@ fn record_shared_reads_in_expression(
                 .value_error_location(expression.id, location.clone());
             record_shared_reads_in_place_indices(env, place, value_location.clone(), roots)?;
 
-            let place_roots = roots_for_place(env.layout, env.state, place, value_location.clone())?;
+            let place_roots =
+                roots_for_place(env.layout, env.state, place, value_location.clone())?;
             let actor_index_hint = place_root_local_index(env.layout, place);
             let mut check = AccessCheckContext {
                 context: env.context,
@@ -1063,7 +1060,8 @@ fn record_shared_reads_in_expression(
                 .value_error_location(expression.id, location.clone());
             record_shared_reads_in_place_indices(env, place, value_location.clone(), roots)?;
 
-            let place_roots = roots_for_place(env.layout, env.state, place, value_location.clone())?;
+            let place_roots =
+                roots_for_place(env.layout, env.state, place, value_location.clone())?;
             let actor_index_hint = place_root_local_index(env.layout, place);
             let mut check = AccessCheckContext {
                 context: env.context,

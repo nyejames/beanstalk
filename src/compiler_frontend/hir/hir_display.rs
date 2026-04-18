@@ -24,9 +24,9 @@ use crate::compiler_frontend::hir::hir_side_table::HirSideTable;
 use crate::compiler_frontend::host_functions::CallTarget;
 #[cfg(any(test, feature = "show_hir"))]
 use crate::compiler_frontend::symbols::string_interning::StringTable;
-use std::fmt::{Display, Formatter, Result as FmtResult};
 #[cfg(any(test, feature = "show_hir"))]
 use std::fmt::Write as _;
+use std::fmt::{Display, Formatter, Result as FmtResult};
 
 #[cfg(any(test, feature = "show_hir"))]
 const MAX_TYPE_RENDER_DEPTH: usize = 24;
