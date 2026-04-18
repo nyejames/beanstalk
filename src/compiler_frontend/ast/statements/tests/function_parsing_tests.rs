@@ -7,6 +7,7 @@ use super::*;
 use crate::compiler_frontend::ast::ast_nodes::NodeKind;
 use crate::compiler_frontend::ast::expressions::expression::{ExpressionKind, ResultCallHandling};
 use crate::compiler_frontend::ast::statements::functions::ReturnSlot;
+use crate::compiler_frontend::compiler_errors::ErrorMetaDataKey;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::tests::test_support::{
     function_body_by_name, function_signature_by_name, parse_single_file_ast,
@@ -378,6 +379,26 @@ fn rejects_return_value_type_with_expected_found_and_value_details() {
         error.msg
     );
     assert!(error.msg.contains("Offending value: 1"), "{}", error.msg);
+}
+
+#[test]
+fn return_int_context_reports_targeted_guidance_for_regular_division() {
+    let error = parse_single_file_ast_error("render || -> Int:\n    return 5 / 2\n;\n\nrender()\n");
+
+    assert!(
+        error.msg.contains("Return value 1 has incorrect type"),
+        "{}",
+        error.msg
+    );
+    assert_eq!(
+        error
+            .metadata
+            .get(&ErrorMetaDataKey::PrimarySuggestion)
+            .map(String::as_str),
+        Some(
+            "Regular division returns 'Float'. Use '//' for integer division. Use 'Int(...)' for an explicit conversion."
+        )
+    );
 }
 
 #[test]

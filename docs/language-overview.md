@@ -113,6 +113,19 @@ Variable mutability declarations and call-site mutable access are separate conce
 * `fn(~value)` or `fn(param = ~value)` requests mutable/exclusive access for one specific call argument.
 * A mutable binding does not automatically satisfy a mutable parameter. The call still has to spell `~`.
 
+### Numeric Semantics
+
+- Whole-number literals are `Int`.
+- Decimal-point literals are `Float`.
+- `+`, `-`, `*`, and `%` preserve `Int` when both operands are `Int`.
+- `/` is always real division. `Int / Int` evaluates to `Float`.
+- `//` is integer division. It currently requires `Int // Int` and evaluates to `Int`.
+- Integer division uses truncation toward zero (`-5 // 2` -> `-2`).
+- Mixed `Int`/`Float` arithmetic for regular operators evaluates to `Float`.
+- There is no implicit `Float -> Int` coercion.
+- Use `//` for integer division.
+- Use `Int(...)` when an explicit conversion is required.
+
 ### Results and Options
 
 Beanstalk supports optional values and error returns with compact syntax.

@@ -271,11 +271,11 @@ impl AstNode {
 
                 // Highest precedence: exponentiation
                 Operator::Exponent => 5,
-                Operator::Root => 5,
 
                 // High precedence: multiplication, division, modulus
                 Operator::Multiply => 4,
                 Operator::Divide => 4,
+                Operator::IntDivide => 4,
                 Operator::Modulus => 4,
 
                 // Medium precedence: addition, subtraction

@@ -416,13 +416,13 @@ pub enum TokenKind {
     Divide,
     Modulus,
     Remainder,
-    Root,
+    IntDivide,
 
     ExponentAssign,
     MultiplyAssign,
     DivideAssign,
     ModulusAssign,
-    RootAssign,
+    IntDivideAssign,
     RemainderAssign,
 
     Add,
@@ -484,7 +484,7 @@ impl TokenKind {
                 | TokenKind::MultiplyAssign
                 | TokenKind::DivideAssign
                 | TokenKind::ExponentAssign
-                | TokenKind::RootAssign
+                | TokenKind::IntDivideAssign
         )
     }
 
@@ -504,13 +504,13 @@ impl TokenKind {
                 | TokenKind::MultiplyAssign
                 | TokenKind::DivideAssign
                 | TokenKind::ExponentAssign
-                | TokenKind::RootAssign
+                | TokenKind::IntDivideAssign
                 | TokenKind::Add
                 | TokenKind::Subtract
                 | TokenKind::Multiply
                 | TokenKind::Divide
                 | TokenKind::Modulus
-                | TokenKind::Root
+                | TokenKind::IntDivide
                 | TokenKind::Arrow
                 | TokenKind::Is
                 | TokenKind::LessThan

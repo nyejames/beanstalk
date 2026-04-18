@@ -1,0 +1,7 @@
+[backends.html]
+mode = "failure"
+warnings = "forbid"
+error_type = "Type"
+message_contains = [
+  "Operator '//' cannot be applied",
+]

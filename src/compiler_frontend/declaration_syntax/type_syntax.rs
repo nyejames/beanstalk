@@ -128,6 +128,7 @@ fn parse_required_type(
                         | TokenKind::AddAssign
                         | TokenKind::SubtractAssign
                         | TokenKind::DivideAssign
+                        | TokenKind::IntDivideAssign
                         | TokenKind::MultiplyAssign
                 ) =>
         {

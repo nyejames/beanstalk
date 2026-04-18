@@ -16,7 +16,8 @@ use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::compiler_frontend::type_coercion::compatibility::is_numeric_coercible;
 use crate::compiler_frontend::type_coercion::diagnostics::{
-    expected_found_clause, offending_value_clause,
+    expected_found_clause, offending_value_clause, regular_division_int_context_guidance,
+    should_report_regular_division_int_context,
 };
 use crate::compiler_frontend::type_coercion::numeric::coerce_expression_to_return_type;
 use crate::{return_rule_error, return_type_error};
@@ -200,7 +201,11 @@ pub(crate) fn parse_return_statement(
                     CompilationStage => "AST Construction",
                     ExpectedType => expected_type.display_with_table(string_table),
                     FoundType => normalized_actual.display_with_table(string_table),
-                    PrimarySuggestion => "Update the returned expression to match the declared return type",
+                    PrimarySuggestion => if should_report_regular_division_int_context(expected_type, &normalized_actual, &returned_value) {
+                        regular_division_int_context_guidance()
+                    } else {
+                        "Update the returned expression to match the declared return type"
+                    },
                     AlternativeSuggestion => "If this value is intended, change the function return signature to the correct type",
                 }
             );

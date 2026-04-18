@@ -354,6 +354,54 @@ fn mixed_int_float_arithmetic_resolves_to_float() {
 }
 
 #[test]
+fn int_division_resolves_to_float() {
+    let value = first_start_declaration_expression("value = 5 / 2\n");
+    assert_eq!(value.data_type, DataType::Float);
+}
+
+#[test]
+fn integer_division_resolves_to_int() {
+    let value = first_start_declaration_expression("value = 5 // 2\n");
+    assert_eq!(value.data_type, DataType::Int);
+}
+
+#[test]
+fn integer_division_rejects_int_float_operands() {
+    let error = parse_single_file_ast_error("value = 5 // 2.0\n");
+    assert_eq!(error.error_type, ErrorType::Type);
+    assert!(
+        error.msg.contains("Operator '//' cannot be applied"),
+        "{}",
+        error.msg
+    );
+    assert_eq!(
+        error
+            .metadata
+            .get(&ErrorMetaDataKey::ExpectedType)
+            .map(String::as_str),
+        Some("Int and Int")
+    );
+}
+
+#[test]
+fn integer_division_rejects_float_int_operands() {
+    let error = parse_single_file_ast_error("value = 5.0 // 2\n");
+    assert_eq!(error.error_type, ErrorType::Type);
+    assert!(
+        error.msg.contains("Operator '//' cannot be applied"),
+        "{}",
+        error.msg
+    );
+    assert_eq!(
+        error
+            .metadata
+            .get(&ErrorMetaDataKey::ExpectedType)
+            .map(String::as_str),
+        Some("Int and Int")
+    );
+}
+
+#[test]
 fn mixed_int_float_comparison_resolves_to_bool() {
     let value = first_start_declaration_expression("value = 1 <= 2.5\n");
     assert_eq!(value.data_type, DataType::Bool);

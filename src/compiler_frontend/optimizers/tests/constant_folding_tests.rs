@@ -64,6 +64,60 @@ fn evaluate_operator_returns_none_for_mismatched_constant_types() {
     assert!(result.is_none());
 }
 
+#[test]
+fn evaluate_operator_divides_ints_to_float() {
+    let mut string_table = StringTable::new();
+    let lhs = Expression::int(5, Default::default(), Ownership::ImmutableOwned);
+    let rhs = Expression::int(2, Default::default(), Ownership::ImmutableOwned);
+
+    let result = lhs
+        .evaluate_operator(&rhs, &Operator::Divide, &mut string_table)
+        .expect("int division should fold")
+        .expect("int division should produce folded expression");
+
+    assert!(matches!(
+        result.kind,
+        ExpressionKind::Float(value) if (value - 2.5).abs() < f64::EPSILON
+    ));
+    assert_eq!(result.data_type, DataType::Float);
+    assert!(
+        result.contains_regular_division,
+        "folded regular division should preserve provenance"
+    );
+}
+
+#[test]
+fn evaluate_operator_integer_division_truncates_toward_zero() {
+    let mut string_table = StringTable::new();
+    let lhs = Expression::int(-5, Default::default(), Ownership::ImmutableOwned);
+    let rhs = Expression::int(2, Default::default(), Ownership::ImmutableOwned);
+
+    let result = lhs
+        .evaluate_operator(&rhs, &Operator::IntDivide, &mut string_table)
+        .expect("integer division should fold")
+        .expect("integer division should produce folded expression");
+
+    assert!(matches!(result.kind, ExpressionKind::Int(-2)));
+    assert_eq!(result.data_type, DataType::Int);
+}
+
+#[test]
+fn evaluate_operator_rejects_divide_by_zero_for_both_division_operators() {
+    let mut string_table = StringTable::new();
+    let lhs = Expression::int(5, Default::default(), Ownership::ImmutableOwned);
+    let zero = Expression::int(0, Default::default(), Ownership::ImmutableOwned);
+
+    let divide_error = lhs
+        .evaluate_operator(&zero, &Operator::Divide, &mut string_table)
+        .expect_err("regular division by zero should fail during fold");
+    assert!(divide_error.msg.contains("Can't divide by zero"));
+
+    let int_divide_error = lhs
+        .evaluate_operator(&zero, &Operator::IntDivide, &mut string_table)
+        .expect_err("integer division by zero should fail during fold");
+    assert!(int_divide_error.msg.contains("Can't divide by zero"));
+}
+
 fn rvalue_node(expression: Expression) -> AstNode {
     AstNode {
         kind: NodeKind::Rvalue(expression),

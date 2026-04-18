@@ -207,6 +207,7 @@ impl TemplateRenderPlan {
                             data_type: DataType::Template,
                             ownership: Ownership::ImmutableOwned,
                             location: c.expression.location.clone(),
+                            contains_regular_division: c.expression.contains_regular_division,
                         },
                         origin: TemplateSegmentOrigin::Body,
                         is_child_template_output: true,

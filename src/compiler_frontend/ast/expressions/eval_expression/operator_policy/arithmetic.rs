@@ -23,11 +23,11 @@ pub(super) fn resolve_arithmetic_operator_type(
                 Operator::Add
                 | Operator::Subtract
                 | Operator::Multiply
-                | Operator::Divide
                 | Operator::Modulus
                 | Operator::Exponent
-                | Operator::Root,
+                | Operator::IntDivide,
             ) => Ok(DataType::Int),
+            (DataType::Int, Operator::Divide) => Ok(DataType::Float),
             (
                 DataType::Float,
                 Operator::Add
@@ -35,8 +35,7 @@ pub(super) fn resolve_arithmetic_operator_type(
                 | Operator::Multiply
                 | Operator::Divide
                 | Operator::Modulus
-                | Operator::Exponent
-                | Operator::Root,
+                | Operator::Exponent,
             ) => Ok(DataType::Float),
             (
                 DataType::Decimal,
@@ -45,8 +44,7 @@ pub(super) fn resolve_arithmetic_operator_type(
                 | Operator::Multiply
                 | Operator::Divide
                 | Operator::Modulus
-                | Operator::Exponent
-                | Operator::Root,
+                | Operator::Exponent,
             ) => Ok(DataType::Decimal),
             (DataType::StringSlice, Operator::Add) => Ok(DataType::StringSlice),
             (DataType::Int, Operator::Range) => Ok(DataType::Range),
@@ -63,8 +61,7 @@ pub(super) fn resolve_arithmetic_operator_type(
             | Operator::Multiply
             | Operator::Divide
             | Operator::Modulus
-            | Operator::Exponent
-            | Operator::Root => Ok(DataType::Float),
+            | Operator::Exponent => Ok(DataType::Float),
             _ => invalid_operator_types(lhs, rhs, op, location, string_table),
         };
     }

@@ -115,3 +115,26 @@ fn rejects_initializer_type_mismatch_with_target_and_value_details() {
         Some("Bool")
     );
 }
+
+#[test]
+fn declaration_int_context_reports_targeted_guidance_for_regular_division() {
+    let error = parse_single_file_ast_error("result Int = 5 / 2\n");
+
+    assert_eq!(error.error_type, ErrorType::Type);
+    assert!(
+        error
+            .msg
+            .contains("Declaration 'result' has incompatible initializer type"),
+        "{}",
+        error.msg
+    );
+    assert_eq!(
+        error
+            .metadata
+            .get(&ErrorMetaDataKey::PrimarySuggestion)
+            .map(String::as_str),
+        Some(
+            "Regular division returns 'Float'. Use '//' for integer division. Use 'Int(...)' for an explicit conversion."
+        )
+    );
+}

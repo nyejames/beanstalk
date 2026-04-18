@@ -14,7 +14,7 @@ use proptest::prelude::*;
 ///
 /// Property 1: Binary Operator Mapping Correctness
 ///
-/// For any HIR binary operator (Add, Sub, Mul, Div, Mod, Eq, Ne, Lt, Le, Gt, Ge, And, Or),
+/// For any HIR binary operator (Add, Sub, Mul, Div, IntDiv, Mod, Eq, Ne, Lt, Le, Gt, Ge, And, Or),
 /// the operator mapper SHALL return the corresponding Exec IR binary operator with the same
 /// semantic meaning.
 #[test]
@@ -33,6 +33,7 @@ fn property_binary_operator_mapping_correctness() {
             HirBinOp::Sub => prop_assert_eq!(exec_op, ExecBinaryOperator::Subtract),
             HirBinOp::Mul => prop_assert_eq!(exec_op, ExecBinaryOperator::Multiply),
             HirBinOp::Div => prop_assert_eq!(exec_op, ExecBinaryOperator::Divide),
+            HirBinOp::IntDiv => prop_assert_eq!(exec_op, ExecBinaryOperator::IntDivide),
             HirBinOp::Mod => prop_assert_eq!(exec_op, ExecBinaryOperator::Modulo),
             HirBinOp::Eq => prop_assert_eq!(exec_op, ExecBinaryOperator::Equal),
             HirBinOp::Ne => prop_assert_eq!(exec_op, ExecBinaryOperator::NotEqual),
@@ -50,13 +51,14 @@ fn property_binary_operator_mapping_correctness() {
 /// Generator for supported HIR binary operators.
 ///
 /// This generates only the operators that are currently supported by the interpreter
-/// (excludes Root and Exponent which are not yet implemented).
+/// (excludes Exponent which is not yet implemented).
 fn any_supported_hir_binary_operator() -> impl Strategy<Value = HirBinOp> {
     prop_oneof![
         Just(HirBinOp::Add),
         Just(HirBinOp::Sub),
         Just(HirBinOp::Mul),
         Just(HirBinOp::Div),
+        Just(HirBinOp::IntDiv),
         Just(HirBinOp::Mod),
         Just(HirBinOp::Eq),
         Just(HirBinOp::Ne),
@@ -593,6 +595,7 @@ fn property_binary_operation_lowering_structure() {
                 HirBinOp::Sub => ExecBinaryOperator::Subtract,
                 HirBinOp::Mul => ExecBinaryOperator::Multiply,
                 HirBinOp::Div => ExecBinaryOperator::Divide,
+                HirBinOp::IntDiv => ExecBinaryOperator::IntDivide,
                 HirBinOp::Mod => ExecBinaryOperator::Modulo,
                 HirBinOp::Eq => ExecBinaryOperator::Equal,
                 HirBinOp::Ne => ExecBinaryOperator::NotEqual,

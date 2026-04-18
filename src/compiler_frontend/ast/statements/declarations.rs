@@ -27,7 +27,8 @@ use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable}
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, Token, TokenKind};
 use crate::compiler_frontend::type_coercion::compatibility::is_declaration_compatible;
 use crate::compiler_frontend::type_coercion::diagnostics::{
-    expected_found_clause, offending_value_clause,
+    expected_found_clause, offending_value_clause, regular_division_int_context_guidance,
+    should_report_regular_division_int_context,
 };
 use crate::compiler_frontend::type_coercion::numeric::coerce_expression_to_declared_type;
 use crate::compiler_frontend::type_coercion::parse_context::parse_expectation_for_target_type;
@@ -236,6 +237,15 @@ pub fn resolve_declaration_syntax(
                 && !is_declaration_compatible(&declared_type, &expr.data_type)
             {
                 let declaration_name = full_name.name_str(string_table).unwrap_or("<value>");
+                let suggestion = if should_report_regular_division_int_context(
+                    &declared_type,
+                    &expr.data_type,
+                    &expr,
+                ) {
+                    regular_division_int_context_guidance()
+                } else {
+                    "Update the initializer so it matches the declared variable type, or cast explicitly"
+                };
                 return_type_error!(
                     format!(
                         "Declaration '{}' has incompatible initializer type. {} {}",
@@ -248,7 +258,7 @@ pub fn resolve_declaration_syntax(
                         CompilationStage => "Expression Evaluation",
                         ExpectedType => declared_type.display_with_table(string_table),
                         FoundType => expr.data_type.display_with_table(string_table),
-                        PrimarySuggestion => "Update the initializer so it matches the declared variable type, or cast explicitly",
+                        PrimarySuggestion => suggestion,
                     }
                 );
             }

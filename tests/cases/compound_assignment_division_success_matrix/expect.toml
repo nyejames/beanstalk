@@ -1,0 +1,13 @@
+[backends.html]
+mode = "success"
+warnings = "forbid"
+
+[[backends.html.artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain = [
+  "__bs_binding(\" count=\")",
+  "__bs_binding(\", ratio=\")",
+  "Math.trunc(__lhs / __rhs);",
+  "Integer division by zero",
+]

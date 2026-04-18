@@ -144,6 +144,7 @@ pub(crate) enum ExecBinaryOperator {
     Subtract,
     Multiply,
     Divide,
+    IntDivide,
     Modulo,
     Equal,
     NotEqual,

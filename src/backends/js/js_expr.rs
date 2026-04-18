@@ -253,8 +253,10 @@ impl<'hir> JsEmitter<'hir> {
             HirBinOp::And => "&&",
             HirBinOp::Or => "||",
             HirBinOp::Exponent => "**",
-            HirBinOp::Root => {
-                return Ok(format!("Math.pow({right}, 1 / {left})"));
+            HirBinOp::IntDiv => {
+                return Ok(format!(
+                    "(() => {{ const __lhs = {left}; const __rhs = {right}; if (__rhs === 0) {{ throw new Error(\"Integer division by zero\"); }} return Math.trunc(__lhs / __rhs); }})()"
+                ));
             }
         };
 

@@ -32,6 +32,19 @@ pub(crate) fn argument_conversion_hint(expected: &DataType, found: &DataType) ->
     }
 }
 
+pub(crate) fn should_report_regular_division_int_context(
+    expected: &DataType,
+    found: &DataType,
+    expression: &Expression,
+) -> bool {
+    matches!((expected, found), (DataType::Int, DataType::Float))
+        && expression.contains_regular_division
+}
+
+pub(crate) fn regular_division_int_context_guidance() -> &'static str {
+    "Regular division returns 'Float'. Use '//' for integer division. Use 'Int(...)' for an explicit conversion."
+}
+
 /// Renders a compact user-facing value snippet for type diagnostics.
 ///
 /// WHAT: extracts short literal/reference-first previews from expressions.

@@ -23,8 +23,8 @@ impl<'a> HirBuilder<'a> {
             Operator::Subtract => Ok(HirBinOp::Sub),
             Operator::Multiply => Ok(HirBinOp::Mul),
             Operator::Divide => Ok(HirBinOp::Div),
+            Operator::IntDivide => Ok(HirBinOp::IntDiv),
             Operator::Modulus => Ok(HirBinOp::Mod),
-            Operator::Root => Ok(HirBinOp::Root),
             Operator::Exponent => Ok(HirBinOp::Exponent),
             Operator::And => Ok(HirBinOp::And),
             Operator::Or => Ok(HirBinOp::Or),
@@ -84,13 +84,7 @@ impl<'a> HirBuilder<'a> {
             | HirBinOp::And
             | HirBinOp::Or => self.intern_type_kind(HirTypeKind::Bool),
 
-            HirBinOp::Add
-            | HirBinOp::Sub
-            | HirBinOp::Mul
-            | HirBinOp::Div
-            | HirBinOp::Mod
-            | HirBinOp::Root
-            | HirBinOp::Exponent => {
+            HirBinOp::Add | HirBinOp::Sub | HirBinOp::Mul | HirBinOp::Mod | HirBinOp::Exponent => {
                 let left_kind = self.type_context.get(left).kind.clone();
                 let right_kind = self.type_context.get(right).kind.clone();
 
@@ -110,6 +104,21 @@ impl<'a> HirBuilder<'a> {
                     left
                 }
             }
+
+            HirBinOp::Div => {
+                let left_kind = self.type_context.get(left).kind.clone();
+                let right_kind = self.type_context.get(right).kind.clone();
+
+                if matches!(left_kind, HirTypeKind::Decimal)
+                    || matches!(right_kind, HirTypeKind::Decimal)
+                {
+                    self.intern_type_kind(HirTypeKind::Decimal)
+                } else {
+                    self.intern_type_kind(HirTypeKind::Float)
+                }
+            }
+
+            HirBinOp::IntDiv => self.intern_type_kind(HirTypeKind::Int),
         }
     }
 

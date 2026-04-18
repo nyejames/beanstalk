@@ -8,17 +8,17 @@
 use super::test_support::{
     assert_value_is_bool, assert_value_is_char, assert_value_is_float, assert_value_is_int,
     assert_value_is_unit, bool_expression, build_manual_exec_program_returning_string,
-    build_module, build_type_context, copy_local_expression, int_expression, load_local_expression,
-    local, lower_and_execute_start, lower_and_execute_start_with_runtime, statement,
-    unit_expression,
+    build_module, build_type_context, copy_local_expression, expression, int_expression,
+    load_local_expression, local, lower_and_execute_start, lower_and_execute_start_with_runtime,
+    statement, unit_expression,
 };
 use crate::backends::rust_interpreter::heap::HeapObject;
 use crate::backends::rust_interpreter::request::InterpreterExecutionPolicy;
 use crate::backends::rust_interpreter::runtime::RuntimeEngine;
 use crate::backends::rust_interpreter::value::Value;
 use crate::compiler_frontend::hir::hir_nodes::{
-    BlockId, FunctionId, HirBlock, HirFunction, HirFunctionOrigin, HirPlace, HirStatementKind,
-    HirTerminator, LocalId, RegionId,
+    BlockId, FunctionId, HirBinOp, HirBlock, HirExpressionKind, HirFunction, HirFunctionOrigin,
+    HirPlace, HirStatementKind, HirTerminator, LocalId, RegionId, ValueKind,
 };
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
@@ -226,6 +226,150 @@ fn executes_return_unit_from_start() {
 
     let value = lower_and_execute_start(&module);
     assert_value_is_unit(&value);
+}
+
+#[test]
+fn executes_int_division_as_real_division_returning_float() {
+    let mut string_table = StringTable::new();
+    let (type_context, types) = build_type_context();
+    let region = RegionId(0);
+
+    let divide_expr = expression(
+        1,
+        HirExpressionKind::BinOp {
+            left: Box::new(int_expression(2, 5, types.int, region)),
+            op: HirBinOp::Div,
+            right: Box::new(int_expression(3, 2, types.int, region)),
+        },
+        types.float,
+        region,
+        ValueKind::RValue,
+    );
+
+    let block = HirBlock {
+        id: BlockId(0),
+        region,
+        locals: vec![],
+        statements: vec![],
+        terminator: HirTerminator::Return(divide_expr),
+    };
+
+    let function = HirFunction {
+        id: FunctionId(0),
+        entry: BlockId(0),
+        params: vec![],
+        return_type: types.float,
+        return_aliases: vec![],
+    };
+
+    let path = InternedPath::from_single_str("start", &mut string_table);
+    let module = build_module(
+        &mut string_table,
+        vec![(function, path, HirFunctionOrigin::EntryStart)],
+        vec![block],
+        type_context,
+        FunctionId(0),
+    );
+
+    let value = lower_and_execute_start(&module);
+    assert_value_is_float(&value, 2.5);
+}
+
+#[test]
+fn executes_real_division_by_zero_without_trapping() {
+    let mut string_table = StringTable::new();
+    let (type_context, types) = build_type_context();
+    let region = RegionId(0);
+
+    let divide_expr = expression(
+        1,
+        HirExpressionKind::BinOp {
+            left: Box::new(int_expression(2, 5, types.int, region)),
+            op: HirBinOp::Div,
+            right: Box::new(int_expression(3, 0, types.int, region)),
+        },
+        types.float,
+        region,
+        ValueKind::RValue,
+    );
+
+    let block = HirBlock {
+        id: BlockId(0),
+        region,
+        locals: vec![],
+        statements: vec![],
+        terminator: HirTerminator::Return(divide_expr),
+    };
+
+    let function = HirFunction {
+        id: FunctionId(0),
+        entry: BlockId(0),
+        params: vec![],
+        return_type: types.float,
+        return_aliases: vec![],
+    };
+
+    let path = InternedPath::from_single_str("start", &mut string_table);
+    let module = build_module(
+        &mut string_table,
+        vec![(function, path, HirFunctionOrigin::EntryStart)],
+        vec![block],
+        type_context,
+        FunctionId(0),
+    );
+
+    let value = lower_and_execute_start(&module);
+    match value {
+        Value::Float(v) => assert!(v.is_infinite() && v.is_sign_positive()),
+        other => panic!("expected positive infinity float result, got {other:?}"),
+    }
+}
+
+#[test]
+fn executes_integer_division_operator_with_truncation_toward_zero() {
+    let mut string_table = StringTable::new();
+    let (type_context, types) = build_type_context();
+    let region = RegionId(0);
+
+    let divide_expr = expression(
+        1,
+        HirExpressionKind::BinOp {
+            left: Box::new(int_expression(2, -5, types.int, region)),
+            op: HirBinOp::IntDiv,
+            right: Box::new(int_expression(3, 2, types.int, region)),
+        },
+        types.int,
+        region,
+        ValueKind::RValue,
+    );
+
+    let block = HirBlock {
+        id: BlockId(0),
+        region,
+        locals: vec![],
+        statements: vec![],
+        terminator: HirTerminator::Return(divide_expr),
+    };
+
+    let function = HirFunction {
+        id: FunctionId(0),
+        entry: BlockId(0),
+        params: vec![],
+        return_type: types.int,
+        return_aliases: vec![],
+    };
+
+    let path = InternedPath::from_single_str("start", &mut string_table);
+    let module = build_module(
+        &mut string_table,
+        vec![(function, path, HirFunctionOrigin::EntryStart)],
+        vec![block],
+        type_context,
+        FunctionId(0),
+    );
+
+    let value = lower_and_execute_start(&module);
+    assert_value_is_int(&value, -2);
 }
 
 // ============================================================

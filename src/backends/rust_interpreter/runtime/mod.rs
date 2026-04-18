@@ -249,6 +249,21 @@ impl RuntimeEngine {
             },
 
             ExecBinaryOperator::Divide => match (left_value, right_value) {
+                (Value::Int(l), Value::Int(r)) => Value::Float(l as f64 / r as f64),
+                (Value::Int(l), Value::Float(r)) => Value::Float(l as f64 / r),
+                (Value::Float(l), Value::Int(r)) => Value::Float(l / r as f64),
+                (Value::Float(l), Value::Float(r)) => Value::Float(l / r),
+                (l, r) => {
+                    return Err(InterpreterBackendError::Execution {
+                        message: format!(
+                            "Type mismatch in Divide operation: expected Int or Float operands, found {:?} and {:?}",
+                            l, r
+                        ),
+                    });
+                }
+            },
+
+            ExecBinaryOperator::IntDivide => match (left_value, right_value) {
                 (Value::Int(l), Value::Int(r)) => {
                     if r == 0 {
                         return Err(InterpreterBackendError::Execution {
@@ -257,18 +272,10 @@ impl RuntimeEngine {
                     }
                     Value::Int(l / r)
                 }
-                (Value::Float(l), Value::Float(r)) => {
-                    if r == 0.0 {
-                        return Err(InterpreterBackendError::Execution {
-                            message: "Division by zero".to_owned(),
-                        });
-                    }
-                    Value::Float(l / r)
-                }
                 (l, r) => {
                     return Err(InterpreterBackendError::Execution {
                         message: format!(
-                            "Type mismatch in Divide operation: expected Int or Float operands, found {:?} and {:?}",
+                            "Type mismatch in IntDivide operation: expected Int operands, found {:?} and {:?}",
                             l, r
                         ),
                     });

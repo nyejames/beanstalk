@@ -73,11 +73,15 @@ pub(super) fn invalid_operator_types(
         | Operator::Multiply
         | Operator::Divide
         | Operator::Modulus
-        | Operator::Exponent
-        | Operator::Root => (
+        | Operator::Exponent => (
             "Numeric operands (Int, Float, or Decimal). '+' also supports String + String",
             "Use compatible numeric operands or cast explicitly before this operation",
             Some(NUMERIC_MIX_HINT),
+        ),
+        Operator::IntDivide => (
+            "Int and Int",
+            "Use integer operands with '//' or switch to '/' for real division",
+            None,
         ),
         Operator::Range => (
             "Int and Int",

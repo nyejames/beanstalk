@@ -820,7 +820,7 @@ impl Display for HirBinOp {
             HirBinOp::Ge => write!(f, ">="),
             HirBinOp::And => write!(f, "&&"),
             HirBinOp::Or => write!(f, "||"),
-            HirBinOp::Root => write!(f, "root"),
+            HirBinOp::IntDiv => write!(f, "//"),
             HirBinOp::Exponent => write!(f, "^"),
         }
     }

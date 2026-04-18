@@ -42,7 +42,7 @@ use crate::compiler_frontend::analysis::borrow_checker::{
 };
 use crate::compiler_frontend::hir::hir_datatypes::{HirType, HirTypeKind, TypeContext, TypeId};
 use crate::compiler_frontend::hir::hir_nodes::{
-    BlockId, FieldId, FunctionId, HirBlock, HirExpression, HirExpressionKind, HirField,
+    BlockId, FieldId, FunctionId, HirBinOp, HirBlock, HirExpression, HirExpressionKind, HirField,
     HirFunction, HirLocal, HirMatchArm, HirModule, HirNodeId, HirPattern, HirPlace, HirRegion,
     HirStatement, HirStatementKind, HirStruct, HirTerminator, LocalId, OptionVariant, RegionId,
     StructId, ValueKind,
@@ -561,6 +561,115 @@ fn local_slot_assignment_emits_assign_value() {
             .source
             .contains(&format!("__bs_assign_value({}, 42);", count_name)),
         "assigning an integer to a local must emit __bs_assign_value"
+    );
+}
+
+#[test]
+fn integer_division_binop_emits_zero_checked_truncation_path() {
+    let mut string_table = StringTable::new();
+    let (type_context, types) = build_type_context();
+    let region = RegionId(0);
+
+    let assign_lhs = statement(
+        1,
+        HirStatementKind::Assign {
+            target: HirPlace::Local(LocalId(0)),
+            value: int_expression(1, 10, types.int, region),
+        },
+        1,
+    );
+    let assign_rhs = statement(
+        2,
+        HirStatementKind::Assign {
+            target: HirPlace::Local(LocalId(1)),
+            value: int_expression(2, 3, types.int, region),
+        },
+        2,
+    );
+    let int_div_expr = expression(
+        3,
+        HirExpressionKind::BinOp {
+            left: Box::new(expression(
+                4,
+                HirExpressionKind::Load(HirPlace::Local(LocalId(0))),
+                types.int,
+                region,
+                ValueKind::Place,
+            )),
+            op: HirBinOp::IntDiv,
+            right: Box::new(expression(
+                5,
+                HirExpressionKind::Load(HirPlace::Local(LocalId(1))),
+                types.int,
+                region,
+                ValueKind::Place,
+            )),
+        },
+        types.int,
+        region,
+        ValueKind::RValue,
+    );
+    let assign_result = statement(
+        3,
+        HirStatementKind::Assign {
+            target: HirPlace::Local(LocalId(2)),
+            value: int_div_expr,
+        },
+        3,
+    );
+
+    let block = HirBlock {
+        id: BlockId(0),
+        region,
+        locals: vec![
+            local(0, types.int, region),
+            local(1, types.int, region),
+            local(2, types.int, region),
+        ],
+        statements: vec![assign_lhs, assign_rhs, assign_result],
+        terminator: HirTerminator::Return(unit_expression(6, types.unit, region)),
+    };
+
+    let function = HirFunction {
+        id: FunctionId(0),
+        entry: BlockId(0),
+        params: vec![],
+        return_type: types.unit,
+        return_aliases: vec![],
+    };
+
+    let module = build_module(
+        &mut string_table,
+        "main",
+        vec![block],
+        function,
+        &[
+            (LocalId(0), "lhs"),
+            (LocalId(1), "rhs"),
+            (LocalId(2), "result"),
+        ],
+        type_context,
+    );
+
+    let output = lower_hir_to_js(
+        &module,
+        &crate::compiler_frontend::analysis::borrow_checker::BorrowCheckReport::default(),
+        &string_table,
+        default_config(),
+    )
+    .expect("JS lowering should succeed");
+
+    assert!(
+        output.source.contains("Math.trunc("),
+        "integer division should use truncation path"
+    );
+    assert!(
+        output.source.contains("Integer division by zero"),
+        "integer division path should include explicit zero trap"
+    );
+    assert!(
+        output.source.contains("__rhs === 0"),
+        "integer division path should branch on zero divisor"
     );
 }
 
