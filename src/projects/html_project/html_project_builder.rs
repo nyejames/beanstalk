@@ -3,6 +3,7 @@
 // WHAT: coordinates module output-path resolution, homepage checks, and backend selection.
 // WHY: project builders own artifact assembly policy while compiler backends stay generic.
 use crate::build_system::build::{BackendBuilder, CleanupPolicy, Module, OutputFile, Project};
+use crate::build_system::utils::file_error_messages;
 use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages, ErrorType};
 use crate::compiler_frontend::style_directives::StyleDirectiveSpec;
@@ -276,14 +277,6 @@ fn tracked_asset_conflicts_with_existing_output_error(
         ),
         string_table,
     )
-}
-
-fn file_error_messages(
-    path: &Path,
-    msg: impl Into<String>,
-    string_table: &StringTable,
-) -> CompilerMessages {
-    CompilerMessages::file_error(path, msg, string_table)
 }
 
 struct CompiledHtmlModuleArtifacts {

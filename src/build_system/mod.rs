@@ -7,3 +7,4 @@ pub(crate) mod build;
 pub(crate) mod create_project_modules;
 pub(crate) mod output_cleanup;
 pub(crate) mod project_config;
+pub(crate) mod utils;

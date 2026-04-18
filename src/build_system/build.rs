@@ -10,6 +10,7 @@ use crate::build_system::output_cleanup::{
     finalize_output_cleanup, prepare_output_cleanup, validate_relative_output_path,
 };
 use crate::build_system::project_config::load_project_config;
+use crate::build_system::utils::{file_error_messages, should_skip_unchanged_write};
 use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::analysis::borrow_checker::BorrowCheckReport;
 use crate::compiler_frontend::basic_utility_functions::check_if_valid_path;
@@ -432,29 +433,6 @@ fn write_bytes_output(
             string_table,
         )
     })
-}
-
-fn should_skip_unchanged_write(
-    destination: &Path,
-    next_bytes: &[u8],
-    write_mode: WriteMode,
-) -> bool {
-    if write_mode != WriteMode::SkipUnchanged {
-        return false;
-    }
-
-    match fs::read(destination) {
-        Ok(existing_bytes) => existing_bytes == next_bytes,
-        Err(_) => false,
-    }
-}
-
-fn file_error_messages(
-    path: &Path,
-    msg: impl Into<String>,
-    string_table: &StringTable,
-) -> CompilerMessages {
-    CompilerMessages::file_error(path, msg, string_table)
 }
 
 #[cfg(test)]

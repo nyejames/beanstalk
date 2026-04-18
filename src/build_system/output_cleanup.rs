@@ -6,6 +6,7 @@
 //! policy remains isolated behind one safety-first module.
 
 use crate::build_system::build::WriteMode;
+use crate::build_system::utils::{file_error_messages, should_skip_unchanged_write};
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use saying::say;
@@ -402,17 +403,6 @@ pub(crate) fn write_build_manifest(
     })
 }
 
-fn should_skip_unchanged_write(path: &Path, next_bytes: &[u8], write_mode: WriteMode) -> bool {
-    if write_mode != WriteMode::SkipUnchanged {
-        return false;
-    }
-
-    match fs::read(path) {
-        Ok(existing_bytes) => existing_bytes == next_bytes,
-        Err(_) => false,
-    }
-}
-
 /// Remove stale managed files tracked by the previous manifest.
 ///
 /// WHAT: deletes stale manifest-tracked files after revalidating each relative path for safety.
@@ -576,14 +566,6 @@ fn emit_limited_safe_mode_warning(reason: &ManifestLimitedSafeModeReason) {
         "Warning: full manifest-based stale cleanup was unavailable because {}. Cleanup ran in limited safe mode; stale artifacts were preserved intentionally until a valid v2 manifest is available.",
         reason.describe()
     ));
-}
-
-fn file_error_messages(
-    path: &Path,
-    msg: impl Into<String>,
-    string_table: &StringTable,
-) -> CompilerMessages {
-    CompilerMessages::file_error(path, msg, string_table)
 }
 
 fn is_safe_relative_output_path(relative_output_path: &Path) -> bool {

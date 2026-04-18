@@ -3,6 +3,7 @@
 //! WHAT: resolves the configured entry root and derives homepage expectations for directory builds.
 //! WHY: the HTML project builder should focus on artifact orchestration, not filesystem policy.
 
+use crate::build_system::utils::file_error_messages;
 use crate::compiler_frontend::compiler_errors::{
     CompilerError, CompilerMessages, ErrorMetaDataKey, ErrorType,
 };
@@ -113,10 +114,4 @@ fn missing_homepage_error(
     CompilerMessages::from_error(error, error_string_table)
 }
 
-fn file_error_messages(
-    path: &Path,
-    msg: impl Into<String>,
-    string_table: &StringTable,
-) -> CompilerMessages {
-    CompilerMessages::file_error(path, msg, string_table)
-}
+
