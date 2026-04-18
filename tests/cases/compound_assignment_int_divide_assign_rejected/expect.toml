@@ -1,0 +1,8 @@
+[backends.html]
+mode = "failure"
+warnings = "forbid"
+error_type = "Type"
+message_contains = [
+  "Compound assignment '/=' to 'count' has incorrect value type",
+  "Expected 'Int', but found 'Float'",
+]

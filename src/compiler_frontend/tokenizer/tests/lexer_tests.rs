@@ -73,6 +73,39 @@ fn find_token_index(tokens: &[Token], predicate: impl Fn(&TokenKind) -> bool) ->
 }
 
 #[test]
+fn tokenizes_double_slash_as_integer_division_operator() {
+    let (file_tokens, _string_table) = tokenize_source("value = 5 // 2\n");
+
+    assert!(
+        file_tokens
+            .tokens
+            .iter()
+            .any(|token| matches!(token.kind, TokenKind::IntDivide)),
+        "expected '//' to tokenize as IntDivide"
+    );
+    assert!(
+        !file_tokens
+            .tokens
+            .iter()
+            .any(|token| matches!(token.kind, TokenKind::DivideAssign)),
+        "integer division token should not be confused with '/='"
+    );
+}
+
+#[test]
+fn tokenizes_double_slash_equals_as_integer_division_assignment_operator() {
+    let (file_tokens, _string_table) = tokenize_source("value ~= 10\nvalue //= 3\n");
+
+    assert!(
+        file_tokens
+            .tokens
+            .iter()
+            .any(|token| matches!(token.kind, TokenKind::IntDivideAssign)),
+        "expected '//=' to tokenize as IntDivideAssign"
+    );
+}
+
+#[test]
 fn tokenizes_reserved_trait_keywords_as_reserved_tokens() {
     let (file_tokens, _string_table) = tokenize_source("must This\n");
 

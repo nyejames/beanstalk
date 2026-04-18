@@ -1,5 +1,6 @@
 use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
+use crate::compiler_frontend::ast::expressions::eval_expression::evaluate_expression;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, Operator};
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
 use crate::compiler_frontend::ast::field_access::parse_field_access;
@@ -11,7 +12,8 @@ use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::compiler_frontend::type_coercion::compatibility::is_declaration_compatible;
 use crate::compiler_frontend::type_coercion::diagnostics::{
-    expected_found_clause, offending_value_clause,
+    expected_found_clause, offending_value_clause, regular_division_int_context_guidance,
+    should_report_regular_division_int_context,
 };
 use crate::compiler_frontend::type_coercion::numeric::coerce_expression_to_declared_type;
 use crate::compiler_frontend::type_coercion::parse_context::parse_expectation_for_target_type;
@@ -89,6 +91,15 @@ fn validate_assignment_value_type(
     let target_name = assignment_target_name(target, string_table);
     let mismatch_clause =
         expected_found_clause(expected_type, &actual_value.data_type, string_table);
+    let suggestion = if should_report_regular_division_int_context(
+        expected_type,
+        &actual_value.data_type,
+        actual_value,
+    ) {
+        regular_division_int_context_guidance()
+    } else {
+        "Use a value whose type matches the assignment target, or cast explicitly before assignment"
+    };
     return_type_error!(
         format!(
             "{} to {} has incorrect value type. {} {}",
@@ -102,9 +113,64 @@ fn validate_assignment_value_type(
             CompilationStage => "Expression Parsing",
             ExpectedType => expected_type.display_with_table(string_table),
             FoundType => actual_value.data_type.display_with_table(string_table),
-            PrimarySuggestion => "Use a value whose type matches the assignment target, or cast explicitly before assignment",
+            PrimarySuggestion => suggestion,
         }
     )
+}
+
+fn compound_assignment_operator(token_kind: &TokenKind) -> Option<(Operator, &'static str)> {
+    match token_kind {
+        TokenKind::AddAssign => Some((Operator::Add, "Compound assignment '+='")),
+        TokenKind::SubtractAssign => Some((Operator::Subtract, "Compound assignment '-='")),
+        TokenKind::MultiplyAssign => Some((Operator::Multiply, "Compound assignment '*='")),
+        TokenKind::DivideAssign => Some((Operator::Divide, "Compound assignment '/='")),
+        TokenKind::IntDivideAssign => Some((Operator::IntDivide, "Compound assignment '//='")),
+        _ => None,
+    }
+}
+
+fn evaluate_compound_assignment_value(
+    token_stream: &mut FileTokens,
+    context: &ScopeContext,
+    variable_arg: &Declaration,
+    target: &AstNode,
+    target_type: &DataType,
+    compound_assignment: (Operator, &str),
+    string_table: &mut StringTable,
+) -> Result<Expression, CompilerError> {
+    let (operator, assignment_label) = compound_assignment;
+    let location = target.location.clone();
+    let mut expr_type = DataType::Inferred;
+    let rhs = create_expression(
+        token_stream,
+        context,
+        &mut expr_type,
+        &variable_arg.value.ownership,
+        false,
+        string_table,
+    )?;
+
+    let rhs_node = AstNode {
+        kind: NodeKind::Rvalue(rhs),
+        location: location.clone(),
+        scope: context.scope.clone(),
+    };
+    let operator_node = AstNode {
+        kind: NodeKind::Operator(operator),
+        location,
+        scope: context.scope.clone(),
+    };
+    let mut inferred = DataType::Inferred;
+    let value = evaluate_expression(
+        context,
+        vec![target.clone(), rhs_node, operator_node],
+        &mut inferred,
+        &variable_arg.value.ownership,
+        string_table,
+    )?;
+
+    validate_assignment_value_type(target_type, &value, target, assignment_label, string_table)?;
+    Ok(value)
 }
 
 fn build_mutation_from_target(
@@ -194,187 +260,27 @@ fn build_mutation_from_target(
             coerce_expression_to_declared_type(rhs, &target_type)
         }
 
-        TokenKind::AddAssign => {
-            // Compound assignment: variable += value
+        compound_token => {
+            let Some((operator, label)) = compound_assignment_operator(compound_token) else {
+                return_syntax_error!(
+                    format!("Expected assignment operator after variable '{}', found '{:?}'", variable_arg.id.to_string(string_table), token_stream.current_token_kind()),
+                    location,
+                    {
+                        CompilationStage => "Expression Parsing",
+                        PrimarySuggestion => "Use '=', '+=', '-=', '*=', '/=', or '//=' for assignment",
+                    }
+                );
+            };
             token_stream.advance();
-
-            let mut expr_type = DataType::Inferred;
-            let rhs = create_expression(
+            evaluate_compound_assignment_value(
                 token_stream,
                 context,
-                &mut expr_type,
-                &variable_arg.value.ownership,
-                false,
-                string_table,
-            )?;
-            validate_assignment_value_type(
-                &target_type,
-                &rhs,
+                variable_arg,
                 &target,
-                "Compound assignment '+='",
-                string_table,
-            )?;
-            let add_value = coerce_expression_to_declared_type(rhs, &target_type);
-
-            // Create an addition expression in RPN order: variable, add_value, +
-            let variable_ref = target.clone();
-            let add_value_node = AstNode {
-                kind: NodeKind::Rvalue(add_value),
-                location: location.clone(),
-                scope: context.scope.clone(),
-            };
-            let add_op = AstNode {
-                kind: NodeKind::Operator(Operator::Add),
-                location: location.clone(),
-                scope: context.scope.clone(),
-            };
-
-            Expression::runtime(
-                vec![variable_ref, add_value_node, add_op],
-                target_type.to_owned(),
-                location.to_owned(),
-                variable_arg.value.ownership.to_owned(),
-            )
-        }
-
-        TokenKind::SubtractAssign => {
-            // Compound assignment: variable -= value
-            token_stream.advance();
-
-            let mut expr_type = DataType::Inferred;
-            let rhs = create_expression(
-                token_stream,
-                context,
-                &mut expr_type,
-                &variable_arg.value.ownership,
-                false,
-                string_table,
-            )?;
-            validate_assignment_value_type(
                 &target_type,
-                &rhs,
-                &target,
-                "Compound assignment '-='",
+                (operator, label),
                 string_table,
-            )?;
-            let subtract_value = coerce_expression_to_declared_type(rhs, &target_type);
-
-            // Create a subtraction expression in RPN order: variable, subtract_value, -
-            let variable_ref = target.clone();
-            let subtract_value_node = AstNode {
-                kind: NodeKind::Rvalue(subtract_value),
-                location: location.to_owned(),
-                scope: context.scope.clone(),
-            };
-            let subtract_op = AstNode {
-                kind: NodeKind::Operator(Operator::Subtract),
-                location: location.to_owned(),
-                scope: context.scope.clone(),
-            };
-
-            Expression::runtime(
-                vec![variable_ref, subtract_value_node, subtract_op],
-                target_type.to_owned(),
-                location.to_owned(),
-                variable_arg.value.ownership.to_owned(),
-            )
-        }
-
-        TokenKind::MultiplyAssign => {
-            // Compound assignment: variable *= value
-            token_stream.advance();
-
-            let mut expr_type = DataType::Inferred;
-            let rhs = create_expression(
-                token_stream,
-                context,
-                &mut expr_type,
-                &variable_arg.value.ownership,
-                false,
-                string_table,
-            )?;
-            validate_assignment_value_type(
-                &target_type,
-                &rhs,
-                &target,
-                "Compound assignment '*='",
-                string_table,
-            )?;
-            let multiply_value = coerce_expression_to_declared_type(rhs, &target_type);
-
-            // Create a multiplication expression in RPN order: variable, multiply_value, *
-            let variable_ref = target.clone();
-            let multiply_value_node = AstNode {
-                kind: NodeKind::Rvalue(multiply_value),
-                location: location.clone(),
-                scope: context.scope.clone(),
-            };
-            let multiply_op = AstNode {
-                kind: NodeKind::Operator(Operator::Multiply),
-                location: location.clone(),
-                scope: context.scope.clone(),
-            };
-
-            Expression::runtime(
-                vec![variable_ref, multiply_value_node, multiply_op],
-                target_type.to_owned(),
-                location.clone(),
-                variable_arg.value.ownership.to_owned(),
-            )
-        }
-
-        TokenKind::DivideAssign => {
-            // Compound assignment: variable /= value
-            token_stream.advance();
-
-            let mut expr_type = DataType::Inferred;
-            let rhs = create_expression(
-                token_stream,
-                context,
-                &mut expr_type,
-                &variable_arg.value.ownership,
-                false,
-                string_table,
-            )?;
-            validate_assignment_value_type(
-                &target_type,
-                &rhs,
-                &target,
-                "Compound assignment '/='",
-                string_table,
-            )?;
-            let divide_value = coerce_expression_to_declared_type(rhs, &target_type);
-
-            // Create a division expression in RPN order: variable, divide_value, /
-            let variable_ref = target.clone();
-            let divide_value_node = AstNode {
-                kind: NodeKind::Rvalue(divide_value),
-                location: location.clone(),
-                scope: context.scope.clone(),
-            };
-            let divide_op = AstNode {
-                kind: NodeKind::Operator(Operator::Divide),
-                location: location.clone(),
-                scope: context.scope.clone(),
-            };
-
-            Expression::runtime(
-                vec![variable_ref, divide_value_node, divide_op],
-                target_type.to_owned(),
-                location.clone(),
-                variable_arg.value.ownership.to_owned(),
-            )
-        }
-
-        _ => {
-            return_syntax_error!(
-                format!("Expected assignment operator after variable '{}', found '{:?}'", variable_arg.id.to_string(string_table), token_stream.current_token_kind()),
-                location,
-                {
-                    CompilationStage => "Expression Parsing",
-                    PrimarySuggestion => "Use '=', '+=', '-=', '*=', or '/=' for assignment",
-                }
-            );
+            )?
         }
     };
 

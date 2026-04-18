@@ -496,6 +496,97 @@ fn lowers_runtime_rpn_arithmetic_stack_correctly() {
 }
 
 #[test]
+fn runtime_division_subexpression_infers_float_type_in_hir() {
+    let mut string_table = StringTable::new();
+    let location = location(3);
+    let mut builder = setup_builder(&mut string_table);
+    let expected_float = builder
+        .lower_data_type(&DataType::Float, &location)
+        .expect("float type should lower in test context");
+
+    let nodes = vec![
+        rvalue_node(Expression::int(
+            5,
+            location.clone(),
+            Ownership::ImmutableOwned,
+        )),
+        rvalue_node(Expression::int(
+            2,
+            location.clone(),
+            Ownership::ImmutableOwned,
+        )),
+        operator_node(Operator::Divide, location.clone()),
+        rvalue_node(Expression::int(
+            1,
+            location.clone(),
+            Ownership::ImmutableOwned,
+        )),
+        operator_node(Operator::Add, location.clone()),
+    ];
+
+    let expr = Expression::runtime(
+        nodes,
+        DataType::Float,
+        location.clone(),
+        Ownership::MutableOwned,
+    );
+    let lowered = builder
+        .lower_expression(&expr)
+        .expect("runtime division lowering should succeed");
+
+    let HirExpressionKind::BinOp { left, op, .. } = &lowered.value.kind else {
+        panic!("expected outer addition binop");
+    };
+    assert!(matches!(op, HirBinOp::Add));
+    let HirExpressionKind::BinOp { op: inner_op, .. } = &left.kind else {
+        panic!("expected left operand to be division binop");
+    };
+    assert!(matches!(inner_op, HirBinOp::Div));
+    assert_eq!(left.ty, expected_float);
+    assert_eq!(lowered.value.ty, expected_float);
+}
+
+#[test]
+fn runtime_integer_division_lowers_to_hir_int_div_with_int_type() {
+    let mut string_table = StringTable::new();
+    let location = location(3);
+    let mut builder = setup_builder(&mut string_table);
+    let expected_int = builder
+        .lower_data_type(&DataType::Int, &location)
+        .expect("int type should lower in test context");
+
+    let nodes = vec![
+        rvalue_node(Expression::int(
+            5,
+            location.clone(),
+            Ownership::ImmutableOwned,
+        )),
+        rvalue_node(Expression::int(
+            2,
+            location.clone(),
+            Ownership::ImmutableOwned,
+        )),
+        operator_node(Operator::IntDivide, location.clone()),
+    ];
+
+    let expr = Expression::runtime(
+        nodes,
+        DataType::Int,
+        location.clone(),
+        Ownership::MutableOwned,
+    );
+    let lowered = builder
+        .lower_expression(&expr)
+        .expect("runtime integer division lowering should succeed");
+
+    let HirExpressionKind::BinOp { op, .. } = &lowered.value.kind else {
+        panic!("expected integer division binop");
+    };
+    assert!(matches!(op, HirBinOp::IntDiv));
+    assert_eq!(lowered.value.ty, expected_int);
+}
+
+#[test]
 fn lowers_unary_not_in_runtime_rpn() {
     let mut string_table = StringTable::new();
     let location = location(4);

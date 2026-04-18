@@ -1,0 +1,13 @@
+[backends.html]
+mode = "success"
+warnings = "forbid"
+
+[[backends.html.artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain = [
+  "__bs_binding(\" real=\")",
+  "__bs_binding(\", int=\")",
+  ", 2.5);",
+  ", 2);",
+]

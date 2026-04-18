@@ -391,7 +391,7 @@ pub fn get_token_kind(
         }
 
         // Mathematical operators
-        // must peak ahead to check for exponentiation (**) or roots (//) and assign variations
+        // must peak ahead to check for exponentiation (**) or integer division (//) and assign variations
         if current_char == '+' {
             if let Some(&next_char) = stream.peek()
                 && next_char == '='
@@ -423,9 +423,9 @@ pub fn get_token_kind(
                         && next_next_char == '='
                     {
                         stream.next();
-                        return_token!(TokenKind::RootAssign, stream);
+                        return_token!(TokenKind::IntDivideAssign, stream);
                     }
-                    return_token!(TokenKind::Root, stream);
+                    return_token!(TokenKind::IntDivide, stream);
                 }
 
                 if next_char == '=' {

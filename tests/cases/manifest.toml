@@ -1578,6 +1578,41 @@ id = "int_declaration_from_float_rejected"
 path = "int_declaration_from_float_rejected"
 tags = ["integration", "type-coercion"]
 
+[[case]]
+id = "integer_division_real_and_int_output"
+path = "integer_division_real_and_int_output"
+tags = ["integration", "language"]
+
+[[case]]
+id = "int_declaration_regular_division_rejected"
+path = "int_declaration_regular_division_rejected"
+tags = ["integration", "diagnostics", "type-coercion"]
+
+[[case]]
+id = "int_return_regular_division_rejected"
+path = "int_return_regular_division_rejected"
+tags = ["integration", "diagnostics", "type-coercion"]
+
+[[case]]
+id = "int_declaration_and_return_integer_division_success"
+path = "int_declaration_and_return_integer_division_success"
+tags = ["integration", "language"]
+
+[[case]]
+id = "compound_assignment_division_success_matrix"
+path = "compound_assignment_division_success_matrix"
+tags = ["integration", "language"]
+
+[[case]]
+id = "compound_assignment_int_divide_assign_rejected"
+path = "compound_assignment_int_divide_assign_rejected"
+tags = ["integration", "diagnostics"]
+
+[[case]]
+id = "invalid_integer_division_mixed_numeric_rejected"
+path = "invalid_integer_division_mixed_numeric_rejected"
+tags = ["integration", "diagnostics"]
+
 
 [[case]]
 id = "char_basic"

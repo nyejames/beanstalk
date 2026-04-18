@@ -1,0 +1,8 @@
+[backends.html]
+mode = "failure"
+warnings = "forbid"
+error_type = "Type"
+message_contains = [
+  "Return value 1 has incorrect type",
+  "Expected 'Int', but found 'Float'",
+]

@@ -214,9 +214,9 @@ import @styles/docs {navbar, title, section, palette, table, data, codeblock, co
     [table:
         [: [: Operator] [: Description]          [: Precedence] ]
         [data: [: ^]        [: Exponent]            [: 4] ]
-        [data: [: //]       [: Root]                [: 4] ]
         [data: [: *]        [: Multiplication]       [: 3] ]
         [data: [: /]        [: Division]             [: 3] ]
+        [data: [: //]       [: Integer Division]     [: 3] ]
         [data: [: %]          [: Modulo (truncated)]   [: 3] ]
         [data: [: %%]         [: Remainder (floored)]  [: 3] ]
         [data: [: +]          [: Sum]                  [: 2] ]

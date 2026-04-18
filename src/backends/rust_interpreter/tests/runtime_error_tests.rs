@@ -7,7 +7,7 @@
 
 use super::test_support::{
     build_module, build_simple_exec_program, build_type_context, exec_const_int, exec_const_string,
-    int_expression, lower_only_expect_error, statement, unit_expression, user_local,
+    expression, int_expression, lower_only_expect_error, statement, unit_expression, user_local,
 };
 use crate::backends::rust_interpreter::error::InterpreterBackendError;
 use crate::backends::rust_interpreter::exec_ir::{
@@ -18,8 +18,9 @@ use crate::backends::rust_interpreter::exec_ir::{
 use crate::backends::rust_interpreter::request::InterpreterExecutionPolicy;
 use crate::backends::rust_interpreter::runtime::RuntimeEngine;
 use crate::compiler_frontend::hir::hir_nodes::{
-    BlockId, FieldId, FunctionId, HirBlock, HirExpressionKind, HirFunction, HirFunctionOrigin,
-    HirMatchArm, HirPattern, HirPlace, HirStatementKind, HirTerminator, LocalId, RegionId,
+    BlockId, FieldId, FunctionId, HirBinOp, HirBlock, HirExpressionKind, HirFunction,
+    HirFunctionOrigin, HirMatchArm, HirPattern, HirPlace, HirStatementKind, HirTerminator, LocalId,
+    RegionId, ValueKind,
 };
 use crate::compiler_frontend::host_functions::CallTarget;
 use crate::compiler_frontend::interned_path::InternedPath;
@@ -568,6 +569,65 @@ fn runtime_rejects_copy_of_heap_backed_value() {
             assert!(
                 message.contains("heap-backed"),
                 "error should mention heap-backed copy, got: {message}"
+            );
+        }
+        other => panic!("unexpected error type: {:?}", other),
+    }
+}
+
+#[test]
+fn runtime_rejects_integer_division_by_zero() {
+    let mut string_table = StringTable::new();
+    let (type_context, types) = build_type_context();
+    let region = RegionId(0);
+
+    let divide_expr = expression(
+        1,
+        HirExpressionKind::BinOp {
+            left: Box::new(int_expression(2, 5, types.int, region)),
+            op: HirBinOp::IntDiv,
+            right: Box::new(int_expression(3, 0, types.int, region)),
+        },
+        types.int,
+        region,
+        ValueKind::RValue,
+    );
+
+    let block = HirBlock {
+        id: BlockId(0),
+        region,
+        locals: vec![],
+        statements: vec![],
+        terminator: HirTerminator::Return(divide_expr),
+    };
+    let function = HirFunction {
+        id: FunctionId(0),
+        entry: BlockId(0),
+        params: vec![],
+        return_type: types.int,
+        return_aliases: vec![],
+    };
+    let path = InternedPath::from_single_str("start", &mut string_table);
+    let module = build_module(
+        &mut string_table,
+        vec![(function, path, HirFunctionOrigin::EntryStart)],
+        vec![block],
+        type_context,
+        FunctionId(0),
+    );
+
+    let exec_program = super::test_support::lower_only(&module);
+    let mut runtime = RuntimeEngine::new(exec_program, InterpreterExecutionPolicy::NormalHeadless);
+    let result = runtime.execute_start();
+    assert!(
+        result.is_err(),
+        "integer division by zero should produce an execution error"
+    );
+    match result.unwrap_err() {
+        InterpreterBackendError::Execution { message } => {
+            assert!(
+                message.contains("Division by zero"),
+                "error should mention division by zero, got: {message}"
             );
         }
         other => panic!("unexpected error type: {:?}", other),

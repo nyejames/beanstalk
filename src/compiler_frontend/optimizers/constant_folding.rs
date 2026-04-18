@@ -360,7 +360,12 @@ impl Expression {
                     Operator::Add => ExpressionKind::Float(lhs_val + rhs_val),
                     Operator::Subtract => ExpressionKind::Float(lhs_val - rhs_val),
                     Operator::Multiply => ExpressionKind::Float(lhs_val * rhs_val),
-                    Operator::Divide => ExpressionKind::Float(lhs_val / rhs_val),
+                    Operator::Divide => {
+                        if *rhs_val == 0.0 {
+                            return_rule_error!("Can't divide by zero", self.location.to_owned())
+                        }
+                        ExpressionKind::Float(lhs_val / rhs_val)
+                    }
                     Operator::Modulus => ExpressionKind::Float(lhs_val % rhs_val),
                     Operator::Exponent => ExpressionKind::Float(lhs_val.powf(*rhs_val)),
 
@@ -387,7 +392,14 @@ impl Expression {
                     Operator::Subtract => ExpressionKind::Int(lhs_val - rhs_val),
                     Operator::Multiply => ExpressionKind::Int(lhs_val * rhs_val),
                     Operator::Divide => {
-                        // Handle division by zero and integer division
+                        // Handle division by zero.
+                        if *rhs_val == 0 {
+                            return_rule_error!("Can't divide by zero", self.location.to_owned())
+                        }
+
+                        ExpressionKind::Float(*lhs_val as f64 / *rhs_val as f64)
+                    }
+                    Operator::IntDivide => {
                         if *rhs_val == 0 {
                             return_rule_error!("Can't divide by zero", self.location.to_owned())
                         }
@@ -448,7 +460,12 @@ impl Expression {
                     Operator::Add => ExpressionKind::Float(lhs + rhs_val),
                     Operator::Subtract => ExpressionKind::Float(lhs - rhs_val),
                     Operator::Multiply => ExpressionKind::Float(lhs * rhs_val),
-                    Operator::Divide => ExpressionKind::Float(lhs / rhs_val),
+                    Operator::Divide => {
+                        if *rhs_val == 0.0 {
+                            return_rule_error!("Can't divide by zero", self.location.to_owned())
+                        }
+                        ExpressionKind::Float(lhs / rhs_val)
+                    }
                     Operator::Modulus => ExpressionKind::Float(lhs % rhs_val),
                     Operator::Exponent => ExpressionKind::Float(lhs.powf(*rhs_val)),
                     Operator::Equality => ExpressionKind::Bool(lhs == *rhs_val),
@@ -457,6 +474,12 @@ impl Expression {
                     Operator::GreaterThanOrEqual => ExpressionKind::Bool(lhs >= *rhs_val),
                     Operator::LessThan => ExpressionKind::Bool(lhs < *rhs_val),
                     Operator::LessThanOrEqual => ExpressionKind::Bool(lhs <= *rhs_val),
+                    Operator::IntDivide => {
+                        return_rule_error!(
+                            "Integer division operator '//' only supports Int and Int operands",
+                            self.location.to_owned()
+                        )
+                    }
                     _ => return_rule_error!(
                         format!("Can't perform operation {} on Int and Float", op.to_str()),
                         self.location.to_owned()
@@ -470,7 +493,12 @@ impl Expression {
                     Operator::Add => ExpressionKind::Float(lhs_val + rhs),
                     Operator::Subtract => ExpressionKind::Float(lhs_val - rhs),
                     Operator::Multiply => ExpressionKind::Float(lhs_val * rhs),
-                    Operator::Divide => ExpressionKind::Float(lhs_val / rhs),
+                    Operator::Divide => {
+                        if *rhs_val == 0 {
+                            return_rule_error!("Can't divide by zero", self.location.to_owned())
+                        }
+                        ExpressionKind::Float(lhs_val / rhs)
+                    }
                     Operator::Modulus => ExpressionKind::Float(lhs_val % rhs),
                     Operator::Exponent => ExpressionKind::Float(lhs_val.powf(rhs)),
                     Operator::Equality => ExpressionKind::Bool(*lhs_val == rhs),
@@ -479,6 +507,12 @@ impl Expression {
                     Operator::GreaterThanOrEqual => ExpressionKind::Bool(*lhs_val >= rhs),
                     Operator::LessThan => ExpressionKind::Bool(*lhs_val < rhs),
                     Operator::LessThanOrEqual => ExpressionKind::Bool(*lhs_val <= rhs),
+                    Operator::IntDivide => {
+                        return_rule_error!(
+                            "Integer division operator '//' only supports Int and Int operands",
+                            self.location.to_owned()
+                        )
+                    }
                     _ => return_rule_error!(
                         format!("Can't perform operation {} on Float and Int", op.to_str()),
                         self.location.to_owned()
@@ -527,6 +561,9 @@ impl Expression {
         } else {
             Ownership::ImmutableOwned
         };
+        let contains_regular_division = self.contains_regular_division
+            || rhs.contains_regular_division
+            || matches!(op, Operator::Divide);
 
         let result_type = match &kind {
             ExpressionKind::Int(_) => DataType::Int,
@@ -538,12 +575,10 @@ impl Expression {
             _ => self.data_type.to_owned(),
         };
 
-        Ok(Some(Expression::new(
-            kind,
-            self.location.to_owned(),
-            result_type,
-            ownership,
-        )))
+        Ok(Some(
+            Expression::new(kind, self.location.to_owned(), result_type, ownership)
+                .with_regular_division_provenance(contains_regular_division),
+        ))
     }
 }
 

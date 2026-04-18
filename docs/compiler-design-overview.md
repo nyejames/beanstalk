@@ -230,7 +230,9 @@ Generic expression evaluation determines the natural type of an expression and s
 - `type_coercion::numeric` applies explicit contextual promotions such as Int -> Float.
 - `type_coercion::string` owns what can become string content at template boundaries.
 - Declarations and returns may apply coercion after expression parsing; generic expression evaluation itself stays strict.
-- Int -> Float is supported in explicit declaration / return contexts
+- `/` is an operator-owned rule: regular division always returns real numeric results, including `Int / Int -> Float`.
+- `//` is a separate operator-owned integer-division rule: it requires `Int // Int` and returns `Int`.
+- Int -> Float is supported in explicit declaration / return contexts only.
 - function arguments and match patterns still require exact compatibility
 - Templates and template wrappers are accepted where string slices are expected because they lower to the same HIR/string representation
 - builtin casts like Float(x) / Int(x) remain explicit frontend-owned syntax

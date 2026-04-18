@@ -25,6 +25,12 @@ pub struct Expression {
     pub data_type: DataType,
     pub ownership: Ownership,
     pub location: SourceLocation,
+    /// Tracks whether this value was derived from regular division (`/`).
+    ///
+    /// WHY: explicit `Int` contexts should emit a targeted diagnostic when a
+    /// value comes from `/`, even when constant folding removed the original
+    /// operator node.
+    pub contains_regular_division: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -144,7 +150,13 @@ impl Expression {
             kind,
             location,
             ownership,
+            contains_regular_division: false,
         }
+    }
+
+    pub fn with_regular_division_provenance(mut self, contains: bool) -> Self {
+        self.contains_regular_division = contains;
+        self
     }
 
     /// Centralises scalar literal construction so literal factories stay structurally identical.
@@ -192,12 +204,14 @@ impl Expression {
         location: SourceLocation,
         ownership: Ownership,
     ) -> Self {
+        let contains_regular_division = expressions.iter().any(Self::node_has_regular_division);
         Self::new(
             ExpressionKind::Runtime(expressions),
             location,
             data_type,
             ownership,
         )
+        .with_regular_division_provenance(contains_regular_division)
     }
     pub fn int(value: i64, location: SourceLocation, ownership: Ownership) -> Self {
         Self::scalar_literal(
@@ -336,6 +350,7 @@ impl Expression {
         error_type: DataType,
         location: SourceLocation,
     ) -> Self {
+        let contains_regular_division = value.contains_regular_division;
         Self::new(
             ExpressionKind::BuiltinCast {
                 kind: BuiltinCastKind::Int,
@@ -348,6 +363,7 @@ impl Expression {
             },
             Ownership::ImmutableOwned,
         )
+        .with_regular_division_provenance(contains_regular_division)
     }
 
     pub fn builtin_float_cast(
@@ -355,6 +371,7 @@ impl Expression {
         error_type: DataType,
         location: SourceLocation,
     ) -> Self {
+        let contains_regular_division = value.contains_regular_division;
         Self::new(
             ExpressionKind::BuiltinCast {
                 kind: BuiltinCastKind::Float,
@@ -367,6 +384,7 @@ impl Expression {
             },
             Ownership::ImmutableOwned,
         )
+        .with_regular_division_provenance(contains_regular_division)
     }
 
     /// Build an explicit contextual coercion node.
@@ -379,6 +397,7 @@ impl Expression {
     pub fn coerced(value: Expression, to_type: DataType) -> Self {
         let location = value.location.clone();
         let ownership = value.ownership.to_owned();
+        let contains_regular_division = value.contains_regular_division;
         Self::new(
             ExpressionKind::Coerced {
                 value: Box::new(value),
@@ -388,6 +407,7 @@ impl Expression {
             to_type,
             ownership,
         )
+        .with_regular_division_provenance(contains_regular_division)
     }
 
     pub fn result_construct(
@@ -397,6 +417,7 @@ impl Expression {
         location: SourceLocation,
         ownership: Ownership,
     ) -> Self {
+        let contains_regular_division = value.contains_regular_division;
         Self::new(
             ExpressionKind::ResultConstruct {
                 variant,
@@ -406,6 +427,7 @@ impl Expression {
             data_type,
             ownership,
         )
+        .with_regular_division_provenance(contains_regular_division)
     }
 
     pub fn handled_result(
@@ -413,6 +435,7 @@ impl Expression {
         handling: ResultCallHandling,
         location: SourceLocation,
     ) -> Self {
+        let contains_regular_division = value.contains_regular_division;
         let result_type = value
             .data_type
             .result_ok_type()
@@ -427,6 +450,7 @@ impl Expression {
             result_type,
             Ownership::ImmutableOwned,
         )
+        .with_regular_division_provenance(contains_regular_division)
     }
 
     pub fn collection(
@@ -434,6 +458,7 @@ impl Expression {
         location: SourceLocation,
         ownership: Ownership,
     ) -> Self {
+        let contains_regular_division = items.iter().any(|item| item.contains_regular_division);
         let inner_type = items
             .first()
             .map(|item| item.data_type.to_owned())
@@ -445,6 +470,7 @@ impl Expression {
             DataType::Collection(Box::new(inner_type), ownership.to_owned()),
             ownership,
         )
+        .with_regular_division_provenance(contains_regular_division)
     }
     pub fn struct_instance(
         nominal_path: InternedPath,
@@ -453,6 +479,7 @@ impl Expression {
         ownership: Ownership,
         const_record: bool,
     ) -> Self {
+        let contains_regular_division = args.iter().any(|arg| arg.value.contains_regular_division);
         let struct_type = if const_record {
             DataType::const_struct_record(nominal_path, args.to_owned())
         } else {
@@ -464,6 +491,7 @@ impl Expression {
             struct_type,
             ownership,
         )
+        .with_regular_division_provenance(contains_regular_division)
     }
     pub fn struct_definition(
         args: Vec<Declaration>,
@@ -494,12 +522,15 @@ impl Expression {
         location: SourceLocation,
         ownership: Ownership,
     ) -> Self {
+        let contains_regular_division =
+            lower.contains_regular_division || upper.contains_regular_division;
         Self::new(
             ExpressionKind::Range(Box::new(lower), Box::new(upper)),
             location,
             DataType::Inferred,
             ownership,
         )
+        .with_regular_division_provenance(contains_regular_division)
     }
 
     pub fn copy(
@@ -603,6 +634,16 @@ impl Expression {
         match &self.data_type {
             DataType::Bool => true,
             DataType::Reference(inner) => matches!(inner.as_ref(), DataType::Bool),
+            _ => false,
+        }
+    }
+
+    fn node_has_regular_division(node: &AstNode) -> bool {
+        match &node.kind {
+            crate::compiler_frontend::ast::ast_nodes::NodeKind::Operator(Operator::Divide) => true,
+            crate::compiler_frontend::ast::ast_nodes::NodeKind::Rvalue(expr) => {
+                expr.contains_regular_division
+            }
             _ => false,
         }
     }
@@ -727,10 +768,8 @@ pub enum Operator {
     Subtract,
     Multiply,
     Divide,
+    IntDivide,
     Modulus,
-    // Remainder,
-    #[allow(dead_code)] // Planned: root operator for numeric extensions.
-    Root,
     Exponent,
 
     // Logical
@@ -755,8 +794,8 @@ impl Operator {
             | Operator::Subtract
             | Operator::Multiply
             | Operator::Divide
+            | Operator::IntDivide
             | Operator::Modulus
-            | Operator::Root
             | Operator::Exponent
             | Operator::And
             | Operator::Or
@@ -778,8 +817,8 @@ impl Operator {
             Operator::Subtract => "-",
             Operator::Multiply => "*",
             Operator::Divide => "/",
+            Operator::IntDivide => "//",
             Operator::Modulus => "%",
-            Operator::Root => "root",
             Operator::Exponent => "^",
             Operator::And => "and",
             Operator::Or => "or",

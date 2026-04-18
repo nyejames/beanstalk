@@ -453,6 +453,15 @@ pub(super) fn dispatch_expression_token(
             );
             Ok(ExpressionTokenStep::Advance)
         }
+        TokenKind::IntDivide => {
+            push_operator_node(
+                state.expression,
+                context,
+                token_stream.current_location(),
+                Operator::IntDivide,
+            );
+            Ok(ExpressionTokenStep::Advance)
+        }
         TokenKind::Exponent => {
             push_operator_node(
                 state.expression,

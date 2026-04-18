@@ -113,5 +113,3 @@ fn missing_homepage_error(
     );
     CompilerMessages::from_error(error, error_string_table)
 }
-
-

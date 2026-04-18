@@ -532,7 +532,7 @@ pub enum HirBinOp {
     Ge,
     And,
     Or,
-    Root,
+    IntDiv,
     Exponent,
 }
 

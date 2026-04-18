@@ -89,6 +89,7 @@ impl HostFunctionDef {
                         location: SourceLocation::default(),
                         data_type: parameter.language_type.clone(),
                         ownership: Ownership::ImmutableReference,
+                        contains_regular_division: false,
                     },
                 }
             })

@@ -16,6 +16,7 @@ pub(crate) fn map_binary_operator(hir_op: HirBinOp) -> Result<ExecBinaryOperator
         HirBinOp::Sub => Ok(ExecBinaryOperator::Subtract),
         HirBinOp::Mul => Ok(ExecBinaryOperator::Multiply),
         HirBinOp::Div => Ok(ExecBinaryOperator::Divide),
+        HirBinOp::IntDiv => Ok(ExecBinaryOperator::IntDivide),
         HirBinOp::Mod => Ok(ExecBinaryOperator::Modulo),
         HirBinOp::Eq => Ok(ExecBinaryOperator::Equal),
         HirBinOp::Ne => Ok(ExecBinaryOperator::NotEqual),
@@ -25,7 +26,7 @@ pub(crate) fn map_binary_operator(hir_op: HirBinOp) -> Result<ExecBinaryOperator
         HirBinOp::Ge => Ok(ExecBinaryOperator::GreaterThanOrEqual),
         HirBinOp::And => Ok(ExecBinaryOperator::And),
         HirBinOp::Or => Ok(ExecBinaryOperator::Or),
-        HirBinOp::Root | HirBinOp::Exponent => Err(CompilerError::compiler_error(format!(
+        HirBinOp::Exponent => Err(CompilerError::compiler_error(format!(
             "Binary operator {:?} is not yet supported by the interpreter",
             hir_op
         ))),

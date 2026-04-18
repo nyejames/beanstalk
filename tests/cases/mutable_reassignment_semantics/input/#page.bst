@@ -14,4 +14,4 @@ flag = true
 
 -- More complex mutations
 counter = counter - 5
-value = value / 4
+value = value // 4
