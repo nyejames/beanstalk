@@ -16,7 +16,6 @@ fn registers_builtin_error_manifest_with_canonical_symbols() {
     let manifest = register_builtin_error_types(&mut string_table);
 
     assert_eq!(manifest.declarations.len(), 4);
-    assert_eq!(manifest.reserved_symbol_paths.len(), 4);
     assert_eq!(manifest.visible_symbol_paths.len(), 4);
 
     let error_path =

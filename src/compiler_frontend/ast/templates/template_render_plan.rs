@@ -104,7 +104,6 @@ pub enum FormatterInputPiece {
 #[derive(Debug, Clone)]
 pub struct FormatterTextPiece {
     pub text: StringId,
-    #[allow(dead_code)] // Preserved for future formatter diagnostics and source mapping
     pub location: SourceLocation,
 }
 
@@ -166,10 +165,7 @@ impl TemplateRenderPlan {
     }
 
     /// Reconstructs a `TemplateContent` from this render plan.
-    /// Kept for future round-trip and debug tooling — not yet wired into the main pipeline.
-    #[allow(dead_code)] // Reserved for render-plan round-trip tests and future debug tooling
     pub fn rebuild_content(&self) -> TemplateContent {
-        use crate::compiler_frontend::ast::expressions::expression::Expression;
         use crate::compiler_frontend::ast::templates::template::{
             TemplateAtom, TemplateContent, TemplateSegment, TemplateSegmentOrigin,
         };

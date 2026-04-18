@@ -6,20 +6,32 @@
 //! (CompilerMessages)
 //! It will also enable printing out Hir structures for easy debugging also.
 
+#[cfg(any(test, feature = "show_hir"))]
 use crate::compiler_frontend::hir::hir_datatypes::{HirTypeKind, TypeContext, TypeId};
 use crate::compiler_frontend::hir::hir_nodes::{
-    BlockId, FieldId, FunctionId, HirBinOp, HirBlock, HirExpression, HirExpressionKind, HirField,
-    HirFunction, HirLocal, HirMatchArm, HirModule, HirNodeId, HirPattern, HirPlace, HirStatement,
-    HirStatementKind, HirStruct, HirTerminator, HirValueId, LocalId, OptionVariant, RegionId,
-    ResultVariant, StructId, ValueKind,
+    BlockId, FieldId, FunctionId, HirBinOp, HirNodeId, HirValueId, LocalId, OptionVariant,
+    RegionId, ResultVariant, StructId,
 };
+#[cfg(any(test, feature = "show_hir"))]
+use crate::compiler_frontend::hir::hir_nodes::{
+    HirBlock, HirExpression, HirExpressionKind, HirField, HirFunction, HirLocal, HirMatchArm,
+    HirModule, HirPattern, HirPlace, HirStatement, HirStatementKind, HirStruct, HirTerminator,
+    ValueKind,
+};
+#[cfg(any(test, feature = "show_hir"))]
 use crate::compiler_frontend::hir::hir_side_table::HirSideTable;
+#[cfg(any(test, feature = "show_hir"))]
 use crate::compiler_frontend::host_functions::CallTarget;
+#[cfg(any(test, feature = "show_hir"))]
 use crate::compiler_frontend::symbols::string_interning::StringTable;
-use std::fmt::{Display, Formatter, Result as FmtResult, Write as _};
+use std::fmt::{Display, Formatter, Result as FmtResult};
+#[cfg(any(test, feature = "show_hir"))]
+use std::fmt::Write as _;
 
+#[cfg(any(test, feature = "show_hir"))]
 const MAX_TYPE_RENDER_DEPTH: usize = 24;
 
+#[cfg(any(test, feature = "show_hir"))]
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct HirDisplayOptions {
     pub include_ids: bool,
@@ -29,6 +41,7 @@ pub(crate) struct HirDisplayOptions {
     pub multiline_match_arms: bool,
 }
 
+#[cfg(any(test, feature = "show_hir"))]
 impl Default for HirDisplayOptions {
     fn default() -> Self {
         Self {
@@ -41,6 +54,7 @@ impl Default for HirDisplayOptions {
     }
 }
 
+#[cfg(any(test, feature = "show_hir"))]
 #[derive(Clone, Copy)]
 pub(crate) struct HirDisplayContext<'a> {
     string_table: &'a StringTable,
@@ -49,6 +63,7 @@ pub(crate) struct HirDisplayContext<'a> {
     options: HirDisplayOptions,
 }
 
+#[cfg(any(test, feature = "show_hir"))]
 impl<'a> HirDisplayContext<'a> {
     pub(crate) fn new(string_table: &'a StringTable) -> Self {
         Self {
@@ -59,13 +74,11 @@ impl<'a> HirDisplayContext<'a> {
         }
     }
 
-    #[allow(dead_code)] // Used by feature-gated HIR logging and debug rendering helpers.
     pub(crate) fn with_side_table(mut self, side_table: &'a HirSideTable) -> Self {
         self.side_table = Some(side_table);
         self
     }
 
-    #[allow(dead_code)] // Used by feature-gated HIR logging and debug rendering helpers.
     pub(crate) fn with_type_context(mut self, type_context: &'a TypeContext) -> Self {
         self.type_context = Some(type_context);
         self
@@ -703,7 +716,7 @@ impl<'a> HirDisplayContext<'a> {
 // Convenience Display Hooks
 // ============================================================================
 
-#[allow(dead_code)] // Used by debug dumps and HIR-focused tests
+#[cfg(any(test, feature = "show_hir"))]
 impl HirModule {
     pub(crate) fn display_with_table(&self, string_table: &StringTable) -> String {
         HirDisplayContext::new(string_table).render_module(self)
@@ -718,63 +731,63 @@ impl HirModule {
     }
 }
 
-#[allow(dead_code)] // Reserved for block-focused debug dumps
+#[cfg(any(test, feature = "show_hir"))]
 impl HirBlock {
     pub(crate) fn display_with_context(&self, display: &HirDisplayContext<'_>) -> String {
         display.render_block(self)
     }
 }
 
-#[allow(dead_code)] // Reserved for function-focused debug dumps
+#[cfg(any(test, feature = "show_hir"))]
 impl HirFunction {
     pub(crate) fn display_with_context(&self, display: &HirDisplayContext<'_>) -> String {
         display.render_function(self)
     }
 }
 
-#[allow(dead_code)] // Reserved for struct-focused debug dumps
+#[cfg(any(test, feature = "show_hir"))]
 impl HirStruct {
     pub(crate) fn display_with_context(&self, display: &HirDisplayContext<'_>) -> String {
         display.render_struct(self)
     }
 }
 
-#[allow(dead_code)] // Reserved for statement-focused debug dumps
+#[cfg(any(test, feature = "show_hir"))]
 impl HirStatement {
     pub(crate) fn display_with_context(&self, display: &HirDisplayContext<'_>) -> String {
         display.render_statement(self)
     }
 }
 
+#[cfg(any(test, feature = "show_hir"))]
 impl HirTerminator {
-    #[allow(dead_code)] // Used for tests
     pub(crate) fn display_with_context(&self, display: &HirDisplayContext<'_>) -> String {
         display.render_terminator(self)
     }
 }
 
+#[cfg(any(test, feature = "show_hir"))]
 impl HirExpression {
-    #[allow(dead_code)] // Used by lowering diagnostics and HIR tests
     pub(crate) fn display_with_context(&self, display: &HirDisplayContext<'_>) -> String {
         display.render_expression(self)
     }
 }
 
-#[allow(dead_code)] // Reserved for place-focused debug dumps
+#[cfg(any(test, feature = "show_hir"))]
 impl HirPlace {
     pub(crate) fn display_with_context(&self, display: &HirDisplayContext<'_>) -> String {
         display.render_place(self)
     }
 }
 
-#[allow(dead_code)] // Reserved for pattern-focused debug dumps
+#[cfg(any(test, feature = "show_hir"))]
 impl HirPattern {
     pub(crate) fn display_with_context(&self, display: &HirDisplayContext<'_>) -> String {
         display.render_pattern(self)
     }
 }
 
-#[allow(dead_code)] // Reserved for match-arm debug dumps
+#[cfg(any(test, feature = "show_hir"))]
 impl HirMatchArm {
     pub(crate) fn display_with_context(&self, display: &HirDisplayContext<'_>) -> String {
         display.render_match_arm(self)

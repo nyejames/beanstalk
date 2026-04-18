@@ -80,9 +80,6 @@ impl BuiltinErrorKind {
 /// WHY: AST orchestration should consume one manifest instead of manually reconstructing builtin
 /// declarations and field maps.
 pub(crate) struct BuiltinErrorManifest {
-    #[allow(dead_code)]
-    // Reserved-symbol paths are part of the manifest contract for future checks.
-    pub(crate) reserved_symbol_paths: FxHashSet<InternedPath>,
     pub(crate) visible_symbol_paths: FxHashSet<InternedPath>,
     pub(crate) declarations: Vec<Declaration>,
     pub(crate) resolved_struct_fields_by_path: FxHashMap<InternedPath, Vec<Declaration>>,
@@ -144,14 +141,11 @@ pub(crate) fn register_builtin_error_types(string_table: &mut StringTable) -> Bu
     let stack_frame_path = builtin_stack_frame_type_path(string_table);
     let error_path = builtin_error_type_path(string_table);
 
-    let mut reserved_symbol_paths = FxHashSet::default();
-    reserved_symbol_paths.insert(error_kind_path.to_owned());
-    reserved_symbol_paths.insert(error_location_path.to_owned());
-    reserved_symbol_paths.insert(stack_frame_path.to_owned());
-    reserved_symbol_paths.insert(error_path.to_owned());
-
     let mut visible_symbol_paths = FxHashSet::default();
-    visible_symbol_paths.extend(reserved_symbol_paths.iter().cloned());
+    visible_symbol_paths.insert(error_kind_path.to_owned());
+    visible_symbol_paths.insert(error_location_path.to_owned());
+    visible_symbol_paths.insert(stack_frame_path.to_owned());
+    visible_symbol_paths.insert(error_path.to_owned());
 
     let error_location_fields = vec![
         required_field(
@@ -306,7 +300,6 @@ pub(crate) fn register_builtin_error_types(string_table: &mut StringTable) -> Bu
     ];
 
     BuiltinErrorManifest {
-        reserved_symbol_paths,
         visible_symbol_paths,
         declarations,
         resolved_struct_fields_by_path,

@@ -911,8 +911,6 @@ struct RenderedOutput {
 }
 
 struct SlotOutput {
-    #[allow(dead_code)]
-    id: String,
     html: String,
 }
 
@@ -1037,9 +1035,8 @@ fn parse_harness_output(json: &str) -> Result<RenderedOutput, String> {
         .ok_or("rendered_output: 'slots' field missing from harness output")?
         .iter()
         .filter_map(|v| {
-            let id = v["id"].as_str()?.to_owned();
             let html = v["html"].as_str()?.to_owned();
-            Some(SlotOutput { id, html })
+            Some(SlotOutput { html })
         })
         .collect();
 
