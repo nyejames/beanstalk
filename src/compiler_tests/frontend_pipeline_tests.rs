@@ -555,14 +555,42 @@ fn deferred_constant_resolution_imported_constant() {
 fn deferred_constant_resolution_nested_template_reference() {
     // WHAT: a template constant references another template constant inside its body.
     // The reference is nested inside a TemplateAtom::Content expression. The walker
-    // must find the unresolved Reference and defer the outer constant.
+    // must find the unresolved Reference and defer the outer constant until #css resolves.
+    // Both directives must be registered so the template parser recognises [$html:...]/[$css:...].
+    let html_directive = StyleDirectiveSpec::handler(
+        "html",
+        TemplateBodyMode::Normal,
+        StyleDirectiveHandlerSpec::new(
+            None,
+            StyleDirectiveEffects {
+                style_id: Some("html"),
+                ..StyleDirectiveEffects::default()
+            },
+            None,
+        ),
+    );
+    let css_directive = StyleDirectiveSpec::handler(
+        "css",
+        TemplateBodyMode::Normal,
+        StyleDirectiveHandlerSpec::new(
+            None,
+            StyleDirectiveEffects {
+                style_id: Some("css"),
+                ..StyleDirectiveEffects::default()
+            },
+            None,
+        ),
+    );
+    let directives = StyleDirectiveRegistry::merged(&[html_directive, css_directive])
+        .expect("merged directive registry should build");
+
     let mut project = FrontendProject::new(
         &[(
             "src/#page.bst",
             "#head = [$html: <style>[css]</style>]\n#css = [$css: body {}]\n",
         )],
         "src/#page.bst",
-        StyleDirectiveRegistry::built_ins(),
+        directives,
     );
 
     let ast = project.ast();
@@ -572,9 +600,10 @@ fn deferred_constant_resolution_nested_template_reference() {
         .iter()
         .find(|c| c.id.name_str(&project.frontend.string_table) == Some("head"))
         .expect("head constant should exist");
+    // After #css folds to StringSlice, the [css] slot in #head is fully static → folds too.
     assert!(
-        matches!(head.value.kind, ExpressionKind::Template(_)),
-        "head should be resolved to a template, got {:?}",
+        matches!(head.value.kind, ExpressionKind::StringSlice(_)),
+        "head should fold to a string slice once all nested references resolve, got {:?}",
         head.value.kind
     );
 }
@@ -787,9 +816,10 @@ fn html_style_directive_available_during_header_parsing() {
         .iter()
         .find(|c| c.id.name_str(&project.frontend.string_table) == Some("head"))
         .expect("head constant should exist");
+    // [$html: <div>Hello</div>] has no runtime slots → folds to StringSlice.
     assert!(
-        matches!(head.value.kind, ExpressionKind::Template(_)),
-        "head should be resolved to a template when $html directive is available, got {:?}",
+        matches!(head.value.kind, ExpressionKind::StringSlice(_)),
+        "head should fold to a string slice when $html directive is available, got {:?}",
         head.value.kind
     );
 }
