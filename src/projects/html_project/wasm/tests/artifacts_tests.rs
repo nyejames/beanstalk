@@ -24,8 +24,9 @@ fn compile_html_module_wasm_exports_bst_start_directly() {
         release_build: false,
         entry_runtime_fragment_count: 0,
     };
-    let compiled = compile_html_module_wasm(&compile_input, &mut string_table, Path::new("index.html"))
-        .expect("wasm mode compilation should succeed");
+    let compiled =
+        compile_html_module_wasm(&compile_input, &mut string_table, Path::new("index.html"))
+            .expect("wasm mode compilation should succeed");
     let js = expect_js_output(&compiled.output_files, "page.js");
 
     assert!(
@@ -103,9 +104,12 @@ fn compile_html_module_wasm_preserves_nested_logical_html_route() {
         release_build: false,
         entry_runtime_fragment_count: 0,
     };
-    let compiled =
-        compile_html_module_wasm(&compile_input, &mut string_table, Path::new("docs/index.html"))
-            .expect("wasm mode compilation should succeed for nested route");
+    let compiled = compile_html_module_wasm(
+        &compile_input,
+        &mut string_table,
+        Path::new("docs/index.html"),
+    )
+    .expect("wasm mode compilation should succeed for nested route");
 
     let output_paths: Vec<PathBuf> = compiled
         .output_files

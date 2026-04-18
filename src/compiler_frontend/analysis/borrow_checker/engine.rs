@@ -11,8 +11,8 @@ use crate::compiler_frontend::analysis::borrow_checker::transfer::{
     BlockTransferStats, BorrowTransferContext, transfer_block,
 };
 use crate::compiler_frontend::analysis::borrow_checker::types::{
-    BorrowCheckReport, BorrowCheckStats, BorrowDropSite, BorrowDropSiteKind,
-    FunctionBorrowSummary, FunctionReturnAliasSummary, LocalMode,
+    BorrowCheckReport, BorrowCheckStats, BorrowDropSite, BorrowDropSiteKind, FunctionBorrowSummary,
+    FunctionReturnAliasSummary, LocalMode,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::hir::hir_nodes::{

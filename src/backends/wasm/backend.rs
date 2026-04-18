@@ -1,5 +1,6 @@
 //! Top-level orchestration for HIR -> LIR and optional LIR -> Wasm emission.
 
+use crate::backends::error_types::{BackendErrorType, lir_transformation_error};
 use crate::backends::wasm::debug::build_debug_outputs;
 use crate::backends::wasm::emit::module::emit_lir_to_wasm_module;
 use crate::backends::wasm::hir_to_lir::module::lower_hir_module_to_lir;
@@ -84,24 +85,24 @@ fn validate_request(
 
     for function_id in &request.export_policy.exported_functions {
         if !seen.insert(function_id.0) {
-            return Err(CompilerError::lir_transformation(format!(
+            return Err(lir_transformation_error(format!(
                 "Wasm backend request contains duplicate export target {function_id:?}",
             )));
         }
 
         if !contains_function(hir_module, *function_id) {
-            return Err(CompilerError::lir_transformation(format!(
+            return Err(lir_transformation_error(format!(
                 "Wasm backend request references missing function {function_id:?}",
             )));
         }
 
         let Some(export_name) = request.export_policy.export_names.get(function_id) else {
-            return Err(CompilerError::lir_transformation(format!(
+            return Err(lir_transformation_error(format!(
                 "Wasm backend request missing stable export name for {function_id:?}",
             )));
         };
         if !export_name_set.insert(export_name.to_owned()) {
-            return Err(CompilerError::lir_transformation(format!(
+            return Err(lir_transformation_error(format!(
                 "Wasm backend request contains duplicate export name '{export_name}'",
             )));
         }
@@ -109,19 +110,19 @@ fn validate_request(
 
     for (function_id, export_name) in &request.export_policy.export_names {
         if !contains_function(hir_module, *function_id) {
-            return Err(CompilerError::lir_transformation(format!(
+            return Err(lir_transformation_error(format!(
                 "Wasm backend request has export name entry for unknown function {function_id:?}"
             )));
         }
 
         if export_name.trim().is_empty() {
-            return Err(CompilerError::lir_transformation(format!(
+            return Err(lir_transformation_error(format!(
                 "Wasm backend request contains an empty export name for {function_id:?}"
             )));
         }
 
         if !seen.contains(&function_id.0) {
-            return Err(CompilerError::lir_transformation(format!(
+            return Err(lir_transformation_error(format!(
                 "Wasm backend request has export name entry for {function_id:?} but it is not in exported_functions"
             )));
         }
@@ -148,21 +149,21 @@ fn validate_feature_flags(request: &WasmBackendRequest) -> Result<(), CompilerEr
         return Err(CompilerError::compiler_error(
             "Wasm backend request enables use_wasm_gc, but phase-2 emits core linear-memory Wasm only",
         )
-        .with_error_type(ErrorType::WasmGeneration));
+        .with_error_type(ErrorType::Backend(BackendErrorType::WasmGeneration)));
     }
 
     if request.target_features.enable_multi_value {
         return Err(CompilerError::compiler_error(
             "Wasm backend request enables multi-value, but phase-2 ABI supports single-result only",
         )
-        .with_error_type(ErrorType::WasmGeneration));
+        .with_error_type(ErrorType::Backend(BackendErrorType::WasmGeneration)));
     }
 
     if request.target_features.enable_reference_types {
         return Err(CompilerError::compiler_error(
             "Wasm backend request enables reference types, but phase-2 targets core value types only",
         )
-        .with_error_type(ErrorType::WasmGeneration));
+        .with_error_type(ErrorType::Backend(BackendErrorType::WasmGeneration)));
     }
 
     // Note: bulk-memory (memory.copy) is now used internally by runtime string helpers.
@@ -179,7 +180,7 @@ fn validate_emit_options(request: &WasmBackendRequest) -> Result<(), CompilerErr
         return Err(CompilerError::compiler_error(
             "Wasm backend request selected structured CFG lowering, but phase-2 currently implements dispatcher-loop CFG lowering only",
         )
-        .with_error_type(ErrorType::WasmGeneration));
+        .with_error_type(ErrorType::Backend(BackendErrorType::WasmGeneration)));
     }
 
     Ok(())
@@ -197,28 +198,28 @@ fn validate_helper_export_policy(
         return Err(CompilerError::compiler_error(
             "Wasm helper exports must request both bst_str_ptr and bst_str_len together",
         )
-        .with_error_type(ErrorType::WasmGeneration));
+        .with_error_type(ErrorType::Backend(BackendErrorType::WasmGeneration)));
     }
 
     if helpers.export_vec_new != helpers.export_vec_push {
         return Err(CompilerError::compiler_error(
             "Wasm helper exports must request both bst_vec_new and bst_vec_push together",
         )
-        .with_error_type(ErrorType::WasmGeneration));
+        .with_error_type(ErrorType::Backend(BackendErrorType::WasmGeneration)));
     }
 
     if helpers.export_vec_len != helpers.export_vec_get {
         return Err(CompilerError::compiler_error(
             "Wasm helper exports must request both bst_vec_len and bst_vec_get together",
         )
-        .with_error_type(ErrorType::WasmGeneration));
+        .with_error_type(ErrorType::Backend(BackendErrorType::WasmGeneration)));
     }
 
     if (helpers.export_str_ptr || helpers.export_str_len) && !helpers.export_memory {
         return Err(CompilerError::compiler_error(
             "Wasm helper exports requesting string pointer/length must also export memory",
         )
-        .with_error_type(ErrorType::WasmGeneration));
+        .with_error_type(ErrorType::Backend(BackendErrorType::WasmGeneration)));
     }
 
     let mut add_reserved_export =
@@ -231,7 +232,7 @@ fn validate_helper_export_policy(
                 return Err(CompilerError::compiler_error(format!(
                     "Wasm helper export '{name}' collides with an existing function export name",
                 ))
-                .with_error_type(ErrorType::WasmGeneration));
+                .with_error_type(ErrorType::Backend(BackendErrorType::WasmGeneration)));
             }
 
             Ok(())

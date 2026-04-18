@@ -1,5 +1,6 @@
 //! User-function code section emission.
 
+use crate::backends::error_types::BackendErrorType;
 use crate::backends::wasm::emit::helpers::emit_helper_function;
 use crate::backends::wasm::emit::instructions::{
     LirBodyEmitContext, emit_statement, emit_terminator,
@@ -30,7 +31,7 @@ pub(crate) fn build_code_section(
                     CompilerError::compiler_error(format!(
                         "Wasm emission missing lowered function body for {function_id:?}"
                     ))
-                    .with_error_type(ErrorType::WasmGeneration)
+                    .with_error_type(ErrorType::Backend(BackendErrorType::WasmGeneration))
                 })?;
                 emit_lir_function(function, plan)?
             }
@@ -69,7 +70,7 @@ fn emit_lir_function(
                 "Wasm emission could not resolve entry block index for {:?} in {:?}",
                 entry_block, function.id
             ))
-            .with_error_type(ErrorType::WasmGeneration)
+            .with_error_type(ErrorType::Backend(BackendErrorType::WasmGeneration))
         })?;
 
     wasm_function.instruction(&Instruction::I32Const(entry_block_index as i32));
@@ -144,7 +145,7 @@ fn build_local_layout(function: &WasmLirFunction) -> Result<LocalLayout, Compile
             sorted_locals.len(),
             function.id
         ))
-        .with_error_type(ErrorType::WasmGeneration));
+        .with_error_type(ErrorType::Backend(BackendErrorType::WasmGeneration)));
     }
 
     // WHAT: enforce Wasm local index contract: params first, then non-params.
@@ -155,14 +156,14 @@ fn build_local_layout(function: &WasmLirFunction) -> Result<LocalLayout, Compile
                 "Wasm emission expected local {:?} to be a parameter in {:?}",
                 local.id, function.id
             ))
-            .with_error_type(ErrorType::WasmGeneration));
+            .with_error_type(ErrorType::Backend(BackendErrorType::WasmGeneration)));
         }
         if index >= parameter_count && local.role == WasmLocalRole::Param {
             return Err(CompilerError::compiler_error(format!(
                 "Wasm emission found parameter local {:?} after non-parameter locals in {:?}",
                 local.id, function.id
             ))
-            .with_error_type(ErrorType::WasmGeneration));
+            .with_error_type(ErrorType::Backend(BackendErrorType::WasmGeneration)));
         }
     }
 
@@ -211,7 +212,7 @@ fn determine_entry_block(function: &WasmLirFunction) -> Result<WasmLirBlockId, C
             "Wasm emission requires at least one block for function {:?}",
             function.id
         ))
-        .with_error_type(ErrorType::WasmGeneration));
+        .with_error_type(ErrorType::Backend(BackendErrorType::WasmGeneration)));
     }
 
     let mut incoming_counts = FxHashMap::default();
@@ -258,5 +259,5 @@ fn determine_entry_block(function: &WasmLirFunction) -> Result<WasmLirBlockId, C
         "Wasm emission found multiple entry-block candidates in {:?}: {:?}",
         function.id, roots
     ))
-    .with_error_type(ErrorType::WasmGeneration))
+    .with_error_type(ErrorType::Backend(BackendErrorType::WasmGeneration)))
 }

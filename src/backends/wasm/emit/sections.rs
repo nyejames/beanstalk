@@ -1,5 +1,6 @@
 //! Section planning and deterministic index assignment for Wasm emission.
 
+use crate::backends::error_types::BackendErrorType;
 use crate::backends::wasm::lir::function::WasmLirFunction;
 use crate::backends::wasm::lir::instructions::WasmLirStmt;
 use crate::backends::wasm::lir::linkage::WasmImportKind;
@@ -407,7 +408,7 @@ fn plan_static_data_layout(
                 CompilerError::compiler_error(
                 "Wasm static data layout overflowed u32 address space while planning data segments",
             )
-            .with_error_type(ErrorType::WasmGeneration)
+            .with_error_type(ErrorType::Backend(BackendErrorType::WasmGeneration))
             })?;
     }
 

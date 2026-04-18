@@ -9,6 +9,7 @@ use super::{
     ParsedBackendExpectation, ParsedExpectationFile, WarningExpectation,
     normalize_relative_path_text,
 };
+use crate::backends::error_types::BackendErrorType;
 use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::compiler_messages::compiler_errors::ErrorType;
 use serde::Deserialize;
@@ -541,8 +542,12 @@ pub(crate) fn parse_error_type(value: &str) -> Result<ErrorType, String> {
         "devserver" | "dev_server" => Ok(ErrorType::DevServer),
         "borrowchecker" | "borrow_checker" => Ok(ErrorType::BorrowChecker),
         "hirtransformation" | "hir_transformation" => Ok(ErrorType::HirTransformation),
-        "lirtransformation" | "lir_transformation" => Ok(ErrorType::LirTransformation),
-        "wasmgeneration" | "wasm_generation" => Ok(ErrorType::WasmGeneration),
+        "lirtransformation" | "lir_transformation" => {
+            Ok(ErrorType::Backend(BackendErrorType::LirTransformation))
+        }
+        "wasmgeneration" | "wasm_generation" => {
+            Ok(ErrorType::Backend(BackendErrorType::WasmGeneration))
+        }
         other => Err(format!("Unsupported error type '{other}'")),
     }
 }

@@ -1,5 +1,5 @@
-use crate::compiler_frontend::basic_utility_functions::normalize_path;
 use crate::backends::error_types::BackendErrorType;
+use crate::compiler_frontend::basic_utility_functions::normalize_path;
 use crate::compiler_frontend::compiler_errors::{
     CompilerError, CompilerMessages, ErrorMetaDataKey, ErrorType,
 };
@@ -386,8 +386,10 @@ fn terse_error_type_name(error_type: &ErrorType) -> &'static str {
         ErrorType::DevServer => "dev_server",
         ErrorType::BorrowChecker => "borrow_checker",
         ErrorType::HirTransformation => "hir_transformation",
-        ErrorType::LirTransformation => "lir_transformation",
-        ErrorType::WasmGeneration => "wasm_generation",
+        ErrorType::Backend(backend) => match backend {
+            BackendErrorType::LirTransformation => "lir_transformation",
+            BackendErrorType::WasmGeneration => "wasm_generation",
+        },
     }
 }
 

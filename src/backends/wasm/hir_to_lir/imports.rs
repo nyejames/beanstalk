@@ -1,5 +1,6 @@
 //! Host import planning for HIR -> LIR lowering.
 
+use crate::backends::error_types::lir_transformation_error;
 use crate::backends::wasm::hir_to_lir::context::WasmLirLoweringContext;
 use crate::backends::wasm::lir::linkage::{WasmImport, WasmImportKind};
 use crate::backends::wasm::lir::types::{WasmAbiType, WasmImportId, WasmLirSignature};
@@ -37,7 +38,7 @@ pub(crate) fn resolve_host_call_import(
     // WHY: each distinct host function maps to exactly one import; unsupported targets
     // must fail with a structured diagnostic instead of silently mapping to the wrong import.
     let CallTarget::HostFunction(path) = target else {
-        return Err(CompilerError::lir_transformation(
+        return Err(lir_transformation_error(
             "Wasm lowering expected a HostFunction call target in resolve_host_call_import",
         ));
     };
@@ -53,14 +54,14 @@ fn resolve_host_function_name(
     // WHAT: map a host function path to its Wasm backend import identity.
     // WHY: ensures only explicitly supported host calls are lowered.
     let Some(name) = path.name_str(context.string_table) else {
-        return Err(CompilerError::lir_transformation(
+        return Err(lir_transformation_error(
             "Wasm lowering could not resolve host function path to a name",
         ));
     };
 
     match name {
         "io" => Ok(WasmHostFunction::LogString),
-        _ => Err(CompilerError::lir_transformation(format!(
+        _ => Err(lir_transformation_error(format!(
             "Wasm backend does not yet support host function '{name}'"
         ))),
     }

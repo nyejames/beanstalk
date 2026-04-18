@@ -1,5 +1,6 @@
 //! Data section emission.
 
+use crate::backends::error_types::BackendErrorType;
 use crate::backends::wasm::emit::sections::WasmEmitPlan;
 use crate::backends::wasm::lir::module::WasmLirModule;
 use crate::compiler_frontend::compiler_messages::compiler_errors::{CompilerError, ErrorType};
@@ -21,7 +22,7 @@ pub(crate) fn build_data_section(
                 "Wasm emission missing static data offset for segment {:?}",
                 segment.id
             ))
-            .with_error_type(ErrorType::WasmGeneration)
+            .with_error_type(ErrorType::Backend(BackendErrorType::WasmGeneration))
         })?;
 
         section.active(

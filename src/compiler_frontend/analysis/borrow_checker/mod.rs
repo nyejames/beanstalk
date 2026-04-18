@@ -12,10 +12,11 @@ mod transfer;
 mod types;
 
 pub(crate) use types::{
-    BorrowAnalysis, BorrowCheckReport, BorrowDropSite, BorrowDropSiteKind, LocalMode,
+    BorrowAnalysis, BorrowCheckReport, BorrowDropSiteKind, LocalMode,
 };
+
 #[cfg(test)]
-pub(crate) use types::{BorrowStateSnapshot, LocalBorrowSnapshot};
+pub(crate) use types::{BorrowStateSnapshot, LocalBorrowSnapshot, BorrowDropSite};
 pub(crate) type BorrowFacts = BorrowAnalysis;
 
 use crate::compiler_frontend::analysis::borrow_checker::engine::BorrowChecker;

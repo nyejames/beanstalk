@@ -1,5 +1,6 @@
 //! Expression lowering helpers for HIR -> Wasm LIR.
 
+use crate::backends::error_types::lir_transformation_error;
 use crate::backends::wasm::hir_to_lir::context::{WasmFunctionLoweringContext, lower_type_to_abi};
 use crate::backends::wasm::hir_to_lir::static_data::intern_static_utf8;
 use crate::backends::wasm::lir::instructions::WasmLirStmt;
@@ -104,7 +105,7 @@ pub(crate) fn lower_expression(
         HirExpressionKind::BinOp { left, op, right } => {
             lower_binary_expression(context, expression, left, *op, right, statements)
         }
-        HirExpressionKind::UnaryOp { op, .. } => Err(CompilerError::lir_transformation(format!(
+        HirExpressionKind::UnaryOp { op, .. } => Err(lir_transformation_error(format!(
             "Wasm lowering does not yet support unary operator {op:?}"
         ))),
         HirExpressionKind::Collection(items) => {
@@ -118,7 +119,7 @@ pub(crate) fn lower_expression(
                 });
             }
 
-            Err(CompilerError::lir_transformation(
+            Err(lir_transformation_error(
                 "Wasm lowering only supports empty Vec<String> collection literals in this pass",
             ))
         }
@@ -132,7 +133,7 @@ pub(crate) fn lower_expression(
         | HirExpressionKind::ResultIsOk { .. }
         | HirExpressionKind::ResultUnwrapOk { .. }
         | HirExpressionKind::ResultUnwrapErr { .. }
-        | HirExpressionKind::BuiltinCast { .. } => Err(CompilerError::lir_transformation(
+        | HirExpressionKind::BuiltinCast { .. } => Err(lir_transformation_error(
             "Wasm lowering does not yet support this expression construct",
         )),
     }
@@ -182,7 +183,7 @@ fn lower_binary_expression(
         }
         HirBinOp::Add => {
             if lhs_abi != rhs_abi {
-                return Err(CompilerError::lir_transformation(format!(
+                return Err(lir_transformation_error(format!(
                     "Wasm lowering does not support Add for mismatched ABI types {lhs_abi:?} and {rhs_abi:?}"
                 )));
             }
@@ -212,14 +213,14 @@ fn lower_binary_expression(
                         prefer_move: false,
                     })
                 }
-                _ => Err(CompilerError::lir_transformation(format!(
+                _ => Err(lir_transformation_error(format!(
                     "Wasm lowering does not support Add for ABI type {lhs_abi:?}"
                 ))),
             }
         }
         HirBinOp::Sub => {
             if lhs_abi != rhs_abi {
-                return Err(CompilerError::lir_transformation(format!(
+                return Err(lir_transformation_error(format!(
                     "Wasm lowering does not support Sub for mismatched ABI types {lhs_abi:?} and {rhs_abi:?}"
                 )));
             }
@@ -249,14 +250,14 @@ fn lower_binary_expression(
                         prefer_move: false,
                     })
                 }
-                _ => Err(CompilerError::lir_transformation(format!(
+                _ => Err(lir_transformation_error(format!(
                     "Wasm lowering does not support Sub for ABI type {lhs_abi:?}"
                 ))),
             }
         }
         HirBinOp::Lt | HirBinOp::Le | HirBinOp::Gt | HirBinOp::Ge => {
             if lhs_abi != rhs_abi {
-                return Err(CompilerError::lir_transformation(format!(
+                return Err(lir_transformation_error(format!(
                     "Wasm lowering does not support ordered comparison {op:?} for mismatched ABI types {lhs_abi:?} and {rhs_abi:?}"
                 )));
             }
@@ -293,12 +294,12 @@ fn lower_binary_expression(
                         prefer_move: false,
                     })
                 }
-                _ => Err(CompilerError::lir_transformation(format!(
+                _ => Err(lir_transformation_error(format!(
                     "Wasm lowering does not support ordered comparison {op:?} for ABI type {lhs_abi:?}"
                 ))),
             }
         }
-        _ => Err(CompilerError::lir_transformation(format!(
+        _ => Err(lir_transformation_error(format!(
             "Wasm lowering does not yet support binary operator {op:?}"
         ))),
     }
@@ -352,7 +353,7 @@ fn lower_string_concat_expression(
                         converted
                     }
                     other => {
-                        return Err(CompilerError::lir_transformation(format!(
+                        return Err(lir_transformation_error(format!(
                             "Wasm lowering string concatenation requires handle-compatible chunks, found {other:?}"
                         )));
                     }
@@ -443,11 +444,11 @@ fn lower_place_local(
     // WHY: field/index projections require additional memory model work (phase-2+).
     match place {
         HirPlace::Local(local_id) => context.local_map.get(local_id).copied().ok_or_else(|| {
-            CompilerError::lir_transformation(format!(
+            lir_transformation_error(format!(
                 "Wasm lowering could not resolve local {local_id:?}",
             ))
         }),
-        HirPlace::Field { .. } | HirPlace::Index { .. } => Err(CompilerError::lir_transformation(
+        HirPlace::Field { .. } | HirPlace::Index { .. } => Err(lir_transformation_error(
             "Wasm lowering currently supports only direct local places",
         )),
     }

@@ -3,9 +3,9 @@
 //! This module builds the per-function layout and signature-derived metadata that the fixed-point
 //! driver needs before it can run transfer over reachable blocks.
 
+use super::engine::{BorrowChecker, successors};
 use super::state::{FunctionLayout, FunctionLayoutInputs, RootSet};
 use super::types::FunctionReturnAliasSummary;
-use super::engine::{BorrowChecker, successors};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::hir::hir_nodes::{
     BlockId, HirExpression, HirExpressionKind, HirFunction, HirPattern, HirPlace, HirStatement,

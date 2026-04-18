@@ -1,5 +1,6 @@
 //! Export-wrapper synthesis for phase-1 Wasm lowering.
 
+use crate::backends::error_types::lir_transformation_error;
 use crate::backends::wasm::hir_to_lir::context::WasmLirLoweringContext;
 use crate::backends::wasm::lir::function::{WasmLirBlock, WasmLirFunction, WasmLirFunctionOrigin};
 use crate::backends::wasm::lir::instructions::{WasmCalleeRef, WasmLirStmt, WasmLirTerminator};
@@ -34,13 +35,13 @@ pub(crate) fn synthesize_export_wrappers(
             .export_names
             .get(function_id)
             .ok_or_else(|| {
-                CompilerError::lir_transformation(format!(
+                lir_transformation_error(format!(
                     "Wasm export wrapper synthesis missing export name for {function_id:?}"
                 ))
             })?;
 
         if !seen_export_names.insert(export_name.clone()) {
-            return Err(CompilerError::lir_transformation(format!(
+            return Err(lir_transformation_error(format!(
                 "Wasm export wrapper synthesis encountered duplicate export name '{export_name}'"
             )));
         }
@@ -50,7 +51,7 @@ pub(crate) fn synthesize_export_wrappers(
             .get(function_id)
             .copied()
             .ok_or_else(|| {
-                CompilerError::lir_transformation(format!(
+                lir_transformation_error(format!(
                     "Wasm export wrapper synthesis could not resolve target function {function_id:?}"
                 ))
             })?;
@@ -63,13 +64,13 @@ pub(crate) fn synthesize_export_wrappers(
             .find(|function| function.id == target_lir_id)
             .map(|function| function.signature.clone())
             .ok_or_else(|| {
-                CompilerError::lir_transformation(format!(
+                lir_transformation_error(format!(
                     "Wasm export wrapper synthesis missing lowered target function {target_lir_id:?}"
                 ))
             })?;
 
         if target_signature.results.len() > 1 {
-            return Err(CompilerError::lir_transformation(format!(
+            return Err(lir_transformation_error(format!(
                 "Wasm export wrapper synthesis does not yet support multi-value returns for {target_lir_id:?}"
             )));
         }

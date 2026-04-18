@@ -1,5 +1,6 @@
 //! Per-function lowering for HIR -> Wasm LIR.
 
+use crate::backends::error_types::lir_transformation_error;
 use crate::backends::wasm::hir_to_lir::context::{
     WasmFunctionLoweringContext, WasmLirLoweringContext, lower_type_to_abi,
 };
@@ -23,7 +24,7 @@ pub(crate) fn lower_function(
     // WHAT: resolve stable function id assigned during module pre-pass.
     // WHY: preserves deterministic cross-function references.
     let Some(lir_id) = module_context.function_map.get(&hir_function.id).copied() else {
-        return Err(CompilerError::lir_transformation(format!(
+        return Err(lir_transformation_error(format!(
             "Wasm lowering missing stable function id for {:?}",
             hir_function.id
         )));
@@ -38,7 +39,7 @@ pub(crate) fn lower_function(
             .get(&hir_function.id)
             .copied()
             .ok_or_else(|| {
-                CompilerError::lir_transformation(format!(
+                lir_transformation_error(format!(
                     "Wasm lowering missing function origin for {:?}",
                     hir_function.id
                 ))
@@ -88,7 +89,7 @@ pub(crate) fn lower_function(
         )?;
 
         let Some(lir_block) = function_context.block_mut(*block_id) else {
-            return Err(CompilerError::lir_transformation(format!(
+            return Err(lir_transformation_error(format!(
                 "Wasm lowering could not resolve lowered block mapping for {block_id:?}",
             )));
         };
@@ -115,7 +116,7 @@ fn lower_function_signature(
     let mut params = Vec::with_capacity(function.params.len());
     for local_id in &function.params {
         let Some(type_id) = local_type_map.get(local_id).copied() else {
-            return Err(CompilerError::lir_transformation(format!(
+            return Err(lir_transformation_error(format!(
                 "Wasm lowering could not resolve parameter type for local {:?} in function {:?}",
                 local_id, function.id
             )));
@@ -148,7 +149,7 @@ fn alloc_function_locals(
 
     for param_local in &context.hir_function.params {
         let Some(type_id) = local_type_map.get(param_local).copied() else {
-            return Err(CompilerError::lir_transformation(format!(
+            return Err(lir_transformation_error(format!(
                 "Wasm lowering missing type for parameter local {param_local:?}",
             )));
         };
@@ -256,7 +257,7 @@ fn block_by_id_or_error<'a>(
         .iter()
         .find(|block| block.id == block_id)
         .ok_or_else(|| {
-            CompilerError::lir_transformation(format!(
+            lir_transformation_error(format!(
                 "Wasm lowering could not resolve block {block_id:?} for function {function_id:?}",
             ))
         })

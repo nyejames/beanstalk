@@ -1,5 +1,6 @@
 //! Import section emission.
 
+use crate::backends::error_types::BackendErrorType;
 use crate::backends::wasm::emit::sections::WasmEmitPlan;
 use crate::backends::wasm::lir::linkage::WasmImportKind;
 use crate::backends::wasm::lir::module::WasmLirModule;
@@ -28,7 +29,7 @@ pub(crate) fn build_import_section(
                             "Wasm emission could not resolve type index for import {:?}",
                             import.id
                         ))
-                        .with_error_type(ErrorType::WasmGeneration)
+                        .with_error_type(ErrorType::Backend(BackendErrorType::WasmGeneration))
                     })?;
                 section.import(
                     import.module_name.as_str(),

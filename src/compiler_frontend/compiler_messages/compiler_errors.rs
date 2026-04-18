@@ -18,8 +18,8 @@
 //! - **Rule**: Semantic errors like undefined variables or scope violations
 //! - **BorrowChecker**: Memory safety violations detected during lifetime analysis
 //! - **HirTransformation**: Failures during AST to HIR conversion (compiler_frontend bugs)
-//! - **LirTransformation**: Failures during HIR to LIR conversion (compiler_frontend bugs)
-//! - **WasmGeneration**: Failures during LIR to WASM (compiler_frontend bugs)
+//! - **Backend**: Lowering and codegen failures in backend modules (for example LIR transformation,
+//!   Wasm generation)
 //! - **Compiler**: Internal compiler_frontend bugs (not user's fault)
 //! - **File**: File system errors
 //! - **Config**: Configuration file issues
@@ -38,8 +38,6 @@
 //! ### Compiler Bug Errors
 //! - [`return_compiler_error!`]: For internal compiler_frontend bugs
 //! - [`return_hir_transformation_error!`]: For HIR transformation failures
-//! - [`return_lir_transformation_error!`]: For LIR transformation failures
-//! - [`return_wasm_generation_error!`]: For WASM generation failures
 //!
 //! ### Specialized Borrow Checker Errors
 //! - [`create_multiple_mutable_borrows_error!`]: Multiple mutable borrow conflicts
@@ -363,16 +361,6 @@ impl CompilerError {
             msg: msg.into(),
             location: SourceLocation::default(),
             error_type: ErrorType::Compiler,
-            metadata: HashMap::new(),
-        }
-    }
-
-    /// Create an LIR transformation error (for HIR to LIR lowering failures)
-    pub fn lir_transformation(msg: impl Into<String>) -> Self {
-        CompilerError {
-            msg: msg.into(),
-            location: SourceLocation::default(),
-            error_type: ErrorType::LirTransformation,
             metadata: HashMap::new(),
         }
     }
@@ -1131,125 +1119,6 @@ macro_rules! return_hir_transformation_error {
             msg: $msg.into(),
             location: $location,
             error_type: $crate::compiler_frontend::compiler_errors::ErrorType::HirTransformation,
-            metadata: std::collections::HashMap::new(),
-        })
-    };
-}
-
-/// Returns a new CompileError for LIR transformation failures.
-///
-/// LIR transformation errors indicate failures during HIR to LIR conversion.
-/// These are typically compiler_frontend bugs where the LIR infrastructure is missing
-/// or incomplete for a particular language feature.
-///
-/// Usage: `return_lir_transformation_error!("Cannot lower expression type {:?}", expr_type, location, {})`;
-#[macro_export]
-macro_rules! return_lir_transformation_error {
-    // With format string, arguments, and metadata (with semicolon separator)
-    ($fmt:expr, $($arg:expr),+ ; $location:expr, { $( $key:ident => $value:expr ),* $(,)? }) => {
-        return Err($crate::compiler_frontend::compiler_errors::CompilerError {
-            msg: format!($fmt, $($arg),+),
-            location: $location,
-            error_type: $crate::compiler_frontend::compiler_errors::ErrorType::LirTransformation,
-            metadata: {
-                let mut map = std::collections::HashMap::new();
-                $( map.insert($crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::$key, $value.into()); )*
-                map
-            },
-        })
-    };
-    // With format string and arguments (no metadata)
-    ($fmt:expr, $($arg:expr),+ ; $location:expr) => {
-        return Err($crate::compiler_frontend::compiler_errors::CompilerError {
-            msg: format!($fmt, $($arg),+),
-            location: $location,
-            error_type: $crate::compiler_frontend::compiler_errors::ErrorType::LirTransformation,
-            metadata: std::collections::HashMap::new(),
-        })
-    };
-    // With metadata
-    ($msg:expr, $location:expr, { $( $key:ident => $value:expr ),* $(,)? }) => {
-        return Err($crate::compiler_frontend::compiler_errors::CompilerError {
-            msg: $msg.into(),
-            location: $location,
-            error_type: $crate::compiler_frontend::compiler_errors::ErrorType::LirTransformation,
-            metadata: {
-                let mut map = std::collections::HashMap::new();
-                $( map.insert($crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::$key, $value.into()); )*
-                map
-            },
-        })
-    };
-    // Simple variant
-    ($msg:expr, $location:expr) => {
-        return Err($crate::compiler_frontend::compiler_errors::CompilerError {
-            msg: $msg.into(),
-            location: $location,
-            error_type: $crate::compiler_frontend::compiler_errors::ErrorType::LirTransformation,
-            metadata: std::collections::HashMap::new(),
-        })
-    };
-}
-
-/// Returns a new CompileError for WASM generation failures.
-///
-/// WASM generation errors indicate failures during LIR to WASM conversion.
-/// These are typically compiler_frontend bugs where the WASM codegen infrastructure is missing
-/// or incomplete for a particular language feature, or when WASM validation fails.
-///
-/// Usage: `return_wasm_generation_error!("Cannot encode instruction {:?}", inst, location, {})`;
-#[macro_export]
-macro_rules! return_wasm_generation_error {
-    // With format string, arguments, and metadata (with semicolon separator)
-    ($fmt:expr, $($arg:expr),+ ; $location:expr, { $( $key:ident => $value:expr ),* $(,)? }) => {
-        return Err($crate::compiler_frontend::compiler_errors::CompilerError {
-            msg: format!($fmt, $($arg),+),
-            location: $location,
-            error_type: $crate::compiler_frontend::compiler_errors::ErrorType::WasmGeneration,
-            metadata: {
-                let mut map = std::collections::HashMap::new();
-                $( map.insert($crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::$key, $value.into()); )*
-                map
-            },
-        })
-    };
-    // With format string and arguments (no metadata)
-    ($fmt:expr, $($arg:expr),+ ; $location:expr) => {
-        return Err($crate::compiler_frontend::compiler_errors::CompilerError {
-            msg: format!($fmt, $($arg),+),
-            location: $location,
-            error_type: $crate::compiler_frontend::compiler_errors::ErrorType::WasmGeneration,
-            metadata: std::collections::HashMap::new(),
-        })
-    };
-    // With metadata
-    ($msg:expr, $location:expr, { $( $key:ident => $value:expr ),* $(,)? }) => {
-        return Err($crate::compiler_frontend::compiler_errors::CompilerError {
-            msg: $msg.into(),
-            location: $location,
-            error_type: $crate::compiler_frontend::compiler_errors::ErrorType::WasmGeneration,
-            metadata: {
-                let mut map = std::collections::HashMap::new();
-                $( map.insert($crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::$key, $value.into()); )*
-                map
-            },
-        })
-    };
-    // Simple variant
-    ($msg:expr, $location:expr) => {
-        return Err($crate::compiler_frontend::compiler_errors::CompilerError {
-            msg: $msg.into(),
-            location: $location,
-            error_type: $crate::compiler_frontend::compiler_errors::ErrorType::WasmGeneration,
-            metadata: std::collections::HashMap::new(),
-        })
-    };
-    // No location variant (for internal WASM generation bugs)
-    ($msg:expr) => {
-        return Err($crate::compiler_frontend::compiler_errors::CompilerError {
-            msg: $msg.into(),
-            location: $crate::compiler_frontend::compiler_errors::SourceLocation::default(),
-            error_type: $crate::compiler_frontend::compiler_errors::ErrorType::WasmGeneration,
             metadata: std::collections::HashMap::new(),
         })
     };

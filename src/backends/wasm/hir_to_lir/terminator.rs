@@ -1,5 +1,6 @@
 //! Terminator lowering for HIR -> Wasm LIR.
 
+use crate::backends::error_types::lir_transformation_error;
 use crate::backends::wasm::hir_to_lir::context::{WasmFunctionLoweringContext, lower_type_to_abi};
 use crate::backends::wasm::hir_to_lir::expr::lower_expression;
 use crate::backends::wasm::lir::instructions::{WasmLirStmt, WasmLirTerminator};
@@ -46,7 +47,7 @@ pub(crate) fn lower_terminator(
             })
         }
         HirTerminator::Panic { .. } => Ok(WasmLirTerminator::Trap),
-        HirTerminator::Match { .. } => Err(CompilerError::lir_transformation(
+        HirTerminator::Match { .. } => Err(lir_transformation_error(
             "Wasm lowering does not yet support this terminator",
         )),
     }
@@ -57,7 +58,7 @@ fn resolve_block_id(
     block_id: BlockId,
 ) -> Result<crate::backends::wasm::lir::types::WasmLirBlockId, CompilerError> {
     context.block_map.get(&block_id).copied().ok_or_else(|| {
-        CompilerError::lir_transformation(format!(
+        lir_transformation_error(format!(
             "Wasm lowering could not resolve block id {block_id:?}"
         ))
     })

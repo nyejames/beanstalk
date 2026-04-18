@@ -1,5 +1,6 @@
 //! Synthesized runtime helper function emission.
 
+use crate::backends::error_types::BackendErrorType;
 use crate::backends::wasm::emit::sections::WasmEmitPlan;
 use crate::backends::wasm::runtime::strings::WasmRuntimeHelper;
 use crate::compiler_frontend::compiler_messages::compiler_errors::{CompilerError, ErrorType};
@@ -15,7 +16,7 @@ pub(crate) fn emit_helper_function(
         CompilerError::compiler_error(
             "Wasm emission expected heap_top global while synthesizing runtime helpers",
         )
-        .with_error_type(ErrorType::WasmGeneration)
+        .with_error_type(ErrorType::Backend(BackendErrorType::WasmGeneration))
     })?;
 
     let alloc_index = plan
@@ -24,7 +25,7 @@ pub(crate) fn emit_helper_function(
         .copied()
         .ok_or_else(|| {
             CompilerError::compiler_error("Wasm emission missing rt_alloc helper index")
-                .with_error_type(ErrorType::WasmGeneration)
+                .with_error_type(ErrorType::Backend(BackendErrorType::WasmGeneration))
         })?;
 
     // Vec-handle helpers have their own focused emitter.
@@ -339,7 +340,7 @@ pub(crate) fn emit_helper_function(
                     CompilerError::compiler_error(
                         "Wasm emission missing rt_string_new_buffer helper index",
                     )
-                    .with_error_type(ErrorType::WasmGeneration)
+                    .with_error_type(ErrorType::Backend(BackendErrorType::WasmGeneration))
                 })?;
             let string_finish_index = plan
                 .helper_indices
@@ -349,7 +350,7 @@ pub(crate) fn emit_helper_function(
                     CompilerError::compiler_error(
                         "Wasm emission missing rt_string_finish helper index",
                     )
-                    .with_error_type(ErrorType::WasmGeneration)
+                    .with_error_type(ErrorType::Backend(BackendErrorType::WasmGeneration))
                 })?;
 
             const VALUE_I64: u32 = 0;

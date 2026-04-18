@@ -1,5 +1,6 @@
 //! Statement lowering for HIR -> Wasm LIR.
 
+use crate::backends::error_types::lir_transformation_error;
 use crate::backends::wasm::hir_to_lir::context::WasmFunctionLoweringContext;
 use crate::backends::wasm::hir_to_lir::expr::lower_expression;
 use crate::backends::wasm::hir_to_lir::imports::resolve_host_call_import;
@@ -41,7 +42,7 @@ pub(crate) fn lower_statement(
                         .get(function_id)
                         .copied()
                         .ok_or_else(|| {
-                            CompilerError::lir_transformation(format!(
+                            lir_transformation_error(format!(
                                 "Wasm lowering missing function id mapping for {function_id:?}"
                             ))
                         })?;
@@ -73,7 +74,7 @@ pub(crate) fn lower_statement(
         HirStatementKind::Drop(local_id) => {
             // Keep explicit source-level drops in LIR when the value is handle-like.
             let mapped_local = context.local_map.get(local_id).copied().ok_or_else(|| {
-                CompilerError::lir_transformation(format!(
+                lir_transformation_error(format!(
                     "Wasm lowering could not resolve drop local {local_id:?}"
                 ))
             })?;
@@ -105,7 +106,7 @@ fn lower_assignment(
     // WHAT: preserve explicit move/copy distinction in LIR.
     // WHY: ownership optimization stays representable even under GC-first semantics.
     let HirPlace::Local(target_local) = target else {
-        return Err(CompilerError::lir_transformation(
+        return Err(lir_transformation_error(
             "Wasm lowering currently supports assignments only to direct locals",
         ));
     };
@@ -115,7 +116,7 @@ fn lower_assignment(
         .get(target_local)
         .copied()
         .ok_or_else(|| {
-            CompilerError::lir_transformation(format!(
+            lir_transformation_error(format!(
                 "Wasm lowering could not resolve assignment target local {target_local:?}",
             ))
         })?;
@@ -147,20 +148,20 @@ fn lower_push_runtime_fragment(
     statements: &mut Vec<WasmLirStmt>,
 ) -> Result<(), CompilerError> {
     let vec_handle = context.local_map.get(vec_local).copied().ok_or_else(|| {
-        CompilerError::lir_transformation(format!(
+        lir_transformation_error(format!(
             "Wasm lowering could not resolve runtime fragment vec local {vec_local:?}",
         ))
     })?;
 
     if !context.is_handle_local(vec_handle) {
-        return Err(CompilerError::lir_transformation(format!(
+        return Err(lir_transformation_error(format!(
             "Wasm lowering expected runtime fragment vec local {vec_local:?} to lower as a handle",
         )));
     }
 
     let lowered_value = lower_expression(context, value, statements)?;
     if !context.is_handle_local(lowered_value.value) {
-        return Err(CompilerError::lir_transformation(
+        return Err(lir_transformation_error(
             "Wasm lowering expected runtime fragment values to lower as string handles",
         ));
     }

@@ -1,5 +1,6 @@
 //! Export section emission.
 
+use crate::backends::error_types::BackendErrorType;
 use crate::backends::wasm::emit::sections::WasmEmitPlan;
 use crate::backends::wasm::lir::linkage::WasmExportKind;
 use crate::backends::wasm::lir::module::WasmLirModule;
@@ -28,7 +29,7 @@ pub(crate) fn build_export_section(
                         CompilerError::compiler_error(format!(
                             "Wasm emission could not resolve function index for export '{function_id:?}'"
                         ))
-                        .with_error_type(ErrorType::WasmGeneration)
+                        .with_error_type(ErrorType::Backend(BackendErrorType::WasmGeneration))
                     })?;
                 section.export(
                     export.export_name.as_str(),
@@ -104,6 +105,6 @@ fn helper_index(plan: &WasmEmitPlan, helper: WasmRuntimeHelper) -> Result<u32, C
             "Wasm emission missing helper function index for {}",
             crate::backends::wasm::emit::sections::helper_name(helper)
         ))
-        .with_error_type(ErrorType::WasmGeneration)
+        .with_error_type(ErrorType::Backend(BackendErrorType::WasmGeneration))
     })
 }

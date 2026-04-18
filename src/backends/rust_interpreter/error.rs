@@ -4,8 +4,8 @@
 //! enum before conversion into the compiler's shared error surface.
 //! WHY: this keeps interpreter internals explicit without leaking ad-hoc strings everywhere.
 
+use crate::backends::error_types::BackendErrorType;
 use crate::compiler_frontend::compiler_messages::compiler_errors::{CompilerError, ErrorType};
-
 #[derive(Debug, Clone)]
 pub(crate) enum InterpreterBackendError {
     InvalidRequest { message: String },
@@ -21,9 +21,8 @@ impl InterpreterBackendError {
             Self::InvalidRequest { message } => {
                 CompilerError::compiler_error(message).with_error_type(ErrorType::Compiler)
             }
-            Self::Lowering { message } => {
-                CompilerError::compiler_error(message).with_error_type(ErrorType::LirTransformation)
-            }
+            Self::Lowering { message } => CompilerError::compiler_error(message)
+                .with_error_type(ErrorType::Backend(BackendErrorType::LirTransformation)),
             Self::Execution { message } => {
                 CompilerError::compiler_error(message).with_error_type(ErrorType::Compiler)
             }

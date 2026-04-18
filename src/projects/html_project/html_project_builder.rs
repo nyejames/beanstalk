@@ -209,9 +209,12 @@ fn compile_one_module(
             compile_html_module_wasm(&compile_input, string_table, logical_html_output_path)?;
         Ok(CompiledHtmlModuleArtifacts::from_wasm(compiled_wasm))
     } else {
-        let output_file =
-            compile_html_module_js(&compile_input, string_table, logical_html_output_path.to_path_buf())
-                .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;
+        let output_file = compile_html_module_js(
+            &compile_input,
+            string_table,
+            logical_html_output_path.to_path_buf(),
+        )
+        .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;
         Ok(CompiledHtmlModuleArtifacts::from_js(
             logical_html_output_path.to_path_buf(),
             output_file,

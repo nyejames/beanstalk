@@ -1,3 +1,4 @@
+use crate::backends::error_types::BackendErrorType;
 use crate::backends::wasm::backend::lower_hir_to_wasm_module;
 use crate::backends::wasm::emit::module::emit_lir_to_wasm_module;
 use crate::backends::wasm::lir::function::{WasmLirBlock, WasmLirFunction, WasmLirFunctionOrigin};
@@ -140,7 +141,10 @@ fn rejects_invalid_helper_export_policy() {
         &string_table,
     )
     .expect_err("invalid helper policy should fail");
-    assert_eq!(error.errors[0].error_type, ErrorType::WasmGeneration);
+    assert_eq!(
+        error.errors[0].error_type,
+        ErrorType::Backend(BackendErrorType::WasmGeneration)
+    );
     assert!(error.errors[0].msg.contains("bst_str_ptr"));
 }
 
@@ -161,7 +165,10 @@ fn rejects_mismatched_numeric_add_types() {
 
     let error = emit_lir_to_wasm_module(&module, &WasmBackendRequest::default())
         .expect_err("mismatched IntAdd operands should fail emission");
-    assert_eq!(error.error_type, ErrorType::WasmGeneration);
+    assert_eq!(
+        error.error_type,
+        ErrorType::Backend(BackendErrorType::WasmGeneration)
+    );
     assert!(error.msg.contains("type mismatch in numeric add"));
 }
 
@@ -202,7 +209,10 @@ fn rejects_unsupported_wasm_feature_flags() {
         &string_table,
     )
     .expect_err("unsupported feature toggle should fail");
-    assert_eq!(error.errors[0].error_type, ErrorType::WasmGeneration);
+    assert_eq!(
+        error.errors[0].error_type,
+        ErrorType::Backend(BackendErrorType::WasmGeneration)
+    );
     assert!(error.errors[0].msg.contains("use_wasm_gc"));
 }
 
@@ -243,7 +253,10 @@ fn rejects_unsupported_cfg_lowering_strategy() {
         &string_table,
     )
     .expect_err("unsupported cfg strategy should fail");
-    assert_eq!(error.errors[0].error_type, ErrorType::WasmGeneration);
+    assert_eq!(
+        error.errors[0].error_type,
+        ErrorType::Backend(BackendErrorType::WasmGeneration)
+    );
     assert!(error.errors[0].msg.contains("dispatcher-loop"));
 }
 

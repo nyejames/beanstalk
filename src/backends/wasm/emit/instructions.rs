@@ -1,5 +1,6 @@
 //! Instruction lowering from Wasm LIR to wasm-encoder instructions.
 
+use crate::backends::error_types::BackendErrorType;
 use crate::backends::wasm::emit::sections::WasmEmitPlan;
 use crate::backends::wasm::lir::instructions::{WasmCalleeRef, WasmLirStmt, WasmLirTerminator};
 use crate::backends::wasm::lir::types::{
@@ -49,7 +50,7 @@ pub(crate) fn emit_statement(
                     "Wasm emission missing offset for static data {:?} in function {:?}",
                     data, context.function_id
                 ))
-                .with_error_type(ErrorType::WasmGeneration)
+                .with_error_type(ErrorType::Backend(BackendErrorType::WasmGeneration))
             })?;
             function.instruction(&Instruction::I32Const(offset as i32));
             function.instruction(&Instruction::LocalSet(local_index(*dst, context)?));
@@ -60,7 +61,7 @@ pub(crate) fn emit_statement(
                     "Wasm emission cannot lower length {} > i32::MAX in function {:?}",
                     value, context.function_id
                 ))
-                .with_error_type(ErrorType::WasmGeneration));
+                .with_error_type(ErrorType::Backend(BackendErrorType::WasmGeneration)));
             }
             function.instruction(&Instruction::I32Const(*value as i32));
             function.instruction(&Instruction::LocalSet(local_index(*dst, context)?));
@@ -86,7 +87,7 @@ pub(crate) fn emit_statement(
                             "Wasm emission missing callee function index for {:?} in {:?}",
                             function_id, context.function_id
                         ))
-                        .with_error_type(ErrorType::WasmGeneration)
+                        .with_error_type(ErrorType::Backend(BackendErrorType::WasmGeneration))
                     })?,
                 WasmCalleeRef::Import(import_id) => plan
                     .import_function_indices
@@ -97,7 +98,7 @@ pub(crate) fn emit_statement(
                             "Wasm emission missing import function index for {:?} in {:?}",
                             import_id, context.function_id
                         ))
-                        .with_error_type(ErrorType::WasmGeneration)
+                        .with_error_type(ErrorType::Backend(BackendErrorType::WasmGeneration))
                     })?,
             };
             function.instruction(&Instruction::Call(callee_index));
@@ -119,14 +120,14 @@ pub(crate) fn emit_statement(
                     "Wasm emission missing static pointer for {:?} in {:?}",
                     data, context.function_id
                 ))
-                .with_error_type(ErrorType::WasmGeneration)
+                .with_error_type(ErrorType::Backend(BackendErrorType::WasmGeneration))
             })?;
             let len = plan.data_lengths.get(data).copied().ok_or_else(|| {
                 CompilerError::compiler_error(format!(
                     "Wasm emission missing static length for {:?} in {:?}",
                     data, context.function_id
                 ))
-                .with_error_type(ErrorType::WasmGeneration)
+                .with_error_type(ErrorType::Backend(BackendErrorType::WasmGeneration))
             })?;
             function.instruction(&Instruction::LocalGet(local_index(*buffer, context)?));
             function.instruction(&Instruction::I32Const(ptr as i32));
@@ -287,7 +288,7 @@ fn set_dispatch_target(
                 "Wasm emission missing block index for target {:?} in function {:?}",
                 target, context.function_id
             ))
-            .with_error_type(ErrorType::WasmGeneration)
+            .with_error_type(ErrorType::Backend(BackendErrorType::WasmGeneration))
         })?;
 
     function.instruction(&Instruction::I32Const(target_index as i32));
@@ -332,7 +333,7 @@ fn emit_compare(
             "Wasm emission type mismatch in comparison: lhs {:?} is {:?}, rhs {:?} is {:?} in {:?}",
             lhs, lhs_type, rhs, rhs_type, context.function_id
         ))
-        .with_error_type(ErrorType::WasmGeneration));
+        .with_error_type(ErrorType::Backend(BackendErrorType::WasmGeneration)));
     }
 
     match lhs_type {
@@ -362,7 +363,7 @@ fn emit_compare(
                 "Wasm emission cannot compare Void-typed locals in function {:?}",
                 context.function_id
             ))
-            .with_error_type(ErrorType::WasmGeneration));
+            .with_error_type(ErrorType::Backend(BackendErrorType::WasmGeneration)));
         }
         WasmAbiType::I32 | WasmAbiType::Handle => {
             function.instruction(if is_eq {
@@ -393,7 +394,7 @@ fn emit_numeric_add(
             "Wasm emission type mismatch in numeric add: lhs {:?} is {:?}, rhs {:?} is {:?} in {:?}",
             lhs, lhs_type, rhs, rhs_type, context.function_id
         ))
-        .with_error_type(ErrorType::WasmGeneration));
+        .with_error_type(ErrorType::Backend(BackendErrorType::WasmGeneration)));
     }
 
     match kind {
@@ -406,7 +407,7 @@ fn emit_numeric_add(
                     "Wasm emission cannot lower IntAdd for ABI type {:?} in function {:?}",
                     lhs_type, context.function_id
                 ))
-                .with_error_type(ErrorType::WasmGeneration));
+                .with_error_type(ErrorType::Backend(BackendErrorType::WasmGeneration)));
             }
         },
         NumericAddKind::Float => match lhs_type {
@@ -421,7 +422,7 @@ fn emit_numeric_add(
                     "Wasm emission cannot lower FloatAdd for ABI type {:?} in function {:?}",
                     lhs_type, context.function_id
                 ))
-                .with_error_type(ErrorType::WasmGeneration));
+                .with_error_type(ErrorType::Backend(BackendErrorType::WasmGeneration)));
             }
         },
     }
@@ -446,7 +447,7 @@ fn emit_ordered_compare(
             "Wasm emission type mismatch in ordered comparison: lhs {:?} is {:?}, rhs {:?} is {:?} in {:?}",
             lhs, lhs_type, rhs, rhs_type, context.function_id
         ))
-        .with_error_type(ErrorType::WasmGeneration));
+        .with_error_type(ErrorType::Backend(BackendErrorType::WasmGeneration)));
     }
 
     match lhs_type {
@@ -487,7 +488,7 @@ fn emit_ordered_compare(
                 "Wasm emission cannot lower ordered comparison for ABI type {:?} in function {:?}",
                 lhs_type, context.function_id
             ))
-            .with_error_type(ErrorType::WasmGeneration));
+            .with_error_type(ErrorType::Backend(BackendErrorType::WasmGeneration)));
         }
     }
 
@@ -511,7 +512,7 @@ fn emit_numeric_sub(
             "Wasm emission type mismatch in numeric sub: lhs {:?} is {:?}, rhs {:?} is {:?} in {:?}",
             lhs, lhs_type, rhs, rhs_type, context.function_id
         ))
-        .with_error_type(ErrorType::WasmGeneration));
+        .with_error_type(ErrorType::Backend(BackendErrorType::WasmGeneration)));
     }
 
     match kind {
@@ -524,7 +525,7 @@ fn emit_numeric_sub(
                     "Wasm emission cannot lower IntSub for ABI type {:?} in function {:?}",
                     lhs_type, context.function_id
                 ))
-                .with_error_type(ErrorType::WasmGeneration));
+                .with_error_type(ErrorType::Backend(BackendErrorType::WasmGeneration)));
             }
         },
         NumericSubKind::Float => match lhs_type {
@@ -539,7 +540,7 @@ fn emit_numeric_sub(
                     "Wasm emission cannot lower FloatSub for ABI type {:?} in function {:?}",
                     lhs_type, context.function_id
                 ))
-                .with_error_type(ErrorType::WasmGeneration));
+                .with_error_type(ErrorType::Backend(BackendErrorType::WasmGeneration)));
             }
         },
     }
@@ -561,7 +562,7 @@ fn local_type(
                 "Wasm emission missing local type for {label} {:?} in function {:?}",
                 local_id, context.function_id
             ))
-            .with_error_type(ErrorType::WasmGeneration)
+            .with_error_type(ErrorType::Backend(BackendErrorType::WasmGeneration))
         })
 }
 
@@ -580,7 +581,7 @@ fn local_index(
                 "Wasm emission missing local index for {:?} in function {:?}",
                 local_id, context.function_id
             ))
-            .with_error_type(ErrorType::WasmGeneration)
+            .with_error_type(ErrorType::Backend(BackendErrorType::WasmGeneration))
         })
 }
 
@@ -592,6 +593,6 @@ fn helper_index(plan: &WasmEmitPlan, helper: WasmRuntimeHelper) -> Result<u32, C
             "Wasm emission missing helper function index for {}",
             crate::backends::wasm::emit::sections::helper_name(helper)
         ))
-        .with_error_type(ErrorType::WasmGeneration)
+        .with_error_type(ErrorType::Backend(BackendErrorType::WasmGeneration))
     })
 }
