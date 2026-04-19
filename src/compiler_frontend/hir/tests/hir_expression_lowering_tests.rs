@@ -773,7 +773,10 @@ fn lowers_fresh_mutable_call_argument_via_hidden_local_with_origin_metadata() {
         .call_location
         .and_then(|id| builder.side_table.source_location(id))
         .expect("fresh mutable arg local should record originating call location");
-    assert_eq!(call_location.start_pos.line_number, location.start_pos.line_number);
+    assert_eq!(
+        call_location.start_pos.line_number,
+        location.start_pos.line_number
+    );
 }
 
 #[test]

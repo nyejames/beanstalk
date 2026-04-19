@@ -965,7 +965,8 @@ impl<'a> HirBuilder<'a> {
             },
             location: argument.location.to_owned(),
         };
-        self.side_table.map_statement(&argument.location, &assign_statement);
+        self.side_table
+            .map_statement(&argument.location, &assign_statement);
         prelude.push(assign_statement);
 
         let region = self.current_region_or_error(&argument.location)?;

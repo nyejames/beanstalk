@@ -273,11 +273,7 @@ impl<'a> HirBuilder<'a> {
                 location,
             } => {
                 if *op == CollectionBuiltinOp::Get {
-                    return self.lower_collection_get_place(
-                        receiver,
-                        args,
-                        location,
-                    );
+                    return self.lower_collection_get_place(receiver, args, location);
                 }
 
                 let lowered = self.lower_collection_builtin_call_expression(

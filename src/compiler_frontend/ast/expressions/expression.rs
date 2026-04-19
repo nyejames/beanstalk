@@ -738,7 +738,7 @@ pub enum ExpressionKind {
     ),
 
     FunctionCall(
-        InternedPath,    // Function name
+        InternedPath,      // Function name
         Vec<CallArgument>, // Arguments
     ),
 

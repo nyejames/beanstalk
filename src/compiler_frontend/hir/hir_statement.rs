@@ -142,11 +142,7 @@ impl<'a> HirBuilder<'a> {
                 location,
             } => {
                 let function_id = self.resolve_function_id_or_error(name, location)?;
-                self.lower_call_statement(
-                    CallTarget::UserFunction(function_id),
-                    args,
-                    location,
-                )
+                self.lower_call_statement(CallTarget::UserFunction(function_id), args, location)
             }
 
             NodeKind::ResultHandledFunctionCall {

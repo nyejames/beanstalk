@@ -557,9 +557,3 @@ This plan is complete when all of the following are true:
 - borrow checking and last-use analysis continue to work on normal locals without a semantic special case
 - the language docs, compiler design docs, memory docs, roadmap, and language-surface matrix all reflect the new rule
 - canonical parser, HIR, borrow-checker, and end-to-end tests exist
-
-## Suggested roadmap blurb
-
-`docs/roadmap/plans/mutable-literal-mutable-params-hidden-locals-plan.md`
-
-Support fresh rvalues directly in mutable (`~T`) function-parameter slots by lowering them through synthesized hidden locals in HIR. Keeps `~` place-only, keeps `~literal` invalid, avoids adding a new HIR node kind, and extends tests/docs for the new call-site rule.
