@@ -11,8 +11,18 @@ loop 0 to 5 |i|:
 ;
 
 inclusive_sum ~= 0
-loop 0 upto 5 |i|:
+loop 0 to & 5 |i|:
     inclusive_sum = inclusive_sum + i
 ;
 
-[:loop_conditional_and_range counter=[counter] sum_exclusive=[sum] sum_inclusive=[inclusive_sum]]
+omitted_start_sum ~= 0
+loop to 5 |i|:
+    omitted_start_sum = omitted_start_sum + i
+;
+
+omitted_start_inclusive_sum ~= 0
+loop to & 5 |i|:
+    omitted_start_inclusive_sum = omitted_start_inclusive_sum + i
+;
+
+[:loop_conditional_and_range counter=[counter] sum_exclusive=[sum] sum_inclusive=[inclusive_sum] omitted=[omitted_start_sum] omitted_inclusive=[omitted_start_inclusive_sum]]

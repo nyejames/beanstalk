@@ -640,48 +640,61 @@ fn parse_range_loop_spec_from_tokens(
 ) -> Result<RangeLoopSpec, CompilerError> {
     let mut range_stream = token_stream_with_eof(range_tokens)?;
 
-    let mut start_type = DataType::Inferred;
-    let start = create_expression_until(
-        &mut range_stream,
-        context,
-        &mut start_type,
-        &Ownership::ImmutableReference,
-        &[
-            TokenKind::ExclusiveRange,
-            TokenKind::InclusiveRange,
-            TokenKind::Eof,
-        ],
-        string_table,
-    )?;
+    // Omitted-start sugar: `loop to 5:` desugars to `loop 0 to 5:`.
+    let start = if matches!(range_stream.current_token_kind(), TokenKind::ExclusiveRange) {
+        let location = range_stream.current_location();
+        Expression::new(
+            ExpressionKind::Int(0),
+            location,
+            DataType::Int,
+            Ownership::ImmutableOwned,
+        )
+    } else {
+        let mut start_type = DataType::Inferred;
+        create_expression_until(
+            &mut range_stream,
+            context,
+            &mut start_type,
+            &Ownership::ImmutableReference,
+            &[TokenKind::ExclusiveRange, TokenKind::Eof],
+            string_table,
+        )?
+    };
 
     let end_kind = match range_stream.current_token_kind() {
-        TokenKind::ExclusiveRange => RangeEndKind::Exclusive,
-        TokenKind::InclusiveRange => RangeEndKind::Inclusive,
+        TokenKind::ExclusiveRange => {
+            range_stream.advance();
+            // Optional inclusive marker: `to & end`
+            if matches!(range_stream.current_token_kind(), TokenKind::Ampersand) {
+                range_stream.advance();
+                RangeEndKind::Inclusive
+            } else {
+                RangeEndKind::Exclusive
+            }
+        }
         TokenKind::Eof => {
             return_syntax_error!(
-                "Range loops must include 'to' or 'upto' between bounds",
+                "Range loops must include 'to' between bounds",
                 start.location.clone(),
                 {
                     CompilationStage => LOOP_PARSING_STAGE,
                     PrimarySuggestion => "Use syntax like: loop 0 to 10 |i|:",
-                    AlternativeSuggestion => "Use 'upto' for an inclusive end bound",
+                    AlternativeSuggestion => "Use `to & end` for an inclusive end bound",
                 }
             );
         }
         _ => {
             return_syntax_error!(
-                "Range loops must include 'to' or 'upto' between bounds",
+                "Range loops must include 'to' between bounds",
                 range_stream.current_location(),
                 {
                     CompilationStage => LOOP_PARSING_STAGE,
                     PrimarySuggestion => "Use syntax like: loop 0 to 10 |i|:",
-                    AlternativeSuggestion => "Use 'upto' for an inclusive end bound",
+                    AlternativeSuggestion => "Use `to & end` for an inclusive end bound",
                 }
             );
         }
     };
-
-    range_stream.advance();
 
     if matches!(range_stream.current_token_kind(), TokenKind::Eof) {
         return_syntax_error!(
@@ -689,7 +702,7 @@ fn parse_range_loop_spec_from_tokens(
             start.location.clone(),
             {
                 CompilationStage => LOOP_PARSING_STAGE,
-                PrimarySuggestion => "Provide an end bound after 'to' or 'upto', for example 'loop 0 to 10 |i|:'",
+                PrimarySuggestion => "Provide an end bound after 'to', for example 'loop 0 to 10 |i|:'",
             }
         );
     }
@@ -986,12 +999,7 @@ fn has_top_level_range_marker(tokens: &[Token]) -> bool {
     let mut depth = NestingDepth::default();
 
     for token in tokens {
-        if depth.is_top_level()
-            && matches!(
-                token.kind,
-                TokenKind::ExclusiveRange | TokenKind::InclusiveRange
-            )
-        {
+        if depth.is_top_level() && matches!(token.kind, TokenKind::ExclusiveRange) {
             return true;
         }
 

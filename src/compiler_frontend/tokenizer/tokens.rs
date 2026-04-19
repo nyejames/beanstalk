@@ -453,7 +453,9 @@ pub enum TokenKind {
     Break,
     Continue,
     ExclusiveRange, // to
-    InclusiveRange, // upto
+
+    // Range inclusivity marker
+    Ampersand, // &
 
     // Pattern matching
     Case,     // case

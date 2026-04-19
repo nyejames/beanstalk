@@ -52,7 +52,7 @@ fn parses_conditional_loop_without_bindings() {
 #[test]
 fn parses_range_loop_with_pipe_binding() {
     let (ast, string_table) =
-        parse_loop_fixture("sum ~= 0\nloop 1 upto 5 by 2 |i|:\n    sum = sum + i\n;");
+        parse_loop_fixture("sum ~= 0\nloop 1 to & 5 by 2 |i|:\n    sum = sum + i\n;");
 
     let body = loop_function_body(&ast, &string_table);
 
@@ -409,8 +409,71 @@ fn rejects_non_boolean_conditional_loop_condition() {
 }
 
 #[test]
+fn parses_inclusive_range_loop_with_tight_ampersand() {
+    let (ast, string_table) =
+        parse_loop_fixture("sum ~= 0\nloop 0 to &5 |i|:\n    sum = sum + i\n;");
+
+    let body = loop_function_body(&ast, &string_table);
+
+    let NodeKind::RangeLoop { range, .. } = &body[1].kind else {
+        panic!("expected range loop in function body");
+    };
+
+    assert_eq!(range.end_kind, RangeEndKind::Inclusive);
+}
+
+#[test]
+fn parses_omitted_start_exclusive_range_loop() {
+    let (ast, string_table) = parse_loop_fixture("sum ~= 0\nloop to 5 |i|:\n    sum = sum + i\n;");
+
+    let body = loop_function_body(&ast, &string_table);
+
+    let NodeKind::RangeLoop { range, .. } = &body[1].kind else {
+        panic!("expected range loop in function body");
+    };
+
+    assert!(matches!(range.start.kind, ExpressionKind::Int(0)));
+    assert_eq!(range.end_kind, RangeEndKind::Exclusive);
+    assert!(matches!(range.end.kind, ExpressionKind::Int(5)));
+}
+
+#[test]
+fn parses_omitted_start_inclusive_range_loop() {
+    let (ast, string_table) =
+        parse_loop_fixture("sum ~= 0\nloop to & 5 |i|:\n    sum = sum + i\n;");
+
+    let body = loop_function_body(&ast, &string_table);
+
+    let NodeKind::RangeLoop { range, .. } = &body[1].kind else {
+        panic!("expected range loop in function body");
+    };
+
+    assert!(matches!(range.start.kind, ExpressionKind::Int(0)));
+    assert_eq!(range.end_kind, RangeEndKind::Inclusive);
+    assert!(matches!(range.end.kind, ExpressionKind::Int(5)));
+}
+
+#[test]
 fn rejects_range_loop_missing_end_bound() {
     let error = parse_loop_fixture_error("loop 0 to |i|:\n    io(i)\n;");
+    assert!(error.msg.contains("Range loop is missing an end bound"));
+}
+
+#[test]
+fn rejects_omitted_start_range_loop_missing_end_bound() {
+    let error = parse_loop_fixture_error("loop to:\n    io(1)\n;");
+    assert!(error.msg.contains("Range loop is missing an end bound"));
+}
+
+#[test]
+fn rejects_omitted_start_range_loop_ampersand_without_end_bound() {
+    let error = parse_loop_fixture_error("loop to &:\n    io(1)\n;");
+    assert!(error.msg.contains("Range loop is missing an end bound"));
+}
+
+#[test]
+fn rejects_explicit_start_range_loop_ampersand_without_end_bound() {
+    let error = parse_loop_fixture_error("loop 0 to &:\n    io(1)\n;");
     assert!(error.msg.contains("Range loop is missing an end bound"));
 }
 

@@ -508,7 +508,6 @@ fn is_keyword(word: &str, language: CodeLanguage) -> bool {
                 | "loop"
                 | "in"
                 | "to"
-                | "upto"
                 | "by"
                 | "as"
                 | "copy"

@@ -24,10 +24,6 @@ These are the non-negotiable conditions for starting Alpha.
 - `docs/roadmap/plans/js-backend-hardening.md`
 Reviewing the JS backend and making sure it implements the full suite of alpha features.
 
-- `docs/roadmap/plans/loop-range-syntax-plan.md`
-Planned loop range syntax cleanup:
-replace inclusive `upto` with `to & end`, and add omitted-start sugar so `loop to end:` desugars to `loop 0 to end:`. This is a frontend/docs/tests migration anchored mainly in `src/compiler_frontend/tokenizer/{tokens,lexer}.rs`, `src/compiler_frontend/ast/statements/loops.rs`, loop parser tests, integration loop fixtures, and loop docs.
-
 - `docs/roadmap/plans/cross-platform-compat.md`
 Some tests current fail on windows, but the language is still usable.
 This is due to things like CRLF in golden outputs and OS path drifts.

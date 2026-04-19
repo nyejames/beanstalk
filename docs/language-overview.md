@@ -411,7 +411,7 @@ else
 
 Beanstalk uses a **single** loop keyword: `loop`.
 
-* **`to` / `upto`** select range semantics (exclusive vs inclusive)
+* **`to`** / **`to &`** select range semantics (exclusive vs inclusive)
 * **Range loops can bind the current counter**
 * **Collection loops can bind the current item**
 * **An optional second binding provides the zero-based index**
@@ -472,10 +472,24 @@ loop items:
 
 ### Range loops
 
-If the loop header contains **`to`** or **`upto`**, it is a range loop.
+If the loop header contains **`to`**, it is a range loop.
 
 * `to` uses an **exclusive** end bound
-* `upto` uses an **inclusive** end bound
+* `to &` uses an **inclusive** end bound
+
+You can omit the leading `0` before `to` as sugar:
+
+```beanstalk
+loop to 10 |i|:
+    io(i.to_string())
+;
+-- equivalent to: loop 0 to 10 |i|:
+
+loop to & 10 |i|:
+    io(i.to_string())
+;
+-- equivalent to: loop 0 to & 10 |i|:
+```
 
 ```beanstalk
 loop 0 to 10 |i|:
@@ -483,7 +497,7 @@ loop 0 to 10 |i|:
 ;
 -- yields: 0, 1, 2, 3, 4, 5, 6, 7, 8, 9
 
-loop 0 upto 10 |i|:
+loop 0 to & 10 |i|:
     io(i.to_string())
 ;
 -- yields: 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
@@ -525,7 +539,7 @@ loop 10 to 0 |i|:
 You can also supply an explicit step:
 
 ```beanstalk
-loop 10 upto 0 by 2 |i|:
+loop 10 to & 0 by 2 |i|:
     io(i.to_string())
 ;
 -- yields: 10, 8, 6, 4, 2, 0

@@ -317,7 +317,7 @@ body {
         color: #c444aff9; 
         padding: 0.1em; 
         font-family: var(--bst-font-family-monospace);
-    "> loop</span>.</p><ul><li><strong><code class='codeblock'><span class='bst-code-keyword'>to</span></code> / <code class='codeblock'><span class='bst-code-keyword'>upto</span></code></strong> select range semantics (exclusive vs inclusive)</li><li>Range loops can bind the current counter</li><li>Collection loops can bind the current item</li><li>An optional second binding provides the zero-based iteration index</li><li>Loop bindings are written after the loop condition</li><li>When bindings exist, they always use <code class='codeblock'><span class='bst-code-operator'>|</span>...<span class='bst-code-operator'>|</span></code> syntax</li><li>No <strong><code class='codeblock'>reverse</code></strong> keyword; direction is inferred from the bounds</li><li><strong><code class='codeblock'><span class='bst-code-keyword'>by</span></code></strong> controls step size and works with both directions</li></ul><p>Loops come in two forms:</p><ol><li><strong>Conditional loops</strong> (repeat while a condition is true)</li><li><strong>Iteration loops</strong> (iterate over a collection or a numeric range)</li></ol><h3>Conditional loops</h3><p>A conditional loop repeats for as long as its condition stays true.</p><pre style="
+    "> loop</span>.</p><ul><li><strong><code class='codeblock'><span class='bst-code-keyword'>to</span></code> / <code class='codeblock'><span class='bst-code-keyword'>to</span> <span class='bst-code-operator'>&amp;</span></code></strong> select range semantics (exclusive vs inclusive)</li><li>Range loops can bind the current counter</li><li>Collection loops can bind the current item</li><li>An optional second binding provides the zero-based iteration index</li><li>Loop bindings are written after the loop condition</li><li>When bindings exist, they always use <code class='codeblock'><span class='bst-code-operator'>|</span>...<span class='bst-code-operator'>|</span></code> syntax</li><li>No <strong><code class='codeblock'>reverse</code></strong> keyword; direction is inferred from the bounds</li><li><strong><code class='codeblock'><span class='bst-code-keyword'>by</span></code></strong> controls step size and works with both directions</li></ul><p>Loops come in two forms:</p><ol><li><strong>Conditional loops</strong> (repeat while a condition is true)</li><li><strong>Iteration loops</strong> (iterate over a collection or a numeric range)</li></ol><h3>Conditional loops</h3><p>A conditional loop repeats for as long as its condition stays true.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12); 
         padding-left: 1em; 
         border-radius: 5px;
@@ -350,7 +350,7 @@ body {
     <span class='bst-code-keyword'>loop</span> items <span class='bst-code-operator'>|</span>item, index<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
         io<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>[</span>index<span class='bst-code-parenthesis'>]</span><span class='bst-code-operator'>:</span> <span class='bst-code-parenthesis'>[</span>item<span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>)</span>
     ;
-    </code></pre><p>The form is determined entirely by the loop header:</p><ul><li>If the header contains <strong>`to`</strong> or <strong>`upto`</strong>, it is a <strong>range loop</strong>.</li><li>Otherwise, if the header ends with loop bindings, it is a <strong>collection loop</strong>.</li><li>Otherwise, it is treated as a <strong>conditional loop</strong>.</li></ul><h3>Range loops</h3><ul><li>`to` uses an <strong>exclusive</strong> end bound</li><li>`upto` uses an <strong>inclusive</strong> end bound</li></ul><pre style="
+    </code></pre><p>The form is determined entirely by the loop header:</p><ul><li>If the header contains <strong>`to`</strong>, it is a <strong>range loop</strong>.</li><li>Otherwise, if the header ends with loop bindings, it is a <strong>collection loop</strong>.</li><li>Otherwise, it is treated as a <strong>conditional loop</strong>.</li></ul><h3>Range loops</h3><ul><li>`to` uses an <strong>exclusive</strong> end bound</li><li>`to &amp;` uses an <strong>inclusive</strong> end bound</li><li>You can omit the leading `0` before `to` as sugar</li></ul><pre style="
         background-color: hsla(0, 0%, 42%, 0.12); 
         padding-left: 1em; 
         border-radius: 5px;
@@ -363,10 +363,15 @@ body {
     ;
     <span class='bst-code-comment'>-- yields: 0, 1, 2, 3, 4, 5, 6, 7, 8, 9</span>
 
-    <span class='bst-code-keyword'>loop</span> <span class='bst-code-number'>0</span> <span class='bst-code-keyword'>upto</span> <span class='bst-code-number'>10</span> <span class='bst-code-operator'>|</span>i<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
+    <span class='bst-code-keyword'>loop</span> <span class='bst-code-number'>0</span> <span class='bst-code-keyword'>to</span> <span class='bst-code-operator'>&amp;</span> <span class='bst-code-number'>10</span> <span class='bst-code-operator'>|</span>i<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
         io<span class='bst-code-parenthesis'>(</span>i.to_string<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-parenthesis'>)</span>
     ;
     <span class='bst-code-comment'>-- yields: 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10</span>
+
+    <span class='bst-code-keyword'>loop</span> <span class='bst-code-keyword'>to</span> <span class='bst-code-number'>5</span> <span class='bst-code-operator'>|</span>i<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
+        io<span class='bst-code-parenthesis'>(</span>i.to_string<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-parenthesis'>)</span>
+    ;
+    <span class='bst-code-comment'>-- equivalent to: loop 0 to 5 |i|:</span>
     </code></pre><p>Range loops can also bind a zero-based iteration index:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12); 
         padding-left: 1em; 
@@ -415,7 +420,7 @@ body {
         white-space: pre; 
         overflow-x: auto;
     "><code class='codeblock'>
-    <span class='bst-code-keyword'>loop</span> <span class='bst-code-number'>10</span> <span class='bst-code-keyword'>upto</span> <span class='bst-code-number'>0</span> <span class='bst-code-keyword'>by</span> <span class='bst-code-number'>2</span> <span class='bst-code-operator'>|</span>i<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
+    <span class='bst-code-keyword'>loop</span> <span class='bst-code-number'>10</span> <span class='bst-code-keyword'>to</span> <span class='bst-code-operator'>&amp;</span> <span class='bst-code-number'>0</span> <span class='bst-code-keyword'>by</span> <span class='bst-code-number'>2</span> <span class='bst-code-operator'>|</span>i<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
         io<span class='bst-code-parenthesis'>(</span>i.to_string<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-parenthesis'>)</span>
     ;
     <span class='bst-code-comment'>-- yields: 10, 8, 6, 4, 2, 0</span>

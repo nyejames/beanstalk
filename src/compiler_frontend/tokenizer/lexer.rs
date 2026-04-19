@@ -512,6 +512,10 @@ pub fn get_token_kind(
             return_token!(TokenKind::Hash, stream);
         }
 
+        if current_char == '&' {
+            return_token!(TokenKind::Ampersand, stream);
+        }
+
         // Path
         if current_char == '@' {
             return parse_file_path(stream, string_table);
@@ -596,7 +600,6 @@ pub(crate) fn keyword_or_variable(
             // Loops
             "loop" => return_token!(TokenKind::Loop, stream),
             "to" => return_token!(TokenKind::ExclusiveRange, stream),
-            "upto" => return_token!(TokenKind::InclusiveRange, stream),
             "by" => return_token!(TokenKind::By, stream),
             "break" => return_token!(TokenKind::Break, stream),
             "continue" => return_token!(TokenKind::Continue, stream),

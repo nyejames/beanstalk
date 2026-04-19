@@ -505,7 +505,7 @@ impl<'a> HirBuilder<'a> {
             "for.header.desc",
         );
 
-        // `to` / `upto` become strict vs inclusive comparators per direction branch.
+        // `to` (exclusive) vs `to &` (inclusive) become strict vs inclusive comparators per direction branch.
         self.set_current_block(header_ascending_block, location)?;
         let header_ascending_region = self.current_region_or_error(location)?;
         let asc_current_value = self.make_expression(

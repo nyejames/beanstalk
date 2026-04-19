@@ -96,11 +96,7 @@ fn rejects_missing_tilde_for_collection_place_argument_to_mutable_parameter() {
         "{}",
         error.msg
     );
-    assert!(
-        error.msg.contains("parameter 'items'"),
-        "{}",
-        error.msg
-    );
+    assert!(error.msg.contains("parameter 'items'"), "{}", error.msg);
 }
 
 #[test]

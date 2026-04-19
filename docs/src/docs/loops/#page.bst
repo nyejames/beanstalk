@@ -13,7 +13,7 @@ import @styles/docs {navbar, title, section, palette, table, data, codeblock, co
 
     Beanstalk uses a **single** loop keyword: [codesnippet: loop].
 
-    - **[$code("bst"):to] / [$code("bst"):upto]** select range semantics (exclusive vs inclusive)
+    - **[$code("bst"):to] / [$code("bst"):to &]** select range semantics (exclusive vs inclusive)
     - Range loops can bind the current counter
     - Collection loops can bind the current item
     - An optional second binding provides the zero-based iteration index
@@ -66,14 +66,15 @@ import @styles/docs {navbar, title, section, palette, table, data, codeblock, co
 
     The form is determined entirely by the loop header:
 
-    - If the header contains **`to`** or **`upto`**, it is a **range loop**.
+    - If the header contains **`to`**, it is a **range loop**.
     - Otherwise, if the header ends with loop bindings, it is a **collection loop**.
     - Otherwise, it is treated as a **conditional loop**.
 
     ### Range loops
 
     - `to` uses an **exclusive** end bound
-    - `upto` uses an **inclusive** end bound
+    - `to &` uses an **inclusive** end bound
+    - You can omit the leading `0` before `to` as sugar
 
     [codeblock, $code("bst"):
         loop 0 to 10 |i|:
@@ -81,10 +82,15 @@ import @styles/docs {navbar, title, section, palette, table, data, codeblock, co
         ;
         -- yields: 0, 1, 2, 3, 4, 5, 6, 7, 8, 9
 
-        loop 0 upto 10 |i|:
+        loop 0 to & 10 |i|:
             io(i.to_string())
         ;
         -- yields: 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
+
+        loop to 5 |i|:
+            io(i.to_string())
+        ;
+        -- equivalent to: loop 0 to 5 |i|:
     ]
 
     Range loops can also bind a zero-based iteration index:
@@ -128,7 +134,7 @@ import @styles/docs {navbar, title, section, palette, table, data, codeblock, co
     You can also supply an explicit step:
 
     [codeblock, $code("bst"):
-        loop 10 upto 0 by 2 |i|:
+        loop 10 to & 0 by 2 |i|:
             io(i.to_string())
         ;
         -- yields: 10, 8, 6, 4, 2, 0
