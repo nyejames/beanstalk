@@ -364,6 +364,7 @@ impl HirSideTable {
     }
 
     #[inline]
+    #[cfg(any(test, feature = "show_hir"))]
     pub(crate) fn resolve_struct_name<'a>(
         &self,
         struct_id: StructId,
@@ -374,6 +375,7 @@ impl HirSideTable {
     }
 
     #[inline]
+    #[cfg(any(test, feature = "show_hir"))]
     pub(crate) fn resolve_field_name<'a>(
         &self,
         field_id: FieldId,

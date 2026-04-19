@@ -27,10 +27,6 @@ Support fresh rvalues directly in mutable (`~T`) function-parameter slots by low
 - `docs/roadmap/plans/collection-builtins-refactor.md`
 Make collection methods simpler builtins that no longer lean on method-call compatilibity. 
 
-- `docs/roadmap/plans/breakup-js-prelude.md`
-Breakdown the prelude.rs file in the JS backend into smaller files.
-Currently has too many responsibilities and needs to be refactored into more files.
-
 - `docs/roadmap/plans/js-backend-hardening.md`
 Reviewing the JS backend and making sure it implements the full suite of alpha features.
 

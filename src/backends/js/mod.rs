@@ -7,7 +7,7 @@ mod js_expr;
 mod js_function;
 mod js_host_functions;
 mod js_statement;
-mod prelude;
+mod runtime;
 mod symbols;
 mod utils;
 
