@@ -301,14 +301,14 @@ mutate(~x)
 }
 
 #[test]
-fn rejects_tilde_on_non_place_argument_expression() {
+fn rejects_tilde_on_non_place_argument_literal() {
     let error = parse_single_file_ast_error(
         r#"
 mutate |value ~Int|:
     value = 5
 ;
 
-mutate(~(1 + 2))
+mutate(~12)
 "#,
     );
 

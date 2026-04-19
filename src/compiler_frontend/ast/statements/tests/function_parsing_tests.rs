@@ -86,15 +86,18 @@ fn start_function_distinguishes_user_and_host_calls() {
 }
 
 #[test]
-fn rejects_immutable_collection_argument_for_mutable_parameter() {
+fn rejects_missing_tilde_for_collection_place_argument_to_mutable_parameter() {
     let error = parse_single_file_ast_error(
         "touch |items ~{Int}| -> Int:\n    return items.length()\n;\n\nvalues = {1, 2, 3}\ncount = touch(values)\n",
     );
 
     assert!(
-        error
-            .msg
-            .contains("Argument for parameter 'items' in Function 'touch' has incorrect type"),
+        error.msg.contains("Function 'touch' requires explicit '~'"),
+        "{}",
+        error.msg
+    );
+    assert!(
+        error.msg.contains("parameter 'items'"),
         "{}",
         error.msg
     );

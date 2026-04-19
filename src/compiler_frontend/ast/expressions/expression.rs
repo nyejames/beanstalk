@@ -342,22 +342,6 @@ impl Expression {
 
     pub fn result_handled_function_call(
         name: InternedPath,
-        args: Vec<Expression>,
-        result_types: Vec<DataType>,
-        handling: ResultCallHandling,
-        location: SourceLocation,
-    ) -> Self {
-        Self::result_handled_function_call_with_arguments(
-            name,
-            Self::shared_positional_call_arguments(args),
-            result_types,
-            handling,
-            location,
-        )
-    }
-
-    pub fn result_handled_function_call_with_arguments(
-        name: InternedPath,
         args: Vec<CallArgument>,
         result_types: Vec<DataType>,
         handling: ResultCallHandling,

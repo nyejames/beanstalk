@@ -199,14 +199,13 @@ pub(super) fn parse_identifier_or_call(
                         handling,
                         location,
                     } => {
-                        let func_call_expr =
-                            Expression::result_handled_function_call_with_arguments(
-                                name,
-                                normalize_call_arguments(&args),
-                                result_types,
-                                handling,
-                                location,
-                            );
+                        let func_call_expr = Expression::result_handled_function_call(
+                            name,
+                            normalize_call_arguments(&args),
+                            result_types,
+                            handling,
+                            location,
+                        );
 
                         push_expression_node(
                             token_stream,

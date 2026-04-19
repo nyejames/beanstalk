@@ -233,7 +233,7 @@ impl AstNode {
                 result_types,
                 handling,
                 location,
-            } => Ok(Expression::result_handled_function_call_with_arguments(
+            } => Ok(Expression::result_handled_function_call(
                 name.to_owned(),
                 normalize_call_arguments(arguments),
                 result_types.to_owned(),

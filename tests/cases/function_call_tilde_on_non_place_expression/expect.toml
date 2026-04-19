@@ -5,6 +5,6 @@ error_type = "Rule"
 message_contains = [
   "Function 'mutate'",
   "received '~' on a non-place argument",
-  "without '~'",
   "parameter 'value'",
+  "without '~'",
 ]
