@@ -18,7 +18,6 @@ use crate::compiler_frontend::paths::rendered_path_usage::RenderedPathUsage;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use std::path::PathBuf;
-use std::time::SystemTime;
 
 /// Create the smallest valid HIR module with one entry start function.
 pub(crate) fn create_test_hir_module() -> HirModule {

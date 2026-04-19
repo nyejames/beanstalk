@@ -2,30 +2,20 @@
 // NOTE: temp file creation processes have to be explicitly dropped
 // Or these tests will fail on Windows due to attempts to delete non-empty temp directories while files are still open.
 
-use super::{
-    BackendBuilder, CleanupPolicy, FileKind, OutputFile, Project, ProjectBuilder, WriteMode,
-    WriteOptions, build_project, resolve_project_output_root,
-    write_project_outputs as write_project_outputs_with_table,
-};
-use crate::build_system::output_cleanup::{
-    BuilderKind, ManifestLimitedSafeModeReason, ManifestLoadResult,
+use super::{WriteOptions, write_project_outputs as write_project_outputs_with_table};
+use crate::build_system::build::{
+    BackendBuilder, CleanupPolicy, FileKind, OutputFile, Project, WriteMode,
 };
 use crate::compiler_frontend::Flag;
-use crate::compiler_frontend::basic_utility_functions::normalize_path;
 use crate::compiler_frontend::compiler_errors::{
     CompilerError, CompilerMessages, ErrorType, SourceLocation,
 };
-use crate::compiler_frontend::compiler_messages::display_messages::resolve_source_file_path;
 use crate::compiler_frontend::compiler_warnings::{CompilerWarning, WarningKind};
 use crate::compiler_frontend::style_directives::StyleDirectiveSpec;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
-use crate::projects::html_project::html_project_builder::HtmlProjectBuilder;
 use crate::projects::settings::Config;
-use std::fs;
 use std::path::PathBuf;
 use std::sync::{Mutex, MutexGuard, OnceLock};
-use std::thread;
-use std::time::{Duration, SystemTime};
 
 struct CurrentDirGuard {
     _lock: MutexGuard<'static, ()>,

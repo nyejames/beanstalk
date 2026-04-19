@@ -16,8 +16,7 @@ use super::{
 };
 use crate::compiler_tests::test_support::temp_dir;
 use std::fs;
-use std::path::{Path, PathBuf};
-use std::time::SystemTime;
+use std::path::Path;
 
 fn write_success_fixture(root: &Path, case_name: &str) {
     let case_root = root.join(case_name);

@@ -8,10 +8,9 @@ use crate::compiler_frontend::ast::expressions::expression::{Expression, Express
 use crate::compiler_frontend::ast::statements::functions::{
     FunctionReturn, FunctionSignature, ReturnSlot,
 };
-use crate::compiler_frontend::ast::{Ast, AstDocFragment, AstDocFragmentKind};
-use crate::compiler_frontend::compiler_errors::{CompilerMessages, ErrorType};
+use crate::compiler_frontend::ast::{AstDocFragment, AstDocFragmentKind};
+use crate::compiler_frontend::compiler_errors::ErrorType;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
-use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::hir::hir_builder::validate_module_for_tests;
 use crate::compiler_frontend::hir::hir_nodes::{
     HirExpression, HirExpressionKind, HirMatchArm, HirPattern, HirPlace, HirRegion, HirTerminator,

@@ -15,7 +15,6 @@ use std::sync::Arc;
 use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
-use std::time::SystemTime;
 
 fn bind_loopback_listener() -> Option<TcpListener> {
     match TcpListener::bind("127.0.0.1:0") {

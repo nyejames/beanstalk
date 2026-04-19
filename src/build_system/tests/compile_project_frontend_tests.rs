@@ -4,8 +4,6 @@ use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_tests::test_support::temp_dir;
 use crate::projects::settings::Config;
 use std::fs;
-use std::path::PathBuf;
-use std::time::SystemTime;
 
 // ── Single-file flow ──────────────────────────────────────────────────────────
 

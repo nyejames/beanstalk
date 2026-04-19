@@ -12,8 +12,6 @@ use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::CharPosition;
 use crate::compiler_tests::test_support::temp_dir;
 use std::fs;
-use std::path::PathBuf;
-use std::time::SystemTime;
 
 #[test]
 fn escape_html_rewrites_special_characters() {

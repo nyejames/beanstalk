@@ -3,30 +3,17 @@
 //! WHAT: checks how statement-level AST nodes become HIR blocks, statements, and terminators.
 //! WHY: statement lowering owns most CFG construction and benefits from targeted regression coverage.
 
-use crate::compiler_frontend::ast::ast_nodes::{
-    AstNode, MultiBindTarget, MultiBindTargetKind, NodeKind,
-};
-use crate::compiler_frontend::ast::expressions::call_argument::{CallAccessMode, CallArgument};
-use crate::compiler_frontend::ast::expressions::expression::{
-    Expression, ExpressionKind, Operator, ResultCallHandling,
-};
-use crate::compiler_frontend::ast::statements::branching::MatchArm;
-use crate::compiler_frontend::ast::statements::functions::{
-    FunctionReturn, FunctionSignature, ReturnSlot,
-};
-use crate::compiler_frontend::ast::templates::template_types::Template;
-use crate::compiler_frontend::ast::{Ast, AstDocFragment, AstDocFragmentKind};
-use crate::compiler_frontend::compiler_errors::{CompilerMessages, ErrorType};
+use crate::compiler_frontend::ast::ast_nodes::NodeKind;
+use crate::compiler_frontend::ast::expressions::expression::{Expression, Operator};
+use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::hir::hir_nodes::{
-    FunctionId, HirConstValue, HirDocFragmentKind, HirExpressionKind, HirModule, HirPattern,
-    HirPlace, HirStatementKind, HirTerminator,
+    FunctionId, HirExpressionKind, HirModule, HirPlace, HirStatementKind, HirTerminator,
 };
 use crate::compiler_frontend::host_functions::CallTarget;
-use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tests::test_support::{
-    fresh_returns, function_node, make_test_variable, node, param, runtime_function_call_node,
+    fresh_returns, function_node, make_test_variable, node, runtime_function_call_node,
     runtime_operator_node, test_location,
 };
 

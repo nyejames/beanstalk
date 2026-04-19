@@ -10,7 +10,6 @@ use crate::compiler_tests::test_support::temp_dir;
 use std::collections::HashSet;
 use std::ffi::OsStr;
 use std::path::PathBuf;
-use std::time::SystemTime;
 
 fn configured_resolver(config: &Config) -> ProjectPathResolver {
     // WHAT: rebuilds the same canonical resolver the real project build uses.

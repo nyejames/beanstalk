@@ -7,7 +7,6 @@
 //! Only EntryStart (for the entry-file implicit start) and Normal (for all other functions)
 //! remain after Phase 1.
 
-use crate::compiler_frontend::ast::Ast;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind, SourceLocation};
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
