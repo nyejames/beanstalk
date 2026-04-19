@@ -5,7 +5,7 @@ use crate::compiler_frontend::ast::expressions::expression::{Expression, Operato
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
 use crate::compiler_frontend::ast::field_access::parse_field_access;
 use crate::compiler_frontend::ast::place_access::{ast_node_is_mutable_place, ast_node_is_place};
-use crate::compiler_frontend::builtins::BuiltinMethodKind;
+use crate::compiler_frontend::builtins::CollectionBuiltinOp;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
@@ -20,8 +20,8 @@ use crate::compiler_frontend::type_coercion::parse_context::parse_expectation_fo
 use crate::{ast_log, return_rule_error, return_syntax_error, return_type_error};
 
 fn assignment_target_value_type(target: &AstNode) -> Result<DataType, CompilerError> {
-    if let NodeKind::MethodCall {
-        builtin: Some(BuiltinMethodKind::CollectionGet),
+    if let NodeKind::CollectionBuiltinCall {
+        op: CollectionBuiltinOp::Get,
         result_types,
         ..
     } = &target.kind
@@ -57,21 +57,23 @@ fn assignment_target_path(target: &AstNode, string_table: &StringTable) -> Optio
         },
         NodeKind::FieldAccess { base, field, .. } => assignment_target_path(base, string_table)
             .map(|base_path| format!("{base_path}.{}", string_table.resolve(*field))),
-        NodeKind::MethodCall {
-            receiver,
-            builtin,
-            method,
-            ..
-        } => {
+        NodeKind::MethodCall { receiver, method, .. } => {
             let receiver_path = assignment_target_path(receiver, string_table)?;
-            if matches!(builtin, Some(BuiltinMethodKind::CollectionGet)) {
-                Some(format!("{receiver_path}.get(...)"))
-            } else {
-                Some(format!(
-                    "{receiver_path}.{}(...)",
-                    string_table.resolve(*method)
-                ))
-            }
+            Some(format!(
+                "{receiver_path}.{}(...)",
+                string_table.resolve(*method)
+            ))
+        }
+        NodeKind::CollectionBuiltinCall { receiver, op, .. } => {
+            let receiver_path = assignment_target_path(receiver, string_table)?;
+            let op_text = match op {
+                CollectionBuiltinOp::Get => "get",
+                CollectionBuiltinOp::Set => "set",
+                CollectionBuiltinOp::Push => "push",
+                CollectionBuiltinOp::Remove => "remove",
+                CollectionBuiltinOp::Length => "length",
+            };
+            Some(format!("{receiver_path}.{op_text}(...)"))
         }
         _ => None,
     }
@@ -184,8 +186,8 @@ fn build_mutation_from_target(
     let target_type = assignment_target_value_type(&target)?;
     let is_collection_get_index_write = matches!(
         &target.kind,
-        NodeKind::MethodCall {
-            builtin: Some(BuiltinMethodKind::CollectionGet),
+        NodeKind::CollectionBuiltinCall {
+            op: CollectionBuiltinOp::Get,
             ..
         }
     );

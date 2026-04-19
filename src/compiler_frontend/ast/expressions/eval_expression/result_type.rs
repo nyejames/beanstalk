@@ -27,6 +27,7 @@ pub(super) fn resolve_expression_result_type(
             NodeKind::FieldAccess { data_type, .. } => stack.push(data_type.to_owned()),
             NodeKind::FunctionCall { result_types, .. }
             | NodeKind::MethodCall { result_types, .. }
+            | NodeKind::CollectionBuiltinCall { result_types, .. }
             | NodeKind::HostFunctionCall { result_types, .. }
             | NodeKind::ResultHandledFunctionCall { result_types, .. } => {
                 stack.push(Expression::call_result_type(result_types.to_owned()));

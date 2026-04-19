@@ -25,6 +25,7 @@ fn is_expression_statement(expr: &Expression) -> bool {
             matches!(
                 node.kind,
                 NodeKind::MethodCall { .. }
+                    | NodeKind::CollectionBuiltinCall { .. }
                     | NodeKind::FunctionCall { .. }
                     | NodeKind::HostFunctionCall { .. }
             )

@@ -7,7 +7,7 @@
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
 use crate::compiler_frontend::ast::expressions::call_argument::normalize_call_argument_values;
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
-use crate::compiler_frontend::builtins::BuiltinMethodKind;
+use crate::compiler_frontend::builtins::CollectionBuiltinOp;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
@@ -113,6 +113,20 @@ impl<'a> HirBuilder<'a> {
             } => self.lower_receiver_method_call_expression(
                 method_path,
                 *builtin,
+                receiver,
+                &normalize_call_argument_values(args),
+                result_types,
+                location,
+            ),
+
+            NodeKind::CollectionBuiltinCall {
+                receiver,
+                op,
+                args,
+                result_types,
+                location,
+            } => self.lower_collection_builtin_call_expression(
+                *op,
                 receiver,
                 &normalize_call_argument_values(args),
                 result_types,
@@ -239,7 +253,26 @@ impl<'a> HirBuilder<'a> {
                 location,
                 ..
             } => {
-                if matches!(builtin, Some(BuiltinMethodKind::CollectionGet)) {
+                let lowered = self.lower_receiver_method_call_expression(
+                    method_path,
+                    *builtin,
+                    receiver,
+                    &normalize_call_argument_values(args),
+                    result_types,
+                    location,
+                )?;
+                let place = self.place_from_expression(&lowered.value, &node.location)?;
+                Ok((lowered.prelude, place))
+            }
+
+            NodeKind::CollectionBuiltinCall {
+                receiver,
+                op,
+                args,
+                result_types,
+                location,
+            } => {
+                if *op == CollectionBuiltinOp::Get {
                     return self.lower_collection_get_place(
                         receiver,
                         &normalize_call_argument_values(args),
@@ -247,9 +280,8 @@ impl<'a> HirBuilder<'a> {
                     );
                 }
 
-                let lowered = self.lower_receiver_method_call_expression(
-                    method_path,
-                    *builtin,
+                let lowered = self.lower_collection_builtin_call_expression(
+                    *op,
                     receiver,
                     &normalize_call_argument_values(args),
                     result_types,

@@ -6,7 +6,7 @@
 
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
-use crate::compiler_frontend::builtins::BuiltinMethodKind;
+use crate::compiler_frontend::builtins::CollectionBuiltinOp;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 
 /// Returns true when the node resolves to a valid place expression.
@@ -14,9 +14,9 @@ pub(crate) fn ast_node_is_place(node: &AstNode) -> bool {
     match &node.kind {
         NodeKind::Rvalue(expr) => matches!(expr.kind, ExpressionKind::Reference(_)),
         NodeKind::FieldAccess { base, .. } => ast_node_is_place(base),
-        NodeKind::MethodCall {
+        NodeKind::CollectionBuiltinCall {
             receiver,
-            builtin: Some(BuiltinMethodKind::CollectionGet),
+            op: CollectionBuiltinOp::Get,
             ..
         } => ast_node_is_place(receiver),
         _ => false,
@@ -30,9 +30,9 @@ pub(crate) fn ast_node_is_mutable_place(node: &AstNode) -> bool {
             matches!(expr.kind, ExpressionKind::Reference(_)) && expr.ownership.is_mutable()
         }
         NodeKind::FieldAccess { base, .. } => ast_node_is_mutable_place(base),
-        NodeKind::MethodCall {
+        NodeKind::CollectionBuiltinCall {
             receiver,
-            builtin: Some(BuiltinMethodKind::CollectionGet),
+            op: CollectionBuiltinOp::Get,
             ..
         } => ast_node_is_mutable_place(receiver),
         _ => false,

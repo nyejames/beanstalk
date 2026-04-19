@@ -188,6 +188,19 @@ impl<'a> HirBuilder<'a> {
                 result_types,
                 location,
             ),
+            NodeKind::CollectionBuiltinCall {
+                receiver,
+                op,
+                args,
+                result_types,
+                location,
+            } => self.lower_collection_builtin_call_expression(
+                *op,
+                receiver,
+                &normalize_call_argument_values(args),
+                result_types,
+                location,
+            ),
             _ => {
                 return_hir_transformation_error!(
                     format!(

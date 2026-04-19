@@ -103,7 +103,7 @@ pub(crate) fn parse_postfix_chain(
     // WHAT: parses chained postfix member access and receiver method calls (`a.b.c(...)`).
     // WHY: expression parsing, assignment parsing, and mutation targets share this chain policy,
     //      so one coordinator preserves behavior while dedicated handlers own each responsibility.
-    let mut saw_method_call = false;
+    let mut saw_receiver_call = false;
 
     while token_stream.index < token_stream.length
         && token_stream.current_token_kind() == &TokenKind::Dot
@@ -149,7 +149,7 @@ pub(crate) fn parse_postfix_chain(
             parse_collection_builtin_member(token_stream, member_context.to_owned(), string_table)?
         {
             receiver_node = collection_builtin_call;
-            saw_method_call = true;
+            saw_receiver_call = true;
             continue;
         }
 
@@ -157,7 +157,7 @@ pub(crate) fn parse_postfix_chain(
             parse_error_builtin_member(token_stream, member_context.to_owned(), string_table)?
         {
             receiver_node = error_builtin_call;
-            saw_method_call = true;
+            saw_receiver_call = true;
             continue;
         }
 
@@ -165,7 +165,7 @@ pub(crate) fn parse_postfix_chain(
             parse_receiver_method_call(token_stream, member_context, string_table)?
         {
             receiver_node = receiver_method_call;
-            saw_method_call = true;
+            saw_receiver_call = true;
             continue;
         }
 
@@ -200,13 +200,13 @@ pub(crate) fn parse_postfix_chain(
         );
     }
 
-    if receiver_access_mode == ReceiverAccessMode::Mutable && !saw_method_call {
+    if receiver_access_mode == ReceiverAccessMode::Mutable && !saw_receiver_call {
         return_rule_error!(
-            "Mutable receiver marker '~' is only valid for receiver method calls like '~value.method(...)'.",
+            "Mutable receiver marker '~' is only valid for receiver calls like '~value.method(...)' or '~values.push(...)'.",
             receiver_node.location.clone(),
             {
                 CompilationStage => "AST Construction",
-                PrimarySuggestion => "Apply '~' directly to a receiver method call",
+                PrimarySuggestion => "Apply '~' directly to a receiver call",
             }
         );
     }
