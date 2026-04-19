@@ -685,9 +685,21 @@ fn normalize_expression_templates_with_context(
             None
         }
 
-        ExpressionKind::FunctionCall(_, args)
-        | ExpressionKind::HostFunctionCall(_, args)
-        | ExpressionKind::Collection(args) => {
+        ExpressionKind::FunctionCall(_, args) | ExpressionKind::HostFunctionCall(_, args) => {
+            for argument in args {
+                normalize_expression_templates_with_context(
+                    &mut argument.value,
+                    source_file_scope,
+                    path_format_config,
+                    project_path_resolver,
+                    string_table,
+                    helper_artifact_policy,
+                )?;
+            }
+            None
+        }
+
+        ExpressionKind::Collection(args) => {
             for argument in args {
                 normalize_expression_templates_with_context(
                     argument,
@@ -704,7 +716,7 @@ fn normalize_expression_templates_with_context(
         ExpressionKind::ResultHandledFunctionCall { args, handling, .. } => {
             for argument in args {
                 normalize_expression_templates_with_context(
-                    argument,
+                    &mut argument.value,
                     source_file_scope,
                     path_format_config,
                     project_path_resolver,

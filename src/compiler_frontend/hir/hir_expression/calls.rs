@@ -5,6 +5,9 @@
 //! prelude sequencing, tuple return shaping, and temporary bindings.
 
 use crate::compiler_frontend::ast::ast_nodes::AstNode;
+use crate::compiler_frontend::ast::expressions::call_argument::{
+    CallAccessMode, CallArgument, CallPassingMode,
+};
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ResultCallHandling};
 use crate::compiler_frontend::builtins::{BuiltinMethodKind, CollectionBuiltinOp};
 use crate::compiler_frontend::compiler_errors::CompilerError;
@@ -122,7 +125,7 @@ impl<'a> HirBuilder<'a> {
         method_path: &InternedPath,
         builtin: Option<BuiltinMethodKind>,
         receiver: &AstNode,
-        args: &[Expression],
+        args: &[CallArgument],
         result_types: &[DataType],
         location: &SourceLocation,
     ) -> Result<LoweredExpression, CompilerError> {
@@ -139,7 +142,7 @@ impl<'a> HirBuilder<'a> {
 
         let function_id = self.resolve_function_id_or_error(method_path, location)?;
         let mut full_args = Vec::with_capacity(args.len() + 1);
-        full_args.push(receiver.get_expr()?);
+        full_args.push(Self::shared_call_argument(receiver.get_expr()?, location));
         full_args.extend(args.iter().cloned());
 
         self.lower_call_expression(
@@ -155,14 +158,14 @@ impl<'a> HirBuilder<'a> {
         builtin: BuiltinMethodKind,
         method_path: &InternedPath,
         receiver: &AstNode,
-        args: &[Expression],
+        args: &[CallArgument],
         result_types: &[DataType],
         location: &SourceLocation,
     ) -> Result<LoweredExpression, CompilerError> {
         match builtin {
             BuiltinMethodKind::WithLocation | BuiltinMethodKind::PushTrace => {
                 let mut full_args = Vec::with_capacity(args.len() + 1);
-                full_args.push(receiver.get_expr()?);
+                full_args.push(Self::shared_call_argument(receiver.get_expr()?, location));
                 full_args.extend(args.iter().cloned());
                 self.lower_call_expression(
                     CallTarget::HostFunction(method_path.to_owned()),
@@ -186,7 +189,7 @@ impl<'a> HirBuilder<'a> {
         &mut self,
         op: CollectionBuiltinOp,
         receiver: &AstNode,
-        args: &[Expression],
+        args: &[CallArgument],
         result_types: &[DataType],
         location: &SourceLocation,
     ) -> Result<LoweredExpression, CompilerError> {
@@ -199,7 +202,7 @@ impl<'a> HirBuilder<'a> {
             | CollectionBuiltinOp::Remove
             | CollectionBuiltinOp::Length => {
                 let mut full_args = Vec::with_capacity(args.len() + 1);
-                full_args.push(receiver.get_expr()?);
+                full_args.push(Self::shared_call_argument(receiver.get_expr()?, location));
                 full_args.extend(args.iter().cloned());
 
                 let host_name = match op {
@@ -225,7 +228,7 @@ impl<'a> HirBuilder<'a> {
         &mut self,
         method_path: &InternedPath,
         receiver: &AstNode,
-        args: &[Expression],
+        args: &[CallArgument],
         result_types: &[DataType],
         location: &SourceLocation,
     ) -> Result<LoweredExpression, CompilerError> {
@@ -240,8 +243,12 @@ impl<'a> HirBuilder<'a> {
         }
 
         let mut full_args = Vec::with_capacity(5);
-        full_args.push(receiver.get_expr()?);
-        full_args.extend(self.make_error_bubble_context_args(method_path, location)?);
+        full_args.push(Self::shared_call_argument(receiver.get_expr()?, location));
+        full_args.extend(
+            self.make_error_bubble_context_args(method_path, location)?
+                .into_iter()
+                .map(|value| Self::shared_call_argument(value, location)),
+        );
 
         self.lower_call_expression(
             CallTarget::HostFunction(method_path.to_owned()),
@@ -298,7 +305,7 @@ impl<'a> HirBuilder<'a> {
     fn lower_collection_set_call_expression(
         &mut self,
         receiver: &AstNode,
-        args: &[Expression],
+        args: &[CallArgument],
         location: &SourceLocation,
     ) -> Result<LoweredExpression, CompilerError> {
         // WHAT: lowers `collection.set(index, value)` to direct indexed assignment.
@@ -314,8 +321,8 @@ impl<'a> HirBuilder<'a> {
         }
 
         let (receiver_prelude, receiver_place) = self.lower_ast_node_to_place(receiver)?;
-        let lowered_index = self.lower_expression(&args[0])?;
-        let lowered_value = self.lower_expression(&args[1])?;
+        let lowered_index = self.lower_expression(&args[0].value)?;
+        let lowered_value = self.lower_expression(&args[1].value)?;
 
         let mut prelude = receiver_prelude;
         prelude.extend(lowered_index.prelude);
@@ -349,7 +356,7 @@ impl<'a> HirBuilder<'a> {
     pub(crate) fn lower_call_expression(
         &mut self,
         target: CallTarget,
-        args: &[Expression],
+        args: &[CallArgument],
         result_types: &[DataType],
         location: &SourceLocation,
     ) -> Result<LoweredExpression, CompilerError> {
@@ -382,8 +389,8 @@ impl<'a> HirBuilder<'a> {
             );
         }
 
-        for arg in args {
-            let lowered = self.lower_expression(arg)?;
+        for (arg_index, argument) in args.iter().enumerate() {
+            let lowered = self.lower_call_argument_value(argument, location, arg_index)?;
             prelude.extend(lowered.prelude);
             lowered_args.push(lowered.value);
         }
@@ -454,7 +461,7 @@ impl<'a> HirBuilder<'a> {
     pub(crate) fn lower_result_handled_call_expression(
         &mut self,
         target: CallTarget,
-        args: &[Expression],
+        args: &[CallArgument],
         result_types: &[DataType],
         handling: &ResultCallHandling,
         value_required: bool,
@@ -516,8 +523,8 @@ impl<'a> HirBuilder<'a> {
             );
         }
 
-        for arg in args {
-            let lowered = self.lower_expression(arg)?;
+        for (arg_index, argument) in args.iter().enumerate() {
+            let lowered = self.lower_call_argument_value(argument, location, arg_index)?;
             prelude.extend(lowered.prelude);
             lowered_args.push(lowered.value);
         }
@@ -575,7 +582,7 @@ impl<'a> HirBuilder<'a> {
     fn lower_result_handled_call_with_branching(
         &mut self,
         target: CallTarget,
-        args: &[Expression],
+        args: &[CallArgument],
         context: HandledResultBranchingContext<'_>,
     ) -> Result<LoweredExpression, CompilerError> {
         let HandledResultBranchingContext {
@@ -590,8 +597,8 @@ impl<'a> HirBuilder<'a> {
         let current_block = self.current_block_id_or_error(location)?;
         let mut lowered_args = Vec::with_capacity(args.len());
 
-        for arg in args {
-            let lowered = self.lower_expression(arg)?;
+        for (arg_index, argument) in args.iter().enumerate() {
+            let lowered = self.lower_call_argument_value(argument, location, arg_index)?;
             for prelude in lowered.prelude {
                 self.emit_statement_to_current_block(prelude, location)?;
             }
@@ -919,5 +926,57 @@ impl<'a> HirBuilder<'a> {
                 region,
             ),
         })
+    }
+
+    fn shared_call_argument(value: Expression, location: &SourceLocation) -> CallArgument {
+        let arg_location = if value.location == SourceLocation::default() {
+            location.to_owned()
+        } else {
+            value.location.clone()
+        };
+        CallArgument::positional(value, CallAccessMode::Shared, arg_location)
+    }
+
+    fn lower_call_argument_value(
+        &mut self,
+        argument: &CallArgument,
+        call_location: &SourceLocation,
+        argument_index: usize,
+    ) -> Result<LoweredExpression, CompilerError> {
+        let lowered = self.lower_expression(&argument.value)?;
+        if argument.passing_mode != CallPassingMode::FreshMutableValue {
+            return Ok(lowered);
+        }
+
+        let mut prelude = lowered.prelude;
+        let value_type = lowered.value.ty;
+        let temp_local = self.allocate_fresh_mutable_call_arg_local(
+            value_type,
+            Some(argument.location.to_owned()),
+            call_location,
+            argument_index,
+        )?;
+
+        let assign_statement = HirStatement {
+            id: self.allocate_node_id(),
+            kind: HirStatementKind::Assign {
+                target: HirPlace::Local(temp_local),
+                value: lowered.value,
+            },
+            location: argument.location.to_owned(),
+        };
+        self.side_table.map_statement(&argument.location, &assign_statement);
+        prelude.push(assign_statement);
+
+        let region = self.current_region_or_error(&argument.location)?;
+        let value = self.make_expression(
+            &argument.location,
+            HirExpressionKind::Load(HirPlace::Local(temp_local)),
+            value_type,
+            ValueKind::RValue,
+            region,
+        );
+
+        Ok(LoweredExpression { prelude, value })
     }
 }

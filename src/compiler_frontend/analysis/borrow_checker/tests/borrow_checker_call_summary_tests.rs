@@ -4,7 +4,9 @@
 //! WHY: call boundaries are where alias metadata is easiest to get wrong and hardest to debug.
 
 use crate::compiler_frontend::ast::ast_nodes::NodeKind;
-use crate::compiler_frontend::ast::expressions::call_argument::{CallAccessMode, CallArgument};
+use crate::compiler_frontend::ast::expressions::call_argument::{
+    CallAccessMode, CallArgument, CallPassingMode,
+};
 use crate::compiler_frontend::ast::expressions::expression::{Expression, Operator};
 use crate::compiler_frontend::ast::statements::functions::{
     FunctionReturn, FunctionSignature, ReturnSlot,
@@ -305,6 +307,78 @@ fn mutable_user_argument_is_accepted_without_false_shared_conflict() {
     );
     run_borrow_checker(&hir, &host_registry, &string_table)
         .expect("single mutable argument call should be accepted");
+}
+
+#[test]
+fn mutable_user_call_with_fresh_mutable_arg_does_not_alias_existing_place_argument() {
+    let mut string_table = StringTable::new();
+    let (entry_path, start_name) = entry_and_start(&mut string_table);
+    let host_registry = default_host_registry(&mut string_table);
+
+    let mut2 = symbol("mut2", &mut string_table);
+    let a = symbol("a", &mut string_table);
+    let b = symbol("b", &mut string_table);
+    let x = symbol("x", &mut string_table);
+
+    let callee = function_node(
+        mut2.clone(),
+        FunctionSignature {
+            parameters: vec![
+                param(a, DataType::Int, true, test_location(1)),
+                param(b, DataType::Int, true, test_location(1)),
+            ],
+            returns: vec![],
+        },
+        vec![],
+        test_location(1),
+    );
+
+    let caller = function_node(
+        start_name,
+        FunctionSignature {
+            parameters: vec![],
+            returns: vec![],
+        },
+        vec![
+            node(
+                NodeKind::VariableDeclaration(make_test_variable(
+                    x.clone(),
+                    Expression::int(1, test_location(10), Ownership::MutableOwned),
+                )),
+                test_location(10),
+            ),
+            node(
+                NodeKind::FunctionCall {
+                    name: mut2,
+                    args: vec![
+                        CallArgument::positional(
+                            reference_expr(x, DataType::Int, test_location(11)),
+                            CallAccessMode::Shared,
+                            test_location(11),
+                        ),
+                        CallArgument::positional(
+                            Expression::int(2, test_location(11), Ownership::ImmutableOwned),
+                            CallAccessMode::Shared,
+                            test_location(11),
+                        )
+                        .with_passing_mode(CallPassingMode::FreshMutableValue),
+                    ],
+                    result_types: vec![],
+                    location: test_location(11),
+                },
+                test_location(11),
+            ),
+        ],
+        test_location(10),
+    );
+
+    let hir = lower_hir(
+        build_ast(vec![callee, caller], entry_path),
+        &mut string_table,
+    );
+    run_borrow_checker(&hir, &host_registry, &string_table).expect(
+        "fresh mutable call args should be treated as independent locals, not aliases of other args",
+    );
 }
 
 #[test]

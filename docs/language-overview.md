@@ -98,9 +98,11 @@ sum(items = ~values)        -- named mutable/exclusive
 Rules:
 
 * Function-call mutability is explicit at the call site.
-* A parameter declared as `~T` must be passed with `~place`.
-* Passing a mutable/exclusive parameter without `~` is an error.
-* `~` is only valid on a mutable place. Using `~` on an immutable binding, literal, temporary, or computed expression is an error.
+* A parameter declared as `~T` accepts either:
+  * `~place` for mutable/exclusive access to an existing place, or
+  * a plain fresh rvalue (literal, template, constructor call, computed value).
+* Passing an existing place to a mutable/exclusive parameter without `~` is an error.
+* `~` is place-only syntax. Using `~` on an immutable binding, literal, temporary, or computed expression is an error; pass fresh values without `~`.
 * Collections follow the same rule. Mutating collection operations do not get a permissive exception.
 * Positional arguments must come before named arguments.
 * No positional arguments are allowed after the first named argument.
@@ -111,7 +113,7 @@ Variable mutability declarations and call-site mutable access are separate conce
 
 * `value ~= ...` declares or reassigns a mutable binding.
 * `fn(~value)` or `fn(param = ~value)` requests mutable/exclusive access for one specific call argument.
-* A mutable binding does not automatically satisfy a mutable parameter. The call still has to spell `~`.
+* A mutable binding does not automatically satisfy a mutable parameter. Existing places still require `~` at the call site.
 
 ### Numeric Semantics
 

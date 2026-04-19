@@ -7,7 +7,7 @@ use crate::compiler_frontend::ast::ast_nodes::{
     AstNode, LoopBindings, MultiBindTarget, MultiBindTargetKind, NodeKind, RangeLoopSpec,
     SourceLocation,
 };
-use crate::compiler_frontend::ast::expressions::call_argument::normalize_call_argument_values;
+use crate::compiler_frontend::ast::expressions::call_argument::CallArgument;
 use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, ResultCallHandling,
 };
@@ -144,7 +144,7 @@ impl<'a> HirBuilder<'a> {
                 let function_id = self.resolve_function_id_or_error(name, location)?;
                 self.lower_call_statement(
                     CallTarget::UserFunction(function_id),
-                    &normalize_call_argument_values(args),
+                    args,
                     location,
                 )
             }
@@ -157,7 +157,7 @@ impl<'a> HirBuilder<'a> {
                 location,
             } => self.lower_result_handled_call_statement(
                 name,
-                &normalize_call_argument_values(args),
+                args,
                 result_types,
                 handling,
                 location,
@@ -170,7 +170,7 @@ impl<'a> HirBuilder<'a> {
                 location,
             } => self.lower_call_statement(
                 CallTarget::HostFunction(host_function_id.to_owned()),
-                &normalize_call_argument_values(args),
+                args,
                 location,
             ),
 
@@ -364,7 +364,7 @@ impl<'a> HirBuilder<'a> {
     fn lower_result_handled_call_statement(
         &mut self,
         name: &InternedPath,
-        args: &[Expression],
+        args: &[CallArgument],
         result_types: &[DataType],
         handling: &ResultCallHandling,
         location: &SourceLocation,
@@ -538,27 +538,14 @@ impl<'a> HirBuilder<'a> {
     fn lower_call_statement(
         &mut self,
         target: CallTarget,
-        args: &[Expression],
+        args: &[CallArgument],
         location: &SourceLocation,
     ) -> Result<(), CompilerError> {
-        let mut lowered_args = Vec::with_capacity(args.len());
-
-        for arg in args {
-            let lowered = self.lower_expression(arg)?;
-            for prelude in lowered.prelude {
-                self.emit_statement_to_current_block(prelude, location)?;
-            }
-            lowered_args.push(lowered.value);
+        let lowered = self.lower_call_expression(target, args, &[], location)?;
+        for prelude in lowered.prelude {
+            self.emit_statement_to_current_block(prelude, location)?;
         }
-
-        self.emit_statement_kind(
-            HirStatementKind::Call {
-                target,
-                args: lowered_args,
-                result: None,
-            },
-            location,
-        )
+        Ok(())
     }
 
     fn lower_expression_statement(

@@ -560,6 +560,6 @@ This plan is complete when all of the following are true:
 
 ## Suggested roadmap blurb
 
-`docs/roadmap/plans/mutable-literal-mutable-params-hidden-locals.md`
+`docs/roadmap/plans/mutable-literal-mutable-params-hidden-locals-plan.md`
 
 Support fresh rvalues directly in mutable (`~T`) function-parameter slots by lowering them through synthesized hidden locals in HIR. Keeps `~` place-only, keeps `~literal` invalid, avoids adding a new HIR node kind, and extends tests/docs for the new call-site rule.

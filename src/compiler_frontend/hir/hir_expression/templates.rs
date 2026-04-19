@@ -12,6 +12,7 @@
 //! - HIR rejects escaped helper artifacts and missing AST materialization bugs.
 //! - HIR does not decide wrapper-vs-runtime legality.
 
+use crate::compiler_frontend::ast::expressions::call_argument::{CallAccessMode, CallArgument};
 use crate::compiler_frontend::ast::templates::template::{TemplateConstValueKind, TemplateType};
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::compiler_errors::CompilerError;
@@ -22,6 +23,7 @@ use crate::compiler_frontend::hir::hir_nodes::{
     FunctionId, HirBlock, HirExpression, HirExpressionKind, HirFunction, HirLocal, HirPlace,
     HirTerminator, LocalId, RegionId, ValueKind,
 };
+use crate::compiler_frontend::hir::hir_side_table::HirLocalOriginKind;
 use crate::compiler_frontend::host_functions::CallTarget;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
@@ -76,11 +78,18 @@ impl<'a> HirBuilder<'a> {
         let chunks = plan.flatten_expressions();
         let chunk_types: Vec<DataType> =
             chunks.iter().map(|chunk| chunk.data_type.clone()).collect();
+        let call_args = chunks
+            .into_iter()
+            .map(|chunk| {
+                let location = chunk.location.clone();
+                CallArgument::positional(chunk, CallAccessMode::Shared, location)
+            })
+            .collect::<Vec<_>>();
         let template_function = self.create_runtime_template_function(&chunk_types, location)?;
 
         self.lower_call_expression(
             CallTarget::UserFunction(template_function),
-            &chunks,
+            &call_args,
             &[DataType::StringSlice],
             location,
         )
@@ -167,6 +176,12 @@ impl<'a> HirBuilder<'a> {
             }
 
             self.side_table.bind_local_name(local_id, local_name);
+            self.side_table.bind_local_origin(
+                local_id,
+                HirLocalOriginKind::CompilerTemp,
+                None,
+                None,
+            );
             self.side_table.map_local_source(&local);
 
             params.push((local_id, param_ty));

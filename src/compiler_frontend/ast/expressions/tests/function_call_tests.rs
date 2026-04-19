@@ -4,7 +4,9 @@ use crate::compiler_frontend::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
-use crate::compiler_frontend::tests::test_support::parse_single_file_ast_error;
+use crate::compiler_frontend::tests::test_support::{
+    parse_single_file_ast, parse_single_file_ast_error,
+};
 use crate::compiler_frontend::tokenizer::lexer::tokenize;
 use crate::compiler_frontend::tokenizer::newline_handling::NewlineMode;
 use crate::compiler_frontend::tokenizer::tokens::{TokenKind, TokenizeMode};
@@ -209,6 +211,74 @@ mutate(x)
 }
 
 #[test]
+fn accepts_fresh_rvalue_for_mutable_positional_parameter() {
+    let _ = parse_single_file_ast(
+        r#"
+mutate |value ~Int|:
+    value = value + 1
+;
+
+mutate(1 + 2)
+"#,
+    );
+}
+
+#[test]
+fn accepts_fresh_rvalue_for_mutable_named_parameter() {
+    let _ = parse_single_file_ast(
+        r#"
+mutate |value ~Int|:
+    value = value + 1
+;
+
+mutate(value = 1 + 2)
+"#,
+    );
+}
+
+#[test]
+fn accepts_fresh_template_for_mutable_parameter() {
+    let _ = parse_single_file_ast(
+        r#"
+mutate |value ~String|:
+    value = [:updated]
+;
+
+mutate([:content])
+"#,
+    );
+}
+
+#[test]
+fn accepts_fresh_collection_for_mutable_parameter() {
+    let _ = parse_single_file_ast(
+        r#"
+mutate |values ~{Int}|:
+    ~values.push(4)
+;
+
+mutate({1, 2, 3})
+"#,
+    );
+}
+
+#[test]
+fn accepts_fresh_struct_constructor_for_mutable_parameter() {
+    let _ = parse_single_file_ast(
+        r#"
+Item = |
+    label String,
+|
+
+mutate |value ~Item|:
+;
+
+mutate(Item("x"))
+"#,
+    );
+}
+
+#[test]
 fn rejects_tilde_on_immutable_place_argument() {
     let error = parse_single_file_ast_error(
         r#"
@@ -248,6 +318,7 @@ mutate(~(1 + 2))
         "{}",
         error.msg
     );
+    assert!(error.msg.contains("without '~'"), "{}", error.msg);
     assert!(error.msg.contains("parameter 'value'"), "{}", error.msg);
 }
 

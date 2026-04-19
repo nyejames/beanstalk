@@ -8,7 +8,7 @@ use crate::compiler_frontend::compiler_errors::SourceLocation;
 use crate::compiler_frontend::hir::hir_nodes::{
     BlockId, FunctionId, HirModule, HirStatement, HirTerminator, HirValueId, LocalId,
 };
-use crate::compiler_frontend::hir::hir_side_table::HirLocation;
+use crate::compiler_frontend::hir::hir_side_table::{HirLocalOriginKind, HirLocation};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 
@@ -31,6 +31,10 @@ impl<'a> BorrowDiagnostics<'a> {
             .resolve_local_name(local_id, self.string_table)
             .map(str::to_owned)
             .unwrap_or_else(|| format!("{local_id}"))
+    }
+
+    pub(super) fn local_origin_kind(&self, local_id: LocalId) -> Option<HirLocalOriginKind> {
+        self.module.side_table.local_origin_kind(local_id)
     }
 
     pub(super) fn function_name(&self, function_id: FunctionId) -> String {

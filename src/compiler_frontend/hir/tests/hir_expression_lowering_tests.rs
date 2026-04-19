@@ -4,7 +4,9 @@
 //! WHY: expression lowering is broad and subtle enough that behavior changes need focused regression tests.
 
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
-use crate::compiler_frontend::ast::expressions::call_argument::{CallAccessMode, CallArgument};
+use crate::compiler_frontend::ast::expressions::call_argument::{
+    CallAccessMode, CallArgument, CallPassingMode,
+};
 use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, Operator,
 };
@@ -19,6 +21,7 @@ use crate::compiler_frontend::hir::hir_nodes::{
     BlockId, FieldId, FunctionId, HirBinOp, HirBlock, HirExpressionKind, HirLocal, HirPlace,
     HirStatementKind, HirTerminator, HirUnaryOp, LocalId, RegionId, StructId, ValueKind,
 };
+use crate::compiler_frontend::hir::hir_side_table::HirLocalOriginKind;
 use crate::compiler_frontend::host_functions::CallTarget;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
@@ -700,6 +703,77 @@ fn lowers_function_call_to_call_statement_and_temp_load() {
         if local == result_local
     ));
     assert_eq!(lowered.value.value_kind, ValueKind::RValue);
+}
+
+#[test]
+fn lowers_fresh_mutable_call_argument_via_hidden_local_with_origin_metadata() {
+    let mut string_table = StringTable::new();
+    let function_name = super::symbol("mutate", &mut string_table);
+    let location = location(6);
+    let mut builder = setup_builder(&mut string_table);
+    builder.test_register_function_name(function_name.clone(), FunctionId(24));
+
+    let fresh_argument = CallArgument::positional(
+        Expression::int(7, location.clone(), Ownership::ImmutableOwned),
+        CallAccessMode::Shared,
+        location.clone(),
+    )
+    .with_passing_mode(CallPassingMode::FreshMutableValue);
+
+    let call_expr = Expression::function_call_with_arguments(
+        function_name,
+        vec![fresh_argument],
+        vec![],
+        location.clone(),
+    );
+
+    let lowered = builder
+        .lower_expression(&call_expr)
+        .expect("fresh mutable argument lowering should succeed");
+
+    assert_eq!(
+        lowered.prelude.len(),
+        2,
+        "fresh mutable args should materialize assignment before call"
+    );
+
+    let temp_local = match &lowered.prelude[0].kind {
+        HirStatementKind::Assign { target, value } => {
+            assert!(matches!(value.kind, HirExpressionKind::Int(7)));
+            match target {
+                HirPlace::Local(local) => *local,
+                other => panic!("expected local assignment target, got {other:?}"),
+            }
+        }
+        other => panic!("expected first prelude statement to assign fresh arg temp, got {other:?}"),
+    };
+
+    match &lowered.prelude[1].kind {
+        HirStatementKind::Call { args, .. } => {
+            assert_eq!(args.len(), 1);
+            assert!(
+                matches!(
+                    args[0].kind,
+                    HirExpressionKind::Load(HirPlace::Local(local)) if local == temp_local
+                ),
+                "call argument should load synthesized fresh-arg local"
+            );
+        }
+        other => panic!("expected second prelude statement to be call, got {other:?}"),
+    }
+
+    let origin = builder
+        .side_table
+        .local_origin(temp_local)
+        .expect("fresh mutable arg local should have side-table origin metadata");
+    assert_eq!(origin.kind, HirLocalOriginKind::CompilerFreshMutableArg);
+    assert_eq!(origin.argument_index, Some(0));
+
+    let call_location = origin
+        .call_location
+        .and_then(|id| builder.side_table.source_location(id))
+        .expect("fresh mutable arg local should record originating call location");
+    assert_eq!(call_location.start_pos.line_number, location.start_pos.line_number);
 }
 
 #[test]

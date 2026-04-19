@@ -16,7 +16,7 @@ use crate::compiler_frontend::hir::hir_nodes::{
     HirConstField, HirConstValue, HirField, HirFunction, HirLocal, HirModuleConst, HirPlace,
     HirRegion, HirStruct, HirTerminator, LocalId,
 };
-use crate::compiler_frontend::hir::hir_side_table::HirLocation;
+use crate::compiler_frontend::hir::hir_side_table::{HirLocalOriginKind, HirLocation};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::projects::settings::IMPLICIT_START_FUNC_NAME;
 use crate::return_hir_transformation_error;
@@ -455,6 +455,8 @@ impl<'a> HirBuilder<'a> {
 
         self.locals_by_name.insert(name.to_owned(), local_id);
         self.side_table.bind_local_name(local_id, name);
+        self.side_table
+            .bind_local_origin(local_id, HirLocalOriginKind::User, None, None);
         self.side_table
             .map_ast_to_hir(&local_location, HirLocation::Local(local_id));
 

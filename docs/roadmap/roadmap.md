@@ -21,7 +21,7 @@ These are the non-negotiable conditions for starting Alpha.
 
 ## Next Plans
 
-- `docs/roadmap/plans/mutable-literal-mutable-params-hidden-locals.md`
+- `docs/roadmap/plans/mutable-literal-mutable-params-hidden-locals-plan.md`
 Support fresh rvalues directly in mutable (`~T`) function-parameter slots by lowering them through synthesized hidden locals in HIR. Keeps `~` place-only, keeps `~literal` invalid, avoids adding a new HIR node kind, and extends tests/docs for the new call-site rule.
 
 - `docs/roadmap/plans/js-backend-hardening.md`

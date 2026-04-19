@@ -12,6 +12,7 @@ use crate::compiler_frontend::hir::hir_nodes::{
     BlockId, FieldId, FunctionId, HirBlock, HirField, HirLocal, HirModule, HirStruct,
     HirTerminator, RegionId, StructId,
 };
+use crate::compiler_frontend::hir::hir_side_table::HirLocalOriginKind;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
@@ -49,6 +50,8 @@ impl<'a> HirBuilder<'a> {
 
         self.locals_by_name.insert(name.clone(), local.id);
         self.side_table.bind_local_name(local.id, name);
+        self.side_table
+            .bind_local_origin(local.id, HirLocalOriginKind::User, None, None);
         self.side_table.map_local_source(&local);
         self.reserve_local_id(local.id);
     }

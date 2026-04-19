@@ -341,6 +341,7 @@ HIR is the first stage where resource lifetime semantics are made explicit, but 
 - Assignment forms, mutation syntax and control-flow sugar are normalized
 - All effects are explicit statements
 - Calls to runtime templates appear as normal HIR call nodes
+- Fresh rvalues passed to mutable (`~T`) call slots are materialized as compiler-introduced hidden locals, then passed as ordinary `Load(Local(...))` call arguments
 
 #### Host Calls
 - Builtins such as `io` are preserved as explicit call nodes.
@@ -361,6 +362,7 @@ Borrow validation is a mandatory frontend phase for backend semantic parity:
 - Programs that pass borrow validation can additionally be optimized for non-GC lowering in capable backends.
 
 The borrow checker does not mutate the HIR, it produces side-table facts keyed by node / value IDs. HIR remains a stable semantic representation.
+Fresh mutable call arguments are already lowered into ordinary locals before this stage, so borrow validation does not need a dedicated special-case node kind.
 
 HIR represents semantic meaning under GC. Ownership is an optimization layer, not semantics. Later stages consult these facts during lowering.
 

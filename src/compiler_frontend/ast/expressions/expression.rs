@@ -5,6 +5,7 @@
 //! manually reassembling `Expression` fields at each call site.
 
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration};
+use crate::compiler_frontend::ast::expressions::call_argument::{CallAccessMode, CallArgument};
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::ast::templates::template::TemplateConstValueKind;
 use crate::compiler_frontend::ast::templates::template_types::Template;
@@ -198,6 +199,17 @@ impl Expression {
             Ownership::MutableOwned,
         )
     }
+
+    fn shared_positional_call_arguments(values: Vec<Expression>) -> Vec<CallArgument> {
+        values
+            .into_iter()
+            .map(|value| {
+                let location = value.location.clone();
+                CallArgument::positional(value, CallAccessMode::Shared, location)
+            })
+            .collect()
+    }
+
     pub fn runtime(
         expressions: Vec<AstNode>,
         data_type: DataType,
@@ -307,6 +319,20 @@ impl Expression {
         result_types: Vec<DataType>,
         location: SourceLocation,
     ) -> Self {
+        Self::function_call_with_arguments(
+            name,
+            Self::shared_positional_call_arguments(args),
+            result_types,
+            location,
+        )
+    }
+
+    pub fn function_call_with_arguments(
+        name: InternedPath,
+        args: Vec<CallArgument>,
+        result_types: Vec<DataType>,
+        location: SourceLocation,
+    ) -> Self {
         Self::call_expression(
             ExpressionKind::FunctionCall(name, args),
             result_types,
@@ -317,6 +343,22 @@ impl Expression {
     pub fn result_handled_function_call(
         name: InternedPath,
         args: Vec<Expression>,
+        result_types: Vec<DataType>,
+        handling: ResultCallHandling,
+        location: SourceLocation,
+    ) -> Self {
+        Self::result_handled_function_call_with_arguments(
+            name,
+            Self::shared_positional_call_arguments(args),
+            result_types,
+            handling,
+            location,
+        )
+    }
+
+    pub fn result_handled_function_call_with_arguments(
+        name: InternedPath,
+        args: Vec<CallArgument>,
         result_types: Vec<DataType>,
         handling: ResultCallHandling,
         location: SourceLocation,
@@ -335,6 +377,20 @@ impl Expression {
     pub fn host_function_call(
         name: InternedPath,
         args: Vec<Expression>,
+        result_types: Vec<DataType>,
+        location: SourceLocation,
+    ) -> Self {
+        Self::host_function_call_with_arguments(
+            name,
+            Self::shared_positional_call_arguments(args),
+            result_types,
+            location,
+        )
+    }
+
+    pub fn host_function_call_with_arguments(
+        name: InternedPath,
+        args: Vec<CallArgument>,
         result_types: Vec<DataType>,
         location: SourceLocation,
     ) -> Self {
@@ -683,12 +739,12 @@ pub enum ExpressionKind {
 
     FunctionCall(
         InternedPath,    // Function name
-        Vec<Expression>, // Arguments
+        Vec<CallArgument>, // Arguments
     ),
 
     ResultHandledFunctionCall {
         name: InternedPath,
-        args: Vec<Expression>,
+        args: Vec<CallArgument>,
         handling: ResultCallHandling,
     },
 
@@ -707,7 +763,7 @@ pub enum ExpressionKind {
         handling: ResultCallHandling,
     },
 
-    HostFunctionCall(InternedPath, Vec<Expression>),
+    HostFunctionCall(InternedPath, Vec<CallArgument>),
 
     // Also equivalent to a String if it folds into a string
     Template(Box<Template>), // Template Body, Styles, ID

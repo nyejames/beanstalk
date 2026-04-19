@@ -6,7 +6,9 @@
 //! same argument policy even though they build different AST nodes afterward.
 
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
-use crate::compiler_frontend::ast::expressions::call_argument::{CallAccessMode, CallArgument};
+use crate::compiler_frontend::ast::expressions::call_argument::{
+    CallAccessMode, CallArgument, CallPassingMode,
+};
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::place_access::{ast_node_is_mutable_place, ast_node_is_place};
 use crate::compiler_frontend::compiler_errors::{CompilerError, SourceLocation};
@@ -387,7 +389,15 @@ pub(crate) fn resolve_call_arguments(
             );
         };
 
-        if !is_type_compatible(&expectation.data_type, &argument.value.data_type) {
+        let passing_mode = classify_call_passing_mode(
+            &diagnostics,
+            &argument,
+            expectation,
+            location.clone(),
+            string_table,
+        )?;
+
+        if !is_call_argument_type_compatible(expectation, &argument, passing_mode) {
             let conversion_hint =
                 argument_conversion_hint(&expectation.data_type, &argument.value.data_type);
             let slot_label = diagnostics.slot_label(expectation, slot, string_table);
@@ -413,26 +423,19 @@ pub(crate) fn resolve_call_arguments(
             );
         }
 
-        validate_call_access_mode(
-            &diagnostics,
-            &argument,
-            expectation,
-            location.clone(),
-            string_table,
-        )?;
-        ordered.push(argument);
+        ordered.push(argument.with_passing_mode(passing_mode));
     }
 
     Ok(ordered)
 }
 
-fn validate_call_access_mode(
+fn classify_call_passing_mode(
     diagnostics: &CallDiagnosticContext<'_>,
     argument: &CallArgument,
     expectation: &ParameterExpectation,
     _location: SourceLocation,
     string_table: &StringTable,
-) -> Result<(), CompilerError> {
+) -> Result<CallPassingMode, CompilerError> {
     let slot_noun = diagnostics.slot_noun();
     let parameter_label = expectation
         .name
@@ -444,8 +447,11 @@ fn validate_call_access_mode(
                 .unwrap_or_else(|| format!("this {slot_noun}"))
         });
     match (argument.access_mode, &expectation.access_mode) {
-        (CallAccessMode::Shared, ExpectedAccessMode::Shared) => Ok(()),
+        (CallAccessMode::Shared, ExpectedAccessMode::Shared) => Ok(CallPassingMode::Shared),
         (CallAccessMode::Shared, ExpectedAccessMode::Mutable) => {
+            if !expression_is_place(&argument.value) {
+                return Ok(CallPassingMode::FreshMutableValue);
+            }
             return_rule_error!(
                 format!(
                     "{} requires explicit '~' for {}",
@@ -477,14 +483,13 @@ fn validate_call_access_mode(
             if !expression_is_place(&argument.value) {
                 return_rule_error!(
                     format!(
-                        "{} received '~' on a non-place argument for {}",
-                        diagnostics.callable_label(),
-                        parameter_label
+                        "{} received '~' on a non-place argument for {}. Pass fresh values without '~'.",
+                        diagnostics.callable_label(), parameter_label
                     ),
                     argument.location.clone(),
                     {
                         CompilationStage => "Function Call Validation",
-                        PrimarySuggestion => "Use '~' with a mutable variable or mutable field place",
+                        PrimarySuggestion => "Use '~' only on a mutable place, or pass fresh values without '~'",
                     }
                 );
             }
@@ -502,8 +507,36 @@ fn validate_call_access_mode(
                     }
                 );
             }
-            Ok(())
+            Ok(CallPassingMode::MutablePlace)
         }
+    }
+}
+
+fn is_call_argument_type_compatible(
+    expectation: &ParameterExpectation,
+    argument: &CallArgument,
+    passing_mode: CallPassingMode,
+) -> bool {
+    if is_type_compatible(&expectation.data_type, &argument.value.data_type) {
+        return true;
+    }
+
+    if passing_mode != CallPassingMode::FreshMutableValue {
+        return false;
+    }
+
+    fresh_mutable_rvalue_type_compatible(&expectation.data_type, &argument.value.data_type)
+}
+
+fn fresh_mutable_rvalue_type_compatible(expected: &DataType, actual: &DataType) -> bool {
+    match (expected, actual) {
+        // Fresh collection literals are produced as immutable-owned values by default, but
+        // mutable call slots own and materialize their own hidden local before the call.
+        // Inner element type compatibility still has to hold.
+        (DataType::Collection(expected_inner, _), DataType::Collection(actual_inner, _)) => {
+            is_type_compatible(expected_inner.as_ref(), actual_inner.as_ref())
+        }
+        _ => false,
     }
 }
 

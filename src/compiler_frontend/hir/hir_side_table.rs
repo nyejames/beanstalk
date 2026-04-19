@@ -20,6 +20,20 @@ const EMPTY_HIR_LOCATIONS: [HirLocation; 0] = [];
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct SourceLocationId(pub u32);
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) enum HirLocalOriginKind {
+    User,
+    CompilerTemp,
+    CompilerFreshMutableArg,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) struct HirLocalOrigin {
+    pub kind: HirLocalOriginKind,
+    pub call_location: Option<SourceLocationId>,
+    pub argument_index: Option<usize>,
+}
+
 /// Canonical references into the HIR graph for source mapping.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum HirLocation {
@@ -128,6 +142,7 @@ pub(crate) struct HirSideTable {
 
     // Store canonical path identity. Rendering and diagnostics derive leaf names from these.
     local_names: FxHashMap<LocalId, InternedPath>,
+    local_origins: FxHashMap<LocalId, HirLocalOrigin>,
     function_names: FxHashMap<FunctionId, InternedPath>,
     struct_names: FxHashMap<StructId, InternedPath>,
     field_names: FxHashMap<FieldId, InternedPath>,
@@ -142,6 +157,7 @@ impl HirSideTable {
         self.hir_to_ast.clear();
         self.hir_to_source.clear();
         self.local_names.clear();
+        self.local_origins.clear();
         self.function_names.clear();
         self.struct_names.clear();
         self.field_names.clear();
@@ -308,6 +324,24 @@ impl HirSideTable {
         self.local_names.insert(local_id, name);
     }
 
+    pub(crate) fn bind_local_origin(
+        &mut self,
+        local_id: LocalId,
+        kind: HirLocalOriginKind,
+        call_location: Option<&SourceLocation>,
+        argument_index: Option<usize>,
+    ) {
+        let call_location = call_location.map(|location| self.intern_source_location(location));
+        self.local_origins.insert(
+            local_id,
+            HirLocalOrigin {
+                kind,
+                call_location,
+                argument_index,
+            },
+        );
+    }
+
     #[inline]
     pub(crate) fn bind_function_name(&mut self, function_id: FunctionId, name: InternedPath) {
         self.function_names.insert(function_id, name);
@@ -326,6 +360,16 @@ impl HirSideTable {
     #[inline]
     pub(crate) fn local_name_path(&self, local_id: LocalId) -> Option<&InternedPath> {
         self.local_names.get(&local_id)
+    }
+
+    #[inline]
+    pub(crate) fn local_origin(&self, local_id: LocalId) -> Option<HirLocalOrigin> {
+        self.local_origins.get(&local_id).copied()
+    }
+
+    #[inline]
+    pub(crate) fn local_origin_kind(&self, local_id: LocalId) -> Option<HirLocalOriginKind> {
+        self.local_origin(local_id).map(|origin| origin.kind)
     }
 
     #[inline]

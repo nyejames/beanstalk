@@ -14,6 +14,7 @@ use crate::compiler_frontend::hir::hir_nodes::{
     HirBlock, HirBuiltinCastKind, HirExpression, HirExpressionKind, HirLocal, HirPlace,
     HirStatement, HirStatementKind, LocalId, OptionVariant, RegionId, ResultVariant, ValueKind,
 };
+use crate::compiler_frontend::hir::hir_side_table::HirLocalOriginKind;
 use crate::compiler_frontend::host_functions::CallTarget;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_format::format_compile_time_paths;
@@ -403,6 +404,39 @@ impl<'a> HirBuilder<'a> {
         ty: TypeId,
         source_info: Option<SourceLocation>,
     ) -> Result<LocalId, CompilerError> {
+        self.allocate_compiler_local(
+            ty,
+            source_info,
+            HirLocalOriginKind::CompilerTemp,
+            None,
+            None,
+        )
+    }
+
+    pub(crate) fn allocate_fresh_mutable_call_arg_local(
+        &mut self,
+        ty: TypeId,
+        source_info: Option<SourceLocation>,
+        call_location: &SourceLocation,
+        argument_index: usize,
+    ) -> Result<LocalId, CompilerError> {
+        self.allocate_compiler_local(
+            ty,
+            source_info,
+            HirLocalOriginKind::CompilerFreshMutableArg,
+            Some(call_location),
+            Some(argument_index),
+        )
+    }
+
+    fn allocate_compiler_local(
+        &mut self,
+        ty: TypeId,
+        source_info: Option<SourceLocation>,
+        origin: HirLocalOriginKind,
+        call_location: Option<&SourceLocation>,
+        argument_index: Option<usize>,
+    ) -> Result<LocalId, CompilerError> {
         let location = source_info.to_owned().unwrap_or_default();
         let region = self.current_region_or_error(&location)?;
         let block_id = self.current_block_id_or_error(&location)?;
@@ -426,6 +460,8 @@ impl<'a> HirBuilder<'a> {
         // Compiler-introduced temporaries are intentionally excluded from AST symbol resolution.
         // They are named only for diagnostics/debug rendering via the side table.
         self.side_table.bind_local_name(local_id, temp_name_id);
+        self.side_table
+            .bind_local_origin(local_id, origin, call_location, argument_index);
 
         Ok(local_id)
     }

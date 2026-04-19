@@ -114,6 +114,21 @@ path = "function_call_mutable_param_requires_explicit_tilde"
 tags = ["integration","functions","diagnostics"]
 
 [[case]]
+id = "function_call_mutable_param_fresh_template_arg"
+path = "function_call_mutable_param_fresh_template_arg"
+tags = ["integration","functions"]
+
+[[case]]
+id = "function_call_mutable_param_fresh_collection_arg"
+path = "function_call_mutable_param_fresh_collection_arg"
+tags = ["integration","functions","collections"]
+
+[[case]]
+id = "function_call_mutable_param_fresh_struct_arg"
+path = "function_call_mutable_param_fresh_struct_arg"
+tags = ["integration","functions","structs"]
+
+[[case]]
 id = "function_call_tilde_on_immutable_place"
 path = "function_call_tilde_on_immutable_place"
 tags = ["integration","functions","diagnostics"]

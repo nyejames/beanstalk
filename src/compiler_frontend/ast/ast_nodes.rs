@@ -6,7 +6,7 @@
 //! one precedence table so behavior stays deterministic across frontend stages.
 
 use crate::compiler_frontend::ast::expressions::call_argument::{
-    CallArgument, normalize_call_argument_values,
+    CallArgument, normalize_call_arguments,
 };
 use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, Operator, ResultCallHandling,
@@ -208,9 +208,9 @@ impl AstNode {
                 args: arguments,
                 result_types,
                 location,
-            } => Ok(Expression::function_call(
+            } => Ok(Expression::function_call_with_arguments(
                 name.to_owned(),
-                normalize_call_argument_values(arguments),
+                normalize_call_arguments(arguments),
                 result_types.to_owned(),
                 location.to_owned(),
             )),
@@ -220,9 +220,9 @@ impl AstNode {
                 args: arguments,
                 result_types,
                 location,
-            } => Ok(Expression::host_function_call(
+            } => Ok(Expression::host_function_call_with_arguments(
                 name.to_owned(),
-                normalize_call_argument_values(arguments),
+                normalize_call_arguments(arguments),
                 result_types.to_owned(),
                 location.to_owned(),
             )),
@@ -233,9 +233,9 @@ impl AstNode {
                 result_types,
                 handling,
                 location,
-            } => Ok(Expression::result_handled_function_call(
+            } => Ok(Expression::result_handled_function_call_with_arguments(
                 name.to_owned(),
-                normalize_call_argument_values(arguments),
+                normalize_call_arguments(arguments),
                 result_types.to_owned(),
                 handling.to_owned(),
                 location.to_owned(),

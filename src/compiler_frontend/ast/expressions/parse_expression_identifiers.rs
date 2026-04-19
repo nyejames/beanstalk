@@ -3,7 +3,7 @@
 //! WHAT: parses identifier-led expression forms such as references, calls, constructors, and imported start aliases.
 //! WHY: identifier tokens fan out into the largest number of semantic cases and need isolated handling.
 
-use super::call_argument::normalize_call_argument_values;
+use super::call_argument::normalize_call_arguments;
 use super::expression::{Expression, ExpressionKind};
 use super::function_calls::parse_function_call;
 use super::parse_expression_dispatch::push_expression_node;
@@ -171,9 +171,9 @@ pub(super) fn parse_identifier_or_call(
                         result_types,
                         location,
                     } => {
-                        let func_call_expr = Expression::function_call(
+                        let func_call_expr = Expression::function_call_with_arguments(
                             name,
-                            normalize_call_argument_values(&args),
+                            normalize_call_arguments(&args),
                             result_types,
                             location,
                         );
@@ -199,9 +199,9 @@ pub(super) fn parse_identifier_or_call(
                         handling,
                         location,
                     } => {
-                        let func_call_expr = Expression::result_handled_function_call(
+                        let func_call_expr = Expression::result_handled_function_call_with_arguments(
                             name,
-                            normalize_call_argument_values(&args),
+                            normalize_call_arguments(&args),
                             result_types,
                             handling,
                             location,
@@ -294,9 +294,9 @@ pub(super) fn parse_identifier_or_call(
             location,
         } = function_call_node.kind
         {
-            let func_call_expr = Expression::host_function_call(
+            let func_call_expr = Expression::host_function_call_with_arguments(
                 host_function_id,
-                normalize_call_argument_values(&args),
+                normalize_call_arguments(&args),
                 result_types,
                 location,
             );

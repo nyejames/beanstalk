@@ -61,7 +61,8 @@ Mutable access must always be explicit.
 
 - At most one mutable access to a value may exist at any time.
 - `~` at a call site requests mutable/exclusive access for that specific argument.
-- A mutable/exclusive parameter is never satisfied implicitly. The caller must spell `~` at the use site.
+- `~` stays place-only: use it for existing mutable places (`~place`), not fresh literals/temporaries/computed values.
+- Mutable/exclusive parameters can be satisfied by either explicit `~place` or a plain fresh rvalue lowered through a compiler-introduced hidden local.
 - Collections and mutable receiver/member calls follow the same explicit rule.
 - Mutable access may be either:
   * a mutable borrow, or
@@ -158,7 +159,8 @@ The compiler enforces memory safety through the following steps:
    * eager folding of expressions takes place.
 2. **HIR lowering**, where:
    * control flow is linearized,
-   * ownership boundaries are identified.
+   * ownership boundaries are identified,
+   * fresh mutable call arguments are materialized into compiler-owned locals before borrow validation.
 3. **Borrow validation**, which:
    * performs last-use analysis,
    * enforces exclusivity rules,

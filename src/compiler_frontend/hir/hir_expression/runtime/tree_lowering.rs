@@ -1,5 +1,4 @@
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
-use crate::compiler_frontend::ast::expressions::call_argument::normalize_call_argument_values;
 use crate::compiler_frontend::ast::expressions::expression::Operator;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
@@ -138,7 +137,7 @@ impl<'a> HirBuilder<'a> {
                 let function_id = self.resolve_function_id_or_error(name, location)?;
                 self.lower_call_expression(
                     CallTarget::UserFunction(function_id),
-                    &normalize_call_argument_values(args),
+                    args,
                     result_types,
                     location,
                 )
@@ -153,7 +152,7 @@ impl<'a> HirBuilder<'a> {
                 let function_id = self.resolve_function_id_or_error(name, location)?;
                 self.lower_result_handled_call_expression(
                     CallTarget::UserFunction(function_id),
-                    &normalize_call_argument_values(args),
+                    args,
                     result_types,
                     handling,
                     true,
@@ -167,7 +166,7 @@ impl<'a> HirBuilder<'a> {
                 location,
             } => self.lower_call_expression(
                 CallTarget::HostFunction(host_function_id.to_owned()),
-                &normalize_call_argument_values(args),
+                args,
                 result_types,
                 location,
             ),
@@ -184,7 +183,7 @@ impl<'a> HirBuilder<'a> {
                 method_path,
                 *builtin,
                 receiver,
-                &normalize_call_argument_values(args),
+                args,
                 result_types,
                 location,
             ),
@@ -197,7 +196,7 @@ impl<'a> HirBuilder<'a> {
             } => self.lower_collection_builtin_call_expression(
                 *op,
                 receiver,
-                &normalize_call_argument_values(args),
+                args,
                 result_types,
                 location,
             ),

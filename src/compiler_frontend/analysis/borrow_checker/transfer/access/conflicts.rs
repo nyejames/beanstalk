@@ -8,6 +8,7 @@ use crate::compiler_frontend::analysis::borrow_checker::state::{
 };
 use crate::compiler_frontend::analysis::borrow_checker::types::{AccessKind, LocalMode};
 use crate::compiler_frontend::compiler_errors::CompilerError;
+use crate::compiler_frontend::hir::hir_side_table::HirLocalOriginKind;
 use crate::return_borrow_checker_error;
 
 use super::{AccessCheckContext, BorrowTransferContext, MutableAccessPolicy};
@@ -240,11 +241,12 @@ fn active_mutable_alias_for_root(
             continue;
         }
 
-        if context
-            .diagnostics
-            .local_name(layout.local_ids[candidate_index])
-            .starts_with("__hir_tmp_")
-        {
+        if matches!(
+            context
+                .diagnostics
+                .local_origin_kind(layout.local_ids[candidate_index]),
+            Some(kind) if kind != HirLocalOriginKind::User
+        ) {
             continue;
         }
 
