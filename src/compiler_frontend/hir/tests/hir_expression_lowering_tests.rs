@@ -10,7 +10,7 @@ use crate::compiler_frontend::ast::expressions::expression::{
 };
 use crate::compiler_frontend::ast::templates::template::{SlotKey, SlotPlaceholder, TemplateAtom};
 use crate::compiler_frontend::ast::templates::template_types::Template;
-use crate::compiler_frontend::builtins::BuiltinMethodKind;
+use crate::compiler_frontend::builtins::{BuiltinMethodKind, CollectionBuiltinOp};
 use crate::compiler_frontend::builtins::error_type::register_builtin_error_types;
 use crate::compiler_frontend::compiler_errors::ErrorType;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
@@ -886,7 +886,7 @@ fn lowers_builtin_error_with_location_and_push_trace_methods_to_host_calls() {
             receiver: Box::new(receiver),
             method_path: with_location_path.to_owned(),
             method: with_location_name,
-            builtin: Some(BuiltinMethodKind::ErrorWithLocation),
+            builtin: Some(BuiltinMethodKind::WithLocation),
             args: vec![CallArgument::positional(
                 Expression::reference(
                     location_name.to_owned(),
@@ -931,7 +931,7 @@ fn lowers_builtin_error_with_location_and_push_trace_methods_to_host_calls() {
             receiver: Box::new(receiver),
             method_path: push_trace_path.to_owned(),
             method: push_trace_name,
-            builtin: Some(BuiltinMethodKind::ErrorPushTrace),
+            builtin: Some(BuiltinMethodKind::PushTrace),
             args: vec![CallArgument::positional(
                 Expression::reference(
                     frame_name,
@@ -996,7 +996,7 @@ fn lowers_builtin_error_bubble_with_compiler_supplied_context_args() {
             }),
             method_path: bubble_path.to_owned(),
             method: bubble_name,
-            builtin: Some(BuiltinMethodKind::ErrorBubble),
+            builtin: Some(BuiltinMethodKind::Bubble),
             args: vec![],
             result_types: vec![error_type],
             location: call_location.to_owned(),
@@ -1610,5 +1610,177 @@ fn field_access_from_module_constant_base_materializes_temp_place() {
             assert!(matches!(*base, HirPlace::Local(_)));
         }
         other => panic!("expected field load expression, got {:?}", other),
+    }
+}
+
+#[test]
+fn lowers_collection_builtin_host_calls_from_explicit_ast_nodes() {
+    let mut string_table = StringTable::new();
+    let location = location(15);
+    let receiver_name = super::symbol("values", &mut string_table);
+    let get_path = super::symbol("__bs_collection_get", &mut string_table);
+    let push_path = super::symbol("__bs_collection_push", &mut string_table);
+    let remove_path = super::symbol("__bs_collection_remove", &mut string_table);
+    let length_path = super::symbol("__bs_collection_length", &mut string_table);
+    let mut builder = setup_builder(&mut string_table);
+
+    let receiver_type =
+        DataType::Collection(Box::new(DataType::Int), Ownership::MutableOwned);
+    register_local(
+        &mut builder,
+        receiver_name.clone(),
+        LocalId(70),
+        receiver_type.clone(),
+        location.clone(),
+    );
+
+    let receiver = AstNode {
+        kind: NodeKind::Rvalue(Expression::reference(
+            receiver_name,
+            receiver_type,
+            location.clone(),
+            Ownership::MutableReference,
+        )),
+        location: location.clone(),
+        scope: InternedPath::new(),
+    };
+
+    let cases = vec![
+        (
+            CollectionBuiltinOp::Get,
+            vec![CallArgument::positional(
+                Expression::int(1, location.clone(), Ownership::ImmutableOwned),
+                CallAccessMode::Shared,
+                location.clone(),
+            )],
+            vec![DataType::Result {
+                ok: Box::new(DataType::Int),
+                err: Box::new(DataType::Int),
+            }],
+            get_path,
+        ),
+        (
+            CollectionBuiltinOp::Push,
+            vec![CallArgument::positional(
+                Expression::int(4, location.clone(), Ownership::ImmutableOwned),
+                CallAccessMode::Shared,
+                location.clone(),
+            )],
+            vec![],
+            push_path,
+        ),
+        (
+            CollectionBuiltinOp::Remove,
+            vec![CallArgument::positional(
+                Expression::int(0, location.clone(), Ownership::ImmutableOwned),
+                CallAccessMode::Shared,
+                location.clone(),
+            )],
+            vec![],
+            remove_path,
+        ),
+        (
+            CollectionBuiltinOp::Length,
+            vec![],
+            vec![DataType::Int],
+            length_path,
+        ),
+    ];
+
+    for (op, args, result_types, expected_path) in cases {
+        let lowered = builder
+            .lower_ast_node_as_expression(&AstNode {
+                kind: NodeKind::CollectionBuiltinCall {
+                    receiver: Box::new(receiver.clone()),
+                    op,
+                    args,
+                    result_types,
+                    location: location.clone(),
+                },
+                location: location.clone(),
+                scope: InternedPath::new(),
+            })
+            .expect("collection builtin call lowering should succeed");
+
+        assert_eq!(lowered.prelude.len(), 1);
+        match &lowered.prelude[0].kind {
+            HirStatementKind::Call { target, args, .. } => {
+                assert_eq!(target, &CallTarget::HostFunction(expected_path.clone()));
+                assert!(
+                    !args.is_empty(),
+                    "collection host calls should include receiver as first argument"
+                );
+            }
+            other => panic!("expected host call statement for collection builtin, got {other:?}"),
+        }
+    }
+}
+
+#[test]
+fn lowers_collection_set_builtin_from_explicit_ast_node_to_index_assignment() {
+    let mut string_table = StringTable::new();
+    let location = location(16);
+    let receiver_name = super::symbol("values", &mut string_table);
+    let mut builder = setup_builder(&mut string_table);
+
+    let receiver_type =
+        DataType::Collection(Box::new(DataType::Int), Ownership::MutableOwned);
+    register_local(
+        &mut builder,
+        receiver_name.clone(),
+        LocalId(71),
+        receiver_type.clone(),
+        location.clone(),
+    );
+
+    let receiver = AstNode {
+        kind: NodeKind::Rvalue(Expression::reference(
+            receiver_name,
+            receiver_type,
+            location.clone(),
+            Ownership::MutableReference,
+        )),
+        location: location.clone(),
+        scope: InternedPath::new(),
+    };
+
+    let lowered = builder
+        .lower_ast_node_as_expression(&AstNode {
+            kind: NodeKind::CollectionBuiltinCall {
+                receiver: Box::new(receiver),
+                op: CollectionBuiltinOp::Set,
+                args: vec![
+                    CallArgument::positional(
+                        Expression::int(0, location.clone(), Ownership::ImmutableOwned),
+                        CallAccessMode::Shared,
+                        location.clone(),
+                    ),
+                    CallArgument::positional(
+                        Expression::int(99, location.clone(), Ownership::ImmutableOwned),
+                        CallAccessMode::Shared,
+                        location.clone(),
+                    ),
+                ],
+                result_types: vec![],
+                location: location.clone(),
+            },
+            location: location.clone(),
+            scope: InternedPath::new(),
+        })
+        .expect("collection set builtin lowering should succeed");
+
+    assert_eq!(lowered.prelude.len(), 1);
+    match &lowered.prelude[0].kind {
+        HirStatementKind::Assign { target, value } => {
+            assert!(matches!(value.kind, HirExpressionKind::Int(99)));
+            match target {
+                HirPlace::Index { base, index } => {
+                    assert!(matches!(**base, HirPlace::Local(LocalId(71))));
+                    assert!(matches!(index.kind, HirExpressionKind::Int(0)));
+                }
+                other => panic!("expected index assignment target, got {other:?}"),
+            }
+        }
+        other => panic!("expected index assignment statement, got {other:?}"),
     }
 }

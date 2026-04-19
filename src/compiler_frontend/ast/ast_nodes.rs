@@ -13,7 +13,7 @@ use crate::compiler_frontend::ast::expressions::expression::{
 };
 use crate::compiler_frontend::ast::statements::branching::MatchArm;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
-use crate::compiler_frontend::builtins::BuiltinMethodKind;
+use crate::compiler_frontend::builtins::{BuiltinMethodKind, CollectionBuiltinOp};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::interned_path::InternedPath;
@@ -135,6 +135,15 @@ pub enum NodeKind {
         location: SourceLocation,
     },
 
+    // For compiler-owned collection builtins: collection.get/set/push/remove/length(...)
+    CollectionBuiltinCall {
+        receiver: Box<AstNode>,
+        op: CollectionBuiltinOp,
+        args: Vec<CallArgument>,
+        result_types: Vec<DataType>,
+        location: SourceLocation,
+    },
+
     FunctionCall {
         name: InternedPath,
         args: Vec<CallArgument>,
@@ -243,6 +252,11 @@ impl AstNode {
                 ownership.to_owned(),
             )),
             NodeKind::MethodCall {
+                result_types,
+                location,
+                ..
+            }
+            | NodeKind::CollectionBuiltinCall {
                 result_types,
                 location,
                 ..

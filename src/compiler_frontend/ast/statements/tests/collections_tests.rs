@@ -5,10 +5,24 @@
 
 use crate::compiler_frontend::ast::ast_nodes::NodeKind;
 use crate::compiler_frontend::ast::expressions::expression::{ExpressionKind, ResultCallHandling};
-use crate::compiler_frontend::builtins::BuiltinMethodKind;
+use crate::compiler_frontend::builtins::{BuiltinMethodKind, CollectionBuiltinOp};
 use crate::compiler_frontend::tests::test_support::{
     function_body_by_name, parse_single_file_ast, parse_single_file_ast_error, start_function_body,
 };
+
+fn runtime_collection_builtin_op(
+    expression: &crate::compiler_frontend::ast::expressions::expression::Expression,
+) -> CollectionBuiltinOp {
+    let ExpressionKind::Runtime(nodes) = &expression.kind else {
+        panic!("expected runtime expression");
+    };
+    assert_eq!(nodes.len(), 1, "expected single-node runtime expression");
+    let NodeKind::CollectionBuiltinCall { op, .. } = &nodes[0].kind else {
+        panic!("expected collection builtin call node");
+    };
+
+    *op
+}
 
 fn runtime_method_builtin_kind(
     expression: &crate::compiler_frontend::ast::expressions::expression::Expression,
@@ -18,11 +32,10 @@ fn runtime_method_builtin_kind(
     };
     assert_eq!(nodes.len(), 1, "expected single-node runtime expression");
     let NodeKind::MethodCall {
-        builtin: Some(kind),
-        ..
+        builtin: Some(kind), ..
     } = &nodes[0].kind
     else {
-        panic!("expected collection builtin method call node");
+        panic!("expected builtin method call node");
     };
 
     *kind
@@ -111,15 +124,15 @@ fn parses_collection_mutators_and_length_calls() {
         panic!("expected set(...) statement");
     };
     assert_eq!(
-        runtime_method_builtin_kind(set_expr),
-        BuiltinMethodKind::CollectionSet
+        runtime_collection_builtin_op(set_expr),
+        CollectionBuiltinOp::Set
     );
 
     let NodeKind::Assignment { target, .. } = &body[2].kind else {
         panic!("expected indexed assignment statement");
     };
-    let NodeKind::MethodCall {
-        builtin: Some(BuiltinMethodKind::CollectionGet),
+    let NodeKind::CollectionBuiltinCall {
+        op: CollectionBuiltinOp::Get,
         ..
     } = &target.kind
     else {
@@ -130,16 +143,16 @@ fn parses_collection_mutators_and_length_calls() {
         panic!("expected push(...) statement");
     };
     assert_eq!(
-        runtime_method_builtin_kind(push_expr),
-        BuiltinMethodKind::CollectionPush
+        runtime_collection_builtin_op(push_expr),
+        CollectionBuiltinOp::Push
     );
 
     let NodeKind::Rvalue(remove_expr) = &body[4].kind else {
         panic!("expected remove(...) statement");
     };
     assert_eq!(
-        runtime_method_builtin_kind(remove_expr),
-        BuiltinMethodKind::CollectionRemove
+        runtime_collection_builtin_op(remove_expr),
+        CollectionBuiltinOp::Remove
     );
 
     let NodeKind::VariableDeclaration(size_decl) = &body[5].kind else {
@@ -150,8 +163,8 @@ fn parses_collection_mutators_and_length_calls() {
         crate::compiler_frontend::datatypes::DataType::Int
     );
     assert_eq!(
-        runtime_method_builtin_kind(&size_decl.value),
-        BuiltinMethodKind::CollectionLength
+        runtime_collection_builtin_op(&size_decl.value),
+        CollectionBuiltinOp::Length
     );
 }
 
@@ -166,24 +179,24 @@ fn parses_collection_mutators_with_explicit_receiver_tilde_prefix() {
         panic!("expected push(...) statement");
     };
     assert_eq!(
-        runtime_method_builtin_kind(push_expr),
-        BuiltinMethodKind::CollectionPush
+        runtime_collection_builtin_op(push_expr),
+        CollectionBuiltinOp::Push
     );
 
     let NodeKind::Rvalue(set_expr) = &body[2].kind else {
         panic!("expected set(...) statement");
     };
     assert_eq!(
-        runtime_method_builtin_kind(set_expr),
-        BuiltinMethodKind::CollectionSet
+        runtime_collection_builtin_op(set_expr),
+        CollectionBuiltinOp::Set
     );
 
     let NodeKind::Rvalue(remove_expr) = &body[3].kind else {
         panic!("expected remove(...) statement");
     };
     assert_eq!(
-        runtime_method_builtin_kind(remove_expr),
-        BuiltinMethodKind::CollectionRemove
+        runtime_collection_builtin_op(remove_expr),
+        CollectionBuiltinOp::Remove
     );
 }
 
@@ -192,6 +205,27 @@ fn rejects_mutating_collection_method_without_explicit_receiver_tilde() {
     let error = parse_single_file_ast_error("values ~= {1, 2, 3}\nvalues.push(4)\n");
     assert!(error.msg.contains("push"), "{}", error.msg);
     assert!(error.msg.contains("~"), "{}", error.msg);
+}
+
+#[test]
+fn rejects_explicit_receiver_tilde_for_collection_get_and_length() {
+    let get_error = parse_single_file_ast_error("values ~= {1, 2, 3}\nvalue = ~values.get(0) ! 0\n");
+    assert!(
+        get_error
+            .msg
+            .contains("does not accept explicit mutable access marker '~'"),
+        "{}",
+        get_error.msg
+    );
+
+    let length_error = parse_single_file_ast_error("values ~= {1, 2, 3}\nvalue = ~values.length()\n");
+    assert!(
+        length_error
+            .msg
+            .contains("does not accept explicit mutable access marker '~'"),
+        "{}",
+        length_error.msg
+    );
 }
 
 #[test]
@@ -242,11 +276,11 @@ fn parses_builtin_error_helper_methods() {
     let body = function_body_by_name(&ast, &string_table, "apply_helpers");
     assert_eq!(
         declaration_runtime_method_builtin_kind(&body[0].kind),
-        BuiltinMethodKind::ErrorWithLocation
+        BuiltinMethodKind::WithLocation
     );
     assert_eq!(
         declaration_runtime_method_builtin_kind(&body[1].kind),
-        BuiltinMethodKind::ErrorPushTrace
+        BuiltinMethodKind::PushTrace
     );
 
     let NodeKind::Return(values) = &body[2].kind else {
@@ -254,6 +288,6 @@ fn parses_builtin_error_helper_methods() {
     };
     assert_eq!(
         runtime_method_builtin_kind(&values[0]),
-        BuiltinMethodKind::ErrorBubble
+        BuiltinMethodKind::Bubble
     );
 }

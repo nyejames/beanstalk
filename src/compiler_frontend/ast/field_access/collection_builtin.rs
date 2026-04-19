@@ -9,15 +9,10 @@ use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::place_access::{
     ast_node_is_mutable_place, ast_node_is_place, receiver_access_hint,
 };
-use crate::compiler_frontend::builtins::BuiltinMethodKind;
+use crate::compiler_frontend::builtins::CollectionBuiltinOp;
 use crate::compiler_frontend::builtins::error_type::resolve_builtin_error_type;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
-use crate::compiler_frontend::host_functions::{
-    COLLECTION_GET_HOST_NAME, COLLECTION_LENGTH_HOST_NAME, COLLECTION_PUSH_HOST_NAME,
-    COLLECTION_REMOVE_HOST_NAME,
-};
-use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::return_rule_error;
@@ -28,56 +23,17 @@ const COLLECTION_PUSH_NAME: &str = "push";
 const COLLECTION_REMOVE_NAME: &str = "remove";
 const COLLECTION_LENGTH_NAME: &str = "length";
 
-// WHAT: synthetic method path retained for AST `MethodCall` shape consistency.
-// WHY: `set` lowering bypasses host-call dispatch and becomes direct index assignment in HIR,
-//      but AST still models collection builtins uniformly as method-call nodes.
-const COLLECTION_BUILTIN_SET_PATH: &str = "__bs_collection_set";
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum CollectionBuiltinMethod {
-    Get,
-    Set,
-    Push,
-    Remove,
-    Length,
-}
-
 fn collection_builtin_method_name(
     member_name: StringId,
     string_table: &StringTable,
-) -> Option<CollectionBuiltinMethod> {
+) -> Option<CollectionBuiltinOp> {
     match string_table.resolve(member_name) {
-        COLLECTION_GET_NAME => Some(CollectionBuiltinMethod::Get),
-        COLLECTION_SET_NAME => Some(CollectionBuiltinMethod::Set),
-        COLLECTION_PUSH_NAME => Some(CollectionBuiltinMethod::Push),
-        COLLECTION_REMOVE_NAME => Some(CollectionBuiltinMethod::Remove),
-        COLLECTION_LENGTH_NAME => Some(CollectionBuiltinMethod::Length),
+        COLLECTION_GET_NAME => Some(CollectionBuiltinOp::Get),
+        COLLECTION_SET_NAME => Some(CollectionBuiltinOp::Set),
+        COLLECTION_PUSH_NAME => Some(CollectionBuiltinOp::Push),
+        COLLECTION_REMOVE_NAME => Some(CollectionBuiltinOp::Remove),
+        COLLECTION_LENGTH_NAME => Some(CollectionBuiltinOp::Length),
         _ => None,
-    }
-}
-
-fn collection_builtin_path(
-    builtin: CollectionBuiltinMethod,
-    string_table: &mut StringTable,
-) -> InternedPath {
-    let builtin_name = match builtin {
-        CollectionBuiltinMethod::Get => COLLECTION_GET_HOST_NAME,
-        CollectionBuiltinMethod::Set => COLLECTION_BUILTIN_SET_PATH,
-        CollectionBuiltinMethod::Push => COLLECTION_PUSH_HOST_NAME,
-        CollectionBuiltinMethod::Remove => COLLECTION_REMOVE_HOST_NAME,
-        CollectionBuiltinMethod::Length => COLLECTION_LENGTH_HOST_NAME,
-    };
-
-    InternedPath::from_single_str(builtin_name, string_table)
-}
-
-fn collection_builtin_kind(builtin: CollectionBuiltinMethod) -> BuiltinMethodKind {
-    match builtin {
-        CollectionBuiltinMethod::Get => BuiltinMethodKind::CollectionGet,
-        CollectionBuiltinMethod::Set => BuiltinMethodKind::CollectionSet,
-        CollectionBuiltinMethod::Push => BuiltinMethodKind::CollectionPush,
-        CollectionBuiltinMethod::Remove => BuiltinMethodKind::CollectionRemove,
-        CollectionBuiltinMethod::Length => BuiltinMethodKind::CollectionLength,
     }
 }
 
@@ -132,9 +88,7 @@ pub(super) fn parse_collection_builtin_member(
 
     let mutating_receiver_required = matches!(
         builtin,
-        CollectionBuiltinMethod::Set
-            | CollectionBuiltinMethod::Push
-            | CollectionBuiltinMethod::Remove
+        CollectionBuiltinOp::Set | CollectionBuiltinOp::Push | CollectionBuiltinOp::Remove
     );
 
     if receiver_access_mode == ReceiverAccessMode::Mutable && !mutating_receiver_required {
@@ -199,7 +153,7 @@ pub(super) fn parse_collection_builtin_member(
     token_stream.advance();
 
     let (args, result_types) = match builtin {
-        CollectionBuiltinMethod::Get => {
+        CollectionBuiltinOp::Get => {
             let args = parse_builtin_method_args(
                 token_stream,
                 &member_name_text,
@@ -216,7 +170,7 @@ pub(super) fn parse_collection_builtin_member(
             };
             (args, vec![get_result_type])
         }
-        CollectionBuiltinMethod::Set => {
+        CollectionBuiltinOp::Set => {
             let args = parse_builtin_method_args(
                 token_stream,
                 &member_name_text,
@@ -227,7 +181,7 @@ pub(super) fn parse_collection_builtin_member(
             )?;
             (args, Vec::new())
         }
-        CollectionBuiltinMethod::Push => {
+        CollectionBuiltinOp::Push => {
             let args = parse_builtin_method_args(
                 token_stream,
                 &member_name_text,
@@ -238,7 +192,7 @@ pub(super) fn parse_collection_builtin_member(
             )?;
             (args, Vec::new())
         }
-        CollectionBuiltinMethod::Remove => {
+        CollectionBuiltinOp::Remove => {
             let args = parse_builtin_method_args(
                 token_stream,
                 &member_name_text,
@@ -249,7 +203,7 @@ pub(super) fn parse_collection_builtin_member(
             )?;
             (args, Vec::new())
         }
-        CollectionBuiltinMethod::Length => {
+        CollectionBuiltinOp::Length => {
             let args = parse_builtin_method_args(
                 token_stream,
                 &member_name_text,
@@ -262,7 +216,7 @@ pub(super) fn parse_collection_builtin_member(
         }
     };
 
-    if matches!(builtin, CollectionBuiltinMethod::Get)
+    if matches!(builtin, CollectionBuiltinOp::Get)
         && token_stream.current_token_kind() != &TokenKind::Bang
         && !(matches!(token_stream.current_token_kind(), TokenKind::Symbol(_))
             && token_stream.peek_next_token() == Some(&TokenKind::Bang))
@@ -279,11 +233,9 @@ pub(super) fn parse_collection_builtin_member(
     }
 
     Ok(Some(AstNode {
-        kind: NodeKind::MethodCall {
+        kind: NodeKind::CollectionBuiltinCall {
             receiver: Box::new(receiver_node),
-            method_path: collection_builtin_path(builtin, string_table),
-            method: member_name,
-            builtin: Some(collection_builtin_kind(builtin)),
+            op: builtin,
             args,
             result_types,
             location: member_location.clone(),

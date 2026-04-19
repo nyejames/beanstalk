@@ -30,6 +30,7 @@ pub(super) fn order_expression_nodes(
             | NodeKind::FunctionCall { .. }
             | NodeKind::ResultHandledFunctionCall { .. }
             | NodeKind::MethodCall { .. }
+            | NodeKind::CollectionBuiltinCall { .. }
             | NodeKind::HostFunctionCall { .. } => {
                 output_queue.push(node);
             }

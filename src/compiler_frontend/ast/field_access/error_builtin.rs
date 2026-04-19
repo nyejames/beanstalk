@@ -52,9 +52,9 @@ fn error_builtin_path(builtin: ErrorBuiltinMethod, string_table: &mut StringTabl
 
 fn error_builtin_kind(builtin: ErrorBuiltinMethod) -> BuiltinMethodKind {
     match builtin {
-        ErrorBuiltinMethod::WithLocation => BuiltinMethodKind::ErrorWithLocation,
-        ErrorBuiltinMethod::PushTrace => BuiltinMethodKind::ErrorPushTrace,
-        ErrorBuiltinMethod::Bubble => BuiltinMethodKind::ErrorBubble,
+        ErrorBuiltinMethod::WithLocation => BuiltinMethodKind::WithLocation,
+        ErrorBuiltinMethod::PushTrace => BuiltinMethodKind::PushTrace,
+        ErrorBuiltinMethod::Bubble => BuiltinMethodKind::Bubble,
     }
 }
 

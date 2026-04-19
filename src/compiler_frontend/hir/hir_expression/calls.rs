@@ -6,7 +6,7 @@
 
 use crate::compiler_frontend::ast::ast_nodes::AstNode;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ResultCallHandling};
-use crate::compiler_frontend::builtins::BuiltinMethodKind;
+use crate::compiler_frontend::builtins::{BuiltinMethodKind, CollectionBuiltinOp};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
@@ -16,7 +16,10 @@ use crate::compiler_frontend::hir::hir_nodes::{
     ValueKind,
 };
 use crate::compiler_frontend::host_functions::CallTarget;
-use crate::compiler_frontend::host_functions::ERROR_BUBBLE_HOST_NAME;
+use crate::compiler_frontend::host_functions::{
+    COLLECTION_GET_HOST_NAME, COLLECTION_LENGTH_HOST_NAME, COLLECTION_PUSH_HOST_NAME,
+    COLLECTION_REMOVE_HOST_NAME, ERROR_BUBBLE_HOST_NAME,
+};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::return_hir_transformation_error;
@@ -157,10 +160,7 @@ impl<'a> HirBuilder<'a> {
         location: &SourceLocation,
     ) -> Result<LoweredExpression, CompilerError> {
         match builtin {
-            BuiltinMethodKind::CollectionGet
-            | BuiltinMethodKind::CollectionPush
-            | BuiltinMethodKind::CollectionRemove
-            | BuiltinMethodKind::CollectionLength => {
+            BuiltinMethodKind::WithLocation | BuiltinMethodKind::PushTrace => {
                 let mut full_args = Vec::with_capacity(args.len() + 1);
                 full_args.push(receiver.get_expr()?);
                 full_args.extend(args.iter().cloned());
@@ -172,29 +172,52 @@ impl<'a> HirBuilder<'a> {
                 )
             }
 
-            BuiltinMethodKind::CollectionSet => {
-                self.lower_collection_set_call_expression(receiver, args, location)
-            }
-
-            BuiltinMethodKind::ErrorWithLocation | BuiltinMethodKind::ErrorPushTrace => {
-                let mut full_args = Vec::with_capacity(args.len() + 1);
-                full_args.push(receiver.get_expr()?);
-                full_args.extend(args.iter().cloned());
-                self.lower_call_expression(
-                    CallTarget::HostFunction(method_path.to_owned()),
-                    &full_args,
-                    result_types,
-                    location,
-                )
-            }
-
-            BuiltinMethodKind::ErrorBubble => self.lower_error_bubble_call_expression(
+            BuiltinMethodKind::Bubble => self.lower_error_bubble_call_expression(
                 method_path,
                 receiver,
                 args,
                 result_types,
                 location,
             ),
+        }
+    }
+
+    pub(crate) fn lower_collection_builtin_call_expression(
+        &mut self,
+        op: CollectionBuiltinOp,
+        receiver: &AstNode,
+        args: &[Expression],
+        result_types: &[DataType],
+        location: &SourceLocation,
+    ) -> Result<LoweredExpression, CompilerError> {
+        match op {
+            CollectionBuiltinOp::Set => {
+                self.lower_collection_set_call_expression(receiver, args, location)
+            }
+            CollectionBuiltinOp::Get
+            | CollectionBuiltinOp::Push
+            | CollectionBuiltinOp::Remove
+            | CollectionBuiltinOp::Length => {
+                let mut full_args = Vec::with_capacity(args.len() + 1);
+                full_args.push(receiver.get_expr()?);
+                full_args.extend(args.iter().cloned());
+
+                let host_name = match op {
+                    CollectionBuiltinOp::Get => COLLECTION_GET_HOST_NAME,
+                    CollectionBuiltinOp::Push => COLLECTION_PUSH_HOST_NAME,
+                    CollectionBuiltinOp::Remove => COLLECTION_REMOVE_HOST_NAME,
+                    CollectionBuiltinOp::Length => COLLECTION_LENGTH_HOST_NAME,
+                    CollectionBuiltinOp::Set => unreachable!("set is handled above"),
+                };
+                let host_path = InternedPath::from_single_str(host_name, self.string_table);
+
+                self.lower_call_expression(
+                    CallTarget::HostFunction(host_path),
+                    &full_args,
+                    result_types,
+                    location,
+                )
+            }
         }
     }
 

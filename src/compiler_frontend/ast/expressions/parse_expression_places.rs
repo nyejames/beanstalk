@@ -56,11 +56,11 @@ pub(super) fn parse_mutable_receiver_expression(
 
     if token_stream.peek_next_token() != Some(&TokenKind::Dot) {
         return_rule_error!(
-            "Mutable receiver marker '~' is only valid for receiver method calls like '~value.method(...)'.",
+            "Mutable receiver marker '~' is only valid for receiver calls like '~value.method(...)' or '~values.push(...)'.",
             marker_location,
             {
                 CompilationStage => "Expression Parsing",
-                PrimarySuggestion => "Apply '~' directly to a receiver method call",
+                PrimarySuggestion => "Apply '~' directly to a receiver call",
             }
         );
     }

@@ -130,6 +130,7 @@ fn normalize_ast_node_templates(
         NodeKind::FunctionCall { .. }
         | NodeKind::HostFunctionCall { .. }
         | NodeKind::MethodCall { .. }
+        | NodeKind::CollectionBuiltinCall { .. }
         | NodeKind::ResultHandledFunctionCall { .. } => normalize_call_templates(
             node,
             source_file_scope,
@@ -477,11 +478,11 @@ fn normalize_declaration_templates(
     }
 }
 
-/// Normalizes templates in function and method call nodes.
+/// Normalizes templates in call-shaped AST nodes.
 ///
 /// WHAT: Handles normalization for function calls, host function calls, method
-/// calls, and result-handled function calls by recursively normalizing arguments
-/// and result handling.
+/// calls, collection builtin calls, and result-handled function calls by
+/// recursively normalizing arguments and result handling.
 ///
 /// WHY: Call nodes have similar structure (receiver/target + arguments) and can
 /// be handled together to avoid duplication.
@@ -493,7 +494,8 @@ fn normalize_call_templates(
     string_table: &mut StringTable,
 ) -> Result<(), CompilerError> {
     match &mut node.kind {
-        NodeKind::MethodCall { receiver, args, .. } => {
+        NodeKind::MethodCall { receiver, args, .. }
+        | NodeKind::CollectionBuiltinCall { receiver, args, .. } => {
             normalize_ast_node_templates(
                 receiver,
                 source_file_scope,

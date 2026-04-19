@@ -32,7 +32,7 @@ fn push_accessed_symbol_statement(
     string_table: &StringTable,
 ) -> Result<(), CompilerError> {
     match accessed.kind {
-        NodeKind::MethodCall { .. } => {
+        NodeKind::MethodCall { .. } | NodeKind::CollectionBuiltinCall { .. } => {
             ast.push(AstNode {
                 kind: NodeKind::Rvalue(accessed.get_expr()?),
                 location: accessed.location,
