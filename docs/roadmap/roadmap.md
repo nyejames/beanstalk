@@ -31,12 +31,12 @@ Make collection methods simpler builtins that no longer lean on method-call comp
 Breakdown the prelude.rs file in the JS backend into smaller files.
 Currently has too many responsibilities and needs to be refactored into more files.
 
+- `docs/roadmap/plans/js-backend-hardening.md`
+Reviewing the JS backend and making sure it implements the full suite of alpha features.
+
 - `docs/roadmap/plans/cross-platform-compat.md`
 Some tests current fail on windows, but the language is still usable.
 This is due to things like CRLF in golden outputs and OS path drifts.
-
-- `docs/roadmap/plans/js-backend-hardening.md`
-Reviewing the JS backend and making sure it implements the full suite of alpha features.
 
 ### Additional TODOs
 - Explicit error for compile time number overflows (2 ^ 63) should not just be a rust panic, should be a graceful compile time error.
