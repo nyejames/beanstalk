@@ -32,7 +32,8 @@ fn runtime_method_builtin_kind(
     };
     assert_eq!(nodes.len(), 1, "expected single-node runtime expression");
     let NodeKind::MethodCall {
-        builtin: Some(kind), ..
+        builtin: Some(kind),
+        ..
     } = &nodes[0].kind
     else {
         panic!("expected builtin method call node");
@@ -209,7 +210,8 @@ fn rejects_mutating_collection_method_without_explicit_receiver_tilde() {
 
 #[test]
 fn rejects_explicit_receiver_tilde_for_collection_get_and_length() {
-    let get_error = parse_single_file_ast_error("values ~= {1, 2, 3}\nvalue = ~values.get(0) ! 0\n");
+    let get_error =
+        parse_single_file_ast_error("values ~= {1, 2, 3}\nvalue = ~values.get(0) ! 0\n");
     assert!(
         get_error
             .msg
@@ -218,7 +220,8 @@ fn rejects_explicit_receiver_tilde_for_collection_get_and_length() {
         get_error.msg
     );
 
-    let length_error = parse_single_file_ast_error("values ~= {1, 2, 3}\nvalue = ~values.length()\n");
+    let length_error =
+        parse_single_file_ast_error("values ~= {1, 2, 3}\nvalue = ~values.length()\n");
     assert!(
         length_error
             .msg

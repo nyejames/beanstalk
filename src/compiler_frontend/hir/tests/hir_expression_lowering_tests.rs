@@ -10,8 +10,8 @@ use crate::compiler_frontend::ast::expressions::expression::{
 };
 use crate::compiler_frontend::ast::templates::template::{SlotKey, SlotPlaceholder, TemplateAtom};
 use crate::compiler_frontend::ast::templates::template_types::Template;
-use crate::compiler_frontend::builtins::{BuiltinMethodKind, CollectionBuiltinOp};
 use crate::compiler_frontend::builtins::error_type::register_builtin_error_types;
+use crate::compiler_frontend::builtins::{BuiltinMethodKind, CollectionBuiltinOp};
 use crate::compiler_frontend::compiler_errors::ErrorType;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
@@ -1624,8 +1624,7 @@ fn lowers_collection_builtin_host_calls_from_explicit_ast_nodes() {
     let length_path = super::symbol("__bs_collection_length", &mut string_table);
     let mut builder = setup_builder(&mut string_table);
 
-    let receiver_type =
-        DataType::Collection(Box::new(DataType::Int), Ownership::MutableOwned);
+    let receiver_type = DataType::Collection(Box::new(DataType::Int), Ownership::MutableOwned);
     register_local(
         &mut builder,
         receiver_name.clone(),
@@ -1723,8 +1722,7 @@ fn lowers_collection_set_builtin_from_explicit_ast_node_to_index_assignment() {
     let receiver_name = super::symbol("values", &mut string_table);
     let mut builder = setup_builder(&mut string_table);
 
-    let receiver_type =
-        DataType::Collection(Box::new(DataType::Int), Ownership::MutableOwned);
+    let receiver_type = DataType::Collection(Box::new(DataType::Int), Ownership::MutableOwned);
     register_local(
         &mut builder,
         receiver_name.clone(),

@@ -57,7 +57,9 @@ fn assignment_target_path(target: &AstNode, string_table: &StringTable) -> Optio
         },
         NodeKind::FieldAccess { base, field, .. } => assignment_target_path(base, string_table)
             .map(|base_path| format!("{base_path}.{}", string_table.resolve(*field))),
-        NodeKind::MethodCall { receiver, method, .. } => {
+        NodeKind::MethodCall {
+            receiver, method, ..
+        } => {
             let receiver_path = assignment_target_path(receiver, string_table)?;
             Some(format!(
                 "{receiver_path}.{}(...)",
