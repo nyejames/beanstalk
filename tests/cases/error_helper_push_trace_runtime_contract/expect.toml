@@ -5,4 +5,8 @@ warnings = "forbid"
 [[backends.html.artifact_assertions]]
 path = "index.html"
 kind = "html"
-must_contain = ["__bs_error_push_trace"]
+must_contain = [
+    "__bs_error_push_trace",
+    "const nextTrace = error.trace ? error.trace.concat([frame]) : [frame];",
+    "return __bs_make_error(error.kind, error.code, error.message, error.location, nextTrace);",
+]

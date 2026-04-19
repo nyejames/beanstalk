@@ -5,4 +5,7 @@ warnings = "forbid"
 [[backends.html.artifact_assertions]]
 path = "index.html"
 kind = "html"
-must_contain = ["__bs_error_with_location"]
+must_contain = [
+    "__bs_error_with_location",
+    "return __bs_make_error(error.kind, error.code, error.message, location, error.trace);",
+]

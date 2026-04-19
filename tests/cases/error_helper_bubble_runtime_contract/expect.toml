@@ -1,8 +1,14 @@
 [backends.html]
 mode = "success"
 warnings = "forbid"
+rendered_output_contains = ["bubbled_to_fallback"]
 
 [[backends.html.artifact_assertions]]
 path = "index.html"
 kind = "html"
-must_contain = ["__bs_error_bubble"]
+must_contain = [
+    "__bs_error_bubble",
+    "const nextLocation = error.location ?? location;",
+    "const located = __bs_error_with_location(error, nextLocation);",
+    "return __bs_error_push_trace(located, frame);",
+]

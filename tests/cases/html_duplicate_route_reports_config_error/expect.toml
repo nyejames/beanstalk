@@ -4,10 +4,16 @@ entry = "."
 mode = "failure"
 warnings = "forbid"
 error_type = "Config"
-message_contains = ["duplicate output path"]
+message_contains = [
+    "duplicate output path",
+    "conflicts with already-mapped entry",
+]
 
 [backends.html_wasm]
 mode = "failure"
 warnings = "forbid"
 error_type = "Config"
-message_contains = ["duplicate output path"]
+message_contains = [
+    "duplicate output path",
+    "conflicts with already-mapped entry",
+]

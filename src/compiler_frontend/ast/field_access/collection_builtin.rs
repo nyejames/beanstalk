@@ -56,17 +56,6 @@ pub(super) fn parse_collection_builtin_member(
         return Ok(None);
     };
 
-    if string_table.resolve(member_name) == "pull" {
-        return_rule_error!(
-            "Collection method 'pull(...)' was removed. Use 'remove(index)' instead.",
-            member_location,
-            {
-                CompilationStage => "AST Construction",
-                PrimarySuggestion => "Replace '.pull(index)' with '.remove(index)'",
-            }
-        );
-    }
-
     let Some(builtin) = collection_builtin_method_name(member_name, string_table) else {
         return Ok(None);
     };

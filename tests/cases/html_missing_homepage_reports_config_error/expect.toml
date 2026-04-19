@@ -4,10 +4,16 @@ entry = "."
 mode = "failure"
 warnings = "forbid"
 error_type = "Config"
-message_contains = ["require a '#page.bst' homepage"]
+message_contains = [
+    "require a '#page.bst' homepage",
+    "configured entry root",
+]
 
 [backends.html_wasm]
 mode = "failure"
 warnings = "forbid"
 error_type = "Config"
-message_contains = ["require a '#page.bst' homepage"]
+message_contains = [
+    "require a '#page.bst' homepage",
+    "configured entry root",
+]

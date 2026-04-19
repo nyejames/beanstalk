@@ -1,0 +1,8 @@
+[backends.html]
+mode = "failure"
+warnings = "forbid"
+error_type = "Rule"
+message_contains = [
+    "expects mutable access at the receiver call site",
+    "~v",
+]

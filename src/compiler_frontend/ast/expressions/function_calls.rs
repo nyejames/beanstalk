@@ -383,8 +383,8 @@ pub fn parse_host_function_call(
 ) -> Result<AstNode, CompilerError> {
     let location = token_stream.current_location();
 
-    // Host signatures currently synthesize positional parameter labels (`_arg{N}`), so named
-    // arguments remain intentionally unsupported until host metadata carries stable public names.
+    // Host metadata does not expose public parameter names yet, so named arguments remain
+    // intentionally unsupported.
     let raw_args = parse_call_arguments(token_stream, context, string_table)?;
     if raw_args
         .iter()
@@ -416,9 +416,7 @@ pub fn parse_host_function_call(
         kind: NodeKind::HostFunctionCall {
             name,
             args,
-            result_types: host_func
-                .params_to_signature(string_table)
-                .return_data_types(),
+            result_types: host_func.return_data_types(),
             location: location.clone(),
         },
         location,

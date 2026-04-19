@@ -5,7 +5,7 @@
 
 use super::call_argument::normalize_call_arguments;
 use super::expression::{Expression, ExpressionKind};
-use super::function_calls::parse_function_call;
+use super::function_calls::{parse_function_call, parse_host_function_call};
 use super::parse_expression_dispatch::push_expression_node;
 use super::struct_instance::parse_struct_constructor_expression;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
@@ -34,8 +34,6 @@ pub(super) fn parse_identifier_or_call(
     let TokenKind::Symbol(id) = token_stream.current_token_kind().to_owned() else {
         return Ok(());
     };
-
-    let full_name = context.scope.to_owned().append(id);
 
     if let Some(arg) = context.get_reference(&id) {
         if let ExpressionKind::Template(template_value) = &arg.value.kind
@@ -273,19 +271,11 @@ pub(super) fn parse_identifier_or_call(
             );
         }
 
-        // Convert return types to Arg format
-        let signature = host_func_def.params_to_signature(string_table);
+        // Host calls parse from metadata directly; do not synthesize fake parameter declarations.
+        token_stream.advance();
 
-        // This is a function call - parse it using the function call parser
-        let function_call_node = parse_function_call(
-            token_stream,
-            &full_name,
-            context,
-            &signature,
-            true,
-            None,
-            string_table,
-        )?;
+        let function_call_node =
+            parse_host_function_call(token_stream, host_func_def, context, string_table)?;
 
         if let NodeKind::HostFunctionCall {
             name: host_function_id,

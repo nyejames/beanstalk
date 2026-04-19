@@ -2,7 +2,4 @@
 mode = "failure"
 warnings = "forbid"
 error_type = "Rule"
-message_contains = [
-  "pull(...)",
-  "remove(index)",
-]
+message_contains = ["Property or method 'pull' not found"]

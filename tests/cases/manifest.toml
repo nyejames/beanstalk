@@ -1823,3 +1823,18 @@ tags = ["error", "frontend-contract"]
 id = "entry_start_sees_sorted_declarations"
 path = "entry_start_sees_sorted_declarations"
 tags = ["integration", "frontend-contract", "dependency-sort"]
+
+[[case]]
+id = "html_docs_site_proving_ground"
+path = "html_docs_site_proving_ground"
+tags = ["integration", "html-builder", "routes", "assets"]
+
+[[case]]
+id = "struct_mutable_receiver_temporary_receiver_rejected"
+path = "struct_mutable_receiver_temporary_receiver_rejected"
+tags = ["integration", "structs", "diagnostics"]
+
+[[case]]
+id = "struct_mutable_receiver_requires_explicit_receiver_tilde"
+path = "struct_mutable_receiver_requires_explicit_receiver_tilde"
+tags = ["integration", "structs", "diagnostics"]

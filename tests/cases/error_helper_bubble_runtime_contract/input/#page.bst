@@ -7,7 +7,9 @@ can_error |name String| -> String, Int, Error!:
 
 bubble_error |name String| -> String, Int, Error!:
     value, number = can_error(name) err!:
-        return! err.bubble()
+        origin = ErrorLocation(file = "origin.bst", line = 7, column = 3)
+        seeded = err.with_location(origin)
+        return! seeded.bubble()
     ;
     return value, number
 ;

@@ -3,22 +3,15 @@
 //! WHAT: defines the host-call surface the frontend and borrow checker understand today.
 //! WHY: host calls need one canonical metadata source for signature lowering and call semantics.
 
-use crate::compiler_frontend::ast::ast_nodes::Declaration;
-use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
-use crate::compiler_frontend::ast::statements::functions::{
-    FunctionReturn, FunctionSignature, ReturnSlot,
-};
+use crate::compiler_frontend::ast::statements::functions::{FunctionReturn, ReturnSlot};
 #[cfg(test)]
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::compiler_messages::source_location::SourceLocation;
-use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::hir::hir_nodes::FunctionId;
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::symbols::string_interning::StringTable;
 #[cfg(test)]
 use crate::return_compiler_error;
 use std::collections::HashMap;
-use std::path::PathBuf;
 
 pub const IO_FUNC_NAME: &str = "io";
 pub const COLLECTION_GET_HOST_NAME: &str = "__bs_collection_get";
@@ -73,60 +66,37 @@ pub struct HostFunctionDef {
 }
 
 impl HostFunctionDef {
-    /// Converts host function parameters into a Beanstalk `FunctionSignature`.
-    pub(crate) fn params_to_signature(&self, string_table: &mut StringTable) -> FunctionSignature {
-        let parameters = self
-            .parameters
-            .iter()
-            .enumerate()
-            .map(|(i, parameter)| {
-                let name = PathBuf::from(self.name).join(format!("_arg{i}"));
-
-                Declaration {
-                    id: InternedPath::from_path_buf(&name, string_table),
-                    value: Expression {
-                        kind: ExpressionKind::NoValue,
-                        location: SourceLocation::default(),
-                        data_type: parameter.language_type.clone(),
-                        ownership: Ownership::ImmutableReference,
-                        contains_regular_division: false,
-                    },
-                }
-            })
-            .collect();
-
-        let returns = self
-            .return_type_to_datatype()
-            .into_iter()
-            .collect::<Vec<_>>();
-        let returns = match self.return_alias {
-            HostReturnAlias::Fresh => returns
-                .iter()
-                .cloned()
-                .map(FunctionReturn::Value)
-                .map(ReturnSlot::success)
-                .collect(),
-            HostReturnAlias::AliasArgs(ref parameter_indices) if !returns.is_empty() => {
-                vec![ReturnSlot::success(FunctionReturn::AliasCandidates {
-                    parameter_indices: parameter_indices.clone(),
-                    data_type: returns[0].clone(),
-                })]
-            }
-            HostReturnAlias::AliasArgs(_) => Vec::new(),
-        };
-
-        FunctionSignature {
-            parameters,
-            returns,
-        }
-    }
-
     pub(crate) fn return_type_to_datatype(&self) -> Option<DataType> {
         match self.return_type {
             HostAbiType::I32 => Some(DataType::Int),
             HostAbiType::Utf8Str => Some(DataType::StringSlice),
             HostAbiType::Void => None,
         }
+    }
+
+    pub(crate) fn return_slots(&self) -> Vec<ReturnSlot> {
+        let Some(return_data_type) = self.return_type_to_datatype() else {
+            return Vec::new();
+        };
+
+        match self.return_alias {
+            HostReturnAlias::Fresh => {
+                vec![ReturnSlot::success(FunctionReturn::Value(return_data_type))]
+            }
+            HostReturnAlias::AliasArgs(ref parameter_indices) => {
+                vec![ReturnSlot::success(FunctionReturn::AliasCandidates {
+                    parameter_indices: parameter_indices.clone(),
+                    data_type: return_data_type,
+                })]
+            }
+        }
+    }
+
+    pub(crate) fn return_data_types(&self) -> Vec<DataType> {
+        self.return_slots()
+            .iter()
+            .map(|slot| slot.data_type().clone())
+            .collect()
     }
 }
 

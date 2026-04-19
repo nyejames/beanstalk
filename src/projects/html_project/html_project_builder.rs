@@ -65,6 +65,7 @@ impl BackendBuilder for HtmlProjectBuilder {
 
         let mut output_files = Vec::new();
         let mut output_paths = HashSet::new();
+        let mut output_path_owners: HashMap<PathBuf, PathBuf> = HashMap::new();
         let mut entry_page_rel = None;
         let mut has_directory_homepage = false;
         let mut compiled_html_output_paths = Vec::with_capacity(modules.len());
@@ -93,13 +94,16 @@ impl BackendBuilder for HtmlProjectBuilder {
             let html_output_path = compiled_artifacts.html_output_path.clone();
             for output_file in compiled_artifacts.output_files {
                 let output_path = output_file.relative_output_path().to_path_buf();
-                if !output_paths.insert(output_path.clone()) {
+                if let Some(existing_entry_point) = output_path_owners.get(&output_path) {
                     return Err(duplicate_output_path_error(
                         &module.entry_point,
+                        existing_entry_point,
                         &output_path,
                         string_table,
                     ));
                 }
+                output_paths.insert(output_path.clone());
+                output_path_owners.insert(output_path.clone(), module.entry_point.clone());
                 output_files.push(output_file);
             }
             compiled_html_output_paths.push((module_index, html_output_path.clone()));
@@ -224,16 +228,19 @@ fn compile_one_module(
 }
 
 fn duplicate_output_path_error(
-    entry_point: &Path,
+    duplicate_entry_point: &Path,
+    existing_entry_point: &Path,
     output_path: &Path,
     string_table: &StringTable,
 ) -> CompilerMessages {
     let mut error_string_table = string_table.clone();
     let mut error = CompilerError::file_error(
-        entry_point,
+        duplicate_entry_point,
         format!(
-            "HTML builder produced duplicate output path '{}'. Ensure each '#*.bst' entry maps to a unique page output.",
+            "HTML builder produced duplicate output path '{}'. Entry '{}' conflicts with already-mapped entry '{}'. Ensure each '#*.bst' entry maps to a unique page output.",
             output_path.display(),
+            duplicate_entry_point.display(),
+            existing_entry_point.display(),
         ),
         &mut error_string_table,
     )

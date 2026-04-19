@@ -7,7 +7,7 @@
 use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
-use crate::compiler_frontend::ast::expressions::function_calls::parse_function_call;
+use crate::compiler_frontend::ast::expressions::function_calls::parse_host_function_call;
 use crate::compiler_frontend::ast::expressions::mutation::{
     handle_mutation, handle_mutation_target,
 };
@@ -98,8 +98,6 @@ pub(crate) fn parse_symbol_statement(
         );
     }
 
-    let full_path = context.scope.append(id);
-
     if let Some(multi_bind) = parse_multi_bind_statement(token_stream, context, string_table)? {
         ast.push(multi_bind);
         return Ok(());
@@ -174,17 +172,9 @@ pub(crate) fn parse_symbol_statement(
 
     if let Some(host_func_call) = context.host_registry.get_function(string_table.resolve(id)) {
         token_stream.advance();
-        let signature = host_func_call.params_to_signature(string_table);
-
-        ast.push(parse_function_call(
-            token_stream,
-            &full_path,
-            context,
-            &signature,
-            false,
-            Some(warnings),
-            string_table,
-        )?);
+        let host_call =
+            parse_host_function_call(token_stream, host_func_call, context, string_table)?;
+        ast.push(host_call);
         return Ok(());
     }
 

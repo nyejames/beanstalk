@@ -1,6 +1,6 @@
 //! Host function metadata regression tests.
 //!
-//! WHAT: exercises host signature derivation and registry uniqueness rules.
+//! WHAT: exercises host return-slot derivation and registry uniqueness rules.
 //! WHY: host metadata feeds both AST lowering and borrow-check call summaries, so small
 //! regressions here can break multiple frontend stages at once.
 
@@ -8,8 +8,7 @@ use super::*;
 use crate::compiler_frontend::ast::statements::functions::FunctionReturn;
 
 #[test]
-fn params_to_signature_preserves_alias_metadata() {
-    let mut string_table = StringTable::new();
+fn return_slots_preserve_alias_metadata() {
     let host_function = HostFunctionDef {
         name: "concat_like",
         parameters: vec![
@@ -26,11 +25,10 @@ fn params_to_signature_preserves_alias_metadata() {
         return_alias: HostReturnAlias::AliasArgs(vec![1]),
     };
 
-    let signature = host_function.params_to_signature(&mut string_table);
-    assert_eq!(signature.parameters.len(), 2);
-    assert_eq!(signature.returns.len(), 1);
+    let returns = host_function.return_slots();
+    assert_eq!(returns.len(), 1);
     assert!(matches!(
-        &signature.returns[0].value,
+        &returns[0].value,
         FunctionReturn::AliasCandidates {
             parameter_indices,
             data_type

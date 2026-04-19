@@ -9,7 +9,8 @@ annotate_error |name String| -> String, Float:
     value, score = can_error(name) err! "fallback", 0.0:
         loc = ErrorLocation(file = "test.bst", line = 42, column = 1)
         annotated = err.with_location(loc)
-        io(annotated.message)
+        summary = [:error_helper_with_location_runtime_contract msg=[annotated.message]]
+        io(summary)
     ;
     return value, score
 ;

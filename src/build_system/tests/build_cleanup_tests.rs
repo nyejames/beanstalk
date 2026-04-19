@@ -164,6 +164,93 @@ fn cleanup_manifest_diff_removes_stale_tracked_byte_assets_from_v2_manifest() {
 }
 
 #[test]
+fn cleanup_manifest_diff_handles_small_static_site_route_and_asset_layout() {
+    let root = temp_dir("cleanup_small_static_site_layout");
+    fs::create_dir_all(&root).expect("should create temp root");
+    let project_dir = root.join("project");
+    fs::create_dir_all(&project_dir).expect("should create project dir");
+    let output_root = project_dir.join("dev");
+
+    // Build A: docs-style static site with nested route output and shared assets.
+    let project_a = html_project(
+        vec![
+            OutputFile::new(
+                PathBuf::from("index.html"),
+                FileKind::Html(String::from("<html>Home</html>")),
+            ),
+            OutputFile::new(
+                PathBuf::from("docs/index.html"),
+                FileKind::Html(String::from("<html>Docs</html>")),
+            ),
+            OutputFile::new(
+                PathBuf::from("docs/getting-started/index.html"),
+                FileKind::Html(String::from("<html>Getting Started</html>")),
+            ),
+            OutputFile::new(
+                PathBuf::from("assets/site.css"),
+                FileKind::Bytes(vec![1, 2, 3]),
+            ),
+            OutputFile::new(
+                PathBuf::from("shared/docs.css"),
+                FileKind::Bytes(vec![4, 5, 6]),
+            ),
+        ],
+        Some(PathBuf::from("index.html")),
+    );
+    write_project_outputs(
+        &project_a,
+        &always_write_options(output_root.clone(), Some(project_dir.clone())),
+    )
+    .expect("build A should succeed");
+
+    assert!(output_root.join("docs/getting-started/index.html").exists());
+    assert!(output_root.join("shared/docs.css").exists());
+
+    // Build B: remove the nested page and shared docs stylesheet.
+    let project_b = html_project(
+        vec![
+            OutputFile::new(
+                PathBuf::from("index.html"),
+                FileKind::Html(String::from("<html>Home v2</html>")),
+            ),
+            OutputFile::new(
+                PathBuf::from("docs/index.html"),
+                FileKind::Html(String::from("<html>Docs v2</html>")),
+            ),
+            OutputFile::new(
+                PathBuf::from("assets/site.css"),
+                FileKind::Bytes(vec![7, 8, 9]),
+            ),
+        ],
+        Some(PathBuf::from("index.html")),
+    );
+    write_project_outputs(
+        &project_b,
+        &always_write_options(output_root.clone(), Some(project_dir.clone())),
+    )
+    .expect("build B should succeed");
+
+    assert!(
+        !output_root.join("docs/getting-started/index.html").exists(),
+        "stale nested route output should be removed"
+    );
+    assert!(
+        !output_root.join("shared/docs.css").exists(),
+        "stale shared static asset should be removed"
+    );
+    assert!(
+        output_root.join("docs/index.html").exists(),
+        "active docs route output should remain"
+    );
+    assert!(
+        output_root.join("assets/site.css").exists(),
+        "active static asset output should remain"
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
+#[test]
 fn cleanup_missing_manifest_preserves_stale_html_route_alias() {
     let root = temp_dir("cleanup_missing_manifest_alias");
     fs::create_dir_all(&root).expect("should create temp root");

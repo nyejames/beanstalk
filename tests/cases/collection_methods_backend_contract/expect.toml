@@ -1,6 +1,7 @@
 [backends.html]
 mode = "success"
 warnings = "forbid"
+rendered_output_contains = ["collection_methods_backend_contract first=99 len=3"]
 
 [[backends.html.artifact_assertions]]
 path = "index.html"

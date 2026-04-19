@@ -21,9 +21,6 @@ These are the non-negotiable conditions for starting Alpha.
 
 ## Next Plans
 
-- `docs/roadmap/plans/js-backend-hardening.md`
-Reviewing the JS backend and making sure it implements the full suite of alpha features.
-
 - `docs/roadmap/plans/cross-platform-compat.md`
 Some tests current fail on windows, but the language is still usable.
 This is due to things like CRLF in golden outputs and OS path drifts.

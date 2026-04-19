@@ -232,10 +232,13 @@ fn rejects_explicit_receiver_tilde_for_collection_get_and_length() {
 }
 
 #[test]
-fn rejects_pull_method_and_guides_to_remove() {
+fn rejects_pull_method_as_unknown_collection_member() {
     let error = parse_single_file_ast_error("values ~= {1, 2, 3}\nvalues.pull(1)\n");
-    assert!(error.msg.contains("pull(...)"), "{}", error.msg);
-    assert!(error.msg.contains("remove(index)"), "{}", error.msg);
+    assert!(
+        error.msg.contains("Property or method 'pull' not found"),
+        "{}",
+        error.msg
+    );
 }
 
 #[test]
