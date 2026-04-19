@@ -27,8 +27,7 @@ pub(crate) fn map_binary_operator(hir_op: HirBinOp) -> Result<ExecBinaryOperator
         HirBinOp::And => Ok(ExecBinaryOperator::And),
         HirBinOp::Or => Ok(ExecBinaryOperator::Or),
         HirBinOp::Exponent => Err(CompilerError::compiler_error(format!(
-            "Binary operator {:?} is not yet supported by the interpreter",
-            hir_op
+            "Binary operator {hir_op:?} is not yet supported by the interpreter"
         ))),
     }
 }

@@ -215,8 +215,7 @@ impl RuntimeEngine {
                 (l, r) => {
                     return Err(InterpreterBackendError::Execution {
                         message: format!(
-                            "Type mismatch in Add operation: expected Int or Float operands, found {:?} and {:?}",
-                            l, r
+                            "Type mismatch in Add operation: expected Int or Float operands, found {l:?} and {r:?}"
                         ),
                     });
                 }
@@ -228,8 +227,7 @@ impl RuntimeEngine {
                 (l, r) => {
                     return Err(InterpreterBackendError::Execution {
                         message: format!(
-                            "Type mismatch in Subtract operation: expected Int or Float operands, found {:?} and {:?}",
-                            l, r
+                            "Type mismatch in Subtract operation: expected Int or Float operands, found {l:?} and {r:?}"
                         ),
                     });
                 }
@@ -241,8 +239,7 @@ impl RuntimeEngine {
                 (l, r) => {
                     return Err(InterpreterBackendError::Execution {
                         message: format!(
-                            "Type mismatch in Multiply operation: expected Int or Float operands, found {:?} and {:?}",
-                            l, r
+                            "Type mismatch in Multiply operation: expected Int or Float operands, found {l:?} and {r:?}"
                         ),
                     });
                 }
@@ -256,8 +253,7 @@ impl RuntimeEngine {
                 (l, r) => {
                     return Err(InterpreterBackendError::Execution {
                         message: format!(
-                            "Type mismatch in Divide operation: expected Int or Float operands, found {:?} and {:?}",
-                            l, r
+                            "Type mismatch in Divide operation: expected Int or Float operands, found {l:?} and {r:?}"
                         ),
                     });
                 }
@@ -275,8 +271,7 @@ impl RuntimeEngine {
                 (l, r) => {
                     return Err(InterpreterBackendError::Execution {
                         message: format!(
-                            "Type mismatch in IntDivide operation: expected Int operands, found {:?} and {:?}",
-                            l, r
+                            "Type mismatch in IntDivide operation: expected Int operands, found {l:?} and {r:?}"
                         ),
                     });
                 }
@@ -302,8 +297,7 @@ impl RuntimeEngine {
                 (l, r) => {
                     return Err(InterpreterBackendError::Execution {
                         message: format!(
-                            "Type mismatch in Modulo operation: expected Int or Float operands, found {:?} and {:?}",
-                            l, r
+                            "Type mismatch in Modulo operation: expected Int or Float operands, found {l:?} and {r:?}"
                         ),
                     });
                 }
@@ -318,8 +312,7 @@ impl RuntimeEngine {
                 (l, r) => {
                     return Err(InterpreterBackendError::Execution {
                         message: format!(
-                            "Type mismatch in Equal operation: operands must have the same type, found {:?} and {:?}",
-                            l, r
+                            "Type mismatch in Equal operation: operands must have the same type, found {l:?} and {r:?}"
                         ),
                     });
                 }
@@ -333,8 +326,7 @@ impl RuntimeEngine {
                 (l, r) => {
                     return Err(InterpreterBackendError::Execution {
                         message: format!(
-                            "Type mismatch in NotEqual operation: operands must have the same type, found {:?} and {:?}",
-                            l, r
+                            "Type mismatch in NotEqual operation: operands must have the same type, found {l:?} and {r:?}"
                         ),
                     });
                 }
@@ -347,8 +339,7 @@ impl RuntimeEngine {
                 (l, r) => {
                     return Err(InterpreterBackendError::Execution {
                         message: format!(
-                            "Type mismatch in LessThan operation: expected Int, Float, or Char operands, found {:?} and {:?}",
-                            l, r
+                            "Type mismatch in LessThan operation: expected Int, Float, or Char operands, found {l:?} and {r:?}"
                         ),
                     });
                 }
@@ -361,8 +352,7 @@ impl RuntimeEngine {
                 (l, r) => {
                     return Err(InterpreterBackendError::Execution {
                         message: format!(
-                            "Type mismatch in LessThanOrEqual operation: expected Int, Float, or Char operands, found {:?} and {:?}",
-                            l, r
+                            "Type mismatch in LessThanOrEqual operation: expected Int, Float, or Char operands, found {l:?} and {r:?}"
                         ),
                     });
                 }
@@ -375,8 +365,7 @@ impl RuntimeEngine {
                 (l, r) => {
                     return Err(InterpreterBackendError::Execution {
                         message: format!(
-                            "Type mismatch in GreaterThan operation: expected Int, Float, or Char operands, found {:?} and {:?}",
-                            l, r
+                            "Type mismatch in GreaterThan operation: expected Int, Float, or Char operands, found {l:?} and {r:?}"
                         ),
                     });
                 }
@@ -389,8 +378,7 @@ impl RuntimeEngine {
                 (l, r) => {
                     return Err(InterpreterBackendError::Execution {
                         message: format!(
-                            "Type mismatch in GreaterThanOrEqual operation: expected Int, Float, or Char operands, found {:?} and {:?}",
-                            l, r
+                            "Type mismatch in GreaterThanOrEqual operation: expected Int, Float, or Char operands, found {l:?} and {r:?}"
                         ),
                     });
                 }
@@ -402,8 +390,7 @@ impl RuntimeEngine {
                 (l, r) => {
                     return Err(InterpreterBackendError::Execution {
                         message: format!(
-                            "Type mismatch in And operation: expected Bool operands, found {:?} and {:?}",
-                            l, r
+                            "Type mismatch in And operation: expected Bool operands, found {l:?} and {r:?}"
                         ),
                     });
                 }
@@ -414,8 +401,7 @@ impl RuntimeEngine {
                 (l, r) => {
                     return Err(InterpreterBackendError::Execution {
                         message: format!(
-                            "Type mismatch in Or operation: expected Bool operands, found {:?} and {:?}",
-                            l, r
+                            "Type mismatch in Or operation: expected Bool operands, found {l:?} and {r:?}"
                         ),
                     });
                 }
@@ -443,8 +429,7 @@ impl RuntimeEngine {
                 other => {
                     return Err(InterpreterBackendError::Execution {
                         message: format!(
-                            "Type mismatch in Negate operation: expected Int or Float operand, found {:?}",
-                            other
+                            "Type mismatch in Negate operation: expected Int or Float operand, found {other:?}",
                         ),
                     });
                 }
@@ -455,8 +440,7 @@ impl RuntimeEngine {
                 other => {
                     return Err(InterpreterBackendError::Execution {
                         message: format!(
-                            "Type mismatch in Not operation: expected Bool operand, found {:?}",
-                            other
+                            "Type mismatch in Not operation: expected Bool operand, found {other:?}",
                         ),
                     });
                 }
