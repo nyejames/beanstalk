@@ -436,5 +436,5 @@ fn write_bytes_output(
 }
 
 #[cfg(test)]
-#[path = "tests/build_tests.rs"]
+#[path = "tests/mod.rs"]
 mod tests;

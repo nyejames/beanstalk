@@ -247,5 +247,5 @@ fn finalize_template_after_formatting(
 }
 
 #[cfg(test)]
-#[path = "tests/create_template_node_tests.rs"]
+#[path = "tests/create_template_node/mod.rs"]
 mod create_template_node_tests;
