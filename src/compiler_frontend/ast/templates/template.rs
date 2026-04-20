@@ -4,6 +4,7 @@ use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::symbols::string_interning::StringId;
+use std::rc::Rc;
 use std::sync::Arc;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -251,7 +252,7 @@ pub struct TemplateSegment {
     pub expression: Expression,
     pub origin: TemplateSegmentOrigin,
     pub is_child_template_output: bool,
-    pub source_child_template: Option<Box<Template>>,
+    pub source_child_template: Option<Rc<Template>>,
 }
 
 impl TemplateSegment {
@@ -273,7 +274,7 @@ impl TemplateSegment {
             expression,
             origin,
             is_child_template_output: true,
-            source_child_template: Some(Box::new(source_child_template)),
+            source_child_template: Some(Rc::new(source_child_template)),
         }
     }
 }

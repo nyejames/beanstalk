@@ -83,7 +83,7 @@ impl SlotContributions {
 ///   handling inheritance, ordering, and validation in one centralized pass.
 pub(crate) fn compose_template_with_slots(
     wrapper: &Template,
-    fill_content: &TemplateContent,
+    fill_content: TemplateContent,
     location: &SourceLocation,
     string_table: &StringTable,
 ) -> Result<TemplateContent, CompilerError> {
@@ -100,7 +100,7 @@ pub(crate) fn compose_template_with_slots(
     // Walk authored fill content exactly once and bucket each atom either as:
     // 1) one or more explicit `$insert(...)` contributors, or
     // 2) loose content that should flow into positional or default slots.
-    for atom in &fill_content.atoms {
+    for atom in fill_content.atoms {
         let (loose_atom, slot_inserts) = split_fill_atom_for_composition(atom);
 
         for (target, inserted_atoms) in slot_inserts {
@@ -405,7 +405,7 @@ fn compose_wrapper_atoms_recursive(
                 if let ExpressionKind::Template(template) = &segment.expression.kind
                     && template.has_unresolved_slots()
                 {
-                    let mut nested_template = template.as_ref().to_owned();
+                    let mut nested_template = template.as_ref().clone_for_composition();
                     nested_template.content = TemplateContent {
                         atoms: compose_wrapper_atoms_recursive(
                             &nested_template.content.atoms,
@@ -413,7 +413,7 @@ fn compose_wrapper_atoms_recursive(
                             string_table,
                         )?,
                     };
-                    nested_template.resync_runtime_metadata();
+                    nested_template.resync_composition_metadata();
 
                     let mut nested_expression = segment.expression.to_owned();
                     nested_expression.kind = ExpressionKind::Template(Box::new(nested_template));
@@ -455,7 +455,7 @@ fn expand_slot_placeholder(
                 string_table,
             )?
         } else if contribution_is_child_template_output(&atom)
-            || contribution_template(&atom).is_some()
+            || contribution_template_ref(&atom).is_some()
         {
             // Contribution is either a folded child template string slice or an
             // unfolded template — wrap the whole contribution in the child wrapper.
@@ -491,7 +491,7 @@ fn is_child_slot_contribution(atom: &TemplateAtom) -> bool {
 }
 
 fn contribution_has_direct_child_templates(atom: &TemplateAtom) -> bool {
-    let Some(template) = contribution_template(atom) else {
+    let Some(template) = contribution_template_ref(atom) else {
         return false;
     };
 
@@ -538,7 +538,7 @@ fn wrap_child_slot_contribution(
     let mut wrapped_template = Template::create_default(vec![]);
     wrapped_template.content = wrapped_content;
     wrapped_template.location = contribution_location(atom);
-    wrapped_template.resync_runtime_metadata();
+    wrapped_template.resync_composition_metadata();
 
     Ok(TemplateAtom::Content(TemplateSegment::new(
         Expression::template(wrapped_template, Ownership::ImmutableOwned),
@@ -551,7 +551,7 @@ fn apply_child_wrappers_to_contribution_children(
     child_wrappers: &[Template],
     string_table: &StringTable,
 ) -> Result<TemplateAtom, CompilerError> {
-    let Some(mut contribution_template) = contribution_template(atom) else {
+    let Some(mut contribution_template) = contribution_template_owned(atom) else {
         return Ok(atom.to_owned());
     };
 
@@ -560,7 +560,7 @@ fn apply_child_wrappers_to_contribution_children(
         child_wrappers,
         string_table,
     )?;
-    contribution_template.resync_runtime_metadata();
+    contribution_template.resync_composition_metadata();
 
     Ok(TemplateAtom::Content(TemplateSegment::new(
         Expression::template(contribution_template, Ownership::ImmutableOwned),
@@ -568,19 +568,23 @@ fn apply_child_wrappers_to_contribution_children(
     )))
 }
 
-fn contribution_template(atom: &TemplateAtom) -> Option<Template> {
+fn contribution_template_ref(atom: &TemplateAtom) -> Option<&Template> {
     let TemplateAtom::Content(segment) = atom else {
         return None;
     };
 
     if let Some(source_child_template) = &segment.source_child_template {
-        return Some(source_child_template.as_ref().to_owned());
+        return Some(source_child_template.as_ref());
     }
 
     match &segment.expression.kind {
-        ExpressionKind::Template(template) => Some(template.as_ref().to_owned()),
+        ExpressionKind::Template(template) => Some(template.as_ref()),
         _ => None,
     }
+}
+
+fn contribution_template_owned(atom: &TemplateAtom) -> Option<Template> {
+    contribution_template_ref(atom).map(Template::clone_for_composition)
 }
 
 /// Returns true when the atom is a child template output that was folded into a
@@ -621,69 +625,69 @@ fn slot_insert_from_atom(atom: &TemplateAtom) -> Option<(SlotKey, &TemplateConte
 }
 
 fn split_fill_atom_for_composition(
-    atom: &TemplateAtom,
+    atom: TemplateAtom,
 ) -> (Option<TemplateAtom>, Vec<(SlotKey, Vec<TemplateAtom>)>) {
-    let Some((target, slot_insert_content)) = slot_insert_from_atom(atom) else {
-        let TemplateAtom::Content(segment) = atom else {
-            return (Some(atom.to_owned()), Vec::new());
+    let Some((target, slot_insert_content)) = slot_insert_from_atom(&atom) else {
+        let TemplateAtom::Content(mut segment) = atom else {
+            return (Some(atom), Vec::new());
         };
 
-        let ExpressionKind::Template(template) = &segment.expression.kind else {
-            return (Some(atom.to_owned()), Vec::new());
-        };
+        // Move the nested template out without cloning. The temporary `NoValue`
+        // sentinel is always replaced before the segment returns.
+        let template =
+            match std::mem::replace(&mut segment.expression.kind, ExpressionKind::NoValue) {
+                ExpressionKind::Template(template) => template,
+                other_kind => {
+                    segment.expression.kind = other_kind;
+                    return (Some(TemplateAtom::Content(segment)), Vec::new());
+                }
+            };
 
         let (sanitized_template, extracted_inserts) =
-            collect_direct_slot_insert_contributions(template);
+            collect_direct_slot_insert_contributions(*template);
         if extracted_inserts.is_empty() {
-            return (Some(atom.to_owned()), extracted_inserts);
+            segment.expression.kind = ExpressionKind::Template(Box::new(sanitized_template));
+            return (Some(TemplateAtom::Content(segment)), extracted_inserts);
         }
 
         if sanitized_template.content.is_empty() {
             return (None, extracted_inserts);
         }
 
-        let mut sanitized_expression = segment.expression.to_owned();
-        sanitized_expression.kind = ExpressionKind::Template(Box::new(sanitized_template));
-        return (
-            Some(TemplateAtom::Content(TemplateSegment::new(
-                sanitized_expression,
-                segment.origin,
-            ))),
-            extracted_inserts,
-        );
+        segment.expression.kind = ExpressionKind::Template(Box::new(sanitized_template));
+        return (Some(TemplateAtom::Content(segment)), extracted_inserts);
     };
 
     (None, vec![(target, slot_insert_content.atoms.clone())])
 }
 
 fn collect_direct_slot_insert_contributions(
-    template: &Template,
+    mut template: Template,
 ) -> (Template, Vec<(SlotKey, Vec<TemplateAtom>)>) {
     let mut sanitized_atoms = Vec::with_capacity(template.content.atoms.len());
     let mut extracted = Vec::new();
 
     // Only direct child `$insert(...)` helpers are extracted here. Nested descendants
     // are left untouched so they cannot bypass immediate-parent slot scoping.
-    for atom in &template.content.atoms {
-        if let Some((target, slot_insert_content)) = slot_insert_from_atom(atom) {
+    for atom in template.content.atoms {
+        if let Some((target, slot_insert_content)) = slot_insert_from_atom(&atom) {
             extracted.push((target, slot_insert_content.atoms.clone()));
             continue;
         }
 
-        sanitized_atoms.push(atom.to_owned());
+        sanitized_atoms.push(atom);
     }
 
-    if extracted.is_empty() {
-        return (template.to_owned(), extracted);
-    }
-
-    let mut sanitized = template.to_owned();
-    sanitized.content = TemplateContent {
+    template.content = TemplateContent {
         atoms: sanitized_atoms,
     };
-    sanitized.resync_runtime_metadata();
+    if extracted.is_empty() {
+        return (template, extracted);
+    }
 
-    (sanitized, extracted)
+    template.resync_composition_metadata();
+
+    (template, extracted)
 }
 
 fn extra_loose_content_without_default_slot_error(

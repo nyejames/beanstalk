@@ -16,6 +16,7 @@ use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::Ownership;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
+use std::rc::Rc;
 
 // -------------------------
 // CHILD WRAPPER APPLICATION
@@ -106,11 +107,11 @@ fn wrap_atom_in_child_template(
             atoms: vec![atom.to_owned()],
         };
         let composed_content =
-            compose_template_with_slots(wrapper, &fill_content, &wrapper.location, string_table)?;
+            compose_template_with_slots(wrapper, fill_content, &wrapper.location, string_table)?;
 
-        let mut wrapped_template = wrapper.to_owned();
+        let mut wrapped_template = wrapper.clone_for_composition();
         wrapped_template.content = composed_content;
-        wrapped_template.resync_runtime_metadata();
+        wrapped_template.resync_composition_metadata();
         wrapped_template
     } else {
         let mut wrapped_template = Template::create_default(vec![]);
@@ -118,13 +119,16 @@ fn wrap_atom_in_child_template(
         wrapped_template.content = TemplateContent {
             atoms: vec![
                 TemplateAtom::Content(TemplateSegment::new(
-                    Expression::template(wrapper.to_owned(), Ownership::ImmutableOwned),
+                    Expression::template(
+                        wrapper.clone_for_composition(),
+                        Ownership::ImmutableOwned,
+                    ),
                     TemplateSegmentOrigin::Body,
                 )),
                 atom.to_owned(),
             ],
         };
-        wrapped_template.resync_runtime_metadata();
+        wrapped_template.resync_composition_metadata();
         wrapped_template
     };
 
@@ -146,7 +150,7 @@ fn wrap_atom_in_child_template(
 /// and clearer.
 #[derive(Clone, Debug, Default)]
 struct PendingAtomPool {
-    atoms: Vec<TemplateAtom>,
+    atoms: Vec<Option<TemplateAtom>>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -155,12 +159,14 @@ struct PendingAtomId(usize);
 impl PendingAtomPool {
     fn push(&mut self, atom: TemplateAtom) -> PendingAtomId {
         let id = PendingAtomId(self.atoms.len());
-        self.atoms.push(atom);
+        self.atoms.push(Some(atom));
         id
     }
 
-    fn get(&self, id: PendingAtomId) -> &TemplateAtom {
-        &self.atoms[id.0]
+    fn take(&mut self, id: PendingAtomId) -> TemplateAtom {
+        self.atoms[id.0].take().expect(
+            "pending atom pool invariant violated: atom consumed more than once during chain resolution",
+        )
     }
 }
 
@@ -236,7 +242,7 @@ pub(crate) fn compose_template_head_chain(
             }
 
             layers.push(ChainLayer {
-                wrapper: receiver.to_owned(),
+                wrapper: receiver.clone_for_composition(),
                 fill_items: Vec::new(),
             });
             active_layer = Some(layer_index);
@@ -265,8 +271,13 @@ pub(crate) fn compose_template_head_chain(
     }
 
     let mut cache = rustc_hash::FxHashMap::default();
-    let atoms =
-        resolve_pending_chain_items(&root_items, &layers, &atom_pool, &mut cache, string_table)?;
+    let atoms = resolve_pending_chain_items(
+        &root_items,
+        &layers,
+        &mut atom_pool,
+        &mut cache,
+        string_table,
+    )?;
     Ok(TemplateContent { atoms })
 }
 
@@ -327,15 +338,15 @@ fn receiver_template_from_head_atom(
 fn resolve_pending_chain_items(
     items: &[PendingChainItem],
     layers: &[ChainLayer],
-    atom_pool: &PendingAtomPool,
-    cache: &mut rustc_hash::FxHashMap<usize, Template>,
+    atom_pool: &mut PendingAtomPool,
+    cache: &mut rustc_hash::FxHashMap<usize, Rc<Template>>,
     string_table: &StringTable,
 ) -> Result<Vec<TemplateAtom>, CompilerError> {
     let mut atoms = Vec::with_capacity(items.len());
 
     for item in items {
         match item {
-            PendingChainItem::AtomRef(atom_id) => atoms.push(atom_pool.get(*atom_id).clone()),
+            PendingChainItem::AtomRef(atom_id) => atoms.push(atom_pool.take(*atom_id)),
             PendingChainItem::LayerRef {
                 layer_index,
                 origin,
@@ -343,7 +354,10 @@ fn resolve_pending_chain_items(
                 let resolved_layer =
                     resolve_chain_layer(*layer_index, layers, atom_pool, cache, string_table)?;
                 atoms.push(TemplateAtom::Content(TemplateSegment::new(
-                    Expression::template(resolved_layer, Ownership::ImmutableOwned),
+                    Expression::template(
+                        resolved_layer.as_ref().clone_for_composition(),
+                        Ownership::ImmutableOwned,
+                    ),
                     *origin,
                 )));
             }
@@ -358,12 +372,12 @@ fn resolve_pending_chain_items(
 fn resolve_chain_layer(
     layer_index: usize,
     layers: &[ChainLayer],
-    atom_pool: &PendingAtomPool,
-    cache: &mut rustc_hash::FxHashMap<usize, Template>,
+    atom_pool: &mut PendingAtomPool,
+    cache: &mut rustc_hash::FxHashMap<usize, Rc<Template>>,
     string_table: &StringTable,
-) -> Result<Template, CompilerError> {
+) -> Result<Rc<Template>, CompilerError> {
     if let Some(cached) = cache.get(&layer_index) {
-        return Ok(cached.to_owned());
+        return Ok(Rc::clone(cached));
     }
 
     let layer = &layers[layer_index];
@@ -372,8 +386,9 @@ fn resolve_chain_layer(
         // wrapper templates so later use-sites can still fill their slots.
         // This is expected for reusable template/style constants and should not
         // be treated as an escaped helper artifact.
-        cache.insert(layer_index, layer.wrapper.to_owned());
-        return Ok(layer.wrapper.to_owned());
+        let wrapper = Rc::new(layer.wrapper.clone_for_composition());
+        cache.insert(layer_index, Rc::clone(&wrapper));
+        return Ok(wrapper);
     }
 
     let resolved_fill_atoms =
@@ -383,15 +398,16 @@ fn resolve_chain_layer(
     };
     let composed_content = compose_template_with_slots(
         &layer.wrapper,
-        &resolved_fill,
+        resolved_fill,
         &layer.wrapper.location,
         string_table,
     )?;
 
-    let mut resolved_wrapper = layer.wrapper.to_owned();
+    let mut resolved_wrapper = layer.wrapper.clone_for_composition();
     resolved_wrapper.content = composed_content;
-    resolved_wrapper.resync_runtime_metadata();
-    cache.insert(layer_index, resolved_wrapper.to_owned());
+    resolved_wrapper.resync_composition_metadata();
+    let resolved_wrapper = Rc::new(resolved_wrapper);
+    cache.insert(layer_index, Rc::clone(&resolved_wrapper));
 
     Ok(resolved_wrapper)
 }

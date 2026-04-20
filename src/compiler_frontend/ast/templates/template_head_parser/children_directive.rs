@@ -111,7 +111,7 @@ pub(super) fn parse_children_style_directive(
                 argument_location,
                 Ownership::ImmutableOwned,
             ));
-            wrapper.resync_runtime_metadata();
+            wrapper.resync_composition_metadata();
             wrapper
         }
 

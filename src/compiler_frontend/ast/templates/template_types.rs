@@ -96,22 +96,60 @@ impl Template {
         self.const_value_kind().is_renderable_string()
     }
 
-    /// Rebuilds the derived metadata that must stay aligned with `content`.
+    /// Rebuilds full runtime metadata from current `content`.
     ///
     /// WHAT:
-    /// - refreshes the pre-format snapshot
-    /// - clears deferred-formatting state
-    /// - reclassifies non-special template kinds
-    /// - rebuilds the final render plan from the current content stream
+    /// - refreshes pre-format snapshot and kind classification
+    /// - always materializes a render plan from the current content stream
     ///
     /// WHY:
-    /// - wrapper/slot composition mutates template content after parsing, and HIR must only
-    ///   receive templates whose runtime metadata is already authoritative.
+    /// - HIR lowering requires runtime templates to already carry an authoritative render plan.
     pub(crate) fn resync_runtime_metadata(&mut self) {
+        self.resync_metadata_with_plan_policy(true);
+    }
+
+    /// Rebuilds composition metadata while only materializing plans needed by runtime templates.
+    ///
+    /// WHAT:
+    /// - refreshes pre-format snapshot and kind classification
+    /// - materializes render plans only when the template remains `StringFunction`
+    ///
+    /// WHY:
+    /// - template composition creates many temporary compile-time wrapper/string templates.
+    ///   Building full render plans for those intermediates causes avoidable clone churn.
+    pub(crate) fn resync_composition_metadata(&mut self) {
+        self.resync_metadata_with_plan_policy(false);
+    }
+
+    fn resync_metadata_with_plan_policy(&mut self, force_full_plan: bool) {
         self.unformatted_content = self.content.to_owned();
         self.content_needs_formatting = false;
         self.refresh_kind_from_content();
-        self.render_plan = Some(TemplateRenderPlan::from_content(&self.content));
+
+        let should_materialize_plan =
+            force_full_plan || matches!(self.kind, TemplateType::StringFunction);
+        self.render_plan =
+            should_materialize_plan.then(|| TemplateRenderPlan::from_content(&self.content));
+    }
+
+    /// Clones this template for AST composition work without carrying stale render-plan payload.
+    ///
+    /// WHY:
+    /// - composition frequently clones wrapper/intermediate templates for structural rewrites.
+    ///   Carrying cloned render plans in those intermediates is unnecessary and expensive.
+    pub(crate) fn clone_for_composition(&self) -> Template {
+        Template {
+            content: self.content.to_owned(),
+            unformatted_content: self.unformatted_content.to_owned(),
+            content_needs_formatting: self.content_needs_formatting,
+            render_plan: None,
+            kind: self.kind.to_owned(),
+            doc_children: self.doc_children.to_owned(),
+            style: self.style.to_owned(),
+            explicit_style: self.explicit_style.to_owned(),
+            id: self.id.to_owned(),
+            location: self.location.to_owned(),
+        }
     }
 
     /// Refreshes the non-special string/string-function classification from current content.

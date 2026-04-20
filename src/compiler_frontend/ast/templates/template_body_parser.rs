@@ -157,7 +157,7 @@ fn parse_nested_template(
                             Ownership::ImmutableOwned,
                         ),
                         TemplateSegmentOrigin::Body,
-                        nested_template.clone(),
+                        nested_template.clone_for_composition(),
                     ),
                 ),
             );

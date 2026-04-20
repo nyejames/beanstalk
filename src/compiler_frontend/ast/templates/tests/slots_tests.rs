@@ -136,7 +136,7 @@ fn test_positional_composition_basic() {
 
     let location = SourceLocation::default();
     let result =
-        compose_template_with_slots(&wrapper, &fill_content, &location, &string_table).unwrap();
+        compose_template_with_slots(&wrapper, fill_content, &location, &string_table).unwrap();
 
     // result should contain [a] and [b]
     assert_eq!(result.atoms.len(), 3); // "[a]", "-", "[b]"
@@ -176,7 +176,7 @@ fn test_positional_composition_with_default_overflow() {
 
     let location = SourceLocation::default();
     let result =
-        compose_template_with_slots(&wrapper, &fill_content, &location, &string_table).unwrap();
+        compose_template_with_slots(&wrapper, fill_content, &location, &string_table).unwrap();
 
     // [$slot(1)] should get [a]
     // [$slot] should get [b] and [c] (both are overflow)
@@ -208,7 +208,7 @@ fn test_positional_composition_overflow_error() {
     };
 
     let location = SourceLocation::default();
-    let result = compose_template_with_slots(&wrapper, &fill_content, &location, &string_table);
+    let result = compose_template_with_slots(&wrapper, fill_content, &location, &string_table);
 
     assert!(result.is_err());
     assert!(
@@ -236,7 +236,7 @@ fn test_positional_composition_repeated_slots() {
 
     let location = SourceLocation::default();
     let result =
-        compose_template_with_slots(&wrapper, &fill_content, &location, &string_table).unwrap();
+        compose_template_with_slots(&wrapper, fill_content, &location, &string_table).unwrap();
 
     // Both should get [a]
     assert_eq!(result.atoms.len(), 3); // "[a]", "and", "[a]"
@@ -277,7 +277,7 @@ fn test_positional_composition_mixed_content() {
 
     let location = SourceLocation::default();
     let result =
-        compose_template_with_slots(&wrapper, &fill_content, &location, &string_table).unwrap();
+        compose_template_with_slots(&wrapper, fill_content, &location, &string_table).unwrap();
 
     // [a] -> [$slot(1)]
     // " text " and [b] -> [$slot]

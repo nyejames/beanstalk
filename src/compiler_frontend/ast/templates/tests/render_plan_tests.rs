@@ -12,6 +12,7 @@ mod render_plan_tests {
     use crate::compiler_frontend::datatypes::Ownership;
     use crate::compiler_frontend::symbols::string_interning::StringTable;
     use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
+    use std::rc::Rc;
 
     fn create_text_segment(
         text: &str,
@@ -97,7 +98,7 @@ mod render_plan_tests {
             &mut string_table,
         );
         segment.is_child_template_output = true;
-        segment.source_child_template = Some(Box::new(child));
+        segment.source_child_template = Some(Rc::new(child));
 
         content.atoms.push(TemplateAtom::Content(segment));
 

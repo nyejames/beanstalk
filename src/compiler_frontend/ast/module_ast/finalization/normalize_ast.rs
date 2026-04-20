@@ -44,7 +44,6 @@ use crate::compiler_frontend::ast::expressions::expression::{
 };
 use crate::compiler_frontend::ast::templates::template::TemplateConstValueKind;
 use crate::compiler_frontend::ast::templates::template::{TemplateAtom, TemplateType};
-use crate::compiler_frontend::ast::templates::template_render_plan::TemplateRenderPlan;
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
@@ -903,12 +902,8 @@ fn normalize_template_for_hir(
         )?;
     }
 
-    // Mark template as not needing formatting (formatting is done during composition)
-    template.content_needs_formatting = false;
-    // Refresh the template kind based on its content
-    template.refresh_kind_from_content();
-    // Build the render plan so HIR doesn't need to reconstruct it
-    template.render_plan = Some(TemplateRenderPlan::from_content(&template.content));
+    // Rebuild final runtime metadata so HIR sees an authoritative post-normalization plan.
+    template.resync_runtime_metadata();
     Ok(())
 }
 
