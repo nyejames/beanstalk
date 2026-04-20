@@ -1429,6 +1429,11 @@ path = "template_positional_slot_overflow_error"
 tags = ["integration","templates","diagnostics"]
 
 [[case]]
+id = "template_positional_slot_children_body"
+path = "template_positional_slot_children_body"
+tags = ["integration","templates"]
+
+[[case]]
 id = "template_slot_wrapper_runtime"
 path = "template_slot_wrapper_runtime"
 tags = ["integration","templates"]

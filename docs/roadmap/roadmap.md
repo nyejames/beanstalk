@@ -21,12 +21,14 @@ These are the non-negotiable conditions for starting Alpha.
 
 ## Next Plans
 
+- `docs/roadmap/plans/compile-time-overflow-guard.md`
+Explicit error for compile time number overflows (2 ^ 63) should not just be a rust panic, should be a graceful compile time error.
+
 - `docs/roadmap/plans/cross-platform-compat.md`
 Some tests current fail on windows, but the language is still usable.
 This is due to things like CRLF in golden outputs and OS path drifts.
 
 ### Additional TODOs
-- Explicit error for compile time number overflows (2 ^ 63) should not just be a rust panic, should be a graceful compile time error.
 - Loops can accept a single integer as a condition and it will automatically create a random from 0 to {integer}.
 - Move to more specific explicit type declarations for numbers (I32, I64, F32, F64) - JS backend just makes all an F64 and accepts the precision loss, more for future Wasm backend. 
 - Review built in "Error" type and reserved keywords. Should this be build-system provided (like IO) rather than a compiler built in? So Error is reserved in a similar way to io and IO, and must always be provided by the build system, but the specific shape beyond the core parameters must be defined by the build system.

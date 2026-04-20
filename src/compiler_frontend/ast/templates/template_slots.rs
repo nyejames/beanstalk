@@ -164,8 +164,15 @@ fn collect_loose_contributions(atoms: Vec<TemplateAtom>) -> Vec<LooseContributio
 
     for atom in atoms {
         if is_top_level_template_contribution(&atom) {
-            flush_pending_loose_atoms(&mut pending_loose_atoms, &mut contributions);
-            contributions.push(LooseContribution { atoms: vec![atom] });
+            // Merge any preceding loose atoms (whitespace, text) into this template's
+            // contribution rather than flushing them as a separate preceding group.
+            // Without this, body-level whitespace between template expressions would
+            // consume positional slot positions, displacing the actual content.
+            let mut contribution_atoms = std::mem::take(&mut pending_loose_atoms);
+            contribution_atoms.push(atom);
+            contributions.push(LooseContribution {
+                atoms: contribution_atoms,
+            });
         } else {
             pending_loose_atoms.push(atom);
         }
