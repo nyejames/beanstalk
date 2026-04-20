@@ -106,6 +106,35 @@ fn tokenizes_double_slash_equals_as_integer_division_assignment_operator() {
 }
 
 #[test]
+fn rejects_non_finite_float_literal_values() {
+    let mut string_table = StringTable::new();
+    let style_directives = StyleDirectiveRegistry::built_ins();
+    let source_path = InternedPath::from_single_str("test.bst", &mut string_table);
+    let source = format!("value = {}.0\n", "9".repeat(400));
+
+    let error = tokenize(
+        &source,
+        &source_path,
+        TokenizeMode::Normal,
+        NewlineMode::NormalizeToLf,
+        &style_directives,
+        &mut string_table,
+        None,
+    )
+    .expect_err("oversized float literal should be rejected");
+
+    assert!(error.msg.contains("Float literal"));
+    assert!(error.msg.contains("too large"));
+    assert_eq!(
+        error
+            .metadata
+            .get(&ErrorMetaDataKey::CompilationStage)
+            .map(String::as_str),
+        Some("Tokenization")
+    );
+}
+
+#[test]
 fn tokenizes_reserved_trait_keywords_as_reserved_tokens() {
     let (file_tokens, _string_table) = tokenize_source("must This\n");
 

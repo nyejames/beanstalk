@@ -118,6 +118,167 @@ fn evaluate_operator_rejects_divide_by_zero_for_both_division_operators() {
     assert!(int_divide_error.msg.contains("Can't divide by zero"));
 }
 
+#[test]
+fn evaluate_operator_rejects_integer_add_overflow() {
+    let mut string_table = StringTable::new();
+    let lhs = Expression::int(i64::MAX, Default::default(), Ownership::ImmutableOwned);
+    let rhs = Expression::int(1, Default::default(), Ownership::ImmutableOwned);
+
+    let error = lhs
+        .evaluate_operator(&rhs, &Operator::Add, &mut string_table)
+        .expect_err("integer add overflow should fail during fold");
+    assert!(error.msg.contains("Compile-time integer overflow"));
+    assert!(error.msg.contains("'+'"));
+}
+
+#[test]
+fn evaluate_operator_rejects_integer_subtract_overflow() {
+    let mut string_table = StringTable::new();
+    let lhs = Expression::int(i64::MIN, Default::default(), Ownership::ImmutableOwned);
+    let rhs = Expression::int(1, Default::default(), Ownership::ImmutableOwned);
+
+    let error = lhs
+        .evaluate_operator(&rhs, &Operator::Subtract, &mut string_table)
+        .expect_err("integer subtract overflow should fail during fold");
+    assert!(error.msg.contains("Compile-time integer overflow"));
+    assert!(error.msg.contains("'-'"));
+}
+
+#[test]
+fn evaluate_operator_rejects_integer_multiply_overflow() {
+    let mut string_table = StringTable::new();
+    let lhs = Expression::int(i64::MAX, Default::default(), Ownership::ImmutableOwned);
+    let rhs = Expression::int(2, Default::default(), Ownership::ImmutableOwned);
+
+    let error = lhs
+        .evaluate_operator(&rhs, &Operator::Multiply, &mut string_table)
+        .expect_err("integer multiply overflow should fail during fold");
+    assert!(error.msg.contains("Compile-time integer overflow"));
+    assert!(error.msg.contains("'*'"));
+}
+
+#[test]
+fn evaluate_operator_rejects_integer_exponent_overflow() {
+    let mut string_table = StringTable::new();
+    let lhs = Expression::int(2, Default::default(), Ownership::ImmutableOwned);
+    let rhs = Expression::int(63, Default::default(), Ownership::ImmutableOwned);
+
+    let error = lhs
+        .evaluate_operator(&rhs, &Operator::Exponent, &mut string_table)
+        .expect_err("integer exponent overflow should fail during fold");
+    assert!(error.msg.contains("Compile-time integer overflow"));
+    assert!(error.msg.contains("'^'"));
+}
+
+#[test]
+fn evaluate_operator_rejects_integer_division_overflow() {
+    let mut string_table = StringTable::new();
+    let lhs = Expression::int(i64::MIN, Default::default(), Ownership::ImmutableOwned);
+    let rhs = Expression::int(-1, Default::default(), Ownership::ImmutableOwned);
+
+    let error = lhs
+        .evaluate_operator(&rhs, &Operator::IntDivide, &mut string_table)
+        .expect_err("integer division overflow should fail during fold");
+    assert!(error.msg.contains("Compile-time integer overflow"));
+    assert!(error.msg.contains("'//'"));
+}
+
+#[test]
+fn evaluate_operator_rejects_integer_modulus_overflow() {
+    let mut string_table = StringTable::new();
+    let lhs = Expression::int(i64::MIN, Default::default(), Ownership::ImmutableOwned);
+    let rhs = Expression::int(-1, Default::default(), Ownership::ImmutableOwned);
+
+    let error = lhs
+        .evaluate_operator(&rhs, &Operator::Modulus, &mut string_table)
+        .expect_err("integer modulus overflow should fail during fold");
+    assert!(error.msg.contains("Compile-time integer overflow"));
+    assert!(error.msg.contains("'%'"));
+}
+
+#[test]
+fn evaluate_operator_rejects_non_finite_float_exponent_result() {
+    let mut string_table = StringTable::new();
+    let lhs = Expression::float(1.0e308, Default::default(), Ownership::ImmutableOwned);
+    let rhs = Expression::float(2.0, Default::default(), Ownership::ImmutableOwned);
+
+    let error = lhs
+        .evaluate_operator(&rhs, &Operator::Exponent, &mut string_table)
+        .expect_err("non-finite float exponent result should fail during fold");
+    assert!(
+        error
+            .msg
+            .contains("Compile-time float overflow or non-finite result")
+    );
+    assert!(error.msg.contains("'^'"));
+}
+
+#[test]
+fn evaluate_operator_rejects_non_finite_float_multiply_result() {
+    let mut string_table = StringTable::new();
+    let lhs = Expression::float(1.0e308, Default::default(), Ownership::ImmutableOwned);
+    let rhs = Expression::float(1.0e308, Default::default(), Ownership::ImmutableOwned);
+
+    let error = lhs
+        .evaluate_operator(&rhs, &Operator::Multiply, &mut string_table)
+        .expect_err("non-finite float multiply result should fail during fold");
+    assert!(
+        error
+            .msg
+            .contains("Compile-time float overflow or non-finite result")
+    );
+    assert!(error.msg.contains("'*'"));
+}
+
+#[test]
+fn eval_int_cast_rejects_out_of_range_float() {
+    let string_table = StringTable::new();
+    let value = Expression::float(
+        9_223_372_036_854_775_808.0,
+        Default::default(),
+        Ownership::ImmutableOwned,
+    );
+
+    let error = eval_int_cast(&value, &string_table)
+        .expect_err("out-of-range float to int cast should fail");
+    assert!(error.contains("exceeds Int range"));
+}
+
+#[test]
+fn eval_int_cast_rejects_non_finite_float() {
+    let string_table = StringTable::new();
+    let value = Expression::float(f64::INFINITY, Default::default(), Ownership::ImmutableOwned);
+
+    let error =
+        eval_int_cast(&value, &string_table).expect_err("non-finite float to int cast should fail");
+    assert!(error.contains("not finite"));
+}
+
+#[test]
+fn eval_int_cast_rejects_non_integer_float() {
+    let string_table = StringTable::new();
+    let value = Expression::float(1.5, Default::default(), Ownership::ImmutableOwned);
+
+    let error = eval_int_cast(&value, &string_table)
+        .expect_err("non-integer float to int cast should fail");
+    assert!(error.contains("not an exact integer value"));
+}
+
+#[test]
+fn eval_float_cast_rejects_non_finite_string_value() {
+    let mut string_table = StringTable::new();
+    let huge = format!("{}.0", "9".repeat(400));
+    let value = Expression::string_slice(
+        string_table.get_or_intern(huge),
+        Default::default(),
+        Ownership::ImmutableOwned,
+    );
+
+    let error = eval_float_cast(&value, &string_table)
+        .expect_err("non-finite float string cast should fail");
+    assert!(error.contains("not finite"));
+}
+
 fn rvalue_node(expression: Expression) -> AstNode {
     AstNode {
         kind: NodeKind::Rvalue(expression),

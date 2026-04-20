@@ -21,9 +21,6 @@ These are the non-negotiable conditions for starting Alpha.
 
 ## Next Plans
 
-- `docs/roadmap/plans/compile-time-overflow-guard.md`
-Explicit error for compile time number overflows (2 ^ 63) should not just be a rust panic, should be a graceful compile time error.
-
 - `docs/roadmap/plans/cross-platform-compat.md`
 Some tests current fail on windows, but the language is still usable.
 This is due to things like CRLF in golden outputs and OS path drifts.

@@ -22,10 +22,15 @@ use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::{
     BuiltinCastKind, Expression, ExpressionKind, Operator, ResultCallHandling, ResultVariant,
 };
-use crate::compiler_frontend::compiler_errors::CompilerError;
+use crate::compiler_frontend::compiler_errors::{CompilerError, SourceLocation};
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::{return_rule_error, return_syntax_error};
+
+const CONSTANT_FOLDING_STAGE: &str = "Constant Folding";
+const INTEGER_OVERFLOW_SUGGESTION: &str =
+    "Reduce the value range or compute this at runtime instead";
+const FLOAT_NON_FINITE_SUGGESTION: &str = "Use smaller values or compute this at runtime instead";
 
 /// Perform conservative constant folding on an expression in RPN order.
 ///
@@ -233,6 +238,105 @@ fn fold_builtin_cast(
     }
 }
 
+fn integer_overflow_error(
+    op: &Operator,
+    location: &SourceLocation,
+) -> Result<ExpressionKind, CompilerError> {
+    return_rule_error!(
+        format!(
+            "Compile-time integer overflow while evaluating '{}'",
+            op.to_str()
+        ),
+        location.to_owned(),
+        {
+            CompilationStage => CONSTANT_FOLDING_STAGE,
+            PrimarySuggestion => INTEGER_OVERFLOW_SUGGESTION,
+        }
+    )
+}
+
+fn float_non_finite_error(
+    op: &Operator,
+    location: &SourceLocation,
+) -> Result<ExpressionKind, CompilerError> {
+    return_rule_error!(
+        format!(
+            "Compile-time float overflow or non-finite result while evaluating '{}'",
+            op.to_str()
+        ),
+        location.to_owned(),
+        {
+            CompilationStage => CONSTANT_FOLDING_STAGE,
+            PrimarySuggestion => FLOAT_NON_FINITE_SUGGESTION,
+        }
+    )
+}
+
+fn checked_float_result(
+    value: f64,
+    op: &Operator,
+    location: &SourceLocation,
+) -> Result<ExpressionKind, CompilerError> {
+    if value.is_finite() {
+        Ok(ExpressionKind::Float(value))
+    } else {
+        float_non_finite_error(op, location)
+    }
+}
+
+fn checked_int_binary_result(
+    lhs: i64,
+    rhs: i64,
+    op: &Operator,
+    location: &SourceLocation,
+) -> Result<ExpressionKind, CompilerError> {
+    let checked = match op {
+        Operator::Add => lhs.checked_add(rhs),
+        Operator::Subtract => lhs.checked_sub(rhs),
+        Operator::Multiply => lhs.checked_mul(rhs),
+        Operator::IntDivide => lhs.checked_div(rhs),
+        Operator::Modulus => lhs.checked_rem(rhs),
+        Operator::Exponent => lhs.checked_pow(rhs as u32),
+        _ => {
+            return_rule_error!(
+                format!("Checked integer folding does not support '{}'", op.to_str()),
+                location.to_owned(),
+                {
+                    CompilationStage => CONSTANT_FOLDING_STAGE,
+                    PrimarySuggestion => "This is a compiler bug - please report it",
+                }
+            )
+        }
+    };
+
+    match checked {
+        Some(value) => Ok(ExpressionKind::Int(value)),
+        None => integer_overflow_error(op, location),
+    }
+}
+
+fn float_to_int_cast_result(float: f64, display: &str) -> Result<i64, String> {
+    if !float.is_finite() {
+        return Err(format!(
+            "Cannot cast Float {display} to Int because it is not finite"
+        ));
+    }
+
+    if float.fract() != 0.0 {
+        return Err(format!(
+            "Cannot cast Float {display} to Int because it is not an exact integer value"
+        ));
+    }
+
+    if float < i64::MIN as f64 || float >= i64::MAX as f64 {
+        return Err(format!(
+            "Cannot cast Float {display} to Int because it exceeds Int range"
+        ));
+    }
+
+    Ok(float as i64)
+}
+
 fn eval_int_cast(value: &Expression, string_table: &StringTable) -> Result<Expression, String> {
     match &value.kind {
         ExpressionKind::Int(int) => Ok(Expression::int(
@@ -240,19 +344,11 @@ fn eval_int_cast(value: &Expression, string_table: &StringTable) -> Result<Expre
             value.location.clone(),
             Ownership::ImmutableOwned,
         )),
-        ExpressionKind::Float(float) => {
-            if float.fract() == 0.0 {
-                Ok(Expression::int(
-                    *float as i64,
-                    value.location.clone(),
-                    Ownership::ImmutableOwned,
-                ))
-            } else {
-                Err(format!(
-                    "Cannot cast Float {float} to Int because it is not an exact integer value"
-                ))
-            }
-        }
+        ExpressionKind::Float(float) => Ok(Expression::int(
+            float_to_int_cast_result(*float, &float.to_string())?,
+            value.location.clone(),
+            Ownership::ImmutableOwned,
+        )),
         ExpressionKind::StringSlice(string) => {
             let raw = string_table.resolve(*string);
             let normalized = normalize_numeric_cast_text(raw);
@@ -272,15 +368,10 @@ fn eval_int_cast(value: &Expression, string_table: &StringTable) -> Result<Expre
                 let parsed = normalized
                     .parse::<f64>()
                     .map_err(|_| format!("Cannot parse '{raw}' as Int"))?;
-                if parsed.fract() == 0.0 {
-                    return Ok(Expression::int(
-                        parsed as i64,
-                        value.location.clone(),
-                        Ownership::ImmutableOwned,
-                    ));
-                }
-                return Err(format!(
-                    "Cannot cast Float {normalized} to Int because it is not an exact integer value"
+                return Ok(Expression::int(
+                    float_to_int_cast_result(parsed, &normalized)?,
+                    value.location.clone(),
+                    Ownership::ImmutableOwned,
                 ));
             }
 
@@ -310,6 +401,11 @@ fn eval_float_cast(value: &Expression, string_table: &StringTable) -> Result<Exp
                 let parsed = normalized
                     .parse::<f64>()
                     .map_err(|_| format!("Cannot parse '{raw}' as Float"))?;
+                if !parsed.is_finite() {
+                    return Err(format!(
+                        "Cannot parse '{raw}' as Float because it is not finite"
+                    ));
+                }
                 return Ok(Expression::float(
                     parsed,
                     value.location.clone(),
@@ -355,119 +451,117 @@ impl Expression {
     ) -> Result<Option<Expression>, CompilerError> {
         let kind: ExpressionKind = match (&self.kind, &rhs.kind) {
             // Float operations
-            (ExpressionKind::Float(lhs_val), ExpressionKind::Float(rhs_val)) => {
-                match op {
-                    Operator::Add => ExpressionKind::Float(lhs_val + rhs_val),
-                    Operator::Subtract => ExpressionKind::Float(lhs_val - rhs_val),
-                    Operator::Multiply => ExpressionKind::Float(lhs_val * rhs_val),
-                    Operator::Divide => {
-                        if *rhs_val == 0.0 {
-                            return_rule_error!("Can't divide by zero", self.location.to_owned())
-                        }
-                        ExpressionKind::Float(lhs_val / rhs_val)
+            (ExpressionKind::Float(lhs_val), ExpressionKind::Float(rhs_val)) => match op {
+                Operator::Add => checked_float_result(lhs_val + rhs_val, op, &self.location)?,
+                Operator::Subtract => checked_float_result(lhs_val - rhs_val, op, &self.location)?,
+                Operator::Multiply => checked_float_result(lhs_val * rhs_val, op, &self.location)?,
+                Operator::Divide => {
+                    if *rhs_val == 0.0 {
+                        return_rule_error!("Can't divide by zero", self.location.to_owned())
                     }
-                    Operator::Modulus => ExpressionKind::Float(lhs_val % rhs_val),
-                    Operator::Exponent => ExpressionKind::Float(lhs_val.powf(*rhs_val)),
-
-                    // Logical operations with float operands
-                    Operator::Equality => ExpressionKind::Bool(lhs_val == rhs_val),
-                    Operator::NotEqual => ExpressionKind::Bool(lhs_val != rhs_val),
-                    Operator::GreaterThan => ExpressionKind::Bool(lhs_val > rhs_val),
-                    Operator::GreaterThanOrEqual => ExpressionKind::Bool(lhs_val >= rhs_val),
-                    Operator::LessThan => ExpressionKind::Bool(lhs_val < rhs_val),
-                    Operator::LessThanOrEqual => ExpressionKind::Bool(lhs_val <= rhs_val),
-
-                    // Other operations are not applicable to floats
-                    _ => return_rule_error!(
-                        format!("Can't perform operation {} on floats", op.to_str()),
-                        self.location.to_owned()
-                    ),
+                    checked_float_result(lhs_val / rhs_val, op, &self.location)?
                 }
-            }
+                Operator::Modulus => checked_float_result(lhs_val % rhs_val, op, &self.location)?,
+                Operator::Exponent => {
+                    checked_float_result(lhs_val.powf(*rhs_val), op, &self.location)?
+                }
+
+                // Logical operations with float operands
+                Operator::Equality => ExpressionKind::Bool(lhs_val == rhs_val),
+                Operator::NotEqual => ExpressionKind::Bool(lhs_val != rhs_val),
+                Operator::GreaterThan => ExpressionKind::Bool(lhs_val > rhs_val),
+                Operator::GreaterThanOrEqual => ExpressionKind::Bool(lhs_val >= rhs_val),
+                Operator::LessThan => ExpressionKind::Bool(lhs_val < rhs_val),
+                Operator::LessThanOrEqual => ExpressionKind::Bool(lhs_val <= rhs_val),
+
+                // Other operations are not applicable to floats
+                _ => return_rule_error!(
+                    format!("Can't perform operation {} on floats", op.to_str()),
+                    self.location.to_owned()
+                ),
+            },
 
             // Integer operations
-            (ExpressionKind::Int(lhs_val), ExpressionKind::Int(rhs_val)) => {
-                match op {
-                    Operator::Add => ExpressionKind::Int(lhs_val + rhs_val),
-                    Operator::Subtract => ExpressionKind::Int(lhs_val - rhs_val),
-                    Operator::Multiply => ExpressionKind::Int(lhs_val * rhs_val),
-                    Operator::Divide => {
-                        // Handle division by zero.
-                        if *rhs_val == 0 {
-                            return_rule_error!("Can't divide by zero", self.location.to_owned())
-                        }
-
-                        ExpressionKind::Float(*lhs_val as f64 / *rhs_val as f64)
-                    }
-                    Operator::IntDivide => {
-                        if *rhs_val == 0 {
-                            return_rule_error!("Can't divide by zero", self.location.to_owned())
-                        }
-
-                        ExpressionKind::Int(lhs_val / rhs_val)
-                    }
-                    Operator::Modulus => {
-                        if *rhs_val == 0 {
-                            return_rule_error!("Can't modulus by zero", self.location.to_owned())
-                        }
-
-                        ExpressionKind::Int(lhs_val % rhs_val)
-                    }
-                    Operator::Exponent => {
-                        // For integer exponentiation, we need to be careful with negative exponents
-                        if *rhs_val < 0 {
-                            // Convert to float for negative exponents
-                            let lhs_float = *lhs_val as f64;
-                            let rhs_float = *rhs_val as f64;
-                            ExpressionKind::Float(lhs_float.powf(rhs_float))
-                        } else {
-                            // Use integer exponentiation for positive exponents
-                            ExpressionKind::Int(lhs_val.pow(*rhs_val as u32))
-                        }
-                    }
-
-                    // Logical operations with integer operands
-                    Operator::Equality => ExpressionKind::Bool(lhs_val == rhs_val),
-                    Operator::NotEqual => ExpressionKind::Bool(lhs_val != rhs_val),
-                    Operator::GreaterThan => ExpressionKind::Bool(lhs_val > rhs_val),
-                    Operator::GreaterThanOrEqual => ExpressionKind::Bool(lhs_val >= rhs_val),
-                    Operator::LessThan => ExpressionKind::Bool(lhs_val < rhs_val),
-                    Operator::LessThanOrEqual => ExpressionKind::Bool(lhs_val <= rhs_val),
-
-                    Operator::Range => ExpressionKind::Range(
-                        Box::new(Expression::int(
-                            *lhs_val,
-                            self.location.to_owned(),
-                            Ownership::ImmutableOwned,
-                        )),
-                        Box::new(Expression::int(
-                            *rhs_val,
-                            self.location.to_owned(),
-                            Ownership::ImmutableOwned,
-                        )),
-                    ),
-
-                    _ => return_rule_error!(
-                        format!("Can't perform operation {} on integers", op.to_str()),
-                        self.location.to_owned()
-                    ),
+            (ExpressionKind::Int(lhs_val), ExpressionKind::Int(rhs_val)) => match op {
+                Operator::Add | Operator::Subtract | Operator::Multiply => {
+                    checked_int_binary_result(*lhs_val, *rhs_val, op, &self.location)?
                 }
-            }
+                Operator::Divide => {
+                    if *rhs_val == 0 {
+                        return_rule_error!("Can't divide by zero", self.location.to_owned())
+                    }
+
+                    checked_float_result(*lhs_val as f64 / *rhs_val as f64, op, &self.location)?
+                }
+                Operator::IntDivide => {
+                    if *rhs_val == 0 {
+                        return_rule_error!("Can't divide by zero", self.location.to_owned())
+                    }
+
+                    checked_int_binary_result(*lhs_val, *rhs_val, op, &self.location)?
+                }
+                Operator::Modulus => {
+                    if *rhs_val == 0 {
+                        return_rule_error!("Can't modulus by zero", self.location.to_owned())
+                    }
+
+                    checked_int_binary_result(*lhs_val, *rhs_val, op, &self.location)?
+                }
+                Operator::Exponent => {
+                    if *rhs_val < 0 {
+                        checked_float_result(
+                            (*lhs_val as f64).powf(*rhs_val as f64),
+                            op,
+                            &self.location,
+                        )?
+                    } else {
+                        checked_int_binary_result(*lhs_val, *rhs_val, op, &self.location)?
+                    }
+                }
+
+                // Logical operations with integer operands
+                Operator::Equality => ExpressionKind::Bool(lhs_val == rhs_val),
+                Operator::NotEqual => ExpressionKind::Bool(lhs_val != rhs_val),
+                Operator::GreaterThan => ExpressionKind::Bool(lhs_val > rhs_val),
+                Operator::GreaterThanOrEqual => ExpressionKind::Bool(lhs_val >= rhs_val),
+                Operator::LessThan => ExpressionKind::Bool(lhs_val < rhs_val),
+                Operator::LessThanOrEqual => ExpressionKind::Bool(lhs_val <= rhs_val),
+
+                Operator::Range => ExpressionKind::Range(
+                    Box::new(Expression::int(
+                        *lhs_val,
+                        self.location.to_owned(),
+                        Ownership::ImmutableOwned,
+                    )),
+                    Box::new(Expression::int(
+                        *rhs_val,
+                        self.location.to_owned(),
+                        Ownership::ImmutableOwned,
+                    )),
+                ),
+
+                _ => return_rule_error!(
+                    format!("Can't perform operation {} on integers", op.to_str()),
+                    self.location.to_owned()
+                ),
+            },
 
             (ExpressionKind::Int(lhs_val), ExpressionKind::Float(rhs_val)) => {
                 let lhs = *lhs_val as f64;
                 match op {
-                    Operator::Add => ExpressionKind::Float(lhs + rhs_val),
-                    Operator::Subtract => ExpressionKind::Float(lhs - rhs_val),
-                    Operator::Multiply => ExpressionKind::Float(lhs * rhs_val),
+                    Operator::Add => checked_float_result(lhs + rhs_val, op, &self.location)?,
+                    Operator::Subtract => checked_float_result(lhs - rhs_val, op, &self.location)?,
+                    Operator::Multiply => checked_float_result(lhs * rhs_val, op, &self.location)?,
                     Operator::Divide => {
                         if *rhs_val == 0.0 {
                             return_rule_error!("Can't divide by zero", self.location.to_owned())
                         }
-                        ExpressionKind::Float(lhs / rhs_val)
+                        checked_float_result(lhs / rhs_val, op, &self.location)?
                     }
-                    Operator::Modulus => ExpressionKind::Float(lhs % rhs_val),
-                    Operator::Exponent => ExpressionKind::Float(lhs.powf(*rhs_val)),
+                    Operator::Modulus => checked_float_result(lhs % rhs_val, op, &self.location)?,
+                    Operator::Exponent => {
+                        checked_float_result(lhs.powf(*rhs_val), op, &self.location)?
+                    }
                     Operator::Equality => ExpressionKind::Bool(lhs == *rhs_val),
                     Operator::NotEqual => ExpressionKind::Bool(lhs != *rhs_val),
                     Operator::GreaterThan => ExpressionKind::Bool(lhs > *rhs_val),
@@ -490,17 +584,19 @@ impl Expression {
             (ExpressionKind::Float(lhs_val), ExpressionKind::Int(rhs_val)) => {
                 let rhs = *rhs_val as f64;
                 match op {
-                    Operator::Add => ExpressionKind::Float(lhs_val + rhs),
-                    Operator::Subtract => ExpressionKind::Float(lhs_val - rhs),
-                    Operator::Multiply => ExpressionKind::Float(lhs_val * rhs),
+                    Operator::Add => checked_float_result(lhs_val + rhs, op, &self.location)?,
+                    Operator::Subtract => checked_float_result(lhs_val - rhs, op, &self.location)?,
+                    Operator::Multiply => checked_float_result(lhs_val * rhs, op, &self.location)?,
                     Operator::Divide => {
                         if *rhs_val == 0 {
                             return_rule_error!("Can't divide by zero", self.location.to_owned())
                         }
-                        ExpressionKind::Float(lhs_val / rhs)
+                        checked_float_result(lhs_val / rhs, op, &self.location)?
                     }
-                    Operator::Modulus => ExpressionKind::Float(lhs_val % rhs),
-                    Operator::Exponent => ExpressionKind::Float(lhs_val.powf(rhs)),
+                    Operator::Modulus => checked_float_result(lhs_val % rhs, op, &self.location)?,
+                    Operator::Exponent => {
+                        checked_float_result(lhs_val.powf(rhs), op, &self.location)?
+                    }
                     Operator::Equality => ExpressionKind::Bool(*lhs_val == rhs),
                     Operator::NotEqual => ExpressionKind::Bool(*lhs_val != rhs),
                     Operator::GreaterThan => ExpressionKind::Bool(*lhs_val > rhs),

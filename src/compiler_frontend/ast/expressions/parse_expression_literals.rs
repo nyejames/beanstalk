@@ -49,7 +49,19 @@ pub(super) fn parse_literal_expression(
         TokenKind::IntLiteral(mut int) => {
             if *next_number_negative {
                 *next_number_negative = false;
-                int = -int;
+                int = match int.checked_neg() {
+                    Some(value) => value,
+                    None => {
+                        return_rule_error!(
+                            "Compile-time integer overflow while negating Int literal",
+                            token_stream.current_location(),
+                            {
+                                CompilationStage => "Expression Parsing",
+                                PrimarySuggestion => "Use a value greater than Int minimum or remove the unary '-'",
+                            }
+                        )
+                    }
+                };
             };
 
             let location = token_stream.current_location();
@@ -171,3 +183,7 @@ pub(super) fn parse_literal_expression(
         _ => Ok(()),
     }
 }
+
+#[cfg(test)]
+#[path = "tests/parse_expression_literals_tests.rs"]
+mod tests;

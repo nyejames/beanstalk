@@ -773,6 +773,18 @@ fn tokenize_numeric_literal(
             stream.new_location(),
         )
     })?;
+
+    if !parsed_value.is_finite() {
+        return_syntax_error!(
+            format!("Float literal '{token_value}' is too large"),
+            stream.new_location(),
+            {
+                CompilationStage => "Tokenization",
+                PrimarySuggestion => "Use a smaller float literal",
+            }
+        )
+    }
+
     return_token!(TokenKind::FloatLiteral(parsed_value), stream);
 }
 
