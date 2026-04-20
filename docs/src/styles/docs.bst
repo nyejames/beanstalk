@@ -174,7 +174,9 @@ Palette = |
 ]
 
 # data = [$html:
-    <td style="padding: 0.2em 0.5em;">[$slot]</td>
+    [$children([$html: <td style="padding: 0.2em 0.5em;">[$slot]</td>]):
+        [$slot]
+    ]
 ]
 
 # codeblock = [$html:
