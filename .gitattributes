@@ -1,2 +1,23 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Keep source/test/docs text deterministic across platforms.
+*.rs text eol=lf
+*.toml text eol=lf
+*.md text eol=lf
+*.txt text eol=lf
+*.json text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.bst text eol=lf
+*.html text eol=lf
+*.js text eol=lf
+*.css text eol=lf
+
+# Explicit binary safeguards.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.wasm binary

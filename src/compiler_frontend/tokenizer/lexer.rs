@@ -12,7 +12,8 @@ use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::identity::FileId;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::newline_handling::{
-    NewlineMode, consume_carriage_return_newline,
+    NewlineMode, consume_pending_carriage_return_newline,
+    normalize_consumed_carriage_return_newline,
 };
 use crate::compiler_frontend::tokenizer::tokens::{
     FileTokens, SourceLocation, TemplateBodyMode, Token, TokenKind, TokenStream, TokenizeMode,
@@ -115,6 +116,12 @@ pub fn get_token_kind(
                     return_token!(TokenKind::RawStringLiteral(interned_string), stream);
                 }
 
+                if ch == '\r' {
+                    let normalized_char = normalize_consumed_carriage_return_newline(stream);
+                    token_value.push_str(normalized_char);
+                    continue;
+                }
+
                 token_value.push(ch);
             }
 
@@ -142,7 +149,7 @@ pub fn get_token_kind(
 
                 return_token!(TokenKind::Newline, stream);
             } else if current_char == '\r' {
-                let _ = consume_carriage_return_newline(stream);
+                let _ = normalize_consumed_carriage_return_newline(stream);
                 consume_all_whitespace(stream);
                 return_token!(TokenKind::Newline, stream);
             } else {
@@ -817,7 +824,7 @@ fn tokenize_string(
 
         // Check for carage returns (Windows Compatibility)
         if ch == '\r' {
-            let normalized_char = consume_carriage_return_newline(stream);
+            let normalized_char = normalize_consumed_carriage_return_newline(stream);
             token_value.push_str(normalized_char);
             continue;
         }
@@ -864,7 +871,7 @@ fn tokenize_template_body(
 
             // Needs to be normalized for windows compatibility
             '\r' => {
-                let normalized_char = consume_carriage_return_newline(stream);
+                let normalized_char = consume_pending_carriage_return_newline(stream);
                 token_value.push_str(normalized_char);
             }
 
@@ -926,7 +933,7 @@ fn append_code_template_body_char(
         '[' => stream.register_template_body_open_square_bracket(),
         ']' => stream.register_template_body_close_square_bracket(),
         '\r' => {
-            let normalized_char = consume_carriage_return_newline(stream);
+            let normalized_char = normalize_consumed_carriage_return_newline(stream);
             token_value.push_str(normalized_char);
             return;
         }
