@@ -30,6 +30,9 @@ impl<'a> AstBuildState<'a> {
         file_import_bindings: &FxHashMap<InternedPath, FileImportBindings>,
         string_table: &mut StringTable,
     ) -> Result<(), CompilerMessages> {
+        #[cfg(feature = "detailed_timers")]
+        let mut resolved_function_count = 0usize;
+
         for header in sorted_headers {
             let HeaderKind::Function { signature } = &header.kind else {
                 continue;
@@ -67,7 +70,18 @@ impl<'a> AstBuildState<'a> {
             );
             self.resolved_function_signatures_by_path
                 .insert(header.tokens.src_path.to_owned(), resolved_signature);
+            #[cfg(feature = "detailed_timers")]
+            {
+                resolved_function_count += 1;
+            }
         }
+
+        #[cfg(feature = "detailed_timers")]
+        saying::say!(
+            "AST/function signatures/resolved count: {}",
+            resolved_function_count
+        );
+
         Ok(())
     }
 
@@ -77,7 +91,7 @@ impl<'a> AstBuildState<'a> {
         sorted_headers: &[Header],
         string_table: &mut StringTable,
     ) -> Result<Rc<ReceiverMethodCatalog>, CompilerMessages> {
-        build_receiver_method_catalog(
+        let catalog = build_receiver_method_catalog(
             sorted_headers,
             &self.resolved_function_signatures_by_path,
             &self.resolved_struct_fields_by_path,
@@ -85,7 +99,14 @@ impl<'a> AstBuildState<'a> {
             &self.module_symbols.canonical_source_by_symbol_path,
             string_table,
         )
-        .map(Rc::new)
-        .map_err(|error| self.error_messages(error, string_table))
+        .map_err(|error| self.error_messages(error, string_table))?;
+
+        #[cfg(feature = "detailed_timers")]
+        saying::say!(
+            "AST/receiver catalog/methods indexed: {}",
+            catalog.by_receiver_and_name.len()
+        );
+
+        Ok(Rc::new(catalog))
     }
 }

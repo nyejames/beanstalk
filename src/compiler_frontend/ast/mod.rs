@@ -108,6 +108,8 @@ use crate::compiler_frontend::paths::rendered_path_usage::RenderedPathUsage;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::FileTokens;
+use crate::timer_log;
+use std::time::Instant;
 
 /// Unified AST output for all source files in one compilation unit.
 ///
@@ -178,18 +180,45 @@ impl Ast {
             module_symbols,
         );
 
+        let import_bindings_start = Instant::now();
         let file_import_bindings = state.resolve_import_bindings(string_table)?;
+        timer_log!(import_bindings_start, "AST/import bindings resolved in: ");
+        let _ = import_bindings_start;
+
+        let type_resolution_start = Instant::now();
         state.resolve_types(&sorted_headers, &file_import_bindings, string_table)?;
+        timer_log!(type_resolution_start, "AST/type resolution completed in:");
+        let _ = type_resolution_start;
+
+        let function_signatures_start = Instant::now();
         state.resolve_function_signatures(&sorted_headers, &file_import_bindings, string_table)?;
+        timer_log!(
+            function_signatures_start,
+            "AST/function signatures resolved in:"
+        );
+        let _ = function_signatures_start;
+
+        let receiver_catalog_start = Instant::now();
         let receiver_methods = state.build_receiver_catalog(&sorted_headers, string_table)?;
+        timer_log!(receiver_catalog_start, "AST/receiver catalog built in: ");
+        let _ = receiver_catalog_start;
+
+        let node_emission_start = Instant::now();
         state.emit_ast_nodes(
             sorted_headers,
             &file_import_bindings,
             &receiver_methods,
             string_table,
         )?;
+        timer_log!(node_emission_start, "AST/node emission completed in: ");
+        let _ = node_emission_start;
 
-        state.finalize(entry_dir, &top_level_const_fragments, string_table)
+        let finalization_start = Instant::now();
+        let ast = state.finalize(entry_dir, &top_level_const_fragments, string_table)?;
+        timer_log!(finalization_start, "AST/finalization completed in: ");
+        let _ = finalization_start;
+
+        Ok(ast)
     }
 }
 
@@ -217,6 +246,7 @@ impl<'a> AstBuildState<'a> {
             )
         })?;
 
+        let doc_fragments_start = Instant::now();
         let doc_fragments = collect_and_strip_comment_templates(
             &mut self.ast,
             project_path_resolver,
@@ -224,25 +254,51 @@ impl<'a> AstBuildState<'a> {
             string_table,
         )
         .map_err(|error| self.error_messages(error, string_table))?;
+        timer_log!(
+            doc_fragments_start,
+            "AST/finalize/doc fragments collected in: "
+        );
+        let _ = doc_fragments_start;
 
+        let const_fragments_start = Instant::now();
         let const_top_level_fragments = collect_const_top_level_fragments(
             top_level_const_fragments,
             &self.const_templates_by_path,
         )
         .map_err(|error| self.error_messages(error, string_table))?;
+        timer_log!(
+            const_fragments_start,
+            "AST/finalize/const top-level fragments collected in: "
+        );
+        let _ = const_fragments_start;
 
+        let ast_template_normalization_start = Instant::now();
         self.normalize_ast_templates_for_hir(project_path_resolver, string_table)
             .map_err(|error| self.error_messages(error, string_table))?;
+        timer_log!(
+            ast_template_normalization_start,
+            "AST/finalize/AST templates normalized in: "
+        );
+        let _ = ast_template_normalization_start;
 
+        let module_constant_normalization_start = Instant::now();
         let module_constants = self
             .normalize_module_constants_for_hir(project_path_resolver, string_table)
             .map_err(|error| self.error_messages(error, string_table))?;
+        timer_log!(
+            module_constant_normalization_start,
+            "AST/finalize/module constants normalized in: "
+        );
+        let _ = module_constant_normalization_start;
 
+        let builtin_merge_start = Instant::now();
         if !self.builtin_struct_ast_nodes.is_empty() {
             let mut ast_nodes = self.builtin_struct_ast_nodes;
             ast_nodes.extend(self.ast);
             self.ast = ast_nodes;
         }
+        timer_log!(builtin_merge_start, "AST/finalize/builtin AST merge in: ");
+        let _ = builtin_merge_start;
 
         Ok(Ast {
             nodes: self.ast,

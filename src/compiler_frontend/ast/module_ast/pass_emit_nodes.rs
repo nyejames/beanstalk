@@ -29,8 +29,15 @@ use crate::compiler_frontend::headers::parse_file_headers::{Header, HeaderKind};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::projects::settings::IMPLICIT_START_FUNC_NAME;
+use crate::timer_log;
 use rustc_hash::FxHashMap;
 use std::rc::Rc;
+
+#[cfg(feature = "detailed_timers")]
+use crate::compiler_frontend::compiler_messages::compiler_dev_logging::log_aggregated_duration;
+#[cfg(feature = "detailed_timers")]
+use std::time::Duration;
+use std::time::Instant;
 
 impl<'a> AstBuildState<'a> {
     /// Pass 6: Emit AST nodes for each header kind (functions, structs, templates).
@@ -44,8 +51,31 @@ impl<'a> AstBuildState<'a> {
         // Build the shared top-level declaration store once, after passes 3–4 have
         // fully resolved all declarations. Every function and start body clones only
         // the Rc pointer, not declaration data.
+        let declaration_index_start = Instant::now();
         let top_level_declarations =
             Rc::new(TopLevelDeclarationIndex::new(self.declarations.clone()));
+        timer_log!(
+            declaration_index_start,
+            "AST/node emission/top-level declaration index built in:"
+        );
+        let _ = declaration_index_start;
+
+        #[cfg(feature = "detailed_timers")]
+        let mut total_function_body_parse_time = Duration::default();
+        #[cfg(feature = "detailed_timers")]
+        let mut total_start_body_parse_time = Duration::default();
+        #[cfg(feature = "detailed_timers")]
+        let mut total_const_template_parse_time = Duration::default();
+        #[cfg(feature = "detailed_timers")]
+        let mut total_const_template_fold_time = Duration::default();
+        #[cfg(feature = "detailed_timers")]
+        let mut function_headers_emitted = 0usize;
+        #[cfg(feature = "detailed_timers")]
+        let mut start_headers_emitted = 0usize;
+        #[cfg(feature = "detailed_timers")]
+        let mut struct_headers_emitted = 0usize;
+        #[cfg(feature = "detailed_timers")]
+        let mut const_templates_emitted = 0usize;
 
         for header in sorted_headers {
             let bindings = file_import_bindings
@@ -103,12 +133,20 @@ impl<'a> AstBuildState<'a> {
                     let mut token_stream = header.tokens;
                     let function_scope = context.scope.clone();
 
+                    #[cfg(feature = "detailed_timers")]
+                    let function_body_parse_start = Instant::now();
                     let body_result = function_body_to_ast(
                         &mut token_stream,
                         context,
                         &mut self.warnings,
                         string_table,
                     );
+
+                    #[cfg(feature = "detailed_timers")]
+                    {
+                        total_function_body_parse_time += function_body_parse_start.elapsed();
+                        function_headers_emitted += 1;
+                    }
 
                     let body =
                         body_result.map_err(|error| self.error_messages(error, string_table))?;
@@ -154,12 +192,20 @@ impl<'a> AstBuildState<'a> {
                     let mut token_stream = header.tokens;
                     let start_scope = context.scope.clone();
 
+                    #[cfg(feature = "detailed_timers")]
+                    let start_body_parse_start = Instant::now();
                     let body_result = function_body_to_ast(
                         &mut token_stream,
                         context,
                         &mut self.warnings,
                         string_table,
                     );
+
+                    #[cfg(feature = "detailed_timers")]
+                    {
+                        total_start_body_parse_time += start_body_parse_start.elapsed();
+                        start_headers_emitted += 1;
+                    }
 
                     let body =
                         body_result.map_err(|error| self.error_messages(error, string_table))?;
@@ -193,6 +239,10 @@ impl<'a> AstBuildState<'a> {
 
                 // --- Structs ---
                 HeaderKind::Struct { .. } => {
+                    #[cfg(feature = "detailed_timers")]
+                    {
+                        struct_headers_emitted += 1;
+                    }
                     let fields = self
                         .resolved_struct_fields_by_path
                         .get(&header.tokens.src_path)
@@ -234,8 +284,16 @@ impl<'a> AstBuildState<'a> {
                     .with_rendered_path_usage_sink(self.rendered_path_usages.clone())
                     .with_source_file_scope(source_file_scope);
 
+                    #[cfg(feature = "detailed_timers")]
+                    let const_template_parse_start = Instant::now();
+
                     let template_result =
                         Template::new(&mut template_tokens, &context, vec![], string_table);
+
+                    #[cfg(feature = "detailed_timers")]
+                    {
+                        total_const_template_parse_time += const_template_parse_start.elapsed();
+                    }
                     self.warnings.extend(context.take_emitted_warnings());
                     let template = template_result
                         .map_err(|error| self.error_messages(error, string_table))?;
@@ -278,6 +336,8 @@ impl<'a> AstBuildState<'a> {
                         }
                     };
 
+                    #[cfg(feature = "detailed_timers")]
+                    let const_template_fold_start = Instant::now();
                     let html = match template.fold_into_stringid(&mut fold_context) {
                         Ok(value) => value,
                         Err(error) => {
@@ -285,11 +345,45 @@ impl<'a> AstBuildState<'a> {
                         }
                     };
 
+                    #[cfg(feature = "detailed_timers")]
+                    {
+                        total_const_template_fold_time += const_template_fold_start.elapsed();
+                        const_templates_emitted += 1;
+                    }
+
                     self.const_templates_by_path
                         .insert(template_tokens.src_path, html);
                 }
             }
         }
+
+        #[cfg(feature = "detailed_timers")]
+        {
+            log_aggregated_duration(
+                "AST/node emission/function bodies parsed in:",
+                total_function_body_parse_time,
+            );
+            log_aggregated_duration(
+                "AST/node emission/start bodies parsed in:",
+                total_start_body_parse_time,
+            );
+            log_aggregated_duration(
+                "AST/node emission/const templates parsed in:",
+                total_const_template_parse_time,
+            );
+            log_aggregated_duration(
+                "AST/node emission/const templates folded in:",
+                total_const_template_fold_time,
+            );
+            saying::say!(
+                "AST/node emission/headers emitted: functions={}, starts={}, structs={}, const templates={}",
+                function_headers_emitted,
+                start_headers_emitted,
+                struct_headers_emitted,
+                const_templates_emitted
+            );
+        }
+
         Ok(())
     }
 }

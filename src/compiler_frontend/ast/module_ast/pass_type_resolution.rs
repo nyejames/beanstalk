@@ -21,8 +21,10 @@ use crate::compiler_frontend::headers::module_symbols::{DeclarationStub, Declara
 use crate::compiler_frontend::headers::parse_file_headers::{Header, HeaderKind};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::timer_log;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::rc::Rc;
+use std::time::Instant;
 
 impl<'a> AstBuildState<'a> {
     /// Pass 3: Resolve constants and struct field types in dependency order.
@@ -34,8 +36,15 @@ impl<'a> AstBuildState<'a> {
         file_import_bindings: &FxHashMap<InternedPath, FileImportBindings>,
         string_table: &mut StringTable,
     ) -> Result<(), CompilerMessages> {
+        let constant_resolution_start = Instant::now();
         self.resolve_constant_headers(sorted_headers, file_import_bindings, string_table)?;
+        timer_log!(
+            constant_resolution_start,
+            "AST/type resolution/constants resolved in:"
+        );
+        let _ = constant_resolution_start;
 
+        let struct_fields_resolution_start = Instant::now();
         for header in sorted_headers {
             let HeaderKind::Struct { fields } = &header.kind else {
                 continue;
@@ -77,9 +86,22 @@ impl<'a> AstBuildState<'a> {
                 ),
             });
         }
+        timer_log!(
+            struct_fields_resolution_start,
+            "AST/type resolution/struct fields resolved in:"
+        );
+        let _ = struct_fields_resolution_start;
 
+        let recursive_validation_start = Instant::now();
         validate_no_recursive_runtime_structs(&self.resolved_struct_fields_by_path, string_table)
-            .map_err(|error| self.error_messages(error, string_table))
+            .map_err(|error| self.error_messages(error, string_table))?;
+        timer_log!(
+            recursive_validation_start,
+            "AST/type resolution/recursive struct validation in:"
+        );
+        let _ = recursive_validation_start;
+
+        Ok(())
     }
 
     fn resolve_constant_headers(
@@ -88,93 +110,126 @@ impl<'a> AstBuildState<'a> {
         file_import_bindings: &FxHashMap<InternedPath, FileImportBindings>,
         string_table: &mut StringTable,
     ) -> Result<(), CompilerMessages> {
-        let mut pending_headers = sorted_headers
-            .iter()
-            .filter(|header| matches!(header.kind, HeaderKind::Constant { .. }))
-            .collect::<Vec<_>>();
-        let empty_visible_symbol_paths = FxHashSet::default();
+        let constants_resolution_start = Instant::now();
+        let mut total_rounds = 0usize;
+        let mut total_headers_attempted = 0usize;
+        let mut total_deferred_headers = 0usize;
+        let mut total_snapshot_rebuilds = 0usize;
 
-        while !pending_headers.is_empty() {
-            // Reuse one declaration snapshot for deferred attempts in this round.
-            // Refresh only after successful resolutions so later constants can see
-            // newly-resolved declarations without cloning on every deferred header.
-            let mut declarations_snapshot =
-                Rc::new(TopLevelDeclarationIndex::new(self.declarations.clone()));
-            let mut unresolved_constant_paths = declarations_snapshot
-                .declarations()
+        let resolution_result = (|| -> Result<(), CompilerMessages> {
+            let mut pending_headers = sorted_headers
                 .iter()
-                .filter(|declaration| declaration.is_unresolved_constant_placeholder())
-                .map(|declaration| declaration.id.to_owned())
-                .collect::<FxHashSet<_>>();
-            let mut deferred_headers = Vec::new();
-            let mut deferred_error = None;
-            let mut made_progress = false;
+                .filter(|header| matches!(header.kind, HeaderKind::Constant { .. }))
+                .collect::<Vec<_>>();
+            let empty_visible_symbol_paths = FxHashSet::default();
 
-            for header in pending_headers {
-                let visible_symbol_paths = file_import_bindings
-                    .get(&header.source_file)
-                    .map(|bindings| &bindings.visible_symbol_paths)
-                    .unwrap_or(&empty_visible_symbol_paths);
+            while !pending_headers.is_empty() {
+                total_rounds += 1;
+                total_headers_attempted += pending_headers.len();
 
-                match parse_constant_header_declaration(
-                    header,
-                    ConstantHeaderParseContext {
-                        top_level_declarations: Rc::clone(&declarations_snapshot),
-                        visible_declaration_ids: visible_symbol_paths,
-                        host_registry: self.host_registry,
-                        style_directives: self.style_directives,
-                        project_path_resolver: self.project_path_resolver.clone(),
-                        path_format_config: self.path_format_config.clone(),
-                        build_profile: self.build_profile,
-                        warnings: &mut self.warnings,
-                        rendered_path_usages: self.rendered_path_usages.clone(),
-                        unresolved_constant_paths: &unresolved_constant_paths,
-                        string_table,
-                    },
-                ) {
-                    Ok(declaration) => {
-                        self.declarations.push(declaration.clone());
-                        self.module_constants.push(declaration);
-                        declarations_snapshot =
-                            Rc::new(TopLevelDeclarationIndex::new(self.declarations.clone()));
-                        unresolved_constant_paths = declarations_snapshot
-                            .declarations()
-                            .iter()
-                            .filter(|resolved| resolved.is_unresolved_constant_placeholder())
-                            .map(|resolved| resolved.id.to_owned())
-                            .collect::<FxHashSet<_>>();
-                        made_progress = true;
-                    }
-                    Err(error)
-                        if is_deferrable_constant_resolution_error(
-                            &error,
-                            visible_symbol_paths,
-                            &self.module_symbols.declaration_stubs_by_path,
+                // Reuse one declaration snapshot for deferred attempts in this round.
+                // Refresh only after successful resolutions so later constants can see
+                // newly-resolved declarations without cloning on every deferred header.
+                let mut declarations_snapshot =
+                    Rc::new(TopLevelDeclarationIndex::new(self.declarations.clone()));
+                let mut round_snapshot_rebuilds = 1usize;
+                let mut unresolved_constant_paths = declarations_snapshot
+                    .declarations()
+                    .iter()
+                    .filter(|declaration| declaration.is_unresolved_constant_placeholder())
+                    .map(|declaration| declaration.id.to_owned())
+                    .collect::<FxHashSet<_>>();
+                let mut deferred_headers = Vec::new();
+                let mut deferred_error = None;
+                let mut made_progress = false;
+
+                for header in pending_headers {
+                    let visible_symbol_paths = file_import_bindings
+                        .get(&header.source_file)
+                        .map(|bindings| &bindings.visible_symbol_paths)
+                        .unwrap_or(&empty_visible_symbol_paths);
+
+                    match parse_constant_header_declaration(
+                        header,
+                        ConstantHeaderParseContext {
+                            top_level_declarations: Rc::clone(&declarations_snapshot),
+                            visible_declaration_ids: visible_symbol_paths,
+                            host_registry: self.host_registry,
+                            style_directives: self.style_directives,
+                            project_path_resolver: self.project_path_resolver.clone(),
+                            path_format_config: self.path_format_config.clone(),
+                            build_profile: self.build_profile,
+                            warnings: &mut self.warnings,
+                            rendered_path_usages: self.rendered_path_usages.clone(),
+                            unresolved_constant_paths: &unresolved_constant_paths,
                             string_table,
-                        ) =>
-                    {
-                        deferred_headers.push(header);
-                        deferred_error.get_or_insert(error);
-                    }
-                    Err(error) => {
-                        return Err(self.error_messages(error, string_table));
+                        },
+                    ) {
+                        Ok(declaration) => {
+                            self.declarations.push(declaration.clone());
+                            self.module_constants.push(declaration);
+                            declarations_snapshot =
+                                Rc::new(TopLevelDeclarationIndex::new(self.declarations.clone()));
+                            round_snapshot_rebuilds += 1;
+                            unresolved_constant_paths = declarations_snapshot
+                                .declarations()
+                                .iter()
+                                .filter(|resolved| resolved.is_unresolved_constant_placeholder())
+                                .map(|resolved| resolved.id.to_owned())
+                                .collect::<FxHashSet<_>>();
+                            made_progress = true;
+                        }
+                        Err(error)
+                            if is_deferrable_constant_resolution_error(
+                                &error,
+                                visible_symbol_paths,
+                                &self.module_symbols.declaration_stubs_by_path,
+                                string_table,
+                            ) =>
+                        {
+                            deferred_headers.push(header);
+                            deferred_error.get_or_insert(error);
+                        }
+                        Err(error) => {
+                            return Err(self.error_messages(error, string_table));
+                        }
                     }
                 }
+
+                total_snapshot_rebuilds += round_snapshot_rebuilds;
+                total_deferred_headers += deferred_headers.len();
+
+                if !made_progress {
+                    let error = deferred_error.unwrap_or_else(|| {
+                        crate::compiler_frontend::compiler_errors::CompilerError::compiler_error(
+                            "Constant header resolution stalled without making progress.",
+                        )
+                    });
+                    return Err(self.error_messages(error, string_table));
+                }
+
+                pending_headers = deferred_headers;
             }
 
-            if !made_progress {
-                let error = deferred_error.unwrap_or_else(|| {
-                    crate::compiler_frontend::compiler_errors::CompilerError::compiler_error(
-                        "Constant header resolution stalled without making progress.",
-                    )
-                });
-                return Err(self.error_messages(error, string_table));
-            }
+            Ok(())
+        })();
 
-            pending_headers = deferred_headers;
-        }
+        timer_log!(
+            constants_resolution_start,
+            "AST/type resolution/constants deferred resolution in:"
+        );
+        let _ = constants_resolution_start;
 
-        Ok(())
+        #[cfg(feature = "detailed_timers")]
+        saying::say!(
+            "AST/type resolution/constants deferred summary: rounds={}, headers attempted={}, headers deferred={}, declaration snapshot rebuilds={}",
+            total_rounds,
+            total_headers_attempted,
+            total_deferred_headers,
+            total_snapshot_rebuilds
+        );
+
+        resolution_result
     }
 }
 

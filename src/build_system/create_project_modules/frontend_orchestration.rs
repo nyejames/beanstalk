@@ -62,7 +62,7 @@ impl FrontendModuleBuildContext<'_> {
             let project_tokens = timed_frontend_stage("Tokenized in: ", || {
                 Self::tokenize_module(&mut compiler, module)
             })?;
-            
+
             let module_headers = timed_frontend_stage("Headers Parsed in: ", || {
                 Self::parse_headers(
                     &mut compiler,
@@ -71,13 +71,13 @@ impl FrontendModuleBuildContext<'_> {
                     entry_file_path,
                 )
             })?;
-            
+
             let sorted = timed_frontend_stage("Dependency graph created in: ", || {
                 Self::sort_headers(&mut compiler, module_headers, &warnings)
             })?;
-            
+
             let entry_runtime_fragment_count = sorted.entry_runtime_fragment_count;
-            
+
             let module_ast = timed_frontend_stage("AST created in: ", || {
                 self.build_ast(&mut compiler, sorted, entry_file_path, &mut warnings)
             })?;
@@ -95,7 +95,7 @@ impl FrontendModuleBuildContext<'_> {
             let hir_module = timed_frontend_stage("HIR generated in: ", || {
                 Self::lower_hir(&mut compiler, module_ast, &mut warnings)
             })?;
-            
+
             let borrow_analysis = timed_frontend_stage("Borrow checking completed in: ", || {
                 Self::check_borrows(&compiler, &hir_module, &mut warnings)
             })?;
@@ -269,9 +269,9 @@ fn timed_frontend_stage<T>(
     let start = Instant::now();
     let result = stage();
     timer_log!(start, label);
-    
+
     // Removes warnings for unused variables.
     // They are actually used in the timer log
-    let _ = (start, label); 
+    let _ = (start, label);
     result
 }

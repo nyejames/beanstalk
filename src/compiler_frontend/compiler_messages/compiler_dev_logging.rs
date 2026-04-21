@@ -1,3 +1,6 @@
+#[cfg(feature = "detailed_timers")]
+use std::time::Duration;
+
 // TOKEN LOGGING MACROS
 #[macro_export]
 #[cfg(feature = "show_tokens")]
@@ -30,6 +33,11 @@ macro_rules! timer_log {
     ($time:expr, $msg:expr) => {
         // Nothing
     };
+}
+
+#[cfg(feature = "detailed_timers")]
+pub fn log_aggregated_duration(label: &str, duration: Duration) {
+    saying::say!(label, Green #duration);
 }
 
 // Headers Logging
