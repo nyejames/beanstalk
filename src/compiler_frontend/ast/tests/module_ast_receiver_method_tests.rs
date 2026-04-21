@@ -1,4 +1,4 @@
-use super::scope_context::{ContextKind, ScopeContext};
+use super::scope_context::{ContextKind, ScopeContext, TopLevelDeclarationIndex};
 use super::*;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
@@ -44,7 +44,7 @@ fn context_for_source_file(
     ScopeContext::new(
         ContextKind::Function,
         InternedPath::new(),
-        Rc::new(vec![]),
+        Rc::new(TopLevelDeclarationIndex::new(vec![])),
         HostRegistry::new(),
         vec![],
     )

@@ -13,9 +13,10 @@
 //! ([`pass_emit_nodes`](crate::compiler_frontend::ast::module_ast::pass_emit_nodes)) and owns
 //! only local scope growth (`local_declarations`, `loop_depth`, type expectations).
 //!
-//! `ScopeContext` receives cloned/copied state from `AstBuildState` (e.g. `Rc<Vec<Declaration>>`
-//! for top-level symbols, `Rc<ReceiverMethodCatalog>` for method lookup, `HostRegistry` clone)
-//! so body parsing is self-contained without referencing the mutable build state directly.
+//! `ScopeContext` receives cloned/copied state from `AstBuildState` (e.g.
+//! `Rc<TopLevelDeclarationIndex>` for top-level symbols, `Rc<ReceiverMethodCatalog>` for method
+//! lookup, `HostRegistry` clone) so body parsing is self-contained without referencing the mutable
+//! build state directly.
 
 use crate::compiler_frontend::FrontendBuildProfile;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
@@ -29,7 +30,7 @@ use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::return_compiler_error;
-use rustc_hash::FxHashSet;
+use rustc_hash::{FxHashMap, FxHashSet};
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -44,6 +45,82 @@ pub(crate) use crate::compiler_frontend::ast::receiver_methods::{
 
 pub(super) static CONTROL_FLOW_SCOPE_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
+pub struct TopLevelDeclarationIndex {
+    declarations: Box<[Declaration]>,
+    by_name: FxHashMap<StringId, DeclarationBucket>,
+}
+
+enum DeclarationBucket {
+    One(u32),
+    Many(Box<[u32]>),
+}
+
+impl TopLevelDeclarationIndex {
+    pub fn new(declarations: Vec<Declaration>) -> Self {
+        let declarations: Box<[Declaration]> = declarations.into_boxed_slice();
+        let mut temp: FxHashMap<StringId, Vec<u32>> = FxHashMap::default();
+
+        for (index, declaration) in declarations.iter().enumerate() {
+            let Some(name) = declaration.id.name() else {
+                continue;
+            };
+
+            // Receiver methods already have their own catalog.
+            if matches!(
+                &declaration.value.data_type,
+                DataType::Function(receiver, _) if receiver.as_ref().is_some()
+            ) {
+                continue;
+            }
+
+            temp.entry(name).or_default().push(index as u32);
+        }
+
+        let by_name = temp
+            .into_iter()
+            .map(|(name, indices)| {
+                let bucket = match indices.as_slice() {
+                    [one] => DeclarationBucket::One(*one),
+                    _ => DeclarationBucket::Many(indices.into_boxed_slice()),
+                };
+                (name, bucket)
+            })
+            .collect();
+
+        Self {
+            declarations,
+            by_name,
+        }
+    }
+
+    pub fn declarations(&self) -> &[Declaration] {
+        &self.declarations
+    }
+
+    pub fn get_visible(
+        &self,
+        name: StringId,
+        visible: Option<&FxHashSet<InternedPath>>,
+    ) -> Option<&Declaration> {
+        let is_visible = |declaration: &Declaration| match visible {
+            Some(visible) => visible.contains(&declaration.id),
+            None => true,
+        };
+
+        match self.by_name.get(&name)? {
+            DeclarationBucket::One(index) => {
+                let declaration = &self.declarations[*index as usize];
+                is_visible(declaration).then_some(declaration)
+            }
+            DeclarationBucket::Many(indices) => indices
+                .iter()
+                .rev()
+                .map(|index| &self.declarations[*index as usize])
+                .find(|declaration| is_visible(declaration)),
+        }
+    }
+}
+
 #[derive(Clone)]
 /// Shared parser/lowering context for one active AST scope.
 pub struct ScopeContext {
@@ -52,9 +129,8 @@ pub struct ScopeContext {
     pub scope: InternedPath,
 
     // --- Declaration tables ---
-    // Shared module-wide top-level declarations — stable after pass 4, cheap to clone
-    // via Rc (no data copy). All function bodies in one module share one allocation.
-    pub(crate) top_level_declarations: Rc<Vec<Declaration>>,
+    // Shared module-wide top-level declaration store + name index.
+    pub(crate) top_level_declarations: Rc<TopLevelDeclarationIndex>,
     // Per-scope locals: function parameters + body-declared variables only.
     // Grows incrementally in source order via add_var(); never carries module-wide data.
     pub local_declarations: Vec<Declaration>,
@@ -120,7 +196,7 @@ impl ScopeContext {
     pub fn new(
         kind: ContextKind,
         scope: InternedPath,
-        top_level_declarations: Rc<Vec<Declaration>>,
+        top_level_declarations: Rc<TopLevelDeclarationIndex>,
         host_registry: HostRegistry,
         expected_result_types: Vec<DataType>,
     ) -> ScopeContext {
@@ -352,25 +428,17 @@ impl ScopeContext {
         self
     }
 
-    pub(crate) fn get_reference(&self, name: &StringId) -> Option<&Declaration> {
-        let is_visible = |declaration: &&Declaration| {
-            !matches!(
-                &declaration.value.data_type,
-                DataType::Function(receiver, _) if receiver.as_ref().is_some()
-            ) && match self.visible_declaration_ids.as_ref() {
-                Some(visible) => visible.contains(&declaration.id),
-                None => true,
-            }
-        };
+    pub(crate) fn set_local_declarations(&mut self, declarations: Vec<Declaration>) {
+        self.local_declarations = declarations;
+    }
 
-        // Locals first — params and body-declared vars shadow top-level symbols by name.
+    pub(crate) fn get_reference(&self, name: &StringId) -> Option<&Declaration> {
         self.local_declarations
             .iter()
-            .rfind(|d| d.id.name() == Some(*name) && is_visible(d))
+            .rfind(|declaration| declaration.id.name() == Some(*name))
             .or_else(|| {
                 self.top_level_declarations
-                    .iter()
-                    .rfind(|d| d.id.name() == Some(*name) && is_visible(d))
+                    .get_visible(*name, self.visible_declaration_ids.as_ref())
             })
     }
 
@@ -406,10 +474,8 @@ impl ScopeContext {
     }
 
     pub fn add_var(&mut self, arg: Declaration) {
-        // Keep the local layer and visibility gate in sync for variables declared in-body.
-        // Otherwise, a newly declared local could exist in local_declarations but be invisible.
-        if let Some(visible) = self.visible_declaration_ids.as_mut() {
-            visible.insert(arg.id.to_owned());
+        if let Some(visible_declarations) = self.visible_declaration_ids.as_mut() {
+            visible_declarations.insert(arg.id.clone());
         }
         self.local_declarations.push(arg);
     }

@@ -15,7 +15,7 @@ use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::function_body_to_ast;
 use crate::compiler_frontend::ast::import_bindings::FileImportBindings;
 use crate::compiler_frontend::ast::module_ast::scope_context::{
-    ContextKind, ReceiverMethodCatalog, ScopeContext,
+    ContextKind, ReceiverMethodCatalog, ScopeContext, TopLevelDeclarationIndex,
 };
 use crate::compiler_frontend::ast::statements::functions::{
     FunctionReturn, FunctionSignature, ReturnSlot,
@@ -41,10 +41,11 @@ impl<'a> AstBuildState<'a> {
         receiver_methods: &Rc<ReceiverMethodCatalog>,
         string_table: &mut StringTable,
     ) -> Result<(), CompilerMessages> {
-        // Build the shared top-level declaration Rc once, after passes 3–4 have
-        // fully resolved all declarations. Every function and start body clones the
-        // Rc (cheap pointer increment), not the underlying Vec.
-        let top_level = Rc::new(self.declarations.clone());
+        // Build the shared top-level declaration store once, after passes 3–4 have
+        // fully resolved all declarations. Every function and start body clones only
+        // the Rc pointer, not declaration data.
+        let top_level_declarations =
+            Rc::new(TopLevelDeclarationIndex::new(self.declarations.clone()));
 
         for header in sorted_headers {
             let bindings = file_import_bindings
@@ -79,7 +80,7 @@ impl<'a> AstBuildState<'a> {
                     let mut context = ScopeContext::new(
                         ContextKind::Function,
                         header.tokens.src_path.to_owned(),
-                        Rc::clone(&top_level),
+                        Rc::clone(&top_level_declarations),
                         self.host_registry.clone(),
                         resolved_signature.signature.return_data_types(),
                     )
@@ -96,17 +97,18 @@ impl<'a> AstBuildState<'a> {
                         .error_return()
                         .map(|ret| ret.data_type().to_owned());
                     // Parameters belong in the local layer, not in top-level declarations.
-                    context.local_declarations = resolved_signature.signature.parameters.to_owned();
+                    context
+                        .set_local_declarations(resolved_signature.signature.parameters.to_owned());
 
                     let mut token_stream = header.tokens;
+                    let function_scope = context.scope.clone();
 
                     let body_result = function_body_to_ast(
                         &mut token_stream,
-                        context.to_owned(),
+                        context,
                         &mut self.warnings,
                         string_table,
                     );
-                    self.warnings.extend(context.take_emitted_warnings());
 
                     let body =
                         body_result.map_err(|error| self.error_messages(error, string_table))?;
@@ -117,10 +119,10 @@ impl<'a> AstBuildState<'a> {
                         kind: NodeKind::Function(
                             token_stream.src_path,
                             resolved_signature.signature,
-                            body.to_owned(),
+                            body,
                         ),
                         location: header.name_location,
-                        scope: context.scope.clone(),
+                        scope: function_scope,
                     });
                 }
 
@@ -136,7 +138,7 @@ impl<'a> AstBuildState<'a> {
                     let context = ScopeContext::new(
                         ContextKind::Module,
                         header.tokens.src_path.to_owned(),
-                        Rc::clone(&top_level),
+                        Rc::clone(&top_level_declarations),
                         self.host_registry.clone(),
                         vec![],
                     )
@@ -150,14 +152,14 @@ impl<'a> AstBuildState<'a> {
                     .with_source_file_scope(source_file_scope.to_owned());
 
                     let mut token_stream = header.tokens;
+                    let start_scope = context.scope.clone();
 
                     let body_result = function_body_to_ast(
                         &mut token_stream,
-                        context.to_owned(),
+                        context,
                         &mut self.warnings,
                         string_table,
                     );
-                    self.warnings.extend(context.take_emitted_warnings());
 
                     let body =
                         body_result.map_err(|error| self.error_messages(error, string_table))?;
@@ -185,7 +187,7 @@ impl<'a> AstBuildState<'a> {
                     self.ast.push(AstNode {
                         kind: NodeKind::Function(full_name, start_signature, body),
                         location: header.name_location,
-                        scope: context.scope.clone(),
+                        scope: start_scope,
                     });
                 }
 
@@ -220,7 +222,7 @@ impl<'a> AstBuildState<'a> {
                     let context = ScopeContext::new(
                         ContextKind::Constant,
                         template_tokens.src_path.to_owned(),
-                        Rc::clone(&top_level),
+                        Rc::clone(&top_level_declarations),
                         self.host_registry.clone(),
                         vec![],
                     )

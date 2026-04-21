@@ -1,5 +1,5 @@
 use super::*;
-use crate::compiler_frontend::ast::{ContextKind, ScopeContext};
+use crate::compiler_frontend::ast::{ContextKind, ScopeContext, TopLevelDeclarationIndex};
 use crate::compiler_frontend::compiler_errors::{ErrorMetaDataKey, ErrorType};
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::host_functions::HostRegistry;
@@ -15,7 +15,7 @@ fn parse_literal_expression_rejects_int_negation_overflow() {
     let context = ScopeContext::new(
         ContextKind::Expression,
         scope.clone(),
-        Rc::new(vec![]),
+        Rc::new(TopLevelDeclarationIndex::new(vec![])),
         HostRegistry::new(),
         vec![],
     );

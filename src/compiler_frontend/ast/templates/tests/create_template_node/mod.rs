@@ -3,7 +3,7 @@ use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::templates::template::{TemplateAtom, TemplateSegment};
 use crate::compiler_frontend::ast::templates::template_render_plan::RenderPiece;
-use crate::compiler_frontend::ast::{ContextKind, ScopeContext};
+use crate::compiler_frontend::ast::{ContextKind, ScopeContext, TopLevelDeclarationIndex};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::WarningKind;
 use crate::compiler_frontend::datatypes::Ownership;
@@ -127,7 +127,7 @@ fn new_constant_context_with_style_directives(
         ScopeContext::new(
             ContextKind::Constant,
             scope.to_owned(),
-            Rc::new(vec![]),
+            Rc::new(TopLevelDeclarationIndex::new(vec![])),
             HostRegistry::default(),
             vec![],
         ),
@@ -184,7 +184,7 @@ fn runtime_template_context_with_style_directives(
         ScopeContext::new(
             ContextKind::Template,
             scope.to_owned(),
-            Rc::new(vec![declaration]),
+            Rc::new(TopLevelDeclarationIndex::new(vec![declaration])),
             HostRegistry::default(),
             vec![],
         ),
@@ -207,7 +207,7 @@ fn constant_template_context_with_style_directives(
         ScopeContext::new(
             ContextKind::Constant,
             scope.to_owned(),
-            Rc::new(declarations.to_vec()),
+            Rc::new(TopLevelDeclarationIndex::new(declarations.to_vec())),
             HostRegistry::default(),
             vec![],
         ),

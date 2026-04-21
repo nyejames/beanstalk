@@ -372,5 +372,6 @@ pub(crate) fn parse_function_body_statements(
         }
     }
 
+    warnings.extend(context.take_emitted_warnings());
     Ok(ast)
 }

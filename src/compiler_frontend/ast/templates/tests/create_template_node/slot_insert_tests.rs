@@ -2,7 +2,7 @@ use super::*;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::templates::template::TemplateType;
-use crate::compiler_frontend::ast::{ContextKind, ScopeContext};
+use crate::compiler_frontend::ast::{ContextKind, ScopeContext, TopLevelDeclarationIndex};
 use crate::compiler_frontend::datatypes::Ownership;
 use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
@@ -384,7 +384,9 @@ fn fills_nested_slots_for_runtime_wrappers() {
     let wrapper_context = ScopeContext::new(
         ContextKind::Template,
         scope.to_owned(),
-        Rc::new(vec![value_declaration.to_owned()]),
+        Rc::new(TopLevelDeclarationIndex::new(vec![
+            value_declaration.to_owned(),
+        ])),
         HostRegistry::default(),
         vec![],
     );
@@ -409,7 +411,7 @@ fn fills_nested_slots_for_runtime_wrappers() {
     let consuming_context = ScopeContext::new(
         ContextKind::Template,
         scope,
-        Rc::new(declarations),
+        Rc::new(TopLevelDeclarationIndex::new(declarations)),
         HostRegistry::default(),
         vec![],
     );

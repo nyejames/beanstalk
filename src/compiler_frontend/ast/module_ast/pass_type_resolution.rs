@@ -10,6 +10,7 @@ use crate::compiler_frontend::ast::expressions::expression::{Expression, Express
 use crate::compiler_frontend::ast::import_bindings::{
     ConstantHeaderParseContext, FileImportBindings, parse_constant_header_declaration,
 };
+use crate::compiler_frontend::ast::module_ast::scope_context::TopLevelDeclarationIndex;
 use crate::compiler_frontend::ast::type_resolution::{
     resolve_struct_field_types, validate_no_recursive_runtime_structs,
 };
@@ -91,22 +92,35 @@ impl<'a> AstBuildState<'a> {
             .iter()
             .filter(|header| matches!(header.kind, HeaderKind::Constant { .. }))
             .collect::<Vec<_>>();
+        let empty_visible_symbol_paths = FxHashSet::default();
+
         while !pending_headers.is_empty() {
+            // Reuse one declaration snapshot for deferred attempts in this round.
+            // Refresh only after successful resolutions so later constants can see
+            // newly-resolved declarations without cloning on every deferred header.
+            let mut declarations_snapshot =
+                Rc::new(TopLevelDeclarationIndex::new(self.declarations.clone()));
+            let mut unresolved_constant_paths = declarations_snapshot
+                .declarations()
+                .iter()
+                .filter(|declaration| declaration.is_unresolved_constant_placeholder())
+                .map(|declaration| declaration.id.to_owned())
+                .collect::<FxHashSet<_>>();
             let mut deferred_headers = Vec::new();
             let mut deferred_error = None;
             let mut made_progress = false;
 
             for header in pending_headers {
-                let bindings = file_import_bindings
+                let visible_symbol_paths = file_import_bindings
                     .get(&header.source_file)
-                    .cloned()
-                    .unwrap_or_default();
+                    .map(|bindings| &bindings.visible_symbol_paths)
+                    .unwrap_or(&empty_visible_symbol_paths);
 
                 match parse_constant_header_declaration(
                     header,
                     ConstantHeaderParseContext {
-                        declarations: Rc::new(self.declarations.clone()),
-                        visible_declaration_ids: &bindings.visible_symbol_paths,
+                        top_level_declarations: Rc::clone(&declarations_snapshot),
+                        visible_declaration_ids: visible_symbol_paths,
                         host_registry: self.host_registry,
                         style_directives: self.style_directives,
                         project_path_resolver: self.project_path_resolver.clone(),
@@ -114,18 +128,27 @@ impl<'a> AstBuildState<'a> {
                         build_profile: self.build_profile,
                         warnings: &mut self.warnings,
                         rendered_path_usages: self.rendered_path_usages.clone(),
+                        unresolved_constant_paths: &unresolved_constant_paths,
                         string_table,
                     },
                 ) {
                     Ok(declaration) => {
                         self.declarations.push(declaration.clone());
                         self.module_constants.push(declaration);
+                        declarations_snapshot =
+                            Rc::new(TopLevelDeclarationIndex::new(self.declarations.clone()));
+                        unresolved_constant_paths = declarations_snapshot
+                            .declarations()
+                            .iter()
+                            .filter(|resolved| resolved.is_unresolved_constant_placeholder())
+                            .map(|resolved| resolved.id.to_owned())
+                            .collect::<FxHashSet<_>>();
                         made_progress = true;
                     }
                     Err(error)
                         if is_deferrable_constant_resolution_error(
                             &error,
-                            &bindings.visible_symbol_paths,
+                            visible_symbol_paths,
                             &self.module_symbols.declaration_stubs_by_path,
                             string_table,
                         ) =>

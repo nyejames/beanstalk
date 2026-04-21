@@ -110,12 +110,8 @@ pub fn new_declaration(
             FunctionSignature::new(token_stream, warnings, string_table, &full_name, context)?;
         let func_context = context.new_child_function(id, func_sig.to_owned(), string_table);
 
-        let function_body = function_body_to_ast(
-            token_stream,
-            func_context.to_owned(),
-            warnings,
-            string_table,
-        )?;
+        let function_body =
+            function_body_to_ast(token_stream, func_context, warnings, string_table)?;
 
         return Ok(Declaration {
             id: full_name,
