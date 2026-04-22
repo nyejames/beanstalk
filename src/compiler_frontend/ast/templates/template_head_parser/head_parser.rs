@@ -11,7 +11,7 @@
 
 use super::core_directives::{
     mark_template_body_whitespace_style_controlled, maybe_parse_slot_or_insert_helper_directive,
-    parse_core_style_directive, reject_mixed_comment_directive,
+    parse_core_style_directive,
 };
 use super::handler_directives::apply_handler_style_directive;
 use super::head_expressions::{
@@ -21,16 +21,50 @@ use super::head_expressions::{
 use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
-use crate::compiler_frontend::ast::templates::template::{CommentDirectiveKind, TemplateType};
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::deferred_feature_diagnostics::unsupported_style_directive_syntax_error;
-use crate::compiler_frontend::style_directives::{StyleDirectiveKind, StyleDirectiveSpec};
+use crate::compiler_frontend::style_directives::{
+    StyleDirectiveKind, StyleDirectiveSpec, TemplateHeadCompatibility, TemplateHeadTag,
+};
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::projects::settings::BS_VAR_PREFIX;
 use crate::{ast_log, return_syntax_error};
+
+#[derive(Clone, Copy, Debug, Default)]
+struct TemplateHeadState {
+    seen_tags: TemplateHeadTag,
+    blocked_future_tags: TemplateHeadTag,
+}
+
+fn enforce_head_compatibility(
+    state: &TemplateHeadState,
+    incoming: &TemplateHeadCompatibility,
+    token_stream: &FileTokens,
+    directive_name: Option<&str>,
+) -> Result<(), CompilerError> {
+    if !state.blocked_future_tags.intersects(incoming.presence_tags)
+        && !state.seen_tags.intersects(incoming.required_absent_tags)
+    {
+        return Ok(());
+    }
+
+    let item_label = directive_name.map_or_else(
+        || "This template head item".to_owned(),
+        |name| format!("The '${name}' directive"),
+    );
+    return_syntax_error!(
+        format!("{item_label} is incompatible with other meaningful items in this template head."),
+        token_stream.current_location()
+    );
+}
+
+fn apply_head_compatibility(state: &mut TemplateHeadState, compatibility: &TemplateHeadCompatibility) {
+    state.seen_tags |= compatibility.presence_tags;
+    state.blocked_future_tags |= compatibility.blocks_future_tags;
+}
 
 // ---------------------
 // TEMPLATE HEAD PARSING
@@ -56,7 +90,8 @@ pub fn parse_template_head(
 
     // Each expression must be separated with a comma.
     let mut comma_separator = true;
-    let mut saw_meaningful_head_item = false;
+    let mut head_state = TemplateHeadState::default();
+    let meaningful_item_compatibility = TemplateHeadCompatibility::fully_compatible_meaningful();
     token_stream.advance();
 
     while token_stream.index < token_stream.length {
@@ -78,7 +113,10 @@ pub fn parse_template_head(
         }
 
         if token == TokenKind::StartTemplateBody {
-            if matches!(template.kind, TemplateType::SlotDefinition(_)) {
+            if head_state
+                .seen_tags
+                .intersects(TemplateHeadTag::SLOT_DIRECTIVE)
+            {
                 return_syntax_error!(
                     "'$slot' markers cannot declare a body. Use '[$slot]' or '[$slot(\"name\")]'.",
                     token_stream.current_location()
@@ -87,40 +125,6 @@ pub fn parse_template_head(
 
             token_stream.advance();
             return Ok(());
-        }
-
-        if matches!(
-            template.kind,
-            TemplateType::SlotDefinition(_)
-                | TemplateType::SlotInsert(_)
-                | TemplateType::Comment(_)
-        ) {
-            match token {
-                TokenKind::Newline => {
-                    token_stream.advance();
-                    continue;
-                }
-                _ => {
-                    let restriction_message = match template.kind {
-                        TemplateType::SlotDefinition(_) | TemplateType::SlotInsert(_) => {
-                            "Slot helper template heads can only contain one '$slot' or '$insert(\"name\")' directive."
-                        }
-                        TemplateType::Comment(CommentDirectiveKind::Doc) => {
-                            "'$doc' template heads can only contain '$doc' before the optional body."
-                        }
-                        TemplateType::Comment(CommentDirectiveKind::Note) => {
-                            "'$note' template heads can only contain '$note' before the optional body."
-                        }
-                        TemplateType::Comment(CommentDirectiveKind::Todo) => {
-                            "'$todo' template heads can only contain '$todo' before the optional body."
-                        }
-                        TemplateType::String | TemplateType::StringFunction => {
-                            "Template helper heads can only contain one helper directive."
-                        }
-                    };
-                    return_syntax_error!(restriction_message, token_stream.current_location())
-                }
-            }
         }
 
         // Make sure there is a comma before the next token.
@@ -148,6 +152,12 @@ pub fn parse_template_head(
                 // Check if it's a regular scene or variable reference.
                 // If this is a reference to a function or variable.
                 if let Some(arg) = context.get_reference(&name) {
+                    enforce_head_compatibility(
+                        &head_state,
+                        &meaningful_item_compatibility,
+                        token_stream,
+                        None,
+                    )?;
                     let value_location = token_stream.current_location();
                     match &arg.value.kind {
                         // Direct template references should preserve wrapper/slot semantics.
@@ -160,7 +170,6 @@ pub fn parse_template_head(
                                 &value_location,
                                 string_table,
                             )?;
-                            saw_meaningful_head_item = true;
                         }
 
                         // Otherwise this is a reference to some other variable:
@@ -184,9 +193,10 @@ pub fn parse_template_head(
                                 string_table,
                             )?;
                             defer_separator_token = true;
-                            saw_meaningful_head_item = true;
                         }
                     }
+
+                    apply_head_compatibility(&mut head_state, &meaningful_item_compatibility);
                 } else {
                     return_syntax_error!(
                         format!(
@@ -204,6 +214,12 @@ pub fn parse_template_head(
             | TokenKind::IntLiteral(_)
             | TokenKind::StringSliceLiteral(_)
             | TokenKind::RawStringLiteral(_) => {
+                enforce_head_compatibility(
+                    &head_state,
+                    &meaningful_item_compatibility,
+                    token_stream,
+                    None,
+                )?;
                 let value_location = token_stream.current_location();
                 let expr = create_expression(
                     token_stream,
@@ -223,10 +239,16 @@ pub fn parse_template_head(
                     string_table,
                 )?;
                 defer_separator_token = true;
-                saw_meaningful_head_item = true;
+                apply_head_compatibility(&mut head_state, &meaningful_item_compatibility);
             }
 
             TokenKind::Path(paths) => {
+                enforce_head_compatibility(
+                    &head_state,
+                    &meaningful_item_compatibility,
+                    token_stream,
+                    None,
+                )?;
                 push_template_head_path_expression(
                     &paths,
                     token_stream,
@@ -234,10 +256,16 @@ pub fn parse_template_head(
                     template,
                     string_table,
                 )?;
-                saw_meaningful_head_item = true;
+                apply_head_compatibility(&mut head_state, &meaningful_item_compatibility);
             }
 
             TokenKind::OpenParenthesis => {
+                enforce_head_compatibility(
+                    &head_state,
+                    &meaningful_item_compatibility,
+                    token_stream,
+                    None,
+                )?;
                 let value_location = token_stream.current_location();
                 let expr = create_expression(
                     token_stream,
@@ -257,7 +285,7 @@ pub fn parse_template_head(
                     string_table,
                 )?;
                 defer_separator_token = true;
-                saw_meaningful_head_item = true;
+                apply_head_compatibility(&mut head_state, &meaningful_item_compatibility);
             }
 
             TokenKind::StyleDirective(directive) => {
@@ -275,24 +303,23 @@ pub fn parse_template_head(
                     ));
                 };
 
+                enforce_head_compatibility(
+                    &head_state,
+                    &spec.head_compatibility,
+                    token_stream,
+                    Some(&directive_name),
+                )?;
+
                 let handled_slot_insert = maybe_parse_slot_or_insert_helper_directive(
                     &spec.kind,
                     token_stream,
                     template,
-                    saw_meaningful_head_item,
                     string_table,
                 )?;
 
                 if handled_slot_insert {
-                    saw_meaningful_head_item = true;
+                    apply_head_compatibility(&mut head_state, &spec.head_compatibility);
                 } else {
-                    reject_mixed_comment_directive(
-                        &spec.kind,
-                        saw_meaningful_head_item,
-                        token_stream,
-                        string_table,
-                    )?;
-
                     defer_separator_token = parse_style_directive_from_spec(
                         token_stream,
                         context,
@@ -301,7 +328,7 @@ pub fn parse_template_head(
                         spec,
                         string_table,
                     )?;
-                    saw_meaningful_head_item = true;
+                    apply_head_compatibility(&mut head_state, &spec.head_compatibility);
                 }
             }
 

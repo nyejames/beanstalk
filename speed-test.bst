@@ -431,7 +431,7 @@ render |this BenchmarkBlock, index Int| -> String:
     tone ~= "even"
 
     if index % 2 is not 0:
-        tone ~= "odd"
+        tone = "odd"
     ;
 
     composite = this.seed * (index + 3) + (index * index) + 17
@@ -465,13 +465,13 @@ build_runtime_grid || -> String:
     ]
 
     loop items |item, index|:
-        grid ~= [:
+        grid = [:
             [grid]
             [item.render(index)]
         ]
     ;
 
-    grid ~= [:
+    grid = [:
         [grid]
         </div>
     ]
@@ -490,10 +490,10 @@ build_runtime_rows || -> String:
 
         row_class ~= "even"
         if row % 2 is not 0:
-            row_class ~= "odd"
+            row_class = "odd"
         ;
 
-        rows ~= [:
+        rows = [:
             [rows]
             <div class="runtime-row [row_class]">
                 <span>row [row]</span>
@@ -503,7 +503,7 @@ build_runtime_rows || -> String:
         ]
     ;
 
-    rows ~= [:
+    rows = [:
         [rows]
         </div>
     ]
@@ -524,24 +524,24 @@ build_runtime_matrix || -> String:
         loop 0 to 18 |inner|:
             value = ((outer + 1) * (inner + 2)) + (outer * inner) + 13
 
-            row_template ~= [:
+            row_template = [:
                 [row_template]
                 <span class="cell">[value]</span>
             ]
         ;
 
-        row_template ~= [:
+        row_template = [:
             [row_template]
             </div>
         ]
 
-        matrix ~= [:
+        matrix = [:
             [matrix]
             [row_template]
         ]
     ;
 
-    matrix ~= [:
+    matrix = [:
         [matrix]
         </div>
     ]
@@ -563,13 +563,13 @@ build_runtime_summary || -> String:
     loop 0 to 24 |index|:
         value = ((index + 5) * (index + 9)) + (index * 3) + 41
 
-        summary ~= [:
+        summary = [:
             [summary]
             <div>summary line [index] = [value]</div>
         ]
     ;
 
-    summary ~= [:
+    summary = [:
             </div>
             <div class="card-foot">
                 runtime summary generated with numeric loops and repeated template rebuilding
@@ -594,31 +594,37 @@ body_insert = [$insert("body"):
         [compile_card_d]
         [runtime_summary]
 
-        [card, [$insert("head"):
+        [card, $insert("head"):
             [section_title, accent_title_3:
                 Runtime grid output
             ]
-        ], [$insert("foot"):
+        ] 
+        
+        [$insert("foot"):
             built from a collection of structs and a receiver method call in a loop
         ]:
             [runtime_grid]
         ]
 
-        [card, [$insert("head"):
+        [card, $insert("head"):
             [section_title, accent_title:
                 Runtime rows output
             ]
-        ], [$insert("foot"):
+        ]
+        
+        [$insert("foot"):
             built from a numeric loop with repeated runtime template rebuilding
         ]:
             [runtime_rows]
         ]
 
-        [card, [$insert("head"):
+        [card, $insert("head"):
             [section_title, accent_title_2:
                 Runtime matrix output
             ]
-        ], [$insert("foot"):
+        ]
+        
+        [$insert("foot"):
             built from nested loops for extra AST body parsing and template work
         ]:
             [runtime_matrix]

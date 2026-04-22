@@ -3,6 +3,7 @@ use crate::compiler_frontend::compiler_errors::ErrorMetaDataKey;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::style_directives::{
     StyleDirectiveHandlerSpec, StyleDirectiveRegistry, StyleDirectiveSpec,
+    TemplateHeadCompatibility,
 };
 use crate::projects::html_project::style_directives::html_project_style_directives;
 
@@ -806,6 +807,7 @@ fn custom_balanced_directive_uses_general_balanced_mode() {
     let directives = vec![StyleDirectiveSpec::handler(
         "highlight",
         TemplateBodyMode::Balanced,
+        TemplateHeadCompatibility::fully_compatible_meaningful(),
         StyleDirectiveHandlerSpec::no_op(),
     )];
     let (file_tokens, string_table) =
