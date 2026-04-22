@@ -187,14 +187,14 @@ impl Ast {
 
         let type_resolution_start = Instant::now();
         state.resolve_types(&sorted_headers, &file_import_bindings, string_table)?;
-        timer_log!(type_resolution_start, "AST/type resolution completed in:");
+        timer_log!(type_resolution_start, "AST/type resolution completed in: ");
         let _ = type_resolution_start;
 
         let function_signatures_start = Instant::now();
         state.resolve_function_signatures(&sorted_headers, &file_import_bindings, string_table)?;
         timer_log!(
             function_signatures_start,
-            "AST/function signatures resolved in:"
+            "AST/function signatures resolved in: "
         );
         let _ = function_signatures_start;
 

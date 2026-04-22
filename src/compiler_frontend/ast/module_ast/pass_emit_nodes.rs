@@ -360,23 +360,23 @@ impl<'a> AstBuildState<'a> {
         #[cfg(feature = "detailed_timers")]
         {
             log_aggregated_duration(
-                "AST/node emission/function bodies parsed in:",
+                "AST/node emission/function bodies parsed in: ",
                 total_function_body_parse_time,
             );
             log_aggregated_duration(
-                "AST/node emission/start bodies parsed in:",
+                "AST/node emission/start bodies parsed in: ",
                 total_start_body_parse_time,
             );
             log_aggregated_duration(
-                "AST/node emission/const templates parsed in:",
+                "AST/node emission/const templates parsed in: ",
                 total_const_template_parse_time,
             );
             log_aggregated_duration(
-                "AST/node emission/const templates folded in:",
+                "AST/node emission/const templates folded in: ",
                 total_const_template_fold_time,
             );
             saying::say!(
-                "AST/node emission/headers emitted: functions={}, starts={}, structs={}, const templates={}",
+                "AST/node emission/headers emitted: functions = {}, starts = {}, structs = {}, const templates = {}",
                 function_headers_emitted,
                 start_headers_emitted,
                 struct_headers_emitted,

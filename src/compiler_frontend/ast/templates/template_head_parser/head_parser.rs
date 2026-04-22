@@ -61,7 +61,10 @@ fn enforce_head_compatibility(
     );
 }
 
-fn apply_head_compatibility(state: &mut TemplateHeadState, compatibility: &TemplateHeadCompatibility) {
+fn apply_head_compatibility(
+    state: &mut TemplateHeadState,
+    compatibility: &TemplateHeadCompatibility,
+) {
     state.seen_tags |= compatibility.presence_tags;
     state.blocked_future_tags |= compatibility.blocks_future_tags;
 }

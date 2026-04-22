@@ -139,7 +139,9 @@ fn frontend_built_in_head_compatibility_profiles_match_contract() {
         TemplateHeadTag::MEANINGFUL_ITEM
     );
 
-    let insert = built_ins.find("insert").expect("missing '$insert' directive");
+    let insert = built_ins
+        .find("insert")
+        .expect("missing '$insert' directive");
     assert_eq!(
         insert.head_compatibility,
         TemplateHeadCompatibility::blocks_same(TemplateHeadTag::INSERT_DIRECTIVE)

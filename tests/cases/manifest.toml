@@ -1579,6 +1579,11 @@ path = "variables_and_assignment"
 tags = ["integration","language"]
 
 [[case]]
+id = "wasm_arithmetic"
+path = "wasm_arithmetic"
+tags = ["integration","language","wasm"]
+
+[[case]]
 id = "white_space"
 path = "white_space"
 tags = ["integration","language"]

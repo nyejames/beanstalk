@@ -79,17 +79,16 @@ fn formatter_directives_are_exclusive_per_template_head() {
 #[test]
 fn project_owned_formatter_directives_are_exclusive_per_template_head() {
     let style_directives = html_project_test_style_directives();
-    let error = template_parse_error_with_style_directives(
-        "[$html, $css: body]",
-        &style_directives,
-    );
+    let error =
+        template_parse_error_with_style_directives("[$html, $css: body]", &style_directives);
     assert!(error.contains("incompatible"));
 }
 
 #[test]
 fn non_formatter_and_formatter_directives_can_coexist() {
     let mut string_table = StringTable::new();
-    let mut token_stream = template_tokens_from_source("[1, $markdown:\n# Hello\n]", &mut string_table);
+    let mut token_stream =
+        template_tokens_from_source("[1, $markdown:\n# Hello\n]", &mut string_table);
     let context = new_constant_context(token_stream.src_path.to_owned());
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("non-formatter and formatter directives should coexist in the same head");

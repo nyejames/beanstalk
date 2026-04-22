@@ -590,10 +590,8 @@ fn canonical_runtime_card_helpers_compose_without_parent_slot_leakage() {
         value: Expression::template(section_title.to_owned(), Ownership::ImmutableOwned),
     };
 
-    let mut accent_title_tokens = template_tokens_from_source(
-        "[$insert(\"style\"): color: cyan;]",
-        &mut string_table,
-    );
+    let mut accent_title_tokens =
+        template_tokens_from_source("[$insert(\"style\"): color: cyan;]", &mut string_table);
     let accent_title_scope = accent_title_tokens.src_path.to_owned();
     let accent_title = Template::new(
         &mut accent_title_tokens,

@@ -458,18 +458,18 @@ fn range_loop_nested_if_body_routes_tail_to_step_block() {
         .iter()
         .find_map(|block| match block.terminator {
             HirTerminator::Jump { target, .. } if target == header_selector_block => {
-                let has_index_increment = block.statements.iter().any(|statement| {
-                    match &statement.kind {
-                        HirStatementKind::Assign { value, .. } => matches!(
-                            &value.kind,
-                            HirExpressionKind::BinOp {
-                                op: HirBinOp::Add,
-                                right,
-                                ..
-                            } if matches!(right.kind, HirExpressionKind::Int(1))
-                        ),
-                        _ => false,
-                    }
+                let has_index_increment = block.statements.iter().any(|statement| match &statement
+                    .kind
+                {
+                    HirStatementKind::Assign { value, .. } => matches!(
+                        &value.kind,
+                        HirExpressionKind::BinOp {
+                            op: HirBinOp::Add,
+                            right,
+                            ..
+                        } if matches!(right.kind, HirExpressionKind::Int(1))
+                    ),
+                    _ => false,
                 });
                 has_index_increment.then_some(block.id)
             }
@@ -481,7 +481,9 @@ fn range_loop_nested_if_body_routes_tail_to_step_block() {
         .blocks
         .iter()
         .filter_map(|block| match block.terminator {
-            HirTerminator::Jump { target, .. } if target == step_block && block.id != body_block => {
+            HirTerminator::Jump { target, .. }
+                if target == step_block && block.id != body_block =>
+            {
                 Some(block.id)
             }
             _ => None,
