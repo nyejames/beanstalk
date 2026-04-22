@@ -284,7 +284,7 @@ impl RuntimeEngine {
                             message: "Modulo by zero".to_owned(),
                         });
                     }
-                    Value::Int(l % r)
+                    Value::Int(l.rem_euclid(r))
                 }
                 (Value::Float(l), Value::Float(r)) => {
                     if r == 0.0 {
@@ -292,7 +292,7 @@ impl RuntimeEngine {
                             message: "Modulo by zero".to_owned(),
                         });
                     }
-                    Value::Float(l % r)
+                    Value::Float(l.rem_euclid(r))
                 }
                 (l, r) => {
                     return Err(InterpreterBackendError::Execution {

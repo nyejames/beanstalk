@@ -240,7 +240,11 @@ impl<'hir> JsEmitter<'hir> {
             HirBinOp::Sub => "-",
             HirBinOp::Mul => "*",
             HirBinOp::Div => "/",
-            HirBinOp::Mod => "%",
+            HirBinOp::Mod => {
+                return Ok(format!(
+                    "(() => {{ const __lhs = {left}; const __rhs = {right}; if (__rhs === 0) {{ throw new Error(\"Modulus by zero\"); }} return ((__lhs % __rhs) + Math.abs(__rhs)) % Math.abs(__rhs); }})()"
+                ));
+            }
             HirBinOp::Eq => "===",
             HirBinOp::Ne => "!==",
             HirBinOp::Lt => "<",

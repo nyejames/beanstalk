@@ -299,6 +299,30 @@ fn lower_binary_expression(
                 ))),
             }
         }
+        HirBinOp::Mod => {
+            if lhs_abi != rhs_abi {
+                return Err(lir_transformation_error(format!(
+                    "Wasm lowering does not support Mod for mismatched ABI types {lhs_abi:?} and {rhs_abi:?}"
+                )));
+            }
+            match lhs_abi {
+                WasmAbiType::I64 => {
+                    let dst = context.alloc_temp(WasmAbiType::I64);
+                    statements.push(WasmLirStmt::IntMod {
+                        dst,
+                        lhs: lhs.value,
+                        rhs: rhs.value,
+                    });
+                    Ok(ExprLoweringOutput {
+                        value: dst,
+                        prefer_move: false,
+                    })
+                }
+                _ => Err(lir_transformation_error(format!(
+                    "Wasm lowering does not support Mod for ABI type {lhs_abi:?}"
+                ))),
+            }
+        }
         _ => Err(lir_transformation_error(format!(
             "Wasm lowering does not yet support binary operator {op:?}"
         ))),

@@ -110,6 +110,11 @@ pub(crate) enum WasmLirStmt {
         lhs: WasmLirLocalId,
         rhs: WasmLirLocalId,
     },
+    IntMod {
+        dst: WasmLirLocalId,
+        lhs: WasmLirLocalId,
+        rhs: WasmLirLocalId,
+    },
     FloatAdd {
         dst: WasmLirLocalId,
         lhs: WasmLirLocalId,

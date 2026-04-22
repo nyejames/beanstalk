@@ -9,7 +9,7 @@ use crate::backends::wasm::lir::types::{
 use crate::backends::wasm::runtime::strings::WasmRuntimeHelper;
 use crate::compiler_frontend::compiler_messages::compiler_errors::{CompilerError, ErrorType};
 use rustc_hash::FxHashMap;
-use wasm_encoder::{BlockType, Function, Instruction};
+use wasm_encoder::{BlockType, Function, Instruction, ValType};
 
 pub(crate) struct LirBodyEmitContext<'a> {
     pub function_id: WasmLirFunctionId,
@@ -203,6 +203,38 @@ pub(crate) fn emit_statement(
         WasmLirStmt::IntSub { dst, lhs, rhs } => {
             emit_numeric_sub(function, *lhs, *rhs, context, NumericSubKind::Int)?;
             function.instruction(&Instruction::LocalSet(local_index(*dst, context)?));
+        }
+        WasmLirStmt::IntMod { dst, lhs, rhs } => {
+            let dst_idx = local_index(*dst, context)?;
+            let lhs_idx = local_index(*lhs, context)?;
+            let rhs_idx = local_index(*rhs, context)?;
+
+            // rem = lhs rem_s rhs  (signed/truncating remainder)
+            function.instruction(&Instruction::LocalGet(lhs_idx));
+            function.instruction(&Instruction::LocalGet(rhs_idx));
+            function.instruction(&Instruction::I64RemS);
+            function.instruction(&Instruction::LocalSet(dst_idx));
+
+            // Euclidean correction: if rem < 0, add abs(rhs)
+            function.instruction(&Instruction::LocalGet(dst_idx));
+            function.instruction(&Instruction::I64Const(0));
+            function.instruction(&Instruction::I64LtS);
+            function.instruction(&Instruction::If(BlockType::Empty));
+            function.instruction(&Instruction::LocalGet(dst_idx));
+            // Compute abs(rhs): rhs < 0 ? (0 - rhs) : rhs
+            function.instruction(&Instruction::LocalGet(rhs_idx));
+            function.instruction(&Instruction::I64Const(0));
+            function.instruction(&Instruction::I64LtS);
+            function.instruction(&Instruction::If(BlockType::Result(ValType::I64)));
+            function.instruction(&Instruction::I64Const(0));
+            function.instruction(&Instruction::LocalGet(rhs_idx));
+            function.instruction(&Instruction::I64Sub);
+            function.instruction(&Instruction::Else);
+            function.instruction(&Instruction::LocalGet(rhs_idx));
+            function.instruction(&Instruction::End);
+            function.instruction(&Instruction::I64Add);
+            function.instruction(&Instruction::LocalSet(dst_idx));
+            function.instruction(&Instruction::End);
         }
         WasmLirStmt::FloatAdd { dst, lhs, rhs } => {
             emit_numeric_add(function, *lhs, *rhs, context, NumericAddKind::Float)?;

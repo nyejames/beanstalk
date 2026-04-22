@@ -1074,6 +1074,11 @@ path = "mixed_numeric_literals"
 tags = ["integration","language"]
 
 [[case]]
+id = "modulus_operator"
+path = "modulus_operator"
+tags = ["integration","language"]
+
+[[case]]
 id = "multi_bind_explicit_types_and_mutability"
 path = "multi_bind_explicit_types_and_mutability"
 tags = ["integration","results"]
