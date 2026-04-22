@@ -1,10 +1,12 @@
 # Compilation
-## What is this compiler?
-- A high-level language with templates as first-class citizens 
-- Near-term target is a stable JS backend/build system for static pages and JS output. Wasm remains the long-term primary target.
-- Build systems can use the compiler up through HIR (and borrow checking) and then apply their own codegen for any backend, including potential Rust-interpreter-backed builds.
-- A modular compiler exposed as a library, plus a build system, dev server and CLI that assemble single-file and multi-file projects into runnable bundles.
-- Ownership treated as an optimisation (GC is the fallback).
+Beanstalk is high-level language with string templates as first-class citizens.
+The compiler is modular and exposed as a library. The project also has a build system and tooling (dev server / CLI) built-in.
+
+The near-term target is a stable JS backend/build system for static pages and JS output. Wasm remains the long-term primary target.
+
+Build systems can use the compiler up through HIR (and borrow checking) and then apply their own codegen for any backend, including potential Rust-interpreter-backed builds. They assemble single-file and multi-file projects into runnable bundles.
+
+Beanstalk has a borrow checker, but ownership is treated as an optimisation (GC is the fallback). See `docs\memory-management-design.md` for more details.
 
 ### Frontend structure at a glance
 - `src/compiler_frontend/mod.rs` wires stages together
@@ -49,24 +51,20 @@ pub struct ProjectBuilder {
 ```
 
 Build and diagnostic path handling:
-- Each top-level build/config-parse lifecycle creates one shared mutable `StringTable`.
-- Stage 0 config loading, frontend compilation, backend validation/build, and final diagnostic rendering all reuse that same table.
-- `SourceLocation` stores an interned scope/path, not an owned diagnostic `PathBuf`.
-- Rendering and filesystem-adjacent code resolve `SourceLocation.scope` through the shared `StringTable`.
-- `BuildResult` and failed `CompilerMessages` own that table at the boundary so later output writing, terminal rendering, and dev-server reporting can still resolve paths consistently.
+- Each top-level build/config-parse lifecycle creates one shared mutable `StringTable`
+- Stage 0 config loading, frontend compilation, backend validation/build, and final diagnostic rendering all reuse that same table
+- `SourceLocation` stores an interned scope/path, not an owned diagnostic `PathBuf`
+- Rendering and filesystem-adjacent code resolve `SourceLocation.scope` through the shared `StringTable`
+- `BuildResult` and failed `CompilerMessages` own that table at the boundary so later output writing, terminal rendering, and dev-server reporting can still resolve paths consistently
 
-Project builders:
-- Decide how modules are interpreted
-- Decide how output files are structured
-- Select and run backend code generation
-- Emit artefacts (HTML, JS, Wasm, tooling output, etc.)
-- Optionally register additional frontend style directives
+Project builders decide how modules are interpreted and output files are structured,
+select and run backend code generation and emit artefacts (HTML, JS, Wasm, tooling output, etc.).
 
 Frontend style directives:
-- Compiler built-ins are always available.
-- Build systems can provide additional project-specific directives via `frontend_style_directives`.
-- Build systems cannot override frontend-owned directive names.
-- Tokenizer and template parsing use the same merged registry and reject unknown directives strictly.
+- Project builders can optionally register additional frontend style directives, but can't override frontend-owned directive names
+- Compiler built-ins are always available
+- Build systems can provide additional project-specific directives via `frontend_style_directives`
+- Tokenizer and template parsing use the same merged registry and reject unknown directives strictly
 
 Project builders do **not**:
 - Parse files
@@ -89,7 +87,6 @@ Since compile speed is a goal of the compiler, complex optimisations are left to
 ### Entry-page fragment interface
 
 Project builders are aware of:
-
 - the entry start function
 - compile-time top-level fragment metadata produced by AST
 - `module_constants` metadata in HIR
@@ -114,11 +111,11 @@ They are also useful for constant data that wants to be shared module wide.
 ]
 ```
 
--- `#[...]` is a top-level const template.
--- Top-level const templates are entry-file only.
--- They must fully fold at compile time.
--- Captures must be constant-only.
--- They become compile-time builder fragments, not HIR runtime fragments.
+- `#[...]` is a top-level const template.
+- Top-level const templates are entry-file only.
+- They must fully fold at compile time.
+- Captures must be constant-only.
+- They become compile-time builder fragments, not HIR runtime fragments.
 `#[html.head: [head_defaults]]`
 
 ## Pipeline Stages
