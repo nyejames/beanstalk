@@ -217,6 +217,50 @@ fn exported_constant_headers_are_parsed() {
 }
 
 #[test]
+fn malformed_children_wrapper_constant_initializer_reports_eof_delimiter_error() {
+    let result = parse_single_file_headers_with_entry(
+        "#broken = [$children([:<li>[$slot]</li>):\n<ul>[$slot]</ul>\n]\n",
+        "src/#page.bst",
+        "src/#page.bst",
+    );
+
+    assert!(
+        result.is_err(),
+        "unterminated '$children(..)' wrapper templates should fail instead of hanging"
+    );
+    let errors = result.err().expect("expected parse errors");
+
+    assert!(errors.iter().any(|error| {
+        error
+            .msg
+            .contains("Unexpected end of file while parsing declaration initializer")
+            && error.msg.contains("Missing ']'")
+    }));
+}
+
+#[test]
+fn malformed_nested_children_wrapper_constant_initializer_reports_eof_delimiter_error() {
+    let result = parse_single_file_headers_with_entry(
+        "#broken = [$children([:<tr>[$slot]</tr>):\n<table>\n    [$children([:<td>[$slot]</td>):[$slot]]\n</table>\n]\n",
+        "src/#page.bst",
+        "src/#page.bst",
+    );
+
+    assert!(
+        result.is_err(),
+        "nested unterminated '$children(..)' wrapper templates should fail instead of hanging"
+    );
+    let errors = result.err().expect("expected parse errors");
+
+    assert!(errors.iter().any(|error| {
+        error
+            .msg
+            .contains("Unexpected end of file while parsing declaration initializer")
+            && error.msg.contains("Missing ']'")
+    }));
+}
+
+#[test]
 fn exported_untyped_constant_has_no_strict_dependencies() {
     let headers = parse_single_file_headers("import @styles/docs/navbar\n#theme = navbar\n");
     let constant_header = headers

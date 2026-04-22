@@ -83,7 +83,7 @@ pub fn parse_declaration_syntax(
         }
     }
 
-    let initializer_tokens = collect_declaration_initializer_tokens(token_stream);
+    let initializer_tokens = collect_declaration_initializer_tokens(token_stream)?;
     if initializer_tokens.is_empty() {
         let var_name = string_table.resolve(name);
         return_rule_error!(
