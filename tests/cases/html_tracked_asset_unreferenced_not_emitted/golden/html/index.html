@@ -18,12 +18,6 @@
 
   --bst-font-size: 100%;
 
-  /* Default Background Colours */
-  --bst-bg-lightmode: #fff;
-  --bst-bg-darkmode: #13171f;
-  --bst-text-lightmode: #373c44;
-  --bst-text-darkmode: #e0e3e7;
-
   --bst-font-family-emoji: "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
   --bst-font-family-sans-serif: system-ui, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, Helvetica, Arial, "Helvetica Neue", sans-serif, var(--bst-font-family-emoji);
   --bst-font-family-monospace: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace, var(--bst-font-family-emoji);
@@ -365,22 +359,33 @@ body {
     }
 
     function __bs_collection_push(collection, value) {
-        if (Array.isArray(collection)) {
-            collection.push(value);
+        if (!Array.isArray(collection)) {
+            const err = __bs_make_error("InvalidArgument", "collection.expected_ordered_collection", "Collection push(...) expects an ordered collection", null, null);
+            return { tag: "err", value: err };
         }
+        collection.push(value);
+        return { tag: "ok", value: null };
     }
 
     function __bs_collection_remove(collection, index) {
-        if (Array.isArray(collection) && Number.isInteger(index) && index >= 0 && index < collection.length) {
-            collection.splice(index, 1);
+        if (!Array.isArray(collection)) {
+            const err = __bs_make_error("InvalidArgument", "collection.expected_ordered_collection", "Collection remove(...) expects an ordered collection", null, null);
+            return { tag: "err", value: err };
         }
+        if (!Number.isInteger(index) || index < 0 || index >= collection.length) {
+            const err = __bs_make_error("OutOfBounds", "collection.index_out_of_bounds", "Collection index out of bounds", null, null);
+            return { tag: "err", value: err };
+        }
+        collection.splice(index, 1);
+        return { tag: "ok", value: null };
     }
 
     function __bs_collection_length(collection) {
         if (!Array.isArray(collection)) {
-            return 0;
+            const err = __bs_make_error("InvalidArgument", "collection.expected_ordered_collection", "Collection length() expects an ordered collection", null, null);
+            return { tag: "err", value: err };
         }
-        return collection.length;
+        return { tag: "ok", value: collection.length };
     }
 
     function __bs_value_to_string(value) {

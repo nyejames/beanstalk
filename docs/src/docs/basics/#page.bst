@@ -149,11 +149,11 @@ import @styles/docs {navbar, title, section, palette, table, data, codeblock, co
         a_reference ~= a_collection
 
         -- a_reference is still a reference to the original collection
-        a_reference.push(5)
+        ~a_reference.push(5)
         io(a_collection) -- {1, 2, 3, 4, 5, 5}
 
-        a_collection.pull(a_collection.length() - 1)
-        io(a_collection) -- {23.0}
+        ~a_collection.remove(a_collection.length() - 1)
+        io(a_collection) -- {1, 2, 3, 4, 5}
     ]
 
     Expressions can span over multiple lines.

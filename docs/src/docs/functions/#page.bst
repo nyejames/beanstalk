@@ -119,7 +119,7 @@ import @styles/docs {navbar, title, section, palette, table, codeblock, theme_he
         map |items {Int}, f Fn(Int -> Int)| -> {Int}:
             result ~= {}
             loop items |item|:
-                result.push(f(item))
+                ~result.push(f(item))
             ;
             return result
         ;

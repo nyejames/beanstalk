@@ -11,7 +11,10 @@ use crate::compiler_frontend::hir::hir_nodes::{
     BlockId, HirExpression, HirExpressionKind, HirFunction, HirMatchArm, HirPattern, HirPlace,
     HirStatement, HirStatementKind, HirTerminator, LocalId,
 };
-use crate::compiler_frontend::host_functions::CallTarget;
+use crate::compiler_frontend::host_functions::{
+    CallTarget, COLLECTION_LENGTH_HOST_NAME, COLLECTION_PUSH_HOST_NAME,
+    COLLECTION_REMOVE_HOST_NAME,
+};
 
 impl<'hir> JsEmitter<'hir> {
     pub(crate) fn emit_block_statements(
@@ -51,15 +54,34 @@ impl<'hir> JsEmitter<'hir> {
 
                 let call = format!("{target_name}({})", args.join(", "));
 
+                // WHAT: collection helpers that are not get return Result carriers at the runtime
+                // level even though the frontend does not surface Result types for them. The backend
+                // must unwrap so errors are not silently swallowed.
+                // WHY: push/remove/length must be strict; silent no-ops hide user bugs.
+                let needs_propagation = matches!(
+                    target_name.as_str(),
+                    COLLECTION_PUSH_HOST_NAME | COLLECTION_REMOVE_HOST_NAME | COLLECTION_LENGTH_HOST_NAME
+                );
+
                 if let Some(result_local) = result {
                     let result_name = self.local_name(*result_local)?;
-                    if self.call_returns_alias_reference(target) {
-                        self.emit_line(&format!("__bs_assign_borrow({result_name}, {call});"));
+                    let rhs = if needs_propagation {
+                        format!("__bs_result_propagate({call})")
                     } else {
-                        self.emit_line(&format!("__bs_assign_value({result_name}, {call});"));
+                        call
+                    };
+                    if self.call_returns_alias_reference(target) {
+                        self.emit_line(&format!("__bs_assign_borrow({result_name}, {rhs});"));
+                    } else {
+                        self.emit_line(&format!("__bs_assign_value({result_name}, {rhs});"));
                     }
                 } else {
-                    self.emit_line(&format!("{call};"));
+                    let stmt = if needs_propagation {
+                        format!("__bs_result_propagate({call});")
+                    } else {
+                        format!("{call};")
+                    };
+                    self.emit_line(&stmt);
                 }
             }
 

@@ -54,6 +54,11 @@ The bang symbol ! is used for creating Result types and handling errors.
     value = my_list.get(5) err! (my_list.length() - 1):
         io("Index out of bounds error: ", err.message)
     ;
+
+    -- All collection methods enforce strict runtime validation.
+    -- push, remove, and length also validate inputs and produce structured errors
+    -- on invalid receivers or out-of-bounds indices. The backend handles
+    -- propagation automatically for these methods.
 ```
 
 ## Using the ? operator

@@ -227,6 +227,10 @@ items ~= {10, 20, 30}
 `collection.get(index)` returns `Result<Elem, Error>`, so value-position reads must be
 handled with `!` syntax.
 
+`push`, `remove`, and `length` enforce the same strict runtime contracts as `get`.
+Invalid receivers or out-of-bounds indices produce structured errors rather than
+silent no-ops; the backend handles propagation automatically for these methods.
+
 Both indexed write forms are supported:
 
 ```beanstalk

@@ -1,0 +1,33 @@
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = ["strict_contract first=10 len=3"]
+
+[[backends.html.artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain = [
+    "function __bs_collection_get(",
+    "function __bs_collection_push(",
+    "function __bs_collection_remove(",
+    "function __bs_collection_length(",
+]
+
+[[backends.html.artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain = [
+    "__bs_result_propagate(__bs_collection_push(",
+    "__bs_result_propagate(__bs_collection_remove(",
+    "__bs_result_propagate(__bs_collection_length(",
+]
+
+[[backends.html.artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain = [
+    "Collection push(...) expects an ordered collection",
+    "Collection remove(...) expects an ordered collection",
+    "Collection length() expects an ordered collection",
+    "Collection index out of bounds",
+]

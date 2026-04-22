@@ -19,27 +19,6 @@ These are the non-negotiable conditions for starting Alpha:
 
 ## Next Plans
 
-
-### Unify JS collection runtime semantics
-
-Make JS collection helper semantics strict and consistent
-
-The JS runtime currently treats collection operations inconsistently. __bs_collection_get returns structured Result errors for invalid collections and out-of-bounds access, while __bs_collection_push and __bs_collection_remove silently no-op and __bs_collection_length returns 0 for non-array inputs. This weakens the backend contract and can hide user bugs behind permissive JS behavior  ￼
-
-Todo
-
-* Decide one explicit semantic policy for JS collection helpers and document it
-* Make push, remove, and length follow the same error/contract style as get
-* Avoid silent no-ops for invalid collection operations unless this is explicitly part of the language semantics
-* Ensure runtime error values use the canonical builtin error shape and codes where appropriate
-* Add integration tests for:
-    * invalid receiver type for each collection helper
-    * out-of-bounds remove
-    * invalid index type
-    * length on invalid receiver
-    * success-path behavior for all collection helpers
-* Add backend contract tests that pin emitted JS helper behavior so this does not drift later
-
 ### Add integration tests for frontend rejection of invalid string coercion
 
 Todo
@@ -109,12 +88,15 @@ Todo
 
 The matrix already has broad collection coverage, but backend/runtime contract hardening is still worth deepening, especially around edge behavior  ￼
 
+Done
+
+* JS contract tests for all collection helpers (push, remove, length, get)
+* Integration cases for invalid receiver type and invalid index type (via artifact assertions)
+* Success-path integration coverage for all helpers
+
 Todo
 
-* Add JS contract tests for all collection helpers, not just get
 * Add integration cases for:
-    * invalid receiver type
-    * invalid index type
     * negative index
     * mutation through alias/reference paths
     * indexed write followed by readback

@@ -249,6 +249,11 @@ path = "collection_get_out_of_bounds"
 tags = ["integration","collections"]
 
 [[case]]
+id = "collection_helpers_strict_runtime_contract"
+path = "collection_helpers_strict_runtime_contract"
+tags = ["integration","collections","js-backend"]
+
+[[case]]
 id = "collection_indexed_write_end_to_end"
 path = "collection_indexed_write_end_to_end"
 tags = ["integration","collections"]

@@ -26,6 +26,10 @@ import @styles/docs {navbar, title, section, codeblock, codesnippet, theme_head}
 
     `get(index)` returns a `Result<Elem, Error>`, so it must be handled with `!` in value position.
 
+    `push`, `remove`, and `length` enforce the same strict runtime validation as `get`.
+    Invalid receivers or out-of-bounds indices produce structured errors rather than silent no-ops.
+    The backend handles error propagation automatically for these methods.
+
     There may not be a runtime function call under the hood for these methods.
     The compiler lowers many collection built-ins directly.
 ]
@@ -64,7 +68,7 @@ import @styles/docs {navbar, title, section, codeblock, codesnippet, theme_head}
         fruit_array.get(0) = "pineapple"
 
         picked = fruit_array.get(0) ! "fallback-fruit"
-        count = fruit_array.length() -- returns an Int
+        count = fruit_array.length() -- returns an Int (strictly validated at runtime)
 
         ~fruit_array.push("orange")
         ~fruit_array.remove(2)
