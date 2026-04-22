@@ -222,11 +222,10 @@ impl<'a> AstBuildState<'a> {
 
         #[cfg(feature = "detailed_timers")]
         saying::say!(
-            "AST/type resolution/constants deferred summary: rounds={}, headers attempted={}, headers deferred={}, declaration snapshot rebuilds={}",
-            total_rounds,
-            total_headers_attempted,
-            total_deferred_headers,
-            total_snapshot_rebuilds
+            "AST/type resolution/constants deferred summary: \n rounds = ", Dark Green total_rounds,
+            Reset "\n headers attempted = ", Dark Green total_headers_attempted,
+            Reset "\n headers deferred = ", Dark Green total_deferred_headers,
+            Reset "\n declaration snapshot rebuilds = ", Dark Green total_snapshot_rebuilds
         );
 
         resolution_result

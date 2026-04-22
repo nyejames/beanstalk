@@ -376,11 +376,10 @@ impl<'a> AstBuildState<'a> {
                 total_const_template_fold_time,
             );
             saying::say!(
-                "AST/node emission/headers emitted: functions = {}, starts = {}, structs = {}, const templates = {}",
-                function_headers_emitted,
-                start_headers_emitted,
-                struct_headers_emitted,
-                const_templates_emitted
+                "AST/node emission/headers emitted: \n functions = ", Dark Green function_headers_emitted , 
+                Reset "\n starts = ", Dark Green start_headers_emitted, 
+                Reset "\n structs = ", Dark Green struct_headers_emitted, 
+                Reset "\n const templates = ", Dark Green const_templates_emitted
             );
         }
 
