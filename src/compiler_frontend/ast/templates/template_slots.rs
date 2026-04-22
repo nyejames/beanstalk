@@ -70,6 +70,13 @@ impl SlotContributions {
     }
 }
 
+#[derive(Clone, Debug)]
+struct SlotInsertContribution {
+    target: SlotKey,
+    atoms: Vec<TemplateAtom>,
+    location: SourceLocation,
+}
+
 /// Composes a wrapper template by filling its slots with the provided content.
 ///
 /// WHAT:
@@ -103,20 +110,25 @@ pub(crate) fn compose_template_with_slots(
     for atom in fill_content.atoms {
         let (loose_atom, slot_inserts) = split_fill_atom_for_composition(atom);
 
-        for (target, inserted_atoms) in slot_inserts {
+        for slot_insert in slot_inserts {
+            let SlotInsertContribution {
+                target,
+                atoms,
+                location,
+            } = slot_insert;
             if !slot_schema.accepts_target(&target) {
-                return unknown_slot_target_error(&target, location);
+                return unknown_slot_target_error(&target, &location, string_table);
             }
 
             match target {
                 SlotKey::Default => {
-                    contributions.default_atoms.extend(inserted_atoms);
+                    contributions.default_atoms.extend(atoms);
                 }
                 SlotKey::Named(name) => {
-                    contributions.extend_named_atoms(name, inserted_atoms);
+                    contributions.extend_named_atoms(name, atoms);
                 }
                 SlotKey::Positional(index) => {
-                    contributions.extend_positional_atoms(index, inserted_atoms);
+                    contributions.extend_positional_atoms(index, atoms);
                 }
             }
         }
@@ -611,12 +623,16 @@ fn contribution_location(atom: &TemplateAtom) -> SourceLocation {
     }
 }
 
-fn slot_insert_from_atom(atom: &TemplateAtom) -> Option<(SlotKey, &TemplateContent)> {
+fn slot_insert_from_atom(atom: &TemplateAtom) -> Option<SlotInsertContribution> {
     match atom {
         TemplateAtom::Slot(_) => None,
         TemplateAtom::Content(segment) => match &segment.expression.kind {
             ExpressionKind::Template(template) => match &template.kind {
-                TemplateType::SlotInsert(target) => Some((target.to_owned(), &template.content)),
+                TemplateType::SlotInsert(target) => Some(SlotInsertContribution {
+                    target: target.to_owned(),
+                    atoms: template.content.atoms.clone(),
+                    location: template.location.to_owned(),
+                }),
                 _ => None,
             },
             _ => None,
@@ -626,8 +642,8 @@ fn slot_insert_from_atom(atom: &TemplateAtom) -> Option<(SlotKey, &TemplateConte
 
 fn split_fill_atom_for_composition(
     atom: TemplateAtom,
-) -> (Option<TemplateAtom>, Vec<(SlotKey, Vec<TemplateAtom>)>) {
-    let Some((target, slot_insert_content)) = slot_insert_from_atom(&atom) else {
+) -> (Option<TemplateAtom>, Vec<SlotInsertContribution>) {
+    let Some(slot_insert) = slot_insert_from_atom(&atom) else {
         let TemplateAtom::Content(mut segment) = atom else {
             return (Some(atom), Vec::new());
         };
@@ -658,20 +674,20 @@ fn split_fill_atom_for_composition(
         return (Some(TemplateAtom::Content(segment)), extracted_inserts);
     };
 
-    (None, vec![(target, slot_insert_content.atoms.clone())])
+    (None, vec![slot_insert])
 }
 
 fn collect_direct_slot_insert_contributions(
     mut template: Template,
-) -> (Template, Vec<(SlotKey, Vec<TemplateAtom>)>) {
+) -> (Template, Vec<SlotInsertContribution>) {
     let mut sanitized_atoms = Vec::with_capacity(template.content.atoms.len());
     let mut extracted = Vec::new();
 
     // Only direct child `$insert(...)` helpers are extracted here. Nested descendants
     // are left untouched so they cannot bypass immediate-parent slot scoping.
     for atom in template.content.atoms {
-        if let Some((target, slot_insert_content)) = slot_insert_from_atom(&atom) {
-            extracted.push((target, slot_insert_content.atoms.clone()));
+        if let Some(slot_insert) = slot_insert_from_atom(&atom) {
+            extracted.push(slot_insert);
             continue;
         }
 
@@ -711,6 +727,7 @@ fn loose_content_without_default_slot_error(
 fn unknown_slot_target_error(
     target: &SlotKey,
     location: &SourceLocation,
+    string_table: &StringTable,
 ) -> Result<TemplateContent, CompilerError> {
     match target {
         SlotKey::Default => {
@@ -719,9 +736,13 @@ fn unknown_slot_target_error(
                 location.to_owned()
             )
         }
-        SlotKey::Named(_) => {
+        SlotKey::Named(name) => {
+            let slot_name = string_table.resolve(*name);
             return_rule_error!(
-                "'$insert(\"name\")' targets a named slot that does not exist on the immediate parent template.",
+                format!(
+                    "'$insert(\"{}\")' targets a named slot that does not exist on the immediate parent template.",
+                    slot_name
+                ),
                 location.to_owned()
             )
         }

@@ -585,53 +585,59 @@ runtime_rows = build_runtime_rows()
 runtime_matrix = build_runtime_matrix()
 runtime_summary = build_runtime_summary()
 
-body_insert = [$insert("body"):
-    [page:
-        [hero_card]
-        [compile_card_a]
-        [compile_card_b]
-        [compile_card_c]
-        [compile_card_d]
-        [runtime_summary]
-
-        [card, $insert("head"):
-            [section_title, accent_title_3:
-                Runtime grid output
-            ]
-        ] 
-        
-        [$insert("foot"):
-            built from a collection of structs and a receiver method call in a loop
-        ]:
-            [runtime_grid]
-        ]
-
-        [card, $insert("head"):
-            [section_title, accent_title:
-                Runtime rows output
-            ]
-        ]
-        
-        [$insert("foot"):
-            built from a numeric loop with repeated runtime template rebuilding
-        ]:
-            [runtime_rows]
-        ]
-
-        [card, $insert("head"):
-            [section_title, accent_title_2:
-                Runtime matrix output
-            ]
-        ]
-        
-        [$insert("foot"):
-            built from nested loops for extra AST body parsing and template work
-        ]:
-            [runtime_matrix]
-        ]
+# runtime_grid_head = [$insert("head"):
+    [section_title, accent_title_3:
+        Runtime grid output
     ]
 ]
 
-[page_shell, global_styles, body_insert:
+# runtime_grid_foot = [$insert("foot"):
+    built from a collection of structs and a receiver method call in a loop
+]
+
+# runtime_rows_head = [$insert("head"):
+    [section_title, accent_title:
+        Runtime rows output
+    ]
+]
+
+# runtime_rows_foot = [$insert("foot"):
+    built from a numeric loop with repeated runtime template rebuilding
+]
+
+# runtime_matrix_head = [$insert("head"):
+    [section_title, accent_title_2:
+        Runtime matrix output
+    ]
+]
+
+# runtime_matrix_foot = [$insert("foot"):
+    built from nested loops for extra AST body parsing and template work
+]
+
+[page_shell, global_styles:
     [page_title]
+
+    [$insert("body"):
+        [page:
+            [hero_card]
+            [compile_card_a]
+            [compile_card_b]
+            [compile_card_c]
+            [compile_card_d]
+            [runtime_summary]
+
+            [card, runtime_grid_head, runtime_grid_foot:
+                [runtime_grid]
+            ]
+
+            [card, runtime_rows_head, runtime_rows_foot:
+                [runtime_rows]
+            ]
+
+            [card, runtime_matrix_head, runtime_matrix_foot:
+                [runtime_matrix]
+            ]
+        ]
+    ]
 ]

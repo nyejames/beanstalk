@@ -445,11 +445,9 @@ pub fn get_token_kind(
         }
 
         if current_char == '%' {
-            if let Some(&next_char) = stream.peek() {
-                if next_char == '=' {
-                    stream.next();
-                    return_token!(TokenKind::ModulusAssign, stream);
-                }
+            if let Some(&next_char) = stream.peek() && next_char == '=' {
+                stream.next();
+                return_token!(TokenKind::ModulusAssign, stream);
             }
 
             return_token!(TokenKind::Modulus, stream);
