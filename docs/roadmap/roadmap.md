@@ -18,8 +18,6 @@ These are the non-negotiable conditions for starting Alpha:
 - The documentation site (written in beanstalk) inside the docs directory should be able to render a complete and good looking docs website fully using the Beanstalk pipeline. This will be the final testing ground for whether the language feels "ready" to be alpha.
 
 ## Next Plans
-- 2 remaining windows test failures `docs\roadmap\plans\windows-failure.md`
-
 
 ### JS backend jump argument lowering
 

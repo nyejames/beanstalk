@@ -839,7 +839,12 @@ fn tokenize_template_body(
     stream: &mut TokenStream<'_>,
     string_table: &mut StringTable,
 ) -> Result<Token, CompilerError> {
-    let mut token_value = String::from(current_char);
+    let mut token_value = String::new();
+    if current_char == '\r' {
+        token_value.push_str(normalize_consumed_carriage_return_newline(stream));
+    } else {
+        token_value.push(current_char);
+    }
 
     // Currently should be at the character that started the String
     while let Some(ch) = stream.peek() {

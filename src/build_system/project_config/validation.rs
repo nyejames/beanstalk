@@ -332,7 +332,7 @@ fn validate_root_folder_path(
         return Err(error);
     }
 
-    if root_folder.is_absolute() {
+    if root_folder.is_absolute() || root_folder.as_os_str().to_string_lossy().starts_with('/') {
         let mut error = CompilerError::new(
             format!(
                 "Invalid '#root_folders' entry '{}'. Root folders must be relative to the project root.",

@@ -50,9 +50,15 @@ pub fn normalize_path(path: &Path) -> PathBuf {
 
         if let Some(Component::Prefix(prefix)) = components.next() {
             match prefix.kind() {
-                Prefix::VerbatimDisk(_) => {
+                Prefix::VerbatimDisk(disk) => {
                     // Strip \\?\C:\ → C:\
-                    return components.as_path().to_path_buf();
+                    let mut new_path = PathBuf::from(format!("{}:", disk as char));
+                    for component in components {
+                        if let Component::Normal(name) = component {
+                            new_path.push(name);
+                        }
+                    }
+                    return new_path;
                 }
                 Prefix::VerbatimUNC(server, share) => {
                     // Convert \\?\UNC\server\share → \\server\share
