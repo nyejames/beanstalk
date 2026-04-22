@@ -123,6 +123,8 @@ Infinite loops require no destruction unless they can exit.
 ## Unified ABI (Deferred Responsibility)
 Beanstalk is designed to support a unified ABI when ownership lowering is active. It deliberately avoids generating separate functions for borrowed vs owned arguments.
 
+The amount that this runtime ABI vs a purely static approach will be used is unclear until the language is tested with both.
+
 Function signatures make no distinction between a mutable reference or a move (owned value). Instead, all function calls use a single ABI:
 
 * Arguments are passed as tagged pointers.

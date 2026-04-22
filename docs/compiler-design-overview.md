@@ -75,14 +75,14 @@ Project builders do **not**:
 Since compile speed is a goal of the compiler, complex optimisations are left to external tools for release builds only.
 
 **Entry Point Semantics**:
-- The module entry file has an implicit `start` function containing its top-level runtime code.
-- Non-entry files do not participate in entry execution and cannot contain top-level executable code.
-- Header parsing represents the entry file’s top-level runtime code as `HeaderKind::StartFunction`.
-- The implicit entry `start` header is not part of dependency sorting.
-- After top-level declaration headers are dependency-sorted, the entry `start` header is appended last and lowered by AST.
-- Entry-file top-level runtime templates are evaluated inside that entry `start` function in source order.
-- Entry-file top-level const templates are folded separately and exposed to project builders as compile-time fragment metadata.
-- The entry `start` function returns the runtime fragment strings (`Vec<String>`) for the page in source order.
+- The module entry file has an implicit `start` function containing its top-level runtime code
+- Non-entry files do not participate in entry execution and cannot contain top-level executable code
+- Header parsing represents the entry file’s top-level runtime code as `HeaderKind::StartFunction`
+- The implicit entry `start` header is not part of dependency sorting
+- After top-level declaration headers are dependency-sorted, the entry `start` header is appended last and lowered by AST
+- Entry-file top-level runtime templates are evaluated inside that entry `start` function in source order
+- Entry-file top-level const templates are folded separately and exposed to project builders as compile-time fragment metadata
+- The entry `start` function returns the runtime fragment strings (`Vec<String>`) for the page in source order
 
 ### Entry-page fragment interface
 
@@ -111,11 +111,11 @@ They are also useful for constant data that wants to be shared module wide.
 ]
 ```
 
-- `#[...]` is a top-level const template.
-- Top-level const templates are entry-file only.
-- They must fully fold at compile time.
-- Captures must be constant-only.
-- They become compile-time builder fragments, not HIR runtime fragments.
+- `#[...]` is a top-level const template
+- Top-level const templates are entry-file only
+- They must fully fold at compile time
+- Captures must be constant-only
+- They become compile-time builder fragments, not HIR runtime fragments
 `#[html.head: [head_defaults]]`
 
 ## Pipeline Stages
@@ -174,11 +174,11 @@ Does not parse anything in function bodies beyond capturing their token streams 
 
 - **Top-Level Declaration Discovery**: Header parsing is the only stage that discovers module-wide top-level declarations.
 - **Declaration Parsing**: Top-level Function signatures, exported constant declarations and structs/choices are parsed here.
-- **Strict Dependency Edge Collection**: Header parsing collects strict top-level dependency edges.
-- **Implicit Entry Start Capture**: Entry-file top-level executable code is collected into a `HeaderKind::StartFunction` header for later AST lowering.
-- **Import Collection**: Imports needed by top-level declarations are collected here for top-level dependency analysis.
-- **Top-Level Const Fragments**: Entry-file top-level const templates are recorded as ordered compile-time fragment headers.
-- **Runtime Fragment Counting**: Entry-file top-level runtime templates remain in the entry `start` body, while header parsing tracks how many runtime fragments precede each const fragment so builders can merge outputs correctly.
+- **Strict Dependency Edge Collection**: Header parsing collects strict top-level dependency edges
+- **Implicit Entry Start Capture**: Entry-file top-level executable code is collected into a `HeaderKind::StartFunction` header for later AST lowering
+- **Import Collection**: Imports needed by top-level declarations are collected here for top-level dependency analysis
+- **Top-Level Const Fragments**: Entry-file top-level const templates are recorded as ordered compile-time fragment headers
+- **Runtime Fragment Counting**: Entry-file top-level runtime templates remain in the entry `start` body, while header parsing tracks how many runtime fragments precede each const fragment so builders can merge outputs correctly
 
 Exported constants are parsed as top-level declarations. Their declared type shape is header-owned, the AST later resolves and validates the initializer. Top-level struct field shapes and choice variant shapes are fully parsed in the header stage, but validated and type checked at the AST stage.
 
@@ -202,19 +202,19 @@ Consumes the already-shaped, already-sorted top-level headers and the header-own
 AST resolves and validates those headers, enforces file-local import visibility, lowers executable bodies, and prepares templates for HIR.
 It does not rediscover top-level symbols or reparse top-level declaration shells.
 
-- **Import Visibility**: AST resolves per-file import visibility while still using the shared module-wide top-level symbol package.
-- **Top-Level Resolution**: AST resolves and validates constants, struct field types, and function signatures from the parsed header payloads.
-- **Body Parsing**: Function bodies and the entry `start` body are parsed and lowered here.
-- **Local Scope Growth**: Executable bodies register local declarations incrementally in source order. Body-local declarations reuse shared declaration syntax, but top-level declaration shells remain header-owned.
-- **Namespace Resolution**: Variables keep full scoped paths, and uniqueness is enforced by scope rules rather than post-hoc recollection.
-- **Template Preparation**: AST performs template composition, compile-time folding, helper elimination, and runtime render-plan preparation before HIR.
+- **Import Visibility**: AST resolves per-file import visibility while still using the shared module-wide top-level symbol package
+- **Top-Level Resolution**: AST resolves and validates constants, struct field types, and function signatures from the parsed header payloads
+- **Body Parsing**: Function bodies and the entry `start` body are parsed and lowered here
+- **Local Scope Growth**: Executable bodies register local declarations incrementally in source order. Body-local declarations reuse shared declaration syntax, but top-level declaration shells remain header-owned
+- **Namespace Resolution**: Variables keep full scoped paths, and uniqueness is enforced by scope rules rather than post-hoc recollection
+- **Template Preparation**: AST performs template composition, compile-time folding, helper elimination, and runtime render-plan preparation before HIR
 
 **Top-level vs body parsing**
 
-- Top-level declaration parsing belongs to header parsing.
-- Executable body parsing belongs to AST construction.
-- Body-local declarations are parsed in source order during AST lowering of executable code.
-- Dependency sorting exists only to order top-level declarations before AST begins; it does not apply inside executable bodies.
+- Top-level declaration parsing belongs to header parsing
+- Executable body parsing belongs to AST construction
+- Body-local declarations are parsed in source order during AST lowering of executable code
+- Dependency sorting exists only to order top-level declarations before AST begins; it does not apply inside executable bodies
 
 Internally, AST runs in this order: resolve file import bindings, resolve constants and struct field types, resolve function signatures, build the receiver-method catalog, emit AST nodes for executable bodies, then finalize template and constant metadata for HIR and builders.
 
@@ -222,14 +222,14 @@ Internally, AST runs in this order: resolve file import bindings, resolve consta
 
 Generic expression evaluation determines the natural type of an expression and stays strict. Contextual promotion is applied afterwards by the frontend site that owns the boundary, such as a declaration or return slot.
 
-- `parse_expression.rs` and `eval_expression.rs` determine the natural type of expressions and enforce operator typing.
-- `type_coercion::compatibility` decides whether one type is accepted in another context.
-- `type_coercion::numeric` applies explicit contextual promotions such as Int -> Float.
-- `type_coercion::string` owns what can become string content at template boundaries.
-- Declarations and returns may apply coercion after expression parsing; generic expression evaluation itself stays strict.
-- `/` is an operator-owned rule: regular division always returns real numeric results, including `Int / Int -> Float`.
-- `//` is a separate operator-owned integer-division rule: it requires `Int // Int` and returns `Int`.
-- Int -> Float is supported in explicit declaration / return contexts only.
+- `parse_expression.rs` and `eval_expression.rs` determine the natural type of expressions and enforce operator typing
+- `type_coercion::compatibility` decides whether one type is accepted in another context
+- `type_coercion::numeric` applies explicit contextual promotions such as Int -> Float
+- `type_coercion::string` owns what can become string content at template boundaries
+- Declarations and returns may apply coercion after expression parsing; generic expression evaluation itself stays strict
+- `/` is an operator-owned rule: regular division always returns real numeric results, including `Int / Int -> Float`
+- `//` is a separate operator-owned integer-division rule: it requires `Int // Int` and returns `Int`
+- Int -> Float is supported in explicit declaration / return contexts only
 - function arguments and match patterns still require exact compatibility
 - Templates and template wrappers are accepted where string slices are expected because they lower to the same HIR/string representation
 - builtin casts like Float(x) / Int(x) remain explicit frontend-owned syntax
@@ -252,27 +252,27 @@ The AST consumes the parsed exported-constant directly and type-checks the initi
 - Expressions are converted to **Reverse Polish Notation (RPN)** for evaluation
 
 #### Templates
-- Templates fully resolved at the AST stage become string literals before HIR.
-- Templates requiring runtime evaluation remain runtime template expressions and are lowered normally inside function bodies.
-- AST owns template composition, compile-time folding, helper elimination, and render-plan construction.
-- HIR only lowers finalized runtime templates that remain after AST folding.
+- Templates fully resolved at the AST stage become string literals before HIR
+- Templates requiring runtime evaluation remain runtime template expressions and are lowered normally inside function bodies
+- AST owns template composition, compile-time folding, helper elimination, and render-plan construction
+- HIR only lowers finalized runtime templates that remain after AST folding
 
 **Top-level templates**
-- Entry-file top-level const templates are folded in AST.
-- Folded top-level const templates are exposed as builder-facing compile-time fragment metadata.
+- Entry-file top-level const templates are folded in AST
+- Folded top-level const templates are exposed as builder-facing compile-time fragment metadata
 - Each compile-time top-level fragment stores a **runtime insertion index** describing where it should be merged into the final runtime fragment list.
-- Entry-file top-level runtime templates remain ordinary runtime code inside the entry `start()` function.
-- AST does not synthesize standalone runtime fragment wrapper functions for top-level templates.
-- AST does not perform top-level runtime template capture replay or start-body pruning as part of template generation.
-- The entry `start()` function returns `Vec<String>` containing runtime top-level fragment results in source order.
-- Builders merge compile-time fragments into that returned runtime list using the recorded insertion indices.
+- Entry-file top-level runtime templates remain ordinary runtime code inside the entry `start()` function
+- AST does not synthesize standalone runtime fragment wrapper functions for top-level templates
+- AST does not perform top-level runtime template capture replay or start-body pruning as part of template generation
+- The entry `start()` function returns `Vec<String>` containing runtime top-level fragment results in source order
+- Builders merge compile-time fragments into that returned runtime list using the recorded insertion indices
 
 **General template rules**
-- Partial compile-time folding inside a runtime template is normal and expected.
-- Wrapper/slot composition is AST-time machinery only.
-- Wrapper-shaped final templates are not automatically compile-time constants.
-- The deciding rule is whether the final template value still depends on runtime expressions.
-- Raw slot-insert/helper artifacts are not stable program values and must not survive past AST composition.
+- Partial compile-time folding inside a runtime template is normal and expected
+- Wrapper/slot composition is AST-time machinery only
+- Wrapper-shaped final templates are not automatically compile-time constants
+- The deciding rule is whether the final template value still depends on runtime expressions
+- Raw slot-insert/helper artifacts are not stable program values and must not survive past AST composition
 
 **Runtime Expressions**: When expressions cannot be folded at compile time:
 - Variables, function calls or complex operations become `ExpressionKind::Runtime(Vec<AstNode>)`
@@ -308,21 +308,21 @@ HIR is the first stage where resource lifetime semantics are made explicit, but 
 - Expression trees remain nested for ordinary operators and value construction
 
 **Template Boundary**
-- HIR assumes template inputs are already semantically complete.
-- HIR does not fold templates or reconstruct missing template plans.
-- HIR lowers remaining runtime templates as ordinary runtime expressions inside function bodies.
-- Top-level const page fragments do not pass through HIR.
+- HIR assumes template inputs are already semantically complete
+- HIR does not fold templates or reconstruct missing template plans
+- HIR lowers remaining runtime templates as ordinary runtime expressions inside function bodies
+- Top-level const page fragments do not pass through HIR
 
 **Entry Start Runtime Output**
-- HIR lowers the entry `start()` function normally.
-- The entry `start()` function returns the runtime fragment strings for the page in source order.
-- HIR does not carry compile-time top-level fragment placement metadata.
-- Builder-facing compile-time fragment ordering is resolved before HIR and stays outside the HIR data model.
+- HIR lowers the entry `start()` function normally
+- The entry `start()` function returns the runtime fragment strings for the page in source order
+- HIR does not carry compile-time top-level fragment placement metadata
+- Builder-facing compile-time fragment ordering is resolved before HIR and stays outside the HIR data model
 
 **Module Constant Pool**
-- HIR exposes `module_constants` as compile-time metadata.
-- Module constants are not lowered as runtime top-level statements.
-- Backends/builders can consume `module_constants` for tooling or codegen decisions.
+- HIR exposes `module_constants` as compile-time metadata
+- Module constants are not lowered as runtime top-level statements
+- Backends/builders can consume `module_constants` for tooling or codegen decisions
 
 **Last-Use–Oriented Semantics**
 - HIR does not model exact lifetimes
@@ -341,9 +341,9 @@ HIR is the first stage where resource lifetime semantics are made explicit, but 
 - Fresh rvalues passed to mutable (`~T`) call slots are materialized as compiler-introduced hidden locals, then passed as ordinary `Load(Local(...))` call arguments
 
 #### Host Calls
-- Builtins such as `io` are preserved as explicit call nodes.
-- HIR assumes required host imports exist.
-- No abstraction layer exists between HIR and host calls.
+- Builtins such as `io` are preserved as explicit call nodes
+- HIR assumes required host imports exist
+- No abstraction layer exists between HIR and host calls
 
 ## Stage 6: Borrow Validation (`src/compiler_frontend/analysis/borrow_checker/`)
 Statically determines which values are not managed by the GC heap.
@@ -355,8 +355,8 @@ Whether a drop actually happens is decided at runtime via ownership flags OR whe
 - Require ownership to be statically resolved
 
 Borrow validation is a mandatory frontend phase for backend semantic parity:
-- Programs that violate borrow/exclusivity rules are rejected before backend lowering.
-- Programs that pass borrow validation can additionally be optimized for non-GC lowering in capable backends.
+- Programs that violate borrow/exclusivity rules are rejected before backend lowering
+- Programs that pass borrow validation can additionally be optimized for non-GC lowering in capable backends
 
 The borrow checker does not mutate the HIR, it produces side-table facts keyed by node / value IDs. HIR remains a stable semantic representation.
 Fresh mutable call arguments are already lowered into ordinary locals before this stage, so borrow validation does not need a dedicated special-case node kind.
