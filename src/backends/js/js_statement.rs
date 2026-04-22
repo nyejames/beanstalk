@@ -187,8 +187,33 @@ impl<'hir> JsEmitter<'hir> {
             return false;
         };
 
-        local_snapshot.mode.contains(LocalMode::ALIAS)
-            && !local_snapshot.mode.contains(LocalMode::SLOT)
+        Self::snapshot_local_is_alias_only(local_snapshot.mode)
+    }
+
+    pub(crate) fn local_is_alias_only_at_block_entry(
+        &self,
+        block_id: BlockId,
+        local_id: LocalId,
+    ) -> bool {
+        let Some(snapshot) = self
+            .borrow_analysis
+            .analysis
+            .block_entry_states
+            .get(&block_id)
+        else {
+            return false;
+        };
+
+        let Some(local_snapshot) = snapshot.locals.iter().find(|local| local.local == local_id)
+        else {
+            return false;
+        };
+
+        Self::snapshot_local_is_alias_only(local_snapshot.mode)
+    }
+
+    fn snapshot_local_is_alias_only(mode: LocalMode) -> bool {
+        mode.contains(LocalMode::ALIAS) && !mode.contains(LocalMode::SLOT)
     }
 
     fn call_returns_alias_reference(&self, target: &CallTarget) -> bool {
@@ -315,12 +340,7 @@ impl<'hir> JsEmitter<'hir> {
     ) -> Result<(), CompilerError> {
         match terminator {
             HirTerminator::Jump { target, args } => {
-                if !args.is_empty() {
-                    return Err(CompilerError::compiler_error(
-                        "JavaScript backend: Jump terminator args are not supported yet",
-                    ));
-                }
-
+                self.emit_jump_argument_transfer(*target, args)?;
                 self.emit_line(&format!("{state_identifier} = {};", target.0));
                 self.emit_line("continue;");
             }

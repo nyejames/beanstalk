@@ -3,7 +3,7 @@ use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::hir::hir_datatypes::{HirTypeKind, TypeId};
 use crate::compiler_frontend::hir::hir_nodes::{
-    BlockId, HirExpressionKind, HirTerminator, LocalId, ValueKind,
+    BlockId, HirExpressionKind, HirTerminator, ValueKind,
 };
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::return_hir_transformation_error;
@@ -48,7 +48,6 @@ impl<'a> HirBuilder<'a> {
         let condition_block = self.current_block_id_or_error(location)?;
         let parent_region = self.current_region_or_error(location)?;
         let bool_ty = self.intern_type_kind(HirTypeKind::Bool);
-        let result_local = self.allocate_temp_local(bool_ty, Some(location.to_owned()))?;
         let cfg_spec = self.short_circuit_cfg_spec(op, location)?;
 
         let rhs_region = self.create_child_region(parent_region);
@@ -56,6 +55,9 @@ impl<'a> HirBuilder<'a> {
         let rhs_block = self.create_block(rhs_region, location, cfg_spec.rhs_block_label)?;
         let short_block = self.create_block(short_region, location, cfg_spec.short_block_label)?;
         let merge_block = self.create_block(parent_region, location, cfg_spec.merge_block_label)?;
+        self.set_current_block(merge_block, location)?;
+        let result_local = self.allocate_temp_local(bool_ty, Some(location.to_owned()))?;
+        self.set_current_block(condition_block, location)?;
         let (then_block, else_block) = cfg_spec.branch_targets(rhs_block, short_block);
 
         self.emit_terminator(
@@ -71,14 +73,12 @@ impl<'a> HirBuilder<'a> {
         self.emit_short_circuit_rhs_branch(
             rhs_block,
             merge_block,
-            result_local,
             right,
             location,
             cfg_spec.rhs_edge_label,
         )?;
         self.emit_short_circuit_constant_branch(
             (short_block, merge_block),
-            result_local,
             cfg_spec.short_value,
             bool_ty,
             location,
@@ -135,7 +135,6 @@ impl<'a> HirBuilder<'a> {
         &mut self,
         rhs_block: BlockId,
         merge_block: BlockId,
-        result_local: LocalId,
         rhs: &RuntimeRpnTree,
         location: &SourceLocation,
         edge_label: &str,
@@ -146,11 +145,18 @@ impl<'a> HirBuilder<'a> {
         for statement in lowered_rhs.prelude {
             self.emit_statement_to_current_block(statement, location)?;
         }
-        self.emit_short_circuit_merge_assignment(result_local, lowered_rhs.value, location)?;
+        let merge_arg_local =
+            self.materialize_short_circuit_jump_argument_local(lowered_rhs.value, location)?;
 
         let rhs_tail = self.current_block_id_or_error(location)?;
         if !self.block_has_explicit_terminator(rhs_tail, location)? {
-            self.emit_jump_to(rhs_tail, merge_block, location, edge_label)?;
+            self.emit_jump_with_args(
+                rhs_tail,
+                merge_block,
+                vec![merge_arg_local],
+                location,
+                edge_label,
+            )?;
         }
 
         Ok(())
@@ -159,7 +165,6 @@ impl<'a> HirBuilder<'a> {
     fn emit_short_circuit_constant_branch(
         &mut self,
         branch_blocks: (BlockId, BlockId),
-        result_local: LocalId,
         short_value: bool,
         bool_ty: TypeId,
         location: &SourceLocation,
@@ -175,7 +180,14 @@ impl<'a> HirBuilder<'a> {
             ValueKind::Const,
             short_region,
         );
-        self.emit_short_circuit_merge_assignment(result_local, short_value_expression, location)?;
-        self.emit_jump_to(short_block, merge_block, location, edge_label)
+        let merge_arg_local =
+            self.materialize_short_circuit_jump_argument_local(short_value_expression, location)?;
+        self.emit_jump_with_args(
+            short_block,
+            merge_block,
+            vec![merge_arg_local],
+            location,
+            edge_label,
+        )
     }
 }

@@ -217,44 +217,56 @@ fn short_circuit_and_keeps_rhs_call_off_always_run_path() {
 
     let rhs_branch_block = &module.blocks[then_block.0 as usize];
     let short_branch_block = &module.blocks[else_block.0 as usize];
-    let rhs_merge_target = match rhs_branch_block.terminator {
-        HirTerminator::Jump { target, .. } => target,
+    let (rhs_merge_target, rhs_jump_args) = match &rhs_branch_block.terminator {
+        HirTerminator::Jump { target, args } => (*target, args.as_slice()),
         _ => panic!("rhs short-circuit branch should jump to merge block"),
     };
-    let short_merge_target = match short_branch_block.terminator {
-        HirTerminator::Jump { target, .. } => target,
+    let (short_merge_target, short_jump_args) = match &short_branch_block.terminator {
+        HirTerminator::Jump { target, args } => (*target, args.as_slice()),
         _ => panic!("short short-circuit branch should jump to merge block"),
     };
     assert_eq!(
         rhs_merge_target, short_merge_target,
         "short-circuit branches should rejoin at one merge block"
     );
-
-    let rhs_assign_local = rhs_branch_block
-        .statements
-        .iter()
-        .find_map(|statement| match &statement.kind {
-            HirStatementKind::Assign {
-                target: HirPlace::Local(local),
-                ..
-            } => Some(*local),
-            _ => None,
-        })
-        .expect("rhs branch should assign merge temp local");
-    let short_assign_local = short_branch_block
-        .statements
-        .iter()
-        .find_map(|statement| match &statement.kind {
-            HirStatementKind::Assign {
-                target: HirPlace::Local(local),
-                ..
-            } => Some(*local),
-            _ => None,
-        })
-        .expect("short branch should assign merge temp local");
     assert_eq!(
-        rhs_assign_local, short_assign_local,
-        "both short-circuit branches should write the same merge temp local"
+        rhs_jump_args.len(),
+        1,
+        "rhs short-circuit branch should pass one merge argument"
+    );
+    assert_eq!(
+        short_jump_args.len(),
+        1,
+        "short short-circuit branch should pass one merge argument"
+    );
+    assert!(
+        rhs_branch_block.statements.iter().any(|statement| {
+            matches!(
+                &statement.kind,
+                HirStatementKind::Assign {
+                    target: HirPlace::Local(local),
+                    ..
+                } if *local == rhs_jump_args[0]
+            )
+        }),
+        "rhs short-circuit branch should materialize its jump argument local"
+    );
+    assert!(
+        short_branch_block.statements.iter().any(|statement| {
+            matches!(
+                &statement.kind,
+                HirStatementKind::Assign {
+                    target: HirPlace::Local(local),
+                    ..
+                } if *local == short_jump_args[0]
+            )
+        }),
+        "short short-circuit branch should materialize its jump argument local"
+    );
+    let merge_block = &module.blocks[rhs_merge_target.0 as usize];
+    assert!(
+        !merge_block.locals.is_empty(),
+        "merge block should declare a destination local for branch arguments"
     );
 }
 
@@ -363,44 +375,56 @@ fn short_circuit_or_keeps_rhs_call_off_true_short_path() {
 
     let rhs_branch_block = &module.blocks[else_block.0 as usize];
     let short_branch_block = &module.blocks[then_block.0 as usize];
-    let rhs_merge_target = match rhs_branch_block.terminator {
-        HirTerminator::Jump { target, .. } => target,
+    let (rhs_merge_target, rhs_jump_args) = match &rhs_branch_block.terminator {
+        HirTerminator::Jump { target, args } => (*target, args.as_slice()),
         _ => panic!("rhs short-circuit branch should jump to merge block"),
     };
-    let short_merge_target = match short_branch_block.terminator {
-        HirTerminator::Jump { target, .. } => target,
+    let (short_merge_target, short_jump_args) = match &short_branch_block.terminator {
+        HirTerminator::Jump { target, args } => (*target, args.as_slice()),
         _ => panic!("short short-circuit branch should jump to merge block"),
     };
     assert_eq!(
         rhs_merge_target, short_merge_target,
         "short-circuit branches should rejoin at one merge block"
     );
-
-    let rhs_assign_local = rhs_branch_block
-        .statements
-        .iter()
-        .find_map(|statement| match &statement.kind {
-            HirStatementKind::Assign {
-                target: HirPlace::Local(local),
-                ..
-            } => Some(*local),
-            _ => None,
-        })
-        .expect("rhs branch should assign merge temp local");
-    let short_assign_local = short_branch_block
-        .statements
-        .iter()
-        .find_map(|statement| match &statement.kind {
-            HirStatementKind::Assign {
-                target: HirPlace::Local(local),
-                ..
-            } => Some(*local),
-            _ => None,
-        })
-        .expect("short branch should assign merge temp local");
     assert_eq!(
-        rhs_assign_local, short_assign_local,
-        "both short-circuit branches should write the same merge temp local"
+        rhs_jump_args.len(),
+        1,
+        "rhs short-circuit branch should pass one merge argument"
+    );
+    assert_eq!(
+        short_jump_args.len(),
+        1,
+        "short short-circuit branch should pass one merge argument"
+    );
+    assert!(
+        rhs_branch_block.statements.iter().any(|statement| {
+            matches!(
+                &statement.kind,
+                HirStatementKind::Assign {
+                    target: HirPlace::Local(local),
+                    ..
+                } if *local == rhs_jump_args[0]
+            )
+        }),
+        "rhs short-circuit branch should materialize its jump argument local"
+    );
+    assert!(
+        short_branch_block.statements.iter().any(|statement| {
+            matches!(
+                &statement.kind,
+                HirStatementKind::Assign {
+                    target: HirPlace::Local(local),
+                    ..
+                } if *local == short_jump_args[0]
+            )
+        }),
+        "short short-circuit branch should materialize its jump argument local"
+    );
+    let merge_block = &module.blocks[rhs_merge_target.0 as usize];
+    assert!(
+        !merge_block.locals.is_empty(),
+        "merge block should declare a destination local for branch arguments"
     );
 }
 
@@ -596,21 +620,28 @@ fn short_circuit_place_rhs_materializes_copy_before_merge_assignment() {
     };
 
     let rhs_branch_block = &module.blocks[rhs_block.0 as usize];
-    let rhs_merge_assignment = rhs_branch_block
+    let rhs_jump_arg_local = match &rhs_branch_block.terminator {
+        HirTerminator::Jump { args, .. } if args.len() == 1 => args[0],
+        _ => panic!("rhs short-circuit branch should jump with one merge argument"),
+    };
+    let rhs_jump_arg_assignment = rhs_branch_block
         .statements
         .iter()
         .find_map(|statement| match &statement.kind {
-            HirStatementKind::Assign { value, .. } => Some(value),
+            HirStatementKind::Assign {
+                target: HirPlace::Local(local),
+                value,
+            } if *local == rhs_jump_arg_local => Some(value),
             _ => None,
         })
-        .expect("rhs short-circuit branch should assign merge temp local");
+        .expect("rhs short-circuit branch should assign the jump argument local");
 
     assert!(
         matches!(
-            rhs_merge_assignment.kind,
+            rhs_jump_arg_assignment.kind,
             HirExpressionKind::Copy(HirPlace::Local(_))
         ),
-        "rhs place loads should be materialized as Copy before merge-temp assignment"
+        "rhs place loads should be materialized as Copy before jump-argument assignment"
     );
 }
 

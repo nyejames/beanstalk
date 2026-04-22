@@ -19,24 +19,6 @@ These are the non-negotiable conditions for starting Alpha:
 
 ## Next Plans
 
-### JS backend jump argument lowering
-
-Complete JS backend lowering for HirTerminator::Jump.args
-
-The HIR already models Jump { target, args }, but the JS backend still rejects non-empty jump argument lists during both structured and dispatcher lowering. This is a backend contract gap between the HIR shape and JS codegen, and it will become more limiting as CFG lowering becomes more explicit and block transitions carry values directly through the graph  ￼  ￼  ￼
-
-Todo
-
-* Add full JS lowering support for non-empty HirTerminator::Jump.args
-* Define the JS-side block-parameter strategy clearly so value flow across blocks is explicit and deterministic
-* Support this in both structured lowering and dispatcher lowering, or explicitly constrain structured lowering to only the subset that can safely carry block arguments
-* Remove current backend hard-errors for non-empty jump args
-* Add focused backend tests for:
-    * simple block-to-block value passing
-    * branch merge with block arguments
-    * loop back-edge with block arguments
-    * interaction with alias/reference locals
-* Add at least one end-to-end compiler fixture that proves a real frontend program can lower through this path once the HIR starts using it
 
 ### Unify JS collection runtime semantics
 

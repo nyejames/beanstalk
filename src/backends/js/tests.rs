@@ -28,6 +28,8 @@
 //   [cfg]            acyclic if-then-else lowers to structured `if` without dispatcher
 //   [cfg]            cycles and back-edges fall back to switch-based block dispatcher
 //   [cfg]            break/continue terminators emit correct block-number assignments
+//   [cfg]            jump arguments lower via deterministic source snapshots and target assignment
+//   [alias]          jump-argument assignment writes through alias-only target-entry locals
 //   [host]           host io(...) calls read the binding value with __bs_read before logging
 //   [start]          auto_invoke_start emits the start function name followed by ()
 //   [names]          function_name_by_id exposes stable JS names for runtime-fragment lookup
@@ -1123,6 +1125,399 @@ fn lowers_break_and_continue_terminators_with_dispatcher() {
     assert!(output.source.contains("switch (__bb"));
     assert!(output.source.contains("= 3;"));
     assert!(output.source.contains("= 4;"));
+}
+
+/// Verifies that a direct jump captures source values and assigns them into target block params. [cfg]
+#[test]
+fn jump_args_lower_block_to_block_value_transfer() {
+    let mut string_table = StringTable::new();
+    let (type_context, types) = build_type_context();
+
+    let assign_source = statement(
+        1,
+        HirStatementKind::Assign {
+            target: HirPlace::Local(LocalId(0)),
+            value: int_expression(1, 7, types.int, RegionId(0)),
+        },
+        1,
+    );
+
+    let blocks = vec![
+        HirBlock {
+            id: BlockId(0),
+            region: RegionId(0),
+            locals: vec![local(0, types.int, RegionId(0))],
+            statements: vec![assign_source],
+            terminator: HirTerminator::Jump {
+                target: BlockId(1),
+                args: vec![LocalId(0)],
+            },
+        },
+        HirBlock {
+            id: BlockId(1),
+            region: RegionId(0),
+            locals: vec![local(1, types.int, RegionId(0))],
+            statements: vec![],
+            terminator: HirTerminator::Return(unit_expression(2, types.unit, RegionId(0))),
+        },
+    ];
+
+    let function = HirFunction {
+        id: FunctionId(0),
+        entry: BlockId(0),
+        params: vec![],
+        return_type: types.unit,
+        return_aliases: vec![],
+    };
+
+    let module = build_module(
+        &mut string_table,
+        "main",
+        blocks,
+        function,
+        &[(LocalId(0), "source"), (LocalId(1), "param")],
+        type_context,
+    );
+
+    let output = lower_hir_to_js(
+        &module,
+        &BorrowCheckReport::default(),
+        &string_table,
+        default_config(),
+    )
+    .expect("JS lowering should succeed");
+    let source_name = expected_dev_local_name("source", 0);
+    let parameter_name = expected_dev_local_name("param", 1);
+
+    assert_eq!(
+        output.source.matches("const __jump_arg_").count(),
+        1,
+        "single-edge jump argument transfer should emit one capture temp"
+    );
+    assert!(
+        output
+            .source
+            .contains(&format!("const __jump_arg_0 = __bs_read({source_name});")),
+        "jump arguments should capture source values with __bs_read before assignment"
+    );
+    assert!(
+        output.source.contains(&format!(
+            "__bs_assign_value({parameter_name}, __jump_arg_0);"
+        )),
+        "jump arguments should assign into the first target local by position"
+    );
+    assert!(
+        !output.source.contains("switch (__bb"),
+        "acyclic jump-only CFG should stay on structured lowering"
+    );
+}
+
+/// Verifies that structured if-branch merges lower block arguments for both incoming edges. [cfg]
+#[test]
+fn structured_branch_merge_lowers_jump_arguments() {
+    let mut string_table = StringTable::new();
+    let (type_context, types) = build_type_context();
+
+    let assign_then = statement(
+        1,
+        HirStatementKind::Assign {
+            target: HirPlace::Local(LocalId(0)),
+            value: int_expression(1, 10, types.int, RegionId(0)),
+        },
+        1,
+    );
+    let assign_else = statement(
+        2,
+        HirStatementKind::Assign {
+            target: HirPlace::Local(LocalId(1)),
+            value: int_expression(2, 20, types.int, RegionId(0)),
+        },
+        2,
+    );
+
+    let blocks = vec![
+        HirBlock {
+            id: BlockId(0),
+            region: RegionId(0),
+            locals: vec![],
+            statements: vec![],
+            terminator: HirTerminator::If {
+                condition: bool_expression(3, true, types.boolean, RegionId(0)),
+                then_block: BlockId(1),
+                else_block: BlockId(2),
+            },
+        },
+        HirBlock {
+            id: BlockId(1),
+            region: RegionId(0),
+            locals: vec![local(0, types.int, RegionId(0))],
+            statements: vec![assign_then],
+            terminator: HirTerminator::Jump {
+                target: BlockId(3),
+                args: vec![LocalId(0)],
+            },
+        },
+        HirBlock {
+            id: BlockId(2),
+            region: RegionId(0),
+            locals: vec![local(1, types.int, RegionId(0))],
+            statements: vec![assign_else],
+            terminator: HirTerminator::Jump {
+                target: BlockId(3),
+                args: vec![LocalId(1)],
+            },
+        },
+        HirBlock {
+            id: BlockId(3),
+            region: RegionId(0),
+            locals: vec![local(2, types.int, RegionId(0))],
+            statements: vec![],
+            terminator: HirTerminator::Return(unit_expression(4, types.unit, RegionId(0))),
+        },
+    ];
+
+    let function = HirFunction {
+        id: FunctionId(0),
+        entry: BlockId(0),
+        params: vec![],
+        return_type: types.unit,
+        return_aliases: vec![],
+    };
+
+    let module = build_module(
+        &mut string_table,
+        "main",
+        blocks,
+        function,
+        &[
+            (LocalId(0), "then_value"),
+            (LocalId(1), "else_value"),
+            (LocalId(2), "merged"),
+        ],
+        type_context,
+    );
+
+    let output = lower_hir_to_js(
+        &module,
+        &BorrowCheckReport::default(),
+        &string_table,
+        default_config(),
+    )
+    .expect("JS lowering should succeed");
+    let merged_name = expected_dev_local_name("merged", 2);
+
+    assert!(output.source.contains("if (true)"));
+    assert!(
+        !output.source.contains("switch (__bb"),
+        "acyclic branch merge with jump args should remain structured"
+    );
+    assert_eq!(
+        output.source.matches("const __jump_arg_").count(),
+        2,
+        "both branch edges should stage one captured jump argument value"
+    );
+    assert_eq!(
+        output
+            .source
+            .matches(&format!("__bs_assign_value({merged_name}, __jump_arg_"))
+            .count(),
+        2,
+        "each branch edge should assign the merge parameter local"
+    );
+}
+
+/// Verifies that loop back-edges carry jump arguments through the dispatcher path. [cfg]
+#[test]
+fn dispatcher_loop_back_edge_lowers_jump_arguments() {
+    let mut string_table = StringTable::new();
+    let (type_context, types) = build_type_context();
+
+    let assign_entry = statement(
+        1,
+        HirStatementKind::Assign {
+            target: HirPlace::Local(LocalId(0)),
+            value: int_expression(1, 1, types.int, RegionId(0)),
+        },
+        1,
+    );
+    let assign_back_edge = statement(
+        2,
+        HirStatementKind::Assign {
+            target: HirPlace::Local(LocalId(2)),
+            value: int_expression(2, 2, types.int, RegionId(0)),
+        },
+        2,
+    );
+
+    let blocks = vec![
+        HirBlock {
+            id: BlockId(0),
+            region: RegionId(0),
+            locals: vec![local(0, types.int, RegionId(0))],
+            statements: vec![assign_entry],
+            terminator: HirTerminator::Jump {
+                target: BlockId(1),
+                args: vec![LocalId(0)],
+            },
+        },
+        HirBlock {
+            id: BlockId(1),
+            region: RegionId(0),
+            locals: vec![local(1, types.int, RegionId(0))],
+            statements: vec![],
+            terminator: HirTerminator::If {
+                condition: bool_expression(3, true, types.boolean, RegionId(0)),
+                then_block: BlockId(2),
+                else_block: BlockId(3),
+            },
+        },
+        HirBlock {
+            id: BlockId(2),
+            region: RegionId(0),
+            locals: vec![local(2, types.int, RegionId(0))],
+            statements: vec![assign_back_edge],
+            terminator: HirTerminator::Jump {
+                target: BlockId(1),
+                args: vec![LocalId(2)],
+            },
+        },
+        HirBlock {
+            id: BlockId(3),
+            region: RegionId(0),
+            locals: vec![],
+            statements: vec![],
+            terminator: HirTerminator::Return(unit_expression(4, types.unit, RegionId(0))),
+        },
+    ];
+
+    let function = HirFunction {
+        id: FunctionId(0),
+        entry: BlockId(0),
+        params: vec![],
+        return_type: types.unit,
+        return_aliases: vec![],
+    };
+
+    let module = build_module(
+        &mut string_table,
+        "main",
+        blocks,
+        function,
+        &[
+            (LocalId(0), "entry_value"),
+            (LocalId(1), "loop_value"),
+            (LocalId(2), "back_edge_value"),
+        ],
+        type_context,
+    );
+
+    let output = lower_hir_to_js(
+        &module,
+        &BorrowCheckReport::default(),
+        &string_table,
+        default_config(),
+    )
+    .expect("JS lowering should succeed");
+    let loop_value_name = expected_dev_local_name("loop_value", 1);
+
+    assert!(
+        output.source.contains("switch (__bb"),
+        "CFG cycle with back-edge should lower through dispatcher"
+    );
+    assert!(
+        output.source.matches("const __jump_arg_").count() >= 2,
+        "entry edge and loop back-edge should each stage captured jump arguments"
+    );
+    assert!(
+        output
+            .source
+            .matches(&format!("__bs_assign_value({loop_value_name}, __jump_arg_"))
+            .count()
+            >= 2,
+        "dispatcher jump edges should assign carried loop values into block parameters"
+    );
+}
+
+/// Verifies that jump-arg assignment writes through alias-only target block params. [cfg] [alias]
+#[test]
+fn jump_args_write_through_alias_only_target_local() {
+    let mut string_table = StringTable::new();
+    let (type_context, types) = build_type_context();
+
+    let assign_source = statement(
+        1,
+        HirStatementKind::Assign {
+            target: HirPlace::Local(LocalId(0)),
+            value: int_expression(1, 42, types.int, RegionId(0)),
+        },
+        1,
+    );
+
+    let blocks = vec![
+        HirBlock {
+            id: BlockId(0),
+            region: RegionId(0),
+            locals: vec![local(0, types.int, RegionId(0))],
+            statements: vec![assign_source],
+            terminator: HirTerminator::Jump {
+                target: BlockId(1),
+                args: vec![LocalId(0)],
+            },
+        },
+        HirBlock {
+            id: BlockId(1),
+            region: RegionId(0),
+            locals: vec![local(1, types.int, RegionId(0))],
+            statements: vec![],
+            terminator: HirTerminator::Return(unit_expression(2, types.unit, RegionId(0))),
+        },
+    ];
+
+    let function = HirFunction {
+        id: FunctionId(0),
+        entry: BlockId(0),
+        params: vec![],
+        return_type: types.unit,
+        return_aliases: vec![],
+    };
+
+    let module = build_module(
+        &mut string_table,
+        "main",
+        blocks,
+        function,
+        &[(LocalId(0), "source"), (LocalId(1), "alias_param")],
+        type_context,
+    );
+
+    let mut report = BorrowCheckReport::default();
+    report.analysis.block_entry_states.insert(
+        BlockId(1),
+        BorrowStateSnapshot {
+            locals: vec![LocalBorrowSnapshot {
+                local: LocalId(1),
+                mode: LocalMode::ALIAS,
+                alias_roots: vec![],
+            }],
+        },
+    );
+
+    let output = lower_hir_to_js(&module, &report, &string_table, default_config())
+        .expect("JS lowering should succeed");
+    let destination_name = expected_dev_local_name("alias_param", 1);
+
+    assert!(
+        output
+            .source
+            .contains(&format!("__bs_write({destination_name}, __jump_arg_0);")),
+        "alias-only jump-arg destinations must use __bs_write at block entry"
+    );
+    assert!(
+        !output.source.contains(&format!(
+            "__bs_assign_value({destination_name}, __jump_arg_0);"
+        )),
+        "alias-only jump-arg destinations must not use __bs_assign_value"
+    );
 }
 
 // ---------------------------------------------------------------------------

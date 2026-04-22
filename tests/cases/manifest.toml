@@ -914,6 +914,11 @@ path = "js_sequential_mutable_assignments"
 tags = ["integration","js-backend"]
 
 [[case]]
+id = "js_short_circuit_jump_args"
+path = "js_short_circuit_jump_args"
+tags = ["integration","js-backend","control-flow"]
+
+[[case]]
 id = "js_struct_field_mutation"
 path = "js_struct_field_mutation"
 tags = ["integration","js-backend"]

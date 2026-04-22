@@ -6,7 +6,9 @@
 
 use crate::borrow_log;
 use crate::compiler_frontend::analysis::borrow_checker::diagnostics::BorrowDiagnostics;
-use crate::compiler_frontend::analysis::borrow_checker::state::{BorrowState, FunctionLayout};
+use crate::compiler_frontend::analysis::borrow_checker::state::{
+    BorrowState, FunctionLayout, LocalState,
+};
 use crate::compiler_frontend::analysis::borrow_checker::transfer::{
     BlockTransferStats, BorrowTransferContext, transfer_block,
 };
@@ -240,9 +242,17 @@ impl<'a> BorrowChecker<'a> {
                     continue;
                 }
 
+                let mut successor_input = output_state.clone();
+                self.apply_jump_argument_transfer(
+                    function.id,
+                    &layout,
+                    &block.terminator,
+                    successor,
+                    &mut successor_input,
+                )?;
+
                 // Apply lexical visibility kills before join to prevent
                 // branch-local aliases from leaking into outer regions.
-                let mut successor_input = output_state.clone();
                 if let Some(mask) = visible_locals_by_block.get(&successor) {
                     successor_input.kill_invisible(mask);
                 }
@@ -449,6 +459,100 @@ impl<'a> BorrowChecker<'a> {
         total.statements_analyzed += block.statements_analyzed;
         total.terminators_analyzed += block.terminators_analyzed;
         total.conflicts_checked += block.conflicts_checked;
+    }
+
+    fn apply_jump_argument_transfer(
+        &self,
+        function_id: FunctionId,
+        layout: &FunctionLayout,
+        terminator: &HirTerminator,
+        successor: BlockId,
+        successor_input: &mut BorrowState,
+    ) -> Result<(), CompilerError> {
+        let HirTerminator::Jump { target, args } = terminator else {
+            return Ok(());
+        };
+
+        if *target != successor || args.is_empty() {
+            return Ok(());
+        }
+
+        let successor_block = self.block_by_id_or_error(successor, function_id)?;
+        if args.len() > successor_block.locals.len() {
+            return_borrow_checker_error!(
+                format!(
+                    "Borrow checker saw jump edge into block '{}' with {} argument(s), but the block declares only {} local(s)",
+                    successor,
+                    args.len(),
+                    successor_block.locals.len()
+                ),
+                self.diagnostics.function_error_location(function_id),
+                {
+                    CompilationStage => "Borrow Checking",
+                }
+            );
+        }
+
+        let source_states = args
+            .iter()
+            .map(|source_local| {
+                let Some(source_index) = layout.index_of(*source_local) else {
+                    return_borrow_checker_error!(
+                        format!(
+                            "Borrow checker could not map jump argument local '{}' into function state layout",
+                            self.diagnostics.local_name(*source_local)
+                        ),
+                        self.diagnostics.function_error_location(function_id),
+                        {
+                            CompilationStage => "Borrow Checking",
+                        }
+                    );
+                };
+
+                Ok(successor_input.local_state(source_index).clone())
+            })
+            .collect::<Result<Vec<_>, CompilerError>>()?;
+
+        let destination_indices = successor_block
+            .locals
+            .iter()
+            .take(args.len())
+            .map(|local| {
+                let Some(destination_index) = layout.index_of(local.id) else {
+                    return_borrow_checker_error!(
+                        format!(
+                            "Borrow checker could not map jump target local '{}' into function state layout",
+                            self.diagnostics.local_name(local.id)
+                        ),
+                        self.diagnostics.function_error_location(function_id),
+                        {
+                            CompilationStage => "Borrow Checking",
+                        }
+                    );
+                };
+
+                Ok(destination_index)
+            })
+            .collect::<Result<Vec<_>, CompilerError>>()?;
+
+        let local_count = layout.local_count();
+        for (source_state, destination_index) in source_states.into_iter().zip(destination_indices)
+        {
+            let destination_state = successor_input.local_state(destination_index).clone();
+            let destination_is_alias_only = destination_state.mode.contains(LocalMode::ALIAS)
+                && !destination_state.mode.contains(LocalMode::SLOT);
+
+            let next_state = if source_state.mode.is_definitely_uninit() {
+                LocalState::uninit(local_count)
+            } else if destination_is_alias_only {
+                destination_state
+            } else {
+                LocalState::slot(local_count)
+            };
+            successor_input.update_local_state(destination_index, next_state);
+        }
+
+        Ok(())
     }
 
     fn check_inconsistent_move_join(

@@ -569,14 +569,18 @@ impl<'a> HirBuilder<'a> {
         location: &SourceLocation,
         edge_label: &str,
     ) -> Result<(), CompilerError> {
-        self.emit_terminator(
-            from_block,
-            HirTerminator::Jump {
-                target,
-                args: vec![],
-            },
-            location,
-        )?;
+        self.emit_jump_with_args(from_block, target, vec![], location, edge_label)
+    }
+
+    pub(crate) fn emit_jump_with_args(
+        &mut self,
+        from_block: BlockId,
+        target: BlockId,
+        args: Vec<crate::compiler_frontend::hir::hir_nodes::LocalId>,
+        location: &SourceLocation,
+        edge_label: &str,
+    ) -> Result<(), CompilerError> {
+        self.emit_terminator(from_block, HirTerminator::Jump { target, args }, location)?;
 
         self.log_control_flow_edge(from_block, target, edge_label);
         Ok(())

@@ -6,14 +6,15 @@ use crate::compiler_frontend::hir::hir_nodes::{
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
 impl<'a> HirBuilder<'a> {
-    pub(super) fn emit_short_circuit_merge_assignment(
+    pub(super) fn materialize_short_circuit_jump_argument_local(
         &mut self,
-        local: LocalId,
         value: HirExpression,
         location: &SourceLocation,
-    ) -> Result<(), CompilerError> {
+    ) -> Result<LocalId, CompilerError> {
         let value = self.materialize_short_circuit_assignment_value(value, location);
-        self.emit_assign_local_statement(local, value, location)
+        let local = self.allocate_temp_local(value.ty, Some(location.to_owned()))?;
+        self.emit_assign_local_statement(local, value, location)?;
+        Ok(local)
     }
 
     fn materialize_short_circuit_assignment_value(
