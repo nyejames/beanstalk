@@ -415,7 +415,6 @@ pub enum TokenKind {
     Multiply,
     Divide,
     Modulus,
-    Remainder,
     IntDivide,
 
     ExponentAssign,
@@ -423,7 +422,6 @@ pub enum TokenKind {
     DivideAssign,
     ModulusAssign,
     IntDivideAssign,
-    RemainderAssign,
 
     Add,
     Subtract,

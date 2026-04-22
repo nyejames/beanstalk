@@ -27,7 +27,7 @@ use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::statements::declarations::resolve_declaration_syntax;
 use crate::compiler_frontend::ast::templates::template::TemplateAtom;
-use crate::compiler_frontend::ast::{ContextKind, ScopeContext};
+use crate::compiler_frontend::ast::{ContextKind, ScopeContext, TopLevelDeclarationIndex};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_errors::ErrorMetaDataKey;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
@@ -198,7 +198,7 @@ pub(crate) fn resolve_file_import_bindings(
 /// WHY: Grouping these parameters keeps the resolver call sites explicit while avoiding
 /// overly-wide function signatures that are harder to maintain.
 pub(crate) struct ConstantHeaderParseContext<'a> {
-    pub declarations: Rc<Vec<Declaration>>,
+    pub top_level_declarations: Rc<TopLevelDeclarationIndex>,
     pub visible_declaration_ids: &'a FxHashSet<InternedPath>,
     pub host_registry: &'a HostRegistry,
     pub style_directives: &'a StyleDirectiveRegistry,
@@ -207,6 +207,7 @@ pub(crate) struct ConstantHeaderParseContext<'a> {
     pub build_profile: FrontendBuildProfile,
     pub warnings: &'a mut Vec<CompilerWarning>,
     pub rendered_path_usages: Rc<RefCell<Vec<RenderedPathUsage>>>,
+    pub unresolved_constant_paths: &'a FxHashSet<InternedPath>,
     pub string_table: &'a mut StringTable,
 }
 
@@ -215,7 +216,7 @@ pub(crate) fn parse_constant_header_declaration(
     context: ConstantHeaderParseContext<'_>,
 ) -> Result<Declaration, CompilerError> {
     let ConstantHeaderParseContext {
-        declarations,
+        top_level_declarations,
         visible_declaration_ids,
         host_registry,
         style_directives,
@@ -224,6 +225,7 @@ pub(crate) fn parse_constant_header_declaration(
         build_profile,
         warnings,
         rendered_path_usages,
+        unresolved_constant_paths,
         string_table,
     } = context;
 
@@ -243,7 +245,7 @@ pub(crate) fn parse_constant_header_declaration(
     let context = ScopeContext::new(
         ContextKind::ConstantHeader,
         header.tokens.src_path.to_owned(),
-        declarations, // already Rc<Vec<Declaration>>
+        top_level_declarations,
         host_registry.clone(),
         vec![],
     )
@@ -272,7 +274,7 @@ pub(crate) fn parse_constant_header_declaration(
         // loop will retry after its dependencies are resolved.
         if let Some(unresolved_path) = find_unresolved_constant_reference(
             &declaration.value,
-            &context.top_level_declarations,
+            unresolved_constant_paths,
             visible_declaration_ids,
         ) {
             let variable_name = unresolved_path
@@ -316,16 +318,12 @@ pub(crate) fn parse_constant_header_declaration(
 /// Reference" and "variable not found" by surfacing the unresolved path name.
 fn find_unresolved_constant_reference(
     expression: &Expression,
-    declarations: &[Declaration],
+    unresolved_constant_paths: &FxHashSet<InternedPath>,
     visible_declaration_ids: &FxHashSet<InternedPath>,
 ) -> Option<InternedPath> {
     match &expression.kind {
         ExpressionKind::Reference(path) => {
-            if visible_declaration_ids.contains(path)
-                && declarations
-                    .iter()
-                    .any(|d| &d.id == path && d.is_unresolved_constant_placeholder())
-            {
+            if visible_declaration_ids.contains(path) && unresolved_constant_paths.contains(path) {
                 return Some(path.clone());
             }
             None
@@ -335,7 +333,7 @@ fn find_unresolved_constant_reference(
                 if let TemplateAtom::Content(segment) = atom
                     && let Some(path) = find_unresolved_constant_reference(
                         &segment.expression,
-                        declarations,
+                        unresolved_constant_paths,
                         visible_declaration_ids,
                     )
                 {
@@ -346,9 +344,11 @@ fn find_unresolved_constant_reference(
         }
         ExpressionKind::Collection(items) => {
             for item in items {
-                if let Some(path) =
-                    find_unresolved_constant_reference(item, declarations, visible_declaration_ids)
-                {
+                if let Some(path) = find_unresolved_constant_reference(
+                    item,
+                    unresolved_constant_paths,
+                    visible_declaration_ids,
+                ) {
                     return Some(path);
                 }
             }
@@ -358,7 +358,7 @@ fn find_unresolved_constant_reference(
             for field in fields {
                 if let Some(path) = find_unresolved_constant_reference(
                     &field.value,
-                    declarations,
+                    unresolved_constant_paths,
                     visible_declaration_ids,
                 ) {
                     return Some(path);
@@ -366,17 +366,25 @@ fn find_unresolved_constant_reference(
             }
             None
         }
-        ExpressionKind::Range(start, end) => {
-            find_unresolved_constant_reference(start, declarations, visible_declaration_ids)
-                .or_else(|| {
-                    find_unresolved_constant_reference(end, declarations, visible_declaration_ids)
-                })
-        }
+        ExpressionKind::Range(start, end) => find_unresolved_constant_reference(
+            start,
+            unresolved_constant_paths,
+            visible_declaration_ids,
+        )
+        .or_else(|| {
+            find_unresolved_constant_reference(
+                end,
+                unresolved_constant_paths,
+                visible_declaration_ids,
+            )
+        }),
         ExpressionKind::BuiltinCast { value, .. }
         | ExpressionKind::ResultConstruct { value, .. }
-        | ExpressionKind::Coerced { value, .. } => {
-            find_unresolved_constant_reference(value, declarations, visible_declaration_ids)
-        }
+        | ExpressionKind::Coerced { value, .. } => find_unresolved_constant_reference(
+            value,
+            unresolved_constant_paths,
+            visible_declaration_ids,
+        ),
         _ => None,
     }
 }

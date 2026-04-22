@@ -3,7 +3,7 @@ use crate::compiler_frontend::ast::templates::template::TemplateType;
 use crate::compiler_frontend::compiler_errors::ErrorMetaDataKey;
 use crate::compiler_frontend::style_directives::{
     StyleDirectiveArgumentType, StyleDirectiveEffects, StyleDirectiveHandlerSpec,
-    StyleDirectiveRegistry, StyleDirectiveSpec,
+    StyleDirectiveRegistry, StyleDirectiveSpec, TemplateHeadCompatibility,
 };
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 
@@ -109,6 +109,7 @@ fn builder_effects_only_handler_updates_style_without_formatter() {
     let directives = vec![StyleDirectiveSpec::handler(
         "brand",
         TemplateBodyMode::Normal,
+        TemplateHeadCompatibility::fully_compatible_meaningful(),
         StyleDirectiveHandlerSpec::new(
             None,
             StyleDirectiveEffects {
@@ -164,6 +165,7 @@ fn builder_registered_handler_directive_accepts_declared_optional_argument_type(
     let directives = vec![StyleDirectiveSpec::handler(
         "brand",
         TemplateBodyMode::Normal,
+        TemplateHeadCompatibility::fully_compatible_meaningful(),
         StyleDirectiveHandlerSpec::new(
             Some(StyleDirectiveArgumentType::String),
             Default::default(),
@@ -192,6 +194,7 @@ fn builder_registered_handler_directive_rejects_multiple_arguments() {
     let directives = vec![StyleDirectiveSpec::handler(
         "brand",
         TemplateBodyMode::Normal,
+        TemplateHeadCompatibility::fully_compatible_meaningful(),
         StyleDirectiveHandlerSpec::new(
             Some(StyleDirectiveArgumentType::String),
             Default::default(),
@@ -219,6 +222,7 @@ fn builder_registered_handler_directive_rejects_runtime_argument_values() {
     let directives = vec![StyleDirectiveSpec::handler(
         "brand",
         TemplateBodyMode::Normal,
+        TemplateHeadCompatibility::fully_compatible_meaningful(),
         StyleDirectiveHandlerSpec::new(
             Some(StyleDirectiveArgumentType::String),
             Default::default(),

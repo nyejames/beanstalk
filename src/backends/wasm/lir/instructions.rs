@@ -110,12 +110,61 @@ pub(crate) enum WasmLirStmt {
         lhs: WasmLirLocalId,
         rhs: WasmLirLocalId,
     },
+    IntMod {
+        dst: WasmLirLocalId,
+        lhs: WasmLirLocalId,
+        rhs: WasmLirLocalId,
+    },
+    IntMul {
+        dst: WasmLirLocalId,
+        lhs: WasmLirLocalId,
+        rhs: WasmLirLocalId,
+    },
+    /// Truncating integer division (for `//` operator); dst, lhs, rhs all I64.
+    IntFloorDiv {
+        dst: WasmLirLocalId,
+        lhs: WasmLirLocalId,
+        rhs: WasmLirLocalId,
+    },
+    /// Regular division with integer operands. lhs/rhs are I64; dst is F64.
+    /// WHY: Beanstalk `Int / Int` always yields Float; conversion is emitted here.
+    IntToFloatDiv {
+        dst: WasmLirLocalId,
+        lhs: WasmLirLocalId,
+        rhs: WasmLirLocalId,
+    },
     FloatAdd {
         dst: WasmLirLocalId,
         lhs: WasmLirLocalId,
         rhs: WasmLirLocalId,
     },
     FloatSub {
+        dst: WasmLirLocalId,
+        lhs: WasmLirLocalId,
+        rhs: WasmLirLocalId,
+    },
+    FloatMul {
+        dst: WasmLirLocalId,
+        lhs: WasmLirLocalId,
+        rhs: WasmLirLocalId,
+    },
+    FloatDiv {
+        dst: WasmLirLocalId,
+        lhs: WasmLirLocalId,
+        rhs: WasmLirLocalId,
+    },
+    /// Euclidean float modulus; emitted as `a − b·floor(a/b)` using the WASM stack.
+    FloatMod {
+        dst: WasmLirLocalId,
+        lhs: WasmLirLocalId,
+        rhs: WasmLirLocalId,
+    },
+    BoolAnd {
+        dst: WasmLirLocalId,
+        lhs: WasmLirLocalId,
+        rhs: WasmLirLocalId,
+    },
+    BoolOr {
         dst: WasmLirLocalId,
         lhs: WasmLirLocalId,
         rhs: WasmLirLocalId,

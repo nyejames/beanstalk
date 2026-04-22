@@ -86,12 +86,8 @@ pub fn create_branch(
 
     token_stream.advance();
     let then_context = context.new_child_control_flow(ContextKind::Branch, string_table);
-    let then_block = function_body_to_ast(
-        token_stream,
-        then_context.to_owned(),
-        warnings,
-        string_table,
-    )?;
+    let then_scope = then_context.scope.clone();
+    let then_block = function_body_to_ast(token_stream, then_context, warnings, string_table)?;
 
     let else_block = if token_stream.current_token_kind() == &TokenKind::Else {
         token_stream.advance();
@@ -109,7 +105,7 @@ pub fn create_branch(
     Ok(vec![AstNode {
         kind: NodeKind::If(then_condition, then_block, else_block),
         location: token_stream.current_location(),
-        scope: then_context.scope,
+        scope: then_scope,
     }])
 }
 

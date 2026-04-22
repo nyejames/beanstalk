@@ -313,6 +313,8 @@ Directive availability is frontend-registry based:
 - $doc                - Turns the template into a documentation comment
 - $children(..)       - Accepts a template (or string slice) that will be applied only to this template's direct child templates
 
+For `$children(..)` template arguments, the child template must close with `]` before the directive closes with `)`.
+
 **HTML Project Directives**
 
 - $html               - Parses the template body as raw HTML (no escaping)

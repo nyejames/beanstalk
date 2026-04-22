@@ -9,7 +9,7 @@
 
 use crate::compiler_frontend::style_directives::{
     StyleDirectiveArgumentType, StyleDirectiveEffects, StyleDirectiveHandlerSpec,
-    StyleDirectiveSpec,
+    StyleDirectiveSpec, TemplateHeadCompatibility, TemplateHeadTag,
 };
 use crate::compiler_frontend::tokenizer::tokens::TemplateBodyMode;
 use crate::projects::html_project::styles::css::css_formatter_factory;
@@ -22,6 +22,7 @@ pub(crate) fn html_project_style_directives() -> Vec<StyleDirectiveSpec> {
         StyleDirectiveSpec::handler(
             "html",
             TemplateBodyMode::Normal,
+            TemplateHeadCompatibility::blocks_same(TemplateHeadTag::FORMATTER_DIRECTIVE),
             StyleDirectiveHandlerSpec::new(
                 None,
                 StyleDirectiveEffects {
@@ -34,6 +35,7 @@ pub(crate) fn html_project_style_directives() -> Vec<StyleDirectiveSpec> {
         StyleDirectiveSpec::handler(
             "css",
             TemplateBodyMode::Balanced,
+            TemplateHeadCompatibility::blocks_same(TemplateHeadTag::FORMATTER_DIRECTIVE),
             StyleDirectiveHandlerSpec::new(
                 Some(StyleDirectiveArgumentType::String),
                 StyleDirectiveEffects {
@@ -46,6 +48,7 @@ pub(crate) fn html_project_style_directives() -> Vec<StyleDirectiveSpec> {
         StyleDirectiveSpec::handler(
             "escape_html",
             TemplateBodyMode::Normal,
+            TemplateHeadCompatibility::blocks_same(TemplateHeadTag::FORMATTER_DIRECTIVE),
             StyleDirectiveHandlerSpec::new(
                 None,
                 StyleDirectiveEffects {

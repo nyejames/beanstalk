@@ -14,6 +14,7 @@ use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::style_directives::{
     StyleDirectiveEffects, StyleDirectiveHandlerSpec, StyleDirectiveRegistry, StyleDirectiveSpec,
+    TemplateHeadCompatibility,
 };
 use crate::compiler_frontend::symbols::identity::SourceFileTable;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
@@ -560,6 +561,7 @@ fn deferred_constant_resolution_nested_template_reference() {
     let html_directive = StyleDirectiveSpec::handler(
         "html",
         TemplateBodyMode::Normal,
+        TemplateHeadCompatibility::fully_compatible_meaningful(),
         StyleDirectiveHandlerSpec::new(
             None,
             StyleDirectiveEffects {
@@ -572,6 +574,7 @@ fn deferred_constant_resolution_nested_template_reference() {
     let css_directive = StyleDirectiveSpec::handler(
         "css",
         TemplateBodyMode::Normal,
+        TemplateHeadCompatibility::fully_compatible_meaningful(),
         StyleDirectiveHandlerSpec::new(
             None,
             StyleDirectiveEffects {
@@ -791,6 +794,7 @@ fn html_style_directive_available_during_header_parsing() {
     let html_directive = StyleDirectiveSpec::handler(
         "html",
         TemplateBodyMode::Normal,
+        TemplateHeadCompatibility::fully_compatible_meaningful(),
         StyleDirectiveHandlerSpec::new(
             None,
             StyleDirectiveEffects {

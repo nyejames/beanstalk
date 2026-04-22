@@ -25,6 +25,7 @@ use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::tokenizer::tokens::TemplateBodyMode;
 use std::fmt::Write as _;
+use std::ops::{BitAnd, BitOr, BitOrAssign};
 
 /// Core language directive behavior handled directly by compiler-owned template parsing.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -38,6 +39,92 @@ pub enum CoreStyleDirectiveKind {
     Doc,
     Code,
     Raw,
+}
+
+/// Template-head compatibility tags for directives and other meaningful head items.
+///
+/// WHAT:
+/// - Encodes compatibility constraints as cheap bit tags in parse-time head state.
+///
+/// WHY:
+/// - Keeps compatibility policy in directive specs instead of hardcoded parser branches.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub struct TemplateHeadTag(u64);
+
+impl TemplateHeadTag {
+    pub const MEANINGFUL_ITEM: Self = Self(1 << 0);
+    pub const SLOT_DIRECTIVE: Self = Self(1 << 1);
+    pub const INSERT_DIRECTIVE: Self = Self(1 << 2);
+    pub const COMMENT_DIRECTIVE: Self = Self(1 << 3);
+    pub const FORMATTER_DIRECTIVE: Self = Self(1 << 4);
+    pub const CHILDREN_DIRECTIVE: Self = Self(1 << 5);
+    pub const FRESH_DIRECTIVE: Self = Self(1 << 6);
+    pub const RAW_DIRECTIVE: Self = Self(1 << 7);
+    pub const CODE_DIRECTIVE: Self = Self(1 << 8);
+
+    pub const fn empty() -> Self {
+        Self(0)
+    }
+
+    pub const fn intersects(self, other: Self) -> bool {
+        (self.0 & other.0) != 0
+    }
+}
+
+impl BitOr for TemplateHeadTag {
+    type Output = Self;
+
+    fn bitor(self, rhs: Self) -> Self::Output {
+        Self(self.0 | rhs.0)
+    }
+}
+
+impl BitOrAssign for TemplateHeadTag {
+    fn bitor_assign(&mut self, rhs: Self) {
+        self.0 |= rhs.0;
+    }
+}
+
+impl BitAnd for TemplateHeadTag {
+    type Output = Self;
+
+    fn bitand(self, rhs: Self) -> Self::Output {
+        Self(self.0 & rhs.0)
+    }
+}
+
+/// Data-driven template-head compatibility rules attached to each directive spec.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct TemplateHeadCompatibility {
+    pub presence_tags: TemplateHeadTag,
+    pub required_absent_tags: TemplateHeadTag,
+    pub blocks_future_tags: TemplateHeadTag,
+}
+
+impl TemplateHeadCompatibility {
+    pub fn fully_compatible_meaningful() -> Self {
+        Self {
+            presence_tags: TemplateHeadTag::MEANINGFUL_ITEM,
+            required_absent_tags: TemplateHeadTag::empty(),
+            blocks_future_tags: TemplateHeadTag::empty(),
+        }
+    }
+
+    pub fn exclusive_meaningful() -> Self {
+        Self {
+            presence_tags: TemplateHeadTag::MEANINGFUL_ITEM,
+            required_absent_tags: TemplateHeadTag::MEANINGFUL_ITEM,
+            blocks_future_tags: TemplateHeadTag::MEANINGFUL_ITEM,
+        }
+    }
+
+    pub fn blocks_same(tag: TemplateHeadTag) -> Self {
+        Self {
+            presence_tags: TemplateHeadTag::MEANINGFUL_ITEM | tag,
+            required_absent_tags: TemplateHeadTag::empty(),
+            blocks_future_tags: tag,
+        }
+    }
 }
 
 /// Supported optional single-argument types for handler-based directives.
@@ -134,11 +221,13 @@ pub enum StyleDirectiveKind {
 /// Frontend registration contract for one style directive.
 ///
 /// `body_mode` controls template-body tokenization after the directive appears in the template
-/// head. `kind` controls AST-level directive handling.
+/// head. `head_compatibility` controls parse-time compatibility against other meaningful head
+/// items. `kind` controls AST-level directive handling.
 #[derive(Clone, Debug)]
 pub struct StyleDirectiveSpec {
     pub name: String,
     pub body_mode: TemplateBodyMode,
+    pub head_compatibility: TemplateHeadCompatibility,
     pub kind: StyleDirectiveKind,
 }
 
@@ -147,29 +236,38 @@ impl StyleDirectiveSpec {
     pub fn handler(
         name: impl Into<String>,
         body_mode: TemplateBodyMode,
+        head_compatibility: TemplateHeadCompatibility,
         handler: StyleDirectiveHandlerSpec,
     ) -> Self {
         Self {
             name: name.into(),
             body_mode,
+            head_compatibility,
             kind: StyleDirectiveKind::Handler(handler),
         }
     }
 
     /// Register an explicit no-op handler-based directive.
     pub fn handler_no_op(name: impl Into<String>, body_mode: TemplateBodyMode) -> Self {
-        Self::handler(name, body_mode, StyleDirectiveHandlerSpec::no_op())
+        Self::handler(
+            name,
+            body_mode,
+            TemplateHeadCompatibility::fully_compatible_meaningful(),
+            StyleDirectiveHandlerSpec::no_op(),
+        )
     }
 
     /// Internal helper for compiler-owned core directives.
     pub(crate) fn core(
         name: &str,
         body_mode: TemplateBodyMode,
+        head_compatibility: TemplateHeadCompatibility,
         kind: CoreStyleDirectiveKind,
     ) -> Self {
         Self {
             name: name.to_string(),
             body_mode,
+            head_compatibility,
             kind: StyleDirectiveKind::Core(kind),
         }
     }
@@ -196,51 +294,108 @@ impl StyleDirectiveRegistry {
                 StyleDirectiveSpec::core(
                     "children",
                     TemplateBodyMode::Normal,
+                    TemplateHeadCompatibility {
+                        presence_tags: TemplateHeadTag::MEANINGFUL_ITEM
+                            | TemplateHeadTag::CHILDREN_DIRECTIVE,
+                        required_absent_tags: TemplateHeadTag::empty(),
+                        blocks_future_tags: TemplateHeadTag::empty(),
+                    },
                     CoreStyleDirectiveKind::Children,
                 ),
                 StyleDirectiveSpec::core(
                     "fresh",
                     TemplateBodyMode::Normal,
+                    TemplateHeadCompatibility {
+                        presence_tags: TemplateHeadTag::MEANINGFUL_ITEM
+                            | TemplateHeadTag::FRESH_DIRECTIVE,
+                        required_absent_tags: TemplateHeadTag::empty(),
+                        blocks_future_tags: TemplateHeadTag::empty(),
+                    },
                     CoreStyleDirectiveKind::Fresh,
                 ),
                 StyleDirectiveSpec::core(
                     "slot",
                     TemplateBodyMode::Normal,
+                    TemplateHeadCompatibility {
+                        presence_tags: TemplateHeadTag::MEANINGFUL_ITEM
+                            | TemplateHeadTag::SLOT_DIRECTIVE,
+                        required_absent_tags: TemplateHeadTag::MEANINGFUL_ITEM,
+                        blocks_future_tags: TemplateHeadTag::MEANINGFUL_ITEM,
+                    },
                     CoreStyleDirectiveKind::Slot,
                 ),
                 StyleDirectiveSpec::core(
                     "insert",
                     TemplateBodyMode::Normal,
+                    TemplateHeadCompatibility::blocks_same(TemplateHeadTag::INSERT_DIRECTIVE),
                     CoreStyleDirectiveKind::Insert,
                 ),
                 StyleDirectiveSpec::core(
                     "note",
                     TemplateBodyMode::DiscardBalanced,
+                    TemplateHeadCompatibility {
+                        presence_tags: TemplateHeadTag::MEANINGFUL_ITEM
+                            | TemplateHeadTag::COMMENT_DIRECTIVE,
+                        required_absent_tags: TemplateHeadTag::MEANINGFUL_ITEM,
+                        blocks_future_tags: TemplateHeadTag::MEANINGFUL_ITEM,
+                    },
                     CoreStyleDirectiveKind::Note,
                 ),
                 StyleDirectiveSpec::core(
                     "todo",
                     TemplateBodyMode::DiscardBalanced,
+                    TemplateHeadCompatibility {
+                        presence_tags: TemplateHeadTag::MEANINGFUL_ITEM
+                            | TemplateHeadTag::COMMENT_DIRECTIVE,
+                        required_absent_tags: TemplateHeadTag::MEANINGFUL_ITEM,
+                        blocks_future_tags: TemplateHeadTag::MEANINGFUL_ITEM,
+                    },
                     CoreStyleDirectiveKind::Todo,
                 ),
                 StyleDirectiveSpec::core(
                     "doc",
                     TemplateBodyMode::Normal,
+                    TemplateHeadCompatibility {
+                        presence_tags: TemplateHeadTag::MEANINGFUL_ITEM
+                            | TemplateHeadTag::COMMENT_DIRECTIVE,
+                        required_absent_tags: TemplateHeadTag::MEANINGFUL_ITEM,
+                        blocks_future_tags: TemplateHeadTag::MEANINGFUL_ITEM,
+                    },
                     CoreStyleDirectiveKind::Doc,
                 ),
                 StyleDirectiveSpec::core(
                     "code",
                     TemplateBodyMode::Balanced,
+                    TemplateHeadCompatibility {
+                        presence_tags: TemplateHeadTag::MEANINGFUL_ITEM
+                            | TemplateHeadTag::FORMATTER_DIRECTIVE
+                            | TemplateHeadTag::CODE_DIRECTIVE,
+                        required_absent_tags: TemplateHeadTag::empty(),
+                        blocks_future_tags: TemplateHeadTag::FORMATTER_DIRECTIVE,
+                    },
                     CoreStyleDirectiveKind::Code,
                 ),
                 StyleDirectiveSpec::core(
                     "raw",
                     TemplateBodyMode::Normal,
+                    TemplateHeadCompatibility {
+                        presence_tags: TemplateHeadTag::MEANINGFUL_ITEM
+                            | TemplateHeadTag::FORMATTER_DIRECTIVE
+                            | TemplateHeadTag::RAW_DIRECTIVE,
+                        required_absent_tags: TemplateHeadTag::empty(),
+                        blocks_future_tags: TemplateHeadTag::FORMATTER_DIRECTIVE,
+                    },
                     CoreStyleDirectiveKind::Raw,
                 ),
                 StyleDirectiveSpec::handler(
                     "markdown",
                     TemplateBodyMode::Normal,
+                    TemplateHeadCompatibility {
+                        presence_tags: TemplateHeadTag::MEANINGFUL_ITEM
+                            | TemplateHeadTag::FORMATTER_DIRECTIVE,
+                        required_absent_tags: TemplateHeadTag::empty(),
+                        blocks_future_tags: TemplateHeadTag::FORMATTER_DIRECTIVE,
+                    },
                     StyleDirectiveHandlerSpec::new(
                         None,
                         StyleDirectiveEffects {

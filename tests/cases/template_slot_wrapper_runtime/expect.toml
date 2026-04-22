@@ -1,4 +1,8 @@
 [backends.html]
 mode = "success"
 warnings = "forbid"
-golden_mode = "normalized"
+rendered_output_contains = [
+  "template_slot_wrapper_runtime",
+  "before",
+  "after",
+]

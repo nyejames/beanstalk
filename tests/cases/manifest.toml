@@ -1074,6 +1074,11 @@ path = "mixed_numeric_literals"
 tags = ["integration","language"]
 
 [[case]]
+id = "modulus_operator"
+path = "modulus_operator"
+tags = ["integration","language"]
+
+[[case]]
 id = "multi_bind_explicit_types_and_mutability"
 path = "multi_bind_explicit_types_and_mutability"
 tags = ["integration","results"]
@@ -1572,6 +1577,11 @@ tags = ["integration","language"]
 id = "variables_and_assignment"
 path = "variables_and_assignment"
 tags = ["integration","language"]
+
+[[case]]
+id = "wasm_arithmetic"
+path = "wasm_arithmetic"
+tags = ["integration","language","wasm"]
 
 [[case]]
 id = "white_space"

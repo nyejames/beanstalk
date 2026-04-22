@@ -9,7 +9,9 @@
 //! defined in sibling modules while keeping the overall flow readable.
 
 use crate::compiler_frontend::ast::ScopeContext;
-use crate::compiler_frontend::ast::templates::template::{CommentDirectiveKind, TemplateType};
+use crate::compiler_frontend::ast::templates::template::{
+    CommentDirectiveKind, TemplateAtom, TemplateSegmentOrigin, TemplateType,
+};
 use crate::compiler_frontend::ast::templates::template_body_parser::parse_template_body;
 use crate::compiler_frontend::ast::templates::template_composition::compose_template_head_chain;
 use crate::compiler_frontend::ast::templates::template_formatting::apply_body_formatter;
@@ -93,9 +95,16 @@ impl Template {
             &mut foldable,
             string_table,
         )?;
+        let requires_post_format_recomposition =
+            template_requires_post_format_recomposition(&template);
 
         // Stage 3: build the composed pre-format snapshot.
-        build_unformatted_template_content(&mut template, &mut foldable, string_table)?;
+        build_unformatted_template_content(
+            &mut template,
+            &mut foldable,
+            string_table,
+            requires_post_format_recomposition,
+        )?;
 
         // Stage 4: format body-origin text and produce a structured render plan.
         let render_plan = format_template_body(&template, context, string_table)?;
@@ -106,6 +115,7 @@ impl Template {
             render_plan,
             &mut foldable,
             string_table,
+            requires_post_format_recomposition,
         )?;
 
         template.content_needs_formatting = false;
@@ -163,7 +173,13 @@ fn build_unformatted_template_content(
     template: &mut Template,
     foldable: &mut bool,
     string_table: &StringTable,
+    requires_post_format_recomposition: bool,
 ) -> Result<(), CompilerError> {
+    if !requires_post_format_recomposition {
+        template.unformatted_content = template.content.to_owned();
+        return Ok(());
+    }
+
     template.unformatted_content = apply_inherited_child_templates_to_content(
         template.content.clone(),
         &template.style.child_templates,
@@ -229,14 +245,17 @@ fn finalize_template_after_formatting(
     render_plan: TemplateRenderPlan,
     foldable: &mut bool,
     string_table: &StringTable,
+    requires_post_format_recomposition: bool,
 ) -> Result<(), CompilerError> {
     template.content = render_plan.rebuild_content();
-    template.content = apply_inherited_child_templates_to_content(
-        template.content.clone(),
-        &template.style.child_templates,
-        string_table,
-    )?;
-    template.content = compose_template_head_chain(&template.content, foldable, string_table)?;
+    if requires_post_format_recomposition {
+        template.content = apply_inherited_child_templates_to_content(
+            template.content.clone(),
+            &template.style.child_templates,
+            string_table,
+        )?;
+        template.content = compose_template_head_chain(&template.content, foldable, string_table)?;
+    }
 
     // `template.render_plan` must always match the finalized content stream before HIR sees
     // the template. AST owns both piece ordering and runtime-template planning.
@@ -244,6 +263,20 @@ fn finalize_template_after_formatting(
     template.refresh_kind_from_content();
     template.render_plan = Some(TemplateRenderPlan::from_content(&template.content));
     Ok(())
+}
+
+fn template_requires_post_format_recomposition(template: &Template) -> bool {
+    if !template.style.child_templates.is_empty() {
+        return true;
+    }
+
+    template.content.atoms.iter().any(|atom| {
+        matches!(
+            atom,
+            TemplateAtom::Content(segment)
+                if segment.origin == TemplateSegmentOrigin::Head
+        )
+    })
 }
 
 #[cfg(test)]

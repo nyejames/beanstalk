@@ -24,6 +24,79 @@ fn note_and_todo_directives_reject_arguments() {
 }
 
 #[test]
+fn slot_directive_must_be_alone_in_template_head() {
+    let before_error = template_parse_error("[\"prefix\", $slot]");
+    let after_error = template_parse_error("[$slot, \"suffix\"]");
+
+    assert!(before_error.contains("incompatible"));
+    assert!(after_error.contains("incompatible"));
+}
+
+#[test]
+fn comment_directives_must_be_alone_in_template_head() {
+    for directive in ["note", "todo", "doc"] {
+        let before = format!("[\"prefix\", ${directive}]");
+        let after = format!("[${directive}, \"suffix\"]");
+        let before_error = template_parse_error(&before);
+        let after_error = template_parse_error(&after);
+
+        assert!(
+            before_error.contains("incompatible"),
+            "expected mixed-head compatibility error for '{before}', got: {before_error}"
+        );
+        assert!(
+            after_error.contains("incompatible"),
+            "expected mixed-head compatibility error for '{after}', got: {after_error}"
+        );
+    }
+}
+
+#[test]
+fn insert_directive_can_coexist_with_other_meaningful_head_items() {
+    let mut string_table = StringTable::new();
+    let mut token_stream =
+        template_tokens_from_source("[\"prefix\", $insert(\"style\"): body]", &mut string_table);
+    let context = new_constant_context(token_stream.src_path.to_owned());
+
+    let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
+        .expect("insert directive should coexist with other meaningful head items");
+
+    assert!(matches!(template.kind, TemplateType::SlotInsert(_)));
+}
+
+#[test]
+fn duplicate_insert_directives_are_rejected_in_one_head() {
+    let error = template_parse_error("[$insert(\"a\"), $insert(\"b\"):]");
+    assert!(error.contains("incompatible"));
+}
+
+#[test]
+fn formatter_directives_are_exclusive_per_template_head() {
+    let error = template_parse_error("[$markdown, $raw: body]");
+    assert!(error.contains("incompatible"));
+}
+
+#[test]
+fn project_owned_formatter_directives_are_exclusive_per_template_head() {
+    let style_directives = html_project_test_style_directives();
+    let error =
+        template_parse_error_with_style_directives("[$html, $css: body]", &style_directives);
+    assert!(error.contains("incompatible"));
+}
+
+#[test]
+fn non_formatter_and_formatter_directives_can_coexist() {
+    let mut string_table = StringTable::new();
+    let mut token_stream =
+        template_tokens_from_source("[1, $markdown:\n# Hello\n]", &mut string_table);
+    let context = new_constant_context(token_stream.src_path.to_owned());
+    let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
+        .expect("non-formatter and formatter directives should coexist in the same head");
+
+    assert_eq!(template.style.id, "markdown");
+}
+
+#[test]
 fn doc_templates_treat_brackets_as_literal_text() {
     let mut string_table = StringTable::new();
     let mut token_stream = template_tokens_from_source("[$doc:\n[value]\n]", &mut string_table);

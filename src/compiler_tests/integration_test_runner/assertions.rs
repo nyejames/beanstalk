@@ -16,6 +16,7 @@ use crate::compiler_frontend::compiler_messages::compiler_errors::{
 };
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 use wasmparser::{Imports, Parser, Payload};
 
 pub(crate) fn validate_success_result(
@@ -674,38 +675,42 @@ fn validate_golden_outputs(
 
         // Text artifacts support normalized comparison; binary/wasm always use strict.
         let is_text = matches!(output.file_kind(), FileKind::Html(_) | FileKind::Js(_));
-
-        if is_text && mode == GoldenMode::Normalized {
+        if is_text {
             let expected_str = String::from_utf8_lossy(&expected_bytes);
             let actual_str = match output.file_kind() {
                 FileKind::Html(s) | FileKind::Js(s) => s.as_str(),
                 _ => unreachable!("is_text is true"),
             };
-            let norm_expected = normalize_text_for_comparison(&expected_str);
-            let norm_actual = normalize_text_for_comparison(actual_str);
-            if norm_expected != norm_actual {
-                let detail = format!("\n{}", generate_text_diff(&norm_expected, &norm_actual, 8));
+
+            if let Some(detail) = compare_text_golden(expected_str.as_ref(), actual_str, mode) {
+                let failure_kind = if mode == GoldenMode::Normalized {
+                    FailureKind::NormalizedSemanticMismatch
+                } else {
+                    FailureKind::StrictGoldenMismatch
+                };
+                let context = if mode == GoldenMode::Normalized {
+                    "did not match after normalization"
+                } else {
+                    "did not match the produced artifact"
+                };
                 return Some((
-                    format!(
-                        "Golden output '{relative}' did not match after normalization.{detail}"
-                    ),
-                    FailureKind::NormalizedSemanticMismatch,
+                    format!("Golden output '{relative}' {context}.\n{detail}"),
+                    failure_kind,
                 ));
             }
-        } else if actual_bytes != expected_bytes {
-            let detail = match output.file_kind() {
-                FileKind::Html(content) | FileKind::Js(content) => {
-                    let expected_str = String::from_utf8_lossy(&expected_bytes);
-                    format!("\n{}", generate_text_diff(&expected_str, content, 8))
-                }
-                _ => format!(
-                    " (expected {} bytes, got {} bytes)",
-                    expected_bytes.len(),
-                    actual_bytes.len()
-                ),
-            };
+            continue;
+        }
+
+        if actual_bytes != expected_bytes {
+            let detail = format!(
+                "expected {} bytes, got {} bytes",
+                expected_bytes.len(),
+                actual_bytes.len()
+            );
             return Some((
-                format!("Golden output '{relative}' did not match the produced artifact.{detail}"),
+                format!(
+                    "Golden output '{relative}' did not match the produced artifact ({detail})."
+                ),
                 FailureKind::StrictGoldenMismatch,
             ));
         }
@@ -730,7 +735,8 @@ fn validate_golden_outputs(
 /// - `bst___template_fn_1_fn4`→ `bst___template_fn_N_fnN`
 /// - `bst___bst_frag_0_fn2`   → `bst___bst_frag_N_fnN`
 pub(crate) fn normalize_text_for_comparison(text: &str) -> String {
-    let text = strip_embedded_css(text);
+    let line_normalized = normalize_text_line_endings(text);
+    let text = strip_embedded_css(&line_normalized);
     let mut result = String::with_capacity(text.len());
     let mut token_start: Option<usize> = None;
 
@@ -753,6 +759,60 @@ pub(crate) fn normalize_text_for_comparison(text: &str) -> String {
     result
 }
 
+/// Normalizes line endings for text golden comparison.
+///
+/// WHAT: canonicalizes CRLF and bare CR sequences to LF (`\n`).
+/// WHY: text artifact line endings are platform-dependent and should not cause
+/// strict-vs-normalized false positives across Windows/macOS/Linux workflows.
+fn normalize_text_line_endings(text: &str) -> String {
+    let mut normalized = String::with_capacity(text.len());
+    let mut chars = text.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        if ch == '\r' {
+            if matches!(chars.peek(), Some('\n')) {
+                chars.next();
+            }
+            normalized.push('\n');
+            continue;
+        }
+
+        normalized.push(ch);
+    }
+
+    normalized
+}
+
+/// Compares two text artifacts under the selected golden mode.
+///
+/// Returns `None` when text is equivalent under the mode, or a unified-style diff
+/// detail string when text differs.
+fn compare_text_golden(expected: &str, actual: &str, mode: GoldenMode) -> Option<String> {
+    let normalized_expected = normalize_text_line_endings(expected);
+    let normalized_actual = normalize_text_line_endings(actual);
+
+    match mode {
+        GoldenMode::Strict => {
+            if normalized_expected == normalized_actual {
+                return None;
+            }
+            Some(generate_text_diff(
+                &normalized_expected,
+                &normalized_actual,
+                8,
+            ))
+        }
+        GoldenMode::Normalized => {
+            let semantic_expected = normalize_text_for_comparison(&normalized_expected);
+            let semantic_actual = normalize_text_for_comparison(&normalized_actual);
+            if semantic_expected == semantic_actual {
+                return None;
+            }
+            Some(generate_text_diff(&semantic_expected, &semantic_actual, 8))
+        }
+    }
+}
+
 /// Strips the embedded core CSS block so golden files stay stable when
 /// `bs-css-core.css` changes.
 ///
@@ -763,7 +823,7 @@ pub(crate) fn normalize_text_for_comparison(text: &str) -> String {
 ///      into JS runtime code, not the `<style>` block, so this only removes stable
 ///      boilerplate.
 fn strip_embedded_css(text: &str) -> String {
-    const STYLE_OPEN: &str = "<style>\n";
+    const STYLE_OPEN: &str = "<style>";
     const STYLE_CLOSE: &str = "</style>";
 
     let Some(start) = text.find(STYLE_OPEN) else {
@@ -878,13 +938,24 @@ fn validate_rendered_output(
         Err(reason) => return Some((reason, FailureKind::HarnessFailed)),
     };
 
-    let combined = combine_rendered_output(&rendered);
+    validate_rendered_output_fragments(&combine_rendered_output(&rendered), contains, not_contains)
+}
 
+/// Validates rendered output string fragments independent of harness execution.
+///
+/// WHAT: checks required/forbidden fragments against precomputed rendered output.
+/// WHY: keeps harness/infrastructure failures separate from semantic mismatch checks,
+/// and allows focused unit tests without requiring a Node runtime.
+fn validate_rendered_output_fragments(
+    rendered_output: &str,
+    contains: &[String],
+    not_contains: &[String],
+) -> Option<(String, FailureKind)> {
     for required in contains {
-        if !combined.contains(required.as_str()) {
+        if !rendered_output.contains(required.as_str()) {
             return Some((
                 format!(
-                    "Rendered output did not contain required fragment '{required}'.\nActual output:\n{combined}"
+                    "Rendered output did not contain required fragment '{required}'.\nActual output:\n{rendered_output}"
                 ),
                 FailureKind::RenderedOutputMismatch,
             ));
@@ -892,10 +963,10 @@ fn validate_rendered_output(
     }
 
     for forbidden in not_contains {
-        if combined.contains(forbidden.as_str()) {
+        if rendered_output.contains(forbidden.as_str()) {
             return Some((
                 format!(
-                    "Rendered output contained forbidden fragment '{forbidden}'.\nActual output:\n{combined}"
+                    "Rendered output contained forbidden fragment '{forbidden}'.\nActual output:\n{rendered_output}"
                 ),
                 FailureKind::RenderedOutputMismatch,
             ));
@@ -940,9 +1011,13 @@ fn execute_html_in_node(html: &str) -> Result<RenderedOutput, String> {
 
     let unique = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.subsec_nanos())
+        .map(|d| d.as_nanos())
         .unwrap_or(0);
-    let temp_path = std::env::temp_dir().join(format!("bst_render_harness_{unique}.js"));
+    let temp_path = std::env::temp_dir().join(format!(
+        "bst_render_harness_{}_{}.js",
+        std::process::id(),
+        unique
+    ));
 
     std::fs::write(&temp_path, &harness)
         .map_err(|e| format!("rendered_output: failed to write node harness: {e}"))?;
@@ -951,14 +1026,14 @@ fn execute_html_in_node(html: &str) -> Result<RenderedOutput, String> {
         .arg(&temp_path)
         .output()
         .map_err(|e| {
-            let _ = std::fs::remove_file(&temp_path);
+            let _ = remove_temp_harness_file_with_retry(&temp_path);
             format!(
                 "rendered_output: failed to invoke node: {e}. \
                  Ensure 'node' is on PATH to use rendered_output_contains."
             )
         })?;
 
-    let _ = std::fs::remove_file(&temp_path);
+    let _ = remove_temp_harness_file_with_retry(&temp_path);
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -969,6 +1044,34 @@ fn execute_html_in_node(html: &str) -> Result<RenderedOutput, String> {
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     parse_harness_output(stdout.trim())
+}
+
+/// Best-effort cleanup for temporary Node harness files.
+///
+/// WHAT: retries removal briefly to tolerate Windows file-sharing race windows
+/// after process exit.
+/// WHY: avoids intermittent cleanup errors surfacing as semantic rendered-output mismatches.
+fn remove_temp_harness_file_with_retry(path: &Path) -> Result<(), std::io::Error> {
+    const MAX_ATTEMPTS: usize = 6;
+    const BASE_RETRY_DELAY_MS: u64 = 8;
+
+    let mut last_error = None;
+    for attempt in 0..MAX_ATTEMPTS {
+        match std::fs::remove_file(path) {
+            Ok(()) => return Ok(()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(error) => {
+                last_error = Some(error);
+                if attempt + 1 < MAX_ATTEMPTS {
+                    std::thread::sleep(Duration::from_millis(
+                        BASE_RETRY_DELAY_MS * (attempt as u64 + 1),
+                    ));
+                }
+            }
+        }
+    }
+
+    Err(last_error.unwrap_or_else(|| std::io::Error::other("failed to remove file")))
 }
 
 fn build_node_harness(scripts: &[String]) -> String {
@@ -1131,4 +1234,112 @@ fn generate_text_diff(expected: &str, actual: &str, max_pairs: usize) -> String 
         out.push_str(&format!("\n... ({extra} more differing lines)"));
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::build_system::build::{BuildResult, CleanupPolicy, FileKind, OutputFile, Project};
+    use crate::compiler_frontend::symbols::string_interning::StringTable;
+    use crate::compiler_tests::test_support::temp_dir;
+    use crate::projects::settings::Config;
+    use std::fs;
+    use std::path::PathBuf;
+
+    fn build_result_with_index_html(html: &str) -> BuildResult {
+        BuildResult {
+            project: Project {
+                output_files: vec![OutputFile::new(
+                    PathBuf::from("index.html"),
+                    FileKind::Html(html.to_owned()),
+                )],
+                entry_page_rel: Some(PathBuf::from("index.html")),
+                cleanup_policy: CleanupPolicy::html(),
+                warnings: Vec::new(),
+            },
+            config: Config::new(PathBuf::from("main.bst")),
+            warnings: Vec::new(),
+            string_table: StringTable::new(),
+        }
+    }
+
+    #[test]
+    fn strict_text_goldens_ignore_lf_vs_crlf_differences() {
+        assert!(
+            compare_text_golden("<p>a\r\nb</p>\r\n", "<p>a\nb</p>\n", GoldenMode::Strict).is_none()
+        );
+    }
+
+    #[test]
+    fn normalized_text_goldens_ignore_lf_vs_crlf_differences() {
+        assert!(
+            compare_text_golden(
+                "<p>bst_rhs_and_fn0\r\n</p>\r\n",
+                "<p>bst_rhs_and_fn7\n</p>\n",
+                GoldenMode::Normalized,
+            )
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn normalized_comparison_strips_core_css_after_crlf_normalization() {
+        let normalized =
+            normalize_text_for_comparison("<style>\r\nbody { color: red; }\r\n</style>\r\nok");
+        assert!(normalized.contains("<style>/* CORE_CSS */</style>"));
+        assert!(!normalized.contains("body { color: red; }"));
+    }
+
+    #[test]
+    fn rendered_output_fragment_validation_reports_semantic_mismatch_kind() {
+        let contains = vec!["missing-fragment".to_string()];
+        let result = validate_rendered_output_fragments("rendered text", &contains, &[])
+            .expect("missing required fragment should fail");
+        assert_eq!(result.1, FailureKind::RenderedOutputMismatch);
+    }
+
+    #[test]
+    fn rendered_output_validation_reports_harness_failure_without_script_blocks() {
+        let build_result = build_result_with_index_html("<html><body>no scripts</body></html>");
+        let contains = vec!["anything".to_string()];
+        let result = validate_rendered_output(&build_result, &contains, &[])
+            .expect("missing script blocks should fail rendered-output validation");
+        assert_eq!(result.1, FailureKind::HarnessFailed);
+    }
+
+    #[test]
+    fn strict_golden_validation_treats_crlf_and_lf_as_equivalent_for_text() {
+        let root = temp_dir("strict_golden_line_endings");
+        let golden_dir = root.join("golden");
+        fs::create_dir_all(&golden_dir).expect("should create golden dir");
+        fs::write(golden_dir.join("index.html"), "<p>a\r\nb</p>\r\n")
+            .expect("should write CRLF golden");
+
+        let build_result = build_result_with_index_html("<p>a\nb</p>\n");
+        let mismatch = validate_golden_outputs(&build_result, &golden_dir, GoldenMode::Strict);
+        assert!(
+            mismatch.is_none(),
+            "strict text golden checks should ignore line-ending-only differences"
+        );
+
+        fs::remove_dir_all(&root).expect("should clean temp directory");
+    }
+
+    #[test]
+    fn normalized_golden_validation_treats_crlf_and_lf_as_equivalent_for_text() {
+        let root = temp_dir("normalized_golden_line_endings");
+        let golden_dir = root.join("golden");
+        fs::create_dir_all(&golden_dir).expect("should create golden dir");
+        fs::write(golden_dir.join("index.html"), "bst_rhs_and_fn0\r\n")
+            .expect("should write CRLF golden");
+
+        let build_result = build_result_with_index_html("bst_rhs_and_fn8\n");
+        let mismatch = validate_golden_outputs(&build_result, &golden_dir, GoldenMode::Normalized);
+        assert!(
+            mismatch.is_none(),
+            "normalized golden checks should ignore counter and line-ending drift"
+        );
+
+        fs::remove_dir_all(&root).expect("should clean temp directory");
+    }
 }

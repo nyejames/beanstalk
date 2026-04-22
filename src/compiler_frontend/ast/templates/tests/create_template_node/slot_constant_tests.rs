@@ -2,7 +2,7 @@ use super::*;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
-use crate::compiler_frontend::ast::{ContextKind, ScopeContext};
+use crate::compiler_frontend::ast::{ContextKind, ScopeContext, TopLevelDeclarationIndex};
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
@@ -127,7 +127,7 @@ fn constant_context_template_head_with_constant_references_folds_to_string_slice
         ScopeContext::new(
             ContextKind::Constant,
             scope.to_owned(),
-            Rc::new(declarations.clone()),
+            Rc::new(TopLevelDeclarationIndex::new(declarations.clone())),
             HostRegistry::default(),
             vec![],
         ),

@@ -8,7 +8,9 @@
 //! This module owns generic scan mechanics only.
 //! It does NOT own statement/feature semantics or diagnostics policy.
 
+use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
+use crate::return_syntax_error;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) struct NestingDepth {
@@ -20,6 +22,18 @@ pub(crate) struct NestingDepth {
 impl NestingDepth {
     pub(crate) fn is_top_level(self) -> bool {
         self.parenthesis == 0 && self.curly == 0 && self.template == 0
+    }
+
+    fn expected_closing_delimiter(self) -> Option<&'static str> {
+        if self.template > 0 {
+            Some("]")
+        } else if self.parenthesis > 0 {
+            Some(")")
+        } else if self.curly > 0 {
+            Some("}")
+        } else {
+            None
+        }
     }
 
     pub(crate) fn step(&mut self, token_kind: &TokenKind) {
@@ -94,7 +108,9 @@ impl TemplateBalance {
     }
 }
 
-pub(crate) fn collect_declaration_initializer_tokens(token_stream: &mut FileTokens) -> Vec<Token> {
+pub(crate) fn collect_declaration_initializer_tokens(
+    token_stream: &mut FileTokens,
+) -> Result<Vec<Token>, CompilerError> {
     let mut collected = Vec::new();
     let mut depth = NestingDepth::default();
 
@@ -130,13 +146,29 @@ pub(crate) fn collect_declaration_initializer_tokens(token_stream: &mut FileToke
             break;
         }
 
+        if matches!(token_kind, TokenKind::Eof) && !at_top_level {
+            let expected_delimiter = depth.expected_closing_delimiter().unwrap_or("]");
+            return_syntax_error!(
+                format!(
+                    "Unexpected end of file while parsing declaration initializer. Missing '{}' to close this expression.",
+                    expected_delimiter
+                ),
+                token_stream.current_location(),
+                {
+                    CompilationStage => "Variable Declaration",
+                    PrimarySuggestion => "Close all opened templates and brackets before the end of the initializer",
+                    SuggestedInsertion => expected_delimiter,
+                }
+            );
+        }
+
         depth.step(&token_kind);
 
         collected.push(token_stream.current_token());
         token_stream.advance();
     }
 
-    collected
+    Ok(collected)
 }
 
 pub(crate) fn has_top_level_comma_before_statement_end(token_stream: &FileTokens) -> bool {

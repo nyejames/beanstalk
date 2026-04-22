@@ -4,7 +4,7 @@ use crate::compiler_frontend::ast::templates::template::{
     SlotKey, TemplateAtom, TemplateContent, TemplateSegment, TemplateSegmentOrigin,
 };
 use crate::compiler_frontend::ast::templates::template_types::Template;
-use crate::compiler_frontend::ast::{ContextKind, ScopeContext};
+use crate::compiler_frontend::ast::{ContextKind, ScopeContext, TopLevelDeclarationIndex};
 use crate::compiler_frontend::datatypes::Ownership;
 use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
@@ -47,7 +47,7 @@ fn test_constant_context(scope: InternedPath) -> ScopeContext {
     ScopeContext::new(
         ContextKind::Constant,
         scope.clone(),
-        Rc::new(vec![]),
+        Rc::new(TopLevelDeclarationIndex::new(vec![])),
         HostRegistry::default(),
         vec![],
     )

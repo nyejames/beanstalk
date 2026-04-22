@@ -3,6 +3,7 @@ use crate::compiler_frontend::compiler_errors::ErrorMetaDataKey;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::style_directives::{
     StyleDirectiveHandlerSpec, StyleDirectiveRegistry, StyleDirectiveSpec,
+    TemplateHeadCompatibility,
 };
 use crate::projects::html_project::style_directives::html_project_style_directives;
 
@@ -70,6 +71,84 @@ fn find_token_index(tokens: &[Token], predicate: impl Fn(&TokenKind) -> bool) ->
         .iter()
         .position(|token| predicate(&token.kind))
         .expect("expected token to be present")
+}
+
+fn collect_literal_texts(file_tokens: &FileTokens, string_table: &StringTable) -> Vec<String> {
+    file_tokens
+        .tokens
+        .iter()
+        .filter_map(|token| match token.kind {
+            TokenKind::StringSliceLiteral(id) | TokenKind::RawStringLiteral(id) => {
+                Some(string_table.resolve(id).to_owned())
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn normalizes_regular_string_newlines_from_crlf_and_bare_cr() {
+    let (file_tokens, string_table) = tokenize_source("value = \"line1\r\nline2\rline3\"\n");
+    let texts = collect_literal_texts(&file_tokens, &string_table);
+    let string_literal = texts
+        .first()
+        .expect("expected one regular string literal to be tokenized");
+
+    assert_eq!(string_literal, "line1\nline2\nline3");
+    assert!(
+        !string_literal.contains('\r'),
+        "regular string literals should not retain carriage returns"
+    );
+}
+
+#[test]
+fn normalizes_raw_string_newlines_from_crlf_and_bare_cr() {
+    let (file_tokens, string_table) = tokenize_source("`line1\r\nline2\rline3`");
+    let texts = collect_literal_texts(&file_tokens, &string_table);
+    let raw_literal = texts
+        .first()
+        .expect("expected one raw string literal to be tokenized");
+
+    assert_eq!(raw_literal, "line1\nline2\nline3");
+    assert!(
+        !raw_literal.contains('\r'),
+        "raw string literals should not retain carriage returns"
+    );
+}
+
+#[test]
+fn normalizes_template_body_newlines_from_crlf_and_bare_cr() {
+    let (file_tokens, string_table) = tokenize_source("[:line1\r\nline2\rline3]");
+    let texts = collect_literal_texts(&file_tokens, &string_table);
+    let body_literal = texts
+        .first()
+        .expect("expected one template-body string literal to be tokenized");
+
+    assert_eq!(body_literal, "line1\nline2\nline3");
+    assert!(
+        !body_literal.contains('\r'),
+        "template body literals should not retain carriage returns"
+    );
+}
+
+#[test]
+fn normalizes_code_template_body_newlines_from_crlf_and_bare_cr() {
+    let (file_tokens, string_table) =
+        tokenize_source("[$code:\r\nalpha\nline\rbravo\r\ncharlie\r\ndelta\r]");
+    let texts = collect_literal_texts(&file_tokens, &string_table);
+    let body_literal = texts
+        .iter()
+        .find(|text| text.contains("alpha"))
+        .expect("expected code template body literal");
+
+    assert!(
+        body_literal.contains("alpha\nline\nbravo\ncharlie\ndelta\n"),
+        "code template body should normalize mixed newline sequences to LF"
+    );
+    assert!(
+        !body_literal.contains('\r'),
+        "code template body literals should not retain carriage returns"
+    );
 }
 
 #[test]
@@ -728,6 +807,7 @@ fn custom_balanced_directive_uses_general_balanced_mode() {
     let directives = vec![StyleDirectiveSpec::handler(
         "highlight",
         TemplateBodyMode::Balanced,
+        TemplateHeadCompatibility::fully_compatible_meaningful(),
         StyleDirectiveHandlerSpec::no_op(),
     )];
     let (file_tokens, string_table) =

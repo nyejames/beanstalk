@@ -9,7 +9,7 @@ use crate::compiler_frontend::ast::expressions::expression::{Expression, Express
 use crate::compiler_frontend::ast::statements::functions::{
     FunctionReturn, FunctionSignature, ReturnSlot,
 };
-use crate::compiler_frontend::ast::{ContextKind, ScopeContext};
+use crate::compiler_frontend::ast::{ContextKind, ScopeContext, TopLevelDeclarationIndex};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, ReceiverKey};
 use crate::compiler_frontend::declaration_syntax::type_syntax::resolve_named_types_in_data_type;
@@ -330,7 +330,7 @@ fn inline_visible_constant_references_impl(
             let evaluation_context = ScopeContext::new(
                 ContextKind::ConstantHeader,
                 expression.location.scope.to_owned(),
-                Rc::new(Vec::new()),
+                Rc::new(TopLevelDeclarationIndex::new(Vec::new())),
                 HostRegistry::new(),
                 Vec::new(),
             );

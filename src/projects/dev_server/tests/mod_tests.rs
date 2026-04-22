@@ -4,7 +4,9 @@ use super::{DevServerOptions, resolve_dev_runtime_paths, validate_dev_entry_path
 use crate::build_system::build::{BackendBuilder, Project, ProjectBuilder};
 use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::style_directives::{StyleDirectiveHandlerSpec, StyleDirectiveSpec};
+use crate::compiler_frontend::style_directives::{
+    StyleDirectiveHandlerSpec, StyleDirectiveSpec, TemplateHeadCompatibility,
+};
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::TemplateBodyMode;
 use crate::compiler_tests::test_support::temp_dir;
@@ -62,6 +64,7 @@ impl BackendBuilder for ConflictingDirectiveBuilder {
         vec![StyleDirectiveSpec::handler(
             "markdown",
             TemplateBodyMode::Normal,
+            TemplateHeadCompatibility::fully_compatible_meaningful(),
             StyleDirectiveHandlerSpec::no_op(),
         )]
     }

@@ -299,10 +299,169 @@ fn lower_binary_expression(
                 ))),
             }
         }
+        HirBinOp::Mod => {
+            if lhs_abi != rhs_abi {
+                return Err(binop_abi_mismatch_error("Mod", lhs_abi, rhs_abi));
+            }
+            match lhs_abi {
+                WasmAbiType::I64 => {
+                    let dst = context.alloc_temp(WasmAbiType::I64);
+                    statements.push(WasmLirStmt::IntMod {
+                        dst,
+                        lhs: lhs.value,
+                        rhs: rhs.value,
+                    });
+                    Ok(ExprLoweringOutput {
+                        value: dst,
+                        prefer_move: false,
+                    })
+                }
+                WasmAbiType::F32 | WasmAbiType::F64 => {
+                    let dst = context.alloc_temp(lhs_abi);
+                    statements.push(WasmLirStmt::FloatMod {
+                        dst,
+                        lhs: lhs.value,
+                        rhs: rhs.value,
+                    });
+                    Ok(ExprLoweringOutput {
+                        value: dst,
+                        prefer_move: false,
+                    })
+                }
+                _ => Err(binop_unsupported_abi_error("Mod", lhs_abi)),
+            }
+        }
+        HirBinOp::Mul => {
+            if lhs_abi != rhs_abi {
+                return Err(binop_abi_mismatch_error("Mul", lhs_abi, rhs_abi));
+            }
+            match lhs_abi {
+                WasmAbiType::I64 => {
+                    let dst = context.alloc_temp(WasmAbiType::I64);
+                    statements.push(WasmLirStmt::IntMul {
+                        dst,
+                        lhs: lhs.value,
+                        rhs: rhs.value,
+                    });
+                    Ok(ExprLoweringOutput {
+                        value: dst,
+                        prefer_move: false,
+                    })
+                }
+                WasmAbiType::F32 | WasmAbiType::F64 => {
+                    let dst = context.alloc_temp(lhs_abi);
+                    statements.push(WasmLirStmt::FloatMul {
+                        dst,
+                        lhs: lhs.value,
+                        rhs: rhs.value,
+                    });
+                    Ok(ExprLoweringOutput {
+                        value: dst,
+                        prefer_move: false,
+                    })
+                }
+                _ => Err(binop_unsupported_abi_error("Mul", lhs_abi)),
+            }
+        }
+        HirBinOp::Div => {
+            match lhs_abi {
+                WasmAbiType::I64 => {
+                    // Int / Int → Float: type system guarantees Float result even with Int operands.
+                    let dst = context.alloc_temp(WasmAbiType::F64);
+                    statements.push(WasmLirStmt::IntToFloatDiv {
+                        dst,
+                        lhs: lhs.value,
+                        rhs: rhs.value,
+                    });
+                    Ok(ExprLoweringOutput {
+                        value: dst,
+                        prefer_move: false,
+                    })
+                }
+                WasmAbiType::F32 | WasmAbiType::F64 => {
+                    if lhs_abi != rhs_abi {
+                        return Err(binop_abi_mismatch_error("Div", lhs_abi, rhs_abi));
+                    }
+                    let dst = context.alloc_temp(lhs_abi);
+                    statements.push(WasmLirStmt::FloatDiv {
+                        dst,
+                        lhs: lhs.value,
+                        rhs: rhs.value,
+                    });
+                    Ok(ExprLoweringOutput {
+                        value: dst,
+                        prefer_move: false,
+                    })
+                }
+                _ => Err(binop_unsupported_abi_error("Div", lhs_abi)),
+            }
+        }
+        HirBinOp::IntDiv => {
+            if lhs_abi != rhs_abi {
+                return Err(binop_abi_mismatch_error("IntDiv", lhs_abi, rhs_abi));
+            }
+            match lhs_abi {
+                WasmAbiType::I64 => {
+                    let dst = context.alloc_temp(WasmAbiType::I64);
+                    statements.push(WasmLirStmt::IntFloorDiv {
+                        dst,
+                        lhs: lhs.value,
+                        rhs: rhs.value,
+                    });
+                    Ok(ExprLoweringOutput {
+                        value: dst,
+                        prefer_move: false,
+                    })
+                }
+                _ => Err(binop_unsupported_abi_error("IntDiv", lhs_abi)),
+            }
+        }
+        HirBinOp::And => match lhs_abi {
+            WasmAbiType::I32 => {
+                let dst = context.alloc_temp(WasmAbiType::I32);
+                statements.push(WasmLirStmt::BoolAnd {
+                    dst,
+                    lhs: lhs.value,
+                    rhs: rhs.value,
+                });
+                Ok(ExprLoweringOutput {
+                    value: dst,
+                    prefer_move: false,
+                })
+            }
+            _ => Err(binop_unsupported_abi_error("And", lhs_abi)),
+        },
+        HirBinOp::Or => match lhs_abi {
+            WasmAbiType::I32 => {
+                let dst = context.alloc_temp(WasmAbiType::I32);
+                statements.push(WasmLirStmt::BoolOr {
+                    dst,
+                    lhs: lhs.value,
+                    rhs: rhs.value,
+                });
+                Ok(ExprLoweringOutput {
+                    value: dst,
+                    prefer_move: false,
+                })
+            }
+            _ => Err(binop_unsupported_abi_error("Or", lhs_abi)),
+        },
         _ => Err(lir_transformation_error(format!(
             "Wasm lowering does not yet support binary operator {op:?}"
         ))),
     }
+}
+
+fn binop_abi_mismatch_error(op: &str, lhs: WasmAbiType, rhs: WasmAbiType) -> CompilerError {
+    lir_transformation_error(format!(
+        "Wasm lowering does not support {op} for mismatched ABI types {lhs:?} and {rhs:?}"
+    ))
+}
+
+fn binop_unsupported_abi_error(op: &str, abi: WasmAbiType) -> CompilerError {
+    lir_transformation_error(format!(
+        "Wasm lowering does not support {op} for ABI type {abi:?}"
+    ))
 }
 
 fn should_lower_as_string_concat(

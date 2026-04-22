@@ -2,8 +2,7 @@
 //!
 //! WHAT:
 //! - Handles compiler-owned core directives in template heads.
-//! - Enforces slot/insert/comment helper restrictions that must never fall through
-//!   to generic handler-based directive logic.
+//! - Keeps slot/insert helper parsing separate from generic style-handler logic.
 //!
 //! WHY:
 //! - Core directives encode language semantics and structural helpers, so their
@@ -31,20 +30,12 @@ pub(super) fn maybe_parse_slot_or_insert_helper_directive(
     spec_kind: &StyleDirectiveKind,
     token_stream: &mut FileTokens,
     template: &mut Template,
-    saw_meaningful_head_item: bool,
     string_table: &StringTable,
 ) -> Result<bool, CompilerError> {
     if matches!(
         spec_kind,
         StyleDirectiveKind::Core(CoreStyleDirectiveKind::Slot)
     ) {
-        if saw_meaningful_head_item {
-            return_syntax_error!(
-                "Slot helper template heads can only contain '$slot' before the optional body.",
-                token_stream.current_location()
-            );
-        }
-
         let slot_key = parse_slot_definition_target_argument(token_stream, string_table)?;
         template.kind = TemplateType::SlotDefinition(slot_key);
         return Ok(true);
@@ -54,44 +45,12 @@ pub(super) fn maybe_parse_slot_or_insert_helper_directive(
         spec_kind,
         StyleDirectiveKind::Core(CoreStyleDirectiveKind::Insert)
     ) {
-        if saw_meaningful_head_item {
-            return_syntax_error!(
-                "Slot helper template heads can only contain '$insert(\"name\")' before the optional body.",
-                token_stream.current_location()
-            );
-        }
-
         let slot_name = parse_required_named_slot_insert_argument(token_stream, string_table)?;
         template.kind = TemplateType::SlotInsert(SlotKey::named(slot_name));
         return Ok(true);
     }
 
     Ok(false)
-}
-
-pub(super) fn reject_mixed_comment_directive(
-    spec_kind: &StyleDirectiveKind,
-    saw_meaningful_head_item: bool,
-    token_stream: &FileTokens,
-    _string_table: &StringTable,
-) -> Result<(), CompilerError> {
-    if saw_meaningful_head_item
-        && matches!(
-            spec_kind,
-            StyleDirectiveKind::Core(
-                CoreStyleDirectiveKind::Note
-                    | CoreStyleDirectiveKind::Todo
-                    | CoreStyleDirectiveKind::Doc
-            )
-        )
-    {
-        return_syntax_error!(
-            "Comment template heads cannot mix '$note', '$todo', or '$doc' with other head expressions/directives.",
-            token_stream.current_location()
-        );
-    }
-
-    Ok(())
 }
 
 pub(super) fn parse_core_style_directive(

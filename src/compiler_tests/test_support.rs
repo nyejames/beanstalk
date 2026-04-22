@@ -4,6 +4,7 @@
 //! WHY: avoids duplicating small utility functions in every test module.
 
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::SystemTime;
 
 /// Creates a unique temporary directory path for test isolation.
@@ -11,9 +12,17 @@ use std::time::SystemTime;
 /// WHAT: joins `std::env::temp_dir()` with a prefix and a nanosecond timestamp.
 /// WHY: prevents test collisions when multiple tests run concurrently or in sequence.
 pub fn temp_dir(prefix: &str) -> PathBuf {
+    static TEMP_DIR_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
     let unique = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
         .expect("time should be after unix epoch")
         .as_nanos();
-    std::env::temp_dir().join(format!("beanstalk_{prefix}_{unique}"))
+    let sequence = TEMP_DIR_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+    std::env::temp_dir().join(format!(
+        "beanstalk_{prefix}_{}_{}_{}",
+        std::process::id(),
+        unique,
+        sequence
+    ))
 }

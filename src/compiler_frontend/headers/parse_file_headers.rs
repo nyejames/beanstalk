@@ -29,7 +29,7 @@
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
-use crate::compiler_frontend::ast::{ContextKind, ScopeContext};
+use crate::compiler_frontend::ast::{ContextKind, ScopeContext, TopLevelDeclarationIndex};
 use crate::compiler_frontend::builtins::error_type::{
     is_reserved_builtin_symbol, register_builtin_error_types,
 };
@@ -156,7 +156,7 @@ struct HeaderBuildContext<'a> {
     warnings: &'a mut Vec<CompilerWarning>,
     project_path_resolver: Option<ProjectPathResolver>,
     path_format_config: PathStringFormatConfig,
-    visible_constant_placeholders: Rc<Vec<Declaration>>,
+    visible_constant_placeholders: Rc<TopLevelDeclarationIndex>,
     source_file: &'a InternedPath,
     file_imports: &'a HashSet<InternedPath>,
     file_import_entries: &'a [FileImport],
@@ -1167,7 +1167,7 @@ fn create_constant_header_payload(
 fn discover_visible_constant_placeholders(
     token_stream: &FileTokens,
     string_table: &mut StringTable,
-) -> Result<Rc<Vec<Declaration>>, CompilerError> {
+) -> Result<Rc<TopLevelDeclarationIndex>, CompilerError> {
     let mut placeholders = Vec::new();
     let mut seen_paths = HashSet::new();
     let mut next_statement_exported = false;
@@ -1235,7 +1235,7 @@ fn discover_visible_constant_placeholders(
         index += 1;
     }
 
-    Ok(Rc::new(placeholders))
+    Ok(Rc::new(TopLevelDeclarationIndex::new(placeholders)))
 }
 
 fn exported_symbol_starts_constant(tokens: &[Token], next_index: usize) -> bool {

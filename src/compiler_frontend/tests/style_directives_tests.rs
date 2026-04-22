@@ -59,6 +59,7 @@ fn handler_directive_contract_is_preserved() {
     let builder_specs = vec![StyleDirectiveSpec::handler(
         "brand",
         TemplateBodyMode::Normal,
+        TemplateHeadCompatibility::fully_compatible_meaningful(),
         StyleDirectiveHandlerSpec::new(
             Some(StyleDirectiveArgumentType::String),
             StyleDirectiveEffects {
@@ -107,6 +108,76 @@ fn frontend_built_ins_have_expected_classification() {
         assert!(
             built_ins.find(non_core).is_none(),
             "non-core directive '{non_core}' should not be compiler built-in"
+        );
+    }
+}
+
+#[test]
+fn handler_no_op_defaults_to_fully_compatible_meaningful_head_item() {
+    let no_op = StyleDirectiveSpec::handler_no_op("brand", TemplateBodyMode::Normal);
+    assert_eq!(
+        no_op.head_compatibility,
+        TemplateHeadCompatibility::fully_compatible_meaningful()
+    );
+}
+
+#[test]
+fn frontend_built_in_head_compatibility_profiles_match_contract() {
+    let built_ins = StyleDirectiveRegistry::built_ins();
+
+    let slot = built_ins.find("slot").expect("missing '$slot' directive");
+    assert_eq!(
+        slot.head_compatibility.presence_tags,
+        TemplateHeadTag::MEANINGFUL_ITEM | TemplateHeadTag::SLOT_DIRECTIVE
+    );
+    assert_eq!(
+        slot.head_compatibility.required_absent_tags,
+        TemplateHeadTag::MEANINGFUL_ITEM
+    );
+    assert_eq!(
+        slot.head_compatibility.blocks_future_tags,
+        TemplateHeadTag::MEANINGFUL_ITEM
+    );
+
+    let insert = built_ins
+        .find("insert")
+        .expect("missing '$insert' directive");
+    assert_eq!(
+        insert.head_compatibility,
+        TemplateHeadCompatibility::blocks_same(TemplateHeadTag::INSERT_DIRECTIVE)
+    );
+
+    for comment_directive in ["note", "todo", "doc"] {
+        let directive = built_ins
+            .find(comment_directive)
+            .unwrap_or_else(|| panic!("missing '${comment_directive}' directive"));
+        assert_eq!(
+            directive.head_compatibility.presence_tags,
+            TemplateHeadTag::MEANINGFUL_ITEM | TemplateHeadTag::COMMENT_DIRECTIVE
+        );
+        assert_eq!(
+            directive.head_compatibility.required_absent_tags,
+            TemplateHeadTag::MEANINGFUL_ITEM
+        );
+        assert_eq!(
+            directive.head_compatibility.blocks_future_tags,
+            TemplateHeadTag::MEANINGFUL_ITEM
+        );
+    }
+
+    for formatter_directive in ["markdown", "raw", "code"] {
+        let directive = built_ins
+            .find(formatter_directive)
+            .unwrap_or_else(|| panic!("missing '${formatter_directive}' directive"));
+        assert!(
+            directive
+                .head_compatibility
+                .presence_tags
+                .intersects(TemplateHeadTag::FORMATTER_DIRECTIVE)
+        );
+        assert_eq!(
+            directive.head_compatibility.blocks_future_tags,
+            TemplateHeadTag::FORMATTER_DIRECTIVE
         );
     }
 }

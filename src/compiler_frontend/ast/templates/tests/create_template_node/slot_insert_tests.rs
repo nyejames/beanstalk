@@ -2,7 +2,7 @@ use super::*;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::templates::template::TemplateType;
-use crate::compiler_frontend::ast::{ContextKind, ScopeContext};
+use crate::compiler_frontend::ast::{ContextKind, ScopeContext, TopLevelDeclarationIndex};
 use crate::compiler_frontend::datatypes::Ownership;
 use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
@@ -202,6 +202,41 @@ fn rejects_unknown_named_insert_targets() {
         .expect_err("unknown named inserts should fail");
 
     assert!(error.msg.contains("named slot that does not exist"));
+    assert!(error.msg.contains("$insert(\"missing\")"));
+}
+
+#[test]
+fn unknown_named_insert_target_points_at_insert_helper_location() {
+    let mut string_table = StringTable::new();
+    let wrapper_scope =
+        InternedPath::from_single_str("main.bst/#const_template0", &mut string_table);
+    let mut wrapper_tokens =
+        template_tokens_from_source("[: before [$slot(\"title\")] after]", &mut string_table);
+    let wrapper_context = new_constant_context(wrapper_tokens.src_path.to_owned());
+    let wrapper = Template::new(
+        &mut wrapper_tokens,
+        &wrapper_context,
+        vec![],
+        &mut string_table,
+    )
+    .expect("wrapper should parse");
+
+    let declaration = Declaration {
+        id: wrapper_scope.append(string_table.intern("named_only_slots")),
+        value: Expression::template(wrapper, Ownership::ImmutableOwned),
+    };
+
+    let mut token_stream = template_tokens_from_source(
+        "[named_only_slots:\n    [$insert(\"missing\"): nope]\n]",
+        &mut string_table,
+    );
+    let context = constant_template_context(&token_stream.src_path, &[declaration]);
+
+    let error = Template::new(&mut token_stream, &context, vec![], &mut string_table)
+        .expect_err("unknown named inserts should fail");
+
+    assert_eq!(error.location.start_pos.line_number, 1);
+    assert!(error.msg.contains("$insert(\"missing\")"));
 }
 
 #[test]
@@ -384,7 +419,9 @@ fn fills_nested_slots_for_runtime_wrappers() {
     let wrapper_context = ScopeContext::new(
         ContextKind::Template,
         scope.to_owned(),
-        Rc::new(vec![value_declaration.to_owned()]),
+        Rc::new(TopLevelDeclarationIndex::new(vec![
+            value_declaration.to_owned(),
+        ])),
         HostRegistry::default(),
         vec![],
     );
@@ -409,7 +446,7 @@ fn fills_nested_slots_for_runtime_wrappers() {
     let consuming_context = ScopeContext::new(
         ContextKind::Template,
         scope,
-        Rc::new(declarations),
+        Rc::new(TopLevelDeclarationIndex::new(declarations)),
         HostRegistry::default(),
         vec![],
     );
@@ -503,4 +540,138 @@ fn template_with_slot_and_insert_contributes_upward_after_receiving_content() {
     assert!(rendered.contains("color: blue;"));
     assert!(rendered.contains("<em>"));
     assert!(rendered.contains("Hello"));
+}
+
+#[test]
+fn canonical_runtime_card_helpers_compose_without_parent_slot_leakage() {
+    let mut string_table = StringTable::new();
+    let scope = InternedPath::from_single_str("main.bst/#const_template0", &mut string_table);
+
+    let mut page_tokens = template_tokens_from_source(
+        "[$children([:<section class=\"section\">[$slot]</section>]): <main class=\"page\">[$slot]</main>]",
+        &mut string_table,
+    );
+    let page_scope = page_tokens.src_path.to_owned();
+    let page = Template::new(
+        &mut page_tokens,
+        &new_constant_context(page_scope),
+        vec![],
+        &mut string_table,
+    )
+    .expect("page wrapper should parse");
+
+    let mut card_tokens = template_tokens_from_source(
+        "[: <article class=\"card\"><div class=\"card-head\">[$slot(\"head\")]</div><div class=\"card-body\">[$slot]</div><div class=\"card-foot\">[$slot(\"foot\")]</div></article>]",
+        &mut string_table,
+    );
+    let card_scope = card_tokens.src_path.to_owned();
+    let card = Template::new(
+        &mut card_tokens,
+        &new_constant_context(card_scope),
+        vec![],
+        &mut string_table,
+    )
+    .expect("card wrapper should parse");
+
+    let mut section_title_tokens = template_tokens_from_source(
+        "[: <h2 class=\"heading\" style=\"[$slot(\"style\")]\">[$slot]</h2>]",
+        &mut string_table,
+    );
+    let section_title_scope = section_title_tokens.src_path.to_owned();
+    let section_title = Template::new(
+        &mut section_title_tokens,
+        &new_constant_context(section_title_scope),
+        vec![],
+        &mut string_table,
+    )
+    .expect("section title should parse");
+    let section_title_declaration = Declaration {
+        id: scope.append(string_table.intern("section_title")),
+        value: Expression::template(section_title.to_owned(), Ownership::ImmutableOwned),
+    };
+
+    let mut accent_title_tokens =
+        template_tokens_from_source("[$insert(\"style\"): color: cyan;]", &mut string_table);
+    let accent_title_scope = accent_title_tokens.src_path.to_owned();
+    let accent_title = Template::new(
+        &mut accent_title_tokens,
+        &new_constant_context(accent_title_scope),
+        vec![],
+        &mut string_table,
+    )
+    .expect("accent title helper should parse");
+    let accent_title_declaration = Declaration {
+        id: scope.append(string_table.intern("accent_title")),
+        value: Expression::template(accent_title.to_owned(), Ownership::ImmutableOwned),
+    };
+
+    let mut runtime_grid_head_tokens = template_tokens_from_source(
+        "[$insert(\"head\"):[section_title, accent_title: Runtime grid output]]",
+        &mut string_table,
+    );
+    let runtime_grid_head_context = constant_template_context(
+        &runtime_grid_head_tokens.src_path,
+        &[
+            section_title_declaration.to_owned(),
+            accent_title_declaration.to_owned(),
+        ],
+    );
+    let runtime_grid_head = Template::new(
+        &mut runtime_grid_head_tokens,
+        &runtime_grid_head_context,
+        vec![],
+        &mut string_table,
+    )
+    .expect("runtime grid head helper should parse");
+
+    let mut runtime_grid_foot_tokens = template_tokens_from_source(
+        "[$insert(\"foot\"): built from a collection of structs and a receiver method call in a loop]",
+        &mut string_table,
+    );
+    let runtime_grid_foot_scope = runtime_grid_foot_tokens.src_path.to_owned();
+    let runtime_grid_foot = Template::new(
+        &mut runtime_grid_foot_tokens,
+        &new_constant_context(runtime_grid_foot_scope),
+        vec![],
+        &mut string_table,
+    )
+    .expect("runtime grid foot helper should parse");
+
+    let declarations = vec![
+        Declaration {
+            id: scope.append(string_table.intern("page")),
+            value: Expression::template(page, Ownership::ImmutableOwned),
+        },
+        Declaration {
+            id: scope.append(string_table.intern("card")),
+            value: Expression::template(card, Ownership::ImmutableOwned),
+        },
+        section_title_declaration,
+        accent_title_declaration,
+        Declaration {
+            id: scope.append(string_table.intern("runtime_grid_head")),
+            value: Expression::template(runtime_grid_head, Ownership::ImmutableOwned),
+        },
+        Declaration {
+            id: scope.append(string_table.intern("runtime_grid_foot")),
+            value: Expression::template(runtime_grid_foot, Ownership::ImmutableOwned),
+        },
+    ];
+
+    let mut token_stream = template_tokens_from_source(
+        "[page:\n    [card, runtime_grid_head, runtime_grid_foot:\n        [: runtime grid body ]\n    ]\n]",
+        &mut string_table,
+    );
+    let context = constant_template_context(&token_stream.src_path, &declarations);
+    let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
+        .expect("canonical helper-based card composition should parse");
+    let folded = fold_template_in_context(&template, &context, &mut string_table);
+    let rendered = string_table.resolve(folded);
+
+    assert!(rendered.contains("<main class=\"page\">"));
+    assert!(rendered.contains("<section class=\"section\">"));
+    assert!(rendered.contains("<article class=\"card\">"));
+    assert!(rendered.contains("Runtime grid output"));
+    assert!(rendered.contains("built from a collection of structs"));
+    assert!(rendered.contains("runtime grid body"));
 }
