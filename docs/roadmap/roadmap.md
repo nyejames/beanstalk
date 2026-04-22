@@ -19,19 +19,6 @@ These are the non-negotiable conditions for starting Alpha:
 
 ## Next Plans
 
-### Add integration tests for frontend rejection of invalid string coercion
-
-Todo
-
-* Add fixtures showing AST rejects invalid automatic string coercion for:
-    * struct values
-    * collection values
-    * option/result carriers
-    * tuples/multiple returns where not explicitly allowed
-* Add template-head and template-body variants
-* Add one regression test that proves valid string-slice/template paths still compile while invalid value types fail early
-
-
 ## JS backend extension
 
 ### Expand JS backend and runtime coverage for choices

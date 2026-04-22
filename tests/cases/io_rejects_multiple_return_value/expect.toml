@@ -1,0 +1,8 @@
+[backends.html]
+mode = "failure"
+warnings = "forbid"
+error_type = "Type"
+message_contains = [
+  "Argument 1 to function 'io' has incorrect type",
+  "Expected a final scalar or textual value, but got Returns(StringInt)",
+]

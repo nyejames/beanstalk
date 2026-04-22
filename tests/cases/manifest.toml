@@ -1868,3 +1868,58 @@ tags = ["integration", "structs", "diagnostics"]
 id = "struct_mutable_receiver_requires_explicit_receiver_tilde"
 path = "struct_mutable_receiver_requires_explicit_receiver_tilde"
 tags = ["integration", "structs", "diagnostics"]
+
+[[case]]
+id = "io_rejects_struct_value"
+path = "io_rejects_struct_value"
+tags = ["integration", "diagnostics", "string-coercion"]
+
+[[case]]
+id = "io_rejects_collection_value"
+path = "io_rejects_collection_value"
+tags = ["integration", "diagnostics", "string-coercion"]
+
+[[case]]
+id = "io_rejects_option_value"
+path = "io_rejects_option_value"
+tags = ["integration", "diagnostics", "string-coercion"]
+
+[[case]]
+id = "io_rejects_result_value"
+path = "io_rejects_result_value"
+tags = ["integration", "diagnostics", "string-coercion"]
+
+[[case]]
+id = "io_rejects_multiple_return_value"
+path = "io_rejects_multiple_return_value"
+tags = ["integration", "diagnostics", "string-coercion"]
+
+[[case]]
+id = "template_head_rejects_struct_value"
+path = "template_head_rejects_struct_value"
+tags = ["integration", "diagnostics", "string-coercion", "templates"]
+
+[[case]]
+id = "template_head_rejects_collection_value"
+path = "template_head_rejects_collection_value"
+tags = ["integration", "diagnostics", "string-coercion", "templates"]
+
+[[case]]
+id = "template_head_rejects_option_value"
+path = "template_head_rejects_option_value"
+tags = ["integration", "diagnostics", "string-coercion", "templates"]
+
+[[case]]
+id = "template_head_rejects_result_value"
+path = "template_head_rejects_result_value"
+tags = ["integration", "diagnostics", "string-coercion", "templates"]
+
+[[case]]
+id = "template_head_rejects_multiple_return_value"
+path = "template_head_rejects_multiple_return_value"
+tags = ["integration", "diagnostics", "string-coercion", "templates"]
+
+[[case]]
+id = "string_coercion_valid_paths_compile_invalid_fails_early"
+path = "string_coercion_valid_paths_compile_invalid_fails_early"
+tags = ["integration", "diagnostics", "string-coercion", "regression"]

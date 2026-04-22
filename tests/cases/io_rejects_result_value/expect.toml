@@ -1,0 +1,8 @@
+[backends.html]
+mode = "failure"
+warnings = "forbid"
+error_type = "Type"
+message_contains = [
+  "Argument 1 to function 'io' has incorrect type",
+  "Result values must be handled before reaching io(...)",
+]
