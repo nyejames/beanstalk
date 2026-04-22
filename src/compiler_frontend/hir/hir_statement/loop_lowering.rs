@@ -655,8 +655,9 @@ impl<'a> HirBuilder<'a> {
         self.lower_statement_sequence(body)?;
         self.pop_loop_targets();
 
-        if !self.block_has_explicit_terminator(body_block, location)? {
-            self.emit_jump_to(body_block, step_block, location, "for.body.step")?;
+        let body_tail_block = self.current_block_id_or_error(location)?;
+        if !self.block_has_explicit_terminator(body_tail_block, location)? {
+            self.emit_jump_to(body_tail_block, step_block, location, "for.body.step")?;
         }
 
         self.set_current_block(step_block, location)?;

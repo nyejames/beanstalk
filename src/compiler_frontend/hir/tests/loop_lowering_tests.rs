@@ -377,6 +377,124 @@ fn preserves_runtime_zero_step_guard_for_dynamic_step() {
 }
 
 #[test]
+fn range_loop_nested_if_body_routes_tail_to_step_block() {
+    let mut string_table = StringTable::new();
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
+    let location = test_location(24);
+
+    let branch_value = super::symbol("branch_value", &mut string_table);
+    let tail_value = super::symbol("tail_value", &mut string_table);
+    let range_loop = node(
+        NodeKind::RangeLoop {
+            bindings: LoopBindings {
+                item: None,
+                index: None,
+            },
+            range: range_loop_spec(
+                Expression::int(0, location.clone(), Ownership::ImmutableOwned),
+                Expression::int(4, location.clone(), Ownership::ImmutableOwned),
+                RangeEndKind::Exclusive,
+                None,
+            ),
+            body: vec![
+                node(
+                    NodeKind::If(
+                        Expression::bool(true, location.clone(), Ownership::ImmutableOwned),
+                        vec![node(
+                            NodeKind::VariableDeclaration(Declaration {
+                                id: branch_value,
+                                value: Expression::int(
+                                    1,
+                                    location.clone(),
+                                    Ownership::ImmutableOwned,
+                                ),
+                            }),
+                            location.clone(),
+                        )],
+                        None,
+                    ),
+                    location.clone(),
+                ),
+                node(
+                    NodeKind::VariableDeclaration(Declaration {
+                        id: tail_value,
+                        value: Expression::int(2, location.clone(), Ownership::ImmutableOwned),
+                    }),
+                    location.clone(),
+                ),
+            ],
+        },
+        location,
+    );
+
+    let start_fn = function_node(
+        start_name,
+        FunctionSignature {
+            parameters: vec![],
+            returns: vec![],
+        },
+        vec![range_loop],
+        test_location(23),
+    );
+
+    let module = lower_ast(build_ast(vec![start_fn], entry_path), &mut string_table)
+        .expect("range loop lowering with nested body control-flow should succeed");
+
+    let (_, header_selector_block, header_ascending_block, _, _) = range_loop_cfg_blocks(&module);
+    let body_block = match module.blocks[header_ascending_block.0 as usize].terminator {
+        HirTerminator::If { then_block, .. } => then_block,
+        _ => panic!("expected ascending header branch"),
+    };
+    assert!(
+        matches!(
+            module.blocks[body_block.0 as usize].terminator,
+            HirTerminator::If { .. }
+        ),
+        "nested if should terminate the range-loop body entry block"
+    );
+
+    let step_block = module
+        .blocks
+        .iter()
+        .find_map(|block| match block.terminator {
+            HirTerminator::Jump { target, .. } if target == header_selector_block => {
+                let has_index_increment = block.statements.iter().any(|statement| {
+                    match &statement.kind {
+                        HirStatementKind::Assign { value, .. } => matches!(
+                            &value.kind,
+                            HirExpressionKind::BinOp {
+                                op: HirBinOp::Add,
+                                right,
+                                ..
+                            } if matches!(right.kind, HirExpressionKind::Int(1))
+                        ),
+                        _ => false,
+                    }
+                });
+                has_index_increment.then_some(block.id)
+            }
+            _ => None,
+        })
+        .expect("expected range-step block backedge to header selector");
+
+    let step_predecessor_ids = module
+        .blocks
+        .iter()
+        .filter_map(|block| match block.terminator {
+            HirTerminator::Jump { target, .. } if target == step_block && block.id != body_block => {
+                Some(block.id)
+            }
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert!(
+        !step_predecessor_ids.is_empty(),
+        "expected lowered range-loop body tail to jump into the step block"
+    );
+    assert_no_placeholder_terminators(&module);
+}
+
+#[test]
 fn lowers_collection_loop_to_explicit_cfg() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
