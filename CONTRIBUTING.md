@@ -21,6 +21,8 @@ New code constributions must follow the style guide: <a href="https://github.com
 
 Run the compiler integration suite with `cargo run -- tests`.
 
+There is a purpose built speed test file that can be ran with `cargo run --release --features "detailed_timers" check speed-test.bst`, for checking compile speed regressions for common heavy template folding work.
+
 New integration fixtures should use the canonical `tests/cases/<case>/input + expect.toml` layout.
 An optional `tests/cases/manifest.toml` can define case ordering and tags during fixture migrations.
 
@@ -28,6 +30,8 @@ An optional `tests/cases/manifest.toml` can define case ordering and tags during
 If you are thinking of contributing, start with something small that is easy to read and review and follow the style guide closely. Readbility and modularity is *TOP PRIORITY* in this codebase. 90% of the time I use a simple subset of Rust that avoids complexity as the primary goal.
 
 Only as things really solidify will that code get reviewed for performance and more to noisier syntax and more 'clever' patterns.
+
+`cargo clippy`, `cargo test` and `cargo run tests` must be fully green before making a new commit.
 
 ## Agents
 If using agents to help with contributing to this project, it is important that the .md files inside /docs are provided for context as a minimum. 
