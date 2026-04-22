@@ -56,7 +56,7 @@ impl<'a> AstBuildState<'a> {
             Rc::new(TopLevelDeclarationIndex::new(self.declarations.clone()));
         timer_log!(
             declaration_index_start,
-            "AST/node emission/top-level declaration index built in:"
+            "AST/node emission/top-level declaration index built in: "
         );
         let _ = declaration_index_start;
 

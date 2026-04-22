@@ -40,7 +40,7 @@ impl<'a> AstBuildState<'a> {
         self.resolve_constant_headers(sorted_headers, file_import_bindings, string_table)?;
         timer_log!(
             constant_resolution_start,
-            "AST/type resolution/constants resolved in:"
+            "AST/type resolution/constants resolved in: "
         );
         let _ = constant_resolution_start;
 
@@ -88,7 +88,7 @@ impl<'a> AstBuildState<'a> {
         }
         timer_log!(
             struct_fields_resolution_start,
-            "AST/type resolution/struct fields resolved in:"
+            "AST/type resolution/struct fields resolved in: "
         );
         let _ = struct_fields_resolution_start;
 
@@ -97,7 +97,7 @@ impl<'a> AstBuildState<'a> {
             .map_err(|error| self.error_messages(error, string_table))?;
         timer_log!(
             recursive_validation_start,
-            "AST/type resolution/recursive struct validation in:"
+            "AST/type resolution/recursive struct validation in: "
         );
         let _ = recursive_validation_start;
 

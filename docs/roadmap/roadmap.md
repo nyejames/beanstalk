@@ -1,6 +1,5 @@
 # Beanstalk Roadmap
-
-This catalogues the todo list for the language and compiler.
+This is the main todo list for the language and compiler.
 
 The current major goal is getting to a healthy alpha stage.
 Each plan or PR that is needed will be linked here.
@@ -8,8 +7,7 @@ Each plan or PR that is needed will be linked here.
 Use the language surface integration matrix as a reference for what is currently implemented: `./language-surface-integration-matrix.md`
 
 ## Path to Alpha
-
-These are the non-negotiable conditions for starting Alpha.
+These are the non-negotiable conditions for starting Alpha:
 
 - All claimed Alpha features compile, type check, and run through the full supported pipeline.
 - Unsupported syntax or incomplete features fail with structured compiler diagnostics, not panics.
@@ -30,19 +28,11 @@ These are the non-negotiable conditions for starting Alpha.
 
 ## Final pre-alpha sweep
 
-### Alpha checklist audit
-
-Verify that the Alpha gates are genuinely met.
-
-**Checklist**
 - Re-run the feature matrix and mark all supported areas as covered.
 - Re-check that unsupported/deferred features fail cleanly.
 - Re-check that docs and examples match actual support.
 - Re-check diagnostics quality on a representative set of failures.
 - Re-check cross-platform golden stability.
-
-**Done when**
-- There is a credible yes/no answer to “is Alpha ready?”
 
 ### Alpha cleanup
 
@@ -72,6 +62,7 @@ This is a collection of notes and findings for future roadmaps once the roadmap 
 - richer numeric redesign work not required by Alpha
 - Compile time arbitary precision aritmetic + Decimals Type support
 - Core Math library
+- Optimised template folding
 
 **Wasm**
 
@@ -83,4 +74,5 @@ Broader Wasm maturity beyond the current experimental path.
 - rt_string_from_i64 Wasm helper: Explicitly noted in the 1ac2613 commit message as an "incremental bridge implementation". It produces valid output but is not a complete runtime implementation. This is scoped for a dedicated follow-up and does not cause panics.
 
 **Rust Interpreter**
+- Unimplmented - mostly just scaffolding
 - Make sure Modulus is Eulidean

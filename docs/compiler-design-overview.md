@@ -10,7 +10,7 @@ Beanstalk has a borrow checker, but ownership is treated as an optimisation (GC 
 
 ### Frontend structure at a glance
 - `src/compiler_frontend/mod.rs` wires stages together
-- `src/compiler_frontend/headers/` parses top-level declarations, defering parsing the bodies of functions or type checking until AST stage.
+- `src/compiler_frontend/headers/` parses top-level declarations, defering parsing the bodies of functions or type checking until AST stage
 - `src/compiler_frontend/ast/` builds the typed AST
 - `src/compiler_frontend/declaration_syntax/` stores the shared syntax parsing for both header and AST stage
 - `src/compiler_frontend/type_coercion/` owns type compatibility and contextual coercion rules
