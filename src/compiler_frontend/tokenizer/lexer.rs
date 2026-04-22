@@ -450,17 +450,6 @@ pub fn get_token_kind(
                     stream.next();
                     return_token!(TokenKind::ModulusAssign, stream);
                 }
-
-                if next_char == '%' {
-                    stream.next();
-                    if let Some(&next_next_char) = stream.peek()
-                        && next_next_char == '='
-                    {
-                        stream.next();
-                        return_token!(TokenKind::RemainderAssign, stream);
-                    }
-                    return_token!(TokenKind::Remainder, stream);
-                }
             }
 
             return_token!(TokenKind::Modulus, stream);
