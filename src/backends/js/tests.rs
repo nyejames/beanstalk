@@ -35,6 +35,8 @@
 //   [names]          function_name_by_id exposes stable JS names for runtime-fragment lookup
 //   [names]          reserved JS identifiers are prefixed with _ to avoid collisions
 //   [names]          identifier characters invalid for JS are replaced with _
+//   [choice]         choice variant construction lowers to plain integer literals
+//   [choice]         choice match lowers to structured if/else if with === against integer tags
 //   [error]          Option/Result construction lowers to tagged JS carrier objects
 //   [error]          result propagation/fallback helpers are emitted and referenced
 
@@ -65,6 +67,7 @@ struct TypeIds {
     boolean: TypeId,
     string: TypeId,
     option_int: TypeId,
+    union_unit: TypeId,
 }
 
 fn loc(start: i32) -> SourceLocation {
@@ -99,6 +102,11 @@ fn build_type_context() -> (TypeContext, TypeIds) {
     let option_int = type_context.insert(HirType {
         kind: HirTypeKind::Option { inner: int },
     });
+    let union_unit = type_context.insert(HirType {
+        kind: HirTypeKind::Union {
+            variants: vec![unit, unit, unit],
+        },
+    });
 
     (
         type_context,
@@ -108,6 +116,7 @@ fn build_type_context() -> (TypeContext, TypeIds) {
             boolean,
             string,
             option_int,
+            union_unit,
         },
     )
 }
@@ -2777,5 +2786,298 @@ fn error_bubble_normalizes_file_and_builds_trace() {
             && bubble.contains("const frame = { function: safeFunction, location }")
             && bubble.contains("__bs_error_push_trace"),
         "__bs_error_bubble must normalize file paths and push a trace frame"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Choice lowering contract tests [choice]
+// ---------------------------------------------------------------------------
+
+/// Verifies that choice variant construction emits a plain integer literal.
+#[test]
+fn choice_variant_construction_emits_integer_literal() {
+    let mut string_table = StringTable::new();
+    let (type_context, types) = build_type_context();
+
+    let block = HirBlock {
+        id: BlockId(0),
+        region: RegionId(0),
+        locals: vec![local(0, types.union_unit, RegionId(0))],
+        statements: vec![statement(
+            1,
+            HirStatementKind::Assign {
+                target: HirPlace::Local(LocalId(0)),
+                value: int_expression(1, 2, types.union_unit, RegionId(0)),
+            },
+            1,
+        )],
+        terminator: HirTerminator::Return(unit_expression(2, types.unit, RegionId(0))),
+    };
+
+    let function = HirFunction {
+        id: FunctionId(0),
+        entry: BlockId(0),
+        params: vec![],
+        return_type: types.unit,
+        return_aliases: vec![],
+    };
+
+    let module = build_module(
+        &mut string_table,
+        "main",
+        vec![block],
+        function,
+        &[(LocalId(0), "status")],
+        type_context,
+    );
+
+    let output = lower_hir_to_js(
+        &module,
+        &BorrowCheckReport::default(),
+        &string_table,
+        default_config(),
+    )
+    .expect("JS lowering should succeed");
+
+    assert!(
+        output.source.contains("__bs_assign_value(bst_status_l0, 2)"),
+        "choice variant must lower to a plain integer literal inside an assignment"
+    );
+}
+
+/// Verifies that choice match lowers to structured if with === against integer tags.
+#[test]
+fn choice_match_lowers_to_structured_if_with_literal_equals() {
+    let mut string_table = StringTable::new();
+    let (type_context, types) = build_type_context();
+
+    let blocks = vec![
+        HirBlock {
+            id: BlockId(0),
+            region: RegionId(0),
+            locals: vec![local(0, types.union_unit, RegionId(0))],
+            statements: vec![statement(
+                1,
+                HirStatementKind::Assign {
+                    target: HirPlace::Local(LocalId(0)),
+                    value: int_expression(1, 0, types.union_unit, RegionId(0)),
+                },
+                1,
+            )],
+            terminator: HirTerminator::Match {
+                scrutinee: expression(
+                    2,
+                    HirExpressionKind::Load(HirPlace::Local(LocalId(0))),
+                    types.union_unit,
+                    RegionId(0),
+                    ValueKind::RValue,
+                ),
+                arms: vec![
+                    HirMatchArm {
+                        pattern: HirPattern::Literal(int_expression(3, 0, types.union_unit, RegionId(0))),
+                        guard: None,
+                        body: BlockId(1),
+                    },
+                    HirMatchArm {
+                        pattern: HirPattern::Literal(int_expression(4, 1, types.union_unit, RegionId(0))),
+                        guard: None,
+                        body: BlockId(2),
+                    },
+                    HirMatchArm {
+                        pattern: HirPattern::Literal(int_expression(5, 2, types.union_unit, RegionId(0))),
+                        guard: None,
+                        body: BlockId(3),
+                    },
+                ],
+            },
+        },
+        HirBlock {
+            id: BlockId(1),
+            region: RegionId(0),
+            locals: vec![],
+            statements: vec![],
+            terminator: HirTerminator::Jump {
+                target: BlockId(4),
+                args: vec![],
+            },
+        },
+        HirBlock {
+            id: BlockId(2),
+            region: RegionId(0),
+            locals: vec![],
+            statements: vec![],
+            terminator: HirTerminator::Jump {
+                target: BlockId(4),
+                args: vec![],
+            },
+        },
+        HirBlock {
+            id: BlockId(3),
+            region: RegionId(0),
+            locals: vec![],
+            statements: vec![],
+            terminator: HirTerminator::Jump {
+                target: BlockId(4),
+                args: vec![],
+            },
+        },
+        HirBlock {
+            id: BlockId(4),
+            region: RegionId(0),
+            locals: vec![],
+            statements: vec![],
+            terminator: HirTerminator::Return(unit_expression(6, types.unit, RegionId(0))),
+        },
+    ];
+
+    let function = HirFunction {
+        id: FunctionId(0),
+        entry: BlockId(0),
+        params: vec![],
+        return_type: types.unit,
+        return_aliases: vec![],
+    };
+
+    let module = build_module(
+        &mut string_table,
+        "main",
+        blocks,
+        function,
+        &[(LocalId(0), "status")],
+        type_context,
+    );
+
+    let output = lower_hir_to_js(
+        &module,
+        &BorrowCheckReport::default(),
+        &string_table,
+        default_config(),
+    )
+    .expect("JS lowering should succeed");
+
+    assert!(
+        output.source.contains("if ("),
+        "choice match must emit structured if"
+    );
+    assert!(
+        output.source.contains("=== 0"),
+        "choice match arm must compare with === 0"
+    );
+    assert!(
+        output.source.contains("=== 1"),
+        "choice match arm must compare with === 1"
+    );
+    assert!(
+        !output.source.contains("while (true)"),
+        "acyclic choice match must not use dispatcher"
+    );
+}
+
+/// Verifies that a wildcard arm in a choice match emits a catch-all else block.
+#[test]
+fn choice_match_with_wildcard_arm_emits_true_condition() {
+    let mut string_table = StringTable::new();
+    let (type_context, types) = build_type_context();
+
+    let blocks = vec![
+        HirBlock {
+            id: BlockId(0),
+            region: RegionId(0),
+            locals: vec![local(0, types.union_unit, RegionId(0))],
+            statements: vec![statement(
+                1,
+                HirStatementKind::Assign {
+                    target: HirPlace::Local(LocalId(0)),
+                    value: int_expression(1, 1, types.union_unit, RegionId(0)),
+                },
+                1,
+            )],
+            terminator: HirTerminator::Match {
+                scrutinee: expression(
+                    2,
+                    HirExpressionKind::Load(HirPlace::Local(LocalId(0))),
+                    types.union_unit,
+                    RegionId(0),
+                    ValueKind::RValue,
+                ),
+                arms: vec![
+                    HirMatchArm {
+                        pattern: HirPattern::Literal(int_expression(3, 0, types.union_unit, RegionId(0))),
+                        guard: None,
+                        body: BlockId(1),
+                    },
+                    HirMatchArm {
+                        pattern: HirPattern::Wildcard,
+                        guard: None,
+                        body: BlockId(2),
+                    },
+                ],
+            },
+        },
+        HirBlock {
+            id: BlockId(1),
+            region: RegionId(0),
+            locals: vec![],
+            statements: vec![],
+            terminator: HirTerminator::Jump {
+                target: BlockId(3),
+                args: vec![],
+            },
+        },
+        HirBlock {
+            id: BlockId(2),
+            region: RegionId(0),
+            locals: vec![],
+            statements: vec![],
+            terminator: HirTerminator::Jump {
+                target: BlockId(3),
+                args: vec![],
+            },
+        },
+        HirBlock {
+            id: BlockId(3),
+            region: RegionId(0),
+            locals: vec![],
+            statements: vec![],
+            terminator: HirTerminator::Return(unit_expression(4, types.unit, RegionId(0))),
+        },
+    ];
+
+    let function = HirFunction {
+        id: FunctionId(0),
+        entry: BlockId(0),
+        params: vec![],
+        return_type: types.unit,
+        return_aliases: vec![],
+    };
+
+    let module = build_module(
+        &mut string_table,
+        "main",
+        blocks,
+        function,
+        &[(LocalId(0), "status")],
+        type_context,
+    );
+
+    let output = lower_hir_to_js(
+        &module,
+        &BorrowCheckReport::default(),
+        &string_table,
+        default_config(),
+    )
+    .expect("JS lowering should succeed");
+
+    assert!(
+        output.source.contains("if ("),
+        "choice match must emit structured if"
+    );
+    assert!(
+        output.source.contains("else if (true)"),
+        "wildcard arm must emit a catch-all 'else if (true)' condition"
+    );
+    assert!(
+        !output.source.contains("while (true)"),
+        "acyclic choice match must not use dispatcher"
     );
 }

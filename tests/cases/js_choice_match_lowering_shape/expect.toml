@@ -1,0 +1,9 @@
+[backends.html]
+mode = "success"
+warnings = "forbid"
+
+[[backends.html.artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain = ["if (", "=== 0", "=== 1"]
+must_not_contain = ["switch (", "while (true)"]

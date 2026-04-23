@@ -21,22 +21,6 @@ These are the non-negotiable conditions for starting Alpha:
 
 ## JS backend extension
 
-### Expand JS backend and runtime coverage for choices
-
-The matrix already marks choices as implemented but incomplete, with thin backend-specific coverage  ￼
-
-Todo
-
-* Add JS backend contract tests for lowering choice construction and choice matching
-* Add integration fixtures covering choice values flowing through:
-    * function returns
-    * assignment
-    * nested match expressions/statements
-    * template/control-flow boundaries where relevant
-* Add emitted-JS tests that pin the runtime carrier shape used for current choice lowering
-* Add negative integration cases for unsupported deferred choice sub-surfaces so deferred behavior stays intentional and stable
-* Add backend/runtime cases for cross-file exported choices to ensure symbol resolution and lowering remain aligned
-
 ### Expand JS backend and runtime coverage for pattern matching
 
 The matrix marks pattern matching as implemented but incomplete, with deferred richer pattern forms and relatively lighter backend/runtime hardening than the frontend surface deserves  ￼

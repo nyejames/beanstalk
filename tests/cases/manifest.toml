@@ -239,6 +239,51 @@ path = "choice_match_unknown_variant_failure"
 tags = ["integration","control-flow","diagnostics"]
 
 [[case]]
+id = "choice_function_return_flow"
+path = "choice_function_return_flow"
+tags = ["integration","language"]
+
+[[case]]
+id = "choice_assignment_flow"
+path = "choice_assignment_flow"
+tags = ["integration","language"]
+
+[[case]]
+id = "choice_nested_match_flow"
+path = "choice_nested_match_flow"
+tags = ["integration","language","control-flow"]
+
+[[case]]
+id = "choice_template_control_flow_boundary"
+path = "choice_template_control_flow_boundary"
+tags = ["integration","language","control-flow"]
+
+[[case]]
+id = "js_choice_carrier_shape"
+path = "js_choice_carrier_shape"
+tags = ["integration","backend-contract"]
+
+[[case]]
+id = "js_choice_match_lowering_shape"
+path = "js_choice_match_lowering_shape"
+tags = ["integration","backend-contract","control-flow"]
+
+[[case]]
+id = "choice_constructor_imported_deferred_rejected"
+path = "choice_constructor_imported_deferred_rejected"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "choice_cross_file_runtime"
+path = "choice_cross_file_runtime"
+tags = ["integration","language"]
+
+[[case]]
+id = "choice_cross_file_carrier_shape"
+path = "choice_cross_file_carrier_shape"
+tags = ["integration","backend-contract"]
+
+[[case]]
 id = "circular_dependency"
 path = "circular_dependency"
 tags = ["integration","language"]
