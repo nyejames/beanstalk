@@ -153,4 +153,29 @@ fn build_project_free_function_receiver_diagnostic_is_deterministic_across_modul
     fs::remove_dir_all(&root).expect("should remove temp dir");
 }
 
+#[test]
+fn builds_exported_mutable_receiver_method_across_files() {
+    let root = temp_dir("receiver_method_exported_mutable_cross_file");
+    fs::create_dir_all(&root).expect("should create temp root");
+    fs::write(
+        root.join("main.bst"),
+        "import @math/Resettable\nimport @math/reset\n\nr ~= Resettable(42)\n~r.reset()\nio(r.value)\n",
+    )
+    .expect("should write main source file");
+    fs::write(
+        root.join("math.bst"),
+        "#Resettable = |\n    value Int = 0,\n|\n\n#reset |this ~Resettable|:\n    this.value = 0\n;\n",
+    )
+    .expect("should write math source file");
+
+    {
+        let _cwd_guard = CurrentDirGuard::set_to(&root);
+        let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
+        build_project(&builder, "main.bst", &[])
+            .expect("exported mutable cross-file receiver method should compile");
+    }
+
+    fs::remove_dir_all(&root).expect("should remove temp dir");
+}
+
 use crate::compiler_tests::test_support::temp_dir;

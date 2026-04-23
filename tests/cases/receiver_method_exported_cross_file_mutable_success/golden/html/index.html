@@ -174,7 +174,6 @@ body {
     </style>
   </head>
   <body style="">
-    <div id="bst-slot-0"></div>
     <script>
     function __bs_is_ref(value) {
         return value !== null && typeof value === "object" && value.__bs_ref === true;
@@ -454,56 +453,29 @@ body {
         return { tag: "err", value: __bs_make_error("Parse", "float.parse_invalid_format", "Float(...) only accepts Int, Float, or string values", null, null) };
     }
 
-    function bst_tick_fn0(bst_this_l0) {
+    function bst_reset_fn0(bst_this_l0) {
         
         bst_this_l0 = __bs_param_binding(bst_this_l0);
         
-        return (__bs_read(__bs_field(bst_this_l0, "bst_count_fld11")) + 1);
+        __bs_write(__bs_field(bst_this_l0, "bst_value_fld11"), 0);
+        return;
     }
 
     function bst_start_fn1() {
         let bst___hir_tmp_0_l1 = __bs_binding(undefined);
-        let bst_c_l2 = __bs_binding(undefined);
-        let bst___hir_tmp_1_l6 = __bs_binding(undefined);
-        let bst___hir_tmp_2_l7 = __bs_binding(undefined);
-        let bst___hir_tmp_3_l8 = __bs_binding(undefined);
+        let bst_r_l2 = __bs_binding(undefined);
         
         __bs_assign_value(bst___hir_tmp_0_l1, []);
-        __bs_assign_value(bst_c_l2, { bst_count_fld11: 41 });
-        __bs_assign_value(bst___hir_tmp_1_l6, bst_tick_fn0(bst_c_l2));
-        __bs_assign_value(bst___hir_tmp_2_l7, bst___template_fn_1_fn3(bst___hir_tmp_1_l6));
-        __bs_assign_value(bst___hir_tmp_3_l8, bst___template_fn_0_fn2(__bs_binding("receiver_method_exported_cross_file_success value="), bst___hir_tmp_2_l7));
-        __bs_read(bst___hir_tmp_0_l1).push(__bs_read(bst___hir_tmp_3_l8));
+        __bs_assign_value(bst_r_l2, { bst_value_fld11: 42 });
+        bst_reset_fn0(bst_r_l2);
+        __bs_io(__bs_read(__bs_field(bst_r_l2, "bst_value_fld11")));
         return __bs_read(bst___hir_tmp_0_l1);
-    }
-
-    function bst___template_fn_0_fn2(bst_chunk_0_l3, bst_chunk_1_l4) {
-        
-        bst_chunk_0_l3 = __bs_param_binding(bst_chunk_0_l3);
-        bst_chunk_1_l4 = __bs_param_binding(bst_chunk_1_l4);
-        
-        return (("" + __bs_read(bst_chunk_0_l3)) + __bs_read(bst_chunk_1_l4));
-    }
-
-    function bst___template_fn_1_fn3(bst_chunk_0_l5) {
-        
-        bst_chunk_0_l5 = __bs_param_binding(bst_chunk_0_l5);
-        
-        return ("" + ("" + __bs_read(bst_chunk_0_l5)));
     }
 
     </script>
     <script>
     (function () {
-      var bst_frags = bst_start_fn1();
-      var bst_slots = [
-        "bst-slot-0",
-      ];
-      for (var i = 0; i < bst_slots.length; i++) {
-        var el = document.getElementById(bst_slots[i]);
-        if (!el) throw new Error("Missing runtime mount slot: " + bst_slots[i]);
-        el.insertAdjacentHTML("beforeend", bst_frags[i] || "");
-      }
+      if (typeof bst_start_fn1 === "function") bst_start_fn1();
     })();
     </script>
   </body>

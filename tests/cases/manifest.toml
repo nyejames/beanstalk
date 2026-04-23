@@ -1820,6 +1820,56 @@ path = "receiver_method_exported_cross_file_success"
 tags = ["integration", "receiver-methods", "imports"]
 
 [[case]]
+id = "receiver_method_mutable_struct_success"
+path = "receiver_method_mutable_struct_success"
+tags = ["integration", "receiver-methods", "structs"]
+
+[[case]]
+id = "receiver_method_nested_struct_success"
+path = "receiver_method_nested_struct_success"
+tags = ["integration", "receiver-methods", "structs"]
+
+[[case]]
+id = "receiver_method_scalar_int_success"
+path = "receiver_method_scalar_int_success"
+tags = ["integration", "receiver-methods", "scalars"]
+
+[[case]]
+id = "receiver_method_scalar_string_success"
+path = "receiver_method_scalar_string_success"
+tags = ["integration", "receiver-methods", "scalars"]
+
+[[case]]
+id = "receiver_method_chained_mutable_and_field_access"
+path = "receiver_method_chained_mutable_and_field_access"
+tags = ["integration", "receiver-methods", "structs"]
+
+[[case]]
+id = "receiver_method_field_write_then_mutable_call"
+path = "receiver_method_field_write_then_mutable_call"
+tags = ["integration", "receiver-methods", "structs"]
+
+[[case]]
+id = "receiver_method_alias_return_success"
+path = "receiver_method_alias_return_success"
+tags = ["integration", "receiver-methods", "borrows"]
+
+[[case]]
+id = "receiver_method_exported_cross_file_mutable_success"
+path = "receiver_method_exported_cross_file_mutable_success"
+tags = ["integration", "receiver-methods", "imports"]
+
+[[case]]
+id = "receiver_method_html_wasm_basic"
+path = "receiver_method_html_wasm_basic"
+tags = ["integration", "receiver-methods", "html-wasm"]
+
+[[case]]
+id = "receiver_method_aliasing_borrow_after_mutable_call"
+path = "receiver_method_aliasing_borrow_after_mutable_call"
+tags = ["integration", "receiver-methods", "borrows"]
+
+[[case]]
 id = "struct_unknown_field_access_diagnostic"
 path = "struct_unknown_field_access_diagnostic"
 tags = ["integration", "structs", "diagnostics"]

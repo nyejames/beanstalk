@@ -35,21 +35,6 @@ As a design decision of the language as well as a simplification of the compiler
 
 ## JS backend extension
 
-### Expand backend/runtime coverage for receiver methods outside the current happy path
-
-The matrix calls receiver methods implemented, but HTML / HTML-Wasm specific runtime cases are still light, and more backend-facing receiver/field mutation cases are still useful
-
-Todo
-
-* Add JS integration tests for immutable and mutable receiver methods on:
-    * structs
-    * nested structs
-    * scalar receivers where supported
-* Add cases for chained receiver calls mixed with field reads/writes
-* Add tests covering aliasing-sensitive receiver cases so the binding model is pinned under method syntax
-* Add emitted-JS tests for receiver calls that return aliases vs fresh values
-* Add backend regression cases for exported receiver methods across files
-
 ### Strengthen collection backend/runtime coverage beyond current basics
 
 The matrix already has broad collection coverage, but backend/runtime contract hardening is still worth deepening, especially around edge behavior
