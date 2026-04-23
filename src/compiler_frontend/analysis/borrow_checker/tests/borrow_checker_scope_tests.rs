@@ -83,6 +83,7 @@ fn match_arm_local_alias_does_not_escape_merge() {
 
     let arm = MatchArm {
         condition: Expression::int(1, test_location(3), Ownership::ImmutableOwned),
+        guard: None,
         body: vec![node(
             NodeKind::VariableDeclaration(make_test_variable(
                 y,

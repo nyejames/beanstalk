@@ -53,6 +53,24 @@
 # checksum_line = [: A [digest_a] / B [digest_b] / C [digest_c] / D [digest_d] ]
 # digest_badge_text = [: digest [grand_digest] ]
 
+thing = 69
+
+if thing is:
+    case 0 => io("zero")
+    case -1 => io("negative")
+    case 1 => io(1)
+    case 2 => io("two")
+    case 3 => io("three")
+    case 4 => io("four")
+    case 5 => io("5")
+    case 6 => io("six")
+    case 7 => io("seven")
+    case 8 => io("eight")
+    case 9 => io("nine")
+    case 10 => io("ten")
+    else => io("only one")
+;
+
 # page_shell = [:
 <!doctype html>
 <html>

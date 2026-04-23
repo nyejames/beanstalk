@@ -8,9 +8,13 @@
 
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::Expression;
-use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
+use crate::compiler_frontend::ast::expressions::parse_expression::{
+    create_expression, create_expression_until,
+};
 use crate::compiler_frontend::ast::function_body_to_ast;
-use crate::compiler_frontend::ast::statements::condition_validation::ensure_if_statement_condition;
+use crate::compiler_frontend::ast::statements::condition_validation::{
+    ensure_if_statement_condition, ensure_match_guard_condition,
+};
 use crate::compiler_frontend::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
@@ -19,7 +23,7 @@ use crate::compiler_frontend::declaration_syntax::choice::ChoiceVariant;
 use crate::compiler_frontend::deferred_feature_diagnostics::deferred_feature_rule_error;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
-use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
+use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
 use crate::compiler_frontend::type_coercion::compatibility::is_type_compatible;
 use crate::{ast_log, return_rule_error, return_syntax_error};
 use std::collections::HashSet;
@@ -27,6 +31,7 @@ use std::collections::HashSet;
 #[derive(Debug, Clone)]
 pub struct MatchArm {
     pub condition: Expression,
+    pub guard: Option<Expression>,
     pub body: Vec<AstNode>,
 }
 
@@ -35,6 +40,14 @@ struct ParsedCaseArm {
     // Tracks which choice variant this arm consumes so duplicates can be rejected early.
     matched_choice_variant: Option<StringId>,
     pattern_location: SourceLocation,
+}
+
+fn peek_next_non_newline_token(token_stream: &FileTokens) -> Option<&Token> {
+    token_stream
+        .tokens
+        .iter()
+        .skip(token_stream.index + 1)
+        .find(|token| token.kind != TokenKind::Newline)
 }
 
 pub fn create_branch(
@@ -145,6 +158,8 @@ fn create_match_node(
     let mut arms: Vec<MatchArm> = Vec::new();
     let mut else_block = None;
     let mut seen_else = false;
+    let mut has_guarded_arms = false;
+    let mut match_arm_indent: Option<i32> = None;
     // Choice exhaustiveness/duplication checks rely on the set of consumed variant names.
     let mut matched_choice_variants: HashSet<StringId> = HashSet::new();
 
@@ -153,6 +168,26 @@ fn create_match_node(
 
         match token_stream.current_token_kind() {
             TokenKind::End => {
+                let next_token = peek_next_non_newline_token(token_stream);
+                let semicolon_separates_same_level_arms = match (match_arm_indent, next_token) {
+                    (Some(arm_indent), Some(next))
+                        if matches!(next.kind, TokenKind::Case | TokenKind::Else) =>
+                    {
+                        next.location.start_pos.char_column == arm_indent
+                    }
+                    _ => false,
+                };
+
+                if semicolon_separates_same_level_arms {
+                    return_syntax_error!(
+                        "Match arms are not closed with semicolons. Use the next 'case', 'else', or the final match ';' to delimit arms.",
+                        token_stream.current_location(),
+                        {
+                            CompilationStage => "Match Statement Parsing",
+                            PrimarySuggestion => "Remove the ';' between match arms and keep only the final ';' that closes the full match block",
+                        }
+                    );
+                }
                 token_stream.advance();
                 break;
             }
@@ -170,6 +205,8 @@ fn create_match_node(
             }
 
             TokenKind::Else => {
+                match_arm_indent.get_or_insert(token_stream.current_location().start_pos.char_column);
+
                 if arms.is_empty() {
                     return_rule_error!(
                         "Match statements require at least one 'case' arm before 'else =>'",
@@ -202,6 +239,8 @@ fn create_match_node(
             }
 
             TokenKind::Case => {
+                match_arm_indent.get_or_insert(token_stream.current_location().start_pos.char_column);
+
                 if seen_else {
                     return_rule_error!(
                         "Match arms cannot appear after an 'else =>' arm",
@@ -237,6 +276,7 @@ fn create_match_node(
                     );
                 }
 
+                has_guarded_arms |= parsed_case.arm.guard.is_some();
                 arms.push(parsed_case.arm);
             }
 
@@ -257,6 +297,7 @@ fn create_match_node(
     enforce_match_exhaustiveness(
         &subject,
         &else_block,
+        has_guarded_arms,
         &matched_choice_variants,
         string_table,
     )?;
@@ -319,7 +360,7 @@ fn parse_else_arm(
     token_stream.advance();
     function_body_to_ast(
         token_stream,
-        match_context.new_child_control_flow(ContextKind::Branch, string_table),
+        match_context.new_child_control_flow(ContextKind::MatchArm, string_table),
         warnings,
         string_table,
     )
@@ -393,6 +434,24 @@ fn parse_case_arm(
         );
     }
 
+    let mut guard = None;
+    if token_stream.current_token_kind() == &TokenKind::If {
+        token_stream.advance();
+        token_stream.skip_newlines();
+
+        let mut guard_type = DataType::Inferred;
+        let guard_expression = create_expression_until(
+            token_stream,
+            &match_context.new_child_control_flow(ContextKind::Condition, string_table),
+            &mut guard_type,
+            &Ownership::ImmutableOwned,
+            &[TokenKind::FatArrow],
+            string_table,
+        )?;
+        ensure_match_guard_condition(&guard_expression, string_table)?;
+        guard = Some(guard_expression);
+    }
+
     if token_stream.current_token_kind() != &TokenKind::FatArrow {
         return_rule_error!(
             format!(
@@ -411,13 +470,17 @@ fn parse_case_arm(
     token_stream.advance();
     let body = function_body_to_ast(
         token_stream,
-        match_context.new_child_control_flow(ContextKind::Branch, string_table),
+        match_context.new_child_control_flow(ContextKind::MatchArm, string_table),
         warnings,
         string_table,
     )?;
 
     Ok(ParsedCaseArm {
-        arm: MatchArm { condition, body },
+        arm: MatchArm {
+            condition,
+            guard,
+            body,
+        },
         matched_choice_variant,
         pattern_location,
     })
@@ -734,6 +797,7 @@ fn normalized_subject_type(data_type: &DataType) -> &DataType {
 fn enforce_match_exhaustiveness(
     subject: &Expression,
     else_block: &Option<Vec<AstNode>>,
+    has_guarded_arms: bool,
     matched_choice_variants: &HashSet<StringId>,
     string_table: &StringTable,
 ) -> Result<(), CompilerError> {
@@ -744,6 +808,17 @@ fn enforce_match_exhaustiveness(
             // `else` intentionally acts as an explicit "future variants" fallback in Alpha.
             if else_block.is_some() {
                 return Ok(());
+            }
+
+            if has_guarded_arms {
+                return_rule_error!(
+                    "Choice matches with guarded arms must include an explicit 'else =>' arm in Alpha.",
+                    subject.location.clone(),
+                    {
+                        CompilationStage => "Match Statement Parsing",
+                        PrimarySuggestion => "Add an 'else =>' arm when any choice match arm uses a guard",
+                    }
+                );
             }
 
             let missing_variants = variants

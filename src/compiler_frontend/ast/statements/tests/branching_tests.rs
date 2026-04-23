@@ -242,7 +242,7 @@ fn equality_and_or_precedence_stays_deterministic_in_if_conditions() {
 #[test]
 fn parses_match_statements_with_else_arm() {
     let (ast, string_table) = parse_single_file_ast(
-        "value = 42\nif value is:\n    case 0 => io(\"zero\");\n    case 42 => io(\"forty-two\");\n    else => io(\"other\");\n;\n",
+        "value = 42\nif value is:\n    case 0 => io(\"zero\")\n    case 42 => io(\"forty-two\")\n    else => io(\"other\")\n;\n",
     );
 
     let body = start_function_body(&ast, &string_table);
@@ -263,14 +263,64 @@ fn parses_match_statements_with_else_arm() {
 }
 
 #[test]
+fn parses_match_arm_with_boolean_guard() {
+    let (ast, string_table) = parse_single_file_ast(
+        "value = 42\nif value is:\n    case 42 if true => io(\"forty-two\")\n    else => io(\"other\")\n;\n",
+    );
+
+    let body = start_function_body(&ast, &string_table);
+
+    let NodeKind::Match(_, arms, else_block) = &body[1].kind else {
+        panic!("expected match statement in start body");
+    };
+
+    assert_eq!(arms.len(), 1);
+    assert!(
+        matches!(
+            arms[0].guard.as_ref().map(|guard| &guard.kind),
+            Some(&ExpressionKind::Bool(true))
+        ),
+        "guard should parse as a Bool expression attached to the arm"
+    );
+    assert!(
+        else_block.is_some(),
+        "guarded literal match should still preserve explicit else body"
+    );
+}
+
+#[test]
+fn rejects_non_boolean_match_guard_with_type_error_metadata() {
+    let error = parse_single_file_ast_error(
+        "value = 1\nif value is:\n    case 1 if 7 => io(\"one\")\n    else => io(\"other\")\n;\n",
+    );
+
+    assert_eq!(error.error_type, ErrorType::Type);
+    assert!(error.msg.contains("Match arm guard requires a Bool condition"));
+    assert_eq!(
+        error
+            .metadata
+            .get(&ErrorMetaDataKey::ExpectedType)
+            .map(String::as_str),
+        Some("Bool")
+    );
+    assert_eq!(
+        error
+            .metadata
+            .get(&ErrorMetaDataKey::FoundType)
+            .map(String::as_str),
+        Some("Int")
+    );
+}
+
+#[test]
 fn parses_choice_match_arms_with_bare_and_qualified_variants() {
     let (ast, string_table) = parse_single_file_ast(
         "#Status :: Ready, Busy;\n\
          current Status = Status::Ready\n\
          if current is:\n\
-             case Ready => io(\"ready\");\n\
-             case Status::Busy => io(\"busy\");\n\
-             else => io(\"other\");\n\
+             case Ready => io(\"ready\")\n\
+             case Status::Busy => io(\"busy\")\n\
+             else => io(\"other\")\n\
          ;\n",
     );
 
@@ -295,7 +345,7 @@ fn parses_choice_match_arms_with_bare_and_qualified_variants() {
 #[test]
 fn rejects_legacy_colon_match_arm_syntax() {
     let error = parse_single_file_ast_error(
-        "value = 1\nif value is:\n    1: io(\"one\");\n    else => io(\"other\");\n;\n",
+        "value = 1\nif value is:\n    1: io(\"one\")\n    else => io(\"other\")\n;\n",
     );
 
     assert_eq!(error.error_type, ErrorType::Syntax);
@@ -315,7 +365,7 @@ fn rejects_choice_match_arm_qualifier_for_other_choice() {
          #OtherStatus :: Busy;\n\
          current Status = Status::Ready\n\
          if current is:\n\
-             case OtherStatus::Busy => io(\"busy\");\n\
+             case OtherStatus::Busy => io(\"busy\")\n\
          ;\n",
     );
 
@@ -335,7 +385,7 @@ fn rejects_non_exhaustive_choice_match_without_else() {
         "#Status :: Ready, Busy;\n\
          current Status = Status::Ready\n\
          if current is:\n\
-             case Ready => io(\"ready\");\n\
+             case Ready => io(\"ready\")\n\
          ;\n",
     );
 
@@ -349,9 +399,30 @@ fn rejects_non_exhaustive_choice_match_without_else() {
 }
 
 #[test]
+fn rejects_guarded_choice_match_without_else() {
+    let error = parse_single_file_ast_error(
+        "#Status :: Ready, Busy;\n\
+         current Status = Status::Ready\n\
+         if current is:\n\
+             case Ready if true => io(\"ready\")\n\
+             case Busy => io(\"busy\")\n\
+         ;\n",
+    );
+
+    assert_eq!(error.error_type, ErrorType::Rule);
+    assert!(
+        error
+            .msg
+            .contains("guarded arms must include an explicit 'else =>' arm"),
+        "{}",
+        error.msg
+    );
+}
+
+#[test]
 fn rejects_deferred_relational_match_patterns() {
     let error = parse_single_file_ast_error(
-        "value = 1\nif value is:\n    case < 0 => io(\"neg\");\n    else => io(\"other\");\n;\n",
+        "value = 1\nif value is:\n    case < 0 => io(\"neg\")\n    else => io(\"other\")\n;\n",
     );
 
     assert_eq!(error.error_type, ErrorType::Rule);
@@ -359,5 +430,47 @@ fn rejects_deferred_relational_match_patterns() {
         error.msg.contains("Relational match patterns"),
         "{}",
         error.msg
+    );
+}
+
+#[test]
+fn rejects_semicolon_between_match_arms() {
+    let error = parse_single_file_ast_error(
+        "value = 1\nif value is:\n    case 1 => io(\"one\");\n    case 2 => io(\"two\")\n    else => io(\"other\")\n;\n",
+    );
+
+    assert_eq!(error.error_type, ErrorType::Syntax);
+    assert!(
+        error
+            .msg
+            .contains("Match arms are not closed with semicolons"),
+        "{}",
+        error.msg
+    );
+}
+
+#[test]
+fn allows_semicolons_inside_nested_structures_within_match_arms() {
+    let (ast, string_table) = parse_single_file_ast(
+        "value = 1\n\
+         if value is:\n\
+             case 1 =>\n\
+                 if true:\n\
+                     io(\"nested\")\n\
+                 ;\n\
+             else => io(\"other\")\n\
+         ;\n",
+    );
+
+    let body = start_function_body(&ast, &string_table);
+
+    let NodeKind::Match(_, arms, _) = &body[1].kind else {
+        panic!("expected match statement in start body");
+    };
+
+    assert_eq!(arms.len(), 1);
+    assert!(
+        matches!(arms[0].body[0].kind, NodeKind::If(_, _, _)),
+        "nested if body inside a match arm should parse successfully"
     );
 }

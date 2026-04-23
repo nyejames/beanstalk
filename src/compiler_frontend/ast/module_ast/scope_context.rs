@@ -179,6 +179,7 @@ pub enum ContextKind {
     Condition, // For loops and if statements
     Loop,
     Branch,
+    MatchArm, // Statement body of one `case ... =>` or `else =>` arm in a match block
     Template,
 }
 

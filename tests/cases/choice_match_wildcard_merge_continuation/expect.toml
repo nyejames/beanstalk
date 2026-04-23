@@ -1,0 +1,12 @@
+entry = "."
+
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = ["choice_match_wildcard_merge_continuation result=ready-done"]
+
+[[backends.html.artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain = ["=== 0", "=== 1"]
+must_not_contain = ["else if (true)", "switch (__bb"]

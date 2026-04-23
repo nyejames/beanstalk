@@ -50,6 +50,21 @@ pub(crate) fn ensure_if_statement_condition(
     )
 }
 
+/// Validate `case <pattern> if <guard> =>` guard type with match-specific diagnostics.
+pub(crate) fn ensure_match_guard_condition(
+    condition: &Expression,
+    string_table: &StringTable,
+) -> Result<(), CompilerError> {
+    ensure_boolean_condition(
+        condition,
+        "Match arm guard",
+        &condition.location,
+        "Match Statement Parsing",
+        "Use a boolean expression after 'if' in the match arm (for example 'count > 0')",
+        string_table,
+    )
+}
+
 /// Validate conditional-loop header type with centralized diagnostics policy.
 pub(crate) fn ensure_loop_condition(
     condition: &Expression,

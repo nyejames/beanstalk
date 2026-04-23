@@ -413,6 +413,53 @@ else
 ;
 ```
 
+### Pattern Matching
+
+Pattern matching uses `if <value> is:` with one or more `case` arms.
+
+```beanstalk
+value ~= 2
+allow ~= false
+result ~= "unset"
+
+if value is:
+    case 1 => result = "one"
+    case 2 if allow => result = "guarded-two"
+    case 2 => result = "two"
+    else => result = "fallback"
+;
+```
+
+Arm syntax:
+
+* `case <pattern> => <body>`
+* `case <pattern> if <bool_expr> => <body>`
+* `else => <body>`
+
+Rules:
+
+* Arms are delimited by the next `case`, `else`, or the final match-closing `;`.
+* Per-arm semicolons are invalid in match blocks.
+* Guard expressions (`if <bool_expr>`) must be `Bool`.
+* For non-choice scrutinees, `else =>` is required in Alpha.
+* For choice scrutinees:
+  * `else =>` always satisfies exhaustiveness.
+  * Without `else =>`, every variant must be covered.
+  * If any arm has a guard, `else =>` is required.
+  * The same variant cannot be matched more than once.
+
+Current Alpha pattern support:
+
+* Literal patterns (`Int`, `Float`, `Bool`, `Char`, `String`) for non-choice matches.
+* Choice variant patterns for choice matches (`case Ready =>` or `case Status::Ready =>`).
+
+Deferred (not yet supported in Alpha):
+
+* Wildcard pattern `case _ =>`
+* Relational patterns (`<`, `<=`, `>`, `>=`)
+* Negated patterns (`case not ... =>`)
+* Capture/tagged patterns using `|...|`
+
 ## Loops
 
 Beanstalk uses a **single** loop keyword: `loop`.

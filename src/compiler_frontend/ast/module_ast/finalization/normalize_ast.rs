@@ -271,6 +271,15 @@ fn normalize_control_flow_templates(
                     project_path_resolver,
                     string_table,
                 )?;
+                if let Some(guard) = &mut arm.guard {
+                    normalize_expression_templates(
+                        guard,
+                        source_file_scope,
+                        path_format_config,
+                        project_path_resolver,
+                        string_table,
+                    )?;
+                }
                 for statement in &mut arm.body {
                     normalize_ast_node_templates(
                         statement,

@@ -23,9 +23,9 @@ else
 value = 42
 match_result ~= "unset"
 if value is:
-    case 0 => match_result = "zero";
-    case 42 => match_result = "forty-two";
-    else => match_result = "other";
+    case 0 => match_result = "zero"
+    case 42 => match_result = "forty-two"
+    else => match_result = "other"
 ;
 
 sum ~= 0

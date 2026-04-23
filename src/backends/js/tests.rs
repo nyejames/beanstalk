@@ -971,6 +971,772 @@ fn emits_structured_match_without_inlining_synthetic_merge_arm() {
     assert!(!output.source.contains("switch (__bb"));
 }
 
+/// Verifies that literal matches lower to structured if-chains when CFG is acyclic. [cfg]
+#[test]
+fn literal_match_uses_structured_lowering_when_cfg_is_acyclic() {
+    let mut string_table = StringTable::new();
+    let (type_context, types) = build_type_context();
+
+    let blocks = vec![
+        HirBlock {
+            id: BlockId(0),
+            region: RegionId(0),
+            locals: vec![local(0, types.int, RegionId(0))],
+            statements: vec![statement(
+                1,
+                HirStatementKind::Assign {
+                    target: HirPlace::Local(LocalId(0)),
+                    value: int_expression(1, 2, types.int, RegionId(0)),
+                },
+                1,
+            )],
+            terminator: HirTerminator::Match {
+                scrutinee: expression(
+                    2,
+                    HirExpressionKind::Load(HirPlace::Local(LocalId(0))),
+                    types.int,
+                    RegionId(0),
+                    ValueKind::RValue,
+                ),
+                arms: vec![
+                    HirMatchArm {
+                        pattern: HirPattern::Literal(int_expression(3, 1, types.int, RegionId(0))),
+                        guard: None,
+                        body: BlockId(1),
+                    },
+                    HirMatchArm {
+                        pattern: HirPattern::Literal(int_expression(4, 2, types.int, RegionId(0))),
+                        guard: None,
+                        body: BlockId(2),
+                    },
+                    HirMatchArm {
+                        pattern: HirPattern::Wildcard,
+                        guard: None,
+                        body: BlockId(3),
+                    },
+                ],
+            },
+        },
+        HirBlock {
+            id: BlockId(1),
+            region: RegionId(0),
+            locals: vec![],
+            statements: vec![],
+            terminator: HirTerminator::Jump {
+                target: BlockId(3),
+                args: vec![],
+            },
+        },
+        HirBlock {
+            id: BlockId(2),
+            region: RegionId(0),
+            locals: vec![],
+            statements: vec![],
+            terminator: HirTerminator::Jump {
+                target: BlockId(3),
+                args: vec![],
+            },
+        },
+        HirBlock {
+            id: BlockId(3),
+            region: RegionId(0),
+            locals: vec![],
+            statements: vec![],
+            terminator: HirTerminator::Return(unit_expression(5, types.unit, RegionId(0))),
+        },
+    ];
+
+    let function = HirFunction {
+        id: FunctionId(0),
+        entry: BlockId(0),
+        params: vec![],
+        return_type: types.unit,
+        return_aliases: vec![],
+    };
+
+    let module = build_module(
+        &mut string_table,
+        "main",
+        blocks,
+        function,
+        &[(LocalId(0), "subject")],
+        type_context,
+    );
+
+    let output = lower_hir_to_js(
+        &module,
+        &BorrowCheckReport::default(),
+        &string_table,
+        default_config(),
+    )
+    .expect("JS lowering should succeed");
+
+    assert!(
+        output.source.contains("const __match_value_0"),
+        "structured lowering should stage the scrutinee once in a temp"
+    );
+    assert!(
+        output.source.contains("=== 1"),
+        "literal arm comparison must emit strict equality for first arm"
+    );
+    assert!(
+        output.source.contains("=== 2"),
+        "literal arm comparison must emit strict equality for second arm"
+    );
+    assert!(
+        !output.source.contains("switch (__bb"),
+        "acyclic literal matches should avoid the dispatcher"
+    );
+}
+
+/// Verifies that literal matches lower through dispatcher fallback in cyclic CFGs. [cfg]
+#[test]
+fn literal_match_uses_dispatcher_when_cfg_contains_cycle() {
+    let mut string_table = StringTable::new();
+    let (type_context, types) = build_type_context();
+
+    let blocks = vec![
+        HirBlock {
+            id: BlockId(0),
+            region: RegionId(0),
+            locals: vec![local(0, types.int, RegionId(0))],
+            statements: vec![statement(
+                1,
+                HirStatementKind::Assign {
+                    target: HirPlace::Local(LocalId(0)),
+                    value: int_expression(1, 0, types.int, RegionId(0)),
+                },
+                1,
+            )],
+            terminator: HirTerminator::Jump {
+                target: BlockId(1),
+                args: vec![],
+            },
+        },
+        HirBlock {
+            id: BlockId(1),
+            region: RegionId(0),
+            locals: vec![],
+            statements: vec![],
+            terminator: HirTerminator::Match {
+                scrutinee: expression(
+                    2,
+                    HirExpressionKind::Load(HirPlace::Local(LocalId(0))),
+                    types.int,
+                    RegionId(0),
+                    ValueKind::RValue,
+                ),
+                arms: vec![
+                    HirMatchArm {
+                        pattern: HirPattern::Literal(int_expression(3, 0, types.int, RegionId(0))),
+                        guard: None,
+                        body: BlockId(2),
+                    },
+                    HirMatchArm {
+                        pattern: HirPattern::Literal(int_expression(4, 1, types.int, RegionId(0))),
+                        guard: None,
+                        body: BlockId(3),
+                    },
+                ],
+            },
+        },
+        HirBlock {
+            id: BlockId(2),
+            region: RegionId(0),
+            locals: vec![],
+            statements: vec![],
+            terminator: HirTerminator::Jump {
+                target: BlockId(1),
+                args: vec![],
+            },
+        },
+        HirBlock {
+            id: BlockId(3),
+            region: RegionId(0),
+            locals: vec![],
+            statements: vec![],
+            terminator: HirTerminator::Return(unit_expression(5, types.unit, RegionId(0))),
+        },
+    ];
+
+    let function = HirFunction {
+        id: FunctionId(0),
+        entry: BlockId(0),
+        params: vec![],
+        return_type: types.unit,
+        return_aliases: vec![],
+    };
+
+    let module = build_module(
+        &mut string_table,
+        "main",
+        blocks,
+        function,
+        &[(LocalId(0), "subject")],
+        type_context,
+    );
+
+    let output = lower_hir_to_js(
+        &module,
+        &BorrowCheckReport::default(),
+        &string_table,
+        default_config(),
+    )
+    .expect("JS lowering should succeed");
+
+    assert!(
+        output.source.contains("while (true)"),
+        "cyclic CFG must select dispatcher lowering"
+    );
+    assert!(
+        output.source.contains("switch (__bb"),
+        "dispatcher lowering must emit block switch"
+    );
+    assert!(
+        output.source.contains("const __match_"),
+        "dispatcher match lowering should stage scrutinee in a temp"
+    );
+    assert!(
+        output.source.contains("=== 0") && output.source.contains("=== 1"),
+        "dispatcher match lowering should preserve literal strict-equality checks"
+    );
+}
+
+/// Verifies structured literal-match arms converging on one continuation lower jump args stably. [cfg]
+#[test]
+fn structured_match_merge_convergence_lowers_jump_arguments() {
+    let mut string_table = StringTable::new();
+    let (type_context, types) = build_type_context();
+
+    let assign_arm0 = statement(
+        1,
+        HirStatementKind::Assign {
+            target: HirPlace::Local(LocalId(1)),
+            value: int_expression(1, 10, types.int, RegionId(0)),
+        },
+        1,
+    );
+    let assign_arm1 = statement(
+        2,
+        HirStatementKind::Assign {
+            target: HirPlace::Local(LocalId(2)),
+            value: int_expression(2, 20, types.int, RegionId(0)),
+        },
+        2,
+    );
+    let assign_default = statement(
+        3,
+        HirStatementKind::Assign {
+            target: HirPlace::Local(LocalId(3)),
+            value: int_expression(3, 30, types.int, RegionId(0)),
+        },
+        3,
+    );
+
+    let blocks = vec![
+        HirBlock {
+            id: BlockId(0),
+            region: RegionId(0),
+            locals: vec![local(0, types.int, RegionId(0))],
+            statements: vec![statement(
+                4,
+                HirStatementKind::Assign {
+                    target: HirPlace::Local(LocalId(0)),
+                    value: int_expression(4, 1, types.int, RegionId(0)),
+                },
+                4,
+            )],
+            terminator: HirTerminator::Match {
+                scrutinee: expression(
+                    5,
+                    HirExpressionKind::Load(HirPlace::Local(LocalId(0))),
+                    types.int,
+                    RegionId(0),
+                    ValueKind::RValue,
+                ),
+                arms: vec![
+                    HirMatchArm {
+                        pattern: HirPattern::Literal(int_expression(6, 0, types.int, RegionId(0))),
+                        guard: None,
+                        body: BlockId(1),
+                    },
+                    HirMatchArm {
+                        pattern: HirPattern::Literal(int_expression(7, 1, types.int, RegionId(0))),
+                        guard: None,
+                        body: BlockId(2),
+                    },
+                    HirMatchArm {
+                        pattern: HirPattern::Wildcard,
+                        guard: None,
+                        body: BlockId(3),
+                    },
+                ],
+            },
+        },
+        HirBlock {
+            id: BlockId(1),
+            region: RegionId(0),
+            locals: vec![local(1, types.int, RegionId(0))],
+            statements: vec![assign_arm0],
+            terminator: HirTerminator::Jump {
+                target: BlockId(4),
+                args: vec![LocalId(1)],
+            },
+        },
+        HirBlock {
+            id: BlockId(2),
+            region: RegionId(0),
+            locals: vec![local(2, types.int, RegionId(0))],
+            statements: vec![assign_arm1],
+            terminator: HirTerminator::Jump {
+                target: BlockId(4),
+                args: vec![LocalId(2)],
+            },
+        },
+        HirBlock {
+            id: BlockId(3),
+            region: RegionId(0),
+            locals: vec![local(3, types.int, RegionId(0))],
+            statements: vec![assign_default],
+            terminator: HirTerminator::Jump {
+                target: BlockId(4),
+                args: vec![LocalId(3)],
+            },
+        },
+        HirBlock {
+            id: BlockId(4),
+            region: RegionId(0),
+            locals: vec![local(4, types.int, RegionId(0))],
+            statements: vec![],
+            terminator: HirTerminator::Return(unit_expression(8, types.unit, RegionId(0))),
+        },
+    ];
+
+    let function = HirFunction {
+        id: FunctionId(0),
+        entry: BlockId(0),
+        params: vec![],
+        return_type: types.unit,
+        return_aliases: vec![],
+    };
+
+    let module = build_module(
+        &mut string_table,
+        "main",
+        blocks,
+        function,
+        &[
+            (LocalId(0), "subject"),
+            (LocalId(1), "arm0_value"),
+            (LocalId(2), "arm1_value"),
+            (LocalId(3), "default_value"),
+            (LocalId(4), "merged"),
+        ],
+        type_context,
+    );
+
+    let output = lower_hir_to_js(
+        &module,
+        &BorrowCheckReport::default(),
+        &string_table,
+        default_config(),
+    )
+    .expect("JS lowering should succeed");
+    let merged_name = expected_dev_local_name("merged", 4);
+
+    assert!(
+        !output.source.contains("switch (__bb"),
+        "acyclic converging match should stay on structured lowering"
+    );
+    assert_eq!(
+        output.source.matches("const __jump_arg_").count(),
+        3,
+        "all converging match-arm edges should stage one captured jump argument"
+    );
+    assert_eq!(
+        output
+            .source
+            .matches(&format!("__bs_assign_value({merged_name}, __jump_arg_"))
+            .count(),
+        3,
+        "all converging match-arm edges should assign merge locals"
+    );
+}
+
+/// Verifies dispatcher fallback preserves merge convergence jump-arg lowering for match arms. [cfg]
+#[test]
+fn dispatcher_match_merge_convergence_lowers_jump_arguments() {
+    let mut string_table = StringTable::new();
+    let (type_context, types) = build_type_context();
+
+    let blocks = vec![
+        HirBlock {
+            id: BlockId(0),
+            region: RegionId(0),
+            locals: vec![local(0, types.int, RegionId(0))],
+            statements: vec![statement(
+                1,
+                HirStatementKind::Assign {
+                    target: HirPlace::Local(LocalId(0)),
+                    value: int_expression(1, 0, types.int, RegionId(0)),
+                },
+                1,
+            )],
+            terminator: HirTerminator::Jump {
+                target: BlockId(1),
+                args: vec![],
+            },
+        },
+        HirBlock {
+            id: BlockId(1),
+            region: RegionId(0),
+            locals: vec![],
+            statements: vec![],
+            terminator: HirTerminator::Match {
+                scrutinee: expression(
+                    2,
+                    HirExpressionKind::Load(HirPlace::Local(LocalId(0))),
+                    types.int,
+                    RegionId(0),
+                    ValueKind::RValue,
+                ),
+                arms: vec![
+                    HirMatchArm {
+                        pattern: HirPattern::Literal(int_expression(3, 0, types.int, RegionId(0))),
+                        guard: None,
+                        body: BlockId(2),
+                    },
+                    HirMatchArm {
+                        pattern: HirPattern::Literal(int_expression(4, 1, types.int, RegionId(0))),
+                        guard: None,
+                        body: BlockId(3),
+                    },
+                    HirMatchArm {
+                        pattern: HirPattern::Wildcard,
+                        guard: None,
+                        body: BlockId(4),
+                    },
+                ],
+            },
+        },
+        HirBlock {
+            id: BlockId(2),
+            region: RegionId(0),
+            locals: vec![local(1, types.int, RegionId(0))],
+            statements: vec![statement(
+                5,
+                HirStatementKind::Assign {
+                    target: HirPlace::Local(LocalId(1)),
+                    value: int_expression(5, 10, types.int, RegionId(0)),
+                },
+                5,
+            )],
+            terminator: HirTerminator::Jump {
+                target: BlockId(5),
+                args: vec![LocalId(1)],
+            },
+        },
+        HirBlock {
+            id: BlockId(3),
+            region: RegionId(0),
+            locals: vec![local(2, types.int, RegionId(0))],
+            statements: vec![statement(
+                6,
+                HirStatementKind::Assign {
+                    target: HirPlace::Local(LocalId(2)),
+                    value: int_expression(6, 20, types.int, RegionId(0)),
+                },
+                6,
+            )],
+            terminator: HirTerminator::Jump {
+                target: BlockId(5),
+                args: vec![LocalId(2)],
+            },
+        },
+        HirBlock {
+            id: BlockId(4),
+            region: RegionId(0),
+            locals: vec![local(3, types.int, RegionId(0))],
+            statements: vec![statement(
+                7,
+                HirStatementKind::Assign {
+                    target: HirPlace::Local(LocalId(3)),
+                    value: int_expression(7, 30, types.int, RegionId(0)),
+                },
+                7,
+            )],
+            terminator: HirTerminator::Jump {
+                target: BlockId(5),
+                args: vec![LocalId(3)],
+            },
+        },
+        HirBlock {
+            id: BlockId(5),
+            region: RegionId(0),
+            locals: vec![local(4, types.int, RegionId(0))],
+            statements: vec![],
+            terminator: HirTerminator::Jump {
+                target: BlockId(1),
+                args: vec![],
+            },
+        },
+    ];
+
+    let function = HirFunction {
+        id: FunctionId(0),
+        entry: BlockId(0),
+        params: vec![],
+        return_type: types.unit,
+        return_aliases: vec![],
+    };
+
+    let module = build_module(
+        &mut string_table,
+        "main",
+        blocks,
+        function,
+        &[
+            (LocalId(0), "subject"),
+            (LocalId(1), "arm0_value"),
+            (LocalId(2), "arm1_value"),
+            (LocalId(3), "default_value"),
+            (LocalId(4), "merged"),
+        ],
+        type_context,
+    );
+
+    let output = lower_hir_to_js(
+        &module,
+        &BorrowCheckReport::default(),
+        &string_table,
+        default_config(),
+    )
+    .expect("JS lowering should succeed");
+    let merged_name = expected_dev_local_name("merged", 4);
+
+    assert!(
+        output.source.contains("switch (__bb"),
+        "cycle should force dispatcher lowering for converging match"
+    );
+    assert!(
+        output.source.matches("const __jump_arg_").count() >= 3,
+        "dispatcher should capture each converging match-arm jump argument"
+    );
+    assert!(
+        output
+            .source
+            .matches(&format!("__bs_assign_value({merged_name}, __jump_arg_"))
+            .count()
+            >= 3,
+        "dispatcher should assign merge locals for converging match-arm edges"
+    );
+}
+
+/// Verifies guarded match-arm conditions emit as literal-check && guard-check conjunctions. [cfg]
+#[test]
+fn match_guard_condition_emits_pattern_and_guard_conjunction() {
+    let mut string_table = StringTable::new();
+    let (type_context, types) = build_type_context();
+
+    let blocks = vec![
+        HirBlock {
+            id: BlockId(0),
+            region: RegionId(0),
+            locals: vec![
+                local(0, types.int, RegionId(0)),
+                local(1, types.boolean, RegionId(0)),
+            ],
+            statements: vec![
+                statement(
+                    1,
+                    HirStatementKind::Assign {
+                        target: HirPlace::Local(LocalId(0)),
+                        value: int_expression(1, 1, types.int, RegionId(0)),
+                    },
+                    1,
+                ),
+                statement(
+                    2,
+                    HirStatementKind::Assign {
+                        target: HirPlace::Local(LocalId(1)),
+                        value: bool_expression(2, true, types.boolean, RegionId(0)),
+                    },
+                    2,
+                ),
+            ],
+            terminator: HirTerminator::Match {
+                scrutinee: expression(
+                    3,
+                    HirExpressionKind::Load(HirPlace::Local(LocalId(0))),
+                    types.int,
+                    RegionId(0),
+                    ValueKind::RValue,
+                ),
+                arms: vec![
+                    HirMatchArm {
+                        pattern: HirPattern::Literal(int_expression(4, 1, types.int, RegionId(0))),
+                        guard: Some(expression(
+                            5,
+                            HirExpressionKind::Load(HirPlace::Local(LocalId(1))),
+                            types.boolean,
+                            RegionId(0),
+                            ValueKind::Place,
+                        )),
+                        body: BlockId(1),
+                    },
+                    HirMatchArm {
+                        pattern: HirPattern::Wildcard,
+                        guard: None,
+                        body: BlockId(2),
+                    },
+                ],
+            },
+        },
+        HirBlock {
+            id: BlockId(1),
+            region: RegionId(0),
+            locals: vec![],
+            statements: vec![],
+            terminator: HirTerminator::Jump {
+                target: BlockId(2),
+                args: vec![],
+            },
+        },
+        HirBlock {
+            id: BlockId(2),
+            region: RegionId(0),
+            locals: vec![],
+            statements: vec![],
+            terminator: HirTerminator::Return(unit_expression(6, types.unit, RegionId(0))),
+        },
+    ];
+
+    let function = HirFunction {
+        id: FunctionId(0),
+        entry: BlockId(0),
+        params: vec![],
+        return_type: types.unit,
+        return_aliases: vec![],
+    };
+
+    let module = build_module(
+        &mut string_table,
+        "main",
+        blocks,
+        function,
+        &[(LocalId(0), "subject"), (LocalId(1), "guard_flag")],
+        type_context,
+    );
+
+    let output = lower_hir_to_js(
+        &module,
+        &BorrowCheckReport::default(),
+        &string_table,
+        default_config(),
+    )
+    .expect("JS lowering should succeed");
+
+    assert!(
+        output.source.contains("if ((__match_value_0 === 1) && ("),
+        "guarded match arm should emit conjunction between pattern and guard"
+    );
+    assert!(
+        !output.source.contains("switch (__bb"),
+        "acyclic guarded match should remain structured"
+    );
+}
+
+/// Verifies malformed non-exhaustive dispatcher match emits stable runtime fallback. [cfg]
+#[test]
+fn dispatcher_match_without_selected_arm_emits_no_arm_selected_fallback() {
+    let mut string_table = StringTable::new();
+    let (type_context, types) = build_type_context();
+
+    let blocks = vec![
+        HirBlock {
+            id: BlockId(0),
+            region: RegionId(0),
+            locals: vec![local(0, types.int, RegionId(0))],
+            statements: vec![statement(
+                1,
+                HirStatementKind::Assign {
+                    target: HirPlace::Local(LocalId(0)),
+                    value: int_expression(1, 0, types.int, RegionId(0)),
+                },
+                1,
+            )],
+            terminator: HirTerminator::Jump {
+                target: BlockId(1),
+                args: vec![],
+            },
+        },
+        HirBlock {
+            id: BlockId(1),
+            region: RegionId(0),
+            locals: vec![],
+            statements: vec![],
+            terminator: HirTerminator::Match {
+                scrutinee: expression(
+                    2,
+                    HirExpressionKind::Load(HirPlace::Local(LocalId(0))),
+                    types.int,
+                    RegionId(0),
+                    ValueKind::RValue,
+                ),
+                arms: vec![HirMatchArm {
+                    pattern: HirPattern::Literal(int_expression(3, 0, types.int, RegionId(0))),
+                    guard: Some(bool_expression(4, false, types.boolean, RegionId(0))),
+                    body: BlockId(2),
+                }],
+            },
+        },
+        HirBlock {
+            id: BlockId(2),
+            region: RegionId(0),
+            locals: vec![],
+            statements: vec![],
+            terminator: HirTerminator::Jump {
+                target: BlockId(1),
+                args: vec![],
+            },
+        },
+    ];
+
+    let function = HirFunction {
+        id: FunctionId(0),
+        entry: BlockId(0),
+        params: vec![],
+        return_type: types.unit,
+        return_aliases: vec![],
+    };
+
+    let module = build_module(
+        &mut string_table,
+        "main",
+        blocks,
+        function,
+        &[(LocalId(0), "subject")],
+        type_context,
+    );
+
+    let output = lower_hir_to_js(
+        &module,
+        &BorrowCheckReport::default(),
+        &string_table,
+        default_config(),
+    )
+    .expect("JS lowering should succeed");
+
+    assert!(
+        output.source.contains("switch (__bb"),
+        "cycle should force dispatcher path for malformed match fallback assertion"
+    );
+    assert!(
+        output.source.contains("throw new Error(\"No match arm selected\");"),
+        "dispatcher match lowering must emit stable no-arm-selected fallback"
+    );
+}
+
 /// Verifies that a CFG cycle falls back to a switch-based block dispatcher. [cfg]
 #[test]
 fn falls_back_to_dispatcher_for_cfg_cycle() {

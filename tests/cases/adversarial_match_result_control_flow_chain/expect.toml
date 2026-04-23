@@ -1,0 +1,11 @@
+entry = "."
+
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = ["adversarial_match_result_control_flow_chain sum=101 label=high"]
+
+[[backends.html.artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain = ["__bs_result_fallback", "while (true)", "switch (", "&&"]

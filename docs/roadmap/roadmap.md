@@ -21,25 +21,6 @@ These are the non-negotiable conditions for starting Alpha:
 
 ## JS backend extension
 
-### Expand JS backend and runtime coverage for pattern matching
-
-The matrix marks pattern matching as implemented but incomplete, with deferred richer pattern forms and relatively lighter backend/runtime hardening than the frontend surface deserves  ￼
-
-Todo
-
-* Add JS backend tests for literal match lowering in both:
-    * structured lowering path
-    * dispatcher fallback path
-* Add integration cases for:
-    * match in loops
-    * nested match in branches
-    * match returning values through merges
-    * match with guards
-    * wildcard merge behavior
-* Add tests proving emitted JS merge behavior is stable when arms converge on a continuation block
-* Add regression tests for “no arm selected” behavior where the frontend should have guaranteed exhaustiveness
-* Add more adversarial cases combining match with results/options and control-flow-heavy code
-
 ### Expand backend/runtime coverage for receiver methods outside the current happy path
 
 The matrix calls receiver methods implemented, but HTML / HTML-Wasm specific runtime cases are still light, and more backend-facing receiver/field mutation cases are still useful  ￼

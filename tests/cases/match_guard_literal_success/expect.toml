@@ -1,0 +1,12 @@
+entry = "."
+
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = ["match_guard_literal_success result=allowed"]
+
+[[backends.html.artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain = ["&&", "=== 2"]
+must_not_contain = ["switch (__bb"]

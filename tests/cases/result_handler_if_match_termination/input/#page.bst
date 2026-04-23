@@ -5,8 +5,8 @@ can_error || -> String, Error!:
 recover || -> String:
     value = can_error() err! "fallback":
         if 1 is:
-            case 1 => io("one");
-            else => io("other");
+            case 1 => io("one")
+            else => io("other")
         ;
     ;
 

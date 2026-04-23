@@ -29,6 +29,16 @@ path = "adversarial_loop_match_result_chain"
 tags = ["adversarial", "bug-hunt"]
 
 [[case]]
+id = "adversarial_match_result_control_flow_chain"
+path = "adversarial_match_result_control_flow_chain"
+tags = ["adversarial", "bug-hunt"]
+
+[[case]]
+id = "adversarial_match_result_option_flow"
+path = "adversarial_match_result_option_flow"
+tags = ["adversarial", "bug-hunt"]
+
+[[case]]
 id = "adversarial_multi_bind_in_loops"
 path = "adversarial_multi_bind_in_loops"
 tags = ["adversarial", "bug-hunt"]
@@ -229,6 +239,11 @@ path = "choice_match_exhaustive_success"
 tags = ["integration","control-flow","language"]
 
 [[case]]
+id = "choice_match_guard_without_else_failure"
+path = "choice_match_guard_without_else_failure"
+tags = ["integration","control-flow","diagnostics"]
+
+[[case]]
 id = "choice_match_non_exhaustive_failure"
 path = "choice_match_non_exhaustive_failure"
 tags = ["integration","control-flow","diagnostics"]
@@ -237,6 +252,11 @@ tags = ["integration","control-flow","diagnostics"]
 id = "choice_match_unknown_variant_failure"
 path = "choice_match_unknown_variant_failure"
 tags = ["integration","control-flow","diagnostics"]
+
+[[case]]
+id = "choice_match_wildcard_merge_continuation"
+path = "choice_match_wildcard_merge_continuation"
+tags = ["integration","control-flow","backend-contract"]
 
 [[case]]
 id = "choice_function_return_flow"
@@ -506,6 +526,11 @@ tags = ["integration","diagnostics"]
 [[case]]
 id = "diagnostic_match_legacy_colon_syntax"
 path = "diagnostic_match_legacy_colon_syntax"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "diagnostic_match_semicolon_between_arms"
+path = "diagnostic_match_semicolon_between_arms"
 tags = ["integration","diagnostics"]
 
 [[case]]
@@ -1112,6 +1137,21 @@ tags = ["integration","control-flow"]
 id = "loop_zero_step"
 path = "loop_zero_step"
 tags = ["integration","control-flow","diagnostics"]
+
+[[case]]
+id = "match_guard_literal_success"
+path = "match_guard_literal_success"
+tags = ["integration","control-flow","language"]
+
+[[case]]
+id = "match_nested_in_branches"
+path = "match_nested_in_branches"
+tags = ["integration","control-flow","language"]
+
+[[case]]
+id = "match_value_merge_flow"
+path = "match_value_merge_flow"
+tags = ["integration","control-flow","language"]
 
 [[case]]
 id = "malformed_print_statement"

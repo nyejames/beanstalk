@@ -42,6 +42,7 @@ fn non_unit_function_with_terminal_match_default_does_not_report_fallthrough() {
                 ),
                 vec![MatchArm {
                     condition: Expression::int(1, test_location(11), Ownership::ImmutableOwned),
+                    guard: None,
                     body: vec![node(
                         NodeKind::Return(vec![Expression::int(
                             1,
@@ -104,6 +105,7 @@ fn lowers_match_with_literal_arms_and_synthesized_wildcard_default() {
             vec![
                 MatchArm {
                     condition: Expression::int(1, test_location(3), Ownership::ImmutableOwned),
+                    guard: None,
                     body: vec![node(
                         NodeKind::Rvalue(Expression::int(
                             9,
@@ -115,6 +117,7 @@ fn lowers_match_with_literal_arms_and_synthesized_wildcard_default() {
                 },
                 MatchArm {
                     condition: Expression::int(2, test_location(3), Ownership::ImmutableOwned),
+                    guard: None,
                     body: vec![node(
                         NodeKind::Rvalue(Expression::int(
                             8,
@@ -158,6 +161,136 @@ fn lowers_match_with_literal_arms_and_synthesized_wildcard_default() {
 }
 
 #[test]
+fn lowers_match_with_guarded_arm_into_hir_guard_expression() {
+    let mut string_table = StringTable::new();
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
+    let x = super::symbol("x", &mut string_table);
+
+    let match_node = node(
+        NodeKind::Match(
+            Expression::reference(
+                x.clone(),
+                DataType::Int,
+                test_location(3),
+                Ownership::ImmutableReference,
+            ),
+            vec![MatchArm {
+                condition: Expression::int(1, test_location(3), Ownership::ImmutableOwned),
+                guard: Some(Expression::bool(
+                    true,
+                    test_location(3),
+                    Ownership::ImmutableOwned,
+                )),
+                body: vec![node(
+                    NodeKind::Rvalue(Expression::int(
+                        9,
+                        test_location(3),
+                        Ownership::ImmutableOwned,
+                    )),
+                    test_location(3),
+                )],
+            }],
+            Some(vec![node(
+                NodeKind::Rvalue(Expression::int(
+                    8,
+                    test_location(4),
+                    Ownership::ImmutableOwned,
+                )),
+                test_location(4),
+            )]),
+        ),
+        test_location(3),
+    );
+
+    let start_fn = function_node(
+        start_name,
+        FunctionSignature {
+            parameters: vec![param(x, DataType::Int, false, test_location(2))],
+            returns: vec![],
+        },
+        vec![match_node],
+        test_location(2),
+    );
+
+    let ast = build_ast(vec![start_fn], entry_path);
+    let module = lower_ast(ast, &mut string_table).expect("HIR lowering should succeed");
+    let start = &module.functions[module.start_function.0 as usize];
+    let entry_block = &module.blocks[start.entry.0 as usize];
+
+    let arms = match &entry_block.terminator {
+        HirTerminator::Match { arms, .. } => arms,
+        _ => panic!("expected match terminator"),
+    };
+
+    assert!(
+        arms[0].guard.is_some(),
+        "first arm should preserve the lowered guard expression"
+    );
+    assert!(
+        arms[1].guard.is_none(),
+        "synthesized wildcard arm should not carry a guard"
+    );
+}
+
+#[test]
+fn match_guard_rejects_lowering_when_guard_emits_prelude_statements() {
+    let mut string_table = StringTable::new();
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
+    let x = super::symbol("x", &mut string_table);
+    let io_path = super::symbol("io", &mut string_table);
+
+    let guarded_arm = MatchArm {
+        condition: Expression::int(1, test_location(3), Ownership::ImmutableOwned),
+        guard: Some(Expression::host_function_call(
+            io_path,
+            vec![Expression::bool(
+                true,
+                test_location(3),
+                Ownership::ImmutableOwned,
+            )],
+            vec![DataType::None],
+            test_location(3),
+        )),
+        body: vec![],
+    };
+
+    let start_fn = function_node(
+        start_name,
+        FunctionSignature {
+            parameters: vec![param(x.clone(), DataType::Int, false, test_location(2))],
+            returns: vec![],
+        },
+        vec![node(
+            NodeKind::Match(
+                Expression::reference(
+                    x,
+                    DataType::Int,
+                    test_location(3),
+                    Ownership::ImmutableReference,
+                ),
+                vec![guarded_arm],
+                Some(vec![]),
+            ),
+            test_location(3),
+        )],
+        test_location(2),
+    );
+
+    let ast = build_ast(vec![start_fn], entry_path);
+    let err = lower_ast(ast, &mut string_table)
+        .expect_err("guard expressions with preludes should fail HIR lowering");
+
+    assert_eq!(err.errors[0].error_type, ErrorType::HirTransformation);
+    assert!(
+        err.errors[0]
+            .msg
+            .contains("Match arm guard lowering produced side-effect statements"),
+        "unexpected error message: {}",
+        err.errors[0].msg
+    );
+}
+
+#[test]
 fn match_rejects_non_literal_pattern_expressions() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
@@ -184,6 +317,7 @@ fn match_rejects_non_literal_pattern_expressions() {
                         test_location(3),
                         Ownership::ImmutableReference,
                     ),
+                    guard: None,
                     body: vec![],
                 }],
                 None,

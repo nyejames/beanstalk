@@ -359,10 +359,14 @@ impl<'a> HirBuilder<'a> {
         let mut hir_arms = Vec::with_capacity(arms.len() + 1);
         for (index, arm) in arms.iter().enumerate() {
             let lowered_pattern = self.lower_match_literal_pattern(&arm.condition)?;
+            let lowered_guard = match &arm.guard {
+                Some(guard) => Some(self.lower_match_guard_expression(guard)?),
+                None => None,
+            };
 
             hir_arms.push(HirMatchArm {
                 pattern: HirPattern::Literal(lowered_pattern),
-                guard: None,
+                guard: lowered_guard,
                 body: arm_blocks[index],
             });
         }
@@ -484,6 +488,29 @@ impl<'a> HirBuilder<'a> {
         }
 
         Ok(lowered_pattern.value)
+    }
+
+    /// Lower a match arm guard and ensure it remains a pure boolean expression.
+    fn lower_match_guard_expression(
+        &mut self,
+        guard: &Expression,
+    ) -> Result<HirExpression, CompilerError> {
+        let lowered_guard = self.lower_expression(guard)?;
+        if !lowered_guard.prelude.is_empty() {
+            return_hir_transformation_error!(
+                "Match arm guard lowering produced side-effect statements; guards must stay pure boolean expressions",
+                self.hir_error_location(&guard.location)
+            );
+        }
+
+        let HirTypeKind::Bool = self.type_context.get(lowered_guard.value.ty).kind else {
+            return_hir_transformation_error!(
+                "Match arm guards must lower to Bool expressions",
+                self.hir_error_location(&guard.location)
+            );
+        };
+
+        Ok(lowered_guard.value)
     }
 
     /// Lazily create the shared merge block on the first non-terminal arm that needs it.

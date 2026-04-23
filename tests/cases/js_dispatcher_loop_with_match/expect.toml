@@ -3,8 +3,9 @@ entry = "."
 [backends.html]
 mode = "success"
 warnings = "forbid"
+rendered_output_contains = ["113"]
 
 [[backends.html.artifact_assertions]]
 path = "index.html"
 kind = "html"
-must_contain = ["while (true)", "switch (", "if (", "console.log"]
+must_contain = ["while (true)", "switch (", "const __match_", "=== 0", "=== 1"]

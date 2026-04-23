@@ -235,8 +235,17 @@ pub(crate) fn parse_function_body_statements(
                 )?);
             }
 
+            TokenKind::Case if context.kind == ContextKind::MatchArm => break,
+
+            TokenKind::Case => {
+                return Err(unexpected_function_body_token_error(
+                    token_stream.current_token_kind(),
+                    token_stream,
+                ));
+            }
+
             TokenKind::Else => {
-                if context.kind == ContextKind::Branch {
+                if context.kind == ContextKind::Branch || context.kind == ContextKind::MatchArm {
                     break;
                 } else {
                     return_rule_error!(
@@ -312,6 +321,7 @@ pub(crate) fn parse_function_body_statements(
                             token_stream.current_location()
                         )
                 }
+                ContextKind::MatchArm => break,
                 _ => {
                     token_stream.advance();
                     break;
