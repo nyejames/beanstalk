@@ -17,7 +17,10 @@ These are the non-negotiable conditions for starting Alpha:
 - Cross-platform output is stable enough that Windows and macOS do not produce avoidable golden drift.
 - The documentation site (written in beanstalk) inside the docs directory should be able to render a complete and good looking docs website fully using the Beanstalk pipeline. This will be the final testing ground for whether the language feels "ready" to be alpha.
 
-## Next Plans
+## Next Plan
+
+### Tighten contract for multibind assignments
+`docs\roadmap\plans\multi-bind-tightening.md`
 
 ### Remaining Windows Test failures
 `docs/roadmap/plans/remaining-windows-failures.md`
