@@ -1,15 +1,21 @@
 //! Multi-bind parsing and target resolution helpers.
 //!
-//! WHAT: parses `a, b = value` style statements and resolves each target into the AST shape HIR
+//! WHAT: parses `a, b = pair()` style statements and resolves each target into the AST shape HIR
 //! will lower later.
 //! WHY: multi-bind syntax mixes statement parsing, declaration rules, and target validation, so it
 //! deserves a dedicated module instead of living inside the general function-body dispatcher.
+//!
+//! INVARIANT: multi-bind is a special-purpose surface for explicit multi-value-producing
+//! expressions. It is NOT a generic destructuring mechanism. The right-hand side must belong to
+//! an explicitly supported multi-bind-producing surface (currently: multi-return function calls).
+//! Future surfaces (e.g. pattern-match blocks) should be added by extending the classifier, not by
+//! broadening regular declaration syntax.
 
 use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::{
     AstNode, Declaration, MultiBindTarget, MultiBindTargetKind, NodeKind,
 };
-use crate::compiler_frontend::ast::expressions::expression::Expression;
+use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
@@ -273,7 +279,27 @@ fn parse_multi_bind_rhs_expression(
     Ok(rhs_expression)
 }
 
+fn classify_multi_bind_rhs(expression: &Expression) -> Result<(), CompilerError> {
+    match &expression.kind {
+        ExpressionKind::FunctionCall(..)
+        | ExpressionKind::ResultHandledFunctionCall { .. }
+        | ExpressionKind::HostFunctionCall(..) => Ok(()),
+        _ => {
+            return_rule_error!(
+                "Multi-bind is only supported for explicit multi-value surfaces. For now, that means multi-return function calls.",
+                expression.location.clone(),
+                {
+                    CompilationStage => "AST Construction",
+                    PrimarySuggestion => "Use a multi-return function call on the right-hand side, or bind a single value with a regular declaration",
+                }
+            );
+        }
+    }
+}
+
 fn extract_rhs_slot_types(rhs_expression: &Expression) -> Result<Vec<DataType>, CompilerError> {
+    classify_multi_bind_rhs(rhs_expression)?;
+
     match &rhs_expression.data_type {
         DataType::Returns(slots) => Ok(slots.to_owned()),
         _ => {
@@ -282,7 +308,7 @@ fn extract_rhs_slot_types(rhs_expression: &Expression) -> Result<Vec<DataType>, 
                 rhs_expression.location.clone(),
                 {
                     CompilationStage => "AST Construction",
-                    PrimarySuggestion => "Use an expression that returns multiple values, such as a multi-return function call",
+                    PrimarySuggestion => "Use a multi-return function call on the right-hand side",
                 }
             );
         }

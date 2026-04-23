@@ -19,9 +19,6 @@ These are the non-negotiable conditions for starting Alpha:
 
 ## Next Plan
 
-### Tighten contract for multibind assignments
-`docs\roadmap\plans\multi-bind-tightening.md`
-
 ### Remaining Windows Test failures
 `docs/roadmap/plans/remaining-windows-failures.md`
 This file contains the results of running the test suite on a windows machine.

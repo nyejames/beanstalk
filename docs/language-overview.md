@@ -194,6 +194,9 @@ pair || -> String, Int:
 name, count = pair()
 ```
 
+Multi-bind is currently intended for multi-return function-call results only. Regular declarations
+remain single-target, and other multi-value expression blocks are not supported yet.
+
 Named handler scopes are supported for explicit error-handling blocks, including fallback values
 when the success path still needs values:
 

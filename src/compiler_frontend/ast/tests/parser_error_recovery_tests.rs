@@ -126,6 +126,44 @@ fn reports_multi_bind_mutable_target_without_explicit_type() {
 }
 
 #[test]
+fn reports_multi_bind_with_variable_rhs_rejected() {
+    let error = parse_single_file_ast_error("value ~= 1\na, b = value\n");
+
+    assert_eq!(error.error_type, ErrorType::Rule);
+    assert!(
+        error.msg.contains("Multi-bind is only supported for explicit multi-value surfaces"),
+        "{}",
+        error.msg
+    );
+}
+
+#[test]
+fn reports_multi_bind_with_literal_rhs_rejected() {
+    let error = parse_single_file_ast_error("a, b = 1\n");
+
+    assert_eq!(error.error_type, ErrorType::Rule);
+    assert!(
+        error.msg.contains("Multi-bind is only supported for explicit multi-value surfaces"),
+        "{}",
+        error.msg
+    );
+}
+
+#[test]
+fn reports_multi_bind_with_field_access_rhs_rejected() {
+    let error = parse_single_file_ast_error(
+        "Thing = |\n    x Int,\n    y Int,\n|\nthing ~= Thing(1, 2)\na, b = thing.x\n",
+    );
+
+    assert_eq!(error.error_type, ErrorType::Rule);
+    assert!(
+        error.msg.contains("Multi-bind is only supported for explicit multi-value surfaces"),
+        "{}",
+        error.msg
+    );
+}
+
+#[test]
 fn reports_reserved_must_keyword_in_function_body() {
     let error = parse_single_file_ast_error("must = 1\n");
 

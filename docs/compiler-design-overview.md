@@ -206,6 +206,7 @@ It does not rediscover top-level symbols or reparse top-level declaration shells
 - **Top-Level Resolution**: AST resolves and validates constants, struct field types, and function signatures from the parsed header payloads
 - **Body Parsing**: Function bodies and the entry `start` body are parsed and lowered here
 - **Local Scope Growth**: Executable bodies register local declarations incrementally in source order. Body-local declarations reuse shared declaration syntax, but top-level declaration shells remain header-owned
+- **Multi-bind**: `a, b = pair()` is an AST statement form limited to explicit multi-return-producing surfaces (currently multi-return function calls). It is not part of general declaration syntax and does not act as a generic destructuring mechanism.
 - **Namespace Resolution**: Variables keep full scoped paths, and uniqueness is enforced by scope rules rather than post-hoc recollection
 - **Template Preparation**: AST performs template composition, compile-time folding, helper elimination, and runtime render-plan preparation before HIR
 

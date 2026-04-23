@@ -395,6 +395,9 @@ impl<'a> HirBuilder<'a> {
         value: &Expression,
         location: &SourceLocation,
     ) -> Result<(), CompilerError> {
+        // INVARIANT: AST validation guarantees the RHS is an explicitly supported multi-bind
+        // source (currently a multi-return function call). This lowering assumes that invariant
+        // and does not handle generic destructuring of arbitrary expressions.
         if targets.len() < 2 {
             return_hir_transformation_error!(
                 "Single-target bind unexpectedly reached multi-bind lowering",
