@@ -103,6 +103,19 @@ Todo
 ### Review built in "Error" type and reserved keywords
 Should this be build-system provided (like IO) rather than a compiler built in? So Error is reserved in a similar way to io and IO, and must always be provided by the build system, but the specific shape beyond the core parameters must be defined by the build system.
 
+### Extend pattern matching
+
+Current Alpha pattern support:
+
+* Literal patterns (`Int`, `Float`, `Bool`, `Char`, `String`) for non-choice matches.
+* Choice variant patterns for choice matches (`case Ready =>` or `case Status::Ready =>`).
+
+Not yet supported:
+
+* Wildcard pattern `case _ =>`
+* Relational patterns (`<`, `<=`, `>`, `>=`)
+* Negated patterns (`case not ... =>`)
+* Capture/tagged patterns using `|...|`
 
 
 ## Final pre-alpha sweep

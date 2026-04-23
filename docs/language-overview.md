@@ -116,7 +116,6 @@ Variable mutability declarations and call-site mutable access are separate conce
 * A mutable binding does not automatically satisfy a mutable parameter. Existing places still require `~` at the call site.
 
 ### Numeric Semantics
-
 - Whole-number literals are `Int`.
 - Decimal-point literals are `Float`.
 - `+`, `-`, `*`, and `%` preserve `Int` when both operands are `Int`.
@@ -129,7 +128,6 @@ Variable mutability declarations and call-site mutable access are separate conce
 - Use `Int(...)` when an explicit conversion is required.
 
 ### Results and Options
-
 Beanstalk supports optional values and error returns with compact syntax.
 none is parse-context-sensitive: it requires an optional surrounding type context rather than being recovered later by post-parse coercion.
 
@@ -346,7 +344,6 @@ If a child template should keep using a formatter such as `$markdown`, redeclare
 In this example, `one` is wrapped with `<li>...</li>`, while `two` opts out and is rendered without the parent `$children(..)` wrapper.
 
 ### Template Slots
-
 Template slots let one template receive content from another template. The default slot is written as `[$slot]` and marks where the main body content should be inserted.
 
 Named slots can also be declared with `[$slot("name")]`. These allow helper templates to insert content into a specific part of another template using `$insert("name")`.
@@ -413,9 +410,19 @@ else
 ;
 ```
 
-### Pattern Matching
+### If Statements / Pattern Matching
+If statements are non-exhaustive and don't have 'else if'.
+The else branch is optional.
 
-Pattern matching uses `if <value> is:` with one or more `case` arms.
+```beanstalk
+if value is true:
+    io("then branch")
+else
+    io("else branch")
+;
+```
+
+Pattern matching is exhaustive and allows you to uses `if <value> is:` with one or more `case` arms.
 
 ```beanstalk
 value ~= 2
@@ -430,38 +437,22 @@ if value is:
 ;
 ```
 
+- Arms are delimited by the next `case`, `else`, or the final match-closing `;`
+- Per-arm semicolons are invalid in match blocks
+- Guard expressions (`if <bool_expr>`) must be `Bool`
+- For non-choice scrutinees, `else =>` is required in Alpha
+- For choice scrutinees:
+  - `else =>` always satisfies exhaustiveness
+  - Without `else =>`, every variant must be covered
+  - If any arm has a guard, `else =>` is required
+  - The same variant cannot be matched more than once
+
 Arm syntax:
-
-* `case <pattern> => <body>`
-* `case <pattern> if <bool_expr> => <body>`
-* `else => <body>`
-
-Rules:
-
-* Arms are delimited by the next `case`, `else`, or the final match-closing `;`.
-* Per-arm semicolons are invalid in match blocks.
-* Guard expressions (`if <bool_expr>`) must be `Bool`.
-* For non-choice scrutinees, `else =>` is required in Alpha.
-* For choice scrutinees:
-  * `else =>` always satisfies exhaustiveness.
-  * Without `else =>`, every variant must be covered.
-  * If any arm has a guard, `else =>` is required.
-  * The same variant cannot be matched more than once.
-
-Current Alpha pattern support:
-
-* Literal patterns (`Int`, `Float`, `Bool`, `Char`, `String`) for non-choice matches.
-* Choice variant patterns for choice matches (`case Ready =>` or `case Status::Ready =>`).
-
-Deferred (not yet supported in Alpha):
-
-* Wildcard pattern `case _ =>`
-* Relational patterns (`<`, `<=`, `>`, `>=`)
-* Negated patterns (`case not ... =>`)
-* Capture/tagged patterns using `|...|`
+- `case <pattern> => <body>`
+- `case <pattern> if <bool_expr> => <body>`
+- `else => <body>`
 
 ## Loops
-
 Beanstalk uses a **single** loop keyword: `loop`.
 
 * **`to`** / **`to &`** select range semantics (exclusive vs inclusive)
@@ -479,7 +470,6 @@ Loops come in two forms:
 2. **Iteration loops** (iterate over a collection or a numeric range)
 
 ### Conditional loops
-
 A conditional loop repeats for as long as its condition stays true.
 
 ```beanstalk
@@ -491,7 +481,6 @@ loop is_connected():
 Conditional loops usually do not need bindings, so the parameter brackets are normally omitted.
 
 ### Iteration loops
-
 Iteration loops evaluate the loop condition as an iterable source and optionally bind values for each iteration.
 
 Iteration can step through either:
@@ -524,7 +513,6 @@ loop items:
 ```
 
 ### Range loops
-
 If the loop header contains **`to`**, it is a range loop.
 
 * `to` uses an **exclusive** end bound
@@ -574,7 +562,6 @@ loop 0 to 3:
 ```
 
 ### Direction is inferred from bounds
-
 Beanstalk automatically determines the iteration direction from the bounds:
 
 * If `start < end`, the default direction is ascending
@@ -736,7 +723,6 @@ Other files contribute declarations that must be imported explicitly by symbol.
 - Circular imports are detected and cause compilation errors
 
 ### Hash (`#`) semantics
-
 At top level, `#` changes behavior by declaration kind:
 - Variable declaration: exported constant declaration (compile-time only)
 - Function declaration: exported function (visibility only)
@@ -760,7 +746,6 @@ Non-`#` top-level declarations are module-private.
 ```
 
 ### Constants and compile-time folding
-
 Constants use the same declaration syntax as regular variables, including optional explicit type annotations.
 The difference is semantic: top-level `#` variable declarations are module constants.
 
@@ -781,7 +766,6 @@ Top-level const templates follow the same compile-time rule and are currently en
 ```
 
 ### Struct instances in constants (const records)
-
 Struct instances can be coerced into compile-time records when assigned to a constant.
 All constructor arguments must also be constant-foldable values.
 
