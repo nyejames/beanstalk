@@ -19,11 +19,20 @@ These are the non-negotiable conditions for starting Alpha:
 
 ## Next Plans
 
+### Remaining Windows Test failures
+`docs/roadmap/plans/remaining-windows-failures.md`
+
+### AST template hardening
+`docs/roadmap/plans/ast-prealpha-front-end-review-plan.md`
+
+### Restrict and simplify multibind to function calls only
+As a design decision of the language as well as a simplification of the compiler, multiple assignment bindings will only be valid when assigning to a function call.
+
 ## JS backend extension
 
 ### Expand backend/runtime coverage for receiver methods outside the current happy path
 
-The matrix calls receiver methods implemented, but HTML / HTML-Wasm specific runtime cases are still light, and more backend-facing receiver/field mutation cases are still useful  ￼
+The matrix calls receiver methods implemented, but HTML / HTML-Wasm specific runtime cases are still light, and more backend-facing receiver/field mutation cases are still useful
 
 Todo
 
@@ -38,7 +47,7 @@ Todo
 
 ### Strengthen collection backend/runtime coverage beyond current basics
 
-The matrix already has broad collection coverage, but backend/runtime contract hardening is still worth deepening, especially around edge behavior  ￼
+The matrix already has broad collection coverage, but backend/runtime contract hardening is still worth deepening, especially around edge behavior
 
 Done
 
@@ -58,7 +67,7 @@ Todo
 
 ### Harden JS result/error runtime coverage further
 
-The backend already has dedicated helpers and some tests, but more integrated adversarial cases are still useful  ￼  ￼  ￼
+The backend already has dedicated helpers and some tests, but more integrated adversarial cases are still useful
 
 Todo
 
@@ -69,7 +78,7 @@ Todo
 
 ### Add explicit backend coverage for block-dispatcher edge cases
 
-The dispatcher path is important and should be hardened more aggressively because it is the fallback for nontrivial CFG  ￼  ￼
+The dispatcher path is important and should be hardened more aggressively because it is the fallback for nontrivial CFG
 
 Todo
 

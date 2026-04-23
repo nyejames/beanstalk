@@ -430,6 +430,9 @@ fn print_help(commands_only: bool) {
         say!(Green Bold "The Beanstalk compiler and build system");
         say!("Usage: ", Bold "<command>",  Italic "<args>");
     }
+
+    say!(Green Bold "Beanstalk", Reset " is version ", Blue Bold env!("CARGO_PKG_VERSION"));
+
     say!(Green Bold "\nCommands:");
     say!("  build <path>      - Builds a project");
     say!("  check [path]      - Runs frontend-only diagnostics (no artifacts)");
