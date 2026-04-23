@@ -36,7 +36,7 @@ pub(crate) fn apply_inherited_child_templates_to_content(
     let mut wrapped_atoms = Vec::with_capacity(content.atoms.len());
 
     for atom in content.atoms {
-        if is_direct_child_template_atom(&atom) {
+        if atom.is_direct_child_template_atom() {
             wrapped_atoms.push(wrap_direct_child_atom(
                 &atom,
                 inherited_templates,
@@ -50,27 +50,6 @@ pub(crate) fn apply_inherited_child_templates_to_content(
     Ok(TemplateContent {
         atoms: wrapped_atoms,
     })
-}
-
-/// Returns true if the atom is a direct child template in body position
-/// (either a folded child output or an unresolved template expression).
-fn is_direct_child_template_atom(atom: &TemplateAtom) -> bool {
-    let TemplateAtom::Content(segment) = atom else {
-        return false;
-    };
-
-    if segment.origin != TemplateSegmentOrigin::Body {
-        return false;
-    }
-
-    if segment.is_child_template_output {
-        return true;
-    }
-
-    match &segment.expression.kind {
-        ExpressionKind::Template(template) => !template.has_unresolved_slots(),
-        _ => false,
-    }
 }
 
 /// Wraps a direct child atom in all inherited wrapper templates (applied

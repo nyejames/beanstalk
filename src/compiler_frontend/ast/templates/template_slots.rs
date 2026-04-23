@@ -511,26 +511,7 @@ fn contribution_has_direct_child_templates(atom: &TemplateAtom) -> bool {
         .content
         .atoms
         .iter()
-        .any(is_direct_child_template_atom)
-}
-
-fn is_direct_child_template_atom(atom: &TemplateAtom) -> bool {
-    let TemplateAtom::Content(segment) = atom else {
-        return false;
-    };
-
-    if segment.origin != TemplateSegmentOrigin::Body {
-        return false;
-    }
-
-    if segment.is_child_template_output {
-        return true;
-    }
-
-    match &segment.expression.kind {
-        ExpressionKind::Template(template) => !template.has_unresolved_slots(),
-        _ => false,
-    }
+        .any(TemplateAtom::is_direct_child_template_atom)
 }
 
 fn wrap_child_slot_contribution(

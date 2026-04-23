@@ -32,6 +32,9 @@ use crate::compiler_frontend::ast::templates::template_render_plan::{
 pub(crate) struct BodyFormattingResult {
     pub plan: TemplateRenderPlan,
     pub warnings: Vec<CompilerWarning>,
+    /// True when the formatter or whitespace passes materially changed the plan.
+    /// Used by the caller to avoid an unnecessary content-rebuild round-trip.
+    pub content_changed: bool,
 }
 
 /// Applies the body formatter and whitespace passes to a template's content.
@@ -56,6 +59,21 @@ pub(crate) fn apply_body_formatter(
         return Ok(BodyFormattingResult {
             plan,
             warnings: Vec::new(),
+            content_changed: false,
+        });
+    }
+
+    // Fast path: if there are no text pieces, whitespace passes are no-ops and
+    // a non-existent formatter has nothing to format. Return the plan unchanged.
+    let has_text_pieces = plan
+        .pieces
+        .iter()
+        .any(|p| matches!(p, RenderPiece::Text(_)));
+    if !has_text_pieces && formatter.is_none() {
+        return Ok(BodyFormattingResult {
+            plan,
+            warnings: Vec::new(),
+            content_changed: false,
         });
     }
 
@@ -210,10 +228,29 @@ pub(crate) fn apply_body_formatter(
         new_plan_pieces.extend(replacement);
     }
 
+    let original_len = plan.pieces.len();
+    let content_changed = new_plan_pieces.len() != original_len
+        || plan
+            .pieces
+            .iter()
+            .zip(new_plan_pieces.iter())
+            .any(|(old, new)| {
+                match (old, new) {
+                    (RenderPiece::Text(old_t), RenderPiece::Text(new_t)) => {
+                        old_t.text != new_t.text
+                    }
+                    (RenderPiece::HeadContent(old_t), RenderPiece::HeadContent(new_t)) => {
+                        old_t.text != new_t.text
+                    }
+                    _ => false, // non-text pieces are unchanged by formatting
+                }
+            });
+
     plan.pieces = new_plan_pieces;
     Ok(BodyFormattingResult {
         plan,
         warnings: all_warnings,
+        content_changed,
     })
 }
 

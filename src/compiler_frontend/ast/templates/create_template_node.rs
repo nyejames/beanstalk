@@ -7,6 +7,14 @@
 //! WHY: This file used to contain ALL template logic (~1700 lines). It has
 //! been refactored into an orchestrator that coordinates the pipeline stages
 //! defined in sibling modules while keeping the overall flow readable.
+//!
+//! ## Runtime metadata ownership
+//!
+//! `Template::new()` is the authoritative owner of final runtime template metadata.
+//! It builds the render plan and sets `content_needs_formatting = false` before
+//! returning. AST finalization trusts this and only resyncs metadata when a
+//! template's content actually changes during normalization (e.g. a nested
+//! compile-time template is folded into a string slice).
 
 use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::templates::template::{
@@ -14,7 +22,9 @@ use crate::compiler_frontend::ast::templates::template::{
 };
 use crate::compiler_frontend::ast::templates::template_body_parser::parse_template_body;
 use crate::compiler_frontend::ast::templates::template_composition::compose_template_head_chain;
-use crate::compiler_frontend::ast::templates::template_formatting::apply_body_formatter;
+use crate::compiler_frontend::ast::templates::template_formatting::{
+    BodyFormattingResult, apply_body_formatter,
+};
 use crate::compiler_frontend::ast::templates::template_head_parser::{
     apply_doc_comment_defaults, parse_template_head,
 };
@@ -107,12 +117,17 @@ impl Template {
         )?;
 
         // Stage 4: format body-origin text and produce a structured render plan.
-        let render_plan = format_template_body(&template, context, string_table)?;
+        let BodyFormattingResult {
+            plan: render_plan,
+            content_changed,
+            ..
+        } = format_template_body(&template, context, string_table)?;
 
         // Stage 5: rebuild formatted content and re-run composition.
         finalize_template_after_formatting(
             &mut template,
             render_plan,
+            content_changed,
             &mut foldable,
             string_table,
             requires_post_format_recomposition,
@@ -204,7 +219,7 @@ fn format_template_body(
     template: &Template,
     context: &ScopeContext,
     string_table: &mut StringTable,
-) -> Result<TemplateRenderPlan, CompilerError> {
+) -> Result<BodyFormattingResult, CompilerError> {
     let formatting_result =
         match apply_body_formatter(&template.content, &template.style, string_table) {
             Ok(result) => result,
@@ -221,11 +236,11 @@ fn format_template_body(
             }
         };
 
-    for warning in formatting_result.warnings {
-        context.emit_warning(warning);
+    for warning in &formatting_result.warnings {
+        context.emit_warning(warning.clone());
     }
 
-    Ok(formatting_result.plan)
+    Ok(formatting_result)
 }
 
 /// Stage 5 helper: rebuild formatted content and finalize the template outputs.
@@ -243,25 +258,34 @@ fn format_template_body(
 fn finalize_template_after_formatting(
     template: &mut Template,
     render_plan: TemplateRenderPlan,
+    content_changed: bool,
     foldable: &mut bool,
     string_table: &StringTable,
     requires_post_format_recomposition: bool,
 ) -> Result<(), CompilerError> {
-    template.content = render_plan.rebuild_content();
-    if requires_post_format_recomposition {
-        template.content = apply_inherited_child_templates_to_content(
-            template.content.clone(),
-            &template.style.child_templates,
-            string_table,
-        )?;
-        template.content = compose_template_head_chain(&template.content, foldable, string_table)?;
+    // If formatting made no changes and no post-format recomposition is needed,
+    // skip the expensive content → plan → content round-trip.
+    if content_changed || requires_post_format_recomposition {
+        template.content = render_plan.rebuild_content();
+        if requires_post_format_recomposition {
+            template.content = apply_inherited_child_templates_to_content(
+                template.content.clone(),
+                &template.style.child_templates,
+                string_table,
+            )?;
+            template.content =
+                compose_template_head_chain(&template.content, foldable, string_table)?;
+        }
+        template.render_plan = Some(TemplateRenderPlan::from_content(&template.content));
+    } else {
+        // Formatting was a no-op; keep the original content and use the plan directly.
+        template.render_plan = Some(render_plan);
     }
 
     // `template.render_plan` must always match the finalized content stream before HIR sees
     // the template. AST owns both piece ordering and runtime-template planning.
     template.content_needs_formatting = false;
     template.refresh_kind_from_content();
-    template.render_plan = Some(TemplateRenderPlan::from_content(&template.content));
     Ok(())
 }
 

@@ -23,13 +23,6 @@ These are the non-negotiable conditions for starting Alpha:
 `docs/roadmap/plans/remaining-windows-failures.md`
 This file contains the results of running the test suite on a windows machine.
 
-### AST template hardening
-`docs/roadmap/plans/ast-prealpha-front-end-review-plan.md`
-Remove **structural frontend cost** that is already visible in the current AST and template pipeline without introducing large prealpha complexity.
-
-### Restrict and simplify multibind to function calls only
-As a design decision of the language as well as a simplification of the compiler, multiple assignment bindings will only be valid when assigning to a function call.
-
 ## JS backend extension
 
 ### Strengthen collection backend/runtime coverage beyond current basics

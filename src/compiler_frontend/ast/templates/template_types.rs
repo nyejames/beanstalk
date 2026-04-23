@@ -122,7 +122,12 @@ impl Template {
     }
 
     fn resync_metadata_with_plan_policy(&mut self, force_full_plan: bool) {
-        self.unformatted_content = self.content.to_owned();
+        // Only snapshot pre-format content when formatting is actually deferred.
+        // After Template::new(), content_needs_formatting is false, so this clone
+        // is unnecessary for the common case.
+        if self.content_needs_formatting {
+            self.unformatted_content = self.content.to_owned();
+        }
         self.content_needs_formatting = false;
         self.refresh_kind_from_content();
 

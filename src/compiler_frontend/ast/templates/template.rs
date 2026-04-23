@@ -235,6 +235,29 @@ impl TemplateAtom {
             },
         }
     }
+
+    /// Returns true if this atom is a direct child template in body position
+    /// (either a folded child output or an unresolved template expression).
+    pub(crate) fn is_direct_child_template_atom(&self) -> bool {
+        let TemplateAtom::Content(segment) = self else {
+            return false;
+        };
+
+        if segment.origin != TemplateSegmentOrigin::Body {
+            return false;
+        }
+
+        if segment.is_child_template_output {
+            return true;
+        }
+
+        match &segment.expression.kind {
+            crate::compiler_frontend::ast::expressions::expression::ExpressionKind::Template(
+                template,
+            ) => !template.has_unresolved_slots(),
+            _ => false,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

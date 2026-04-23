@@ -134,6 +134,9 @@ pub struct ScopeContext {
     // Per-scope locals: function parameters + body-declared variables only.
     // Grows incrementally in source order via add_var(); never carries module-wide data.
     pub local_declarations: Vec<Declaration>,
+    // Indexed local lookup: name → ordered indices into local_declarations.
+    // Preserves "latest visible local wins" without reverse scanning the full vec.
+    local_declarations_by_name: FxHashMap<StringId, Vec<u32>>,
     // Optional file-local visibility gate over declarations.
     // When present, references must be in this set, which enforces import boundaries.
     pub visible_declaration_ids: Option<FxHashSet<InternedPath>>,
@@ -193,6 +196,16 @@ impl ContextKind {
     }
 }
 
+fn build_local_declarations_index(declarations: &[Declaration]) -> FxHashMap<StringId, Vec<u32>> {
+    let mut index: FxHashMap<StringId, Vec<u32>> = FxHashMap::default();
+    for (i, declaration) in declarations.iter().enumerate() {
+        if let Some(name) = declaration.id.name() {
+            index.entry(name).or_default().push(i as u32);
+        }
+    }
+    index
+}
+
 impl ScopeContext {
     pub fn new(
         kind: ContextKind,
@@ -206,6 +219,7 @@ impl ScopeContext {
             scope,
             top_level_declarations,
             local_declarations: Vec::new(),
+            local_declarations_by_name: FxHashMap::default(),
             visible_declaration_ids: None,
             expected_result_types,
             expected_error_type: None,
@@ -227,18 +241,37 @@ impl ScopeContext {
         kind: ContextKind,
         string_table: &mut StringTable,
     ) -> ScopeContext {
-        let mut new_context = self.to_owned();
-        new_context.kind = kind;
-        if matches!(new_context.kind, ContextKind::Loop) {
-            new_context.loop_depth += 1;
-        }
+        let loop_depth = if matches!(kind, ContextKind::Loop) {
+            self.loop_depth + 1
+        } else {
+            self.loop_depth
+        };
 
         let scope_id = CONTROL_FLOW_SCOPE_COUNTER.fetch_add(1, Ordering::Relaxed);
-        new_context.scope = self
+        let scope = self
             .scope
             .join_str(&format!("__scope_{scope_id}"), string_table);
 
-        new_context
+        ScopeContext {
+            kind,
+            scope,
+            top_level_declarations: Rc::clone(&self.top_level_declarations),
+            local_declarations: self.local_declarations.clone(),
+            local_declarations_by_name: self.local_declarations_by_name.clone(),
+            visible_declaration_ids: self.visible_declaration_ids.clone(),
+            expected_result_types: self.expected_result_types.clone(),
+            expected_error_type: self.expected_error_type.clone(),
+            host_registry: self.host_registry.clone(),
+            style_directives: self.style_directives.clone(),
+            loop_depth,
+            build_profile: self.build_profile,
+            emitted_warnings: self.emitted_warnings.clone(),
+            project_path_resolver: self.project_path_resolver.clone(),
+            source_file_scope: self.source_file_scope.clone(),
+            path_format_config: self.path_format_config.clone(),
+            rendered_path_usages: self.rendered_path_usages.clone(),
+            receiver_methods: self.receiver_methods.clone(),
+        }
     }
 
     pub fn new_child_function(
@@ -266,10 +299,26 @@ impl ScopeContext {
     }
 
     pub fn new_child_expression(&self, expected_result_types: Vec<DataType>) -> ScopeContext {
-        let mut new_context = self.to_owned();
-        new_context.kind = ContextKind::Expression;
-        new_context.expected_result_types = expected_result_types;
-        new_context
+        ScopeContext {
+            kind: ContextKind::Expression,
+            scope: self.scope.clone(),
+            top_level_declarations: Rc::clone(&self.top_level_declarations),
+            local_declarations: self.local_declarations.clone(),
+            local_declarations_by_name: self.local_declarations_by_name.clone(),
+            visible_declaration_ids: self.visible_declaration_ids.clone(),
+            expected_result_types,
+            expected_error_type: self.expected_error_type.clone(),
+            host_registry: self.host_registry.clone(),
+            style_directives: self.style_directives.clone(),
+            loop_depth: self.loop_depth,
+            build_profile: self.build_profile,
+            emitted_warnings: self.emitted_warnings.clone(),
+            project_path_resolver: self.project_path_resolver.clone(),
+            source_file_scope: self.source_file_scope.clone(),
+            path_format_config: self.path_format_config.clone(),
+            rendered_path_usages: self.rendered_path_usages.clone(),
+            receiver_methods: self.receiver_methods.clone(),
+        }
     }
 
     /// Build the context used while parsing template expressions.
@@ -288,6 +337,7 @@ impl ScopeContext {
             scope: self.scope.clone(),
             top_level_declarations: Rc::clone(&self.top_level_declarations),
             local_declarations: self.local_declarations.clone(),
+            local_declarations_by_name: self.local_declarations_by_name.clone(),
             visible_declaration_ids: self.visible_declaration_ids.clone(),
             expected_result_types: vec![],
             expected_error_type: self.expected_error_type.clone(),
@@ -316,6 +366,7 @@ impl ScopeContext {
             scope,
             top_level_declarations: Rc::clone(&parent.top_level_declarations),
             local_declarations: parent.local_declarations.clone(),
+            local_declarations_by_name: parent.local_declarations_by_name.clone(),
             visible_declaration_ids: parent.visible_declaration_ids.clone(),
             expected_result_types: Vec::new(),
             expected_error_type: parent.expected_error_type.clone(),
@@ -430,17 +481,24 @@ impl ScopeContext {
     }
 
     pub(crate) fn set_local_declarations(&mut self, declarations: Vec<Declaration>) {
+        self.local_declarations_by_name = build_local_declarations_index(&declarations);
         self.local_declarations = declarations;
     }
 
     pub(crate) fn get_reference(&self, name: &StringId) -> Option<&Declaration> {
-        self.local_declarations
-            .iter()
-            .rfind(|declaration| declaration.id.name() == Some(*name))
-            .or_else(|| {
-                self.top_level_declarations
-                    .get_visible(*name, self.visible_declaration_ids.as_ref())
-            })
+        match self.local_declarations_by_name.get(name) {
+            Some(indices) => {
+                // Walk backwards through the bucket to find the latest visible local.
+                indices
+                    .iter()
+                    .rev()
+                    .map(|index| &self.local_declarations[*index as usize])
+                    .next()
+            }
+            None => self
+                .top_level_declarations
+                .get_visible(*name, self.visible_declaration_ids.as_ref()),
+        }
     }
 
     pub(crate) fn lookup_receiver_method(
@@ -477,6 +535,13 @@ impl ScopeContext {
     pub fn add_var(&mut self, arg: Declaration) {
         if let Some(visible_declarations) = self.visible_declaration_ids.as_mut() {
             visible_declarations.insert(arg.id.clone());
+        }
+        if let Some(name) = arg.id.name() {
+            let index = self.local_declarations.len() as u32;
+            self.local_declarations_by_name
+                .entry(name)
+                .or_default()
+                .push(index);
         }
         self.local_declarations.push(arg);
     }

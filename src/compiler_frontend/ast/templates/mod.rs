@@ -12,7 +12,7 @@
 //!   │                           children/handler directives, and head expressions.
 //!   ▼ template_body_parser.rs   Parse the body: raw text, nested templates, runtime
 //!   │                           expression splices.
-//!   ▼ create_template_node.rs   Assemble a typed `TemplateNode` from head + body.
+//!   ▼ create_template_node.rs   Assemble a typed `Template` from head + body.
 //!   ▼ template_types.rs         Core AST template data types.
 //!   │
 //!   ▼ template_slots.rs         Slot insertion and children-directive composition.
@@ -25,7 +25,7 @@
 //!   │
 //!   ▼ top_level_templates.rs    Fragment synthesis for the entry file:
 //!                               - const templates become ConstString start fragments
-//!                               - runtime templates become generated __bst_frag_N functions
+//!                               - runtime templates become PushStartRuntimeFragment AST nodes
 //!                               - mutation/reference analysis for runtime capture plans
 //! ```
 //!
@@ -35,7 +35,7 @@
 //! |---|---|
 //! | `template_head_parser/` | Head token parsing, directive dispatch |
 //! | `template_body_parser.rs` | Body token parsing (raw text, splices, nesting) |
-//! | `create_template_node.rs` | Head + body → `TemplateNode` |
+//! | `create_template_node.rs` | Head + body → `Template`; owns final runtime metadata |
 //! | `template_types.rs` | `Template`, `TemplateNode`, slot and directive types |
 //! | `template_slots.rs` | Slot resolution and children directive semantics |
 //! | `template_composition.rs` | Wrapper chaining and head composition |

@@ -3948,10 +3948,7 @@ fn receiver_method_call_emits_receiver_as_first_arg() {
     let caller_block = HirBlock {
         id: BlockId(1),
         region,
-        locals: vec![
-            local(0, types.int, region),
-            local(1, types.int, region),
-        ],
+        locals: vec![local(0, types.int, region), local(1, types.int, region)],
         statements: vec![assign_receiver, call_bump],
         terminator: HirTerminator::Return(expression(
             3,
@@ -3983,10 +3980,22 @@ fn receiver_method_call_emits_receiver_as_first_arg() {
         FunctionId(1),
         InternedPath::from_single_str("bump", &mut string_table),
     );
-    module.side_table.bind_local_name(LocalId(0), InternedPath::from_single_str("receiver", &mut string_table));
-    module.side_table.bind_local_name(LocalId(1), InternedPath::from_single_str("result", &mut string_table));
-    module.function_origins.insert(FunctionId(0), crate::compiler_frontend::hir::hir_nodes::HirFunctionOrigin::Normal);
-    module.function_origins.insert(FunctionId(1), crate::compiler_frontend::hir::hir_nodes::HirFunctionOrigin::Normal);
+    module.side_table.bind_local_name(
+        LocalId(0),
+        InternedPath::from_single_str("receiver", &mut string_table),
+    );
+    module.side_table.bind_local_name(
+        LocalId(1),
+        InternedPath::from_single_str("result", &mut string_table),
+    );
+    module.function_origins.insert(
+        FunctionId(0),
+        crate::compiler_frontend::hir::hir_nodes::HirFunctionOrigin::Normal,
+    );
+    module.function_origins.insert(
+        FunctionId(1),
+        crate::compiler_frontend::hir::hir_nodes::HirFunctionOrigin::Normal,
+    );
 
     let output = lower_hir_to_js(
         &module,
@@ -4000,7 +4009,9 @@ fn receiver_method_call_emits_receiver_as_first_arg() {
     let callee_name = expected_dev_function_name("bump", 1);
 
     assert!(
-        output.source.contains(&format!("{}({})", callee_name, receiver_name)),
+        output
+            .source
+            .contains(&format!("{}({})", callee_name, receiver_name)),
         "receiver method call must pass receiver binding as first argument"
     );
 }
@@ -4063,12 +4074,30 @@ fn receiver_method_call_assigns_value_for_fresh_return() {
     module.start_function = FunctionId(0);
     module.type_context = type_context;
     module.regions = vec![HirRegion::lexical(RegionId(0), None)];
-    module.side_table.bind_function_name(FunctionId(0), InternedPath::from_single_str("main", &mut string_table));
-    module.side_table.bind_function_name(FunctionId(1), InternedPath::from_single_str("bump", &mut string_table));
-    module.side_table.bind_local_name(LocalId(0), InternedPath::from_single_str("receiver", &mut string_table));
-    module.side_table.bind_local_name(LocalId(1), InternedPath::from_single_str("result", &mut string_table));
-    module.function_origins.insert(FunctionId(0), crate::compiler_frontend::hir::hir_nodes::HirFunctionOrigin::Normal);
-    module.function_origins.insert(FunctionId(1), crate::compiler_frontend::hir::hir_nodes::HirFunctionOrigin::Normal);
+    module.side_table.bind_function_name(
+        FunctionId(0),
+        InternedPath::from_single_str("main", &mut string_table),
+    );
+    module.side_table.bind_function_name(
+        FunctionId(1),
+        InternedPath::from_single_str("bump", &mut string_table),
+    );
+    module.side_table.bind_local_name(
+        LocalId(0),
+        InternedPath::from_single_str("receiver", &mut string_table),
+    );
+    module.side_table.bind_local_name(
+        LocalId(1),
+        InternedPath::from_single_str("result", &mut string_table),
+    );
+    module.function_origins.insert(
+        FunctionId(0),
+        crate::compiler_frontend::hir::hir_nodes::HirFunctionOrigin::Normal,
+    );
+    module.function_origins.insert(
+        FunctionId(1),
+        crate::compiler_frontend::hir::hir_nodes::HirFunctionOrigin::Normal,
+    );
 
     let output = lower_hir_to_js(
         &module,
@@ -4082,7 +4111,10 @@ fn receiver_method_call_assigns_value_for_fresh_return() {
     let callee_name = expected_dev_function_name("bump", 1);
 
     assert!(
-        output.source.contains(&format!("__bs_assign_value({}, {}(" , result_name, callee_name)),
+        output.source.contains(&format!(
+            "__bs_assign_value({}, {}(",
+            result_name, callee_name
+        )),
         "fresh-return receiver call must assign result with __bs_assign_value"
     );
 }
@@ -4151,12 +4183,30 @@ fn receiver_method_call_assigns_borrow_for_alias_return() {
     module.start_function = FunctionId(0);
     module.type_context = type_context;
     module.regions = vec![HirRegion::lexical(RegionId(0), None)];
-    module.side_table.bind_function_name(FunctionId(0), InternedPath::from_single_str("main", &mut string_table));
-    module.side_table.bind_function_name(FunctionId(1), InternedPath::from_single_str("self_ref", &mut string_table));
-    module.side_table.bind_local_name(LocalId(0), InternedPath::from_single_str("receiver", &mut string_table));
-    module.side_table.bind_local_name(LocalId(1), InternedPath::from_single_str("alias", &mut string_table));
-    module.function_origins.insert(FunctionId(0), crate::compiler_frontend::hir::hir_nodes::HirFunctionOrigin::Normal);
-    module.function_origins.insert(FunctionId(1), crate::compiler_frontend::hir::hir_nodes::HirFunctionOrigin::Normal);
+    module.side_table.bind_function_name(
+        FunctionId(0),
+        InternedPath::from_single_str("main", &mut string_table),
+    );
+    module.side_table.bind_function_name(
+        FunctionId(1),
+        InternedPath::from_single_str("self_ref", &mut string_table),
+    );
+    module.side_table.bind_local_name(
+        LocalId(0),
+        InternedPath::from_single_str("receiver", &mut string_table),
+    );
+    module.side_table.bind_local_name(
+        LocalId(1),
+        InternedPath::from_single_str("alias", &mut string_table),
+    );
+    module.function_origins.insert(
+        FunctionId(0),
+        crate::compiler_frontend::hir::hir_nodes::HirFunctionOrigin::Normal,
+    );
+    module.function_origins.insert(
+        FunctionId(1),
+        crate::compiler_frontend::hir::hir_nodes::HirFunctionOrigin::Normal,
+    );
 
     let output = lower_hir_to_js(
         &module,
@@ -4170,7 +4220,10 @@ fn receiver_method_call_assigns_borrow_for_alias_return() {
     let callee_name = expected_dev_function_name("self_ref", 1);
 
     assert!(
-        output.source.contains(&format!("__bs_assign_borrow({}, {}(" , result_name, callee_name)),
+        output.source.contains(&format!(
+            "__bs_assign_borrow({}, {}(",
+            result_name, callee_name
+        )),
         "alias-return receiver call must assign result with __bs_assign_borrow"
     );
 }

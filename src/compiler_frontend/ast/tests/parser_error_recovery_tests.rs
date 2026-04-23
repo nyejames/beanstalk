@@ -131,7 +131,9 @@ fn reports_multi_bind_with_variable_rhs_rejected() {
 
     assert_eq!(error.error_type, ErrorType::Rule);
     assert!(
-        error.msg.contains("Multi-bind is only supported for explicit multi-value surfaces"),
+        error
+            .msg
+            .contains("Multi-bind is only supported for explicit multi-value surfaces"),
         "{}",
         error.msg
     );
@@ -143,7 +145,9 @@ fn reports_multi_bind_with_literal_rhs_rejected() {
 
     assert_eq!(error.error_type, ErrorType::Rule);
     assert!(
-        error.msg.contains("Multi-bind is only supported for explicit multi-value surfaces"),
+        error
+            .msg
+            .contains("Multi-bind is only supported for explicit multi-value surfaces"),
         "{}",
         error.msg
     );
@@ -157,7 +161,9 @@ fn reports_multi_bind_with_field_access_rhs_rejected() {
 
     assert_eq!(error.error_type, ErrorType::Rule);
     assert!(
-        error.msg.contains("Multi-bind is only supported for explicit multi-value surfaces"),
+        error
+            .msg
+            .contains("Multi-bind is only supported for explicit multi-value surfaces"),
         "{}",
         error.msg
     );
