@@ -6,6 +6,8 @@ It is intentionally scoped to **high-value simplification and performance cleanu
 
 This plan is anchored in the current repository shape and current frontend contract.
 
+Use the speed test file as a rough benchmark (before and after) to check if there is a compile speed improvement: `cargo run --features "detailed_timers" check speed-test.bst`
+
 ---
 
 ## Why this plan exists
@@ -197,18 +199,8 @@ That means template-heavy code can pay multiple times for closely related work.
 ### Concrete refactor steps
 
 #### 1. Define one authoritative owner for final runtime template metadata
-
-Choose one of these models and make it explicit in code comments:
-
-**Option A**
-- `Template::new()` finalizes content shape only
-- AST finalization owns final runtime metadata materialization
-
-**Option B**
 - `Template::new()` produces final runtime-ready metadata
 - AST finalization trusts that and only handles cases changed by later AST rewrites
-
-For prealpha, prefer the simpler option with fewer duplicate passes.
 
 #### 2. Remove unconditional metadata rebuilding where the template has not changed
 
@@ -346,6 +338,7 @@ It should not become an always-on intermediate representation for every simple t
 - fewer conversions between content and render plan in simple/common cases
 - template folding still behaves identically
 - no readability collapse in template code
+- No regression in compile speed benchmark `cargo run --features "detailed_timers" check speed-test.bst`
 
 ---
 
@@ -532,11 +525,10 @@ cargo run -- tests
 
 For profiling comparisons, use the existing detailed timing path and template-heavy fixtures.
 
-Suggested checks:
+Suggested check:
 
 ```bash
-cargo run --features "detailed_timers" -- build <heavy-template-entry>
-cargo run --features "detailed_timers" -- build tests/cases/<relevant-case>/input/main.bst
+cargo run --features "detailed_timers" check speed-test.bst
 ```
 
 If there is a dedicated heavy benchmark file or docs-site page that stresses templates, include it in before/after timing notes for every phase.
