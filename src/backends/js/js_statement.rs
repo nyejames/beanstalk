@@ -12,8 +12,7 @@ use crate::compiler_frontend::hir::hir_nodes::{
     HirStatement, HirStatementKind, HirTerminator, LocalId,
 };
 use crate::compiler_frontend::host_functions::{
-    CallTarget, COLLECTION_LENGTH_HOST_NAME, COLLECTION_PUSH_HOST_NAME,
-    COLLECTION_REMOVE_HOST_NAME,
+    COLLECTION_LENGTH_HOST_NAME, COLLECTION_PUSH_HOST_NAME, COLLECTION_REMOVE_HOST_NAME, CallTarget,
 };
 
 impl<'hir> JsEmitter<'hir> {
@@ -60,7 +59,9 @@ impl<'hir> JsEmitter<'hir> {
                 // WHY: push/remove/length must be strict; silent no-ops hide user bugs.
                 let needs_propagation = matches!(
                     target_name.as_str(),
-                    COLLECTION_PUSH_HOST_NAME | COLLECTION_REMOVE_HOST_NAME | COLLECTION_LENGTH_HOST_NAME
+                    COLLECTION_PUSH_HOST_NAME
+                        | COLLECTION_REMOVE_HOST_NAME
+                        | COLLECTION_LENGTH_HOST_NAME
                 );
 
                 if let Some(result_local) = result {

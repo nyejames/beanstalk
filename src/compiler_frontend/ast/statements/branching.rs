@@ -205,7 +205,8 @@ fn create_match_node(
             }
 
             TokenKind::Else => {
-                match_arm_indent.get_or_insert(token_stream.current_location().start_pos.char_column);
+                match_arm_indent
+                    .get_or_insert(token_stream.current_location().start_pos.char_column);
 
                 if arms.is_empty() {
                     return_rule_error!(
@@ -239,7 +240,8 @@ fn create_match_node(
             }
 
             TokenKind::Case => {
-                match_arm_indent.get_or_insert(token_stream.current_location().start_pos.char_column);
+                match_arm_indent
+                    .get_or_insert(token_stream.current_location().start_pos.char_column);
 
                 if seen_else {
                     return_rule_error!(

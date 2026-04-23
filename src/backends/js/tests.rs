@@ -1732,7 +1732,9 @@ fn dispatcher_match_without_selected_arm_emits_no_arm_selected_fallback() {
         "cycle should force dispatcher path for malformed match fallback assertion"
     );
     assert!(
-        output.source.contains("throw new Error(\"No match arm selected\");"),
+        output
+            .source
+            .contains("throw new Error(\"No match arm selected\");"),
         "dispatcher match lowering must emit stable no-arm-selected fallback"
     );
 }
@@ -3244,7 +3246,8 @@ fn collection_push_returns_err_for_non_array() {
     let push = helper_source(&source, "__bs_collection_push");
 
     assert!(
-        push.contains("!Array.isArray(collection)") && push.contains("{ tag: \"err\", value: err }"),
+        push.contains("!Array.isArray(collection)")
+            && push.contains("{ tag: \"err\", value: err }"),
         "__bs_collection_push must return a Result-typed err for non-array inputs"
     );
 }
@@ -3268,7 +3271,8 @@ fn collection_remove_returns_err_for_non_array() {
     let remove = helper_source(&source, "__bs_collection_remove");
 
     assert!(
-        remove.contains("!Array.isArray(collection)") && remove.contains("{ tag: \"err\", value: err }"),
+        remove.contains("!Array.isArray(collection)")
+            && remove.contains("{ tag: \"err\", value: err }"),
         "__bs_collection_remove must return a Result-typed err for non-array inputs"
     );
 }
@@ -3293,7 +3297,8 @@ fn collection_remove_returns_ok_for_valid_index() {
     let remove = helper_source(&source, "__bs_collection_remove");
 
     assert!(
-        remove.contains("collection.splice(index, 1)") && remove.contains("{ tag: \"ok\", value: null }"),
+        remove.contains("collection.splice(index, 1)")
+            && remove.contains("{ tag: \"ok\", value: null }"),
         "__bs_collection_remove must return a Result-typed ok after removing"
     );
 }
@@ -3305,7 +3310,8 @@ fn collection_length_returns_err_for_non_array() {
     let length = helper_source(&source, "__bs_collection_length");
 
     assert!(
-        length.contains("!Array.isArray(collection)") && length.contains("{ tag: \"err\", value: err }"),
+        length.contains("!Array.isArray(collection)")
+            && length.contains("{ tag: \"err\", value: err }"),
         "__bs_collection_length must return a Result-typed err for non-array inputs"
     );
 }
@@ -3365,7 +3371,14 @@ fn collection_push_call_is_wrapped_with_result_propagate() {
         return_aliases: vec![],
     };
 
-    let module = build_module(&mut string_table, "main", vec![block], function, &[], type_context);
+    let module = build_module(
+        &mut string_table,
+        "main",
+        vec![block],
+        function,
+        &[],
+        type_context,
+    );
 
     let output = lower_hir_to_js(
         &module,
@@ -3376,7 +3389,9 @@ fn collection_push_call_is_wrapped_with_result_propagate() {
     .expect("JS lowering should succeed");
 
     assert!(
-        output.source.contains("__bs_result_propagate(__bs_collection_push("),
+        output
+            .source
+            .contains("__bs_result_propagate(__bs_collection_push("),
         "__bs_collection_push host call must be wrapped with __bs_result_propagate"
     );
 }
@@ -3424,7 +3439,14 @@ fn collection_remove_call_is_wrapped_with_result_propagate() {
         return_aliases: vec![],
     };
 
-    let module = build_module(&mut string_table, "main", vec![block], function, &[], type_context);
+    let module = build_module(
+        &mut string_table,
+        "main",
+        vec![block],
+        function,
+        &[],
+        type_context,
+    );
 
     let output = lower_hir_to_js(
         &module,
@@ -3435,7 +3457,9 @@ fn collection_remove_call_is_wrapped_with_result_propagate() {
     .expect("JS lowering should succeed");
 
     assert!(
-        output.source.contains("__bs_result_propagate(__bs_collection_remove("),
+        output
+            .source
+            .contains("__bs_result_propagate(__bs_collection_remove("),
         "__bs_collection_remove host call must be wrapped with __bs_result_propagate"
     );
 }
@@ -3606,7 +3630,9 @@ fn choice_variant_construction_emits_integer_literal() {
     .expect("JS lowering should succeed");
 
     assert!(
-        output.source.contains("__bs_assign_value(bst_status_l0, 2)"),
+        output
+            .source
+            .contains("__bs_assign_value(bst_status_l0, 2)"),
         "choice variant must lower to a plain integer literal inside an assignment"
     );
 }
@@ -3640,17 +3666,32 @@ fn choice_match_lowers_to_structured_if_with_literal_equals() {
                 ),
                 arms: vec![
                     HirMatchArm {
-                        pattern: HirPattern::Literal(int_expression(3, 0, types.union_unit, RegionId(0))),
+                        pattern: HirPattern::Literal(int_expression(
+                            3,
+                            0,
+                            types.union_unit,
+                            RegionId(0),
+                        )),
                         guard: None,
                         body: BlockId(1),
                     },
                     HirMatchArm {
-                        pattern: HirPattern::Literal(int_expression(4, 1, types.union_unit, RegionId(0))),
+                        pattern: HirPattern::Literal(int_expression(
+                            4,
+                            1,
+                            types.union_unit,
+                            RegionId(0),
+                        )),
                         guard: None,
                         body: BlockId(2),
                     },
                     HirMatchArm {
-                        pattern: HirPattern::Literal(int_expression(5, 2, types.union_unit, RegionId(0))),
+                        pattern: HirPattern::Literal(int_expression(
+                            5,
+                            2,
+                            types.union_unit,
+                            RegionId(0),
+                        )),
                         guard: None,
                         body: BlockId(3),
                     },
@@ -3768,7 +3809,12 @@ fn choice_match_with_wildcard_arm_emits_true_condition() {
                 ),
                 arms: vec![
                     HirMatchArm {
-                        pattern: HirPattern::Literal(int_expression(3, 0, types.union_unit, RegionId(0))),
+                        pattern: HirPattern::Literal(int_expression(
+                            3,
+                            0,
+                            types.union_unit,
+                            RegionId(0),
+                        )),
                         guard: None,
                         body: BlockId(1),
                     },

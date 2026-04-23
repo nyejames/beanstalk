@@ -216,7 +216,7 @@ impl<'a> AstBuildState<'a> {
 
         timer_log!(
             constants_resolution_start,
-            "AST/type resolution/constants deferred resolution in:"
+            "AST/type resolution/constants deferred resolution in: "
         );
         let _ = constants_resolution_start;
 

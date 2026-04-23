@@ -295,7 +295,11 @@ fn rejects_non_boolean_match_guard_with_type_error_metadata() {
     );
 
     assert_eq!(error.error_type, ErrorType::Type);
-    assert!(error.msg.contains("Match arm guard requires a Bool condition"));
+    assert!(
+        error
+            .msg
+            .contains("Match arm guard requires a Bool condition")
+    );
     assert_eq!(
         error
             .metadata

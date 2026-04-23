@@ -78,7 +78,7 @@ impl<'a> AstBuildState<'a> {
 
         #[cfg(feature = "detailed_timers")]
         saying::say!(
-            "AST/function signatures/resolved count: {}",
+            "\n AST/function signatures/resolved count: ",
             resolved_function_count
         );
 
@@ -103,7 +103,7 @@ impl<'a> AstBuildState<'a> {
 
         #[cfg(feature = "detailed_timers")]
         saying::say!(
-            "AST/receiver catalog/methods indexed: {}",
+            "\n AST/receiver catalog/methods indexed: ",
             catalog.by_receiver_and_name.len()
         );
 
