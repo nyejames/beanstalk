@@ -18,7 +18,7 @@ use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages}
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::hir::hir_nodes::HirModule;
 use crate::compiler_frontend::style_directives::{StyleDirectiveRegistry, StyleDirectiveSpec};
-use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::{StringIdRemap, StringTable};
 use crate::projects::settings::Config;
 use std::collections::HashSet;
 use std::fs;
@@ -55,6 +55,24 @@ pub struct Module {
     /// WHY: header parsing is the authoritative counter; builders use this directly
     /// rather than scanning HIR for `PushRuntimeFragment` statements.
     pub(crate) entry_runtime_fragment_count: usize,
+}
+
+impl Module {
+    pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
+        self.hir.remap_string_ids(remap);
+        for warning in &mut self.warnings {
+            warning.remap_string_ids(remap);
+        }
+        // BorrowCheckReport contains only HIR IDs (no StringIds).
+        // ResolvedConstFragment.html is already a String.
+        // entry_point is a PathBuf.
+    }
+}
+
+/// Per-module frontend compilation result carrying the evolved local string table.
+pub(crate) struct CompiledModuleResult {
+    pub module: Module,
+    pub string_table: StringTable,
 }
 
 /// Unified build interface for all project types

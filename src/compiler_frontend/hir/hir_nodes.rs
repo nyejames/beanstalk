@@ -48,6 +48,7 @@
 use super::hir_side_table::HirSideTable;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::hir::hir_datatypes::{TypeContext, TypeId};
+use crate::compiler_frontend::symbols::string_interning::StringIdRemap;
 use crate::compiler_frontend::host_functions::CallTarget;
 use crate::compiler_frontend::paths::rendered_path_usage::RenderedPathUsage;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
@@ -174,6 +175,25 @@ impl HirModule {
             rendered_path_usages: vec![],
             regions: vec![],
             warnings: vec![],
+        }
+    }
+
+    pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
+        self.side_table.remap_string_ids(remap);
+
+        for fragment in &mut self.doc_fragments {
+            fragment.location.remap_string_ids(remap);
+        }
+
+        for usage in &mut self.rendered_path_usages {
+            usage.source_path.remap_string_ids(remap);
+            usage.public_path.remap_string_ids(remap);
+            usage.source_file_scope.remap_string_ids(remap);
+            usage.render_location.remap_string_ids(remap);
+        }
+
+        for warning in &mut self.warnings {
+            warning.remap_string_ids(remap);
         }
     }
 }

@@ -5,7 +5,7 @@
 //!      `StringTable` only at rendering or filesystem-adjacent boundaries.
 
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::{StringIdRemap, StringTable};
 use std::cmp::Ordering;
 use std::path::Path;
 
@@ -43,6 +43,10 @@ impl SourceLocation {
             CharPosition::default(),
             CharPosition::default(),
         )
+    }
+
+    pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
+        self.scope.remap_string_ids(remap);
     }
 }
 

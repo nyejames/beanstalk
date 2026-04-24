@@ -134,7 +134,7 @@
 pub use crate::compiler_frontend::compiler_messages::source_location::SourceLocation;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::{StringIdRemap, StringTable};
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -268,6 +268,10 @@ pub struct CompilerError {
 }
 
 impl CompilerError {
+    pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
+        self.location.remap_string_ids(remap);
+    }
+
     pub fn new(
         msg: impl Into<String>,
         location: SourceLocation,

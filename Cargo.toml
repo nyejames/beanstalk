@@ -19,6 +19,7 @@ name = "bean"
 path = "src/main.rs"
 
 [dependencies]
+rayon = "1.10"
 rustc-hash = "2.1.1"
 saying = "0.1.7"
 serde = { version = "1.0.228", features = ["derive"] }

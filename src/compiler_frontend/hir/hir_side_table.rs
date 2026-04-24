@@ -8,7 +8,7 @@ use crate::compiler_frontend::hir::hir_nodes::{
     HirValueId, LocalId, StructId,
 };
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::{StringIdRemap, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use rustc_hash::FxHashMap;
 use std::fmt::{Display, Formatter, Result as FmtResult};
@@ -161,6 +161,33 @@ impl HirSideTable {
         self.function_names.clear();
         self.struct_names.clear();
         self.field_names.clear();
+    }
+
+    pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
+        // Remap all stored source locations.
+        for location in &mut self.source_locations {
+            location.remap_string_ids(remap);
+        }
+        // Rebuild the index because SourceLocationKey contains InternedPath.
+        self.source_location_index.clear();
+        for (i, location) in self.source_locations.iter().enumerate() {
+            let key = SourceLocationKey::from(location);
+            self.source_location_index.insert(key, SourceLocationId(i as u32));
+        }
+
+        // Remap all name side-tables.
+        for path in self.local_names.values_mut() {
+            path.remap_string_ids(remap);
+        }
+        for path in self.function_names.values_mut() {
+            path.remap_string_ids(remap);
+        }
+        for path in self.struct_names.values_mut() {
+            path.remap_string_ids(remap);
+        }
+        for path in self.field_names.values_mut() {
+            path.remap_string_ids(remap);
+        }
     }
 
     #[inline]

@@ -1,4 +1,4 @@
-use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
+use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRemap, StringTable};
 use std::path::{Path, PathBuf};
 
 /// An efficient path representation using interned string components.
@@ -93,6 +93,12 @@ impl InternedPath {
         new_components.extend_from_slice(&other.components);
         InternedPath {
             components: new_components,
+        }
+    }
+
+    pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
+        for component in &mut self.components {
+            *component = remap.get(*component);
         }
     }
 

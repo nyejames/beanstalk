@@ -20,7 +20,7 @@ mod source_loading;
 pub(super) use module_discovery::{DiscoveredModule, discover_all_modules_in_project};
 pub use source_loading::extract_source_code;
 
-use crate::build_system::build::Module;
+use crate::build_system::build::{CompiledModuleResult, Module};
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
@@ -30,6 +30,7 @@ use crate::compiler_frontend::{Flag, FrontendBuildProfile};
 use crate::projects::settings;
 use crate::projects::settings::{BEANSTALK_FILE_EXTENSION, Config};
 use frontend_orchestration::FrontendModuleBuildContext;
+use rayon::prelude::*;
 use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -125,14 +126,18 @@ fn compile_single_file_frontend(
         style_directives,
         string_table,
     )?;
-    let module = FrontendModuleBuildContext {
+    let local_table = string_table.clone();
+    let result = FrontendModuleBuildContext {
         config,
         build_profile,
         project_path_resolver: Some(project_path_resolver),
         style_directives,
-        string_table,
     }
-    .compile_module(&input_files, &entry_path)?;
+    .compile_module(&input_files, &entry_path, local_table)?;
+
+    let remap = string_table.merge_from(&result.string_table);
+    let mut module = result.module;
+    module.remap_string_ids(&remap);
     Ok(vec![module])
 }
 
@@ -156,17 +161,65 @@ fn compile_directory_frontend(
         Err(error) => return Err(CompilerMessages::from_error_ref(error, string_table)),
     };
 
-    let mut compiled_modules = Vec::with_capacity(discovered_modules.len());
-    for discovered in discovered_modules {
-        let module = FrontendModuleBuildContext {
-            config,
-            build_profile,
-            project_path_resolver: Some(project_path_resolver.clone()),
-            style_directives,
-            string_table,
+    // Compile modules in parallel, each with its own cloned StringTable.
+    let results: Vec<(PathBuf, Result<CompiledModuleResult, CompilerMessages>)> = discovered_modules
+        .into_par_iter()
+        .map(|discovered| {
+            let local_table = string_table.clone();
+            let result = FrontendModuleBuildContext {
+                config,
+                build_profile,
+                project_path_resolver: Some(project_path_resolver.clone()),
+                style_directives,
+            }
+            .compile_module(&discovered.input_files, &discovered.entry_point, local_table);
+            (discovered.entry_point, result)
+        })
+        .collect();
+
+    // Deterministic ordering by entry path.
+    let mut results = results;
+    results.sort_by(|a, b| a.0.cmp(&b.0));
+
+    // Partition into successes and failures.
+    let mut successes = Vec::with_capacity(results.len());
+    let mut failures = Vec::new();
+    for (entry_path, result) in results {
+        match result {
+            Ok(compiled) => successes.push((entry_path, compiled)),
+            Err(messages) => failures.push((entry_path, messages)),
         }
-        .compile_module(&discovered.input_files, &discovered.entry_point)?;
-        compiled_modules.push(module);
+    }
+
+    // If any module failed, aggregate all diagnostics deterministically.
+    if !failures.is_empty() {
+        let mut aggregated_table = string_table.clone();
+        let mut all_errors = Vec::new();
+        let mut all_warnings = Vec::new();
+        for (_, messages) in failures {
+            let remap = aggregated_table.merge_from(&messages.string_table);
+            for mut error in messages.errors {
+                error.remap_string_ids(&remap);
+                all_errors.push(error);
+            }
+            for mut warning in messages.warnings {
+                warning.remap_string_ids(&remap);
+                all_warnings.push(warning);
+            }
+        }
+        return Err(CompilerMessages {
+            errors: all_errors,
+            warnings: all_warnings,
+            string_table: aggregated_table,
+        });
+    }
+
+    // All succeeded: merge each local table into the build table and remap.
+    let mut compiled_modules = Vec::with_capacity(successes.len());
+    for (_, mut compiled) in successes {
+        let remap = string_table.merge_from(&compiled.string_table);
+        compiled.module.remap_string_ids(&remap);
+        compiled_modules.push(compiled.module);
     }
 
     Ok(compiled_modules)

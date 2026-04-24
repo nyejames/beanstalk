@@ -1,4 +1,5 @@
 use crate::compiler_frontend::compiler_messages::source_location::SourceLocation;
+use crate::compiler_frontend::symbols::string_interning::StringIdRemap;
 
 #[derive(Clone, Debug)]
 pub struct CompilerWarning {
@@ -14,6 +15,10 @@ impl CompilerWarning {
             location,
             warning_kind,
         }
+    }
+
+    pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
+        self.location.remap_string_ids(remap);
     }
 }
 

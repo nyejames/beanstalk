@@ -3,7 +3,7 @@
 //! Drives a single discovered module through the full frontend pipeline:
 //! tokenization → header parsing → dependency sort → AST → HIR → borrow checking.
 
-use crate::build_system::build::{InputFile, Module, ResolvedConstFragment};
+use crate::build_system::build::{CompiledModuleResult, InputFile, Module, ResolvedConstFragment};
 use crate::compiler_frontend::analysis::borrow_checker::BorrowCheckReport;
 use crate::compiler_frontend::ast::Ast;
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
@@ -34,7 +34,6 @@ pub(super) struct FrontendModuleBuildContext<'a> {
     pub(super) build_profile: FrontendBuildProfile,
     pub(super) project_path_resolver: Option<ProjectPathResolver>,
     pub(super) style_directives: &'a StyleDirectiveRegistry,
-    pub(super) string_table: &'a mut StringTable,
 }
 
 impl FrontendModuleBuildContext<'_> {
@@ -43,18 +42,16 @@ impl FrontendModuleBuildContext<'_> {
         self,
         module: &[InputFile],
         entry_file_path: &Path,
-    ) -> Result<Module, CompilerMessages> {
+        string_table: StringTable,
+    ) -> Result<CompiledModuleResult, CompilerMessages> {
         let mut compiler = CompilerFrontend::new(
             self.config,
-            std::mem::take(self.string_table),
+            string_table,
             self.style_directives.to_owned(),
             self.project_path_resolver.clone(),
             NewlineMode::NormalizeToLf,
         );
 
-        // Always move the frontend's active string table back to the caller, even on errors.
-        // Frontend diagnostics carry interned source paths from later stages, so dropping the
-        // evolved table here would leave those path IDs unresolvable at the CLI boundary.
         let compile_result = (|| {
             let mut warnings = Vec::new();
             Self::attach_source_files(&mut compiler, module, entry_file_path)?;
@@ -122,8 +119,9 @@ impl FrontendModuleBuildContext<'_> {
                 entry_runtime_fragment_count,
             })
         })();
-        *self.string_table = compiler.string_table;
-        compile_result
+
+        let string_table = compiler.string_table;
+        compile_result.map(|module| CompiledModuleResult { module, string_table })
     }
 
     fn attach_source_files(

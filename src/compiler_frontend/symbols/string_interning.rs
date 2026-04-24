@@ -13,6 +13,18 @@ impl std::fmt::Display for StringId {
     }
 }
 
+/// Mapping from StringIds in one table to StringIds in another after a merge.
+#[derive(Debug, Clone)]
+pub struct StringIdRemap {
+    old_to_new: Vec<StringId>,
+}
+
+impl StringIdRemap {
+    pub fn get(&self, old: StringId) -> StringId {
+        self.old_to_new[old.0 as usize]
+    }
+}
+
 /// A centralized string interning system that stores unique strings only once in memory.
 ///
 /// The StringTable uses a dual-mapping approach for optimal performance:
@@ -155,5 +167,25 @@ impl StringTable {
     #[inline]
     pub fn len(&self) -> usize {
         self.strings.len()
+    }
+
+    /// Iterate over all interned strings with their IDs.
+    pub fn iter(&self) -> impl Iterator<Item = (StringId, &str)> + use<'_> {
+        self.strings
+            .iter()
+            .enumerate()
+            .map(|(i, s)| (StringId(i as u32), s.as_ref()))
+    }
+
+    /// Merge all strings from `other` into `self`. Returns a remap so callers can
+    /// rewrite `StringId`s that were issued against `other` to IDs valid in `self`.
+    pub fn merge_from(&mut self, other: &StringTable) -> StringIdRemap {
+        let mut old_to_new = Vec::with_capacity(other.len());
+        for (old_id, s) in other.iter() {
+            let new_id = self.intern(s);
+            old_to_new.push(new_id);
+            debug_assert_eq!(old_id.0 as usize, old_to_new.len() - 1);
+        }
+        StringIdRemap { old_to_new }
     }
 }
