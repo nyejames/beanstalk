@@ -443,17 +443,59 @@ if value is:
 - Arms are delimited by the next `case`, `else`, or the final match-closing `;`
 - Per-arm semicolons are invalid in match blocks
 - Guard expressions (`if <bool_expr>`) must be `Bool`
-- For non-choice scrutinees, `else =>` is required in Alpha
+- For non-choice scrutinees, `else =>` or an unguarded `case _ =>` is required in Alpha
 - For choice scrutinees:
-  - `else =>` always satisfies exhaustiveness
-  - Without `else =>`, every variant must be covered
-  - If any arm has a guard, `else =>` is required
+  - `else =>` or an unguarded `case _ =>` always satisfies exhaustiveness
+  - Without a default arm, every variant must be covered
+  - If any arm has a guard, `else =>` or an unguarded `case _ =>` is required
   - The same variant cannot be matched more than once
 
 Arm syntax:
 - `case <pattern> => <body>`
 - `case <pattern> if <bool_expr> => <body>`
 - `else => <body>`
+
+Supported Alpha patterns:
+
+- Literal patterns: `case 1 =>`, `case "ok" =>`, `case true =>`
+- Choice variant patterns: `case Ready =>` or `case Status::Ready =>`
+- Wildcard patterns: `case _ =>`
+- Relational patterns for ordered scalar values: `case < 0 =>`, `case <= 10 =>`, `case > 0 =>`, `case >= 100 =>`
+
+Wildcard patterns match any value. An unguarded wildcard arm is exhaustive, like `else =>`.
+A guarded wildcard arm is not exhaustive because the guard can fail.
+
+Relational patterns are supported for ordered scalar scrutinees such as `Int`, `Float`, and `Char`.
+The pattern value must be a literal of the same compatible type.
+Relational patterns do not prove exhaustiveness in Alpha, so non-choice matches still need `else =>` or an unguarded `case _ =>`.
+
+```beanstalk
+value ~= 12
+
+if value is:
+    case < 0 => io("negative")
+    case 0 => io("zero")
+    case <= 10 => io("small")
+    case _ => io("large")
+;
+```
+
+Choice wildcard example:
+
+```beanstalk
+Status ::
+    Ready,
+    Loading,
+    Failed,
+;
+
+status ~= Status::Loading
+
+if status is:
+    case Ready => io("ready")
+    case _ => io("not ready")
+;
+```
 
 ## Loops
 Beanstalk uses a **single** loop keyword: `loop`.

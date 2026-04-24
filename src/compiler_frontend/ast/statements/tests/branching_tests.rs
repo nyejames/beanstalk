@@ -253,8 +253,8 @@ fn parses_match_statements_with_else_arm() {
 
     assert_eq!(subject.data_type, DataType::Int);
     assert_eq!(arms.len(), 2);
-    assert!(matches!(arms[0].condition.kind, ExpressionKind::Int(0)));
-    assert!(matches!(arms[1].condition.kind, ExpressionKind::Int(42)));
+    assert!(matches!(arms[0].pattern, MatchPattern::Literal(Expression { kind: ExpressionKind::Int(0), .. })));
+    assert!(matches!(arms[1].pattern, MatchPattern::Literal(Expression { kind: ExpressionKind::Int(42), .. })));
     assert_eq!(
         else_block.as_ref().map(Vec::len),
         Some(1),
@@ -338,8 +338,8 @@ fn parses_choice_match_arms_with_bare_and_qualified_variants() {
         "choice match subject should preserve choice type identity"
     );
     assert_eq!(arms.len(), 2);
-    assert!(matches!(arms[0].condition.kind, ExpressionKind::Int(0)));
-    assert!(matches!(arms[1].condition.kind, ExpressionKind::Int(1)));
+    assert!(matches!(arms[0].pattern, MatchPattern::Literal(Expression { kind: ExpressionKind::Int(0), .. })));
+    assert!(matches!(arms[1].pattern, MatchPattern::Literal(Expression { kind: ExpressionKind::Int(1), .. })));
     assert!(
         else_block.is_some(),
         "choice match should keep explicit else default"
@@ -424,16 +424,20 @@ fn rejects_guarded_choice_match_without_else() {
 }
 
 #[test]
-fn rejects_deferred_relational_match_patterns() {
-    let error = parse_single_file_ast_error(
+fn parses_relational_match_patterns() {
+    let (ast, string_table) = parse_single_file_ast(
         "value = 1\nif value is:\n    case < 0 => io(\"neg\")\n    else => io(\"other\")\n;\n",
     );
 
-    assert_eq!(error.error_type, ErrorType::Rule);
+    let body = start_function_body(&ast, &string_table);
+    let NodeKind::Match(_, arms, _) = &body[1].kind else {
+        panic!("expected match statement in start body");
+    };
+
+    assert_eq!(arms.len(), 1);
     assert!(
-        error.msg.contains("Relational match patterns"),
-        "{}",
-        error.msg
+        matches!(arms[0].pattern, MatchPattern::Relational { .. }),
+        "relational pattern should parse successfully"
     );
 }
 
@@ -476,5 +480,161 @@ fn allows_semicolons_inside_nested_structures_within_match_arms() {
     assert!(
         matches!(arms[0].body[0].kind, NodeKind::If(_, _, _)),
         "nested if body inside a match arm should parse successfully"
+    );
+}
+
+
+#[test]
+fn parses_non_choice_wildcard_pattern() {
+    let (ast, string_table) =
+        parse_single_file_ast("value = 1\nif value is:\n    case _ => io(\"anything\")\n;\n");
+
+    let body = start_function_body(&ast, &string_table);
+    let NodeKind::Match(_, arms, else_block) = &body[1].kind else {
+        panic!("expected match statement in start body");
+    };
+
+    assert_eq!(arms.len(), 1);
+    assert!(
+        matches!(arms[0].pattern, MatchPattern::Wildcard { .. }),
+        "wildcard pattern should parse successfully"
+    );
+    assert!(else_block.is_none(), "wildcard alone should be exhaustive");
+}
+
+#[test]
+fn guarded_wildcard_requires_fallback() {
+    let error = parse_single_file_ast_error(
+        "value = 1\nallow = false\nif value is:\n    case _ if allow => io(\"allowed\")\n;\n",
+    );
+
+    assert_eq!(error.error_type, ErrorType::Rule);
+    assert!(
+        error
+            .msg
+            .contains("must include an 'else =>' arm or an unguarded 'case _ =>' arm"),
+        "{}",
+        error.msg
+    );
+}
+
+#[test]
+fn parses_relational_int_patterns() {
+    let (ast, string_table) = parse_single_file_ast(
+        "value = 5\nif value is:\n    case < 0 => io(\"negative\")\n    case >= 0 => io(\"non-negative\")\n    else => io(\"fallback\")\n;\n",
+    );
+
+    let body = start_function_body(&ast, &string_table);
+    let NodeKind::Match(_, arms, _) = &body[1].kind else {
+        panic!("expected match statement in start body");
+    };
+
+    assert_eq!(arms.len(), 2);
+    assert!(
+        matches!(
+            arms[0].pattern,
+            MatchPattern::Relational {
+                op: RelationalPatternOp::LessThan,
+                ..
+            }
+        ),
+        "first arm should be < pattern"
+    );
+    assert!(
+        matches!(
+            arms[1].pattern,
+            MatchPattern::Relational {
+                op: RelationalPatternOp::GreaterThanOrEqual,
+                ..
+            }
+        ),
+        "second arm should be >= pattern"
+    );
+}
+
+#[test]
+fn relational_patterns_without_default_are_not_exhaustive() {
+    let error = parse_single_file_ast_error(
+        "value = 5\nif value is:\n    case < 0 => io(\"negative\")\n    case >= 0 => io(\"non-negative\")\n;\n",
+    );
+
+    assert_eq!(error.error_type, ErrorType::Rule);
+    assert!(
+        error
+            .msg
+            .contains("must include an 'else =>' arm or an unguarded 'case _ =>' arm"),
+        "{}",
+        error.msg
+    );
+}
+
+#[test]
+fn relational_pattern_rejects_bool() {
+    let error = parse_single_file_ast_error(
+        "value = true\nif value is:\n    case < true => io(\"bad\")\n    else => io(\"fallback\")\n;\n",
+    );
+
+    assert_eq!(error.error_type, ErrorType::Rule);
+    assert!(
+        error
+            .msg
+            .contains("Relational match patterns are only supported for ordered scalar types"),
+        "{}",
+        error.msg
+    );
+}
+
+#[test]
+fn relational_pattern_rejects_string() {
+    let error = parse_single_file_ast_error(
+        "value = \"abc\"\nif value is:\n    case < \"def\" => io(\"bad\")\n    else => io(\"fallback\")\n;\n",
+    );
+
+    assert_eq!(error.error_type, ErrorType::Rule);
+    assert!(
+        error
+            .msg
+            .contains("Relational match patterns are only supported for ordered scalar types"),
+        "{}",
+        error.msg
+    );
+}
+
+#[test]
+fn parses_choice_wildcard_pattern() {
+    let (ast, string_table) = parse_single_file_ast(
+        "#Status :: Ready, Loading;\n\
+         status Status = Status::Ready\n\
+         if status is:\n\
+             case _ => io(\"anything\")\n\
+         ;\n",
+    );
+
+    let body = start_function_body(&ast, &string_table);
+    let NodeKind::Match(_, arms, else_block) = &body[1].kind else {
+        panic!("expected match statement in start body");
+    };
+
+    assert_eq!(arms.len(), 1);
+    assert!(
+        matches!(arms[0].pattern, MatchPattern::Wildcard { .. }),
+        "choice wildcard should parse successfully"
+    );
+    assert!(else_block.is_none(), "wildcard alone should be exhaustive for choices");
+}
+
+#[test]
+fn unreachable_arm_after_unguarded_wildcard() {
+    let error = parse_single_file_ast_error(
+        "value = 1\nif value is:\n    case _ => io(\"anything\")\n    case 1 => io(\"dead\")\n;\n",
+    );
+
+    assert_eq!(error.error_type, ErrorType::Rule);
+    assert!(
+        error
+            .msg
+            .contains("unreachable because a previous unguarded wildcard arm matches all remaining values"),
+        "{}",
+        error.msg
     );
 }

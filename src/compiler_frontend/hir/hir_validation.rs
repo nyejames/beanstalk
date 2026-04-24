@@ -674,6 +674,31 @@ impl<'a> HirValidator<'a> {
             }
 
             HirPattern::Wildcard => {}
+
+            HirPattern::Relational { value, .. } => {
+                self.validate_literal_pattern_expression(value, anchor)?;
+                self.validate_relational_pattern_expression(value, anchor)?;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn validate_relational_pattern_expression(
+        &self,
+        expression: &HirExpression,
+        anchor: Option<HirLocation>,
+    ) -> Result<(), CompilerError> {
+        if !matches!(
+            expression.kind,
+            HirExpressionKind::Int(_)
+                | HirExpressionKind::Float(_)
+                | HirExpressionKind::Char(_)
+        ) {
+            return Err(self.error_with_hir(
+                "Match relational pattern must be int/float/char",
+                anchor,
+            ));
         }
 
         Ok(())

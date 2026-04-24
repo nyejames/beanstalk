@@ -1,5 +1,4 @@
 [backends.html]
-mode = "failure"
+mode = "success"
 warnings = "forbid"
-error_type = "Rule"
-message_contains = ["Wildcard patterns ('case _ =>') are deferred"]
+rendered_output_contains = ["one"]

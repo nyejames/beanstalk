@@ -5,7 +5,7 @@
 
 use crate::compiler_frontend::ast::ast_nodes::NodeKind;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
-use crate::compiler_frontend::ast::statements::branching::MatchArm;
+use crate::compiler_frontend::ast::statements::branching::{MatchArm, MatchPattern};
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::compiler_errors::ErrorType;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
@@ -82,7 +82,7 @@ fn match_arm_local_alias_does_not_escape_merge() {
     let y = symbol("y", &mut string_table);
 
     let arm = MatchArm {
-        condition: Expression::int(1, test_location(3), Ownership::ImmutableOwned),
+        pattern: MatchPattern::Literal(Expression::int(1, test_location(3), Ownership::ImmutableOwned)),
         guard: None,
         body: vec![node(
             NodeKind::VariableDeclaration(make_test_variable(

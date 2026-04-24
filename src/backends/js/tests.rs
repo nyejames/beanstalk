@@ -48,8 +48,8 @@ use crate::compiler_frontend::hir::hir_datatypes::{HirType, HirTypeKind, TypeCon
 use crate::compiler_frontend::hir::hir_nodes::{
     BlockId, FieldId, FunctionId, HirBinOp, HirBlock, HirExpression, HirExpressionKind, HirField,
     HirFunction, HirLocal, HirMatchArm, HirModule, HirNodeId, HirPattern, HirPlace, HirRegion,
-    HirStatement, HirStatementKind, HirStruct, HirTerminator, LocalId, OptionVariant, RegionId,
-    ResultVariant, StructId, ValueKind,
+    HirRelationalPatternOp, HirStatement, HirStatementKind, HirStruct, HirTerminator, LocalId,
+    OptionVariant, RegionId, ResultVariant, StructId, ValueKind,
 };
 use crate::compiler_frontend::host_functions::CallTarget;
 use crate::compiler_frontend::interned_path::InternedPath;
@@ -3891,6 +3891,242 @@ fn choice_match_with_wildcard_arm_emits_true_condition() {
     assert!(
         !output.source.contains("while (true)"),
         "acyclic choice match must not use dispatcher"
+    );
+}
+
+/// Verifies that relational match patterns emit correct JS comparison operators.
+#[test]
+fn relational_match_patterns_emit_correct_js_operators() {
+    let mut string_table = StringTable::new();
+    let (type_context, types) = build_type_context();
+
+    let blocks = vec![
+        HirBlock {
+            id: BlockId(0),
+            region: RegionId(0),
+            locals: vec![local(0, types.int, RegionId(0))],
+            statements: vec![statement(
+                1,
+                HirStatementKind::Assign {
+                    target: HirPlace::Local(LocalId(0)),
+                    value: int_expression(1, 5, types.int, RegionId(0)),
+                },
+                1,
+            )],
+            terminator: HirTerminator::Match {
+                scrutinee: expression(
+                    2,
+                    HirExpressionKind::Load(HirPlace::Local(LocalId(0))),
+                    types.int,
+                    RegionId(0),
+                    ValueKind::Place,
+                ),
+                arms: vec![
+                    HirMatchArm {
+                        pattern: HirPattern::Relational {
+                            op: HirRelationalPatternOp::LessThan,
+                            value: int_expression(3, 10, types.int, RegionId(0)),
+                        },
+                        guard: None,
+                        body: BlockId(1),
+                    },
+                    HirMatchArm {
+                        pattern: HirPattern::Relational {
+                            op: HirRelationalPatternOp::LessThanOrEqual,
+                            value: int_expression(4, 20, types.int, RegionId(0)),
+                        },
+                        guard: None,
+                        body: BlockId(2),
+                    },
+                    HirMatchArm {
+                        pattern: HirPattern::Relational {
+                            op: HirRelationalPatternOp::GreaterThan,
+                            value: int_expression(5, 30, types.int, RegionId(0)),
+                        },
+                        guard: None,
+                        body: BlockId(3),
+                    },
+                    HirMatchArm {
+                        pattern: HirPattern::Relational {
+                            op: HirRelationalPatternOp::GreaterThanOrEqual,
+                            value: int_expression(6, 40, types.int, RegionId(0)),
+                        },
+                        guard: None,
+                        body: BlockId(4),
+                    },
+                ],
+            },
+        },
+        HirBlock {
+            id: BlockId(1),
+            region: RegionId(0),
+            locals: vec![],
+            statements: vec![],
+            terminator: HirTerminator::Jump {
+                target: BlockId(5),
+                args: vec![],
+            },
+        },
+        HirBlock {
+            id: BlockId(2),
+            region: RegionId(0),
+            locals: vec![],
+            statements: vec![],
+            terminator: HirTerminator::Jump {
+                target: BlockId(5),
+                args: vec![],
+            },
+        },
+        HirBlock {
+            id: BlockId(3),
+            region: RegionId(0),
+            locals: vec![],
+            statements: vec![],
+            terminator: HirTerminator::Jump {
+                target: BlockId(5),
+                args: vec![],
+            },
+        },
+        HirBlock {
+            id: BlockId(4),
+            region: RegionId(0),
+            locals: vec![],
+            statements: vec![],
+            terminator: HirTerminator::Jump {
+                target: BlockId(5),
+                args: vec![],
+            },
+        },
+        HirBlock {
+            id: BlockId(5),
+            region: RegionId(0),
+            locals: vec![],
+            statements: vec![],
+            terminator: HirTerminator::Return(unit_expression(7, types.unit, RegionId(0))),
+        },
+    ];
+
+    let function = HirFunction {
+        id: FunctionId(0),
+        entry: BlockId(0),
+        params: vec![],
+        return_type: types.unit,
+        return_aliases: vec![],
+    };
+
+    let module = build_module(
+        &mut string_table,
+        "main",
+        blocks,
+        function,
+        &[(LocalId(0), "value")],
+        type_context,
+    );
+
+    let output = lower_hir_to_js(
+        &module,
+        &BorrowCheckReport::default(),
+        &string_table,
+        default_config(),
+    )
+    .expect("JS lowering should succeed");
+
+    assert!(
+        output.source.contains(" < 10"),
+        "LessThan should emit '<' operator, got: {}",
+        output.source
+    );
+    assert!(
+        output.source.contains(" <= 20"),
+        "LessThanOrEqual should emit '<=' operator, got: {}",
+        output.source
+    );
+    assert!(
+        output.source.contains(" > 30"),
+        "GreaterThan should emit '>' operator, got: {}",
+        output.source
+    );
+    assert!(
+        output.source.contains(" >= 40"),
+        "GreaterThanOrEqual should emit '>=' operator, got: {}",
+        output.source
+    );
+}
+
+/// Verifies that a wildcard match pattern emits `true` as the condition.
+#[test]
+fn wildcard_match_pattern_emits_true_condition() {
+    let mut string_table = StringTable::new();
+    let (type_context, types) = build_type_context();
+
+    let blocks = vec![
+        HirBlock {
+            id: BlockId(0),
+            region: RegionId(0),
+            locals: vec![local(0, types.int, RegionId(0))],
+            statements: vec![statement(
+                1,
+                HirStatementKind::Assign {
+                    target: HirPlace::Local(LocalId(0)),
+                    value: int_expression(1, 5, types.int, RegionId(0)),
+                },
+                1,
+            )],
+            terminator: HirTerminator::Match {
+                scrutinee: expression(
+                    2,
+                    HirExpressionKind::Load(HirPlace::Local(LocalId(0))),
+                    types.int,
+                    RegionId(0),
+                    ValueKind::Place,
+                ),
+                arms: vec![
+                    HirMatchArm {
+                        pattern: HirPattern::Wildcard,
+                        guard: None,
+                        body: BlockId(1),
+                    },
+                ],
+            },
+        },
+        HirBlock {
+            id: BlockId(1),
+            region: RegionId(0),
+            locals: vec![],
+            statements: vec![],
+            terminator: HirTerminator::Return(unit_expression(3, types.unit, RegionId(0))),
+        },
+    ];
+
+    let function = HirFunction {
+        id: FunctionId(0),
+        entry: BlockId(0),
+        params: vec![],
+        return_type: types.unit,
+        return_aliases: vec![],
+    };
+
+    let module = build_module(
+        &mut string_table,
+        "main",
+        blocks,
+        function,
+        &[(LocalId(0), "value")],
+        type_context,
+    );
+
+    let output = lower_hir_to_js(
+        &module,
+        &BorrowCheckReport::default(),
+        &string_table,
+        default_config(),
+    )
+    .expect("JS lowering should succeed");
+
+    assert!(
+        output.source.contains("if (true)"),
+        "wildcard pattern should emit 'if (true)' condition, got: {}",
+        output.source
     );
 }
 

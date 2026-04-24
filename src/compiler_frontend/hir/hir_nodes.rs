@@ -488,10 +488,22 @@ pub struct HirMatchArm {
     pub body: BlockId,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HirRelationalPatternOp {
+    LessThan,
+    LessThanOrEqual,
+    GreaterThan,
+    GreaterThanOrEqual,
+}
+
 #[derive(Debug, Clone)]
 pub enum HirPattern {
     Literal(HirExpression),
     Wildcard,
+    Relational {
+        op: HirRelationalPatternOp,
+        value: HirExpression,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

@@ -1,5 +1,4 @@
 [backends.html]
-mode = "failure"
+mode = "success"
 warnings = "forbid"
-error_type = "Rule"
-message_contains = ["Relational match patterns", "deferred for Alpha"]
+rendered_output_contains = ["other"]

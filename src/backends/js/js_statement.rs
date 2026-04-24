@@ -9,7 +9,7 @@ use crate::compiler_frontend::analysis::borrow_checker::LocalMode;
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
 use crate::compiler_frontend::hir::hir_nodes::{
     BlockId, HirExpression, HirExpressionKind, HirFunction, HirMatchArm, HirPattern, HirPlace,
-    HirStatement, HirStatementKind, HirTerminator, LocalId,
+    HirRelationalPatternOp, HirStatement, HirStatementKind, HirTerminator, LocalId,
 };
 use crate::compiler_frontend::host_functions::{
     COLLECTION_LENGTH_HOST_NAME, COLLECTION_PUSH_HOST_NAME, COLLECTION_REMOVE_HOST_NAME, CallTarget,
@@ -447,6 +447,16 @@ impl<'hir> JsEmitter<'hir> {
                 format!("{scrutinee_expression} === {literal}")
             }
             HirPattern::Wildcard => "true".to_owned(),
+            HirPattern::Relational { op, value } => {
+                let rhs = self.lower_expr(value)?;
+                let js_op = match op {
+                    HirRelationalPatternOp::LessThan => "<",
+                    HirRelationalPatternOp::LessThanOrEqual => "<=",
+                    HirRelationalPatternOp::GreaterThan => ">",
+                    HirRelationalPatternOp::GreaterThanOrEqual => ">=",
+                };
+                format!("{scrutinee_expression} {js_op} {rhs}")
+            }
         };
 
         if let Some(guard) = &arm.guard {

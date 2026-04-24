@@ -264,13 +264,19 @@ fn normalize_control_flow_templates(
                 string_table,
             )?;
             for arm in arms {
-                normalize_expression_templates(
-                    &mut arm.condition,
-                    source_file_scope,
-                    path_format_config,
-                    project_path_resolver,
-                    string_table,
-                )?;
+                match &mut arm.pattern {
+                    crate::compiler_frontend::ast::statements::branching::MatchPattern::Literal(expression)
+                    | crate::compiler_frontend::ast::statements::branching::MatchPattern::Relational { value: expression, .. } => {
+                        normalize_expression_templates(
+                            expression,
+                            source_file_scope,
+                            path_format_config,
+                            project_path_resolver,
+                            string_table,
+                        )?;
+                    }
+                    crate::compiler_frontend::ast::statements::branching::MatchPattern::Wildcard { .. } => {}
+                }
                 if let Some(guard) = &mut arm.guard {
                     normalize_expression_templates(
                         guard,

@@ -6,16 +6,25 @@
 
 use crate::compiler_frontend::ast::ast_nodes::AstNode;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
-use crate::compiler_frontend::ast::statements::branching::MatchArm;
+use crate::compiler_frontend::ast::statements::branching::{MatchArm, MatchPattern, RelationalPatternOp};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::hir::hir_builder::{HirBuilder, LoopTargets};
 use crate::compiler_frontend::hir::hir_datatypes::{HirTypeKind, TypeId};
 use crate::compiler_frontend::hir::hir_nodes::{
-    BlockId, HirBlock, HirExpression, HirExpressionKind, HirMatchArm, HirPattern, HirRegion,
-    HirTerminator, ResultVariant, ValueKind,
+    BlockId, HirBlock, HirExpression, HirExpressionKind, HirMatchArm, HirPattern,
+    HirRegion, HirRelationalPatternOp, HirTerminator, ResultVariant, ValueKind,
 };
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::return_hir_transformation_error;
+
+fn lower_relational_pattern_op(op: RelationalPatternOp) -> HirRelationalPatternOp {
+    match op {
+        RelationalPatternOp::LessThan => HirRelationalPatternOp::LessThan,
+        RelationalPatternOp::LessThanOrEqual => HirRelationalPatternOp::LessThanOrEqual,
+        RelationalPatternOp::GreaterThan => HirRelationalPatternOp::GreaterThan,
+        RelationalPatternOp::GreaterThanOrEqual => HirRelationalPatternOp::GreaterThanOrEqual,
+    }
+}
 
 impl<'a> HirBuilder<'a> {
     pub(super) fn lower_return_statement(
@@ -358,14 +367,14 @@ impl<'a> HirBuilder<'a> {
 
         let mut hir_arms = Vec::with_capacity(arms.len() + 1);
         for (index, arm) in arms.iter().enumerate() {
-            let lowered_pattern = self.lower_match_literal_pattern(&arm.condition)?;
+            let lowered_pattern = self.lower_match_pattern(&arm.pattern)?;
             let lowered_guard = match &arm.guard {
                 Some(guard) => Some(self.lower_match_guard_expression(guard)?),
                 None => None,
             };
 
             hir_arms.push(HirMatchArm {
-                pattern: HirPattern::Literal(lowered_pattern),
+                pattern: lowered_pattern,
                 guard: lowered_guard,
                 body: arm_blocks[index],
             });
@@ -488,6 +497,30 @@ impl<'a> HirBuilder<'a> {
         }
 
         Ok(lowered_pattern.value)
+    }
+
+    /// Lower an AST match pattern into its HIR counterpart.
+    fn lower_match_pattern(
+        &mut self,
+        pattern: &MatchPattern,
+    ) -> Result<HirPattern, CompilerError> {
+        match pattern {
+            MatchPattern::Literal(expression) => {
+                let lowered = self.lower_match_literal_pattern(expression)?;
+                Ok(HirPattern::Literal(lowered))
+            }
+
+            MatchPattern::Wildcard { .. } => Ok(HirPattern::Wildcard),
+
+            MatchPattern::Relational { op, value, .. } => {
+                let lowered_value = self.lower_match_literal_pattern(value)?;
+
+                Ok(HirPattern::Relational {
+                    op: lower_relational_pattern_op(*op),
+                    value: lowered_value,
+                })
+            }
+        }
     }
 
     /// Lower a match arm guard and ensure it remains a pure boolean expression.

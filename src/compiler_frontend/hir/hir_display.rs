@@ -15,8 +15,8 @@ use crate::compiler_frontend::hir::hir_nodes::{
 #[cfg(any(test, feature = "show_hir"))]
 use crate::compiler_frontend::hir::hir_nodes::{
     HirBlock, HirExpression, HirExpressionKind, HirField, HirFunction, HirLocal, HirMatchArm,
-    HirModule, HirPattern, HirPlace, HirStatement, HirStatementKind, HirStruct, HirTerminator,
-    ValueKind,
+    HirModule, HirPattern, HirPlace, HirRelationalPatternOp, HirStatement, HirStatementKind,
+    HirStruct, HirTerminator, ValueKind,
 };
 #[cfg(any(test, feature = "show_hir"))]
 use crate::compiler_frontend::hir::hir_side_table::HirSideTable;
@@ -485,10 +485,26 @@ impl<'a> HirDisplayContext<'a> {
         }
     }
 
+    fn render_relational_pattern_op(&self, op: HirRelationalPatternOp) -> &'static str {
+        match op {
+            HirRelationalPatternOp::LessThan => "<",
+            HirRelationalPatternOp::LessThanOrEqual => "<=",
+            HirRelationalPatternOp::GreaterThan => ">",
+            HirRelationalPatternOp::GreaterThanOrEqual => ">=",
+        }
+    }
+
     pub(crate) fn render_pattern(&self, pattern: &HirPattern) -> String {
         match pattern {
             HirPattern::Literal(expr) => self.render_expression(expr),
             HirPattern::Wildcard => "_".to_owned(),
+            HirPattern::Relational { op, value } => {
+                format!(
+                    "{} {}",
+                    self.render_relational_pattern_op(*op),
+                    self.render_expression(value)
+                )
+            }
         }
     }
 

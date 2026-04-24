@@ -140,7 +140,7 @@ import @styles/docs {navbar, title, section, palette, table, data, codeblock, co
             [: Partial]
             [: Broad literal and choice-match coverage, including exhaustiveness and diagnostics.]
             [: JS / HTML]
-            [: Literal patterns, choice variants, guards, and else are supported. Wildcard may be promoted soon. Relational, negated, and capture/tagged patterns should stay deferred unless explicitly implemented and covered.]
+            [: Literal patterns, choice variants, wildcard, relational ordered-scalar patterns, guards, and else are supported. Negated and capture/tagged patterns remain deferred for Alpha.]
         ]
 
         [data:
@@ -388,7 +388,7 @@ import @styles/docs {navbar, title, section, palette, table, data, codeblock, co
         [data:
             [: Pattern matching scope]
             [: High]
-            [: Decide whether wildcard patterns are promoted before Alpha. Keep relational, negated, and capture/tagged patterns deferred unless implemented with tests.]
+            [: Wildcard and relational ordered-scalar patterns are now implemented and tested. Keep negated and capture/tagged patterns deferred for Alpha unless explicitly promoted.]
         ]
 
         [data:

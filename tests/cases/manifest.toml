@@ -1189,6 +1189,31 @@ path = "match_value_merge_flow"
 tags = ["integration","control-flow","language"]
 
 [[case]]
+id = "match_wildcard_non_choice"
+path = "match_wildcard_non_choice"
+tags = ["integration","control-flow","language"]
+
+[[case]]
+id = "match_relational_int"
+path = "match_relational_int"
+tags = ["integration","control-flow","language"]
+
+[[case]]
+id = "match_relational_guard"
+path = "match_relational_guard"
+tags = ["integration","control-flow","language"]
+
+[[case]]
+id = "match_relational_requires_default"
+path = "match_relational_requires_default"
+tags = ["integration","control-flow","diagnostics"]
+
+[[case]]
+id = "match_unreachable_after_wildcard"
+path = "match_unreachable_after_wildcard"
+tags = ["integration","control-flow","diagnostics"]
+
+[[case]]
 id = "malformed_print_statement"
 path = "malformed_print_statement"
 tags = ["integration","diagnostics"]
