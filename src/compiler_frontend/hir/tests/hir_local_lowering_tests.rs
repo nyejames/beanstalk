@@ -51,7 +51,7 @@ fn allocates_parameter_locals_and_binds_names() {
     assert_eq!(start_fn.params.len(), 1);
 
     let entry_block = &module.blocks[start_fn.entry.0 as usize];
-    assert!(entry_block.locals.len() >= 1);
+    assert!(!entry_block.locals.is_empty());
     assert_eq!(
         module
             .side_table
@@ -88,7 +88,7 @@ fn variable_declaration_emits_local_and_assign_statement() {
     let start_fn = &module.functions[module.start_function.0 as usize];
     let entry_block = &module.blocks[start_fn.entry.0 as usize];
 
-    assert!(entry_block.locals.len() >= 1);
+    assert!(!entry_block.locals.is_empty());
     assert!(
         entry_block
             .statements

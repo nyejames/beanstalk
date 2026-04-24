@@ -1,5 +1,5 @@
 #[cfg(test)]
-mod render_plan_tests {
+mod tests {
     use crate::compiler_frontend::ast::expressions::expression::Expression;
     use crate::compiler_frontend::ast::templates::template::{
         SlotKey, SlotPlaceholder, TemplateAtom, TemplateContent, TemplateSegment,
