@@ -19,10 +19,6 @@ These are the non-negotiable conditions for starting Alpha:
 
 ## Next Plan
 
-### Remaining Windows Test failures
-`docs/roadmap/plans/remaining-windows-failures.md`
-This file contains the results of running the test suite on a windows machine.
-
 ## JS backend extension
 
 ### Strengthen collection backend/runtime coverage beyond current basics

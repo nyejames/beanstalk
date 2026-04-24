@@ -62,19 +62,23 @@ fn build_project_keeps_one_shared_string_table_for_multi_module_diagnostics() {
     assert_eq!(messages.warnings.len(), 1);
 
     assert_eq!(
-        messages.errors[0]
-            .location
-            .scope
-            .to_path_buf(&messages.string_table),
+        normalize_path(
+            &messages.errors[0]
+                .location
+                .scope
+                .to_path_buf(&messages.string_table)
+        ),
         normalize_path(
             &fs::canonicalize(src_dir.join("#page.bst")).expect("homepage should canonicalize")
         )
     );
     assert_eq!(
-        messages.warnings[0]
-            .location
-            .scope
-            .to_path_buf(&messages.string_table),
+        normalize_path(
+            &messages.warnings[0]
+                .location
+                .scope
+                .to_path_buf(&messages.string_table)
+        ),
         normalize_path(
             &fs::canonicalize(docs_dir.join("#page.bst")).expect("docs page should canonicalize")
         )

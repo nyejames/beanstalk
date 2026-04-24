@@ -52,7 +52,7 @@ pub fn normalize_path(path: &Path) -> PathBuf {
             match prefix.kind() {
                 Prefix::VerbatimDisk(disk) => {
                     // Strip \\?\C:\ → C:\
-                    let mut new_path = PathBuf::from(format!("{}:", disk as char));
+                    let mut new_path = PathBuf::from(format!(r"{}:\", disk as char));
                     for component in components {
                         if let Component::Normal(name) = component {
                             new_path.push(name);
