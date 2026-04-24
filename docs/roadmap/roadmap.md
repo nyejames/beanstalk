@@ -17,20 +17,11 @@ These are the non-negotiable conditions for starting Alpha:
 - Cross-platform output is stable enough that Windows and macOS do not produce avoidable golden drift.
 - The documentation site (written in beanstalk) inside the docs directory should be able to render a complete and good looking docs website fully using the Beanstalk pipeline. This will be the final testing ground for whether the language feels "ready" to be alpha.
 
-## Next Plan
+---
+
+# Next Plans
 
 ## JS backend extension
-
-### Harden JS result/error runtime coverage further
-
-The backend already has dedicated helpers and some tests, but more integrated adversarial cases are still useful
-
-Todo
-
-* Add integration fixtures for nested ! propagation through multiple function layers
-* Add fallback-path cases inside loops, branches, and match arms
-* Add emitted-JS tests pinning error trace and bubble behavior in more than the minimal helper-level contract
-* Add cases mixing result propagation with runtime fragment generation/templates
 
 ### Add explicit backend coverage for block-dispatcher edge cases
 
@@ -45,28 +36,6 @@ Todo
     * branch-heavy cyclic CFG
 * Add regression tests proving structured lowering is chosen when legal and dispatcher lowering only when needed
 * Add future tests for jump-arg lowering once implemented
-
-
-### Some basic optimisation work over ast. Major bottleneck function is: parse_function_body_statements(). THis is where the compiler is spending the vast majority of the total compile time.
-
-### Move to more specific explicit type declarations for numbers (I32, I64, F32, F64) - JS backend just makes all an F64 and accepts the precision loss, more for future Wasm backend.
-
-### Review built in "Error" type and reserved keywords
-Should this be build-system provided (like IO) rather than a compiler built in? So Error is reserved in a similar way to io and IO, and must always be provided by the build system, but the specific shape beyond the core parameters must be defined by the build system.
-
-### Extend pattern matching
-
-Current Alpha pattern support:
-
-* Literal patterns (`Int`, `Float`, `Bool`, `Char`, `String`) for non-choice matches.
-* Choice variant patterns for choice matches (`case Ready =>` or `case Status::Ready =>`).
-
-Not yet supported:
-
-* Wildcard pattern `case _ =>`
-* Relational patterns (`<`, `<=`, `>`, `>=`)
-* Negated patterns (`case not ... =>`)
-* Capture/tagged patterns using `|...|`
 
 
 ## Final pre-alpha sweep
@@ -93,6 +62,13 @@ Land final small consistency and hygiene fixes before the release branch/tag.
 
 ---
 
+# Notes / TODOS
+
+## Review built in "Error" type and reserved keywords
+Should this be build-system provided (like IO) rather than a compiler built in? So Error is reserved in a similar way to io and IO, and must always be provided by the build system, but the specific shape beyond the core parameters must be defined by the build system.
+
+---
+
 # Deferred until after Alpha
 These are intentionally not Alpha blockers unless they become necessary for one of the supported slices.
 
@@ -106,6 +82,7 @@ This is a collection of notes and findings for future roadmaps once the roadmap 
 - Compile time arbitary precision aritmetic + Decimals Type support
 - Core Math library
 - Optimised template folding
+- Move to more specific explicit type declarations for numbers (I32, I64, F32, F64) - JS backend just makes all an F64 and accepts the precision loss, more for future Wasm backend.
 
 ## Wasm
 

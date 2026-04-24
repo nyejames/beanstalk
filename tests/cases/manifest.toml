@@ -2093,3 +2093,28 @@ tags = ["integration", "diagnostics", "string-coercion", "templates"]
 id = "string_coercion_valid_paths_compile_invalid_fails_early"
 path = "string_coercion_valid_paths_compile_invalid_fails_early"
 tags = ["integration", "diagnostics", "string-coercion", "regression"]
+
+[[case]]
+id = "result_deep_propagation_stack"
+path = "result_deep_propagation_stack"
+tags = ["integration", "results", "js-backend"]
+
+[[case]]
+id = "result_fallback_in_branch"
+path = "result_fallback_in_branch"
+tags = ["integration", "results", "control-flow", "js-backend"]
+
+[[case]]
+id = "result_fallback_in_match_arm"
+path = "result_fallback_in_match_arm"
+tags = ["integration", "results", "control-flow", "js-backend"]
+
+[[case]]
+id = "error_bubble_trace_multilayer"
+path = "error_bubble_trace_multilayer"
+tags = ["integration", "results", "js-backend"]
+
+[[case]]
+id = "result_propagate_in_template_fragment"
+path = "result_propagate_in_template_fragment"
+tags = ["integration", "results", "templates", "js-backend"]

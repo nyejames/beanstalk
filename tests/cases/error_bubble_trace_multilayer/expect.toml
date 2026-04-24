@@ -1,0 +1,12 @@
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = ["outer_handler"]
+
+[[backends.html.artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain = [
+    "__bs_error_bubble(",
+    "__bs_error_push_trace",
+]
