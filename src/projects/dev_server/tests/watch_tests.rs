@@ -90,6 +90,22 @@ fn directory_scope_watches_config_entry_root_and_root_folders() {
 }
 
 #[test]
+fn directory_scope_without_config_watches_entry_directory() {
+    let root = temp_dir("directory_scope_without_config");
+    let output_dir = root.join("dev");
+    fs::create_dir_all(root.join("src")).expect("should create src dir");
+    fs::create_dir_all(&output_dir).expect("should create output dir");
+    let canonical_root = root.canonicalize().expect("root should canonicalize");
+
+    let scope = WatchScope::derive(&root, None, &output_dir);
+
+    assert!(scope.watches_path(&canonical_root.join("src/main.bst")));
+    assert!(!scope.watches_path(&canonical_root.join("dev/main.html")));
+
+    fs::remove_dir_all(&root).expect("should remove temp test dir");
+}
+
+#[test]
 fn scanner_only_scans_declared_watch_targets() {
     let root = temp_dir("watch_scan");
     let output_dir = root.join("dev");

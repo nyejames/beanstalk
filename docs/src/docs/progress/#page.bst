@@ -332,13 +332,6 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
         ]
 
         [data:
-            [: Relational match patterns]
-            [: Deferred]
-            [: [codesnippet:diagnostic_match_deferred_relational_pattern]]
-            [: Adds extra grammar, type-checking, and exhaustiveness interactions.]
-        ]
-
-        [data:
             [: Negated match patterns]
             [: Deferred]
             [: Add or keep a canonical deferred-pattern diagnostic if syntax is recognized.]

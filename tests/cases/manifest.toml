@@ -554,11 +554,6 @@ path = "diagnostic_match_deferred_capture_pattern"
 tags = ["integration","diagnostics"]
 
 [[case]]
-id = "diagnostic_match_deferred_relational_pattern"
-path = "diagnostic_match_deferred_relational_pattern"
-tags = ["integration","diagnostics"]
-
-[[case]]
 id = "diagnostic_match_legacy_colon_syntax"
 path = "diagnostic_match_legacy_colon_syntax"
 tags = ["integration","diagnostics"]
@@ -1196,6 +1191,11 @@ tags = ["integration","control-flow","language"]
 [[case]]
 id = "match_relational_guard"
 path = "match_relational_guard"
+tags = ["integration","control-flow","language"]
+
+[[case]]
+id = "match_relational_else_fallback"
+path = "match_relational_else_fallback"
 tags = ["integration","control-flow","language"]
 
 [[case]]

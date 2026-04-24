@@ -36,7 +36,10 @@ impl WatchScope {
         };
 
         if entry_target.is_dir() {
-            let config = config.expect("directory watch scope requires config");
+            let Some(config) = config else {
+                scope.watch_directory_or_parent(entry_target);
+                return scope;
+            };
             let project_root = canonical_if_exists(&config.entry_dir);
             scope.watch_exact_file_or_parent(&project_root.join(CONFIG_FILE_NAME));
             scope.watch_directory_or_parent(&resolve_project_entry_root(config));

@@ -8,6 +8,7 @@ mod builtin_call_args;
 mod collection_builtin;
 mod error_builtin;
 mod field_member;
+mod receiver_access;
 mod receiver_calls;
 
 use self::collection_builtin::parse_collection_builtin_member;

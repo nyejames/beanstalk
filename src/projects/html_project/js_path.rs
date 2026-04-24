@@ -98,12 +98,7 @@ pub(crate) fn render_entry_fragments(
     let mut const_iter = sorted_const.iter().peekable();
 
     // Emit const fragments with insertion_index == 0 (before any runtime slots).
-    while const_iter
-        .peek()
-        .map(|(idx, _)| *idx == runtime_index)
-        .unwrap_or(false)
-    {
-        let (_, html_str) = const_iter.next().unwrap();
+    while let Some((_, html_str)) = const_iter.next_if(|(idx, _)| *idx == runtime_index) {
         html.push_str(html_str);
         html.push('\n');
     }
@@ -116,12 +111,7 @@ pub(crate) fn render_entry_fragments(
         runtime_index += 1;
 
         // Emit any const fragments whose insertion_index matches this runtime slot position.
-        while const_iter
-            .peek()
-            .map(|(idx, _)| *idx == runtime_index)
-            .unwrap_or(false)
-        {
-            let (_, html_str) = const_iter.next().unwrap();
+        while let Some((_, html_str)) = const_iter.next_if(|(idx, _)| *idx == runtime_index) {
             html.push_str(html_str);
             html.push('\n');
         }

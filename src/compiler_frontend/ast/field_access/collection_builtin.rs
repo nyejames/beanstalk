@@ -3,12 +3,12 @@
 //! WHAT: parses compiler-owned collection members (`get/set/push/remove/length`).
 //! WHY: collection builtin policy should stay separate from user field/method dispatch.
 
+use super::MemberStepContext;
 use super::builtin_call_args::parse_builtin_method_args;
-use super::{MemberStepContext, ReceiverAccessMode};
-use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
-use crate::compiler_frontend::ast::place_access::{
-    ast_node_is_mutable_place, ast_node_is_place, receiver_access_hint,
+use super::receiver_access::{
+    ReceiverAccessDiagnostic, ReceiverAccessRequirement, validate_receiver_access,
 };
+use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::builtins::CollectionBuiltinOp;
 use crate::compiler_frontend::builtins::error_type::resolve_builtin_error_type;
 use crate::compiler_frontend::compiler_errors::CompilerError;
@@ -80,64 +80,18 @@ pub(super) fn parse_collection_builtin_member(
         CollectionBuiltinOp::Set | CollectionBuiltinOp::Push | CollectionBuiltinOp::Remove
     );
 
-    if receiver_access_mode == ReceiverAccessMode::Mutable && !mutating_receiver_required {
-        return_rule_error!(
-            format!(
-                "Collection method '{}(...)' does not accept explicit mutable access marker '~'.",
-                string_table.resolve(member_name)
-            ),
-            member_location,
-            {
-                CompilationStage => "AST Construction",
-                PrimarySuggestion => "Remove '~' from this receiver call",
-            }
-        );
-    }
-
-    if mutating_receiver_required {
-        if !ast_node_is_place(&receiver_node) {
-            return_rule_error!(
-                format!(
-                    "Collection mutating method '{}(...)' requires a mutable place receiver.",
-                    string_table.resolve(member_name)
-                ),
-                member_location,
-                {
-                    CompilationStage => "AST Construction",
-                    PrimarySuggestion => "Call this method on a mutable variable or mutable field path, not on a temporary expression",
-                }
-            );
-        }
-
-        if !ast_node_is_mutable_place(&receiver_node) {
-            return_rule_error!(
-                format!(
-                    "Collection mutating method '{}(...)' requires a mutable collection receiver.",
-                    string_table.resolve(member_name)
-                ),
-                member_location,
-                {
-                    CompilationStage => "AST Construction",
-                    PrimarySuggestion => "Use a mutable receiver place for this mutating collection method",
-                }
-            );
-        }
-
-        if receiver_access_mode == ReceiverAccessMode::Shared {
-            return_rule_error!(
-                format!(
-                    "Collection mutating method '{}(...)' expects mutable access at the receiver call site. Call this with `~{}`.",
-                    string_table.resolve(member_name),
-                    receiver_access_hint(&receiver_node, string_table)
-                ),
-                member_location,
-                {
-                    CompilationStage => "AST Construction",
-                    PrimarySuggestion => "Prefix the receiver with '~' for this mutating collection call",
-                }
-            );
-        }
-    }
+    validate_receiver_access(
+        &receiver_node,
+        receiver_access_mode,
+        &member_location,
+        ReceiverAccessRequirement {
+            requires_mutable: mutating_receiver_required,
+            diagnostic: ReceiverAccessDiagnostic::CollectionBuiltin {
+                method_name: &member_name_text,
+            },
+        },
+        string_table,
+    )?;
 
     token_stream.advance();
 

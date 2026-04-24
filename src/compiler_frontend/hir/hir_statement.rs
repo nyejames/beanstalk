@@ -29,6 +29,7 @@ use crate::hir_log;
 mod control_flow;
 mod declarations;
 mod loop_lowering;
+mod returns;
 
 impl<'a> HirBuilder<'a> {
     // WHAT: routes one top-level AST node into the HIR lowering path that owns it.

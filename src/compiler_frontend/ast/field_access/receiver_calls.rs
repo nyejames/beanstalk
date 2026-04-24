@@ -3,16 +3,16 @@
 //! WHAT: resolves declared receiver methods and validates call-site receiver semantics.
 //! WHY: user receiver methods follow different rules than compiler-owned builtin members.
 
-use super::{MemberStepContext, ReceiverAccessMode};
+use super::MemberStepContext;
+use super::receiver_access::{
+    ReceiverAccessDiagnostic, ReceiverAccessRequirement, validate_receiver_access,
+};
 use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::expressions::call_validation::{
     CallDiagnosticContext, expectations_from_receiver_method_signature, resolve_call_arguments,
 };
 use crate::compiler_frontend::ast::expressions::function_calls::parse_call_arguments;
-use crate::compiler_frontend::ast::place_access::{
-    ast_node_is_mutable_place, ast_node_is_place, receiver_access_hint,
-};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, ReceiverKey};
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
@@ -90,71 +90,24 @@ pub(super) fn parse_receiver_method_call(
 
     token_stream.advance();
 
-    if method_entry.receiver_mutable {
-        if !ast_node_is_place(&receiver_node) {
-            return_rule_error!(
-                format!(
-                    "Mutable receiver method '{}.{}(...)' requires a mutable place receiver.",
-                    receiver_type.display_with_table(string_table),
-                    string_table.resolve(member_name)
-                ),
-                member_location,
-                {
-                    CompilationStage => "AST Construction",
-                    PrimarySuggestion => "Call this mutable method on a mutable variable or mutable field path, not on a temporary expression",
-                }
-            );
-        }
-
-        if !ast_node_is_mutable_place(&receiver_node) {
-            return_rule_error!(
-                format!(
-                    "Mutable receiver method '{}.{}(...)' requires a mutable place receiver.",
-                    receiver_type.display_with_table(string_table),
-                    string_table.resolve(member_name)
-                ),
-                member_location,
-                {
-                    CompilationStage => "AST Construction",
-                    PrimarySuggestion => "Use a mutable receiver place for this mutable receiver call",
-                }
-            );
-        }
-
-        if receiver_access_mode == ReceiverAccessMode::Shared {
-            return_rule_error!(
-                format!(
-                    "Mutable receiver method '{}.{}(...)' expects mutable access at the receiver call site. Call this with `~{}`.",
-                    receiver_type.display_with_table(string_table),
-                    string_table.resolve(member_name),
-                    receiver_access_hint(&receiver_node, string_table)
-                ),
-                member_location,
-                {
-                    CompilationStage => "AST Construction",
-                    PrimarySuggestion => "Prefix the receiver with '~' when calling mutable receiver methods",
-                }
-            );
-        }
-    } else if receiver_access_mode == ReceiverAccessMode::Mutable {
-        return_rule_error!(
-            format!(
-                "Receiver method '{}.{}(...)' does not accept explicit mutable access marker '~'.",
-                receiver_type.display_with_table(string_table),
-                string_table.resolve(member_name)
-            ),
-            member_location,
-            {
-                CompilationStage => "AST Construction",
-                PrimarySuggestion => "Remove '~' from this receiver call",
-            }
-        );
-    }
+    let method_name = string_table.resolve(member_name).to_owned();
+    validate_receiver_access(
+        &receiver_node,
+        receiver_access_mode,
+        &member_location,
+        ReceiverAccessRequirement {
+            requires_mutable: method_entry.receiver_mutable,
+            diagnostic: ReceiverAccessDiagnostic::ReceiverMethod {
+                receiver_type,
+                method_name: &method_name,
+            },
+        },
+        string_table,
+    )?;
 
     let raw_args = parse_call_arguments(token_stream, context, string_table)?;
     let expectations =
         expectations_from_receiver_method_signature(&method_entry.signature.parameters[1..]);
-    let method_name = string_table.resolve(member_name).to_owned();
     let args = resolve_call_arguments(
         CallDiagnosticContext::receiver_method(&method_name),
         &raw_args,
