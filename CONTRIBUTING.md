@@ -9,11 +9,9 @@ Open a discussion on GitHub if you're curious.
 
 ## The Current Goal
 
-The current goal is compiling the documentation in the language itself using the HTML project builder without errors. This is still a solo project as of now.
+To see the progress and current priority goals of the compiler and language, see `docs/roadmap/roadmap.md`.
 
-This is a slow process as I'm writing the docs in an ideal form of Beanstalk code, then implement the missing features or fix bugs along the way to get that code to work correctly without test regressions.
-
-See <a href="https://github.com/nyejames/beanstalk/blob/main/docs/Beanstalk%20Language%20Overview.md">the language overview</a> and <a href="https://github.com/nyejames/beanstalk/blob/main/docs/Beanstalk%20Compiler%20Design%20Overview.md">the compiler overview</a> for more in-depth details.
+See <a href="https://github.com/nyejames/beanstalk/blob/main/docs/Beanstalk%20Language%20Overview.md">the language overview</a> and <a href="https://github.com/nyejames/beanstalk/blob/main/docs/Beanstalk%20Compiler%20Design%20Overview.md">the compiler overview</a> for more details about the language itself.
 
 New code contributions must follow the style guide: <a href="https://github.com/nyejames/beanstalk/blob/main/docs/Beanstalk%20Compiler%20Codebase%20Style%20Guide.md">Codebase Style Guide</a>
 

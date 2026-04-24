@@ -84,6 +84,8 @@ consult `docs/memory-management-design.md`.
 For code organization, naming, diagnostics, testing expectations, comments, and refactor standards,
 consult `docs/codebase-style-guide.md`.
 
+To see the progress and current priority goals of the compiler and language, consult: `docs/roadmap/roadmap.md`
+
 ## Implementation expectations
 
 - Keep modules focused on one responsibility.

@@ -4,7 +4,7 @@ This is the main todo list for the language and compiler.
 The current major goal is getting to a healthy alpha stage.
 Each plan or PR that is needed will be linked here.
 
-Use the language surface integration matrix as a reference for what is currently implemented: `./language-surface-integration-matrix.md`
+Use the language surface integration matrix as a reference for what is currently implemented: `docs/src/docs/progress/#page.bst`
 
 ## Path to Alpha
 These are the non-negotiable conditions for starting Alpha:
@@ -78,4 +78,3 @@ Broader Wasm maturity beyond the current experimental path.
 
 ## Rust Interpreter
 - Unimplmented - mostly just scaffolding
-- Make sure Modulus is Eulidean
