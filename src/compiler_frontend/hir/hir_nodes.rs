@@ -50,7 +50,7 @@ use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::hir::hir_datatypes::{TypeContext, TypeId};
 use crate::compiler_frontend::host_functions::CallTarget;
 use crate::compiler_frontend::paths::rendered_path_usage::RenderedPathUsage;
-use crate::compiler_frontend::symbols::string_interning::StringIdRemap;
+use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRemap};
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
 // ============================================================
@@ -72,6 +72,7 @@ define_hir_id!(FieldId);
 define_hir_id!(FunctionId);
 define_hir_id!(RegionId);
 define_hir_id!(HirConstId);
+define_hir_id!(ChoiceId);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum HirFunctionOrigin {
@@ -134,10 +135,22 @@ pub struct HirModuleConst {
 // Module
 // ============================================================
 #[derive(Debug, Clone)]
+pub struct HirChoice {
+    pub id: ChoiceId,
+    pub variants: Vec<HirChoiceVariant>,
+}
+
+#[derive(Debug, Clone)]
+pub struct HirChoiceVariant {
+    pub name: StringId,
+}
+
+#[derive(Debug, Clone)]
 pub struct HirModule {
     pub blocks: Vec<HirBlock>,
     pub functions: Vec<HirFunction>,
     pub structs: Vec<HirStruct>,
+    pub choices: Vec<HirChoice>,
     pub type_context: TypeContext,
     pub side_table: HirSideTable,
 
@@ -166,6 +179,7 @@ impl HirModule {
             blocks: vec![],
             functions: vec![],
             structs: vec![],
+            choices: vec![],
             type_context: TypeContext::default(),
             side_table: HirSideTable::default(),
             start_function: FunctionId(0),
@@ -496,6 +510,15 @@ pub enum HirExpressionKind {
         kind: HirBuiltinCastKind,
         value: Box<HirExpression>,
     },
+
+    /// Explicit choice variant value.
+    ///
+    /// WHY: choice tags are nominal, not raw integers. A dedicated HIR node
+    /// preserves choice identity for backend lowering and future payload support.
+    ChoiceVariant {
+        choice_id: ChoiceId,
+        variant_index: usize,
+    },
 }
 
 // ============================================================
@@ -523,6 +546,10 @@ pub enum HirPattern {
     Relational {
         op: HirRelationalPatternOp,
         value: HirExpression,
+    },
+    ChoiceVariant {
+        choice_id: ChoiceId,
+        variant_index: usize,
     },
 }
 

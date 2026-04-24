@@ -679,6 +679,8 @@ impl<'a> HirValidator<'a> {
                 self.validate_literal_pattern_expression(value, anchor)?;
                 self.validate_relational_pattern_expression(value, anchor)?;
             }
+
+            HirPattern::ChoiceVariant { .. } => {}
         }
 
         Ok(())
@@ -775,7 +777,8 @@ impl<'a> HirValidator<'a> {
             | HirExpressionKind::Float(_)
             | HirExpressionKind::Bool(_)
             | HirExpressionKind::Char(_)
-            | HirExpressionKind::StringLiteral(_) => {}
+            | HirExpressionKind::StringLiteral(_)
+            | HirExpressionKind::ChoiceVariant { .. } => {}
 
             HirExpressionKind::Load(place) => {
                 let _ = self.validate_place(place, anchor)?;

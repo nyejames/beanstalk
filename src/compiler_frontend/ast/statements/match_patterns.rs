@@ -35,17 +35,31 @@ pub enum MatchPattern {
         value: Expression,
         location: SourceLocation,
     },
+
+    ChoiceVariant {
+        nominal_path: InternedPath,
+        variant: StringId,
+        tag: usize,
+        location: SourceLocation,
+    },
 }
 
 impl MatchPattern {
-    pub(super) fn location(&self) -> &SourceLocation {
+    fn location(&self) -> &SourceLocation {
         match self {
             MatchPattern::Literal(expression) => &expression.location,
-            MatchPattern::Wildcard { location } | MatchPattern::Relational { location, .. } => {
-                location
-            }
+            MatchPattern::Wildcard { location }
+            | MatchPattern::Relational { location, .. }
+            | MatchPattern::ChoiceVariant { location, .. } => location,
         }
     }
+}
+
+/// Result of parsing a choice-variant pattern in a match arm.
+struct ParsedChoicePattern {
+    pattern: MatchPattern,
+    variant: StringId,
+    location: SourceLocation,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -54,6 +68,13 @@ pub enum RelationalPatternOp {
     LessThanOrEqual,
     GreaterThan,
     GreaterThanOrEqual,
+}
+
+struct ParsedCaseArm {
+    arm: MatchArm,
+    // Tracks which choice variant this arm consumes so duplicates can be rejected early.
+    matched_choice_variant: Option<StringId>,
+    pattern_location: SourceLocation,
 }
 
 /// Parse a non-choice match pattern, dispatching to relational or literal parsers.

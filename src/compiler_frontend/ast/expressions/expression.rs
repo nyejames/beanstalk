@@ -134,6 +134,9 @@ impl Expression {
                     upper.as_string(string_table)
                 )
             }
+            ExpressionKind::ChoiceVariant { variant, .. } => {
+                string_table.resolve(*variant).to_owned()
+            }
             ExpressionKind::NoValue => String::new(),
             ExpressionKind::OptionNone => String::new(),
             ExpressionKind::Coerced { value, .. } => value.as_string(string_table),
@@ -614,7 +617,8 @@ impl Expression {
             | ExpressionKind::StringSlice(_)
             | ExpressionKind::Bool(_)
             | ExpressionKind::Char(_)
-            | ExpressionKind::Path(_) => ConstValueKind::Literal,
+            | ExpressionKind::Path(_)
+            | ExpressionKind::ChoiceVariant { .. } => ConstValueKind::Literal,
             ExpressionKind::Collection(items) => {
                 if items.iter().all(Expression::is_compile_time_constant) {
                     ConstValueKind::Composite
@@ -775,6 +779,17 @@ pub enum ExpressionKind {
         value: Box<Expression>,
         to_type: DataType,
     },
+
+    /// Explicit choice variant value: `Choice::Variant`.
+    ///
+    /// WHY: choice values must not masquerade as raw integer literals in AST.
+    /// The tag index is deterministic but is an implementation detail; the
+    /// nominal path and variant name are the semantic identity.
+    ChoiceVariant {
+        nominal_path: InternedPath,
+        variant: StringId,
+        tag: usize,
+    },
 }
 
 impl ExpressionKind {
@@ -787,6 +802,7 @@ impl ExpressionKind {
                 | ExpressionKind::StringSlice(_)
                 | ExpressionKind::Char(_)
                 | ExpressionKind::Path(_)
+                | ExpressionKind::ChoiceVariant { .. }
         )
     }
 

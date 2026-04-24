@@ -1027,7 +1027,8 @@ fn record_shared_reads_in_expression(
         | HirExpressionKind::Float(_)
         | HirExpressionKind::Bool(_)
         | HirExpressionKind::Char(_)
-        | HirExpressionKind::StringLiteral(_) => {}
+        | HirExpressionKind::StringLiteral(_)
+        | HirExpressionKind::ChoiceVariant { .. } => {}
 
         HirExpressionKind::Load(place) => {
             let value_location = env
@@ -1227,7 +1228,8 @@ fn collect_expression_roots(
         | HirExpressionKind::Float(_)
         | HirExpressionKind::Bool(_)
         | HirExpressionKind::Char(_)
-        | HirExpressionKind::StringLiteral(_) => {}
+        | HirExpressionKind::StringLiteral(_)
+        | HirExpressionKind::ChoiceVariant { .. } => {}
     }
 
     Ok(())

@@ -135,6 +135,14 @@ pub enum HirTypeKind {
     Union {
         variants: Vec<TypeId>,
     },
+
+    /// Nominal choice type (unit-variant enum).
+    ///
+    /// WHY: unit choices are closed scalar tag sets, not generic unions.
+    /// A dedicated kind preserves nominal identity and prepares for payload variants.
+    Choice {
+        choice_id: crate::compiler_frontend::hir::hir_nodes::ChoiceId,
+    },
 }
 
 /// Backend-agnostic classification of a HIR type.
@@ -170,6 +178,7 @@ pub fn classify_hir_type(kind: &HirTypeKind) -> HirTypeClass {
         | HirTypeKind::Struct { .. }
         | HirTypeKind::Option { .. }
         | HirTypeKind::Result { .. }
-        | HirTypeKind::Union { .. } => HirTypeClass::HeapAllocated,
+        | HirTypeKind::Union { .. }
+        | HirTypeKind::Choice { .. } => HirTypeClass::HeapAllocated,
     }
 }

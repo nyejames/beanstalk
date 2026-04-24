@@ -23,7 +23,7 @@ use crate::compiler_frontend::symbols::identifier_policy::{
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
 use crate::return_rule_error;
-use std::collections::HashSet;
+use rustc_hash::FxHashMap;
 
 #[derive(Clone, Debug)]
 pub struct ChoiceVariant {
@@ -59,7 +59,7 @@ pub(crate) fn parse_choice_shell(
     warnings: &mut Vec<CompilerWarning>,
 ) -> Result<Vec<ChoiceVariant>, CompilerError> {
     let mut variants = Vec::new();
-    let mut seen_variants: HashSet<StringId> = HashSet::new();
+    let mut seen_variants: FxHashMap<StringId, SourceLocation> = FxHashMap::default();
 
     // Caller is positioned on the `::` token.
     token_stream.advance();
@@ -96,7 +96,7 @@ pub(crate) fn parse_choice_shell(
                 )?;
 
                 // Make sure this is not a duplicate variant name
-                if !seen_variants.insert(variant_name) {
+                if let Some(_first_location) = seen_variants.get(&variant_name) {
                     return_rule_error!(
                         format!(
                             "Duplicate choice variant '{}'. Variant names must be unique within a choice declaration.",
@@ -110,6 +110,7 @@ pub(crate) fn parse_choice_shell(
                         }
                     );
                 }
+                seen_variants.insert(variant_name, current_location.clone());
 
                 if let Some(warning) = naming_warning_for_identifier(
                     string_table.resolve(variant_name),

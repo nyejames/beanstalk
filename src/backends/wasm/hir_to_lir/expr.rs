@@ -38,6 +38,17 @@ pub(crate) fn lower_expression(
                 prefer_move: false,
             })
         }
+        HirExpressionKind::ChoiceVariant { variant_index, .. } => {
+            let dst = context.alloc_temp(WasmAbiType::I64);
+            statements.push(WasmLirStmt::ConstI64 {
+                dst,
+                value: *variant_index as i64,
+            });
+            Ok(ExprLoweringOutput {
+                value: dst,
+                prefer_move: false,
+            })
+        }
         HirExpressionKind::Float(value) => {
             let dst = context.alloc_temp(WasmAbiType::F64);
             statements.push(WasmLirStmt::ConstF64 { dst, value: *value });

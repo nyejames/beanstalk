@@ -439,7 +439,11 @@ fn parse_choice_variant_value(
     }
 
     Ok(Expression::new(
-        ExpressionKind::Int(variant_index as i64),
+        ExpressionKind::ChoiceVariant {
+            nominal_path: nominal_path.to_owned(),
+            variant: variant_name,
+            tag: variant_index,
+        },
         variant_location,
         choice_declaration.value.data_type.to_owned(),
         Ownership::ImmutableOwned,

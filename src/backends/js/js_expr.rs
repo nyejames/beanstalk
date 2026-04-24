@@ -21,6 +21,9 @@ impl<'hir> JsEmitter<'hir> {
         //      semantic mapping from each variant to the exact JS runtime helper sequence it needs.
         match &expression.kind {
             HirExpressionKind::Int(value) => Ok(value.to_string()),
+            HirExpressionKind::ChoiceVariant { variant_index, .. } => {
+                Ok(variant_index.to_string())
+            }
 
             HirExpressionKind::Float(value) => {
                 if value.is_nan() {

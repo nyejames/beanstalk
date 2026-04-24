@@ -275,7 +275,8 @@ fn normalize_control_flow_templates(
                             string_table,
                         )?;
                     }
-                    crate::compiler_frontend::ast::statements::branching::MatchPattern::Wildcard { .. } => {}
+                    crate::compiler_frontend::ast::statements::branching::MatchPattern::Wildcard { .. }
+                    | crate::compiler_frontend::ast::statements::branching::MatchPattern::ChoiceVariant { .. } => {}
                 }
                 if let Some(guard) = &mut arm.guard {
                     normalize_expression_templates(
@@ -866,7 +867,8 @@ fn normalize_expression_templates_with_context(
         | ExpressionKind::Bool(_)
         | ExpressionKind::Char(_)
         | ExpressionKind::Path(_)
-        | ExpressionKind::Reference(_) => None,
+        | ExpressionKind::Reference(_)
+        | ExpressionKind::ChoiceVariant { .. } => None,
     };
 
     // If we folded a template, replace the expression with a StringSlice

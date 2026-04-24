@@ -10,6 +10,7 @@ use crate::compiler_frontend::ast::statements::branching::{
     MatchArm, MatchPattern, RelationalPatternOp,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::hir::hir_builder::{HirBuilder, LoopTargets};
 use crate::compiler_frontend::hir::hir_datatypes::{HirTypeKind, TypeId};
 use crate::compiler_frontend::hir::hir_nodes::{
@@ -228,7 +229,7 @@ impl<'a> HirBuilder<'a> {
 
         let mut hir_arms = Vec::with_capacity(arms.len() + 1);
         for (index, arm) in arms.iter().enumerate() {
-            let lowered_pattern = self.lower_match_pattern(&arm.pattern)?;
+            let lowered_pattern = self.lower_match_pattern(&arm.pattern, &scrutinee.data_type)?;
             let lowered_guard = match &arm.guard {
                 Some(guard) => Some(self.lower_match_guard_expression(guard)?),
                 None => None,
@@ -367,7 +368,11 @@ impl<'a> HirBuilder<'a> {
     }
 
     /// Lower an AST match pattern into its HIR counterpart.
-    fn lower_match_pattern(&mut self, pattern: &MatchPattern) -> Result<HirPattern, CompilerError> {
+    fn lower_match_pattern(
+        &mut self,
+        pattern: &MatchPattern,
+        subject_type: &DataType,
+    ) -> Result<HirPattern, CompilerError> {
         match pattern {
             MatchPattern::Literal(expression) => {
                 let lowered = self.lower_match_literal_pattern(expression)?;
