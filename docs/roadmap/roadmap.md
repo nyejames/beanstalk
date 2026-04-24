@@ -21,6 +21,8 @@ These are the non-negotiable conditions for starting Alpha:
 
 # Next Plans
 
+## Review and expansion of Choices
+
 ## Final pre-alpha sweep
 
 - Re-run the feature matrix and mark all supported areas as covered.

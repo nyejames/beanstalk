@@ -563,7 +563,15 @@ body {
         color: #c444aff9; 
         padding: 0.1em; 
         font-family: var(--bst-font-family-monospace);
-    ">$children(..)</span> only applies to direct children, nested helpers can scope row and cell wrappers independently:</p><pre style="
+    ">$children(..)</span> only applies to direct child templates, nested helpers can scope row and cell wrappers independently.</p><p>A child template is treated as an opaque contribution after it has been selected as a direct child.The parent <span style="
+        color: #c444aff9; 
+        padding: 0.1em; 
+        font-family: var(--bst-font-family-monospace);
+    ">$children(..)</span> wrapper must not descend into that child and wrap its nested templates.If nested templates need their own wrappers, the child template should declare its own <span style="
+        color: #c444aff9; 
+        padding: 0.1em; 
+        font-family: var(--bst-font-family-monospace);
+    ">$children(..)</span> directive.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12); 
         padding-left: 1em; 
         border-radius: 5px;
@@ -573,19 +581,50 @@ body {
     "><code class='codeblock'>
     <span class='bst-code-operator'>#</span> table <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>children<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span><span class='bst-code-operator'>&lt;</span>tr<span class='bst-code-operator'>&gt;</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>slot<span class='bst-code-parenthesis'>]</span><span class='bst-code-operator'>&lt;</span><span class='bst-code-operator'>/</span>tr<span class='bst-code-operator'>&gt;</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>:</span>
         <span class='bst-code-operator'>&lt;</span>table style<span class='bst-code-operator'>=</span><span class='bst-code-string'>&quot;[$slot(&quot;</span>style<span class='bst-code-string'>&quot;)]&quot;</span><span class='bst-code-operator'>&gt;</span>
-            <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>children<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span><span class='bst-code-operator'>&lt;</span>td<span class='bst-code-operator'>&gt;</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>slot<span class='bst-code-parenthesis'>]</span><span class='bst-code-operator'>&lt;</span><span class='bst-code-operator'>/</span>td<span class='bst-code-operator'>&gt;</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>:</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>slot<span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>]</span>
+            <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>slot<span class='bst-code-parenthesis'>]</span>
         <span class='bst-code-operator'>&lt;</span><span class='bst-code-operator'>/</span>table<span class='bst-code-operator'>&gt;</span>
     <span class='bst-code-parenthesis'>]</span>
 
-    <span class='bst-code-parenthesis'>[</span>table<span class='bst-code-operator'>:</span>
-        <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>Type</span><span class='bst-code-parenthesis'>]</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>Description</span><span class='bst-code-parenthesis'>]</span> <span class='bst-code-parenthesis'>]</span>
-        <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> float <span class='bst-code-parenthesis'>]</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-number'>64</span> bit floating point number<span class='bst-code-parenthesis'>]</span> <span class='bst-code-parenthesis'>]</span>
+    <span class='bst-code-operator'>#</span> row <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>children<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span><span class='bst-code-operator'>&lt;</span>td<span class='bst-code-operator'>&gt;</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>slot<span class='bst-code-parenthesis'>]</span><span class='bst-code-operator'>&lt;</span><span class='bst-code-operator'>/</span>td<span class='bst-code-operator'>&gt;</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>slot<span class='bst-code-parenthesis'>]</span>
     <span class='bst-code-parenthesis'>]</span>
-    </code></pre><p>In that example, each direct child of `table` becomes a row, while each direct child of a row becomes a cell. The outer <span style="
+
+    <span class='bst-code-parenthesis'>[</span>table<span class='bst-code-operator'>:</span>
+        <span class='bst-code-parenthesis'>[</span>row<span class='bst-code-operator'>:</span>
+            <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>Type</span><span class='bst-code-parenthesis'>]</span>
+            <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>Description</span> with <span class='bst-code-parenthesis'>[</span>codesnippet<span class='bst-code-operator'>:</span>inline helper<span class='bst-code-parenthesis'>]</span> content<span class='bst-code-parenthesis'>]</span>
+        <span class='bst-code-parenthesis'>]</span>
+
+        <span class='bst-code-parenthesis'>[</span>row<span class='bst-code-operator'>:</span>
+            <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-type'>Float</span><span class='bst-code-parenthesis'>]</span>
+            <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-number'>64</span><span class='bst-code-operator'>-</span>bit floating point number<span class='bst-code-parenthesis'>]</span>
+        <span class='bst-code-parenthesis'>]</span>
+    <span class='bst-code-parenthesis'>]</span>
+    </code></pre><p>In that example, <span style="
         color: #c444aff9; 
         padding: 0.1em; 
         font-family: var(--bst-font-family-monospace);
-    "><tr></span> wrapper does not leak into the inner cell templates.</p><h2>Template control flow examples</h2><pre style="
+    ">table</span> wraps each direct <span style="
+        color: #c444aff9; 
+        padding: 0.1em; 
+        font-family: var(--bst-font-family-monospace);
+    ">row</span> child in <span style="
+        color: #c444aff9; 
+        padding: 0.1em; 
+        font-family: var(--bst-font-family-monospace);
+    "><tr></span>.Then <span style="
+        color: #c444aff9; 
+        padding: 0.1em; 
+        font-family: var(--bst-font-family-monospace);
+    ">row</span> wraps each direct cell child in <span style="
+        color: #c444aff9; 
+        padding: 0.1em; 
+        font-family: var(--bst-font-family-monospace);
+    "><td></span>.The nested <span style="
+        color: #c444aff9; 
+        padding: 0.1em; 
+        font-family: var(--bst-font-family-monospace);
+    ">codesnippet</span> helper inside a cell remains inline content inside that cell; it does not become another table cell.</p><h2>Template control flow examples</h2><pre style="
         background-color: hsla(0, 0%, 42%, 0.12); 
         padding-left: 1em; 
         border-radius: 5px;
@@ -787,22 +826,33 @@ body {
     }
 
     function __bs_collection_push(collection, value) {
-    if (Array.isArray(collection)) {
-    collection.push(value);
+    if (!Array.isArray(collection)) {
+    const err = __bs_make_error("InvalidArgument", "collection.expected_ordered_collection", "Collection push(...) expects an ordered collection", null, null);
+    return { tag: "err", value: err };
     }
+    collection.push(value);
+    return { tag: "ok", value: null };
     }
 
     function __bs_collection_remove(collection, index) {
-    if (Array.isArray(collection) && Number.isInteger(index) && index >= 0 && index < collection.length) {
-    collection.splice(index, 1);
+    if (!Array.isArray(collection)) {
+    const err = __bs_make_error("InvalidArgument", "collection.expected_ordered_collection", "Collection remove(...) expects an ordered collection", null, null);
+    return { tag: "err", value: err };
     }
+    if (!Number.isInteger(index) || index < 0 || index >= collection.length) {
+    const err = __bs_make_error("OutOfBounds", "collection.index_out_of_bounds", "Collection index out of bounds", null, null);
+    return { tag: "err", value: err };
+    }
+    collection.splice(index, 1);
+    return { tag: "ok", value: null };
     }
 
     function __bs_collection_length(collection) {
     if (!Array.isArray(collection)) {
-    return 0;
+    const err = __bs_make_error("InvalidArgument", "collection.expected_ordered_collection", "Collection length() expects an ordered collection", null, null);
+    return { tag: "err", value: err };
     }
-    return collection.length;
+    return { tag: "ok", value: collection.length };
     }
 
     function __bs_value_to_string(value) {

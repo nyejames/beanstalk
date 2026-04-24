@@ -1,0 +1,1105 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light dark">
+    <title>Alpha Surface Matrix | Beanstalk</title>
+    <meta name="description" content="Current implementation and coverage status for the Beanstalk Alpha compiler surface.">
+    <link rel="icon" href="/assets/favicon.ico">
+    <style>
+/*!
+  BS CSS CORE (absolute basics CSS reset)
+  This is inspired by Pico.css, but is an even more minimal reset.
+
+  Actual style systems are intended to be built on top of this easily.
+*/
+
+:root {
+  color-scheme: light dark;
+
+  --bst-font-size: 100%;
+
+  --bst-font-family-emoji: "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  --bst-font-family-sans-serif: system-ui, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, Helvetica, Arial, "Helvetica Neue", sans-serif, var(--bst-font-family-emoji);
+  --bst-font-family-monospace: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace, var(--bst-font-family-emoji);
+  --bst-font-family: var(--bst-font-family-sans-serif);
+
+  --bst-line-height: 1.5;
+  --bst-font-weight: 400;
+  --bst-font-size: 100%;
+  --bst-text-underline-offset: 0.1rem;
+  --bst-border-radius: 0.25rem;
+  --bst-border-width: 0.0625rem;
+  --bst-outline-width: 0.125rem;
+  --bst-transition: 0.2s ease-in-out;
+
+  --bst-spacing: 1rem;
+  --bst-spacing-small: 0.5rem;
+
+  /* Code block colours */
+  --comment-dark: #838c86;
+  --comment-light: #759061;
+  --keyword-dark: #ea943e;
+  --keyword-light: #ad590e;
+  --string-dark: #4fba11;
+  --string-light: #007130;
+  --number-dark: #96b5ed;
+  --number-light: #073f85;
+  --operator-dark: #9ec1ff;
+  --operator-light: #2b476a;
+  --struct-dark: #a17fbd;
+  --struct-light: #ac2187;
+  --type-dark: #54c5d3;
+  --type-light: #0d8db3;
+  --parenthesis-dark: #bcac52;
+  --parenthesis-light: #ad7e0d;
+}
+
+/* where: is used here for less specificity, allowing easier overriding */
+:where(:root) {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  -moz-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  font-weight: var(--bst-font-weight);
+  font-size: var(--bst-font-size);
+  line-height: var(--bst-line-height);
+  font-family: var(--bst-font-family);
+  text-underline-offset: var(--bst-text-underline-offset);
+  text-rendering: optimizeLegibility;
+  overflow-wrap: break-word;
+  -moz-tab-size: 4;
+  -o-tab-size: 4;
+  tab-size: 4;
+
+}
+
+@media (min-width: 576px) {
+  :root {
+    --bst-font-size: 106.25%;
+  }
+}
+@media (min-width: 768px) {
+  :root {
+    --bst-font-size: 112.5%;
+  }
+}
+@media (min-width: 1024px) {
+  :root {
+    --bst-font-size: 118.75%;
+  }
+}
+@media (min-width: 1280px) {
+  :root {
+    --bst-font-size: 125%;
+  }
+}
+@media (min-width: 1536px) {
+  :root {
+    --bst-font-size: 131.25%;
+  }
+}
+
+body {
+  width: 100%;
+  margin: 0;
+}
+
+/* Code Style */
+.codeblock {
+  color: #222222;
+  color: light-dark(#222222, #ddd);
+  font-family: var(--bst-font-family-monospace);
+  white-space: break-spaces;
+  tab-size: 4;
+}
+.bs-code-comment,
+.bst-code-comment {
+  color: var(--comment-light);
+  color:light-dark(var(--comment-light), var(--comment-dark))
+}
+.bs-code-keyword,
+.bst-code-keyword {
+  color: var(--keyword-light);
+  color:light-dark( var(--keyword-light), var(--keyword-dark))
+}
+.bs-code-string,
+.bst-code-string {
+  color: var(--string-light);
+  color:light-dark( var(--string-light), var(--string-dark))
+}
+.bs-code-number,
+.bst-code-number {
+  color: var(--number-light);
+  color:light-dark( var(--number-light), var(--number-dark))
+}
+.bs-code-operator,
+.bst-code-operator {
+  color: var(--operator-light);
+  color:light-dark( var(--operator-light), var(--operator-dark))
+}
+.bs-code-struct,
+.bst-code-struct {
+  color: var(--struct-light);
+  color:light-dark( var(--struct-light), var(--struct-dark))
+}
+.bs-code-type,
+.bst-code-type {
+  color: var(--type-light);
+  color:light-dark( var(--type-light), var(--type-dark))
+}
+.bs-code-parenthesis,
+.bst-code-parenthesis {
+  color: var(--parenthesis-light);
+  color:light-dark( var(--parenthesis-light), var(--parenthesis-dark))
+}
+
+/* BASIC CSS RESET STUFF */
+
+/**
+ * Document
+ * Content-box & Responsive typography
+*/
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  background-repeat: no-repeat;
+}
+
+::before,
+::after {
+  text-decoration: inherit;
+  vertical-align: inherit;
+}
+    </style>
+    <style>body {
+        background-color: light-dark(hsl(125, 67%, 97%), hsl(203, 68%, 8%));
+    }
+
+    a {
+        color: light-dark(hsl(111, 96%, 26%), hsl(235, 87%, 67%));
+    }
+
+    .container {
+        width: 100%;
+        margin-right: auto;
+        margin-left: auto;
+        padding-right: var(--bst-spacing-small);
+        padding-left: var(--bst-spacing-small);
+    }
+
+    @media (min-width: 576px) {
+        .container {
+            max-width: 510px;
+            padding-right: var(--bst-spacing);
+            padding-left: var(--bst-spacing);
+            padding-bottom: var(--bst-spacing);
+        }
+    }
+
+    @media (min-width: 768px) {
+        .container {
+            max-width: 700px;
+        }
+    }
+
+    @media (min-width: 1024px) {
+        .container {
+            max-width: 950px;
+        }
+    }
+
+    @media (min-width: 1280px) {
+        .container {
+            max-width: 1200px;
+        }
+    }
+
+    @media (min-width: 1536px) {
+        .container {
+            max-width: 1450px;
+        }
+    }
+
+    .bst-nav-1 {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom-color: grey;
+        border-bottom-style: solid;
+        border-bottom-width: 1px;
+        padding: 0rem 2rem 0rem 2rem;
+    }</style>
+
+  </head>
+  <body style="">
+    <nav class="bst-nav-1" aria-label="Primary">
+        <a
+            href="/beanstalk/"
+            style="
+                display: flex;
+                align-items: center;
+                gap: 0.6rem;
+                padding: 0.9rem 0;
+                color: light-dark(var(--bst-text-lightmode), var(--bst-text-darkmode));
+                text-decoration: none;
+                font-weight: 700;
+                letter-spacing: 0.04rem;
+            "
+        >
+            <span
+                aria-hidden="true"
+                style="
+                    font-family: var(--bst-font-family-emoji);
+                    font-size: 1.4rem;
+                    line-height: 1;
+                "
+            >🌱</span>
+
+            <span>Beanstalk</span>
+        </a>
+
+        <div
+            style="
+                display: flex;
+                align-items: center;
+                gap: 1rem;
+            "
+        >
+            <a
+                href="/beanstalk/docs/"
+                style="
+                    color: light-dark(var(--bst-text-lightmode), var(--bst-text-darkmode));
+                    text-decoration: none;
+                    font-weight: 500;
+                    padding: 0.35rem 0;
+                "
+            >
+                Docs
+            </a>
+
+            <a
+                href="https://github.com/nyejames/beanstalk"
+                target="_blank"
+                rel="noreferrer"
+                aria-label="Beanstalk GitHub repository"
+                style="
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                    color: light-dark(var(--bst-text-lightmode), var(--bst-text-darkmode));
+                    padding: 0.35rem 0;
+                "
+            >
+                <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 16 16"
+                    width="22"
+                    height="22"
+                    fill="currentColor"
+                    aria-hidden="true"
+                >
+                    <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38
+                    0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52
+                    -.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07
+                    -1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21
+                    2.2.82a7.65 7.65 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82
+                    1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2
+                    0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/>
+                </svg>
+            </a>
+        </div>
+    </nav>
+     <h1 style="font-size: 2em;text-align: center;"> ALPHA SURFACE MATRIX</h1>
+    <section class="container"><p>This page tracks the compiler surface intended for the first Beanstalk Alpha.</p><p>It is an implementation matrix, not a full language specification.The wider language docs may describe intended or aspirational syntax.This page should describe what the compiler currently supports, rejects cleanly, or keeps experimental.</p><p>Use this together with <span style="
+        color: #c444aff9; 
+        padding: 0.1em; 
+        font-family: var(--bst-font-family-monospace);
+    ">tests/cases/manifest.toml</span> when changing language features.</p><h2>Alpha target</h2><p>The supported Alpha target is:</p><ul><li>frontend parsing and diagnostics</li><li>typed AST construction</li><li>HIR lowering</li><li>borrow validation</li><li>JavaScript backend</li><li>HTML project builder</li><li>docs-style static site generation</li></ul><p>HTML-Wasm and the Rust interpreter are not Alpha stability targets.They may have tests and scaffolding, but they should not be counted as supported Alpha runtime surfaces.</p></section>
+    <section class="container"><h1>Status legend</h1><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+            
+    <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
+         <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Status</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Meaning</th> 
+    </tr>
+
+            
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Supported</td>
+     <td style="padding: 0.2em 0.5em;"> Implemented for the Alpha surface and expected to compile, type check, lower, and run through the JS / HTML pipeline.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Partial</td>
+     <td style="padding: 0.2em 0.5em;"> A useful subset is implemented, but some sub-surfaces are intentionally deferred or still being shaped before Alpha.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Experimental</td>
+     <td style="padding: 0.2em 0.5em;"> Present in the repo, but not part of the Alpha stability promise.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Deferred</td>
+     <td style="padding: 0.2em 0.5em;"> Not part of Alpha. Syntax should either be reserved or rejected with structured diagnostics.</td>
+        </tr>
+        
+    </table><h1>Coverage legend</h1><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+            
+    <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
+         <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Coverage</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Meaning</th> 
+    </tr>
+
+            
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Broad</td>
+     <td style="padding: 0.2em 0.5em;"> Multiple focused cases exist, including success and failure coverage.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Targeted</td>
+     <td style="padding: 0.2em 0.5em;"> Dedicated coverage exists, but not across all important edges.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Thin</td>
+     <td style="padding: 0.2em 0.5em;"> Coverage exists indirectly or through only a small number of cases.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> None</td>
+     <td style="padding: 0.2em 0.5em;"> No clear canonical coverage found.</td>
+        </tr>
+        
+    </table></section>
+    <section class="container"><h1>Core Alpha surface</h1><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+            
+    <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
+         <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Surface</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Status</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Coverage</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Runtime target</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Watch points</th> 
+    </tr>
+
+            
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Control flow</td>
+     <td style="padding: 0.2em 0.5em;"> Supported</td>
+     <td style="padding: 0.2em 0.5em;"> Broad parser, HIR, integration, dispatcher, and structured-lowering coverage.</td>
+     <td style="padding: 0.2em 0.5em;"> JS / HTML</td>
+     <td style="padding: 0.2em 0.5em;"> Keep loops, break / continue, match lowering, and branch-heavy CFG cases covered.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Functions and calls</td>
+     <td style="padding: 0.2em 0.5em;"> Supported</td>
+     <td style="padding: 0.2em 0.5em;"> Broad function declaration, call validation, parameter passing, host-call, and return coverage.</td>
+     <td style="padding: 0.2em 0.5em;"> JS / HTML</td>
+     <td style="padding: 0.2em 0.5em;"> Keep named and positional call semantics strict. Host and builtin calls remain positional-only.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Templates and style directives</td>
+     <td style="padding: 0.2em 0.5em;"> Supported</td>
+     <td style="padding: 0.2em 0.5em;"> Broad template parsing, slot, directive, const-fragment, and runtime-fragment coverage.</td>
+     <td style="padding: 0.2em 0.5em;"> HTML / JS</td>
+     <td style="padding: 0.2em 0.5em;"> This is one of the main Alpha surfaces. Keep fragment ordering and slot composition heavily tested.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Structs, records, and receiver methods</td>
+     <td style="padding: 0.2em 0.5em;"> Supported</td>
+     <td style="padding: 0.2em 0.5em;"> Broad integration coverage with targeted parser and receiver-catalog unit coverage.</td>
+     <td style="padding: 0.2em 0.5em;"> JS / HTML</td>
+     <td style="padding: 0.2em 0.5em;"> More field-mutation and receiver runtime regressions are useful, but this is not an Alpha blocker if current tests stay green.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Choices</td>
+     <td style="padding: 0.2em 0.5em;"> Partial</td>
+     <td style="padding: 0.2em 0.5em;"> Targeted parser, declaration, match, import, assignment, return, and JS carrier-shape coverage.</td>
+     <td style="padding: 0.2em 0.5em;"> JS / HTML</td>
+     <td style="padding: 0.2em 0.5em;"> Unit variants are the current supported subset. Payloads, tagged/default declarations, and constructor use remain deferred unless deliberately promoted before Alpha.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Pattern matching</td>
+     <td style="padding: 0.2em 0.5em;"> Partial</td>
+     <td style="padding: 0.2em 0.5em;"> Broad literal and choice-match coverage, including exhaustiveness and diagnostics.</td>
+     <td style="padding: 0.2em 0.5em;"> JS / HTML</td>
+     <td style="padding: 0.2em 0.5em;"> Literal patterns, choice variants, relational ordered-scalar patterns, guards, and else are supported. Wildcard in case arms is not supported—use else => instead. Negated and capture/tagged patterns remain deferred for Alpha.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Collections</td>
+     <td style="padding: 0.2em 0.5em;"> Supported</td>
+     <td style="padding: 0.2em 0.5em;"> Broad collection literal, mutation, builtin method, indexing, loop, result, and JS helper coverage.</td>
+     <td style="padding: 0.2em 0.5em;"> JS / HTML</td>
+     <td style="padding: 0.2em 0.5em;"> Collection helper runtime contracts should remain JS-owned for Alpha. HTML-Wasm collection behavior is experimental only.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Results, options, multiple returns, and multi-bind</td>
+     <td style="padding: 0.2em 0.5em;"> Supported</td>
+     <td style="padding: 0.2em 0.5em;"> Broad result, option, fallback, propagation, handler, cast, and multi-bind coverage.</td>
+     <td style="padding: 0.2em 0.5em;"> JS / HTML</td>
+     <td style="padding: 0.2em 0.5em;"> Multi-bind is limited to explicit multi-return function calls. It is not general destructuring.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Type checking and coercion</td>
+     <td style="padding: 0.2em 0.5em;"> Supported</td>
+     <td style="padding: 0.2em 0.5em;"> Broad type compatibility, contextual promotion, strict expression typing, call argument, and declaration coverage.</td>
+     <td style="padding: 0.2em 0.5em;"> Frontend-owned</td>
+     <td style="padding: 0.2em 0.5em;"> Keep strict expression typing separate from contextual declaration / return coercion.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Paths and imports</td>
+     <td style="padding: 0.2em 0.5em;"> Supported</td>
+     <td style="padding: 0.2em 0.5em;"> Broad import syntax, relative path, root folder, circular dependency, and multi-file module coverage.</td>
+     <td style="padding: 0.2em 0.5em;"> Frontend / HTML builder</td>
+     <td style="padding: 0.2em 0.5em;"> Path rendering is golden-sensitive. Keep normalized output and platform-stable diagnostics covered.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> HTML project builds</td>
+     <td style="padding: 0.2em 0.5em;"> Supported</td>
+     <td style="padding: 0.2em 0.5em;"> Broad routing, document shell, metadata, tracked asset, config, and page-fragment coverage.</td>
+     <td style="padding: 0.2em 0.5em;"> HTML / JS</td>
+     <td style="padding: 0.2em 0.5em;"> This is the release-critical project backend. HTML-Wasm cases must not be treated as Alpha support requirements.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Logical expressions</td>
+     <td style="padding: 0.2em 0.5em;"> Supported</td>
+     <td style="padding: 0.2em 0.5em;"> Broad precedence, grouping, invalid operand, not, comparison, and JS operator mapping coverage.</td>
+     <td style="padding: 0.2em 0.5em;"> JS / HTML</td>
+     <td style="padding: 0.2em 0.5em;"> Keep short-circuit behavior covered through artifact-shaped tests.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> If statements and conditions</td>
+     <td style="padding: 0.2em 0.5em;"> Supported</td>
+     <td style="padding: 0.2em 0.5em;"> Broad condition validation, nested condition, Bool requirement, and JS lowering coverage.</td>
+     <td style="padding: 0.2em 0.5em;"> JS / HTML</td>
+     <td style="padding: 0.2em 0.5em;"> No major Alpha gap if current control-flow coverage remains green.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Char</td>
+     <td style="padding: 0.2em 0.5em;"> Supported</td>
+     <td style="padding: 0.2em 0.5em;"> Broad success coverage with targeted diagnostic coverage.</td>
+     <td style="padding: 0.2em 0.5em;"> JS / HTML</td>
+     <td style="padding: 0.2em 0.5em;"> Additional malformed-char diagnostics are useful cleanup, not a core Alpha blocker.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Named arguments and call-site mutability</td>
+     <td style="padding: 0.2em 0.5em;"> Supported</td>
+     <td style="padding: 0.2em 0.5em;"> Broad function-call, constructor-call, duplicate, unknown, missing, ordering, and tilde diagnostics coverage.</td>
+     <td style="padding: 0.2em 0.5em;"> JS / HTML</td>
+     <td style="padding: 0.2em 0.5em;"> Fresh rvalues can satisfy mutable parameters without <span style="
+        color: #c444aff9; 
+        padding: 0.1em; 
+        font-family: var(--bst-font-family-monospace);
+    ">~</span>. Existing places still require explicit <span style="
+        color: #c444aff9; 
+        padding: 0.1em; 
+        font-family: var(--bst-font-family-monospace);
+    ">~</span>.</td>
+        </tr>
+        
+    </table></section>
+    <section class="container"><h1>Compiler-owned builtin surfaces</h1><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+            
+    <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
+         <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Surface</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Status</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Coverage</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Runtime target</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Watch points</th> 
+    </tr>
+
+            
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Collection methods</td>
+     <td style="padding: 0.2em 0.5em;"> Supported</td>
+     <td style="padding: 0.2em 0.5em;"> Broad JS helper, mutation, indexed write, out-of-bounds, and explicit-mutable-receiver coverage.</td>
+     <td style="padding: 0.2em 0.5em;"> JS / HTML</td>
+     <td style="padding: 0.2em 0.5em;"> <span style="
+        color: #c444aff9; 
+        padding: 0.1em; 
+        font-family: var(--bst-font-family-monospace);
+    ">get</span>, <span style="
+        color: #c444aff9; 
+        padding: 0.1em; 
+        font-family: var(--bst-font-family-monospace);
+    ">set</span>, <span style="
+        color: #c444aff9; 
+        padding: 0.1em; 
+        font-family: var(--bst-font-family-monospace);
+    ">push</span>, <span style="
+        color: #c444aff9; 
+        padding: 0.1em; 
+        font-family: var(--bst-font-family-monospace);
+    ">remove</span>, and <span style="
+        color: #c444aff9; 
+        padding: 0.1em; 
+        font-family: var(--bst-font-family-monospace);
+    ">length</span> are compiler-owned surfaces.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Error helper methods</td>
+     <td style="padding: 0.2em 0.5em;"> Supported</td>
+     <td style="padding: 0.2em 0.5em;"> Targeted coverage for <span style="
+        color: #c444aff9; 
+        padding: 0.1em; 
+        font-family: var(--bst-font-family-monospace);
+    ">with_location</span>, <span style="
+        color: #c444aff9; 
+        padding: 0.1em; 
+        font-family: var(--bst-font-family-monospace);
+    ">push_trace</span>, and <span style="
+        color: #c444aff9; 
+        padding: 0.1em; 
+        font-family: var(--bst-font-family-monospace);
+    ">bubble</span>.</td>
+     <td style="padding: 0.2em 0.5em;"> JS / HTML</td>
+     <td style="padding: 0.2em 0.5em;"> Keep emitted helper contracts pinned through JS backend tests.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Receiver methods</td>
+     <td style="padding: 0.2em 0.5em;"> Supported</td>
+     <td style="padding: 0.2em 0.5em;"> Broad method call, export, same-file restriction, unsupported receiver, and mutable receiver diagnostics coverage.</td>
+     <td style="padding: 0.2em 0.5em;"> JS / HTML</td>
+     <td style="padding: 0.2em 0.5em;"> User-defined struct methods must stay statically resolved and same-file with the struct for Alpha.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Result suffix handling</td>
+     <td style="padding: 0.2em 0.5em;"> Supported</td>
+     <td style="padding: 0.2em 0.5em;"> Broad propagation, fallback, named handler, handler fallthrough, and template-boundary coverage.</td>
+     <td style="padding: 0.2em 0.5em;"> JS / HTML</td>
+     <td style="padding: 0.2em 0.5em;"> Keep <span style="
+        color: #c444aff9; 
+        padding: 0.1em; 
+        font-family: var(--bst-font-family-monospace);
+    ">__bs_result_propagate</span> and <span style="
+        color: #c444aff9; 
+        padding: 0.1em; 
+        font-family: var(--bst-font-family-monospace);
+    ">__bs_result_fallback</span> contracts covered by artifact assertions.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Builtin Error type</td>
+     <td style="padding: 0.2em 0.5em;"> Supported for current runtime surface</td>
+     <td style="padding: 0.2em 0.5em;"> Reserved symbol diagnostics and helper runtime coverage exist.</td>
+     <td style="padding: 0.2em 0.5em;"> Frontend / JS</td>
+     <td style="padding: 0.2em 0.5em;"> Further Error enrichment is deferred. Do not expand this before Alpha unless required by supported result handling.</td>
+        </tr>
+        
+    </table></section>
+    <section class="container"><h1>Experimental surfaces</h1><p>These are useful and may have tests, but they are not part of the Alpha stability contract.</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+            
+    <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
+         <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Surface</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Status</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Current role</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Alpha rule</th> 
+    </tr>
+
+            
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> HTML-Wasm</td>
+     <td style="padding: 0.2em 0.5em;"> Experimental</td>
+     <td style="padding: 0.2em 0.5em;"> Backend experiment and integration path for future Wasm output.</td>
+     <td style="padding: 0.2em 0.5em;"> Keep behind <span style="
+        color: #c444aff9; 
+        padding: 0.1em; 
+        font-family: var(--bst-font-family-monospace);
+    ">--html-wasm</span>. Tests may pin current behavior, but Alpha support is JS / HTML.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Wasm backend</td>
+     <td style="padding: 0.2em 0.5em;"> Experimental</td>
+     <td style="padding: 0.2em 0.5em;"> Long-term backend direction. Current lowering/runtime support is partial.</td>
+     <td style="padding: 0.2em 0.5em;"> Do not count Wasm support as an Alpha blocker except for clean diagnostics or no-panic guarantees on covered paths.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Rust interpreter</td>
+     <td style="padding: 0.2em 0.5em;"> Experimental scaffolding</td>
+     <td style="padding: 0.2em 0.5em;"> Future local runtime / tooling direction.</td>
+     <td style="padding: 0.2em 0.5em;"> Ignore for Alpha readiness unless it breaks normal builds or tests.</td>
+        </tr>
+        
+    </table></section>
+    <section class="container"><h1>Deferred or reserved surfaces</h1><p>These are intentionally not counted as supported Alpha features.If syntax exists, it should fail with a structured diagnostic rather than panic or lower incorrectly.</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+            
+    <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
+         <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Surface</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Status</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Canonical diagnostic direction</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Notes</th> 
+    </tr>
+
+            
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Traits / interfaces</td>
+     <td style="padding: 0.2em 0.5em;"> Deferred</td>
+     <td style="padding: 0.2em 0.5em;"> <span style="
+        color: #c444aff9; 
+        padding: 0.1em; 
+        font-family: var(--bst-font-family-monospace);
+    ">trait_declaration_reserved</span>, <span style="
+        color: #c444aff9; 
+        padding: 0.1em; 
+        font-family: var(--bst-font-family-monospace);
+    ">trait_this_reserved</span></td>
+     <td style="padding: 0.2em 0.5em;"> Syntax is reserved for future design work.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Choice payload declarations</td>
+     <td style="padding: 0.2em 0.5em;"> Deferred unless promoted before Alpha</td>
+     <td style="padding: 0.2em 0.5em;"> <span style="
+        color: #c444aff9; 
+        padding: 0.1em; 
+        font-family: var(--bst-font-family-monospace);
+    ">choice_payload_decl_deferred</span></td>
+     <td style="padding: 0.2em 0.5em;"> Keep rejected until the carrier representation, constructors, matching, and JS lowering are deliberately implemented together.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Choice tagged/default declarations</td>
+     <td style="padding: 0.2em 0.5em;"> Deferred</td>
+     <td style="padding: 0.2em 0.5em;"> <span style="
+        color: #c444aff9; 
+        padding: 0.1em; 
+        font-family: var(--bst-font-family-monospace);
+    ">choice_tagged_decl_deferred</span>, <span style="
+        color: #c444aff9; 
+        padding: 0.1em; 
+        font-family: var(--bst-font-family-monospace);
+    ">choice_default_decl_deferred</span></td>
+     <td style="padding: 0.2em 0.5em;"> These belong to the fuller tagged-union design, not the current Alpha subset.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Choice constructor use</td>
+     <td style="padding: 0.2em 0.5em;"> Deferred unless choices are expanded before Alpha</td>
+     <td style="padding: 0.2em 0.5em;"> <span style="
+        color: #c444aff9; 
+        padding: 0.1em; 
+        font-family: var(--bst-font-family-monospace);
+    ">choice_constructor_use_deferred</span></td>
+     <td style="padding: 0.2em 0.5em;"> Current unit variant flow is enough for the existing Alpha subset.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Relational match patterns</td>
+     <td style="padding: 0.2em 0.5em;"> Deferred</td>
+     <td style="padding: 0.2em 0.5em;"> <span style="
+        color: #c444aff9; 
+        padding: 0.1em; 
+        font-family: var(--bst-font-family-monospace);
+    ">diagnostic_match_deferred_relational_pattern</span></td>
+     <td style="padding: 0.2em 0.5em;"> Adds extra grammar, type-checking, and exhaustiveness interactions.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Negated match patterns</td>
+     <td style="padding: 0.2em 0.5em;"> Deferred</td>
+     <td style="padding: 0.2em 0.5em;"> Add or keep a canonical deferred-pattern diagnostic if syntax is recognized.</td>
+     <td style="padding: 0.2em 0.5em;"> Should wait until the match exhaustiveness model is deliberately extended.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Capture / tagged match patterns</td>
+     <td style="padding: 0.2em 0.5em;"> Deferred</td>
+     <td style="padding: 0.2em 0.5em;"> <span style="
+        color: #c444aff9; 
+        padding: 0.1em; 
+        font-family: var(--bst-font-family-monospace);
+    ">diagnostic_match_deferred_capture_pattern</span></td>
+     <td style="padding: 0.2em 0.5em;"> Adds bindings and scope rules inside match arms.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Full tagged unions</td>
+     <td style="padding: 0.2em 0.5em;"> Deferred</td>
+     <td style="padding: 0.2em 0.5em;"> Choice deferred diagnostics should cover the unsupported entry points.</td>
+     <td style="padding: 0.2em 0.5em;"> Explicitly post-Alpha unless required by a narrowed choice expansion.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Rich numeric redesign</td>
+     <td style="padding: 0.2em 0.5em;"> Deferred</td>
+     <td style="padding: 0.2em 0.5em;"> Unsupported syntax should fail cleanly.</td>
+     <td style="padding: 0.2em 0.5em;"> Includes arbitrary precision compile-time arithmetic, decimal type work, and more specific numeric widths.</td>
+        </tr>
+        
+    </table></section>
+    <section class="container"><h1>Current Alpha probe gaps</h1><p>These are the remaining areas to keep visible during the pre-alpha inspection.They are not all blockers, but they should be deliberately accepted, fixed, or moved out of the Alpha contract.</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+            
+    <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
+         <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Area</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Severity</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Action</th> 
+    </tr>
+
+            
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Matrix accuracy</td>
+     <td style="padding: 0.2em 0.5em;"> High</td>
+     <td style="padding: 0.2em 0.5em;"> Keep this page in sync with actual compiler behavior. Remove stale HTML-Wasm-as-supported wording and stale cross-platform drift notes once fixes are confirmed.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Pattern matching scope</td>
+     <td style="padding: 0.2em 0.5em;"> High</td>
+     <td style="padding: 0.2em 0.5em;"> Relational ordered-scalar patterns are now implemented and tested. Keep negated and capture/tagged patterns deferred for Alpha unless explicitly promoted.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Choice scope</td>
+     <td style="padding: 0.2em 0.5em;"> High</td>
+     <td style="padding: 0.2em 0.5em;"> Decide whether unit-only choices are the Alpha contract or whether constructors / payloads need a contained pre-Alpha expansion.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Unsupported feature diagnostics</td>
+     <td style="padding: 0.2em 0.5em;"> High</td>
+     <td style="padding: 0.2em 0.5em;"> Re-check all reserved/deferred syntax paths for structured diagnostics and no panics.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Docs vs implementation</td>
+     <td style="padding: 0.2em 0.5em;"> Medium</td>
+     <td style="padding: 0.2em 0.5em;"> Keep aspirational language docs if useful, but make this page the current implementation tracker.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Char diagnostics</td>
+     <td style="padding: 0.2em 0.5em;"> Low</td>
+     <td style="padding: 0.2em 0.5em;"> Add more malformed-char diagnostics if time allows. Existing success coverage and baseline failure coverage are enough for Alpha if tests remain green.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Cross-platform golden stability</td>
+     <td style="padding: 0.2em 0.5em;"> Medium</td>
+     <td style="padding: 0.2em 0.5em;"> Treat as mostly closed once Windows fixes are verified. Keep path and template output normalized where exact bytes are not contractual.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> HTML-Wasm coverage</td>
+     <td style="padding: 0.2em 0.5em;"> Low for Alpha</td>
+     <td style="padding: 0.2em 0.5em;"> Keep experimental tests useful, but do not promote successful Wasm collection/runtime behavior to an Alpha requirement.</td>
+        </tr>
+        
+    </table></section>
+    <section class="container"><h1>Maintenance rule</h1><p>When a language feature changes shape:</p><ol><li>Update this page.</li><li>Update <span style="
+        color: #c444aff9; 
+        padding: 0.1em; 
+        font-family: var(--bst-font-family-monospace);
+    ">tests/cases/manifest.toml</span>.</li><li>Add or rewrite canonical cases instead of layering temporary coverage.</li><li>Mark unsupported syntax as <span style="
+        color: #c444aff9; 
+        padding: 0.1em; 
+        font-family: var(--bst-font-family-monospace);
+    ">Deferred</span> or <span style="
+        color: #c444aff9; 
+        padding: 0.1em; 
+        font-family: var(--bst-font-family-monospace);
+    ">Experimental</span>, not as a vague missing test.</li><li>Do not count HTML-Wasm or the Rust interpreter as Alpha-supported unless the roadmap explicitly changes.</li></ol><p>The goal is to keep the Alpha surface small, honest, and fully exercised.</p></section>
+    <script>
+    function __bs_is_ref(value) {
+    return value !== null && typeof value === "object" && value.__bs_ref === true;
+    }
+
+    function __bs_binding(value) {
+    return { __bs_ref: true, __bs_kind: "binding", __bs_mode: "slot", __bs_slot: { value }, __bs_target: null };
+    }
+
+    function __bs_param_binding(value) {
+    if (!__bs_is_ref(value)) {
+    return __bs_binding(value);
+    }
+    if (value.__bs_kind === "binding") {
+    return value;
+    }
+    const binding = __bs_binding(undefined);
+    binding.__bs_mode = "alias";
+    binding.__bs_target = value;
+    return binding;
+    }
+
+    function __bs_resolve(ref) {
+    while (ref.__bs_kind === "binding" && ref.__bs_mode === "alias") {
+    ref = ref.__bs_target;
+    }
+    return ref;
+    }
+
+    function __bs_read(ref) {
+    const resolved = __bs_resolve(ref);
+    return resolved.__bs_kind === "binding" ? resolved.__bs_slot.value : resolved.__bs_get();
+    }
+
+    function __bs_write(ref, value) {
+    const resolved = __bs_resolve(ref);
+    if (resolved.__bs_kind === "binding") {
+    resolved.__bs_slot.value = value;
+    } else {
+    resolved.__bs_set(value);
+    }
+    return value;
+    }
+
+    function __bs_assign_borrow(binding, ref) {
+    if (binding.__bs_mode === "alias") {
+    return __bs_write(binding, __bs_read(ref));
+    }
+    binding.__bs_mode = "alias";
+    binding.__bs_target = ref;
+    return binding;
+    }
+
+    function __bs_assign_value(binding, value) {
+    if (binding.__bs_mode === "alias") {
+    return __bs_write(binding, value);
+    }
+    binding.__bs_mode = "slot";
+    binding.__bs_target = null;
+    binding.__bs_slot.value = value;
+    return binding;
+    }
+
+    function __bs_field(baseRef, field) {
+    return {
+    __bs_ref: true,
+    __bs_kind: "computed",
+    __bs_get() {
+    return __bs_read(baseRef)[field];
+    },
+    __bs_set(value) {
+    __bs_read(baseRef)[field] = value;
+    }
+    };
+    }
+
+    function __bs_index(baseRef, index) {
+    return {
+    __bs_ref: true,
+    __bs_kind: "computed",
+    __bs_get() {
+    return __bs_read(baseRef)[index];
+    },
+    __bs_set(value) {
+    __bs_read(baseRef)[index] = value;
+    }
+    };
+    }
+
+    function __bs_clone_value(value) {
+    if (Array.isArray(value)) {
+    return value.map(__bs_clone_value);
+    }
+    if (value !== null && typeof value === "object") {
+    const result = {};
+    for (const key of Object.keys(value)) {
+    result[key] = __bs_clone_value(value[key]);
+    }
+    return result;
+    }
+    return value;
+    }
+
+    function __bs_error_normalize_file(file) {
+    if (typeof file !== "string") {
+    return "";
+    }
+    if (file.startsWith("/")) {
+    const parts = file.split(/[\\/]/).filter(Boolean);
+    return parts.length > 0 ? parts[parts.length - 1] : file;
+    }
+    if (/^[A-Za-z]:[\\/]/.test(file)) {
+    const parts = file.split(/[\\/]/).filter(Boolean);
+    return parts.length > 0 ? parts[parts.length - 1] : file;
+    }
+    return file;
+    }
+
+    function __bs_make_error(kind, code, message, location, trace) {
+    return {
+    kind,
+    code,
+    message,
+    location: location ?? null,
+    trace: trace ?? null
+    };
+    }
+
+    function __bs_error_with_location(error, location) {
+    return __bs_make_error(error.kind, error.code, error.message, location, error.trace);
+    }
+
+    function __bs_error_push_trace(error, frame) {
+    const nextTrace = error.trace ? error.trace.concat([frame]) : [frame];
+    return __bs_make_error(error.kind, error.code, error.message, error.location, nextTrace);
+    }
+
+    function __bs_error_bubble(error, file, line, column, functionName) {
+    const safeFunction = typeof functionName === "string" && functionName.length > 0 ? functionName : "<unknown>";
+    const location = {
+    file: __bs_error_normalize_file(file),
+    line,
+    column,
+    function: safeFunction === "<unknown>" ? null : safeFunction
+    };
+    const frame = { function: safeFunction, location };
+    const nextLocation = error.location ?? location;
+    const located = __bs_error_with_location(error, nextLocation);
+    return __bs_error_push_trace(located, frame);
+    }
+
+    function __bs_result_propagate(result) {
+    if (result && result.tag === "ok") {
+    return result.value;
+    }
+    if (result && result.tag === "err") {
+    throw { __bs_result_propagate: true, value: result.value };
+    }
+    throw new Error("Expected internal Result carrier during propagation");
+    }
+
+    function __bs_result_fallback(result, fallback) {
+    if (result && result.tag === "ok") {
+    return result.value;
+    }
+    if (result && result.tag === "err") {
+    return fallback();
+    }
+    throw new Error("Expected internal Result carrier during fallback handling");
+    }
+
+    function __bs_collection_get(collection, index) {
+    if (!Array.isArray(collection)) {
+    const err = __bs_make_error("InvalidArgument", "collection.expected_ordered_collection", "Collection get(...) expects an ordered collection", null, null);
+    return { tag: "err", value: err };
+    }
+    if (!Number.isInteger(index) || index < 0 || index >= collection.length) {
+    const err = __bs_make_error("OutOfBounds", "collection.index_out_of_bounds", "Collection index out of bounds", null, null);
+    return { tag: "err", value: err };
+    }
+    return { tag: "ok", value: collection[index] };
+    }
+
+    function __bs_collection_push(collection, value) {
+    if (!Array.isArray(collection)) {
+    const err = __bs_make_error("InvalidArgument", "collection.expected_ordered_collection", "Collection push(...) expects an ordered collection", null, null);
+    return { tag: "err", value: err };
+    }
+    collection.push(value);
+    return { tag: "ok", value: null };
+    }
+
+    function __bs_collection_remove(collection, index) {
+    if (!Array.isArray(collection)) {
+    const err = __bs_make_error("InvalidArgument", "collection.expected_ordered_collection", "Collection remove(...) expects an ordered collection", null, null);
+    return { tag: "err", value: err };
+    }
+    if (!Number.isInteger(index) || index < 0 || index >= collection.length) {
+    const err = __bs_make_error("OutOfBounds", "collection.index_out_of_bounds", "Collection index out of bounds", null, null);
+    return { tag: "err", value: err };
+    }
+    collection.splice(index, 1);
+    return { tag: "ok", value: null };
+    }
+
+    function __bs_collection_length(collection) {
+    if (!Array.isArray(collection)) {
+    const err = __bs_make_error("InvalidArgument", "collection.expected_ordered_collection", "Collection length() expects an ordered collection", null, null);
+    return { tag: "err", value: err };
+    }
+    return { tag: "ok", value: collection.length };
+    }
+
+    function __bs_value_to_string(value) {
+    if (value === undefined || value === null) {
+    return "";
+    }
+    return String(value);
+    }
+
+    function __bs_io(value) {
+    console.log(__bs_value_to_string(value));
+    }
+
+    function __bs_normalize_numeric_text(value) {
+    return value.trim().replace(/_/g, "");
+    }
+
+    function __bs_cast_int(value) {
+    if (typeof value === "number") {
+    if (!Number.isFinite(value) || !Number.isSafeInteger(value)) {
+    return { tag: "err", value: __bs_make_error("Parse", "int.parse_out_of_range", "Int value is out of supported range", null, null) };
+    }
+    if (Number.isInteger(value)) {
+    return { tag: "ok", value };
+    }
+    return { tag: "err", value: __bs_make_error("Parse", "int.parse_invalid_format", "Float value is not an exact integer", null, null) };
+    }
+    if (typeof value === "string") {
+    const normalized = __bs_normalize_numeric_text(value);
+    if (/^[+-]?[0-9]+$/.test(normalized)) {
+    const parsed = Number.parseInt(normalized, 10);
+    if (!Number.isSafeInteger(parsed)) {
+    return { tag: "err", value: __bs_make_error("Parse", "int.parse_out_of_range", "Int value is out of supported range", null, null) };
+    }
+    return { tag: "ok", value: parsed };
+    }
+    if (/^[+-]?[0-9]+\.[0-9]+$/.test(normalized)) {
+    const parsed = Number.parseFloat(normalized);
+    if (Number.isInteger(parsed) && Number.isSafeInteger(parsed)) {
+    return { tag: "ok", value: parsed };
+    }
+    }
+    return { tag: "err", value: __bs_make_error("Parse", "int.parse_invalid_format", "Cannot parse Int from text", null, null) };
+    }
+    return { tag: "err", value: __bs_make_error("Parse", "int.parse_invalid_format", "Int(...) only accepts Int, Float, or string values", null, null) };
+    }
+
+    function __bs_cast_float(value) {
+    if (typeof value === "number") {
+    if (!Number.isFinite(value)) {
+    return { tag: "err", value: __bs_make_error("Parse", "float.parse_out_of_range", "Float value is out of supported range", null, null) };
+    }
+    return { tag: "ok", value };
+    }
+    if (typeof value === "string") {
+    const normalized = __bs_normalize_numeric_text(value);
+    if (/^[+-]?[0-9]+$/.test(normalized) || /^[+-]?[0-9]+\.[0-9]+$/.test(normalized)) {
+    const parsed = Number.parseFloat(normalized);
+    if (!Number.isFinite(parsed)) {
+    return { tag: "err", value: __bs_make_error("Parse", "float.parse_out_of_range", "Float value is out of supported range", null, null) };
+    }
+    return { tag: "ok", value: parsed };
+    }
+    return { tag: "err", value: __bs_make_error("Parse", "float.parse_invalid_format", "Cannot parse Float from text", null, null) };
+    }
+    return { tag: "err", value: __bs_make_error("Parse", "float.parse_invalid_format", "Float(...) only accepts Int, Float, or string values", null, null) };
+    }
+
+    function b_fn0() {
+    let b_l0 = __bs_binding(undefined);
+
+    __bs_assign_value(b_l0, []);
+    return __bs_read(b_l0);
+    }
+
+    </script>
+    <script>
+    (function () {
+      if (typeof b_fn0 === "function") b_fn0();
+    })();
+    </script>
+  </body>
+</html>

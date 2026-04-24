@@ -13,7 +13,6 @@ import @styles/docs {navbar, title, section, palette, codeblock, theme_head}
     [$todo: 
         [$img, @assets/seedling_icon.png: Beanstalk logo]
     ]
-    
 
     This website is built using Beanstalk's built in HTML project builder, and all the content you see here is written in Beanstalk code.
 
@@ -21,6 +20,7 @@ import @styles/docs {navbar, title, section, palette, codeblock, theme_head}
 
     ## Documentation
     The documentation is currently being written in Beanstalk one file at a time.
+    See the @./progress (alpha implementation matrix) for a detailed breakdown of what features are currently documented and what features are still in progress.
 
     ### Introduction
     - @./basics (Basics)

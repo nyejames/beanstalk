@@ -9,8 +9,6 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
 #[title, style.center: ALPHA SURFACE MATRIX]
 
 #[section, $markdown:
-    # Alpha Surface Matrix
-
     This page tracks the compiler surface intended for the first Beanstalk Alpha.
 
     It is an implementation matrix, not a full language specification.
