@@ -18,6 +18,8 @@ New code contributions must follow the style guide: <a href="https://github.com/
 ## Testing
 
 Run the compiler integration suite with `cargo run -- tests`.
+Alternatively, run `just validate` to execute the full validation suite (fmt check, clippy, unit tests, integration tests, docs build, and speed test). 
+You must have `just` installed to run this.
 
 There is a purpose-built speed test file that can be run with `cargo run --release --features "detailed_timers" check speed-test.bst`, for checking compile speed regressions for common heavy template folding work.
 
@@ -30,7 +32,7 @@ If you are thinking of contributing, start with something small that is easy to 
 
 Only as things really solidify will that code get reviewed for performance and noisier syntax and more 'clever' patterns.
 
-`cargo clippy`, `cargo test` and `cargo run tests` must be fully green before making a new commit.
+`cargo clippy`, `cargo test` and `cargo run tests` must be fully green before making a new commit (or run `just validate`).
 
 ## Agents
 If using agents to help with contributing to this project, it is important that the .md files inside /docs are provided for context as a minimum. 

@@ -107,10 +107,15 @@ To see the progress and current priority goals of the compiler and language, con
 
 ## Testing and validation
 
-Before finishing code changes, always run:
+Before finishing code changes, always run `just validate`.
+
+This executes:
 - `cargo clippy`
 - `cargo test`
 - `cargo run tests`
+- `cargo fmt --check`
+- The docs build
+- The speed test
 
 When adding or changing behavior:
 - Prefer integration coverage for user-visible language behavior.

@@ -12,6 +12,9 @@ Before finishing changes, always run:
 - `cargo test`
 - `cargo run tests`
 
+Or run `just validate`, which covers all of the above plus `cargo fmt --check`, the docs build, and the speed test.
+You must have `just` installed to run this.
+
 ## Best Practices
 
 ### No user-input panics
