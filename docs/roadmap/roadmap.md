@@ -21,26 +21,6 @@ These are the non-negotiable conditions for starting Alpha:
 
 ## JS backend extension
 
-### Strengthen collection backend/runtime coverage beyond current basics
-
-The matrix already has broad collection coverage, but backend/runtime contract hardening is still worth deepening, especially around edge behavior
-
-Done
-
-* JS contract tests for all collection helpers (push, remove, length, get)
-* Integration cases for invalid receiver type and invalid index type (via artifact assertions)
-* Success-path integration coverage for all helpers
-
-Todo
-
-* Add integration cases for:
-    * negative index
-    * mutation through alias/reference paths
-    * indexed write followed by readback
-    * mutation inside loops and branches
-* Add regression fixtures proving explicit mutable access requirements are preserved all the way through emitted JS
-
-
 ### Harden JS result/error runtime coverage further
 
 The backend already has dedicated helpers and some tests, but more integrated adversarial cases are still useful

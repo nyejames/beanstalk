@@ -309,6 +309,11 @@ path = "circular_dependency"
 tags = ["integration","language"]
 
 [[case]]
+id = "collection_alias_observes_mutation"
+path = "collection_alias_observes_mutation"
+tags = ["integration", "collections", "borrows"]
+
+[[case]]
 id = "collection_get_out_of_bounds"
 path = "collection_get_out_of_bounds"
 tags = ["integration","collections"]
@@ -324,6 +329,11 @@ path = "collection_indexed_write_end_to_end"
 tags = ["integration","collections"]
 
 [[case]]
+id = "collection_indexed_write_readback_branch"
+path = "collection_indexed_write_readback_branch"
+tags = ["integration", "collections", "control-flow"]
+
+[[case]]
 id = "collection_literal_smoke"
 path = "collection_literal_smoke"
 tags = ["integration","collections"]
@@ -337,6 +347,11 @@ tags = ["integration","collections","js-backend"]
 id = "collection_methods_end_to_end"
 path = "collection_methods_end_to_end"
 tags = ["integration","collections"]
+
+[[case]]
+id = "collection_mutable_access_js_regression"
+path = "collection_mutable_access_js_regression"
+tags = ["integration", "collections", "js-backend", "regression"]
 
 [[case]]
 id = "cast_float_from_string_runtime_output"
@@ -367,6 +382,26 @@ tags = ["integration","collections","diagnostics"]
 id = "collection_mutating_method_temporary_receiver_rejected"
 path = "collection_mutating_method_temporary_receiver_rejected"
 tags = ["integration","collections","diagnostics"]
+
+[[case]]
+id = "collection_mutation_inside_branch"
+path = "collection_mutation_inside_branch"
+tags = ["integration", "collections", "control-flow"]
+
+[[case]]
+id = "collection_mutation_inside_loop"
+path = "collection_mutation_inside_loop"
+tags = ["integration", "collections", "control-flow"]
+
+[[case]]
+id = "collection_mutation_through_mutable_alias"
+path = "collection_mutation_through_mutable_alias"
+tags = ["integration", "collections", "borrows"]
+
+[[case]]
+id = "collection_negative_index_fallback"
+path = "collection_negative_index_fallback"
+tags = ["integration", "collections", "js-backend"]
 
 [[case]]
 id = "collection_pull_removed_syntax_rejected"
