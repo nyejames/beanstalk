@@ -1,5 +1,5 @@
 import @lib/html {format, style}
-import @styles/docs {navbar, title, section, palette, table, data, codeblock, codesnippet, theme_head}
+import @styles/docs {navbar, title, section, palette, table, header, data, codeblock, codesnippet, theme_head}
 
 # page_title = "Alpha Surface Matrix"
 # page_description = "Current implementation and coverage status for the Beanstalk Alpha compiler surface."
@@ -39,7 +39,7 @@ import @styles/docs {navbar, title, section, palette, table, data, codeblock, co
     # Status legend
 
     [table:
-        [: [: Status] [: Meaning] ]
+        [header: [: Status] [: Meaning] ]
 
         [data:
             [: Supported]
@@ -65,7 +65,7 @@ import @styles/docs {navbar, title, section, palette, table, data, codeblock, co
     # Coverage legend
 
     [table:
-        [: [: Coverage] [: Meaning] ]
+        [header: [: Coverage] [: Meaning] ]
 
         [data:
             [: Broad]
@@ -93,7 +93,7 @@ import @styles/docs {navbar, title, section, palette, table, data, codeblock, co
     # Core Alpha surface
 
     [table:
-        [: [: Surface] [: Status] [: Coverage] [: Runtime target] [: Watch points] ]
+        [header: [: Surface] [: Status] [: Coverage] [: Runtime target] [: Watch points] ]
 
         [data:
             [: Control flow]
@@ -221,7 +221,7 @@ import @styles/docs {navbar, title, section, palette, table, data, codeblock, co
     # Compiler-owned builtin surfaces
 
     [table:
-        [: [: Surface] [: Status] [: Coverage] [: Runtime target] [: Watch points] ]
+        [header: [: Surface] [: Status] [: Coverage] [: Runtime target] [: Watch points] ]
 
         [data:
             [: Collection methods]
@@ -271,7 +271,7 @@ import @styles/docs {navbar, title, section, palette, table, data, codeblock, co
     These are useful and may have tests, but they are not part of the Alpha stability contract.
 
     [table:
-        [: [: Surface] [: Status] [: Current role] [: Alpha rule] ]
+        [header: [: Surface] [: Status] [: Current role] [: Alpha rule] ]
 
         [data:
             [: HTML-Wasm]
@@ -303,7 +303,7 @@ import @styles/docs {navbar, title, section, palette, table, data, codeblock, co
     If syntax exists, it should fail with a structured diagnostic rather than panic or lower incorrectly.
 
     [table:
-        [: [: Surface] [: Status] [: Canonical diagnostic direction] [: Notes] ]
+        [header: [: Surface] [: Status] [: Canonical diagnostic direction] [: Notes] ]
 
         [data:
             [: Traits / interfaces]
@@ -377,7 +377,7 @@ import @styles/docs {navbar, title, section, palette, table, data, codeblock, co
     They are not all blockers, but they should be deliberately accepted, fixed, or moved out of the Alpha contract.
 
     [table:
-        [: [: Area] [: Severity] [: Action] ]
+        [header: [: Area] [: Severity] [: Action] ]
 
         [data:
             [: Matrix accuracy]

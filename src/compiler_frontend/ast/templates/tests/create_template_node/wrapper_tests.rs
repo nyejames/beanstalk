@@ -11,29 +11,39 @@ fn slot_children_wrappers_apply_table_rows_and_cells_without_cross_applying() {
     let mut string_table = StringTable::new();
     let wrapper_scope =
         InternedPath::from_single_str("main.bst/#const_template0", &mut string_table);
-    let mut wrapper_tokens = template_tokens_from_source(
-        "[$children([:<tr>[$slot]</tr>]): <table style=\"[$slot(\"style\")]\">[$children([:<td>[$slot]</td>]):[$slot]]</table>]",
+
+    let mut row_tokens = template_tokens_from_source(
+        "[$children([:<td>[$slot]</td>]):[$slot]]",
         &mut string_table,
     );
-    let wrapper_context = new_constant_context(wrapper_tokens.src_path.to_owned());
-    let wrapper = Template::new(
-        &mut wrapper_tokens,
-        &wrapper_context,
-        vec![],
-        &mut string_table,
-    )
-    .expect("table wrapper should parse");
+    let row_context = new_constant_context(row_tokens.src_path.to_owned());
+    let row_wrapper = Template::new(&mut row_tokens, &row_context, vec![], &mut string_table)
+        .expect("row wrapper should parse");
 
-    let declaration = Declaration {
-        id: wrapper_scope.append(string_table.intern("table_wrapper")),
-        value: Expression::template(wrapper, Ownership::ImmutableOwned),
-    };
+    let mut table_tokens = template_tokens_from_source(
+        "[$children([:<tr>[$slot]</tr>]): <table style=\"[$slot(\"style\")]\">[$slot]</table>]",
+        &mut string_table,
+    );
+    let table_context = new_constant_context(table_tokens.src_path.to_owned());
+    let table_wrapper = Template::new(&mut table_tokens, &table_context, vec![], &mut string_table)
+        .expect("table wrapper should parse");
+
+    let declarations = vec![
+        Declaration {
+            id: wrapper_scope.append(string_table.intern("row")),
+            value: Expression::template(row_wrapper, Ownership::ImmutableOwned),
+        },
+        Declaration {
+            id: wrapper_scope.append(string_table.intern("table")),
+            value: Expression::template(table_wrapper, Ownership::ImmutableOwned),
+        },
+    ];
 
     let mut token_stream = template_tokens_from_source(
-        "[table_wrapper:\n    [: [:Type] [:Description] ]\n    [: [:float] [:64 bit floating point number] ]\n]",
+        "[table:\n    [row: [:Type] [:Description] ]\n    [row: [:float] [:64 bit floating point number] ]\n]",
         &mut string_table,
     );
-    let context = constant_template_context(&token_stream.src_path, &[declaration]);
+    let context = constant_template_context(&token_stream.src_path, &declarations);
 
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("slot child wrapper application should parse");
@@ -52,29 +62,39 @@ fn markdown_parent_keeps_table_rows_and_cells_inside_table() {
     let mut string_table = StringTable::new();
     let wrapper_scope =
         InternedPath::from_single_str("main.bst/#const_template0", &mut string_table);
-    let mut wrapper_tokens = template_tokens_from_source(
-        "[$children([:<tr>[$slot]</tr>]): <table style=\"[$slot(\"style\")]\">[$children([:<td>[$slot]</td>]):[$slot]]</table>]",
+
+    let mut row_tokens = template_tokens_from_source(
+        "[$children([:<td>[$slot]</td>]):[$slot]]",
         &mut string_table,
     );
-    let wrapper_context = new_constant_context(wrapper_tokens.src_path.to_owned());
-    let wrapper = Template::new(
-        &mut wrapper_tokens,
-        &wrapper_context,
-        vec![],
-        &mut string_table,
-    )
-    .expect("table wrapper should parse");
+    let row_context = new_constant_context(row_tokens.src_path.to_owned());
+    let row_wrapper = Template::new(&mut row_tokens, &row_context, vec![], &mut string_table)
+        .expect("row wrapper should parse");
 
-    let declaration = Declaration {
-        id: wrapper_scope.append(string_table.intern("table_wrapper")),
-        value: Expression::template(wrapper, Ownership::ImmutableOwned),
-    };
+    let mut table_tokens = template_tokens_from_source(
+        "[$children([:<tr>[$slot]</tr>]): <table style=\"[$slot(\"style\")]\">[$slot]</table>]",
+        &mut string_table,
+    );
+    let table_context = new_constant_context(table_tokens.src_path.to_owned());
+    let table_wrapper = Template::new(&mut table_tokens, &table_context, vec![], &mut string_table)
+        .expect("table wrapper should parse");
+
+    let declarations = vec![
+        Declaration {
+            id: wrapper_scope.append(string_table.intern("row")),
+            value: Expression::template(row_wrapper, Ownership::ImmutableOwned),
+        },
+        Declaration {
+            id: wrapper_scope.append(string_table.intern("table")),
+            value: Expression::template(table_wrapper, Ownership::ImmutableOwned),
+        },
+    ];
 
     let mut token_stream = template_tokens_from_source(
-        "[$markdown:\n[table_wrapper:\n    [: [:Type] [:Description] ]\n    [: [:float] [:64 bit floating point number] ]\n]\n]",
+        "[$markdown:\n[table:\n    [row: [:Type] [:Description] ]\n    [row: [:float] [:64 bit floating point number] ]\n]\n]",
         &mut string_table,
     );
-    let context = constant_template_context(&token_stream.src_path, &[declaration]);
+    let context = constant_template_context(&token_stream.src_path, &declarations);
 
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect("markdown table usage should parse");
@@ -92,24 +112,27 @@ fn markdown_page_wrapper_keeps_table_rows_and_cells_inside_table() {
     let wrapper_scope =
         InternedPath::from_single_str("main.bst/#const_template0", &mut string_table);
 
-    let mut table_tokens = template_tokens_from_source(
-        "[$children([:<tr>[$slot]</tr>]): <table style=\"[$slot(\"style\")]\">[$children([:<td>[$slot]</td>]):[$slot]]</table>]",
+    let mut row_tokens = template_tokens_from_source(
+        "[$children([:<td>[$slot]</td>]):[$slot]]",
         &mut string_table,
     );
-    let wrapper_context = new_constant_context(table_tokens.src_path.to_owned());
-    let table_wrapper = Template::new(
-        &mut table_tokens,
-        &wrapper_context,
-        vec![],
+    let row_context = new_constant_context(row_tokens.src_path.to_owned());
+    let row_wrapper = Template::new(&mut row_tokens, &row_context, vec![], &mut string_table)
+        .expect("row wrapper should parse");
+
+    let mut table_tokens = template_tokens_from_source(
+        "[$children([:<tr>[$slot]</tr>]): <table style=\"[$slot(\"style\")]\">[$slot]</table>]",
         &mut string_table,
-    )
-    .expect("table wrapper should parse");
+    );
+    let table_context = new_constant_context(table_tokens.src_path.to_owned());
+    let table_wrapper = Template::new(&mut table_tokens, &table_context, vec![], &mut string_table)
+        .expect("table wrapper should parse");
 
     let mut page_tokens =
         template_tokens_from_source("[: <body>[$slot]</body>]", &mut string_table);
     let page_wrapper = Template::new(
         &mut page_tokens,
-        &wrapper_context,
+        &table_context,
         vec![],
         &mut string_table,
     )
@@ -117,7 +140,11 @@ fn markdown_page_wrapper_keeps_table_rows_and_cells_inside_table() {
 
     let declarations = vec![
         Declaration {
-            id: wrapper_scope.append(string_table.intern("table_wrapper")),
+            id: wrapper_scope.append(string_table.intern("row")),
+            value: Expression::template(row_wrapper, Ownership::ImmutableOwned),
+        },
+        Declaration {
+            id: wrapper_scope.append(string_table.intern("table")),
             value: Expression::template(table_wrapper, Ownership::ImmutableOwned),
         },
         Declaration {
@@ -127,7 +154,7 @@ fn markdown_page_wrapper_keeps_table_rows_and_cells_inside_table() {
     ];
 
     let mut token_stream = template_tokens_from_source(
-        "[page_wrapper, $markdown:\n[table_wrapper:\n    [: [:Type] [:Description] ]\n    [: [:float] [:64 bit floating point number] ]\n]\n]",
+        "[page_wrapper, $markdown:\n[table:\n    [row: [:Type] [:Description] ]\n    [row: [:float] [:64 bit floating point number] ]\n]\n]",
         &mut string_table,
     );
     let context = constant_template_context(&token_stream.src_path, &declarations);
@@ -193,12 +220,134 @@ fn markdown_parent_with_fresh_header_row_wrapper_renders_plain_headers() {
 }
 
 #[test]
+fn children_wrappers_in_slot_composition_do_not_apply_to_grandchildren() {
+    let mut string_table = StringTable::new();
+    let wrapper_scope =
+        InternedPath::from_single_str("main.bst/#const_template0", &mut string_table);
+
+    let mut cell_tokens = template_tokens_from_source(
+        "[$children([:<td>[$slot]</td>]):[$slot]]",
+        &mut string_table,
+    );
+    let cell_context = new_constant_context(cell_tokens.src_path.to_owned());
+    let cell_wrapper = Template::new(&mut cell_tokens, &cell_context, vec![], &mut string_table)
+        .expect("cell wrapper should parse");
+
+    let declaration = Declaration {
+        id: wrapper_scope.append(string_table.intern("cell")),
+        value: Expression::template(cell_wrapper, Ownership::ImmutableOwned),
+    };
+
+    let mut token_stream = template_tokens_from_source(
+        "[cell: [: before [:nested] after]]",
+        &mut string_table,
+    );
+    let context = constant_template_context(&token_stream.src_path, &[declaration]);
+
+    let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
+        .expect("slot child wrapper application should parse");
+    let folded = fold_template_in_context(&template, &context, &mut string_table);
+    let rendered = string_table.resolve(folded);
+
+    assert!(rendered.contains("before"));
+    assert!(rendered.contains("nested"));
+    assert!(rendered.contains("after"));
+
+    assert_eq!(
+        rendered.matches("<td>").count(),
+        1,
+        "$children(..) should wrap the direct cell contribution once, not the nested grandchild"
+    );
+
+    let td_pos = rendered.find("<td>").expect("expected td wrapper");
+    let before_pos = rendered.find("before").expect("expected before text");
+    let nested_pos = rendered.find("nested").expect("expected nested text");
+    let after_pos = rendered.find("after").expect("expected after text");
+    let close_td_pos = rendered.find("</td>").expect("expected closing td wrapper");
+
+    assert!(td_pos < before_pos);
+    assert!(before_pos < nested_pos);
+    assert!(nested_pos < after_pos);
+    assert!(after_pos < close_td_pos);
+}
+
+#[test]
+fn nested_inline_templates_inside_table_cells_do_not_become_extra_cells() {
+    let mut string_table = StringTable::new();
+    let wrapper_scope =
+        InternedPath::from_single_str("main.bst/#const_template0", &mut string_table);
+
+    let mut row_tokens = template_tokens_from_source(
+        "[$children([:<td>[$slot]</td>]):[$slot]]",
+        &mut string_table,
+    );
+    let row_context = new_constant_context(row_tokens.src_path.to_owned());
+    let row_wrapper = Template::new(&mut row_tokens, &row_context, vec![], &mut string_table)
+        .expect("row wrapper should parse");
+
+    let mut table_tokens = template_tokens_from_source(
+        "[$children([:<tr>[$slot]</tr>]): <table>[$slot]</table>]",
+        &mut string_table,
+    );
+    let table_context = new_constant_context(table_tokens.src_path.to_owned());
+    let table_wrapper = Template::new(&mut table_tokens, &table_context, vec![], &mut string_table)
+        .expect("table wrapper should parse");
+
+    let declarations = vec![
+        Declaration {
+            id: wrapper_scope.append(string_table.intern("row")),
+            value: Expression::template(row_wrapper, Ownership::ImmutableOwned),
+        },
+        Declaration {
+            id: wrapper_scope.append(string_table.intern("table")),
+            value: Expression::template(table_wrapper, Ownership::ImmutableOwned),
+        },
+    ];
+
+    let mut token_stream = template_tokens_from_source(
+        "[table:\n    [row: [: Cell with [:inline] content] [: Plain cell] ]\n]",
+        &mut string_table,
+    );
+    let context = constant_template_context(&token_stream.src_path, &declarations);
+
+    let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
+        .expect("table composition should parse");
+    let folded = fold_template_in_context(&template, &context, &mut string_table);
+    let rendered = string_table.resolve(folded);
+
+    assert_eq!(
+        rendered.matches("<tr>").count(),
+        1,
+        "expected one row"
+    );
+
+    assert_eq!(
+        rendered.matches("<td>").count(),
+        2,
+        "expected two cells; nested inline templates must not become extra cells"
+    );
+
+    assert!(
+        rendered.contains("Cell with"),
+        "expected text before nested inline template"
+    );
+    assert!(
+        rendered.contains("inline"),
+        "expected nested inline template content"
+    );
+    assert!(
+        rendered.contains("content"),
+        "expected text after nested inline template"
+    );
+}
+
+#[test]
 fn docs_style_data_wrapper_renders_expected_table_structure() {
     let mut string_table = StringTable::new();
     let declarations = docs_style_table_and_data_declarations(&mut string_table);
 
     let mut token_stream = template_tokens_from_source(
-        "[table:\n    [: [: Operator] [: Description] [: Precedence] ]\n    [data: [: +] [: Sum] [: 2] ]\n    [data: [: -] [: Subtraction] [: 2] ]\n]",
+        "[table:\n    [header_row: [: Operator] [: Description] [: Precedence] ]\n    [data: [: +] [: Sum] [: 2] ]\n    [data: [: -] [: Subtraction] [: 2] ]\n]",
         &mut string_table,
     );
     let context = constant_template_context(&token_stream.src_path, &declarations);
@@ -263,7 +412,7 @@ fn docs_style_data_wrapper_keeps_ast_structure_bounded_for_many_rows() {
 
     let row_count = 48usize;
     let mut source =
-        String::from("[table:\n    [: [: Operator] [: Description] [: Precedence] ]\n");
+        String::from("[table:\n    [header_row: [: Operator] [: Description] [: Precedence] ]\n");
     for index in 0..row_count {
         source.push_str(&format!(
             "    [data: [: op-{index}] [: desc-{index}] [: {index}] ]\n"
@@ -288,8 +437,16 @@ fn docs_style_data_wrapper_keeps_ast_structure_bounded_for_many_rows() {
 fn docs_style_table_and_data_declarations(string_table: &mut StringTable) -> Vec<Declaration> {
     let wrapper_scope = InternedPath::from_single_str("main.bst/#const_template0", string_table);
 
+    let mut header_row_tokens = template_tokens_from_source(
+        "[$children([:\n            <th style=\"border: 1px solid; padding: 0.5em; text-align: left;\">[$slot]</th>\n        ]):[$slot]]",
+        string_table,
+    );
+    let header_row_context = new_constant_context(header_row_tokens.src_path.to_owned());
+    let header_row = Template::new(&mut header_row_tokens, &header_row_context, vec![], string_table)
+        .expect("docs-style header row wrapper should parse");
+
     let mut table_tokens = template_tokens_from_source(
-        "[:\n    <table style=\"[$slot(\"style\") ]\">\n        <tr style=\"background-color: hsla(107, 100%, 36%, 0.23);\">\n            [$children([:\n                <th style=\"border: 1px solid; padding: 0.5em; text-align: left;\">[$slot]</th>\n            ]):[$slot(1)]]\n        </tr>\n        [$children([:<tr style=\"border-bottom: 1px dotted grey;\">[$slot]</tr>]):\n            [$slot]\n        ]\n    </table>\n]",
+        "[:\n    <table style=\"[$slot(\"style\") ]\">\n        <tr style=\"background-color: hsla(107, 100%, 36%, 0.23);\">\n            [$slot(1)]\n        </tr>\n        [$children([:<tr style=\"border-bottom: 1px dotted grey;\">[$slot]</tr>]):\n            [$slot]\n        ]\n    </table>\n]",
         string_table,
     );
     let table_context = new_constant_context(table_tokens.src_path.to_owned());
@@ -305,6 +462,10 @@ fn docs_style_table_and_data_declarations(string_table: &mut StringTable) -> Vec
         .expect("docs-style data wrapper should parse");
 
     vec![
+        Declaration {
+            id: wrapper_scope.append(string_table.intern("header_row")),
+            value: Expression::template(header_row, Ownership::ImmutableOwned),
+        },
         Declaration {
             id: wrapper_scope.append(string_table.intern("table")),
             value: Expression::template(table, Ownership::ImmutableOwned),

@@ -161,12 +161,16 @@ Palette = |
     <div></div>
 ]
 
+# header = [$html:
+    [$children([$html:
+        <th style="border: 1px solid; padding: 0.5em; text-align: left;">[$slot]</th>
+    ]):[$slot]]
+]
+
 # table = [format.table, $html:
     [$insert("style"):border-collapse: collapse; border: 1px solid; padding: 1em;]
     <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
-        [$children([$html:
-            <th style="border: 1px solid; padding: 0.5em; text-align: left;">[$slot]</th>
-        ]):[$slot(1)]]
+        [$slot(1)]
     </tr>
     [$children([$html:<tr style="border-bottom: 1px dotted grey;">[$slot]</tr>]):
         [$slot]

@@ -220,12 +220,12 @@ fn build_project_const_slot_children_wrap_table_rows_and_cells_without_cross_app
     fs::create_dir_all(root.join("libs")).expect("should create libs root");
     fs::write(
         root.join("libs").join("html.bst"),
-        "#table = [$children([:<tr>[$slot]</tr>]):\n  <table>\n    [$children([:<td>[$slot]</td>]):[$slot]]\n  </table>\n]\n",
+        "#row = [$children([:<td>[$slot]</td>]):[$slot]]\n#table = [$children([:<tr>[$slot]</tr>]):\n  <table>\n    [$slot]\n  </table>\n]\n",
     )
     .expect("should write html library");
     fs::write(
         root.join("main.bst"),
-        "import @libs/html {table}\n[table:\n    [: [:Type] [:Description] ]\n    [: [:float] [:64 bit floating point number] ]\n]\n",
+        "import @libs/html {table, row}\n[table:\n    [row: [:Type] [:Description] ]\n    [row: [:float] [:64 bit floating point number] ]\n]\n",
     )
     .expect("should write source file");
 
@@ -261,17 +261,17 @@ fn build_project_markdown_page_reexported_table_keeps_rows_and_cells_inside_tabl
     fs::create_dir_all(root.join("styles")).expect("should create styles root");
     fs::write(
         root.join("libs").join("html.bst"),
-        "Format = |\n  table String = [$children([:<tr>[$slot]</tr>]):\n    <table style=\"[$slot(\"style\")]\">\n      [$children([:<td>[$slot]</td>]):[$slot]]\n    </table>\n  ],\n|\n#format = Format()\n",
+        "Format = |\n  row String = [$children([:<td>[$slot]</td>]):[$slot]],\n  table String = [$children([:<tr>[$slot]</tr>]):\n    <table style=\"[$slot(\"style\")]\">\n      [$slot]\n    </table>\n  ],\n|\n#format = Format()\n",
     )
     .expect("should write html library");
     fs::write(
         root.join("styles").join("docs.bst"),
-        "import @libs/html {format}\n#page = [:\n  <body>[$slot]</body>\n]\n#table = [format.table]\n",
+        "import @libs/html {format}\n#page = [:\n  <body>[$slot]</body>\n]\n#table = [format.table]\n#row = [format.row]\n",
     )
     .expect("should write docs style library");
     fs::write(
         root.join("main.bst"),
-        "import @styles/docs {page, table}\n[page, $markdown:\n[table:\n    [: [:Type] [:Description] ]\n    [: [:float] [:64 bit floating point number] ]\n]\n]\n",
+        "import @styles/docs {page, table, row}\n[page, $markdown:\n[table:\n    [row: [:Type] [:Description] ]\n    [row: [:float] [:64 bit floating point number] ]\n]\n]\n",
     )
     .expect("should write source file");
 

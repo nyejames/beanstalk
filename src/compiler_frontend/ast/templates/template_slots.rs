@@ -458,19 +458,11 @@ fn expand_slot_placeholder(
     for atom in slot_atoms {
         let atom = if slot.child_wrappers.is_empty() {
             atom
-        } else if contribution_has_direct_child_templates(&atom) {
-            // Contribution is a template with direct child templates inside — apply
-            // the child wrappers to those inner children.
-            apply_child_wrappers_to_contribution_children(
-                &atom,
-                &slot.child_wrappers,
-                string_table,
-            )?
         } else if contribution_is_child_template_output(&atom)
             || contribution_template_ref(&atom).is_some()
         {
-            // Contribution is either a folded child template string slice or an
-            // unfolded template — wrap the whole contribution in the child wrapper.
+            // `$children(..)` applies to this direct slot contribution as a whole.
+            // It must not descend into the contribution and wrap grandchildren.
             wrap_child_slot_contribution(&atom, &slot.child_wrappers, string_table)?
         } else {
             atom
@@ -502,18 +494,6 @@ fn is_child_slot_contribution(atom: &TemplateAtom) -> bool {
         || matches!(segment.expression.kind, ExpressionKind::Template(_))
 }
 
-fn contribution_has_direct_child_templates(atom: &TemplateAtom) -> bool {
-    let Some(template) = contribution_template_ref(atom) else {
-        return false;
-    };
-
-    template
-        .content
-        .atoms
-        .iter()
-        .any(TemplateAtom::is_direct_child_template_atom)
-}
-
 fn wrap_child_slot_contribution(
     atom: &TemplateAtom,
     child_wrappers: &[Template],
@@ -539,28 +519,6 @@ fn wrap_child_slot_contribution(
     )))
 }
 
-fn apply_child_wrappers_to_contribution_children(
-    atom: &TemplateAtom,
-    child_wrappers: &[Template],
-    string_table: &StringTable,
-) -> Result<TemplateAtom, CompilerError> {
-    let Some(mut contribution_template) = contribution_template_owned(atom) else {
-        return Ok(atom.to_owned());
-    };
-
-    contribution_template.content = apply_inherited_child_templates_to_content(
-        contribution_template.content,
-        child_wrappers,
-        string_table,
-    )?;
-    contribution_template.resync_composition_metadata();
-
-    Ok(TemplateAtom::Content(TemplateSegment::new(
-        Expression::template(contribution_template, Ownership::ImmutableOwned),
-        contribution_origin(atom),
-    )))
-}
-
 fn contribution_template_ref(atom: &TemplateAtom) -> Option<&Template> {
     let TemplateAtom::Content(segment) = atom else {
         return None;
@@ -574,10 +532,6 @@ fn contribution_template_ref(atom: &TemplateAtom) -> Option<&Template> {
         ExpressionKind::Template(template) => Some(template.as_ref()),
         _ => None,
     }
-}
-
-fn contribution_template_owned(atom: &TemplateAtom) -> Option<Template> {
-    contribution_template_ref(atom).map(Template::clone_for_composition)
 }
 
 /// Returns true when the atom is a child template output that was folded into a

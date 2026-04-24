@@ -1,5 +1,5 @@
 import @lib/html {format, style}
-import @styles/docs {navbar, title, section, palette, table, data, codeblock, codesnippet,theme_head}
+import @styles/docs {navbar, title, section, palette, table, header, data, codeblock, codesnippet,theme_head}
 
 # page_title = "Language Basics"
 # page_description = "Core language syntax and semantics in Beanstalk."
@@ -179,7 +179,7 @@ import @styles/docs {navbar, title, section, palette, table, data, codeblock, co
     Mutibility can change the underlaying data type but is not actually part of the type.
 
     [table:
-        [: [: Type] [: Description] ] 
+        [header: [: Type] [: Description] ] 
 
         [data: [: Float ] [: 64-bit floating point number] ]
 
@@ -212,7 +212,7 @@ import @styles/docs {navbar, title, section, palette, table, data, codeblock, co
 
     ## Mathematical Operators
     [table:
-        [: [: Operator] [: Description]          [: Precedence] ]
+        [header: [: Operator] [: Description]          [: Precedence] ]
         [data: [: ^]        [: Exponent]            [: 4] ]
         [data: [: *]        [: Multiplication]       [: 3] ]
         [data: [: /]        [: Division]             [: 3] ]

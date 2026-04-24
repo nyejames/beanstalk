@@ -127,3 +127,41 @@ fn markdown_must_be_redeclared_at_each_nested_template_level() {
     assert!(rendered.contains("&lt;b&gt;grandchild-body&lt;/b&gt;"));
     assert!(!rendered.contains("<b>grandchild-body</b>"));
 }
+
+#[test]
+fn nested_inline_templates_inside_table_cells_do_not_become_extra_cells() {
+    let rendered = folded_template_output(
+        "[
+            $children([:<tr>[$slot]</tr>]):
+            [$children([:<td>[$slot]</td>]):
+                [: Cell with [:inline] content]
+                [: Plain cell]
+            ]
+        ]"
+    );
+
+    assert_eq!(
+        rendered.matches("<tr>").count(),
+        1,
+        "expected one row"
+    );
+
+    assert_eq!(
+        rendered.matches("<td>").count(),
+        2,
+        "expected two cells; nested inline templates must not become extra cells"
+    );
+
+    assert!(
+        rendered.contains("Cell with"),
+        "expected text before nested inline template"
+    );
+    assert!(
+        rendered.contains("inline"),
+        "expected nested inline template content"
+    );
+    assert!(
+        rendered.contains("content"),
+        "expected text after nested inline template"
+    );
+}

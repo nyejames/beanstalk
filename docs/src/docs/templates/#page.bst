@@ -1,5 +1,5 @@
 import @lib/html {format, style}
-import @styles/docs {navbar, title, section, palette, table, codeblock, codesnippet, theme_head}
+import @styles/docs {navbar, title, section, palette, table, header, codeblock, codesnippet, theme_head}
 
 # page_title = "Templates"
 # page_description = "Template syntax, slots, directives, and formatting in Beanstalk."
@@ -135,22 +135,39 @@ import @styles/docs {navbar, title, section, palette, table, codeblock, codesnip
     If a slot receives no content, it expands to an empty string.
     Repeated slots, such as two occurrences of [codesnippet:[$slot(1)]], will replay the same content in both places.
 
-    Because [codesnippet:$children(..)] only applies to direct children, nested helpers can scope row and cell wrappers independently:
+    Because [codesnippet:$children(..)] only applies to direct child templates, nested helpers can scope row and cell wrappers independently.
+
+    A child template is treated as an opaque contribution after it has been selected as a direct child.
+    The parent [codesnippet:$children(..)] wrapper must not descend into that child and wrap its nested templates.
+    If nested templates need their own wrappers, the child template should declare its own [codesnippet:$children(..)] directive.
 
     [codeblock, $code("bst"):
         # table = [$children([:<tr>[$slot]</tr>]):
             <table style="[$slot("style")]">
-                [$children([:<td>[$slot]</td>]):[$slot]]
+                [$slot]
             </table>
         ]
 
+        # row = [$children([:<td>[$slot]</td>]):
+            [$slot]
+        ]
+
         [table:
-            [: [: Type] [: Description] ]
-            [: [: float ] [: 64 bit floating point number] ]
+            [row:
+                [: Type]
+                [: Description with [codesnippet:inline helper] content]
+            ]
+
+            [row:
+                [: Float]
+                [: 64-bit floating point number]
+            ]
         ]
     ]
 
-    In that example, each direct child of `table` becomes a row, while each direct child of a row becomes a cell. The outer [codesnippet:<tr>] wrapper does not leak into the inner cell templates.
+    In that example, [codesnippet:table] wraps each direct [codesnippet:row] child in [codesnippet:<tr>].
+    Then [codesnippet:row] wraps each direct cell child in [codesnippet:<td>].
+    The nested [codesnippet:codesnippet] helper inside a cell remains inline content inside that cell; it does not become another table cell.
 
     ## Template control flow examples
     [codeblock, $code("bst"):
