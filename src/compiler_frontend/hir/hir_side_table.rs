@@ -172,7 +172,8 @@ impl HirSideTable {
         self.source_location_index.clear();
         for (i, location) in self.source_locations.iter().enumerate() {
             let key = SourceLocationKey::from(location);
-            self.source_location_index.insert(key, SourceLocationId(i as u32));
+            self.source_location_index
+                .insert(key, SourceLocationId(i as u32));
         }
 
         // Remap all name side-tables.

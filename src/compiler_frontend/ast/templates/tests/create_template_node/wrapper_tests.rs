@@ -130,13 +130,8 @@ fn markdown_page_wrapper_keeps_table_rows_and_cells_inside_table() {
 
     let mut page_tokens =
         template_tokens_from_source("[: <body>[$slot]</body>]", &mut string_table);
-    let page_wrapper = Template::new(
-        &mut page_tokens,
-        &table_context,
-        vec![],
-        &mut string_table,
-    )
-    .expect("page wrapper should parse");
+    let page_wrapper = Template::new(&mut page_tokens, &table_context, vec![], &mut string_table)
+        .expect("page wrapper should parse");
 
     let declarations = vec![
         Declaration {
@@ -238,10 +233,8 @@ fn children_wrappers_in_slot_composition_do_not_apply_to_grandchildren() {
         value: Expression::template(cell_wrapper, Ownership::ImmutableOwned),
     };
 
-    let mut token_stream = template_tokens_from_source(
-        "[cell: [: before [:nested] after]]",
-        &mut string_table,
-    );
+    let mut token_stream =
+        template_tokens_from_source("[cell: [: before [:nested] after]]", &mut string_table);
     let context = constant_template_context(&token_stream.src_path, &[declaration]);
 
     let template = Template::new(&mut token_stream, &context, vec![], &mut string_table)
@@ -315,11 +308,7 @@ fn nested_inline_templates_inside_table_cells_do_not_become_extra_cells() {
     let folded = fold_template_in_context(&template, &context, &mut string_table);
     let rendered = string_table.resolve(folded);
 
-    assert_eq!(
-        rendered.matches("<tr>").count(),
-        1,
-        "expected one row"
-    );
+    assert_eq!(rendered.matches("<tr>").count(), 1, "expected one row");
 
     assert_eq!(
         rendered.matches("<td>").count(),
@@ -442,8 +431,13 @@ fn docs_style_table_and_data_declarations(string_table: &mut StringTable) -> Vec
         string_table,
     );
     let header_row_context = new_constant_context(header_row_tokens.src_path.to_owned());
-    let header_row = Template::new(&mut header_row_tokens, &header_row_context, vec![], string_table)
-        .expect("docs-style header row wrapper should parse");
+    let header_row = Template::new(
+        &mut header_row_tokens,
+        &header_row_context,
+        vec![],
+        string_table,
+    )
+    .expect("docs-style header row wrapper should parse");
 
     let mut table_tokens = template_tokens_from_source(
         "[:\n    <table style=\"[$slot(\"style\") ]\">\n        <tr style=\"background-color: hsla(107, 100%, 36%, 0.23);\">\n            [$slot(1)]\n        </tr>\n        [$children([:<tr style=\"border-bottom: 1px dotted grey;\">[$slot]</tr>]):\n            [$slot]\n        ]\n    </table>\n]",

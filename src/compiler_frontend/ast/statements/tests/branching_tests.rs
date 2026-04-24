@@ -253,8 +253,20 @@ fn parses_match_statements_with_else_arm() {
 
     assert_eq!(subject.data_type, DataType::Int);
     assert_eq!(arms.len(), 2);
-    assert!(matches!(arms[0].pattern, MatchPattern::Literal(Expression { kind: ExpressionKind::Int(0), .. })));
-    assert!(matches!(arms[1].pattern, MatchPattern::Literal(Expression { kind: ExpressionKind::Int(42), .. })));
+    assert!(matches!(
+        arms[0].pattern,
+        MatchPattern::Literal(Expression {
+            kind: ExpressionKind::Int(0),
+            ..
+        })
+    ));
+    assert!(matches!(
+        arms[1].pattern,
+        MatchPattern::Literal(Expression {
+            kind: ExpressionKind::Int(42),
+            ..
+        })
+    ));
     assert_eq!(
         else_block.as_ref().map(Vec::len),
         Some(1),
@@ -338,8 +350,20 @@ fn parses_choice_match_arms_with_bare_and_qualified_variants() {
         "choice match subject should preserve choice type identity"
     );
     assert_eq!(arms.len(), 2);
-    assert!(matches!(arms[0].pattern, MatchPattern::Literal(Expression { kind: ExpressionKind::Int(0), .. })));
-    assert!(matches!(arms[1].pattern, MatchPattern::Literal(Expression { kind: ExpressionKind::Int(1), .. })));
+    assert!(matches!(
+        arms[0].pattern,
+        MatchPattern::Literal(Expression {
+            kind: ExpressionKind::Int(0),
+            ..
+        })
+    ));
+    assert!(matches!(
+        arms[1].pattern,
+        MatchPattern::Literal(Expression {
+            kind: ExpressionKind::Int(1),
+            ..
+        })
+    ));
     assert!(
         else_block.is_some(),
         "choice match should keep explicit else default"
@@ -483,7 +507,6 @@ fn allows_semicolons_inside_nested_structures_within_match_arms() {
     );
 }
 
-
 #[test]
 fn parses_relational_int_patterns() {
     let (ast, string_table) = parse_single_file_ast(
@@ -526,9 +549,7 @@ fn relational_patterns_without_default_are_not_exhaustive() {
 
     assert_eq!(error.error_type, ErrorType::Rule);
     assert!(
-        error
-            .msg
-            .contains("must include an 'else =>' arm"),
+        error.msg.contains("must include an 'else =>' arm"),
         "{}",
         error.msg
     );
@@ -565,4 +586,3 @@ fn relational_pattern_rejects_string() {
         error.msg
     );
 }
-

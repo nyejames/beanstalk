@@ -121,7 +121,10 @@ impl FrontendModuleBuildContext<'_> {
         })();
 
         let string_table = compiler.string_table;
-        compile_result.map(|module| CompiledModuleResult { module, string_table })
+        compile_result.map(|module| CompiledModuleResult {
+            module,
+            string_table,
+        })
     }
 
     fn attach_source_files(

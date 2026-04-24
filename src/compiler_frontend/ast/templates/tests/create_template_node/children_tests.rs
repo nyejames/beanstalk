@@ -137,14 +137,10 @@ fn nested_inline_templates_inside_table_cells_do_not_become_extra_cells() {
                 [: Cell with [:inline] content]
                 [: Plain cell]
             ]
-        ]"
+        ]",
     );
 
-    assert_eq!(
-        rendered.matches("<tr>").count(),
-        1,
-        "expected one row"
-    );
+    assert_eq!(rendered.matches("<tr>").count(), 1, "expected one row");
 
     assert_eq!(
         rendered.matches("<td>").count(),

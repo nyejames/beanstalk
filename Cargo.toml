@@ -19,14 +19,14 @@ name = "bean"
 path = "src/main.rs"
 
 [dependencies]
-rayon = "1.10"
+rayon = "1.12"
 rustc-hash = "2.1.1"
 saying = "0.1.7"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
 toml = "1.1.2"
-wasm-encoder = "0.246.2"
-wasmparser = "0.246.2"
+wasm-encoder = "0.247.0"
+wasmparser = "0.247.0"
 notify = "8.2.0"
 
 # For future release builds:

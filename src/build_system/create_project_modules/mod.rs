@@ -162,20 +162,25 @@ fn compile_directory_frontend(
     };
 
     // Compile modules in parallel, each with its own cloned StringTable.
-    let results: Vec<(PathBuf, Result<CompiledModuleResult, CompilerMessages>)> = discovered_modules
-        .into_par_iter()
-        .map(|discovered| {
-            let local_table = string_table.clone();
-            let result = FrontendModuleBuildContext {
-                config,
-                build_profile,
-                project_path_resolver: Some(project_path_resolver.clone()),
-                style_directives,
-            }
-            .compile_module(&discovered.input_files, &discovered.entry_point, local_table);
-            (discovered.entry_point, result)
-        })
-        .collect();
+    let results: Vec<(PathBuf, Result<CompiledModuleResult, CompilerMessages>)> =
+        discovered_modules
+            .into_par_iter()
+            .map(|discovered| {
+                let local_table = string_table.clone();
+                let result = FrontendModuleBuildContext {
+                    config,
+                    build_profile,
+                    project_path_resolver: Some(project_path_resolver.clone()),
+                    style_directives,
+                }
+                .compile_module(
+                    &discovered.input_files,
+                    &discovered.entry_point,
+                    local_table,
+                );
+                (discovered.entry_point, result)
+            })
+            .collect();
 
     // Deterministic ordering by entry path.
     let mut results = results;

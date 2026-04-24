@@ -54,8 +54,9 @@ impl MatchPattern {
     fn location(&self) -> &SourceLocation {
         match self {
             MatchPattern::Literal(expression) => &expression.location,
-            MatchPattern::Wildcard { location }
-            | MatchPattern::Relational { location, .. } => location,
+            MatchPattern::Wildcard { location } | MatchPattern::Relational { location, .. } => {
+                location
+            }
         }
     }
 }

@@ -5,7 +5,9 @@
 
 use crate::compiler_frontend::ast::ast_nodes::NodeKind;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
-use crate::compiler_frontend::ast::statements::branching::{MatchArm, MatchPattern, RelationalPatternOp};
+use crate::compiler_frontend::ast::statements::branching::{
+    MatchArm, MatchPattern, RelationalPatternOp,
+};
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::compiler_errors::ErrorType;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
@@ -43,7 +45,11 @@ fn non_unit_function_with_terminal_match_default_does_not_report_fallthrough() {
                     Ownership::ImmutableReference,
                 ),
                 vec![MatchArm {
-                    pattern: MatchPattern::Literal(Expression::int(1, test_location(11), Ownership::ImmutableOwned)),
+                    pattern: MatchPattern::Literal(Expression::int(
+                        1,
+                        test_location(11),
+                        Ownership::ImmutableOwned,
+                    )),
                     guard: None,
                     body: vec![node(
                         NodeKind::Return(vec![Expression::int(
@@ -106,7 +112,11 @@ fn lowers_match_with_literal_arms_and_synthesized_wildcard_default() {
             ),
             vec![
                 MatchArm {
-                    pattern: MatchPattern::Literal(Expression::int(1, test_location(3), Ownership::ImmutableOwned)),
+                    pattern: MatchPattern::Literal(Expression::int(
+                        1,
+                        test_location(3),
+                        Ownership::ImmutableOwned,
+                    )),
                     guard: None,
                     body: vec![node(
                         NodeKind::Rvalue(Expression::int(
@@ -118,7 +128,11 @@ fn lowers_match_with_literal_arms_and_synthesized_wildcard_default() {
                     )],
                 },
                 MatchArm {
-                    pattern: MatchPattern::Literal(Expression::int(2, test_location(3), Ownership::ImmutableOwned)),
+                    pattern: MatchPattern::Literal(Expression::int(
+                        2,
+                        test_location(3),
+                        Ownership::ImmutableOwned,
+                    )),
                     guard: None,
                     body: vec![node(
                         NodeKind::Rvalue(Expression::int(
@@ -177,7 +191,11 @@ fn lowers_match_with_guarded_arm_into_hir_guard_expression() {
                 Ownership::ImmutableReference,
             ),
             vec![MatchArm {
-                pattern: MatchPattern::Literal(Expression::int(1, test_location(3), Ownership::ImmutableOwned)),
+                pattern: MatchPattern::Literal(Expression::int(
+                    1,
+                    test_location(3),
+                    Ownership::ImmutableOwned,
+                )),
                 guard: Some(Expression::bool(
                     true,
                     test_location(3),
@@ -242,7 +260,11 @@ fn match_guard_rejects_lowering_when_guard_emits_prelude_statements() {
     let io_path = super::symbol("io", &mut string_table);
 
     let guarded_arm = MatchArm {
-        pattern: MatchPattern::Literal(Expression::int(1, test_location(3), Ownership::ImmutableOwned)),
+        pattern: MatchPattern::Literal(Expression::int(
+            1,
+            test_location(3),
+            Ownership::ImmutableOwned,
+        )),
         guard: Some(Expression::host_function_call(
             io_path,
             vec![Expression::bool(
@@ -484,7 +506,6 @@ fn side_table_maps_statement_and_terminator_locations() {
     let ret_mappings = module.side_table.hir_locations_for_ast(&ret_loc);
     assert!(!ret_mappings.is_empty());
 }
-
 
 #[test]
 fn lowers_relational_pattern_to_hir_relational() {

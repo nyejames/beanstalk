@@ -82,7 +82,11 @@ fn match_arm_local_alias_does_not_escape_merge() {
     let y = symbol("y", &mut string_table);
 
     let arm = MatchArm {
-        pattern: MatchPattern::Literal(Expression::int(1, test_location(3), Ownership::ImmutableOwned)),
+        pattern: MatchPattern::Literal(Expression::int(
+            1,
+            test_location(3),
+            Ownership::ImmutableOwned,
+        )),
         guard: None,
         body: vec![node(
             NodeKind::VariableDeclaration(make_test_variable(
