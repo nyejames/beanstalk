@@ -51,6 +51,13 @@ enum MarkdownInlineAtom {
     Opaque(FormatterOpaquePiece),
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum LeadingChildTemplateLine {
+    None,
+    Standalone,
+    InlineContinuation,
+}
+
 #[derive(Clone, Debug, Default)]
 struct MarkdownLine {
     atoms: Vec<MarkdownInlineAtom>,
@@ -312,16 +319,17 @@ fn render_markdown_stream(lines: &[MarkdownLine], default_tag: &str) -> Vec<Form
     output.finish()
 }
 
-/// Groups plain non-list lines into paragraphs, applying the child-only newline rule.
+/// Groups plain non-list lines into paragraphs, applying child-template line boundaries.
 ///
 /// WHAT:
 /// - Consecutive text/dynamic lines stay in the current paragraph and join with spaces.
-/// - A line whose first significant piece is a child-template anchor forces the prior
-///   paragraph to close, then renders that line outside the paragraph.
+/// - A child-template anchor alone at line start renders as standalone output.
+/// - A child-template anchor followed by same-line content starts a fresh paragraph.
 ///
 /// WHY:
 /// - `$markdown` needs to keep child templates opaque while still letting a single
-///   newline before a child break paragraph context.
+///   newline before a child break paragraph context without splitting inline helpers
+///   from their same-line text.
 fn render_plain_region(lines: &[MarkdownLine], default_tag: &str) -> Vec<FormatterOutputPiece> {
     enum PlainRegionBlock {
         Paragraph(Vec<Vec<MarkdownInlineAtom>>),
@@ -332,18 +340,32 @@ fn render_plain_region(lines: &[MarkdownLine], default_tag: &str) -> Vec<Formatt
     let mut paragraph_lines: Vec<Vec<MarkdownInlineAtom>> = Vec::new();
 
     for line in lines {
-        if line_starts_child_template(&line.atoms) {
-            if !paragraph_lines.is_empty() {
-                blocks.push(PlainRegionBlock::Paragraph(std::mem::take(
-                    &mut paragraph_lines,
-                )));
-            }
+        match classify_leading_child_template_line(&line.atoms) {
+            LeadingChildTemplateLine::Standalone => {
+                if !paragraph_lines.is_empty() {
+                    blocks.push(PlainRegionBlock::Paragraph(std::mem::take(
+                        &mut paragraph_lines,
+                    )));
+                }
 
-            blocks.push(PlainRegionBlock::StandaloneInline(
-                trim_leading_horizontal_whitespace(&line.atoms),
-            ));
-        } else {
-            paragraph_lines.push(line.atoms.clone());
+                blocks.push(PlainRegionBlock::StandaloneInline(
+                    trim_leading_horizontal_whitespace(&line.atoms),
+                ));
+            }
+            LeadingChildTemplateLine::InlineContinuation => {
+                if !paragraph_lines.is_empty() {
+                    blocks.push(PlainRegionBlock::Paragraph(std::mem::take(
+                        &mut paragraph_lines,
+                    )));
+                }
+
+                blocks.push(PlainRegionBlock::Paragraph(vec![
+                    trim_leading_horizontal_whitespace(&line.atoms),
+                ]));
+            }
+            LeadingChildTemplateLine::None => {
+                paragraph_lines.push(line.atoms.clone());
+            }
         }
     }
 
@@ -510,19 +532,34 @@ fn build_list_item_blocks(fragments: &[MarkdownListItemFragment]) -> Vec<Markdow
 
     for fragment in fragments {
         match fragment {
-            MarkdownListItemFragment::Line(atoms) if line_starts_child_template(atoms) => {
-                if !paragraph_lines.is_empty() {
-                    blocks.push(MarkdownListItemBlock::Paragraph(std::mem::take(
-                        &mut paragraph_lines,
-                    )));
-                }
-
-                blocks.push(MarkdownListItemBlock::StandaloneInline(
-                    trim_leading_horizontal_whitespace(atoms),
-                ));
-            }
             MarkdownListItemFragment::Line(atoms) => {
-                paragraph_lines.push(atoms.clone());
+                match classify_leading_child_template_line(atoms) {
+                    LeadingChildTemplateLine::Standalone => {
+                        if !paragraph_lines.is_empty() {
+                            blocks.push(MarkdownListItemBlock::Paragraph(std::mem::take(
+                                &mut paragraph_lines,
+                            )));
+                        }
+
+                        blocks.push(MarkdownListItemBlock::StandaloneInline(
+                            trim_leading_horizontal_whitespace(atoms),
+                        ));
+                    }
+                    LeadingChildTemplateLine::InlineContinuation => {
+                        if !paragraph_lines.is_empty() {
+                            blocks.push(MarkdownListItemBlock::Paragraph(std::mem::take(
+                                &mut paragraph_lines,
+                            )));
+                        }
+
+                        blocks.push(MarkdownListItemBlock::Paragraph(vec![
+                            trim_leading_horizontal_whitespace(atoms),
+                        ]));
+                    }
+                    LeadingChildTemplateLine::None => {
+                        paragraph_lines.push(atoms.clone());
+                    }
+                }
             }
             MarkdownListItemFragment::NestedList(pieces) => {
                 if !paragraph_lines.is_empty() {
@@ -776,12 +813,30 @@ fn line_is_blank(line: &MarkdownLine) -> bool {
     })
 }
 
-fn line_starts_child_template(atoms: &[MarkdownInlineAtom]) -> bool {
-    match atoms.get(skip_leading_horizontal_whitespace(atoms)) {
-        Some(MarkdownInlineAtom::Opaque(anchor)) => {
-            anchor.kind == FormatterOpaqueKind::ChildTemplate
-        }
-        _ => false,
+fn classify_leading_child_template_line(atoms: &[MarkdownInlineAtom]) -> LeadingChildTemplateLine {
+    let mut index = skip_leading_horizontal_whitespace(atoms);
+
+    let Some(MarkdownInlineAtom::Opaque(anchor)) = atoms.get(index) else {
+        return LeadingChildTemplateLine::None;
+    };
+
+    if anchor.kind != FormatterOpaqueKind::ChildTemplate {
+        return LeadingChildTemplateLine::None;
+    }
+
+    index += 1;
+
+    while let Some(MarkdownInlineAtom::Char(' ' | '\t')) = atoms.get(index) {
+        index += 1;
+    }
+
+    if atoms[index..].iter().any(|atom| match atom {
+        MarkdownInlineAtom::Char(ch) => !matches!(ch, ' ' | '\t' | '\r' | '\n'),
+        MarkdownInlineAtom::Opaque(_) => true,
+    }) {
+        LeadingChildTemplateLine::InlineContinuation
+    } else {
+        LeadingChildTemplateLine::Standalone
     }
 }
 

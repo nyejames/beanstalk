@@ -295,6 +295,19 @@ fn non_list_lines_remain_plain_markdown_blocks() {
 }
 
 #[test]
+fn line_leading_child_anchor_with_inline_text_opens_paragraph_before_anchor() {
+    let rendered = markdown_formatter_output_from_text_and_anchors(&[
+        (None, Some(child_anchor(7))),
+        (Some(" introduces **compiler-handled directives**"), None),
+    ]);
+
+    assert_eq!(
+        rendered,
+        "<p>{child:7} introduces <strong>compiler-handled directives</strong></p>"
+    );
+}
+
+#[test]
 fn inline_child_anchor_stays_inside_one_paragraph() {
     let rendered = markdown_formatter_output_from_text_and_anchors(&[
         (Some("hello "), None),
@@ -306,7 +319,21 @@ fn inline_child_anchor_stays_inside_one_paragraph() {
 }
 
 #[test]
-fn single_newline_before_child_anchor_closes_current_paragraph() {
+fn newline_before_child_anchor_with_inline_text_starts_new_paragraph() {
+    let rendered = markdown_formatter_output_from_text_and_anchors(&[
+        (Some("previous paragraph\n"), None),
+        (None, Some(child_anchor(7))),
+        (Some(" introduces directives"), None),
+    ]);
+
+    assert_eq!(
+        rendered,
+        "<p>previous paragraph</p><p>{child:7} introduces directives</p>"
+    );
+}
+
+#[test]
+fn child_anchor_alone_on_line_keeps_existing_standalone_behavior() {
     let rendered = markdown_formatter_output_from_text_and_anchors(&[
         (Some("hello\n"), None),
         (None, Some(child_anchor(7))),
@@ -345,6 +372,17 @@ fn single_newline_before_dynamic_anchor_does_not_use_child_rule() {
 }
 
 #[test]
+fn line_leading_dynamic_anchor_does_not_use_child_template_boundary_rule() {
+    let rendered = markdown_formatter_output_from_text_and_anchors(&[
+        (Some("hello\n"), None),
+        (None, Some(dynamic_anchor(9))),
+        (Some(" world"), None),
+    ]);
+
+    assert_eq!(rendered, "<p>hello{dynamic:9} world</p>");
+}
+
+#[test]
 fn inline_child_anchor_stays_inside_same_list_item() {
     let rendered = markdown_formatter_output_from_text_and_anchors(&[
         (Some("- hello "), None),
@@ -353,6 +391,20 @@ fn inline_child_anchor_stays_inside_same_list_item() {
     ]);
 
     assert_eq!(rendered, "<ul><li>hello {child:4} world</li></ul>");
+}
+
+#[test]
+fn list_item_starting_with_child_anchor_and_inline_text_stays_one_item() {
+    let rendered = markdown_formatter_output_from_text_and_anchors(&[
+        (Some("- "), None),
+        (None, Some(child_anchor(4))),
+        (Some(" introduces directives"), None),
+    ]);
+
+    assert_eq!(
+        rendered,
+        "<ul><li>{child:4} introduces directives</li></ul>"
+    );
 }
 
 #[test]
