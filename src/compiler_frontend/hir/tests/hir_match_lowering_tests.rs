@@ -5,15 +5,17 @@
 
 use crate::compiler_frontend::ast::ast_nodes::NodeKind;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
-use crate::compiler_frontend::ast::statements::branching::{
+use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
+use crate::compiler_frontend::ast::statements::match_patterns::{
     MatchArm, MatchPattern, RelationalPatternOp,
 };
-use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::compiler_errors::ErrorType;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::declaration_syntax::choice::ChoiceVariant;
 use crate::compiler_frontend::hir::hir_nodes::{
-    HirExpressionKind, HirPattern, HirTerminator, ValueKind,
+    ChoiceId, HirExpressionKind, HirPattern, HirTerminator, ValueKind,
 };
+use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tests::test_support::{
     fresh_returns, function_node, make_test_variable, node, param, test_location,
@@ -666,5 +668,138 @@ fn lowers_guarded_relational_pattern_preserving_guard_separation() {
     assert!(
         arms[0].guard.is_some(),
         "guard should remain separate from relational pattern"
+    );
+}
+
+/// Verifies that `MatchPattern::ChoiceVariant` lowers to `HirPattern::ChoiceVariant`
+/// with correct tag indices and a shared `ChoiceId`.
+///
+/// WHY: choice match arms must not become `HirPattern::Literal(HirExpressionKind::Int)`
+/// after the Choice Hardening refactor.
+#[test]
+fn lowers_choice_match_arms_to_hir_choice_variant_patterns() {
+    let mut string_table = StringTable::new();
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
+    let status_path = InternedPath::from_single_str("Status", &mut string_table);
+    let ready_name = string_table.intern("Ready");
+    let busy_name = string_table.intern("Busy");
+    let status_local = super::symbol("status", &mut string_table);
+
+    let choice_type = DataType::Choices {
+        nominal_path: status_path.clone(),
+        variants: vec![
+            ChoiceVariant {
+                id: ready_name,
+                data_type: DataType::None,
+                location: test_location(2),
+            },
+            ChoiceVariant {
+                id: busy_name,
+                data_type: DataType::None,
+                location: test_location(2),
+            },
+        ],
+    };
+
+    let match_node = node(
+        NodeKind::Match(
+            Expression::reference(
+                status_local.clone(),
+                choice_type.clone(),
+                test_location(3),
+                Ownership::ImmutableOwned,
+            ),
+            vec![
+                MatchArm {
+                    pattern: MatchPattern::ChoiceVariant {
+                        nominal_path: status_path.clone(),
+                        variant: ready_name,
+                        tag: 0,
+                        location: test_location(4),
+                    },
+                    guard: None,
+                    body: vec![node(
+                        NodeKind::Rvalue(Expression::int(
+                            1,
+                            test_location(4),
+                            Ownership::ImmutableOwned,
+                        )),
+                        test_location(4),
+                    )],
+                },
+                MatchArm {
+                    pattern: MatchPattern::ChoiceVariant {
+                        nominal_path: status_path.clone(),
+                        variant: busy_name,
+                        tag: 1,
+                        location: test_location(5),
+                    },
+                    guard: None,
+                    body: vec![node(
+                        NodeKind::Rvalue(Expression::int(
+                            2,
+                            test_location(5),
+                            Ownership::ImmutableOwned,
+                        )),
+                        test_location(5),
+                    )],
+                },
+            ],
+            None,
+        ),
+        test_location(3),
+    );
+
+    let start_fn = function_node(
+        start_name,
+        FunctionSignature {
+            parameters: vec![param(status_local, choice_type, false, test_location(2))],
+            returns: vec![],
+        },
+        vec![match_node],
+        test_location(2),
+    );
+
+    let ast = build_ast(vec![start_fn], entry_path);
+    let module = lower_ast(ast, &mut string_table).expect("HIR lowering should succeed");
+
+    let start = &module.functions[module.start_function.0 as usize];
+    let entry_block = &module.blocks[start.entry.0 as usize];
+
+    let arms = match &entry_block.terminator {
+        HirTerminator::Match { arms, .. } => arms,
+        _ => panic!("expected match terminator"),
+    };
+
+    // HIR match lowering synthesizes a wildcard default arm when no explicit else is given.
+    assert_eq!(arms.len(), 3);
+
+    let (choice_id_0, tag_0) = match &arms[0].pattern {
+        HirPattern::ChoiceVariant {
+            choice_id,
+            variant_index,
+        } => (*choice_id, *variant_index),
+        other => panic!("expected ChoiceVariant pattern, got {other:?}"),
+    };
+    assert_eq!(tag_0, 0, "first arm should match tag 0 (Ready)");
+    assert_eq!(choice_id_0, ChoiceId(0));
+
+    let (choice_id_1, tag_1) = match &arms[1].pattern {
+        HirPattern::ChoiceVariant {
+            choice_id,
+            variant_index,
+        } => (*choice_id, *variant_index),
+        other => panic!("expected ChoiceVariant pattern, got {other:?}"),
+    };
+    assert_eq!(tag_1, 1, "second arm should match tag 1 (Busy)");
+    assert_eq!(
+        choice_id_1,
+        ChoiceId(0),
+        "both arms should share the same ChoiceId"
+    );
+
+    assert!(
+        matches!(arms[2].pattern, HirPattern::Wildcard),
+        "synthesized default arm should be a wildcard"
     );
 }

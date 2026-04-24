@@ -16,10 +16,12 @@ use crate::compiler_frontend::builtins::error_type::register_builtin_error_types
 use crate::compiler_frontend::builtins::{BuiltinMethodKind, CollectionBuiltinOp};
 use crate::compiler_frontend::compiler_errors::ErrorType;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::declaration_syntax::choice::ChoiceVariant;
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
+use crate::compiler_frontend::hir::hir_datatypes::HirTypeKind;
 use crate::compiler_frontend::hir::hir_nodes::{
-    BlockId, FieldId, FunctionId, HirBinOp, HirBlock, HirExpressionKind, HirLocal, HirPlace,
-    HirStatementKind, HirTerminator, HirUnaryOp, LocalId, RegionId, StructId, ValueKind,
+    BlockId, ChoiceId, FieldId, FunctionId, HirBinOp, HirBlock, HirExpressionKind, HirLocal,
+    HirPlace, HirStatementKind, HirTerminator, HirUnaryOp, LocalId, RegionId, StructId, ValueKind,
 };
 use crate::compiler_frontend::hir::hir_side_table::HirLocalOriginKind;
 use crate::compiler_frontend::host_functions::CallTarget;
@@ -1858,4 +1860,82 @@ fn lowers_collection_set_builtin_from_explicit_ast_node_to_index_assignment() {
         }
         other => panic!("expected index assignment statement, got {other:?}"),
     }
+}
+
+/// Verifies that `ExpressionKind::ChoiceVariant` lowers to `HirExpressionKind::ChoiceVariant`
+/// with the correct tag index, and that the result type is `HirTypeKind::Choice`.
+///
+/// WHY: this is the core contract of the Choice Hardening refactor — choice values must not
+/// masquerade as `HirExpressionKind::Int` in HIR.
+#[test]
+fn lowers_choice_variant_expression_to_hir_choice_variant() {
+    let mut string_table = StringTable::new();
+    let location = location(1);
+
+    let status_path = InternedPath::from_single_str("Status", &mut string_table);
+    let ready_name = string_table.intern("Ready");
+    let busy_name = string_table.intern("Busy");
+
+    let mut builder = setup_builder(&mut string_table);
+
+    let choice_type = DataType::Choices {
+        nominal_path: status_path.clone(),
+        variants: vec![
+            ChoiceVariant {
+                id: ready_name,
+                data_type: DataType::None,
+                location: location.clone(),
+            },
+            ChoiceVariant {
+                id: busy_name,
+                data_type: DataType::None,
+                location: location.clone(),
+            },
+        ],
+    };
+
+    let choice_expr = Expression::new(
+        ExpressionKind::ChoiceVariant {
+            nominal_path: status_path.clone(),
+            variant: ready_name,
+            tag: 0,
+        },
+        location.clone(),
+        choice_type,
+        Ownership::ImmutableOwned,
+    );
+
+    let lowered = builder
+        .lower_expression(&choice_expr)
+        .expect("choice variant lowering should succeed");
+
+    assert!(lowered.prelude.is_empty());
+    assert_eq!(lowered.value.value_kind, ValueKind::Const);
+
+    let (choice_id, variant_index) = match &lowered.value.kind {
+        HirExpressionKind::ChoiceVariant {
+            choice_id,
+            variant_index,
+        } => (*choice_id, *variant_index),
+        other => panic!("expected ChoiceVariant, got {other:?}"),
+    };
+
+    assert_eq!(variant_index, 0, "expected tag 0 for Ready variant");
+    assert_eq!(
+        choice_id,
+        ChoiceId(0),
+        "first choice should receive ChoiceId(0)"
+    );
+
+    let hir_type = builder.type_context.get(lowered.value.ty);
+    assert!(
+        matches!(
+            hir_type.kind,
+            HirTypeKind::Choice {
+                choice_id: ChoiceId(0)
+            }
+        ),
+        "expected Choice type with ChoiceId(0), got {:?}",
+        hir_type.kind
+    );
 }

@@ -42,6 +42,7 @@ use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, ResultCallHandling,
 };
+use crate::compiler_frontend::ast::statements::match_patterns::MatchPattern;
 use crate::compiler_frontend::ast::templates::template::TemplateConstValueKind;
 use crate::compiler_frontend::ast::templates::template::{TemplateAtom, TemplateType};
 use crate::compiler_frontend::ast::templates::template_types::Template;
@@ -265,8 +266,10 @@ fn normalize_control_flow_templates(
             )?;
             for arm in arms {
                 match &mut arm.pattern {
-                    crate::compiler_frontend::ast::statements::branching::MatchPattern::Literal(expression)
-                    | crate::compiler_frontend::ast::statements::branching::MatchPattern::Relational { value: expression, .. } => {
+                    MatchPattern::Literal(expression)
+                    | MatchPattern::Relational {
+                        value: expression, ..
+                    } => {
                         normalize_expression_templates(
                             expression,
                             source_file_scope,
@@ -275,8 +278,7 @@ fn normalize_control_flow_templates(
                             string_table,
                         )?;
                     }
-                    crate::compiler_frontend::ast::statements::branching::MatchPattern::Wildcard { .. }
-                    | crate::compiler_frontend::ast::statements::branching::MatchPattern::ChoiceVariant { .. } => {}
+                    MatchPattern::Wildcard { .. } | MatchPattern::ChoiceVariant { .. } => {}
                 }
                 if let Some(guard) = &mut arm.guard {
                     normalize_expression_templates(

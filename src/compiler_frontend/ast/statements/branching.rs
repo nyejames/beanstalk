@@ -16,7 +16,7 @@ use crate::compiler_frontend::ast::statements::condition_validation::{
     ensure_if_statement_condition, ensure_match_guard_condition,
 };
 use crate::compiler_frontend::ast::statements::match_patterns::{
-    normalized_subject_type, parse_choice_variant_pattern, parse_non_choice_pattern,
+    MatchArm, normalized_subject_type, parse_choice_variant_pattern, parse_non_choice_pattern,
 };
 use crate::compiler_frontend::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::compiler_errors::CompilerError;
@@ -26,15 +26,11 @@ use crate::compiler_frontend::deferred_feature_diagnostics::deferred_feature_rul
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
 use crate::{ast_log, return_rule_error, return_syntax_error};
-use std::collections::HashSet;
-
-pub use crate::compiler_frontend::ast::statements::match_patterns::{
-    MatchArm, MatchPattern, RelationalPatternOp,
-};
+use rustc_hash::FxHashSet;
 
 struct ParsedCaseArm {
     arm: MatchArm,
-    // Tracks which choice variant this arm consumes so duplicates can be rejected early.
+    /// Tracks which choice variant this arm consumes so duplicates can be rejected early.
     matched_choice_variant: Option<StringId>,
     pattern_location: SourceLocation,
 }
@@ -158,7 +154,7 @@ fn create_match_node(
     let mut has_guarded_arms = false;
     let mut match_arm_indent: Option<i32> = None;
     // Choice exhaustiveness/duplication checks rely on the set of consumed variant names.
-    let mut matched_choice_variants: HashSet<StringId> = HashSet::new();
+    let mut matched_choice_variants: FxHashSet<StringId> = FxHashSet::default();
 
     loop {
         token_stream.skip_newlines();
@@ -365,6 +361,36 @@ fn parse_else_arm(
     )
 }
 
+/// Parse an optional `if <condition>` guard before the `=>` separator.
+///
+/// WHY: guard parsing is self-contained (token check, expression parse, validation)
+/// and extracting it removes ~15 lines from `parse_case_arm`.
+fn parse_match_guard(
+    token_stream: &mut FileTokens,
+    match_context: &ScopeContext,
+    string_table: &mut StringTable,
+) -> Result<Option<Expression>, CompilerError> {
+    if token_stream.current_token_kind() != &TokenKind::If {
+        return Ok(None);
+    }
+
+    token_stream.advance();
+    token_stream.skip_newlines();
+
+    let mut guard_type = DataType::Inferred;
+    let guard_expression = create_expression_until(
+        token_stream,
+        &match_context.new_child_control_flow(ContextKind::Condition, string_table),
+        &mut guard_type,
+        &Ownership::ImmutableOwned,
+        &[TokenKind::FatArrow],
+        string_table,
+    )?;
+    ensure_match_guard_condition(&guard_expression, string_table)?;
+
+    Ok(Some(guard_expression))
+}
+
 /// Parse a single `case <pattern> => <body>` arm.
 ///
 /// WHAT: dispatches to choice-variant or literal pattern parsing based on the
@@ -433,23 +459,7 @@ fn parse_case_arm(
         );
     }
 
-    let mut guard = None;
-    if token_stream.current_token_kind() == &TokenKind::If {
-        token_stream.advance();
-        token_stream.skip_newlines();
-
-        let mut guard_type = DataType::Inferred;
-        let guard_expression = create_expression_until(
-            token_stream,
-            &match_context.new_child_control_flow(ContextKind::Condition, string_table),
-            &mut guard_type,
-            &Ownership::ImmutableOwned,
-            &[TokenKind::FatArrow],
-            string_table,
-        )?;
-        ensure_match_guard_condition(&guard_expression, string_table)?;
-        guard = Some(guard_expression);
-    }
+    let guard = parse_match_guard(token_stream, match_context, string_table)?;
 
     if token_stream.current_token_kind() != &TokenKind::FatArrow {
         return_rule_error!(
@@ -495,7 +505,7 @@ fn enforce_match_exhaustiveness(
     subject: &Expression,
     else_block: &Option<Vec<AstNode>>,
     has_guarded_arms: bool,
-    matched_choice_variants: &HashSet<StringId>,
+    matched_choice_variants: &FxHashSet<StringId>,
     string_table: &StringTable,
 ) -> Result<(), CompilerError> {
     let normalized_subject_type = normalized_subject_type(&subject.data_type);

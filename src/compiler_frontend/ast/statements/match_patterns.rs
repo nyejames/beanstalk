@@ -180,19 +180,62 @@ pub(super) fn parse_choice_variant_pattern(
     // Alpha only supports exact choice-variant names in match patterns.
     reject_deferred_pattern_lead_token(token_stream)?;
 
-    let choice_name = choice_nominal_path.name();
-    let choice_name_display = choice_name
-        .map(|name| string_table.resolve(name).to_owned())
-        .unwrap_or_else(|| String::from("<choice>"));
+    let choice_name_display = choice_display_name(choice_nominal_path, string_table);
+    let (variant_name, variant_location) = parse_variant_name(
+        token_stream,
+        choice_nominal_path,
+        &choice_name_display,
+        string_table,
+    )?;
 
+    if token_stream.current_token_kind() == &TokenKind::TypeParameterBracket {
+        return Err(deferred_feature_rule_error(
+            "Capture/tagged patterns using '|...|' are deferred for Alpha.",
+            token_stream.current_location(),
+            "Match Statement Parsing",
+            "Use simple choice-variant patterns only in this phase.",
+        ));
+    }
+
+    let variant_index = resolve_variant_to_tag(
+        variants,
+        variant_name,
+        &choice_name_display,
+        &variant_location,
+        string_table,
+    )?;
+
+    Ok(ParsedChoicePattern {
+        pattern: MatchPattern::ChoiceVariant {
+            nominal_path: choice_nominal_path.to_owned(),
+            variant: variant_name,
+            tag: variant_index,
+            location: variant_location.clone(),
+        },
+        variant: variant_name,
+        location: variant_location,
+    })
+}
+
+/// Parse a bare (`Ready`) or qualified (`Status::Ready`) variant name from the token stream.
+///
+/// WHY: separating token-level parsing from tag resolution keeps each function focused
+/// and makes error messages specific to the syntactic layer they diagnose.
+fn parse_variant_name(
+    token_stream: &mut FileTokens,
+    choice_nominal_path: &InternedPath,
+    choice_name_display: &str,
+    string_table: &StringTable,
+) -> Result<(StringId, SourceLocation), CompilerError> {
     let leading_token = token_stream.current_token_kind().to_owned();
-    let (variant_name, variant_location) = match leading_token {
+
+    match leading_token {
         TokenKind::Symbol(first_name) => {
             let first_location = token_stream.current_location();
             token_stream.advance();
 
             if token_stream.current_token_kind() == &TokenKind::DoubleColon {
-                if let Some(expected_choice_name) = choice_name
+                if let Some(expected_choice_name) = choice_nominal_path.name()
                     && first_name != expected_choice_name
                 {
                     return_rule_error!(
@@ -216,7 +259,7 @@ pub(super) fn parse_choice_variant_pattern(
                     TokenKind::Symbol(qualified_variant_name) => {
                         let qualified_location = token_stream.current_location();
                         token_stream.advance();
-                        (qualified_variant_name, qualified_location)
+                        Ok((qualified_variant_name, qualified_location))
                     }
                     _ => {
                         return_rule_error!(
@@ -233,7 +276,7 @@ pub(super) fn parse_choice_variant_pattern(
                     }
                 }
             } else {
-                (first_name, first_location)
+                Ok((first_name, first_location))
             }
         }
 
@@ -263,18 +306,20 @@ pub(super) fn parse_choice_variant_pattern(
                 }
             );
         }
-    };
-
-    if token_stream.current_token_kind() == &TokenKind::TypeParameterBracket {
-        return Err(deferred_feature_rule_error(
-            "Capture/tagged patterns using '|...|' are deferred for Alpha.",
-            token_stream.current_location(),
-            "Match Statement Parsing",
-            "Use simple choice-variant patterns only in this phase.",
-        ));
     }
+}
 
-    // Match lowering compares tag indices today, so we normalize variant names to their index.
+/// Look up a variant name in the declared choice variant list and return its positional tag.
+///
+/// WHY: separating semantic resolution from token parsing produces clearer control flow
+/// and keeps the error-construction logic for unknown variants in one place.
+fn resolve_variant_to_tag(
+    variants: &[ChoiceVariant],
+    variant_name: StringId,
+    choice_name_display: &str,
+    variant_location: &SourceLocation,
+    string_table: &StringTable,
+) -> Result<usize, CompilerError> {
     let Some(variant_index) = variants
         .iter()
         .position(|variant| variant.id == variant_name)
@@ -292,7 +337,7 @@ pub(super) fn parse_choice_variant_pattern(
                 choice_name_display,
                 available_variants
             ),
-            variant_location,
+            variant_location.clone(),
             {
                 CompilationStage => "Match Statement Parsing",
                 PrimarySuggestion => "Use one of the declared variants for this choice",
@@ -300,16 +345,14 @@ pub(super) fn parse_choice_variant_pattern(
         );
     };
 
-    Ok(ParsedChoicePattern {
-        pattern: MatchPattern::ChoiceVariant {
-            nominal_path: choice_nominal_path.to_owned(),
-            variant: variant_name,
-            tag: variant_index,
-            location: variant_location.clone(),
-        },
-        variant: variant_name,
-        location: variant_location,
-    })
+    Ok(variant_index)
+}
+
+fn choice_display_name(choice_nominal_path: &InternedPath, string_table: &StringTable) -> String {
+    choice_nominal_path
+        .name()
+        .map(|name| string_table.resolve(name).to_owned())
+        .unwrap_or_else(|| String::from("<choice>"))
 }
 
 /// Parse a literal value pattern and type-check it against the scrutinee.

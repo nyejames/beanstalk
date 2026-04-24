@@ -11,8 +11,8 @@ use crate::compiler_frontend::ast::expressions::call_argument::{
 use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, Operator, ResultCallHandling,
 };
-use crate::compiler_frontend::ast::statements::branching::MatchArm;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
+use crate::compiler_frontend::ast::statements::match_patterns::MatchArm;
 use crate::compiler_frontend::builtins::{BuiltinMethodKind, CollectionBuiltinOp};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};

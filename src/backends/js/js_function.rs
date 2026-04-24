@@ -180,7 +180,12 @@ impl<'hir> JsEmitter<'hir> {
                     }
 
                     for arm in arms {
-                        if !matches!(arm.pattern, HirPattern::Literal(_) | HirPattern::Wildcard) {
+                        if !matches!(
+                            arm.pattern,
+                            HirPattern::Literal(_)
+                                | HirPattern::Wildcard
+                                | HirPattern::ChoiceVariant { .. }
+                        ) {
                             return Ok(ControlFlowStrategy::Dispatcher);
                         }
 

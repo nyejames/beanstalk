@@ -7,6 +7,9 @@ use super::*;
 use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, Operator,
 };
+use crate::compiler_frontend::ast::statements::match_patterns::{
+    MatchPattern, RelationalPatternOp,
+};
 use crate::compiler_frontend::compiler_errors::{ErrorMetaDataKey, ErrorType};
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::tests::test_support::{

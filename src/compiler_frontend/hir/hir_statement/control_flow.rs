@@ -6,7 +6,7 @@
 
 use crate::compiler_frontend::ast::ast_nodes::AstNode;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
-use crate::compiler_frontend::ast::statements::branching::{
+use crate::compiler_frontend::ast::statements::match_patterns::{
     MatchArm, MatchPattern, RelationalPatternOp,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;

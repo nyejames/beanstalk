@@ -397,7 +397,23 @@ impl<'hir> JsEmitter<'hir> {
                 let scrutinee_temp = self.next_temp_identifier("__match");
                 self.emit_line(&format!("const {scrutinee_temp} = {scrutinee};"));
 
-                for (index, arm) in arms.iter().enumerate() {
+                // If the last arm is an unguarded wildcard, emit it as `else` instead of
+                // `else if (true)` and skip the unreachable fallback throw.
+                let has_wildcard_fallback = matches!(
+                    arms.last(),
+                    Some(HirMatchArm {
+                        pattern: HirPattern::Wildcard,
+                        guard: None,
+                        ..
+                    })
+                );
+                let emit_count = if has_wildcard_fallback {
+                    arms.len() - 1
+                } else {
+                    arms.len()
+                };
+
+                for (index, arm) in arms.iter().enumerate().take(emit_count) {
                     let condition = self.lower_match_arm_condition(&scrutinee_temp, arm)?;
                     if index == 0 {
                         self.emit_line(&format!("if ({condition}) {{"));
@@ -411,11 +427,21 @@ impl<'hir> JsEmitter<'hir> {
                     self.emit_line("}");
                 }
 
-                self.emit_line("else {");
-                self.with_indent(|emitter| {
-                    emitter.emit_line("throw new Error(\"No match arm selected\");");
-                });
-                self.emit_line("}");
+                if has_wildcard_fallback {
+                    let wildcard_arm = arms.last().expect("checked above");
+                    self.emit_line("else {");
+                    self.with_indent(|emitter| {
+                        emitter
+                            .emit_line(&format!("{state_identifier} = {};", wildcard_arm.body.0));
+                    });
+                    self.emit_line("}");
+                } else {
+                    self.emit_line("else {");
+                    self.with_indent(|emitter| {
+                        emitter.emit_line("throw new Error(\"No match arm selected\");");
+                    });
+                    self.emit_line("}");
+                }
                 self.emit_line("continue;");
             }
 

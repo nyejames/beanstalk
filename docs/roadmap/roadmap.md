@@ -21,8 +21,6 @@ These are the non-negotiable conditions for starting Alpha:
 
 # Next Plans
 
-## Review and expansion of Choices
-
 ## Final pre-alpha sweep
 
 - Re-run the feature matrix and mark all supported areas as covered.
@@ -80,3 +78,6 @@ Broader Wasm maturity beyond the current experimental path.
 
 ## Rust Interpreter
 - Unimplmented - mostly just scaffolding
+- primary goal: for basic CTFE as a release mode optimization step after HIR generation
+- long term goal (noted here to not forget the idea): will work like MIRI to enable a special `checked: .. ;` blocks.
+In beanstalk these would HAVE to be fully evaluated (would not be actually unsafe, just more heavily verified), but would run this additional advanced checking through those blocks specifically. Tradeoff of slower compile-times for using these special blocks, but gain more control. Rust interpreter means Beanstalk can do much more sophisticated analysis to prove the block is safe, allowing more flexible code patterns and faster runtime code.
