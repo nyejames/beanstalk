@@ -21,14 +21,6 @@ These are the non-negotiable conditions for starting Alpha:
 
 # Next Plans
 
-## Final pre-alpha sweep
-
-- Re-run the feature matrix and mark all supported areas as covered.
-- Re-check that unsupported/deferred features fail cleanly.
-- Re-check that docs and examples match actual support.
-- Re-check diagnostics quality on a representative set of failures.
-- Re-check cross-platform golden stability.
-
 ### Alpha cleanup
 
 Land final small consistency and hygiene fixes before the release branch/tag.

@@ -1,5 +1,9 @@
 # Beanstalk Traits
 
+Current compiler status: traits are deferred for Alpha.
+The `must` and `This` tokens are reserved and reject with structured diagnostics.
+This page is a design reference, not current user-facing compiler support.
+
 Traits define a named behavioural contract for a type.
 
 They are intended to be simple, explicit, and cheap for the compiler to resolve.

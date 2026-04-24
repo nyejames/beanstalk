@@ -12,38 +12,49 @@ import @styles/docs {navbar, title, section, codeblock, theme_head}
 
     # Choices (enums)
     Choices are a way to define a set of possible values. 
-    They are similar to enums in Rust (tagged unions).
+    The Alpha compiler supports unit variants.
+    Payload variants, tagged variant bodies, default values, and constructor calls are deferred.
 
     You create and access choices using a double colon.
 
     [codeblock, $code("bst"):
-        Choice :: Option1, Option2, Option3;
+        #Status :: Ready, Busy, Offline;
 
-        option = Choice::Option2
+        current Status = Status::Busy
 
-        -- Another example with data attached to the Error choice and a Plex attached to the Pending choice
-        ResponseKind ::
-            Success,
-            Error String,
-            Pending |
-                RetryCount Int,
-                Timeout Float
-            |,
+        pass_status |status Status| -> Status:
+            return status
         ;
 
-        response = ResponseKind::Error("Network failure")
+        selected = pass_status(current)
     ]
 
-    Choices can also be defined with default values, the same way structs can.
+    Choices work with assignment and pattern matching.
 
     [codeblock, $code("bst"):
-        Status ::
-            Active Bool = true,
-            Inactive Bool = false,
-        ;
+        #Status :: Ready, Busy;
 
-        -- No need to set a value, it defaults to 'true'
-        currentStatus = Status::Active
+        current ~= Status::Ready
+        current = Status::Busy
+
+        label ~= "unset"
+        if current is:
+            case Ready => label = "ready"
+            case Busy => label = "busy"
+        ;
+    ]
+
+    These richer choice forms are reserved for post-Alpha design work and currently reject with structured diagnostics:
+
+    [codeblock, $code("bst"):
+        -- Payload variant: deferred.
+        Response :: Error String, Success;
+
+        -- Tagged variant body: deferred.
+        Response :: Pending | retry_count Int |, Success;
+
+        -- Constructor call: deferred.
+        value = Response::Success()
     ]
 
 ]

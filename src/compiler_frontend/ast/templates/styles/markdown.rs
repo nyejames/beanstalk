@@ -649,6 +649,9 @@ fn render_inline_atoms(
                     &mut wrapper_open,
                     &mut pending_open_strength,
                 );
+                // Soft line boundaries render as one space but remain newline atoms
+                // here so inline parsing can still reject cross-line constructs.
+                output.push_escaped_char(' ');
                 prev_whitespace = true;
                 index += 1;
             }
@@ -964,7 +967,8 @@ fn join_lines_with_spaces(lines: &[Vec<MarkdownInlineAtom>]) -> Vec<MarkdownInli
     for (index, line) in lines.iter().enumerate() {
         if index > 0 {
             // Preserve a soft line boundary for inline parsing rules (for example
-            // preventing cross-line link parsing) without forcing a rendered space.
+            // preventing cross-line link parsing). Inline rendering turns this into
+            // exactly one visible space.
             joined.push(MarkdownInlineAtom::Char('\n'));
         }
         joined.extend(line.iter().copied());

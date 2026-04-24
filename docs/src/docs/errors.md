@@ -5,45 +5,33 @@ they represent Result types similar to Rust.
 
 Any function that can return an error must have its error handled.
 
-The bang symbol ! is used for creating Result types and handling errors.
+The bang symbol `!` marks one error return slot and handles error-returning calls.
 
 ```beanstalk
-    func_call_that_can_return_an_error() Int!:
-        -- Error handling code
-    ;
-
-    -- Here, we define a type called 'BadStuff' that we will use as our error value.
-    BadStuff = |
-        msg String
-    |
-
-    -- This function can return a String and an Int or a BadStuff error
-    -- The ! indicates that instead of the normal return values, the error value could be returned instead of the other two
-    -- Using return! returns only the error value
-    -- The regular return doesn't return the error value
-    -- Only one value can use the ! symbol to represent the error value
-    parent_func || -> String, Int, BadStuff!:
-        text = func_call_that_can_return_an_error() !err:
-            io("Error: ", err)
-            return! BadStuff(err.msg)
+    parse_number |text String| -> Int, Error!:
+        if text.is_empty():
+            return! Error("Parse", "int.empty", "Missing number")
         ;
 
-        return text, 42
-    ;
-    
-    text, number = parent_func() !err:
-        io("Error from parent_func: ", err.msg)
-        return
+        return 42
     ;
 
-    -- Handling an error with default values
-    string_returned, number_returned = parent_func() !("", 0)
+    -- Fallback value.
+    value = parse_number("") ! 0
 
-    -- Bubbling up errors without handling them
-    another_parent_func || -> String, Int, BadStuff!:
-        -- Since this function has the same return signature, 
-        -- it can be directly returned without handling the error here
-        return parent_func()
+    -- Bubble the error to the surrounding function.
+    wrapper |text String| -> Int, Error!:
+        value = parse_number(text)!
+        return value
+    ;
+
+    -- Named handler with a fallback value.
+    recover |text String| -> Int:
+        value = parse_number(text) err! 0:
+            io(err.message)
+        ;
+
+        return value
     ;
 
     -- By default, collection .get(index) returns a Result<Elem, Error>.
@@ -51,7 +39,8 @@ The bang symbol ! is used for creating Result types and handling errors.
     my_list ~= {1, 2, 3}
 
     -- Handle the out-of-bounds case with a fallback and named error scope.
-    value = my_list.get(5) err! (my_list.length() - 1):
+    fallback = my_list.length() ! 0
+    value = my_list.get(5) err! fallback:
         io("Index out of bounds error: ", err.message)
     ;
 
@@ -65,47 +54,16 @@ The bang symbol ! is used for creating Result types and handling errors.
 ```beanstalk
 
     -- Using the Option type (?) we can represent that a value might not exist
-    -- This function returns a string or None
-    getURL || -> String?:
-        response = getNetworkRequest()
-
-        if response is None:
-            return None
+    -- This function returns a string or none.
+    find_url |has_url Bool| -> String?:
+        if has_url:
+            return "https://nyejames.com"
         ;
 
-        return response.body
+        return none
     ;
 
-    -- We can use some ? syntax sugar to set a default value if the value is None
-    url = getURL() ?("https://nyejames.com")
-
-    -- This function always returns a Response, as we've handled the None case inside the function
-    getURL || -> Response:
-        return getNetworkRequest() ?(
-            Response("Default Body")
-        )
-    ;
-
-    -- Ignoring the error syntax sugar and returning errors with the values
-    -- Notice, not using the ! 
-    -- Instead, we will use an option '?' to represent that the error could be None
-    -- This is equivalent to the pattern used for error handling in Go
-    parent_func_no_sugar || -> String, Int, BadStuff?:
-        text, number = func_call_that_can_return_an_error() !:
-            return "", 0, BadStuff("An error occurred")
-        ;
-
-        return text, number, None
-    ;
-
-    -- We are just treating the error as an optional here instead
-    -- So we can seperately check if there was an error
-    text, number, error? = parent_func_no_sugar()
-
-    if error is not None:
-        io("Error from parent_func_no_sugar: ", error.msg)
-        return
-    ;
+    url String? = find_url(false)
 ```
 
 ## Panics

@@ -554,6 +554,11 @@ path = "diagnostic_match_deferred_capture_pattern"
 tags = ["integration","diagnostics"]
 
 [[case]]
+id = "diagnostic_match_negated_pattern"
+path = "diagnostic_match_negated_pattern"
+tags = ["integration","diagnostics"]
+
+[[case]]
 id = "diagnostic_match_legacy_colon_syntax"
 path = "diagnostic_match_legacy_colon_syntax"
 tags = ["integration","diagnostics"]

@@ -85,6 +85,39 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
             [: No clear canonical coverage found.]
         ]
     ]
+
+    # Final pre-alpha sweep
+
+    Last swept: April 24, 2026.
+
+    [table:
+        [header: [: Check] [: Result] ]
+
+        [data:
+            [: HTML Alpha matrix]
+            [: [codesnippet:cargo run -- tests --backend html] passed 425 / 425 expected results: 266 successful compilations and 159 expected diagnostic failures.]
+        ]
+
+        [data:
+            [: HTML-Wasm experimental matrix]
+            [: [codesnippet:cargo run -- tests --backend html_wasm] passed 20 / 20 expected results. This remains experimental and is not counted as Alpha runtime support.]
+        ]
+
+        [data:
+            [: Deferred features]
+            [: Traits, choice payload/tagged/default/constructor paths, capture/tagged match patterns, removed collection syntax, and labeled scopes have canonical structured-diagnostic fixtures.]
+        ]
+
+        [data:
+            [: Diagnostics]
+            [: Representative syntax, type, rule, config/file, borrow-checker, and deferred-feature failures assert [codesnippet:error_type] plus ordered message fragments.]
+        ]
+
+        [data:
+            [: Cross-platform goldens]
+            [: Exact goldens were re-checked. Non-contractual output should continue to use normalized goldens, artifact assertions, or rendered-output assertions. The current GitHub workflow deploys docs only, so Windows/macOS validation remains a separate release check.]
+        ]
+    ]
 ]
 
 #[section, $markdown:
@@ -334,7 +367,7 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
         [data:
             [: Negated match patterns]
             [: Deferred]
-            [: Add or keep a canonical deferred-pattern diagnostic if syntax is recognized.]
+            [: [codesnippet:diagnostic_match_negated_pattern]]
             [: Should wait until the match exhaustiveness model is deliberately extended.]
         ]
 
@@ -362,59 +395,53 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
 ]
 
 #[section, $markdown:
-    # Current Alpha probe gaps
+    # Final sweep notes
 
-    These are the remaining areas to keep visible during the pre-alpha inspection.
-    They are not all blockers, but they should be deliberately accepted, fixed, or moved out of the Alpha contract.
+    These are the scoped follow-ups after the final pre-alpha sweep.
+    They belong to Alpha cleanup or post-Alpha planning unless they become release blockers.
 
     [table:
-        [header: [: Area] [: Severity] [: Action] ]
+        [header: [: Area] [: Priority] [: Action] ]
 
         [data:
-            [: Matrix accuracy]
-            [: High]
-            [: Keep this page in sync with actual compiler behavior. Remove stale HTML-Wasm-as-supported wording and stale cross-platform drift notes once fixes are confirmed.]
+            [: CI platform coverage]
+            [: Alpha cleanup]
+            [: Add or run a Windows/macOS validation path before tagging Alpha. The repo currently has a docs deploy workflow, not a cross-platform validation workflow.]
         ]
 
         [data:
             [: Pattern matching scope]
-            [: High]
+            [: Post-Alpha unless promoted]
             [: Relational ordered-scalar patterns are now implemented and tested. Keep negated and capture/tagged patterns deferred for Alpha unless explicitly promoted.]
         ]
 
         [data:
             [: Choice scope]
-            [: High]
-            [: Decide whether unit-only choices are the Alpha contract or whether constructors / payloads need a contained pre-Alpha expansion.]
-        ]
-
-        [data:
-            [: Unsupported feature diagnostics]
-            [: High]
-            [: Re-check all reserved/deferred syntax paths for structured diagnostics and no panics.]
+            [: Post-Alpha unless promoted]
+            [: Unit-only choices are the current Alpha contract. Constructors, payloads, tagged/default declarations, and full tagged unions stay deferred.]
         ]
 
         [data:
             [: Docs vs implementation]
-            [: Medium]
-            [: Keep aspirational language docs if useful, but make this page the current implementation tracker.]
+            [: Ongoing]
+            [: Keep aspirational design docs clearly labelled as future-facing. The progress page remains the implementation tracker.]
         ]
 
         [data:
             [: Char diagnostics]
-            [: Low]
+            [: Cleanup]
             [: Add more malformed-char diagnostics if time allows. Existing success coverage and baseline failure coverage are enough for Alpha if tests remain green.]
         ]
 
         [data:
             [: Cross-platform golden stability]
-            [: Medium]
-            [: Treat as mostly closed once Windows fixes are verified. Keep path and template output normalized where exact bytes are not contractual.]
+            [: Ongoing]
+            [: Keep path and template output normalized where exact bytes are not contractual.]
         ]
 
         [data:
             [: HTML-Wasm coverage]
-            [: Low for Alpha]
+            [: Post-Alpha]
             [: Keep experimental tests useful, but do not promote successful Wasm collection/runtime behavior to an Alpha requirement.]
         ]
     ]

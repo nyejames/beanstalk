@@ -151,6 +151,6 @@ The language is nearly at the first alpha stage, but already has a broad set of 
 
 The syntax and some constructs (e.g. closures, async) are not implemented at all yet and will evolve in their design during the alpha stage. Not everything is completely set in stone so some things can be figured out based on how the language feels to use in real projects.
 
-The goal once hitting alpha is to have a stable Wasm backend for web projects.
+The first Alpha target is the JS / HTML pipeline for docs-style static sites and small web projects. Wasm remains the long-term backend direction after Alpha.
 
 <br>

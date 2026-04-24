@@ -2,7 +2,7 @@ import @lib/html {format, style}
 import @styles/docs {navbar, title, section, palette, table, codeblock, theme_head}
 
 # page_title = "Functions"
-# page_description = "Function declarations, returns, and closures in Beanstalk."
+# page_description = "Function declarations, returns, calls, and Alpha-scope result handling in Beanstalk."
 # page_head = theme_head
 
 #[navbar]
@@ -11,123 +11,80 @@ import @styles/docs {navbar, title, section, palette, table, codeblock, theme_he
 #[section, $markdown:
     [codeblock, $code("bst"):
         -- The simplest possible function
-        -- The name of the function first,
-        -- Followed by a parameter definition that defines what arguments must be passed in
         main ||:
-            -- Some code goes in here!
+            io("Hello from a function")
         ;
     ]
 
     ## The function signature
-    Functions in Beanstalk pass arguments by reference.
-
-    The arrow symbol is used to define the return signature of a function. 
-    Functions can return multiple values. 
-    If the function returns values, 
-    it must use a type signature or the name of one of the arguments if it's returning that reference back to the caller.
+    Function names come first, followed by parameters inside vertical pipes.
+    The arrow symbol defines return slots.
+    Functions can return multiple values.
 
     [codeblock, $code("bst"):
 
         get_doubled |value Int| -> Int:
-            -- Creates a new immutable integer using value
             return value * 2
         ;
 
-        -- This function returns a reference to the x value passed in
-        -- The only names you can use in the return type are the names of arguments that are passsed in.
-        -- This is to help the compiler understand lifetimes
-        multipleReturns |x ~Int| -> x, Bool:
-            x += 1
-            return x, x is > 0
+        pair || -> String, Int:
+            return "Ana", 2
         ;
 
-        -- Calling a function
-        value, is_positive = multipleReturns(5)
+        doubled = get_doubled(21)
+        name, count = pair()
+    ]
 
-        -- Creating an error type
-        Error = |
-            msg String,
-            context ~{String},
-        |
+    ## Arguments
+    Positional arguments come before named arguments.
+    Mutable access to an existing place must be explicit at the call site.
 
-        -- Functions use the '!' to show that they can return an error instead of any other values
-        -- This error must always be handled at the call site,
-        -- The '!' symbol provides convenient syntax sugar for this
-        canError |x String| -> String, Float, Error!:
-        
-            if x.is_empty():
-                return! Error("Whoops", {})
+    [codeblock, $code("bst"):
+        update |value ~Int|:
+            value += 1
+        ;
+
+        value ~= 1
+        update(~value)
+
+        -- Fresh values can satisfy mutable parameters without '~'.
+        update(1)
+    ]
+
+    ## Error-returning functions
+    A function can mark one return slot with `!`.
+    Error-returning calls must be handled with propagation, fallback values, or a named handler.
+
+    [codeblock, $code("bst"):
+        parse_number |text String| -> Int, Error!:
+
+            if text.is_empty():
+                return! Error("Parse", "int.empty", "Missing number")
             ;
 
-            return [x, " is cool"], 3.14
+            return 42
         ;
 
-        defaultIfError || -> String, Float:
-            string, number = canError("") ! "", 0.0
-            return string, number
+        with_fallback || -> Int:
+            value = parse_number("") ! 0
+            return value
         ;
 
-        bubble_up_error_with_context |name String| -> Error!:
-            value, number = canError(name) err!:
-                err.context.push("bubbled up from this function")
-                return! err
+        bubble_up |text String| -> Int, Error!:
+            value = parse_number(text)!
+            return value
+        ;
+
+        recover |text String| -> Int:
+            value = parse_number(text) err! 0:
+                io(err.message)
             ;
 
-            io([value, number])
+            return value
         ;
     ]
 
     ## Closures
-    Closures in Beanstalk are nameless functions used as values.
-    They use the same syntax as functions, but do not have a name and therefore cannot be declared at the top level.
-
-    Closures may only appear inside a function or method body and are always expressions (rvalues).
-
-    [codeblock, $code("bst"):
-        update_total |values {Int}| -> Int:
-            total ~= 0
-
-            apply = |value Int|:
-                total += value
-            ;
-
-            loop values |v|:
-                apply(v)
-            ;
-
-            return total
-        ;
-    ]
-
-    ### Capturing Variables
-    A closure may reference values from its surrounding scope.
-    This is called capture.
-
-    Captures are implicit, references by default and subject to the same mutability and exclusivity rules as normal variables.
-
-    ### Returnning closures from functions
-    Functions may return closures as values.
-
-    To represent a closure type, Beanstalk uses the `Fn` keyword followed by the parameter and return type signatures inside of brackets.
-
-    [codeblock, $code("bst"):
-        -- Defining the type of a closure that takes an Int and returns a String
-        Fn(Int -> String)
-    ]
-
-    [codeblock, $code("bst"):
-        map |items {Int}, f Fn(Int -> Int)| -> {Int}:
-            result ~= {}
-            loop items |item|:
-                ~result.push(f(item))
-            ;
-            return result
-        ;
-
-        each |items {Int}, f Fn(Int)|:
-            loop items |item|:
-                f(item)
-            ;
-        ;
-    ]
+    Closures and `Fn(...)` function-value types are deferred for Alpha.
+    Do not use closure examples as current compiler support yet.
 ]
