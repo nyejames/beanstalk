@@ -485,40 +485,6 @@ fn allows_semicolons_inside_nested_structures_within_match_arms() {
 
 
 #[test]
-fn parses_non_choice_wildcard_pattern() {
-    let (ast, string_table) =
-        parse_single_file_ast("value = 1\nif value is:\n    case _ => io(\"anything\")\n;\n");
-
-    let body = start_function_body(&ast, &string_table);
-    let NodeKind::Match(_, arms, else_block) = &body[1].kind else {
-        panic!("expected match statement in start body");
-    };
-
-    assert_eq!(arms.len(), 1);
-    assert!(
-        matches!(arms[0].pattern, MatchPattern::Wildcard { .. }),
-        "wildcard pattern should parse successfully"
-    );
-    assert!(else_block.is_none(), "wildcard alone should be exhaustive");
-}
-
-#[test]
-fn guarded_wildcard_requires_fallback() {
-    let error = parse_single_file_ast_error(
-        "value = 1\nallow = false\nif value is:\n    case _ if allow => io(\"allowed\")\n;\n",
-    );
-
-    assert_eq!(error.error_type, ErrorType::Rule);
-    assert!(
-        error
-            .msg
-            .contains("must include an 'else =>' arm or an unguarded 'case _ =>' arm"),
-        "{}",
-        error.msg
-    );
-}
-
-#[test]
 fn parses_relational_int_patterns() {
     let (ast, string_table) = parse_single_file_ast(
         "value = 5\nif value is:\n    case < 0 => io(\"negative\")\n    case >= 0 => io(\"non-negative\")\n    else => io(\"fallback\")\n;\n",
@@ -562,7 +528,7 @@ fn relational_patterns_without_default_are_not_exhaustive() {
     assert!(
         error
             .msg
-            .contains("must include an 'else =>' arm or an unguarded 'case _ =>' arm"),
+            .contains("must include an 'else =>' arm"),
         "{}",
         error.msg
     );
@@ -600,41 +566,3 @@ fn relational_pattern_rejects_string() {
     );
 }
 
-#[test]
-fn parses_choice_wildcard_pattern() {
-    let (ast, string_table) = parse_single_file_ast(
-        "#Status :: Ready, Loading;\n\
-         status Status = Status::Ready\n\
-         if status is:\n\
-             case _ => io(\"anything\")\n\
-         ;\n",
-    );
-
-    let body = start_function_body(&ast, &string_table);
-    let NodeKind::Match(_, arms, else_block) = &body[1].kind else {
-        panic!("expected match statement in start body");
-    };
-
-    assert_eq!(arms.len(), 1);
-    assert!(
-        matches!(arms[0].pattern, MatchPattern::Wildcard { .. }),
-        "choice wildcard should parse successfully"
-    );
-    assert!(else_block.is_none(), "wildcard alone should be exhaustive for choices");
-}
-
-#[test]
-fn unreachable_arm_after_unguarded_wildcard() {
-    let error = parse_single_file_ast_error(
-        "value = 1\nif value is:\n    case _ => io(\"anything\")\n    case 1 => io(\"dead\")\n;\n",
-    );
-
-    assert_eq!(error.error_type, ErrorType::Rule);
-    assert!(
-        error
-            .msg
-            .contains("unreachable because a previous unguarded wildcard arm matches all remaining values"),
-        "{}",
-        error.msg
-    );
-}

@@ -232,9 +232,9 @@ Generic expression evaluation determines the natural type of an expression and s
 - `//` is a separate operator-owned integer-division rule: it requires `Int // Int` and returns `Int`
 - Int -> Float is supported in explicit declaration / return contexts only
 - function arguments and match patterns still require exact compatibility
-- Match arm patterns are validated in AST. Supported Alpha patterns are literals, choice variants, wildcard, and relational ordered-scalar patterns.
+- Match arm patterns are validated in AST. Supported Alpha patterns are literals, choice variants, and relational ordered-scalar patterns.
 - Match arm guards (`case <pattern> if <expr> =>`) are validated in AST and must type-check as `Bool`.
-- Match exhaustiveness is enforced in AST: non-choice matches require `else =>` or an unguarded `case _ =>`; choice matches may omit a default only when all variants are covered and no arm is guarded.
+- Match exhaustiveness is enforced in AST: non-choice matches require `else =>`; choice matches may omit `else =>` only when all variants are covered and no arm is guarded.
 - Relational patterns do not prove exhaustiveness in Alpha.
 - Templates and template wrappers are accepted where string slices are expected because they lower to the same HIR/string representation
 - builtin casts like Float(x) / Int(x) remain explicit frontend-owned syntax
@@ -311,7 +311,7 @@ HIR is the first stage where resource lifetime semantics are made explicit, but 
 **Linear Control Flow**
 - All control-flow is explicit via blocks, jumps and terminators
 - Expression trees remain nested for ordinary operators and value construction
-- `HirTerminator::Match` carries literal, wildcard, and relational patterns plus optional guard expressions
+- `HirTerminator::Match` carries literal and relational patterns plus optional guard expressions
 - guard lowering must remain pure for terminator conditions: guards that lower with prelude statements are rejected
 
 **Template Boundary**

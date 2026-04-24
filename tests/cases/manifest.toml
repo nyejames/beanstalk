@@ -1189,11 +1189,6 @@ path = "match_value_merge_flow"
 tags = ["integration","control-flow","language"]
 
 [[case]]
-id = "match_wildcard_non_choice"
-path = "match_wildcard_non_choice"
-tags = ["integration","control-flow","language"]
-
-[[case]]
 id = "match_relational_int"
 path = "match_relational_int"
 tags = ["integration","control-flow","language"]
@@ -1206,11 +1201,6 @@ tags = ["integration","control-flow","language"]
 [[case]]
 id = "match_relational_requires_default"
 path = "match_relational_requires_default"
-tags = ["integration","control-flow","diagnostics"]
-
-[[case]]
-id = "match_unreachable_after_wildcard"
-path = "match_unreachable_after_wildcard"
 tags = ["integration","control-flow","diagnostics"]
 
 [[case]]

@@ -21,7 +21,7 @@ Always follow the style guide by default.
 
 ## Core working rules
 
-- Prefer readability, modularity, correctness, and diagnostics over cleverness.
+- Prefer readability, modularity, correctness, and diagnostics over cleverness. Avoid complexity.
 - Maintain clear boundaries between compiler stages. Do not mix frontend, analysis, IR, and backend concerns casually.
 - Avoid user-input panics. Do not introduce `panic!`, `todo!`, or user-data-driven `.unwrap()` / `.expect()` in active compiler paths.
 - Panic paths are only acceptable for proven internal invariants that indicate a compiler bug.

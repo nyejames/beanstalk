@@ -2,4 +2,4 @@
 mode = "failure"
 warnings = "forbid"
 error_type = "Rule"
-message_contains = ["must include an 'else =>' arm or an unguarded 'case _ =>' arm"]
+message_contains = ["must include an 'else =>' arm"]

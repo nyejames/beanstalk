@@ -1,5 +1,0 @@
-[backends.html]
-mode = "failure"
-warnings = "forbid"
-error_type = "Rule"
-message_contains = ["unreachable because a previous unguarded wildcard arm matches all remaining values"]

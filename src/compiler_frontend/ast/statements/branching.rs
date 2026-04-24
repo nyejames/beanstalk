@@ -58,10 +58,6 @@ impl MatchPattern {
             | MatchPattern::Relational { location, .. } => location,
         }
     }
-
-    fn is_wildcard(&self) -> bool {
-        matches!(self, MatchPattern::Wildcard { .. })
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -77,7 +73,6 @@ struct ParsedCaseArm {
     // Tracks which choice variant this arm consumes so duplicates can be rejected early.
     matched_choice_variant: Option<StringId>,
     pattern_location: SourceLocation,
-    is_unguarded_wildcard: bool,
 }
 
 fn peek_next_non_newline_token(token_stream: &FileTokens) -> Option<&Token> {
@@ -200,7 +195,6 @@ fn create_match_node(
     let mut match_arm_indent: Option<i32> = None;
     // Choice exhaustiveness/duplication checks rely on the set of consumed variant names.
     let mut matched_choice_variants: HashSet<StringId> = HashSet::new();
-    let mut has_unguarded_wildcard_arm = false;
 
     loop {
         token_stream.skip_newlines();
@@ -301,17 +295,6 @@ fn create_match_node(
                     string_table,
                 )?;
 
-                if has_unguarded_wildcard_arm {
-                    return_rule_error!(
-                        "Match arm is unreachable because a previous unguarded wildcard arm matches all remaining values.",
-                        parsed_case.pattern_location,
-                        {
-                            CompilationStage => "Match Statement Parsing",
-                            PrimarySuggestion => "Move this arm before the wildcard arm or remove it",
-                        }
-                    );
-                }
-
                 if let Some(variant_name) = parsed_case.matched_choice_variant
                     && !matched_choice_variants.insert(variant_name)
                 {
@@ -329,9 +312,6 @@ fn create_match_node(
                 }
 
                 has_guarded_arms |= parsed_case.arm.guard.is_some();
-                if parsed_case.is_unguarded_wildcard {
-                    has_unguarded_wildcard_arm = true;
-                }
                 arms.push(parsed_case.arm);
             }
 
@@ -353,7 +333,6 @@ fn create_match_node(
         &subject,
         &else_block,
         has_guarded_arms,
-        has_unguarded_wildcard_arm,
         &matched_choice_variants,
         string_table,
     )?;
@@ -446,19 +425,13 @@ fn parse_case_arm(
             nominal_path,
             variants,
         } => {
-            if token_stream.current_token_kind() == &TokenKind::Wildcard {
-                let pattern = parse_wildcard_pattern(token_stream);
-                let location = pattern.location().to_owned();
-                (pattern, None, location)
-            } else {
-                let (choice_pattern, matched_variant_name, location) =
-                    parse_choice_variant_pattern(token_stream, nominal_path, variants, string_table)?;
-                (
-                    MatchPattern::Literal(choice_pattern),
-                    Some(matched_variant_name),
-                    location,
-                )
-            }
+            let (choice_pattern, matched_variant_name, location) =
+                parse_choice_variant_pattern(token_stream, nominal_path, variants, string_table)?;
+            (
+                MatchPattern::Literal(choice_pattern),
+                Some(matched_variant_name),
+                location,
+            )
         }
         subject_type => {
             let pattern = parse_non_choice_pattern(token_stream, subject_type, string_table)?;
@@ -541,8 +514,6 @@ fn parse_case_arm(
         string_table,
     )?;
 
-    let is_unguarded_wildcard = pattern.is_wildcard() && guard.is_none();
-
     Ok(ParsedCaseArm {
         arm: MatchArm {
             pattern,
@@ -551,7 +522,6 @@ fn parse_case_arm(
         },
         matched_choice_variant,
         pattern_location,
-        is_unguarded_wildcard,
     })
 }
 
@@ -562,8 +532,6 @@ fn parse_non_choice_pattern(
     string_table: &StringTable,
 ) -> Result<MatchPattern, CompilerError> {
     match token_stream.current_token_kind() {
-        TokenKind::Wildcard => Ok(parse_wildcard_pattern(token_stream)),
-
         TokenKind::LessThan
         | TokenKind::LessThanOrEqual
         | TokenKind::GreaterThan
@@ -576,13 +544,6 @@ fn parse_non_choice_pattern(
             Ok(MatchPattern::Literal(literal))
         }
     }
-}
-
-fn parse_wildcard_pattern(token_stream: &mut FileTokens) -> MatchPattern {
-    let location = token_stream.current_location();
-    token_stream.advance();
-
-    MatchPattern::Wildcard { location }
 }
 
 fn parse_relational_pattern(
@@ -912,6 +873,14 @@ fn parse_literal_pattern(
 fn reject_deferred_pattern_lead_token(token_stream: &FileTokens) -> Result<(), CompilerError> {
     // These forms intentionally fail fast so unsupported syntax never drifts silently.
     match token_stream.current_token_kind() {
+        TokenKind::Wildcard => {
+            return Err(deferred_feature_rule_error(
+                "Wildcard patterns in 'case' arms are not supported. Use 'else =>' for a catch-all arm.",
+                token_stream.current_location(),
+                "Match Statement Parsing",
+                "Replace 'case _ =>' with 'else =>'.",
+            ));
+        }
         TokenKind::Not => {
             return Err(deferred_feature_rule_error(
                 "Negated match patterns (for example 'case not ... =>') are deferred for Alpha.",
@@ -952,27 +921,25 @@ fn enforce_match_exhaustiveness(
     subject: &Expression,
     else_block: &Option<Vec<AstNode>>,
     has_guarded_arms: bool,
-    has_unguarded_wildcard_arm: bool,
     matched_choice_variants: &HashSet<StringId>,
     string_table: &StringTable,
 ) -> Result<(), CompilerError> {
     let normalized_subject_type = normalized_subject_type(&subject.data_type);
-    let has_default_coverage = else_block.is_some() || has_unguarded_wildcard_arm;
 
     match normalized_subject_type {
         DataType::Choices { variants, .. } => {
-            // `else` or unguarded wildcard intentionally acts as an explicit "future variants" fallback in Alpha.
-            if has_default_coverage {
+            // `else` intentionally acts as an explicit "future variants" fallback in Alpha.
+            if else_block.is_some() {
                 return Ok(());
             }
 
             if has_guarded_arms {
                 return_rule_error!(
-                    "Choice matches with guarded arms must include an explicit 'else =>' arm or an unguarded 'case _ =>' arm in Alpha.",
+                    "Choice matches with guarded arms must include an explicit 'else =>' arm in Alpha.",
                     subject.location.clone(),
                     {
                         CompilationStage => "Match Statement Parsing",
-                        PrimarySuggestion => "Add an 'else =>' arm or 'case _ =>' arm when any choice match arm uses a guard",
+                        PrimarySuggestion => "Add an 'else =>' arm when any choice match arm uses a guard",
                     }
                 );
             }
@@ -995,25 +962,25 @@ fn enforce_match_exhaustiveness(
                 subject.location.clone(),
                 {
                     CompilationStage => "Match Statement Parsing",
-                    PrimarySuggestion => "Add match arms for each missing variant, or add an 'else =>' arm or 'case _ =>' arm",
+                    PrimarySuggestion => "Add match arms for each missing variant, or add an 'else =>' arm",
                 }
             );
         }
 
         non_choice_type => {
-            if has_default_coverage {
+            if else_block.is_some() {
                 return Ok(());
             }
 
             return_rule_error!(
                 format!(
-                    "Non-choice matches must include an 'else =>' arm or an unguarded 'case _ =>' arm in Alpha. Scrutinee type: '{}'.",
+                    "Non-choice matches must include an 'else =>' arm in Alpha. Scrutinee type: '{}'.",
                     non_choice_type.display_with_table(string_table)
                 ),
                 subject.location.clone(),
                 {
                     CompilationStage => "Match Statement Parsing",
-                    PrimarySuggestion => "Add an 'else =>' arm or 'case _ =>' arm to make this match exhaustive",
+                    PrimarySuggestion => "Add an 'else =>' arm to make this match exhaustive",
                 }
             );
         }

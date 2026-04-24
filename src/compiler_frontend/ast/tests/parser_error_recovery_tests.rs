@@ -32,20 +32,31 @@ fn reports_stray_comma_in_function_body() {
 }
 
 #[test]
-fn wildcard_match_arms_parse_successfully() {
-    let (ast, string_table) =
-        parse_single_file_ast("value = 1\nif value is:\n    case _ => io(\"one\")\n;\n");
+fn reports_wildcard_match_arms_as_deferred_rule_errors() {
+    let error =
+        parse_single_file_ast_error("value = 1\nif value is:\n    case _ => io(\"one\")\n;\n");
 
-    let body = start_function_body(&ast, &string_table);
-    let NodeKind::Match(_, arms, _) = &body[1].kind else {
-        panic!("expected match statement in start body");
-    };
-
-    assert_eq!(arms.len(), 1);
+    assert_eq!(error.error_type, ErrorType::Rule);
     assert!(
-        matches!(arms[0].pattern, MatchPattern::Wildcard { .. }),
-        "wildcard pattern should parse successfully"
+        error
+            .msg
+            .contains("Wildcard patterns in 'case' arms are not supported")
     );
+    assert_eq!(
+        error
+            .metadata
+            .get(&ErrorMetaDataKey::CompilationStage)
+            .map(String::as_str),
+        Some("Match Statement Parsing")
+    );
+    assert_eq!(
+        error
+            .metadata
+            .get(&ErrorMetaDataKey::PrimarySuggestion)
+            .map(String::as_str),
+        Some("Replace 'case _ =>' with 'else =>'.")
+    );
+    assert!(error.location.start_pos.char_column > 0);
 }
 
 #[test]

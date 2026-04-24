@@ -7,7 +7,7 @@ if value is:
     case < 0 => result = "negative"
     case 0 => result = "zero"
     case <= 10 => result = "small"
-    case _ => result = "large"
+    else => result = "large"
 ;
 
 [:relational_result=[result]]
