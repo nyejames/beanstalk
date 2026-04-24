@@ -350,20 +350,20 @@ fn parses_choice_match_arms_with_bare_and_qualified_variants() {
         "choice match subject should preserve choice type identity"
     );
     assert_eq!(arms.len(), 2);
-    assert!(matches!(
-        arms[0].pattern,
-        MatchPattern::Literal(Expression {
-            kind: ExpressionKind::Int(0),
-            ..
-        })
-    ));
-    assert!(matches!(
-        arms[1].pattern,
-        MatchPattern::Literal(Expression {
-            kind: ExpressionKind::Int(1),
-            ..
-        })
-    ));
+    assert!(
+        matches!(
+            arms[0].pattern,
+            MatchPattern::ChoiceVariant { tag: 0, .. }
+        ),
+        "expected first arm to match Ready (tag 0)"
+    );
+    assert!(
+        matches!(
+            arms[1].pattern,
+            MatchPattern::ChoiceVariant { tag: 1, .. }
+        ),
+        "expected second arm to match Busy (tag 1)"
+    );
     assert!(
         else_block.is_some(),
         "choice match should keep explicit else default"

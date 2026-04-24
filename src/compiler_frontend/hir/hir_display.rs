@@ -9,14 +9,14 @@
 #[cfg(any(test, feature = "show_hir"))]
 use crate::compiler_frontend::hir::hir_datatypes::{HirTypeKind, TypeContext, TypeId};
 use crate::compiler_frontend::hir::hir_nodes::{
-    BlockId, FieldId, FunctionId, HirBinOp, HirNodeId, HirValueId, LocalId, OptionVariant,
-    RegionId, ResultVariant, StructId,
+    BlockId, FieldId, FunctionId, HirBinOp, HirNodeId, HirValueId, LocalId, OptionVariant, RegionId,
+    ResultVariant, StructId,
 };
 #[cfg(any(test, feature = "show_hir"))]
 use crate::compiler_frontend::hir::hir_nodes::{
-    HirBlock, HirExpression, HirExpressionKind, HirField, HirFunction, HirLocal, HirMatchArm,
-    HirModule, HirPattern, HirPlace, HirRelationalPatternOp, HirStatement, HirStatementKind,
-    HirStruct, HirTerminator, ValueKind,
+    ChoiceId, HirBlock, HirExpression, HirExpressionKind, HirField, HirFunction, HirLocal,
+    HirMatchArm, HirModule, HirPattern, HirPlace, HirRelationalPatternOp, HirStatement,
+    HirStatementKind, HirStruct, HirTerminator, ValueKind,
 };
 #[cfg(any(test, feature = "show_hir"))]
 use crate::compiler_frontend::hir::hir_side_table::HirSideTable;
@@ -466,6 +466,16 @@ impl<'a> HirDisplayContext<'a> {
             HirExpressionKind::BuiltinCast { kind, value } => {
                 format!("{:?}({})", kind, self.render_expression(value))
             }
+            HirExpressionKind::ChoiceVariant {
+                choice_id,
+                variant_index,
+            } => {
+                format!(
+                    "choice_variant(choice={}, tag={})",
+                    self.choice_label(*choice_id),
+                    variant_index
+                )
+            }
         }
     }
 
@@ -503,6 +513,16 @@ impl<'a> HirDisplayContext<'a> {
                     "{} {}",
                     self.render_relational_pattern_op(*op),
                     self.render_expression(value)
+                )
+            }
+            HirPattern::ChoiceVariant {
+                choice_id,
+                variant_index,
+            } => {
+                format!(
+                    "choice_pat(choice={}, tag={})",
+                    self.choice_label(*choice_id),
+                    variant_index
                 )
             }
         }
@@ -640,6 +660,9 @@ impl<'a> HirDisplayContext<'a> {
                     .join(" | ");
                 format!("union({joined})")
             }
+            HirTypeKind::Choice { choice_id } => {
+                format!("Choice({})", self.choice_label(*choice_id))
+            }
         }
     }
 
@@ -674,6 +697,17 @@ impl<'a> HirDisplayContext<'a> {
         }
 
         format!("struct{}", struct_id.0)
+    }
+
+    fn choice_label(&self, choice_id: ChoiceId) -> String {
+        if let Some(name) = self
+            .side_table
+            .and_then(|side| side.resolve_choice_name(choice_id, self.string_table))
+        {
+            return name.to_owned();
+        }
+
+        format!("choice{}", choice_id.0)
     }
 
     fn field_label(&self, field_id: FieldId) -> String {

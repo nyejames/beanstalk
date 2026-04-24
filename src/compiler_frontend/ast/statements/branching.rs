@@ -48,17 +48,31 @@ pub enum MatchPattern {
         value: Expression,
         location: SourceLocation,
     },
+
+    ChoiceVariant {
+        nominal_path: InternedPath,
+        variant: StringId,
+        tag: usize,
+        location: SourceLocation,
+    },
 }
 
 impl MatchPattern {
     fn location(&self) -> &SourceLocation {
         match self {
             MatchPattern::Literal(expression) => &expression.location,
-            MatchPattern::Wildcard { location } | MatchPattern::Relational { location, .. } => {
-                location
-            }
+            MatchPattern::Wildcard { location }
+            | MatchPattern::Relational { location, .. }
+            | MatchPattern::ChoiceVariant { location, .. } => location,
         }
     }
+}
+
+/// Result of parsing a choice-variant pattern in a match arm.
+struct ParsedChoicePattern {
+    pattern: MatchPattern,
+    variant: StringId,
+    location: SourceLocation,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -426,12 +440,12 @@ fn parse_case_arm(
             nominal_path,
             variants,
         } => {
-            let (choice_pattern, matched_variant_name, location) =
+            let parsed =
                 parse_choice_variant_pattern(token_stream, nominal_path, variants, string_table)?;
             (
-                MatchPattern::Literal(choice_pattern),
-                Some(matched_variant_name),
-                location,
+                parsed.pattern,
+                Some(parsed.variant),
+                parsed.location,
             )
         }
         subject_type => {
@@ -632,7 +646,7 @@ fn parse_choice_variant_pattern(
     choice_nominal_path: &InternedPath,
     variants: &[ChoiceVariant],
     string_table: &StringTable,
-) -> Result<(Expression, StringId, SourceLocation), CompilerError> {
+) -> Result<ParsedChoicePattern, CompilerError> {
     // Alpha only supports exact choice-variant names in match patterns.
     reject_deferred_pattern_lead_token(token_stream)?;
 
@@ -756,15 +770,16 @@ fn parse_choice_variant_pattern(
         );
     };
 
-    Ok((
-        Expression::int(
-            variant_index as i64,
-            variant_location.clone(),
-            Ownership::ImmutableOwned,
-        ),
-        variant_name,
-        variant_location,
-    ))
+    Ok(ParsedChoicePattern {
+        pattern: MatchPattern::ChoiceVariant {
+            nominal_path: choice_nominal_path.to_owned(),
+            variant: variant_name,
+            tag: variant_index,
+            location: variant_location.clone(),
+        },
+        variant: variant_name,
+        location: variant_location,
+    })
 }
 
 /// Parse a literal value pattern and type-check it against the scrutinee.

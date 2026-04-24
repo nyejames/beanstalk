@@ -22,8 +22,8 @@ use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages}
 use crate::compiler_frontend::hir::hir_datatypes::{HirTypeKind, TypeContext, TypeId};
 use crate::compiler_frontend::hir::hir_nodes::{
     BlockId, FieldId, FunctionId, HirBlock, HirConstId, HirDocFragment, HirDocFragmentKind,
-    HirFunction, HirFunctionOrigin, HirModule, HirNodeId, HirRegion, HirTerminator, HirValueId,
-    LocalId, RegionId, StructId,
+    ChoiceId, HirFunction, HirFunctionOrigin, HirModule, HirNodeId, HirRegion, HirTerminator,
+    HirValueId, LocalId, RegionId, StructId,
 };
 use crate::compiler_frontend::hir::hir_side_table::HirSideTable;
 use crate::compiler_frontend::hir::hir_validation::validate_hir_module;
@@ -87,6 +87,7 @@ pub struct HirBuilder<'a> {
     next_struct_id: u32,
     next_field_id: u32,
     next_const_id: u32,
+    next_choice_id: u32,
     pub(super) temp_local_counter: u32,
     pub(super) template_function_counter: u32,
 
@@ -103,6 +104,7 @@ pub struct HirBuilder<'a> {
     pub(super) locals_by_name: FxHashMap<InternedPath, LocalId>,
     pub(super) functions_by_name: FxHashMap<InternedPath, FunctionId>,
     pub(super) structs_by_name: FxHashMap<InternedPath, StructId>,
+    pub(super) choices_by_name: FxHashMap<InternedPath, ChoiceId>,
     pub(super) fields_by_struct_and_name: FxHashMap<(StructId, InternedPath), FieldId>,
     pub(super) module_constants_by_name: FxHashMap<InternedPath, Declaration>,
     pub(super) currently_lowering_constants: FxHashSet<InternedPath>,
@@ -163,6 +165,7 @@ impl<'a> HirBuilder<'a> {
             next_struct_id: 0,
             next_field_id: 0,
             next_const_id: 0,
+            next_choice_id: 0,
             temp_local_counter: 0,
             template_function_counter: 0,
 
@@ -173,6 +176,7 @@ impl<'a> HirBuilder<'a> {
             locals_by_name: FxHashMap::default(),
             functions_by_name: FxHashMap::default(),
             structs_by_name: FxHashMap::default(),
+            choices_by_name: FxHashMap::default(),
             fields_by_struct_and_name: FxHashMap::default(),
             module_constants_by_name: FxHashMap::default(),
             currently_lowering_constants: FxHashSet::default(),
@@ -297,6 +301,7 @@ impl<'a> HirBuilder<'a> {
     allocate_id!(allocate_struct_id, next_struct_id, StructId);
     allocate_id!(allocate_field_id, next_field_id, FieldId);
     allocate_id!(allocate_const_id, next_const_id, HirConstId);
+    allocate_id!(allocate_choice_id, next_choice_id, ChoiceId);
 
     #[cfg(test)]
     fn advance_counter_past(next_counter: &mut u32, used_id: u32) {

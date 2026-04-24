@@ -322,13 +322,23 @@ impl DataType {
                     err.display_with_table(string_table)
                 )
             }
-            DataType::Choices { variants, .. } => {
-                let mut inner_types_str = String::new();
-                for variant in variants {
-                    inner_types_str
-                        .push_str(variant.data_type.display_with_table(string_table).as_str());
+            DataType::Choices {
+                nominal_path,
+                variants,
+            } => {
+                let name = nominal_path
+                    .name_str(string_table)
+                    .unwrap_or("<choice>")
+                    .to_owned();
+                if variants.is_empty() {
+                    format!("{name}::{{}}")
+                } else {
+                    let variant_names: Vec<String> = variants
+                        .iter()
+                        .map(|v| string_table.resolve(v.id).to_owned())
+                        .collect();
+                    format!("{name}::{{{}}}", variant_names.join(", "))
                 }
-                format!("Choices({inner_types_str})")
             }
         }
     }

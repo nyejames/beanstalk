@@ -131,14 +131,13 @@ impl<'a> HirBuilder<'a> {
                 HirTypeKind::Result { ok, err }
             }
 
-            DataType::Choices { variants, .. } => {
-                let variant_types = variants
-                    .iter()
-                    .map(|variant| self.lower_data_type(&variant.data_type, location))
-                    .collect::<Result<Vec<_>, _>>()?;
-                HirTypeKind::Union {
-                    variants: variant_types,
-                }
+            DataType::Choices {
+                nominal_path,
+                variants,
+            } => {
+                let choice_id =
+                    self.resolve_or_create_choice_id(nominal_path, variants, location)?;
+                HirTypeKind::Choice { choice_id }
             }
 
             DataType::Parameters(fields) => {

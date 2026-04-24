@@ -9,6 +9,7 @@ use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::statements::branching::{
     MatchArm, MatchPattern, RelationalPatternOp,
 };
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::hir::hir_builder::{HirBuilder, LoopTargets};
 use crate::compiler_frontend::hir::hir_datatypes::{HirTypeKind, TypeId};
@@ -369,7 +370,7 @@ impl<'a> HirBuilder<'a> {
 
         let mut hir_arms = Vec::with_capacity(arms.len() + 1);
         for (index, arm) in arms.iter().enumerate() {
-            let lowered_pattern = self.lower_match_pattern(&arm.pattern)?;
+            let lowered_pattern = self.lower_match_pattern(&arm.pattern, &scrutinee.data_type)?;
             let lowered_guard = match &arm.guard {
                 Some(guard) => Some(self.lower_match_guard_expression(guard)?),
                 None => None,
@@ -502,7 +503,11 @@ impl<'a> HirBuilder<'a> {
     }
 
     /// Lower an AST match pattern into its HIR counterpart.
-    fn lower_match_pattern(&mut self, pattern: &MatchPattern) -> Result<HirPattern, CompilerError> {
+    fn lower_match_pattern(
+        &mut self,
+        pattern: &MatchPattern,
+        subject_type: &DataType,
+    ) -> Result<HirPattern, CompilerError> {
         match pattern {
             MatchPattern::Literal(expression) => {
                 let lowered = self.lower_match_literal_pattern(expression)?;
@@ -517,6 +522,26 @@ impl<'a> HirBuilder<'a> {
                 Ok(HirPattern::Relational {
                     op: lower_relational_pattern_op(*op),
                     value: lowered_value,
+                })
+            }
+
+            MatchPattern::ChoiceVariant {
+                nominal_path,
+                tag,
+                location,
+                ..
+            } => {
+                let DataType::Choices { variants, .. } = subject_type else {
+                    return_hir_transformation_error!(
+                        "ChoiceVariant pattern used with non-choice scrutinee type",
+                        self.hir_error_location(location)
+                    );
+                };
+                let choice_id =
+                    self.resolve_or_create_choice_id(nominal_path, variants, location)?;
+                Ok(HirPattern::ChoiceVariant {
+                    choice_id,
+                    variant_index: *tag,
                 })
             }
         }

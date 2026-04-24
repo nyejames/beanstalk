@@ -4,8 +4,8 @@
 //! by diagnostics, borrow checking, and debug rendering.
 
 use crate::compiler_frontend::hir::hir_nodes::{
-    BlockId, FieldId, FunctionId, HirBlock, HirFunction, HirLocal, HirNodeId, HirStatement,
-    HirValueId, LocalId, StructId,
+    BlockId, ChoiceId, FieldId, FunctionId, HirBlock, HirFunction, HirLocal, HirNodeId,
+    HirStatement, HirValueId, LocalId, StructId,
 };
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringIdRemap, StringTable};
@@ -45,6 +45,7 @@ pub(crate) enum HirLocation {
     Statement(HirNodeId),
     Value(HirValueId),
     Terminator(BlockId),
+    Choice(ChoiceId),
 }
 
 impl Display for HirLocation {
@@ -58,6 +59,7 @@ impl Display for HirLocation {
             HirLocation::Statement(id) => write!(f, "statement({id})"),
             HirLocation::Value(id) => write!(f, "value({id})"),
             HirLocation::Terminator(block) => write!(f, "terminator({block})"),
+            HirLocation::Choice(id) => write!(f, "choice({})", id.0),
         }
     }
 }
@@ -95,6 +97,12 @@ impl From<LocalId> for HirLocation {
 impl From<HirNodeId> for HirLocation {
     fn from(value: HirNodeId) -> Self {
         HirLocation::Statement(value)
+    }
+}
+
+impl From<ChoiceId> for HirLocation {
+    fn from(value: ChoiceId) -> Self {
+        HirLocation::Choice(value)
     }
 }
 
@@ -146,6 +154,7 @@ pub(crate) struct HirSideTable {
     function_names: FxHashMap<FunctionId, InternedPath>,
     struct_names: FxHashMap<StructId, InternedPath>,
     field_names: FxHashMap<FieldId, InternedPath>,
+    choice_names: FxHashMap<ChoiceId, InternedPath>,
 }
 
 impl HirSideTable {
@@ -161,6 +170,7 @@ impl HirSideTable {
         self.function_names.clear();
         self.struct_names.clear();
         self.field_names.clear();
+        self.choice_names.clear();
     }
 
     pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
@@ -187,6 +197,9 @@ impl HirSideTable {
             path.remap_string_ids(remap);
         }
         for path in self.field_names.values_mut() {
+            path.remap_string_ids(remap);
+        }
+        for path in self.choice_names.values_mut() {
             path.remap_string_ids(remap);
         }
     }
@@ -386,6 +399,11 @@ impl HirSideTable {
     }
 
     #[inline]
+    pub(crate) fn bind_choice_name(&mut self, choice_id: ChoiceId, name: InternedPath) {
+        self.choice_names.insert(choice_id, name);
+    }
+
+    #[inline]
     pub(crate) fn local_name_path(&self, local_id: LocalId) -> Option<&InternedPath> {
         self.local_names.get(&local_id)
     }
@@ -413,6 +431,21 @@ impl HirSideTable {
     #[inline]
     pub(crate) fn field_name_path(&self, field_id: FieldId) -> Option<&InternedPath> {
         self.field_names.get(&field_id)
+    }
+
+    #[inline]
+    pub(crate) fn choice_name_path(&self, choice_id: ChoiceId) -> Option<&InternedPath> {
+        self.choice_names.get(&choice_id)
+    }
+
+    #[inline]
+    pub(crate) fn resolve_choice_name<'a>(
+        &self,
+        choice_id: ChoiceId,
+        string_table: &'a StringTable,
+    ) -> Option<&'a str> {
+        self.choice_name_path(choice_id)
+            .and_then(|path| path.name_str(string_table))
     }
 
     #[inline]

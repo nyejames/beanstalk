@@ -48,6 +48,37 @@ impl<'a> HirBuilder<'a> {
         self.log_expression_input(expr);
 
         let lowered = match &expr.kind {
+            ExpressionKind::ChoiceVariant {
+                nominal_path,
+                variant: _,
+                tag,
+            } => {
+                let DataType::Choices { variants, .. } = &expr.data_type else {
+                    return_hir_transformation_error!(
+                        "ChoiceVariant expression has non-choice data type",
+                        self.hir_error_location(&expr.location)
+                    );
+                };
+                let choice_id =
+                    self.resolve_or_create_choice_id(nominal_path, variants, &expr.location)?;
+                let region = self.current_region_or_error(&expr.location)?;
+                let ty = self.lower_data_type(&expr.data_type, &expr.location)?;
+
+                Ok(LoweredExpression {
+                    prelude: vec![],
+                    value: self.make_expression(
+                        &expr.location,
+                        HirExpressionKind::ChoiceVariant {
+                            choice_id,
+                            variant_index: *tag,
+                        },
+                        ty,
+                        ValueKind::Const,
+                        region,
+                    ),
+                })
+            }
+
             ExpressionKind::Int(value) => self.lower_literal_expression(
                 &expr.location,
                 &expr.data_type,
@@ -581,5 +612,40 @@ impl<'a> HirBuilder<'a> {
                 .with_type_context(&self.type_context),
             )
         ));
+    }
+
+    /// Resolve a choice declaration to its stable HIR `ChoiceId`, creating one on first use.
+    ///
+    /// WHAT: lazily registers `HirChoice` entries because AST does not emit top-level
+    /// choice-definition nodes; choices are discovered via type references and expressions.
+    /// WHY: keeps choice registration simple without a separate pre-scan pass.
+    pub(crate) fn resolve_or_create_choice_id(
+        &mut self,
+        nominal_path: &InternedPath,
+        variants: &[crate::compiler_frontend::declaration_syntax::choice::ChoiceVariant],
+        _location: &SourceLocation,
+    ) -> Result<crate::compiler_frontend::hir::hir_nodes::ChoiceId, CompilerError> {
+        use crate::compiler_frontend::hir::hir_nodes::{HirChoice, HirChoiceVariant};
+
+        if let Some(&choice_id) = self.choices_by_name.get(nominal_path) {
+            return Ok(choice_id);
+        }
+
+        let choice_id = self.allocate_choice_id();
+        let hir_variants: Vec<HirChoiceVariant> = variants
+            .iter()
+            .map(|v| HirChoiceVariant { name: v.id })
+            .collect();
+
+        self.choices_by_name
+            .insert(nominal_path.to_owned(), choice_id);
+        self.side_table
+            .bind_choice_name(choice_id, nominal_path.to_owned());
+        self.module.choices.push(HirChoice {
+            id: choice_id,
+            variants: hir_variants,
+        });
+
+        Ok(choice_id)
     }
 }
