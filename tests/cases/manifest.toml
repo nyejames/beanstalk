@@ -2118,3 +2118,33 @@ tags = ["integration", "results", "js-backend"]
 id = "result_propagate_in_template_fragment"
 path = "result_propagate_in_template_fragment"
 tags = ["integration", "results", "templates", "js-backend"]
+
+[[case]]
+id = "dispatcher_nested_loops_multi_break"
+path = "dispatcher_nested_loops_multi_break"
+tags = ["integration", "control-flow", "js-backend", "dispatcher"]
+
+[[case]]
+id = "dispatcher_loop_match_result_fallback"
+path = "dispatcher_loop_match_result_fallback"
+tags = ["integration", "control-flow", "results", "js-backend", "dispatcher"]
+
+[[case]]
+id = "dispatcher_break_continue_chain"
+path = "dispatcher_break_continue_chain"
+tags = ["integration", "control-flow", "js-backend", "dispatcher"]
+
+[[case]]
+id = "dispatcher_branch_heavy_cyclic"
+path = "dispatcher_branch_heavy_cyclic"
+tags = ["integration", "control-flow", "js-backend", "dispatcher"]
+
+[[case]]
+id = "structured_nested_if_chain"
+path = "structured_nested_if_chain"
+tags = ["integration", "control-flow", "js-backend", "structured"]
+
+[[case]]
+id = "structured_match_converge"
+path = "structured_match_converge"
+tags = ["integration", "control-flow", "js-backend", "structured"]

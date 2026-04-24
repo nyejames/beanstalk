@@ -21,23 +21,6 @@ These are the non-negotiable conditions for starting Alpha:
 
 # Next Plans
 
-## JS backend extension
-
-### Add explicit backend coverage for block-dispatcher edge cases
-
-The dispatcher path is important and should be hardened more aggressively because it is the fallback for nontrivial CFG
-
-Todo
-
-* Add more dispatcher-only integration fixtures for:
-    * nested loops
-    * loop + match
-    * break/continue chains
-    * branch-heavy cyclic CFG
-* Add regression tests proving structured lowering is chosen when legal and dispatcher lowering only when needed
-* Add future tests for jump-arg lowering once implemented
-
-
 ## Final pre-alpha sweep
 
 - Re-run the feature matrix and mark all supported areas as covered.

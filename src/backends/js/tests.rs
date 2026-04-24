@@ -48,8 +48,8 @@ use crate::compiler_frontend::hir::hir_datatypes::{HirType, HirTypeKind, TypeCon
 use crate::compiler_frontend::hir::hir_nodes::{
     BlockId, FieldId, FunctionId, HirBinOp, HirBlock, HirExpression, HirExpressionKind, HirField,
     HirFunction, HirLocal, HirMatchArm, HirModule, HirNodeId, HirPattern, HirPlace, HirRegion,
-    HirStatement, HirStatementKind, HirStruct, HirTerminator, LocalId, OptionVariant, RegionId, ResultVariant,
-    StructId, ValueKind,
+    HirStatement, HirStatementKind, HirStruct, HirTerminator, LocalId, OptionVariant, RegionId,
+    ResultVariant, StructId, ValueKind,
 };
 use crate::compiler_frontend::host_functions::CallTarget;
 use crate::compiler_frontend::interned_path::InternedPath;
@@ -4228,7 +4228,6 @@ fn receiver_method_call_assigns_borrow_for_alias_return() {
     );
 }
 
-
 // ---------------------------------------------------------------------------
 // Result/error emission contract tests beyond helper-level [error] [result]
 // ---------------------------------------------------------------------------
@@ -4463,15 +4462,18 @@ fn result_propagate_emitted_in_nested_function_calls() {
         InternedPath::from_single_str("outer", &mut string_table),
     );
 
-    module
-        .function_origins
-        .insert(FunctionId(0), crate::compiler_frontend::hir::hir_nodes::HirFunctionOrigin::Normal);
-    module
-        .function_origins
-        .insert(FunctionId(1), crate::compiler_frontend::hir::hir_nodes::HirFunctionOrigin::Normal);
-    module
-        .function_origins
-        .insert(FunctionId(2), crate::compiler_frontend::hir::hir_nodes::HirFunctionOrigin::Normal);
+    module.function_origins.insert(
+        FunctionId(0),
+        crate::compiler_frontend::hir::hir_nodes::HirFunctionOrigin::Normal,
+    );
+    module.function_origins.insert(
+        FunctionId(1),
+        crate::compiler_frontend::hir::hir_nodes::HirFunctionOrigin::Normal,
+    );
+    module.function_origins.insert(
+        FunctionId(2),
+        crate::compiler_frontend::hir::hir_nodes::HirFunctionOrigin::Normal,
+    );
 
     let output = lower_hir_to_js(
         &module,
@@ -4494,5 +4496,399 @@ fn result_propagate_emitted_in_nested_function_calls() {
     assert!(
         propagate_return_count >= 2,
         "expected at least 2 return statements with result propagation, found {propagate_return_count}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Dispatcher / structured lowering regression tests [cfg]
+// ---------------------------------------------------------------------------
+
+/// Verifies that a Result-returning function with a cyclic CFG wraps the dispatcher
+/// in a try/catch, not just a structured body. [cfg] [result]
+#[test]
+fn dispatcher_with_result_return_wraps_dispatcher_in_try_catch() {
+    let mut string_table = StringTable::new();
+    let (mut type_context, types) = build_type_context();
+
+    let result_type = type_context.insert(HirType {
+        kind: HirTypeKind::Result {
+            ok: types.string,
+            err: types.string,
+        },
+    });
+
+    let loop_assign = statement(
+        1,
+        HirStatementKind::Assign {
+            target: HirPlace::Local(LocalId(0)),
+            value: string_expression(1, "loop_body", types.string, RegionId(0)),
+        },
+        2,
+    );
+
+    let blocks = vec![
+        HirBlock {
+            id: BlockId(0),
+            region: RegionId(0),
+            locals: vec![local(0, types.string, RegionId(0))],
+            statements: vec![],
+            terminator: HirTerminator::Jump {
+                target: BlockId(1),
+                args: vec![],
+            },
+        },
+        HirBlock {
+            id: BlockId(1),
+            region: RegionId(0),
+            locals: vec![],
+            statements: vec![],
+            terminator: HirTerminator::If {
+                condition: bool_expression(2, true, types.boolean, RegionId(0)),
+                then_block: BlockId(2),
+                else_block: BlockId(3),
+            },
+        },
+        HirBlock {
+            id: BlockId(2),
+            region: RegionId(0),
+            locals: vec![],
+            statements: vec![loop_assign],
+            terminator: HirTerminator::Jump {
+                target: BlockId(1),
+                args: vec![],
+            },
+        },
+        HirBlock {
+            id: BlockId(3),
+            region: RegionId(0),
+            locals: vec![],
+            statements: vec![],
+            terminator: HirTerminator::Return(expression(
+                3,
+                HirExpressionKind::ResultConstruct {
+                    variant: ResultVariant::Ok,
+                    value: Box::new(string_expression(4, "done", types.string, RegionId(0))),
+                },
+                result_type,
+                RegionId(0),
+                ValueKind::RValue,
+            )),
+        },
+    ];
+
+    let function = HirFunction {
+        id: FunctionId(0),
+        entry: BlockId(0),
+        params: vec![],
+        return_type: result_type,
+        return_aliases: vec![],
+    };
+
+    let module = build_module(
+        &mut string_table,
+        "main",
+        blocks,
+        function,
+        &[(LocalId(0), "label")],
+        type_context,
+    );
+
+    let output = lower_hir_to_js(
+        &module,
+        &BorrowCheckReport::default(),
+        &string_table,
+        default_config(),
+    )
+    .expect("JS lowering should succeed");
+
+    assert!(
+        output.source.contains("switch (__bb"),
+        "cyclic CFG must use dispatcher"
+    );
+
+    let try_pos = output
+        .source
+        .find("try {")
+        .expect("Result function must emit try/catch wrapper");
+    let while_pos = output
+        .source
+        .find("while (true)")
+        .expect("dispatcher must emit while (true)");
+    assert!(
+        try_pos < while_pos,
+        "try/catch must wrap the dispatcher, not the other way around"
+    );
+
+    assert!(
+        output.source.contains("} catch (__bs_err) {"),
+        "Result function must emit catch block for propagation sentinel"
+    );
+    assert!(
+        output
+            .source
+            .contains("return { tag: \"err\", value: __bs_err.value };"),
+        "catch block must re-wrap propagated errors into Result carrier"
+    );
+}
+
+/// Verifies that many independent acyclic if-else blocks in one function stay structured
+/// and do not accidentally fall back to the dispatcher. [cfg]
+#[test]
+fn multiple_acyclic_if_blocks_stay_structured() {
+    let mut string_table = StringTable::new();
+    let (type_context, types) = build_type_context();
+
+    // Four sequential if-else blocks, each with simple branches.
+    // Block 0: if -> 1 else 2
+    // Block 1: assign "a", jump 3
+    // Block 2: assign "b", jump 3
+    // Block 3: if -> 4 else 5
+    // Block 4: assign "c", jump 6
+    // Block 5: assign "d", jump 6
+    // Block 6: if -> 7 else 8
+    // Block 7: assign "e", jump 9
+    // Block 8: assign "f", jump 9
+    // Block 9: if -> 10 else 11
+    // Block 10: assign "g", jump 12
+    // Block 11: assign "h", jump 12
+    // Block 12: return
+
+    let assign_a = statement(
+        1,
+        HirStatementKind::Assign {
+            target: HirPlace::Local(LocalId(0)),
+            value: string_expression(1, "a", types.string, RegionId(0)),
+        },
+        1,
+    );
+    let assign_b = statement(
+        2,
+        HirStatementKind::Assign {
+            target: HirPlace::Local(LocalId(0)),
+            value: string_expression(2, "b", types.string, RegionId(0)),
+        },
+        1,
+    );
+    let assign_c = statement(
+        3,
+        HirStatementKind::Assign {
+            target: HirPlace::Local(LocalId(0)),
+            value: string_expression(3, "c", types.string, RegionId(0)),
+        },
+        1,
+    );
+    let assign_d = statement(
+        4,
+        HirStatementKind::Assign {
+            target: HirPlace::Local(LocalId(0)),
+            value: string_expression(4, "d", types.string, RegionId(0)),
+        },
+        1,
+    );
+    let assign_e = statement(
+        5,
+        HirStatementKind::Assign {
+            target: HirPlace::Local(LocalId(0)),
+            value: string_expression(5, "e", types.string, RegionId(0)),
+        },
+        1,
+    );
+    let assign_f = statement(
+        6,
+        HirStatementKind::Assign {
+            target: HirPlace::Local(LocalId(0)),
+            value: string_expression(6, "f", types.string, RegionId(0)),
+        },
+        1,
+    );
+    let assign_g = statement(
+        7,
+        HirStatementKind::Assign {
+            target: HirPlace::Local(LocalId(0)),
+            value: string_expression(7, "g", types.string, RegionId(0)),
+        },
+        1,
+    );
+    let assign_h = statement(
+        8,
+        HirStatementKind::Assign {
+            target: HirPlace::Local(LocalId(0)),
+            value: string_expression(8, "h", types.string, RegionId(0)),
+        },
+        1,
+    );
+
+    let blocks = vec![
+        HirBlock {
+            id: BlockId(0),
+            region: RegionId(0),
+            locals: vec![local(0, types.string, RegionId(0))],
+            statements: vec![],
+            terminator: HirTerminator::If {
+                condition: bool_expression(9, true, types.boolean, RegionId(0)),
+                then_block: BlockId(1),
+                else_block: BlockId(2),
+            },
+        },
+        HirBlock {
+            id: BlockId(1),
+            region: RegionId(0),
+            locals: vec![],
+            statements: vec![assign_a],
+            terminator: HirTerminator::Jump {
+                target: BlockId(3),
+                args: vec![],
+            },
+        },
+        HirBlock {
+            id: BlockId(2),
+            region: RegionId(0),
+            locals: vec![],
+            statements: vec![assign_b],
+            terminator: HirTerminator::Jump {
+                target: BlockId(3),
+                args: vec![],
+            },
+        },
+        HirBlock {
+            id: BlockId(3),
+            region: RegionId(0),
+            locals: vec![],
+            statements: vec![],
+            terminator: HirTerminator::If {
+                condition: bool_expression(10, true, types.boolean, RegionId(0)),
+                then_block: BlockId(4),
+                else_block: BlockId(5),
+            },
+        },
+        HirBlock {
+            id: BlockId(4),
+            region: RegionId(0),
+            locals: vec![],
+            statements: vec![assign_c],
+            terminator: HirTerminator::Jump {
+                target: BlockId(6),
+                args: vec![],
+            },
+        },
+        HirBlock {
+            id: BlockId(5),
+            region: RegionId(0),
+            locals: vec![],
+            statements: vec![assign_d],
+            terminator: HirTerminator::Jump {
+                target: BlockId(6),
+                args: vec![],
+            },
+        },
+        HirBlock {
+            id: BlockId(6),
+            region: RegionId(0),
+            locals: vec![],
+            statements: vec![],
+            terminator: HirTerminator::If {
+                condition: bool_expression(11, true, types.boolean, RegionId(0)),
+                then_block: BlockId(7),
+                else_block: BlockId(8),
+            },
+        },
+        HirBlock {
+            id: BlockId(7),
+            region: RegionId(0),
+            locals: vec![],
+            statements: vec![assign_e],
+            terminator: HirTerminator::Jump {
+                target: BlockId(9),
+                args: vec![],
+            },
+        },
+        HirBlock {
+            id: BlockId(8),
+            region: RegionId(0),
+            locals: vec![],
+            statements: vec![assign_f],
+            terminator: HirTerminator::Jump {
+                target: BlockId(9),
+                args: vec![],
+            },
+        },
+        HirBlock {
+            id: BlockId(9),
+            region: RegionId(0),
+            locals: vec![],
+            statements: vec![],
+            terminator: HirTerminator::If {
+                condition: bool_expression(12, true, types.boolean, RegionId(0)),
+                then_block: BlockId(10),
+                else_block: BlockId(11),
+            },
+        },
+        HirBlock {
+            id: BlockId(10),
+            region: RegionId(0),
+            locals: vec![],
+            statements: vec![assign_g],
+            terminator: HirTerminator::Jump {
+                target: BlockId(12),
+                args: vec![],
+            },
+        },
+        HirBlock {
+            id: BlockId(11),
+            region: RegionId(0),
+            locals: vec![],
+            statements: vec![assign_h],
+            terminator: HirTerminator::Jump {
+                target: BlockId(12),
+                args: vec![],
+            },
+        },
+        HirBlock {
+            id: BlockId(12),
+            region: RegionId(0),
+            locals: vec![],
+            statements: vec![],
+            terminator: HirTerminator::Return(unit_expression(13, types.unit, RegionId(0))),
+        },
+    ];
+
+    let function = HirFunction {
+        id: FunctionId(0),
+        entry: BlockId(0),
+        params: vec![],
+        return_type: types.unit,
+        return_aliases: vec![],
+    };
+
+    let module = build_module(
+        &mut string_table,
+        "main",
+        blocks,
+        function,
+        &[(LocalId(0), "result")],
+        type_context,
+    );
+
+    let output = lower_hir_to_js(
+        &module,
+        &BorrowCheckReport::default(),
+        &string_table,
+        default_config(),
+    )
+    .expect("JS lowering should succeed");
+
+    assert!(
+        !output.source.contains("switch (__bb"),
+        "acyclic CFG with many simple if-else blocks must stay structured"
+    );
+    assert!(
+        !output.source.contains("while (true)"),
+        "acyclic CFG must not use dispatcher"
+    );
+
+    let if_count = output.source.matches("if (").count();
+    assert!(
+        if_count >= 4,
+        "expected at least 4 structured if statements, found {if_count}"
     );
 }
