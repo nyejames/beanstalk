@@ -15,10 +15,10 @@ pub(super) use crate::compiler_frontend::hir::hir_datatypes::{
     HirType, HirTypeKind, TypeContext, TypeId,
 };
 pub(super) use crate::compiler_frontend::hir::hir_nodes::{
-    BlockId, FieldId, FunctionId, HirBinOp, HirBlock, HirExpression, HirExpressionKind, HirField,
-    HirFunction, HirLocal, HirMatchArm, HirModule, HirNodeId, HirPattern, HirPlace, HirRegion,
-    HirRelationalPatternOp, HirStatement, HirStatementKind, HirStruct, HirTerminator, LocalId,
-    OptionVariant, RegionId, ResultVariant, StructId, ValueKind,
+    BlockId, ChoiceId, FieldId, FunctionId, HirBinOp, HirBlock, HirChoice, HirExpression,
+    HirExpressionKind, HirField, HirFunction, HirLocal, HirMatchArm, HirModule, HirNodeId,
+    HirPattern, HirPlace, HirRegion, HirRelationalPatternOp, HirStatement, HirStatementKind,
+    HirStruct, HirTerminator, LocalId, OptionVariant, RegionId, ResultVariant, StructId, ValueKind,
 };
 pub(super) use crate::compiler_frontend::host_functions::CallTarget;
 pub(super) use crate::compiler_frontend::interned_path::InternedPath;
@@ -32,7 +32,7 @@ pub(super) struct TypeIds {
     pub(super) boolean: TypeId,
     pub(super) string: TypeId,
     pub(super) option_int: TypeId,
-    pub(super) union_unit: TypeId,
+    pub(super) choice_unit: TypeId,
 }
 
 pub(super) fn loc(start: i32) -> SourceLocation {
@@ -67,9 +67,9 @@ pub(super) fn build_type_context() -> (TypeContext, TypeIds) {
     let option_int = type_context.insert(HirType {
         kind: HirTypeKind::Option { inner: int },
     });
-    let union_unit = type_context.insert(HirType {
-        kind: HirTypeKind::Union {
-            variants: vec![unit, unit, unit],
+    let choice_unit = type_context.insert(HirType {
+        kind: HirTypeKind::Choice {
+            choice_id: ChoiceId(0),
         },
     });
 
@@ -81,7 +81,7 @@ pub(super) fn build_type_context() -> (TypeContext, TypeIds) {
             boolean,
             string,
             option_int,
-            union_unit,
+            choice_unit,
         },
     )
 }
@@ -180,6 +180,10 @@ pub(super) fn build_module(
     module.functions = vec![function];
     module.type_context = type_context;
     module.regions = vec![HirRegion::lexical(RegionId(0), None)];
+    module.choices = vec![HirChoice {
+        id: ChoiceId(0),
+        variants: vec![],
+    }];
 
     let function_path = InternedPath::from_single_str(function_name, string_table);
     module

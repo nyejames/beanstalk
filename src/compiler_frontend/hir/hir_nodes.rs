@@ -134,13 +134,19 @@ pub struct HirModuleConst {
 // ============================================================
 // Module
 // ============================================================
+/// Registry entry for a nominal choice type.
+///
+/// WHY: the `choices` vec provides a dense `ChoiceId` namespace. Fields are reserved
+/// for future payload-variant support and choice-aware diagnostics.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct HirChoice {
     pub id: ChoiceId,
     pub variants: Vec<HirChoiceVariant>,
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct HirChoiceVariant {
     pub name: StringId,
 }

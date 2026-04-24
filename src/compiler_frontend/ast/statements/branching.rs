@@ -389,13 +389,9 @@ fn parse_case_arm(
             nominal_path,
             variants,
         } => {
-            let (choice_pattern, matched_variant_name, location) =
+            let parsed =
                 parse_choice_variant_pattern(token_stream, nominal_path, variants, string_table)?;
-            (
-                MatchPattern::Literal(choice_pattern),
-                Some(matched_variant_name),
-                location,
-            )
+            (parsed.pattern, Some(parsed.variant), parsed.location)
         }
         subject_type => {
             let pattern = parse_non_choice_pattern(token_stream, subject_type, string_table)?;

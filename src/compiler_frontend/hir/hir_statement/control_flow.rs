@@ -389,6 +389,25 @@ impl<'a> HirBuilder<'a> {
                     value: lowered_value,
                 })
             }
+            MatchPattern::ChoiceVariant {
+                nominal_path,
+                tag,
+                location,
+                ..
+            } => {
+                let DataType::Choices { variants, .. } = subject_type else {
+                    return_hir_transformation_error!(
+                        "ChoiceVariant pattern used with non-choice scrutinee type",
+                        self.hir_error_location(location)
+                    );
+                };
+                let choice_id =
+                    self.resolve_or_create_choice_id(nominal_path, variants, location)?;
+                Ok(HirPattern::ChoiceVariant {
+                    choice_id,
+                    variant_index: *tag,
+                })
+            }
         }
     }
 

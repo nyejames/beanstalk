@@ -434,11 +434,13 @@ impl HirSideTable {
     }
 
     #[inline]
+    #[cfg(any(test, feature = "show_hir"))]
     pub(crate) fn choice_name_path(&self, choice_id: ChoiceId) -> Option<&InternedPath> {
         self.choice_names.get(&choice_id)
     }
 
     #[inline]
+    #[cfg(any(test, feature = "show_hir"))]
     pub(crate) fn resolve_choice_name<'a>(
         &self,
         choice_id: ChoiceId,

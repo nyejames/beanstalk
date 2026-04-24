@@ -129,13 +129,6 @@ pub enum HirTypeKind {
         err: TypeId,
     },
 
-    /// Tagged union.
-    ///
-    /// Variants are types, not AST-level "choices".
-    Union {
-        variants: Vec<TypeId>,
-    },
-
     /// Nominal choice type (unit-variant enum).
     ///
     /// WHY: unit choices are closed scalar tag sets, not generic unions.
@@ -178,7 +171,6 @@ pub fn classify_hir_type(kind: &HirTypeKind) -> HirTypeClass {
         | HirTypeKind::Struct { .. }
         | HirTypeKind::Option { .. }
         | HirTypeKind::Result { .. }
-        | HirTypeKind::Union { .. }
         | HirTypeKind::Choice { .. } => HirTypeClass::HeapAllocated,
     }
 }

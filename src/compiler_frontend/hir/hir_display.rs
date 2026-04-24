@@ -9,8 +9,8 @@
 #[cfg(any(test, feature = "show_hir"))]
 use crate::compiler_frontend::hir::hir_datatypes::{HirTypeKind, TypeContext, TypeId};
 use crate::compiler_frontend::hir::hir_nodes::{
-    BlockId, FieldId, FunctionId, HirBinOp, HirNodeId, HirValueId, LocalId, OptionVariant, RegionId,
-    ResultVariant, StructId,
+    BlockId, FieldId, FunctionId, HirBinOp, HirNodeId, HirValueId, LocalId, OptionVariant,
+    RegionId, ResultVariant, StructId,
 };
 #[cfg(any(test, feature = "show_hir"))]
 use crate::compiler_frontend::hir::hir_nodes::{
@@ -652,14 +652,6 @@ impl<'a> HirDisplayContext<'a> {
                 self.render_type_with_context(type_context, *ok, depth + 1),
                 self.render_type_with_context(type_context, *err, depth + 1)
             ),
-            HirTypeKind::Union { variants } => {
-                let joined = variants
-                    .iter()
-                    .map(|variant| self.render_type_with_context(type_context, *variant, depth + 1))
-                    .collect::<Vec<_>>()
-                    .join(" | ");
-                format!("union({joined})")
-            }
             HirTypeKind::Choice { choice_id } => {
                 format!("Choice({})", self.choice_label(*choice_id))
             }

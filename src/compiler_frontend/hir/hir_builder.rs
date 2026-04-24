@@ -21,9 +21,9 @@ use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, SourceLocat
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::hir::hir_datatypes::{HirTypeKind, TypeContext, TypeId};
 use crate::compiler_frontend::hir::hir_nodes::{
-    BlockId, FieldId, FunctionId, HirBlock, HirConstId, HirDocFragment, HirDocFragmentKind,
-    ChoiceId, HirFunction, HirFunctionOrigin, HirModule, HirNodeId, HirRegion, HirTerminator,
-    HirValueId, LocalId, RegionId, StructId,
+    BlockId, ChoiceId, FieldId, FunctionId, HirBlock, HirConstId, HirDocFragment,
+    HirDocFragmentKind, HirFunction, HirFunctionOrigin, HirModule, HirNodeId, HirRegion,
+    HirTerminator, HirValueId, LocalId, RegionId, StructId,
 };
 use crate::compiler_frontend::hir::hir_side_table::HirSideTable;
 use crate::compiler_frontend::hir::hir_validation::validate_hir_module;

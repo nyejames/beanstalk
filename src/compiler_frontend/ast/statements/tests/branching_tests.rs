@@ -351,17 +351,11 @@ fn parses_choice_match_arms_with_bare_and_qualified_variants() {
     );
     assert_eq!(arms.len(), 2);
     assert!(
-        matches!(
-            arms[0].pattern,
-            MatchPattern::ChoiceVariant { tag: 0, .. }
-        ),
+        matches!(arms[0].pattern, MatchPattern::ChoiceVariant { tag: 0, .. }),
         "expected first arm to match Ready (tag 0)"
     );
     assert!(
-        matches!(
-            arms[1].pattern,
-            MatchPattern::ChoiceVariant { tag: 1, .. }
-        ),
+        matches!(arms[1].pattern, MatchPattern::ChoiceVariant { tag: 1, .. }),
         "expected second arm to match Busy (tag 1)"
     );
     assert!(

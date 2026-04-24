@@ -680,7 +680,14 @@ impl<'a> HirValidator<'a> {
                 self.validate_relational_pattern_expression(value, anchor)?;
             }
 
-            HirPattern::ChoiceVariant { .. } => {}
+            HirPattern::ChoiceVariant { choice_id, .. } => {
+                if self.module.choices.get(choice_id.0 as usize).is_none() {
+                    return Err(self.error_with_hir(
+                        format!("Invalid ChoiceId {choice_id:?} in pattern"),
+                        anchor,
+                    ));
+                }
+            }
         }
 
         Ok(())
@@ -777,8 +784,16 @@ impl<'a> HirValidator<'a> {
             | HirExpressionKind::Float(_)
             | HirExpressionKind::Bool(_)
             | HirExpressionKind::Char(_)
-            | HirExpressionKind::StringLiteral(_)
-            | HirExpressionKind::ChoiceVariant { .. } => {}
+            | HirExpressionKind::StringLiteral(_) => {}
+
+            HirExpressionKind::ChoiceVariant { choice_id, .. } => {
+                if self.module.choices.get(choice_id.0 as usize).is_none() {
+                    return Err(self.error_with_hir(
+                        format!("Invalid ChoiceId {choice_id:?} in expression"),
+                        anchor,
+                    ));
+                }
+            }
 
             HirExpressionKind::Load(place) => {
                 let _ = self.validate_place(place, anchor)?;

@@ -14,12 +14,12 @@ fn choice_variant_construction_emits_integer_literal() {
     let block = HirBlock {
         id: BlockId(0),
         region: RegionId(0),
-        locals: vec![local(0, types.union_unit, RegionId(0))],
+        locals: vec![local(0, types.choice_unit, RegionId(0))],
         statements: vec![statement(
             1,
             HirStatementKind::Assign {
                 target: HirPlace::Local(LocalId(0)),
-                value: int_expression(1, 2, types.union_unit, RegionId(0)),
+                value: int_expression(1, 2, types.choice_unit, RegionId(0)),
             },
             1,
         )],
@@ -69,12 +69,12 @@ fn choice_match_lowers_to_structured_if_with_literal_equals() {
         HirBlock {
             id: BlockId(0),
             region: RegionId(0),
-            locals: vec![local(0, types.union_unit, RegionId(0))],
+            locals: vec![local(0, types.choice_unit, RegionId(0))],
             statements: vec![statement(
                 1,
                 HirStatementKind::Assign {
                     target: HirPlace::Local(LocalId(0)),
-                    value: int_expression(1, 0, types.union_unit, RegionId(0)),
+                    value: int_expression(1, 0, types.choice_unit, RegionId(0)),
                 },
                 1,
             )],
@@ -82,7 +82,7 @@ fn choice_match_lowers_to_structured_if_with_literal_equals() {
                 scrutinee: expression(
                     2,
                     HirExpressionKind::Load(HirPlace::Local(LocalId(0))),
-                    types.union_unit,
+                    types.choice_unit,
                     RegionId(0),
                     ValueKind::RValue,
                 ),
@@ -91,7 +91,7 @@ fn choice_match_lowers_to_structured_if_with_literal_equals() {
                         pattern: HirPattern::Literal(int_expression(
                             3,
                             0,
-                            types.union_unit,
+                            types.choice_unit,
                             RegionId(0),
                         )),
                         guard: None,
@@ -101,7 +101,7 @@ fn choice_match_lowers_to_structured_if_with_literal_equals() {
                         pattern: HirPattern::Literal(int_expression(
                             4,
                             1,
-                            types.union_unit,
+                            types.choice_unit,
                             RegionId(0),
                         )),
                         guard: None,
@@ -111,7 +111,7 @@ fn choice_match_lowers_to_structured_if_with_literal_equals() {
                         pattern: HirPattern::Literal(int_expression(
                             5,
                             2,
-                            types.union_unit,
+                            types.choice_unit,
                             RegionId(0),
                         )),
                         guard: None,
@@ -212,12 +212,12 @@ fn choice_match_with_wildcard_arm_emits_true_condition() {
         HirBlock {
             id: BlockId(0),
             region: RegionId(0),
-            locals: vec![local(0, types.union_unit, RegionId(0))],
+            locals: vec![local(0, types.choice_unit, RegionId(0))],
             statements: vec![statement(
                 1,
                 HirStatementKind::Assign {
                     target: HirPlace::Local(LocalId(0)),
-                    value: int_expression(1, 1, types.union_unit, RegionId(0)),
+                    value: int_expression(1, 1, types.choice_unit, RegionId(0)),
                 },
                 1,
             )],
@@ -225,7 +225,7 @@ fn choice_match_with_wildcard_arm_emits_true_condition() {
                 scrutinee: expression(
                     2,
                     HirExpressionKind::Load(HirPlace::Local(LocalId(0))),
-                    types.union_unit,
+                    types.choice_unit,
                     RegionId(0),
                     ValueKind::RValue,
                 ),
@@ -234,7 +234,7 @@ fn choice_match_with_wildcard_arm_emits_true_condition() {
                         pattern: HirPattern::Literal(int_expression(
                             3,
                             0,
-                            types.union_unit,
+                            types.choice_unit,
                             RegionId(0),
                         )),
                         guard: None,
