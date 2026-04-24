@@ -18,6 +18,7 @@ mod tests;
 use crate::build_system::build::BuildResult;
 use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::compiler_messages::compiler_errors::{CompilerMessages, ErrorType};
+use rayon::prelude::*;
 use saying::say;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -345,6 +346,27 @@ pub(crate) struct ParsedBackendExpectation {
     pub rendered_output_not_contains: Vec<String>,
 }
 
+/// Reads an optional thread-limit override from the environment for the integration runner.
+///
+/// WHAT: lets CI or local workflows cap test parallelism without changing Rayon globally.
+/// WHY: the compiler backend may also use Rayon; a local pool keeps concerns separated.
+fn test_thread_count_from_env() -> Result<Option<usize>, String> {
+    let Some(raw) = std::env::var_os("BST_TEST_THREADS") else {
+        return Ok(None);
+    };
+
+    let threads = raw
+        .to_string_lossy()
+        .parse::<usize>()
+        .map_err(|_| "BST_TEST_THREADS must be a positive integer".to_string())?;
+
+    if threads == 0 {
+        return Err("BST_TEST_THREADS must be greater than 0".to_string());
+    }
+
+    Ok(Some(threads))
+}
+
 /// Normalises a relative path string to forward slashes for cross-platform comparison.
 pub(crate) fn normalize_relative_path_text(path: &str) -> String {
     path.replace('\\', "/")
@@ -382,34 +404,69 @@ pub fn run_all_test_cases_with_backend_filter(
 
     let suite = fixture::load_test_suite(options.backend_filter)?;
 
+    // Phase 1: run all cases in parallel, then aggregate serially so counts and
+    // failure-triage order remain deterministic (manifest order).
+    //
+    // NOTE: the compiler frontend shares a global CONTROL_FLOW_SCOPE_COUNTER.
+    // It is assumed not to affect generated HTML/JS/Wasm output; if that changes,
+    // parallel execution could make golden comparisons non-deterministic.
+    let cases = suite.cases;
+    let mut indexed_results = if let Some(thread_count) = test_thread_count_from_env()? {
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(thread_count)
+            .build()
+            .map_err(|error| format!("Failed to create test runner thread pool: {error}"))?;
+
+        pool.install(|| {
+            cases
+                .into_par_iter()
+                .enumerate()
+                .map(|(index, case)| {
+                    let result = execution::execute_test_case(&case);
+                    (index, case, result)
+                })
+                .collect::<Vec<_>>()
+        })
+    } else {
+        cases
+            .into_par_iter()
+            .enumerate()
+            .map(|(index, case)| {
+                let result = execution::execute_test_case(&case);
+                (index, case, result)
+            })
+            .collect::<Vec<_>>()
+    };
+
+    indexed_results.sort_by_key(|(index, _, _)| *index);
+
     let mut total_summary = SummaryCounts::default();
     let mut backend_summaries = BTreeMap::<BackendId, SummaryCounts>::new();
     let mut failure_triage_entries = Vec::new();
 
-    // Phase 1: run all cases, accumulate counts.
-    let mut case_results: Vec<(TestCaseSpec, CaseExecutionResult)> = Vec::new();
-    for case in suite.cases {
-        let result = execution::execute_test_case(&case);
+    let case_results = indexed_results
+        .into_iter()
+        .map(|(_, case, result)| {
+            total_summary.record(&case, &result);
+            backend_summaries
+                .entry(case.backend_id)
+                .or_default()
+                .record(&case, &result);
 
-        total_summary.record(&case, &result);
-        backend_summaries
-            .entry(case.backend_id)
-            .or_default()
-            .record(&case, &result);
+            if !result.passed {
+                failure_triage_entries.push(FailureTriageEntry {
+                    case: case.display_name.clone(),
+                    backend: case.backend_id.as_str().to_string(),
+                    expected_outcome: reporting::expected_outcome_label(&case.expected),
+                    failure_reason: reporting::observed_failure_reason(&result),
+                    failure_kind: result.failure_kind,
+                    panic_message: result.panic_message.clone(),
+                });
+            }
 
-        if !result.passed {
-            failure_triage_entries.push(FailureTriageEntry {
-                case: case.display_name.clone(),
-                backend: case.backend_id.as_str().to_string(),
-                expected_outcome: reporting::expected_outcome_label(&case.expected),
-                failure_reason: reporting::observed_failure_reason(&result),
-                failure_kind: result.failure_kind,
-                panic_message: result.panic_message.clone(),
-            });
-        }
-
-        case_results.push((case, result));
-    }
+            (case, result)
+        })
+        .collect::<Vec<_>>();
 
     // Phase 2: render failures only — skip per-case output entirely on a clean pass.
     let failures: Vec<_> = case_results.iter().filter(|(_, r)| !r.passed).collect();
