@@ -20,6 +20,7 @@ use crate::compiler_frontend::builtins::error_type::is_reserved_builtin_symbol;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
+use crate::compiler_frontend::syntax_errors::statement_position::check_mistaken_keyword_symbol;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::{return_rule_error, return_syntax_error};
 
@@ -83,6 +84,10 @@ pub(crate) fn parse_symbol_statement(
             }
         );
     };
+
+    if let Some(error) = check_mistaken_keyword_symbol(id, token_stream, string_table) {
+        return Err(error);
+    }
 
     if is_reserved_builtin_symbol(string_table.resolve(id)) {
         return_rule_error!(

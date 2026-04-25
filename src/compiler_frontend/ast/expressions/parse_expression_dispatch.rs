@@ -25,6 +25,7 @@ use crate::compiler_frontend::reserved_trait_syntax::{
     reserved_trait_keyword_error, reserved_trait_keyword_or_dispatch_mismatch,
 };
 use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_frontend::syntax_errors::expression_position::check_expression_common_mistake;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
 use crate::{ast_log, return_syntax_error, return_type_error};
 
@@ -65,6 +66,15 @@ pub(super) fn push_expression_node(
     } else {
         node
     };
+
+    // Detect `!=` (Bang + Assign) before treating `!` as a result-handling suffix.
+    if token_stream.index < token_stream.length
+        && token_stream.current_token_kind() == &TokenKind::Bang
+        && token_stream.peek_next_token() == Some(&TokenKind::Assign)
+    {
+        return Err(check_expression_common_mistake(token_stream, false)
+            .expect("Bang+Assign should always produce an error"));
+    }
 
     let node = if token_stream.index < token_stream.length
         && (token_stream.current_token_kind() == &TokenKind::Bang
@@ -615,6 +625,12 @@ pub(super) fn dispatch_expression_token(
         }
 
         TokenKind::TypeParameterBracket => {
+            if let Some(error) =
+                check_expression_common_mistake(token_stream, state.expression.is_empty())
+            {
+                return Err(error);
+            }
+
             let mut error = CompilerError::new_syntax_error(
                 "Unexpected '|' in expression. This token is only valid in signatures/struct definitions or in loop header bindings.",
                 token_stream.current_location(),
@@ -635,6 +651,12 @@ pub(super) fn dispatch_expression_token(
         TokenKind::AddAssign => Ok(ExpressionTokenStep::Advance),
 
         _ => {
+            if let Some(error) =
+                check_expression_common_mistake(token_stream, state.expression.is_empty())
+            {
+                return Err(error);
+            }
+
             return_syntax_error!(
                 format!("Invalid token used in expression: '{:?}'", token),
                 token_stream.current_location(),

@@ -26,6 +26,7 @@ use crate::compiler_frontend::symbols::identifier_policy::{
     IdentifierNamingKind, ensure_not_keyword_shadow_identifier, naming_warning_for_identifier,
 };
 use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_frontend::syntax_errors::signature_position::check_signature_common_mistake;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::return_syntax_error;
 
@@ -137,6 +138,10 @@ pub fn parse_signature_members(
             }
 
             _ => {
+                if let Some(error) = check_signature_common_mistake(token_stream) {
+                    return Err(error);
+                }
+
                 return_syntax_error!(
                     format!(
                         "Unexpected token used in function arguments: {:?}",

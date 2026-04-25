@@ -39,6 +39,7 @@ pub(crate) use compiler_messages::compiler_warnings;
 pub(crate) use compiler_messages::display_messages;
 pub(crate) mod datatypes;
 pub(crate) mod interned_path;
+pub(crate) mod syntax_errors;
 pub(crate) mod token_scan;
 pub(crate) mod type_coercion;
 

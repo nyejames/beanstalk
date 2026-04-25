@@ -20,6 +20,7 @@ use crate::compiler_frontend::reserved_trait_syntax::{
     reserved_trait_keyword_error, reserved_trait_keyword_or_dispatch_mismatch,
 };
 use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_frontend::syntax_errors::statement_position::check_statement_common_mistake;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::projects::settings;
 use crate::{ast_log, return_rule_error, return_syntax_error};
@@ -169,6 +170,10 @@ fn unexpected_function_body_token_error(
         }
 
         other => {
+            if let Some(error) = check_statement_common_mistake(other, token_stream) {
+                return error;
+            }
+
             let mut error = CompilerError::new_syntax_error(
                 format!("Unexpected token '{other:?}' in a function body."),
                 token_stream.current_location(),

@@ -24,6 +24,7 @@ use crate::compiler_frontend::symbols::identifier_policy::{
     IdentifierNamingKind, ensure_not_keyword_shadow_identifier, naming_warning_for_identifier,
 };
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
+use crate::compiler_frontend::syntax_errors::signature_position::check_signature_common_mistake;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, Token, TokenKind};
 use crate::compiler_frontend::type_coercion::compatibility::is_declaration_compatible;
 use crate::compiler_frontend::type_coercion::diagnostics::{
@@ -122,6 +123,10 @@ pub fn new_declaration(
                 token_stream.current_location(),
             ),
         });
+    }
+
+    if let Some(error) = check_signature_common_mistake(token_stream) {
+        return Err(error);
     }
 
     let declaration_syntax = parse_declaration_syntax(token_stream, id, string_table)?;

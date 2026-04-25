@@ -2173,3 +2173,53 @@ tags = ["integration", "control-flow", "js-backend", "structured"]
 id = "structured_match_converge"
 path = "structured_match_converge"
 tags = ["integration", "control-flow", "js-backend", "structured"]
+
+[[case]]
+id = "diagnostic_expression_and_and"
+path = "diagnostic_expression_and_and"
+tags = ["integration", "diagnostics"]
+
+[[case]]
+id = "diagnostic_expression_bang_equal"
+path = "diagnostic_expression_bang_equal"
+tags = ["integration", "diagnostics"]
+
+[[case]]
+id = "diagnostic_expression_bang_negation"
+path = "diagnostic_expression_bang_negation"
+tags = ["integration", "diagnostics"]
+
+[[case]]
+id = "diagnostic_expression_double_equal"
+path = "diagnostic_expression_double_equal"
+tags = ["integration", "diagnostics"]
+
+[[case]]
+id = "diagnostic_expression_or_or"
+path = "diagnostic_expression_or_or"
+tags = ["integration", "diagnostics"]
+
+[[case]]
+id = "diagnostic_signature_paren_parameters"
+path = "diagnostic_signature_paren_parameters"
+tags = ["integration", "diagnostics"]
+
+[[case]]
+id = "diagnostic_statement_comment_slash_slash"
+path = "diagnostic_statement_comment_slash_slash"
+tags = ["integration", "diagnostics"]
+
+[[case]]
+id = "diagnostic_statement_keyword_fn"
+path = "diagnostic_statement_keyword_fn"
+tags = ["integration", "diagnostics"]
+
+[[case]]
+id = "diagnostic_statement_keyword_let"
+path = "diagnostic_statement_keyword_let"
+tags = ["integration", "diagnostics"]
+
+[[case]]
+id = "diagnostic_statement_keyword_match"
+path = "diagnostic_statement_keyword_match"
+tags = ["integration", "diagnostics"]
