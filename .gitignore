@@ -9,10 +9,11 @@ test_output/
 # Ignore all hidden files
 .*
 
-# But allow .git hidden files
+# But allow project metadata and GitHub Actions
 !.gitignore
 !.gitattributes
-!.github/**
+!.github/
+!.github/workflows/**
 
 # These are created by compiler test files sometimes, and can be ignored
 /dev

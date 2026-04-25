@@ -1,0 +1,143 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+env:
+  BIN_NAME: bean
+
+jobs:
+  validate:
+    name: Validate before release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install just
+        run: cargo install just --locked
+
+      - name: Run validation
+        run: just validate
+
+  build:
+    name: Build ${{ matrix.asset_suffix }}
+    needs: validate
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            asset_suffix: linux-x86_64
+            archive: tar.gz
+
+          - os: macos-latest
+            asset_suffix: macos
+            archive: tar.gz
+
+          - os: windows-latest
+            asset_suffix: windows-x86_64
+            archive: zip
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-release-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build release binary
+        run: cargo build --locked --release
+
+      - name: Prepare package directory
+        shell: bash
+        run: |
+          mkdir -p package
+
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            cp "target/release/${BIN_NAME}.exe" "package/${BIN_NAME}.exe"
+          else
+            cp "target/release/${BIN_NAME}" "package/${BIN_NAME}"
+            chmod +x "package/${BIN_NAME}"
+          fi
+
+          cp README.md package/
+          cp LICENSE package/ 2>/dev/null || true
+
+      - name: Create tar.gz package
+        if: matrix.archive == 'tar.gz'
+        shell: bash
+        run: |
+          tar -czf "${BIN_NAME}-${{ github.ref_name }}-${{ matrix.asset_suffix }}.tar.gz" -C package .
+
+      - name: Create zip package
+        if: matrix.archive == 'zip'
+        shell: pwsh
+        run: |
+          Compress-Archive -Path package/* -DestinationPath "${env:BIN_NAME}-${env:GITHUB_REF_NAME}-${{ matrix.asset_suffix }}.zip"
+
+      - name: Upload package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.BIN_NAME }}-${{ github.ref_name }}-${{ matrix.asset_suffix }}
+          path: |
+            *.tar.gz
+            *.zip
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download packages
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" dist/* \
+            --verify-tag \
+            --prerelease \
+            --generate-notes \
+            --title "Beanstalk ${GITHUB_REF_NAME}"
