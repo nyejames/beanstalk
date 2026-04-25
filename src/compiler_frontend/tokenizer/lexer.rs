@@ -586,15 +586,18 @@ pub(crate) fn keyword_or_variable(
             "if" => return_token!(TokenKind::If, stream),
             "case" => return_token!(TokenKind::Case, stream),
             "return" => return_token!(TokenKind::Return, stream),
-            "yield" => return_token!(TokenKind::Yield, stream),
             "else" => return_token!(TokenKind::Else, stream),
             "block" => return_token!(TokenKind::Block, stream),
             "checked" => return_token!(TokenKind::Checked, stream),
-            "async" => return_token!(TokenKind::Async, stream),
             "as" => return_token!(TokenKind::As, stream),
-            "copy" => return_token!(TokenKind::Copy, stream),
+
+            // Traits
             "must" => return_token!(TokenKind::Must, stream),
             "This" => return_token!(TokenKind::TraitThis, stream),
+
+            // Async
+            "async" => return_token!(TokenKind::Async, stream),
+            "yield" => return_token!(TokenKind::Yield, stream),
 
             // Loops
             "loop" => return_token!(TokenKind::Loop, stream),
@@ -614,7 +617,6 @@ pub(crate) fn keyword_or_variable(
             "True" => return_token!(TokenKind::DatatypeTrue, stream),
             "false" => return_token!(TokenKind::BoolLiteral(false), stream),
             "False" => return_token!(TokenKind::DatatypeFalse, stream),
-            "Fn" => return_token!(TokenKind::DatatypeFalse, stream),
 
             "Float" => return_token!(TokenKind::DatatypeFloat, stream),
             "Int" => return_token!(TokenKind::DatatypeInt, stream),
@@ -624,6 +626,8 @@ pub(crate) fn keyword_or_variable(
 
             "None" => return_token!(TokenKind::DatatypeNone, stream),
             "none" => return_token!(TokenKind::NoneLiteral, stream),
+
+            "copy" => return_token!(TokenKind::Copy, stream),
 
             _ => {}
         }
