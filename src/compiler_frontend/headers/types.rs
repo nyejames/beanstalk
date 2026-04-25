@@ -5,11 +5,14 @@
 //! WHY: keeping these types separate from parser control flow makes the header-stage API obvious
 //! and avoids making `parse_file_headers.rs` the dumping ground for every header concern.
 
+use crate::compiler_frontend::ast::TopLevelDeclarationIndex;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
+use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::declaration_syntax::choice::ChoiceVariant;
 use crate::compiler_frontend::declaration_syntax::declaration_shell::DeclarationSyntax;
 use crate::compiler_frontend::headers::module_symbols::ModuleSymbols;
+use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
@@ -19,6 +22,7 @@ use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation};
 use std::collections::HashSet;
 use std::fmt::Display;
+use std::rc::Rc;
 
 /// Parsed headers for one module plus const-fragment placement metadata for the entry file.
 ///
@@ -147,4 +151,35 @@ impl Header {
 pub struct FileImport {
     pub header_path: InternedPath,
     pub location: SourceLocation,
+}
+
+// Shared file-level state that stays live while one source file is being split into headers.
+pub(super) struct HeaderParseContext<'a> {
+    pub host_function_registry: &'a HostRegistry,
+    pub style_directives: &'a StyleDirectiveRegistry,
+    pub warnings: &'a mut Vec<CompilerWarning>,
+    pub is_entry_file: bool,
+    pub project_path_resolver: Option<ProjectPathResolver>,
+    pub path_format_config: PathStringFormatConfig,
+    pub string_table: &'a mut StringTable,
+    pub const_template_number: &'a mut usize,
+    /// Count of runtime (non-exported) top-level templates seen so far in the entry file.
+    /// Used as the runtime_insertion_index for the next const fragment.
+    pub runtime_fragment_count: &'a mut usize,
+    pub top_level_const_fragments: &'a mut Vec<TopLevelConstFragment>,
+}
+
+// Shared per-header builder inputs that stay stable while one declaration is classified.
+pub(super) struct HeaderBuildContext<'a> {
+    pub host_function_registry: &'a HostRegistry,
+    pub style_directives: &'a StyleDirectiveRegistry,
+    pub warnings: &'a mut Vec<CompilerWarning>,
+    pub project_path_resolver: Option<ProjectPathResolver>,
+    pub path_format_config: PathStringFormatConfig,
+    pub visible_constant_placeholders: Rc<TopLevelDeclarationIndex>,
+    pub source_file: &'a InternedPath,
+    pub file_imports: &'a HashSet<InternedPath>,
+    pub file_import_entries: &'a [FileImport],
+    pub file_constant_order: &'a mut usize,
+    pub string_table: &'a mut StringTable,
 }
