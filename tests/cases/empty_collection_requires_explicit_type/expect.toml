@@ -1,0 +1,8 @@
+[backends.html]
+mode = "failure"
+warnings = "forbid"
+error_type = "Type"
+message_contains = [
+  "Cannot infer the element type of empty collection",
+  "explicit collection type",
+]

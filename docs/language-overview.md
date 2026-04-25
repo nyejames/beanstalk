@@ -52,8 +52,8 @@ This comes before the type if there is an explicit type declaration.
 
     bool ~= true
 
-    mutable_collection ~= {}
-    immutable_collection = {}
+    mutable_collection ~{Int} = {}
+    immutable_collection {Int} = {}
 
     Struct = |
         value Float,
@@ -212,7 +212,23 @@ The special `!` return is only for the error path.
 ### Collections
 Collections are ordered groups of values that are zero-indexed.
 
-When a new collection uses the mutable symbol, its internal values can be mutated by default.
+Collection literals are homogeneous. A non-empty collection literal infers its element type from
+its items. Empty collection literals require an explicit collection type annotation because their
+element type is not immediately inferable.
+
+```beanstalk
+values ~= {1, 2, 3}      -- inferred as {Int}
+empty_values ~{Int} = {} -- explicit empty Int collection
+
+values ~= {}             -- Type error: element type is ambiguous
+mixed ~= {1, "bad"}      -- Type error: inconsistent item types
+```
+
+Beanstalk does not infer an empty collection's element type from later `push`, assignment, loop,
+function argument, HIR, or borrow-analysis use. A declaration's type must be explicit at the
+declaration site or immediately inferable from its initializer.
+
+A collection binding declared with the mutable symbol can be mutated through collection methods.
 
 `set`, `push`, and `remove` are mutating collection operations and require explicit mutable/exclusive receiver access at the call site.
 `get(index) = value` is also a mutating write and therefore requires a mutable place target.

@@ -81,8 +81,8 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
 
         bool ~= true
 
-        mutable_collection ~= {}
-        immutable_collection = {}
+        mutable_collection ~{Int} = {}
+        immutable_collection {Int} = {}
 
         NewStruct = |
             value Float,

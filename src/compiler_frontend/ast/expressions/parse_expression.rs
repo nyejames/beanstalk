@@ -32,10 +32,9 @@ pub fn create_multiple_expressions(
 ) -> Result<Vec<Expression>, CompilerError> {
     let mut expressions: Vec<Expression> = Vec::new();
     for (type_index, expected_type) in context.expected_result_types.iter().enumerate() {
-        // Pass Inferred for concrete scalar/composite types so that eval_expression stays
-        // strict (Exact context); callers own their own coercion or validation after this
-        // call returns. Pass the expected type through only for Option variants so that
-        // `none` literals can resolve their inner type from the surrounding context.
+        // Pass parse-time context only for context-sensitive literals. Other
+        // expressions resolve their natural type here, and callers own
+        // validation or coercion after this call returns.
         let mut expr_type = parse_expectation_for_target_type(expected_type);
         let expression = create_expression_with_trailing_newline_policy(
             token_stream,

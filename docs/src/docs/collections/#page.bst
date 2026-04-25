@@ -17,6 +17,22 @@ import @styles/docs {navbar, title, section, codeblock, codesnippet, theme_head}
 
     Collections are ordered groups of values that are zero-indexed (start from 0).
 
+    Collection literals are homogeneous. A non-empty collection literal infers its element type
+    from its items. Empty collection literals require an explicit collection type annotation
+    because their element type is not immediately inferable.
+
+    [codeblock, $code("bst"):
+        values ~= {1, 2, 3}      -- inferred as {Int}
+        empty_values ~{Int} = {} -- explicit empty Int collection
+
+        values ~= {}             -- Type error: element type is ambiguous
+        mixed ~= {1, "bad"}      -- Type error: inconsistent item types
+    ]
+
+    The compiler does not infer an empty collection's element type from later `push`, assignment,
+    loop, function argument, HIR, or borrow-analysis use. A declaration's type must be explicit at
+    the declaration site or immediately inferable from its initializer.
+
     For unordered keyed collections (Hash Map semantics), keyed method behavior is deferred in this milestone.
 
     Elements inside collections are accessed using [codesnippet: .get(index)].
@@ -37,17 +53,15 @@ import @styles/docs {navbar, title, section, codeblock, codesnippet, theme_head}
 #[section, $markdown:
     ## Immutable Collections
     [codeblock, $code("bst"):
-        -- Collections assigned without the mutable symbol have immutable values inside
+        -- Collections assigned without the mutable symbol cannot be mutated
         immutable_collection = {1, 2, 3}
 
         value = immutable_collection.get(0) ! 0
 
         ~immutable_collection.set(1, 69) -- Error, can't mutate values inside an immutable collection
         immutable_collection.get(1) = 69 -- Error, same mutable-element rule
-
-        -- You can still push and remove values from an immutable collection
-        ~immutable_collection.push(4)
-        ~immutable_collection.remove(0)
+        ~immutable_collection.push(4) -- Error, push mutates the collection
+        ~immutable_collection.remove(0) -- Error, remove mutates the collection
     ]
 ]
 

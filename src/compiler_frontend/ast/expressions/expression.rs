@@ -499,14 +499,11 @@ impl Expression {
 
     pub fn collection(
         items: Vec<Expression>,
+        inner_type: DataType,
         location: SourceLocation,
         value_mode: ValueMode,
     ) -> Self {
         let contains_regular_division = items.iter().any(|item| item.contains_regular_division);
-        let inner_type = items
-            .first()
-            .map(|item| item.data_type.to_owned())
-            .unwrap_or(DataType::Int);
 
         Self::new(
             ExpressionKind::Collection(items),

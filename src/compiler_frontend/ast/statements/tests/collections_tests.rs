@@ -71,6 +71,119 @@ fn parses_collection_literal_items() {
 }
 
 #[test]
+fn infers_collection_element_type_from_non_empty_literal() {
+    let (ast, string_table) = parse_single_file_ast("values ~= {1, 2, 3}\n");
+    let body = start_function_body(&ast, &string_table);
+
+    let NodeKind::VariableDeclaration(values_decl) = &body[0].kind else {
+        panic!("expected values declaration");
+    };
+
+    assert_eq!(
+        values_decl
+            .value
+            .data_type
+            .display_with_table(&string_table),
+        "Int Collection"
+    );
+}
+
+#[test]
+fn parses_empty_collection_with_explicit_element_type() {
+    let (ast, string_table) =
+        parse_single_file_ast("Reading = |\n    value Float,\n|\n\nreadings ~{Reading} = {}\n");
+    let body = start_function_body(&ast, &string_table);
+
+    let NodeKind::VariableDeclaration(readings_decl) = &body[0].kind else {
+        panic!("expected readings declaration");
+    };
+
+    assert_eq!(
+        readings_decl
+            .value
+            .data_type
+            .display_with_table(&string_table),
+        "Reading Collection"
+    );
+}
+
+#[test]
+fn rejects_empty_collection_without_explicit_element_type() {
+    let error = parse_single_file_ast_error("values ~= {}\n");
+
+    assert!(
+        error
+            .msg
+            .contains("Cannot infer the element type of empty collection"),
+        "{}",
+        error.msg
+    );
+    assert!(
+        error.msg.contains("explicit collection type"),
+        "{}",
+        error.msg
+    );
+}
+
+#[test]
+fn rejects_mixed_item_types_in_inferred_collection() {
+    let error = parse_single_file_ast_error("values ~= {1, \"bad\"}\n");
+
+    assert!(
+        error
+            .msg
+            .contains("Collection literal has inconsistent item types"),
+        "{}",
+        error.msg
+    );
+    assert!(error.msg.contains("Int"), "{}", error.msg);
+    assert!(error.msg.contains("String"), "{}", error.msg);
+}
+
+#[test]
+fn rejects_item_that_does_not_match_explicit_collection_type() {
+    let error = parse_single_file_ast_error("values ~{Int} = {1, \"bad\"}\n");
+
+    assert!(
+        error
+            .msg
+            .contains("Collection literal item has incompatible type"),
+        "{}",
+        error.msg
+    );
+    assert!(error.msg.contains("Int"), "{}", error.msg);
+    assert!(error.msg.contains("String"), "{}", error.msg);
+}
+
+#[test]
+fn parses_push_after_explicit_empty_collection() {
+    let (ast, string_table) = parse_single_file_ast("values ~{Int} = {}\n~values.push(1)\n");
+    let body = start_function_body(&ast, &string_table);
+
+    let NodeKind::Rvalue(push_expr) = &body[1].kind else {
+        panic!("expected push statement");
+    };
+
+    assert_eq!(
+        runtime_collection_builtin_op(push_expr),
+        CollectionBuiltinOp::Push
+    );
+}
+
+#[test]
+fn rejects_empty_collection_even_when_later_push_would_reveal_type() {
+    let error = parse_single_file_ast_error("values ~= {}\n~values.push(1)\n");
+
+    assert!(
+        error
+            .msg
+            .contains("Cannot infer the element type of empty collection"),
+        "{}",
+        error.msg
+    );
+}
+
+#[test]
 fn rejects_missing_collection_item_after_comma() {
     let error = parse_single_file_ast_error("values ~= {1, , 2}\n");
     assert!(

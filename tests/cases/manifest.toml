@@ -339,6 +339,21 @@ path = "collection_literal_smoke"
 tags = ["integration","collections"]
 
 [[case]]
+id = "empty_collection_requires_explicit_type"
+path = "empty_collection_requires_explicit_type"
+tags = ["integration","collections","diagnostics"]
+
+[[case]]
+id = "explicit_empty_collection_can_be_pushed"
+path = "explicit_empty_collection_can_be_pushed"
+tags = ["integration","collections"]
+
+[[case]]
+id = "mixed_collection_literal_rejected"
+path = "mixed_collection_literal_rejected"
+tags = ["integration","collections","diagnostics"]
+
+[[case]]
 id = "collection_methods_backend_contract"
 path = "collection_methods_backend_contract"
 tags = ["integration","collections","js-backend"]

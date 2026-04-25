@@ -1,0 +1,9 @@
+[backends.html]
+mode = "failure"
+warnings = "forbid"
+error_type = "Type"
+message_contains = [
+  "Collection literal has inconsistent item types",
+  "Int",
+  "String",
+]

@@ -116,6 +116,7 @@ fn collection_literal(location: SourceLocation) -> Expression {
             Expression::int(2, location.clone(), ValueMode::ImmutableOwned),
             Expression::int(3, location.clone(), ValueMode::ImmutableOwned),
         ],
+        DataType::Int,
         location,
         ValueMode::ImmutableOwned,
     )

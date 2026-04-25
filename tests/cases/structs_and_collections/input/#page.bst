@@ -18,7 +18,7 @@ render_structs_and_collections || -> String:
     p2.x = 5
     p2.y = 10
 
-    empty = {}
+    empty {Int} = {}
     numbers = {1, 2, 3, 4, 5}
     names = {"Alice", "Bob", "Charlie"}
     matrix = {{1, 2}, {3, 4}}

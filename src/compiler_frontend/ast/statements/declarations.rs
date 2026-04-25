@@ -211,11 +211,10 @@ pub fn resolve_declaration_syntax(
             // below can reference it after the expression has resolved its own
             // natural type.
             //
-            // Pass parse-time context only where syntax requires it: Option(_)
-            // targets need the context so that `none` literals can extract their
-            // inner type during parsing. Everything else uses Inferred so that
-            // eval_expression stays strict (Exact context) and coercion remains
-            // explicit and post-parse.
+            // Pass parse-time context only where syntax requires it, such as
+            // `none` and empty collection literals. Other expressions resolve
+            // their natural type before this declaration boundary validates and
+            // coerces them.
             let declared_type = data_type.clone();
             let mut expr_type = parse_expectation_for_target_type(&declared_type);
             let expr = create_expression(

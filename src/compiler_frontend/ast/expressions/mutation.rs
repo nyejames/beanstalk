@@ -238,10 +238,9 @@ fn build_mutation_from_target(
     // Determine the assignment type and handle accordingly
     let value = match token_stream.current_token_kind() {
         TokenKind::Assign => {
-            // Simple mutation: variable = new_value
-            // Pass parse-time context only for Option(_) targets so that `none`
-            // literals can resolve their inner type. Compound assignments below
-            // use Inferred unconditionally because optional context does not
+            // Simple mutation: variable = new_value. Parse-time context is
+            // preserved only for context-sensitive literals. Compound
+            // assignments below use Inferred because that context does not
             // apply to arithmetic operators.
             token_stream.advance();
 
