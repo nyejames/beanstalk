@@ -2268,3 +2268,18 @@ tags = ["integration", "diagnostics"]
 id = "diagnostic_statement_keyword_match"
 path = "diagnostic_statement_keyword_match"
 tags = ["integration", "diagnostics"]
+
+[[case]]
+id = "constant_soft_dependency_resolves_after_placeholder"
+path = "constant_soft_dependency_resolves_after_placeholder"
+tags = ["integration", "constants", "dependency-resolution"]
+
+[[case]]
+id = "constant_cross_file_soft_dependency"
+path = "constant_cross_file_soft_dependency"
+tags = ["integration", "constants", "dependency-resolution", "imports"]
+
+[[case]]
+id = "struct_placeholder_visible_before_resolution"
+path = "struct_placeholder_visible_before_resolution"
+tags = ["integration", "structs", "dependency-resolution"]
