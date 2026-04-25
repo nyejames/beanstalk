@@ -6,3 +6,4 @@
 
 pub(crate) mod module_symbols;
 pub(crate) mod parse_file_headers;
+mod types;
