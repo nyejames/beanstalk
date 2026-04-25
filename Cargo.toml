@@ -11,7 +11,7 @@ show_borrow_checker = []
 
 [package]
 name = "beanstalk"
-version = "0.0.1-alpha"
+version = "0.1.0-alpha"
 edition = "2024"
 
 [[bin]]

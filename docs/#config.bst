@@ -12,7 +12,6 @@
 # origin = "/beanstalk"
 # html_lang = "en"
 # html_title_postfix = " | Beanstalk"
-# html_favicon = "/assets/favicon.ico"
 # root_folders = {
     @lib,
     @assets,

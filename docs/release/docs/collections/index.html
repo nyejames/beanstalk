@@ -6,7 +6,6 @@
     <meta name="color-scheme" content="light dark">
     <title>COLLECTIONS | Beanstalk</title>
     <meta name="description" content="Introduction to collections in Beanstalk">
-    <link rel="icon" href="/assets/favicon.ico">
     <style>
 /*!
   BS CSS CORE (absolute basics CSS reset)
@@ -317,7 +316,7 @@ body {
         color: #c444aff9; 
         padding: 0.1em; 
         font-family: var(--bst-font-family-monospace);
-    "> .get(index)</span>.</p><p>`collection.get(0)` is the equivalent of `collection0` in most C-like languages.There is no square-bracket index notation in Beanstalk.</p><p>`get(index)` returns a `Result&lt;Elem, Error&gt;`, so it must be handled with `!` in value position.</p><p>`push`, `remove`, and `length` enforce the same strict runtime validation as `get`.Invalid receivers or out-of-bounds indices produce structured errors rather than silent no-ops.The backend handles error propagation automatically for these methods.</p><p>There may not be a runtime function call under the hood for these methods.The compiler lowers many collection built-ins directly.</p></section>
+    "> .get(index)</span>.</p><p>`collection.get(0)` is the equivalent of `collection0` in most C-like languages. There is no square-bracket index notation in Beanstalk.</p><p>`get(index)` returns a `Result&lt;Elem, Error&gt;`, so it must be handled with `!` in value position.</p><p>`push`, `remove`, and `length` enforce the same strict runtime validation as `get`. Invalid receivers or out-of-bounds indices produce structured errors rather than silent no-ops. The backend handles error propagation automatically for these methods.</p><p>There may not be a runtime function call under the hood for these methods. The compiler lowers many collection built-ins directly.</p></section>
     <section class="container"><h2>Immutable Collections</h2><pre style="
         background-color: hsla(0, 0%, 42%, 0.12); 
         padding-left: 1em; 
@@ -361,7 +360,7 @@ body {
     <span class='bst-code-operator'>~</span>fruit_array.push<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;orange&quot;</span><span class='bst-code-parenthesis'>)</span>
     <span class='bst-code-operator'>~</span>fruit_array.remove<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>2</span><span class='bst-code-parenthesis'>)</span>
     </code></pre></section>
-    <section class="container"><h2>Hash Maps</h2><p>Hash map keyed method behavior is deferred at this stage of development.Current built-in collection receiver methods are implemented for ordered collections only.</p><p>The eventual built-in hash map syntax will look something like this:</p><pre style="
+    <section class="container"><h2>Hash Maps</h2><p>Hash map keyed method behavior is deferred at this stage of development. Current built-in collection receiver methods are implemented for ordered collections only.</p><p>The eventual built-in hash map syntax will look something like this:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12); 
         padding-left: 1em; 
         border-radius: 5px;

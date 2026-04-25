@@ -1,4 +1,8 @@
+-- Should not compile
+bad Int =  6 / 2
 
-basic_maths Float = 4 / 5
+/ 
 
-[basic_maths]
+5
+
+[bad]

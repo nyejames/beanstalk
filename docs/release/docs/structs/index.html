@@ -6,7 +6,6 @@
     <meta name="color-scheme" content="light dark">
     <title>Structs | Beanstalk</title>
     <meta name="description" content="Structs in Beanstalk.">
-    <link rel="icon" href="/assets/favicon.ico">
     <style>
 /*!
   BS CSS CORE (absolute basics CSS reset)
@@ -313,7 +312,7 @@ body {
         </div>
     </nav>
      <h1 style="font-size: 2em;text-align: center;"> STRUCTS</h1>
-    <section class="container"><h1>The Struct</h1><p>    A struct is a collection of named fields, similar to a struct in other languages.</p><p>    Runtime structs are nominal types. Two structs with the same field shape are still different runtime types.</p><p>    They can implement statically resolved receiver methods by defining a top-level function whose first argument is literally named `this`.    `this Type` is immutable, `this ~Type` is mutable, and receiver methods can only be called with `value.method(...)`.    User-defined struct methods must be declared in the same file as the struct definition.</p><p>    Receiver methods are also supported on built-in scalar types (`Int`, `Float`, `Bool`, `String`) and use the same `this` rules. The same-file restriction applies to user-defined struct methods.</p><p>    Structs can be assigned with default arguments, these can be any constant expression.</p><pre style="
+    <section class="container"><h1>The Struct</h1><p>    A struct is a collection of named fields, similar to a struct in other languages.</p><p>    Runtime structs are nominal types. Two structs with the same field shape are still different runtime types.</p><p>    They can implement statically resolved receiver methods by defining a top-level function whose first argument is literally named `this`.     `this Type` is immutable, `this ~Type` is mutable, and receiver methods can only be called with `value.method(...)`.     User-defined struct methods must be declared in the same file as the struct definition.</p><p>    Receiver methods are also supported on built-in scalar types (`Int`, `Float`, `Bool`, `String`) and use the same `this` rules. The same-file restriction applies to user-defined struct methods.</p><p>    Structs can be assigned with default arguments, these can be any constant expression.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12); 
         padding-left: 1em; 
         border-radius: 5px;

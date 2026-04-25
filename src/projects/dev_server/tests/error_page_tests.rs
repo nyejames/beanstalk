@@ -101,8 +101,8 @@ fn compiler_error_page_links_to_project_relative_resolved_source_path() {
     println!("EXPECTED! {}", expected_href);
     assert!(page.contains(&format!("href=\"{expected_href}\"")));
     assert!(page.contains("line 2, col 5"));
-    assert!(page.contains("Stage: Function Signature Parsing"));
-    assert!(page.contains("Help: Add"));
+    assert!(!page.contains("Stage: Function Signature Parsing"));
+    assert!(page.contains("Add"));
     assert!(page.contains("return declarations"));
     assert!(!page.contains("start.header"));
     assert!(page.contains("EventSource('/docs/__beanstalk/events')"));

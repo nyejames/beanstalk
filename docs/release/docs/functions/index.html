@@ -5,8 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light dark">
     <title>Functions | Beanstalk</title>
-    <meta name="description" content="Function declarations, returns, and closures in Beanstalk.">
-    <link rel="icon" href="/assets/favicon.ico">
+    <meta name="description" content="Function declarations, returns, calls, and Alpha-scope result handling in Beanstalk.">
     <style>
 /*!
   BS CSS CORE (absolute basics CSS reset)
@@ -322,12 +321,10 @@ body {
         overflow-x: auto;
     "><code class='codeblock'>
     <span class='bst-code-comment'>-- The simplest possible function</span>
-    <span class='bst-code-comment'>-- The name of the function first,</span>
-    <span class='bst-code-comment'>-- Followed by a parameter definition that defines what arguments must be passed in</span>
     main <span class='bst-code-operator'>|</span><span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
-        <span class='bst-code-comment'>-- Some code goes in here!</span>
+        io<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Hello from a function&quot;</span><span class='bst-code-parenthesis'>)</span>
     ;
-    </code></pre><h2>The function signature</h2><p>Functions in Beanstalk pass arguments by reference.</p><p>The arrow symbol is used to define the return signature of a function. Functions can return multiple values. If the function returns values, it must use a type signature or the name of one of the arguments if it&#39;s returning that reference back to the caller.</p><pre style="
+    </code></pre><h2>The function signature</h2><p>Function names come first, followed by parameters inside vertical pipes. The arrow symbol defines return slots. Functions can return multiple values.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12); 
         padding-left: 1em; 
         border-radius: 5px;
@@ -337,53 +334,16 @@ body {
     "><code class='codeblock'>
 
     get_doubled <span class='bst-code-operator'>|</span>value <span class='bst-code-type'>Int</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>Int</span><span class='bst-code-operator'>:</span>
-        <span class='bst-code-comment'>-- Creates a new immutable integer using value</span>
         <span class='bst-code-keyword'>return</span> value <span class='bst-code-operator'>*</span> <span class='bst-code-number'>2</span>
     ;
 
-    <span class='bst-code-comment'>-- This function returns a reference to the x value passed in</span>
-    <span class='bst-code-comment'>-- The only names you can use in the return type are the names of arguments that are passsed in.</span>
-    <span class='bst-code-comment'>-- This is to help the compiler understand lifetimes</span>
-    multipleReturns <span class='bst-code-operator'>|</span>x <span class='bst-code-operator'>~</span><span class='bst-code-type'>Int</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> x, <span class='bst-code-type'>Bool</span><span class='bst-code-operator'>:</span>
-        x <span class='bst-code-operator'>+</span><span class='bst-code-operator'>=</span> <span class='bst-code-number'>1</span>
-        <span class='bst-code-keyword'>return</span> x, x is <span class='bst-code-operator'>&gt;</span> <span class='bst-code-number'>0</span>
+    pair <span class='bst-code-operator'>|</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>String,</span> <span class='bst-code-type'>Int</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>return</span> <span class='bst-code-string'>&quot;Ana&quot;</span>, <span class='bst-code-number'>2</span>
     ;
 
-    <span class='bst-code-comment'>-- Calling a function</span>
-    value, is_positive <span class='bst-code-operator'>=</span> multipleReturns<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>5</span><span class='bst-code-parenthesis'>)</span>
-
-    <span class='bst-code-comment'>-- Creating an error type</span>
-    <span class='bst-code-struct'>Error</span> <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>|</span>
-        msg <span class='bst-code-struct'>String,</span>
-        context <span class='bst-code-operator'>~</span><span class='bst-code-parenthesis'>{</span><span class='bst-code-type'>String</span><span class='bst-code-parenthesis'>}</span>,
-    <span class='bst-code-operator'>|</span>
-
-    <span class='bst-code-comment'>-- Functions use the &#39;!&#39; to show that they can return an error instead of any other values</span>
-    <span class='bst-code-comment'>-- This error must always be handled at the call site,</span>
-    <span class='bst-code-comment'>-- The &#39;!&#39; symbol provides convenient syntax sugar for this</span>
-    canError <span class='bst-code-operator'>|</span>x <span class='bst-code-type'>String</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>String,</span> <span class='bst-code-struct'>Float,</span> <span class='bst-code-struct'>Error</span><span class='bst-code-operator'>!</span><span class='bst-code-operator'>:</span>
-
-        <span class='bst-code-keyword'>if</span> x.is_empty<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>:</span>
-            <span class='bst-code-keyword'>return</span><span class='bst-code-operator'>!</span> <span class='bst-code-struct'>Error</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Whoops&quot;</span>, <span class='bst-code-parenthesis'>{</span><span class='bst-code-parenthesis'>}</span><span class='bst-code-parenthesis'>)</span>
-        ;
-
-        <span class='bst-code-keyword'>return</span> <span class='bst-code-parenthesis'>[</span>x, <span class='bst-code-string'>&quot; is cool&quot;</span><span class='bst-code-parenthesis'>]</span>, <span class='bst-code-number'>3.14</span>
-    ;
-
-    defaultIfError <span class='bst-code-operator'>|</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>String,</span> <span class='bst-code-type'>Float</span><span class='bst-code-operator'>:</span>
-        string, number <span class='bst-code-operator'>=</span> canError<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;&quot;</span><span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>!</span> <span class='bst-code-string'>&quot;&quot;</span>, <span class='bst-code-number'>0.0</span>
-        <span class='bst-code-keyword'>return</span> string, number
-    ;
-
-    bubble_up_error_with_context <span class='bst-code-operator'>|</span>name <span class='bst-code-type'>String</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>Error</span><span class='bst-code-operator'>!</span><span class='bst-code-operator'>:</span>
-        value, number <span class='bst-code-operator'>=</span> canError<span class='bst-code-parenthesis'>(</span>name<span class='bst-code-parenthesis'>)</span> err<span class='bst-code-operator'>!</span><span class='bst-code-operator'>:</span>
-            err.context.push<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;bubbled up from this function&quot;</span><span class='bst-code-parenthesis'>)</span>
-            <span class='bst-code-keyword'>return</span><span class='bst-code-operator'>!</span> err
-        ;
-
-        io<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>[</span>value, number<span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>)</span>
-    ;
-    </code></pre><h2>Closures</h2><p>Closures in Beanstalk are nameless functions used as values.They use the same syntax as functions, but do not have a name and therefore cannot be declared at the top level.</p><p>Closures may only appear inside a function or method body and are always expressions (rvalues).</p><pre style="
+    doubled <span class='bst-code-operator'>=</span> get_doubled<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>21</span><span class='bst-code-parenthesis'>)</span>
+    name, count <span class='bst-code-operator'>=</span> pair<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><h2>Arguments</h2><p>Positional arguments come before named arguments. Mutable access to an existing place must be explicit at the call site.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12); 
         padding-left: 1em; 
         border-radius: 5px;
@@ -391,20 +351,16 @@ body {
         white-space: pre; 
         overflow-x: auto;
     "><code class='codeblock'>
-    update_total <span class='bst-code-operator'>|</span>values <span class='bst-code-parenthesis'>{</span><span class='bst-code-type'>Int</span><span class='bst-code-parenthesis'>}</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>Int</span><span class='bst-code-operator'>:</span>
-        total <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-number'>0</span>
-
-        apply <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>|</span>value <span class='bst-code-type'>Int</span><span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
-            total <span class='bst-code-operator'>+</span><span class='bst-code-operator'>=</span> value
-        ;
-
-        <span class='bst-code-keyword'>loop</span> values <span class='bst-code-operator'>|</span>v<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
-            apply<span class='bst-code-parenthesis'>(</span>v<span class='bst-code-parenthesis'>)</span>
-        ;
-
-        <span class='bst-code-keyword'>return</span> total
+    update <span class='bst-code-operator'>|</span>value <span class='bst-code-operator'>~</span><span class='bst-code-type'>Int</span><span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
+        value <span class='bst-code-operator'>+</span><span class='bst-code-operator'>=</span> <span class='bst-code-number'>1</span>
     ;
-    </code></pre><h3>Capturing Variables</h3><p>A closure may reference values from its surrounding scope.This is called capture.</p><p>Captures are implicit, references by default and subject to the same mutability and exclusivity rules as normal variables.</p><h3>Returnning closures from functions</h3><p>Functions may return closures as values.</p><p>To represent a closure type, Beanstalk uses the `Fn` keyword followed by the parameter and return type signatures inside of brackets.</p><pre style="
+
+    value <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-number'>1</span>
+    update<span class='bst-code-parenthesis'>(</span><span class='bst-code-operator'>~</span>value<span class='bst-code-parenthesis'>)</span>
+
+    <span class='bst-code-comment'>-- Fresh values can satisfy mutable parameters without &#39;~&#39;.</span>
+    update<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>1</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><h2>Error-returning functions</h2><p>A function can mark one return slot with `!`. Error-returning calls must be handled with propagation, fallback values, or a named handler.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12); 
         padding-left: 1em; 
         border-radius: 5px;
@@ -412,30 +368,33 @@ body {
         white-space: pre; 
         overflow-x: auto;
     "><code class='codeblock'>
-    <span class='bst-code-comment'>-- Defining the type of a closure that takes an Int and returns a String</span>
-    <span class='bst-code-struct'>Fn</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-type'>Int</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-parenthesis'>)</span>
-    </code></pre><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12); 
-        padding-left: 1em; 
-        border-radius: 5px;
-        max-width: 100%; 
-        white-space: pre; 
-        overflow-x: auto;
-    "><code class='codeblock'>
-    map <span class='bst-code-operator'>|</span>items <span class='bst-code-parenthesis'>{</span><span class='bst-code-type'>Int</span><span class='bst-code-parenthesis'>}</span>, f <span class='bst-code-struct'>Fn</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-type'>Int</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>Int</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-type'>Int</span><span class='bst-code-parenthesis'>}</span><span class='bst-code-operator'>:</span>
-        result <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-parenthesis'>}</span>
-        <span class='bst-code-keyword'>loop</span> items <span class='bst-code-operator'>|</span>item<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
-            <span class='bst-code-operator'>~</span>result.push<span class='bst-code-parenthesis'>(</span>f<span class='bst-code-parenthesis'>(</span>item<span class='bst-code-parenthesis'>)</span><span class='bst-code-parenthesis'>)</span>
+    parse_number <span class='bst-code-operator'>|</span>text <span class='bst-code-type'>String</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>Int,</span> <span class='bst-code-struct'>Error</span><span class='bst-code-operator'>!</span><span class='bst-code-operator'>:</span>
+
+        <span class='bst-code-keyword'>if</span> text.is_empty<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>:</span>
+            <span class='bst-code-keyword'>return</span><span class='bst-code-operator'>!</span> <span class='bst-code-struct'>Error</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Parse&quot;</span>, <span class='bst-code-string'>&quot;int.empty&quot;</span>, <span class='bst-code-string'>&quot;Missing number&quot;</span><span class='bst-code-parenthesis'>)</span>
         ;
-        <span class='bst-code-keyword'>return</span> result
+
+        <span class='bst-code-keyword'>return</span> <span class='bst-code-number'>42</span>
     ;
 
-    each <span class='bst-code-operator'>|</span>items <span class='bst-code-parenthesis'>{</span><span class='bst-code-type'>Int</span><span class='bst-code-parenthesis'>}</span>, f <span class='bst-code-struct'>Fn</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-type'>Int</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
-        <span class='bst-code-keyword'>loop</span> items <span class='bst-code-operator'>|</span>item<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
-            f<span class='bst-code-parenthesis'>(</span>item<span class='bst-code-parenthesis'>)</span>
-        ;
+    with_fallback <span class='bst-code-operator'>|</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>Int</span><span class='bst-code-operator'>:</span>
+        value <span class='bst-code-operator'>=</span> parse_number<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;&quot;</span><span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>!</span> <span class='bst-code-number'>0</span>
+        <span class='bst-code-keyword'>return</span> value
     ;
-    </code></pre></section>
+
+    bubble_up <span class='bst-code-operator'>|</span>text <span class='bst-code-type'>String</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>Int,</span> <span class='bst-code-struct'>Error</span><span class='bst-code-operator'>!</span><span class='bst-code-operator'>:</span>
+        value <span class='bst-code-operator'>=</span> parse_number<span class='bst-code-parenthesis'>(</span>text<span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>!</span>
+        <span class='bst-code-keyword'>return</span> value
+    ;
+
+    recover <span class='bst-code-operator'>|</span>text <span class='bst-code-type'>String</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>Int</span><span class='bst-code-operator'>:</span>
+        value <span class='bst-code-operator'>=</span> parse_number<span class='bst-code-parenthesis'>(</span>text<span class='bst-code-parenthesis'>)</span> err<span class='bst-code-operator'>!</span> <span class='bst-code-number'>0</span><span class='bst-code-operator'>:</span>
+            io<span class='bst-code-parenthesis'>(</span>err.message<span class='bst-code-parenthesis'>)</span>
+        ;
+
+        <span class='bst-code-keyword'>return</span> value
+    ;
+    </code></pre><h2>Closures</h2><p>Closures and `Fn(...)` function-value types are deferred for Alpha. Do not use closure examples as current compiler support yet.</p></section>
     <script>
     function __bs_is_ref(value) {
     return value !== null && typeof value === "object" && value.__bs_ref === true;

@@ -19,8 +19,8 @@ import @styles/docs {navbar, title, section, palette, codeblock, theme_head}
     You can find the source code for this website on @https://github.com/nyejames/beanstalk/tree/main/docs (Github).
 
     ## Documentation
-    The documentation is currently being written in Beanstalk one file at a time.
-    See the @./progress (alpha implementation matrix) for a detailed breakdown of what features are currently documented and what features are still in progress.
+    These pages document the Alpha-supported language surface.
+    See the @./progress (alpha implementation matrix) for the current implementation and coverage status.
 
     ### Introduction
     - @./basics (Basics)
@@ -32,5 +32,6 @@ import @styles/docs {navbar, title, section, palette, codeblock, theme_head}
     - @./loops (Loops)
     - @./collections (Collections)
     - @./structs (Structs)
+    - @./choices (Choices)
     - @./pattern-matching (Pattern Matching)
 ]

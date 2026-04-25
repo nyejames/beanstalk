@@ -6,7 +6,6 @@
     <meta name="color-scheme" content="light dark">
     <title>Templates | Beanstalk</title>
     <meta name="description" content="Template syntax, slots, directives, and formatting in Beanstalk.">
-    <link rel="icon" href="/assets/favicon.ico">
     <style>
 /*!
   BS CSS CORE (absolute basics CSS reset)
@@ -334,11 +333,11 @@ body {
         color: #c444aff9; 
         padding: 0.1em; 
         font-family: var(--bst-font-family-monospace);
-    "> $</span> directives. </p><span style="
+    "> $</span> directives. </p><p><span style="
         color: #c444aff9; 
         padding: 0.1em; 
         font-family: var(--bst-font-family-monospace);
-    ">$</span> <p>introduces <strong>compiler-handled directives</strong> (so they don&#39;t collide with normal variables and can be extended in the future), such as formatter-like built-ins, precedence controls, and default child templates that are automatically applied to direct child templates.</p><p>Directive availability is frontend-registry based:</p><ul><li>Frontend built-ins are available by default (<span style="
+    ">$</span> introduces <strong>compiler-handled directives</strong> (so they don&#39;t collide with normal variables and can be extended in the future), such as formatter-like built-ins, precedence controls, and default child templates that are automatically applied to direct child templates.</p><p>Directive availability is frontend-registry based:</p><ul><li>Frontend built-ins are available by default (<span style="
         color: #c444aff9; 
         padding: 0.1em; 
         font-family: var(--bst-font-family-monospace);
@@ -393,63 +392,63 @@ body {
         color: #c444aff9; 
         padding: 0.1em; 
         font-family: var(--bst-font-family-monospace);
-    ">$slot</span> <p>/ <span style="
+    ">$slot</span> / <span style="
         color: #c444aff9; 
         padding: 0.1em; 
         font-family: var(--bst-font-family-monospace);
-    ">$insert(..)</span> - See slots below!</p></li><li><span style="
+    ">$insert(..)</span> - See slots below!</li><li><span style="
         color: #c444aff9; 
         padding: 0.1em; 
         font-family: var(--bst-font-family-monospace);
-    ">$fresh</span>              <p>- Opts this child template out of wrappers applied by the immediate parent&#39;s <span style="
+    ">$fresh</span>              - Opts this child template out of wrappers applied by the immediate parent&#39;s <span style="
         color: #c444aff9; 
         padding: 0.1em; 
         font-family: var(--bst-font-family-monospace);
-    ">$children(..)</span> directive</p></li><li><span style="
+    ">$children(..)</span> directive</li><li><span style="
         color: #c444aff9; 
         padding: 0.1em; 
         font-family: var(--bst-font-family-monospace);
-    ">$markdown</span>           <p>- Parses the template bodies with a custom flavour of Markdown</p></li><li><span style="
+    ">$markdown</span>           - Parses the template bodies with a custom flavour of Markdown</li><li><span style="
         color: #c444aff9; 
         padding: 0.1em; 
         font-family: var(--bst-font-family-monospace);
-    ">$code</span>               <p>- Highlights code blocks using the compiler&#39;s built-in formatter</p></li><li><span style="
+    ">$code</span>               - Highlights code blocks using the compiler&#39;s built-in formatter</li><li><span style="
         color: #c444aff9; 
         padding: 0.1em; 
         font-family: var(--bst-font-family-monospace);
-    ">$raw</span>                <p>- Parses the template body as a raw string (no escaping, no formatting)</p></li><li><span style="
+    ">$raw</span>                - Parses the template body as a raw string (no escaping, no formatting)</li><li><span style="
         color: #c444aff9; 
         padding: 0.1em; 
         font-family: var(--bst-font-family-monospace);
-    ">$note / $todo</span>       <p>- Comments (ignored by final output)</p></li><li><span style="
+    ">$note / $todo</span>       - Comments (ignored by final output)</li><li><span style="
         color: #c444aff9; 
         padding: 0.1em; 
         font-family: var(--bst-font-family-monospace);
-    ">$doc</span>                <p>- Turns the template into a documentation comment</p></li><li><span style="
+    ">$doc</span>                - Turns the template into a documentation comment</li><li><span style="
         color: #c444aff9; 
         padding: 0.1em; 
         font-family: var(--bst-font-family-monospace);
-    ">$children(..)</span>       <p>- Accepts a template (or string slice) that will be applied only to this template&#39;s direct child templates</p></li></ul><p><strong>HTML Project Directives</strong></p><ul><li><span style="
+    ">$children(..)</span>       - Accepts a template (or string slice) that will be applied only to this template&#39;s direct child templates</li></ul><p><strong>HTML Project Directives</strong></p><ul><li><span style="
         color: #c444aff9; 
         padding: 0.1em; 
         font-family: var(--bst-font-family-monospace);
-    ">$html</span>               <p>- Parses the template body as raw HTML (no escaping)</p></li><li><span style="
+    ">$html</span>               - Parses the template body as raw HTML (no escaping)</li><li><span style="
         color: #c444aff9; 
         padding: 0.1em; 
         font-family: var(--bst-font-family-monospace);
-    ">$css</span>                <p>- Provides some basic warnings for malformed CSS</p></li><li><span style="
+    ">$css</span>                - Provides some basic warnings for malformed CSS</li><li><span style="
         color: #c444aff9; 
         padding: 0.1em; 
         font-family: var(--bst-font-family-monospace);
-    ">$escape_html</span>        <p>- Escapes HTML-sensitive characters in the template body</p></li></ul><p>Formatting directives do not automatically flow into nested child templates.If a child template should keep using a formatter such as <span style="
+    ">$escape_html</span>        - Escapes HTML-sensitive characters in the template body</li></ul><p>Formatting directives do not automatically flow into nested child templates. If a child template should keep using a formatter such as <span style="
         color: #c444aff9; 
         padding: 0.1em; 
         font-family: var(--bst-font-family-monospace);
-    ">$markdown</span>, redeclare it in that child template&#39;s head.</p><span style="
+    ">$markdown</span>, redeclare it in that child template&#39;s head.</p><p><span style="
         color: #c444aff9; 
         padding: 0.1em; 
         font-family: var(--bst-font-family-monospace);
-    ">$fresh</span> <p>is per-child and only affects wrapper application from the immediate parent. Siblings without <span style="
+    ">$fresh</span> is per-child and only affects wrapper application from the immediate parent. Siblings without <span style="
         color: #c444aff9; 
         padding: 0.1em; 
         font-family: var(--bst-font-family-monospace);
@@ -555,7 +554,7 @@ body {
         color: #c444aff9; 
         padding: 0.1em; 
         font-family: var(--bst-font-family-monospace);
-    ">$slot</span>.</p><p>If a template has named or positional slots but no default slot, any loose body content that cannot be assigned to a positional slot is an error. If a slot receives no content, it expands to an empty string.Repeated slots, such as two occurrences of <span style="
+    ">$slot</span>.</p><p>If a template has named or positional slots but no default slot, any loose body content that cannot be assigned to a positional slot is an error.  If a slot receives no content, it expands to an empty string. Repeated slots, such as two occurrences of <span style="
         color: #c444aff9; 
         padding: 0.1em; 
         font-family: var(--bst-font-family-monospace);
@@ -563,11 +562,11 @@ body {
         color: #c444aff9; 
         padding: 0.1em; 
         font-family: var(--bst-font-family-monospace);
-    ">$children(..)</span> only applies to direct child templates, nested helpers can scope row and cell wrappers independently.</p><p>A child template is treated as an opaque contribution after it has been selected as a direct child.The parent <span style="
+    ">$children(..)</span> only applies to direct child templates, nested helpers can scope row and cell wrappers independently.</p><p>A child template is treated as an opaque contribution after it has been selected as a direct child. The parent <span style="
         color: #c444aff9; 
         padding: 0.1em; 
         font-family: var(--bst-font-family-monospace);
-    ">$children(..)</span> wrapper must not descend into that child and wrap its nested templates.If nested templates need their own wrappers, the child template should declare its own <span style="
+    ">$children(..)</span> wrapper must not descend into that child and wrap its nested templates. If nested templates need their own wrappers, the child template should declare its own <span style="
         color: #c444aff9; 
         padding: 0.1em; 
         font-family: var(--bst-font-family-monospace);
@@ -612,7 +611,7 @@ body {
         color: #c444aff9; 
         padding: 0.1em; 
         font-family: var(--bst-font-family-monospace);
-    "><tr></span>.Then <span style="
+    "><tr></span>. Then <span style="
         color: #c444aff9; 
         padding: 0.1em; 
         font-family: var(--bst-font-family-monospace);
@@ -620,7 +619,7 @@ body {
         color: #c444aff9; 
         padding: 0.1em; 
         font-family: var(--bst-font-family-monospace);
-    "><td></span>.The nested <span style="
+    "><td></span>. The nested <span style="
         color: #c444aff9; 
         padding: 0.1em; 
         font-family: var(--bst-font-family-monospace);

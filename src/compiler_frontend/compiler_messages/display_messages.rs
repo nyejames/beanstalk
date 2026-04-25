@@ -64,12 +64,14 @@ pub(crate) fn resolve_source_file_path(
 pub(crate) fn format_error_guidance_lines(error: &CompilerError) -> Vec<String> {
     let mut lines = Vec::new();
 
-    if let Some(stage) = error.metadata.get(&ErrorMetaDataKey::CompilationStage) {
+    if let Some(stage) = error.metadata.get(&ErrorMetaDataKey::CompilationStage)
+        && error.error_type == ErrorType::Compiler
+    {
         lines.push(format!("Stage: {stage}"));
     }
 
     if let Some(suggestion) = error.metadata.get(&ErrorMetaDataKey::PrimarySuggestion) {
-        lines.push(format!("Help: {suggestion}"));
+        lines.push(suggestion.to_owned());
     }
 
     if let Some(alternative) = error.metadata.get(&ErrorMetaDataKey::AlternativeSuggestion) {
@@ -176,135 +178,103 @@ pub fn print_formatted_warning(warning: CompilerWarning, string_table: &StringTa
 pub fn print_formatted_error(e: CompilerError, string_table: &StringTable) {
     // Resolve synthetic header scopes back to source files before choosing a human-readable path.
     let relative_dir = resolved_display_path(&e.location.scope, string_table);
-
-    let line_number = e.location.start_pos.line_number as usize;
+    let display_line = display_line_number(e.location.start_pos.line_number);
+    let display_column = display_column_number(e.location.start_pos.char_column);
 
     // Read the file and get the actual line as a string from the code
     // Strip the actual header at the end of the path (.header extension)
     let actual_file = resolve_source_file_path(&e.location.scope, string_table);
 
+    let source_line_index = e.location.start_pos.line_number.max(0) as usize;
     let line = match fs::read_to_string(&actual_file) {
         Ok(file) => file
             .lines()
-            .nth(line_number)
+            .nth(source_line_index)
             .unwrap_or_default()
             .to_string(),
         Err(_) => String::new(),
     };
 
-    match e.error_type {
-        ErrorType::Syntax => {
-            if !relative_dir.is_empty() {
-                say!("\n(╯°□°)╯  🔥🔥 ", Dark Magenta relative_dir, " 🔥🔥  Σ(°△°;) ");
-            }
-
-            say!(Red "Syntax");
-            say!(Dark Magenta "Line ", Bright {line_number + 1});
-        }
-
-        ErrorType::Type => {
-            if !relative_dir.is_empty() {
-                say!("\n(ಠ_ಠ) ", Dark Magenta relative_dir);
-                say!(Inline " ( ._. ) ");
-            }
-
-            say!(Red "Type Error");
-            say!(Dark Magenta "Line ", Bright {line_number + 1});
-        }
-
-        ErrorType::Rule => {
-            if !relative_dir.is_empty() {
-                say!("\nヽ(˶°o°)ﾉ  🔥🔥🔥 ", Dark Magenta relative_dir, " 🔥🔥🔥  ╰(°□°╰) ");
-            }
-
-            say!(Red "Rule");
-            say!(Dark Magenta "Line ", Bright {line_number + 1});
-        }
-
-        ErrorType::File => {
-            say!(Yellow "🏚 Can't find/read file or directory: ", relative_dir);
-            say!(e.msg);
-            return;
-        }
-
-        ErrorType::Compiler => {
-            if !relative_dir.is_empty() {
-                say!("\nヽ༼☉ ‿ ⚆༽ﾉ  🔥🔥🔥🔥 ", Dark Magenta relative_dir, " 🔥🔥🔥🔥  ╰(° _ o╰) ");
-            }
-            say!(Yellow "COMPILER BUG - ");
-            say!(Dark Yellow "compiler_frontend developer skill issue (not your fault)");
-        }
-
-        ErrorType::Config => {
-            if !relative_dir.is_empty() {
-                say!("\n (-_-)  🔥🔥🔥🔥 ", Dark Magenta relative_dir, " 🔥🔥🔥🔥  <(^~^)/ ");
-            }
-            say!(Yellow "CONFIG FILE ISSUE- ");
-            say!(
-                Dark Yellow "Malformed config file, something doesn't make sense inside the project config)"
-            );
-        }
-
-        ErrorType::DevServer => {
-            if !relative_dir.is_empty() {
-                say!("\n(ﾉ☉_⚆)ﾉ  🔥 ", Dark Magenta relative_dir, " 🔥 ╰(° O °)╯ ");
-            }
-
-            say!(Yellow "Dev Server whoopsie: ", Red e.msg);
-            return;
-        }
-
-        ErrorType::BorrowChecker => {
-            if !relative_dir.is_empty() {
-                say!("\n(╯°Д°)╯  🔥🔥 ", Dark Magenta relative_dir, " 🔥🔥  ╰(°□°╰) ");
-            }
-
-            say!(Red "Borrow Checker");
-            say!(Dark Magenta "Line ", Bright {line_number + 1});
-        }
-
-        ErrorType::HirTransformation => {
-            if !relative_dir.is_empty() {
-                say!("\nヽ༼☉ ‿ ⚆༽ﾉ  🔥🔥🔥 ", Dark Magenta relative_dir, " 🔥🔥🔥  ╰(°□°╰) ");
-            }
-
-            say!(Yellow "HIR TRANSFORMATION BUG - ");
-            say!(Dark Yellow "compiler_frontend developer skill issue (not your fault)");
-        }
-
-        ErrorType::Backend(BackendErrorType::LirTransformation) => {
-            if !relative_dir.is_empty() {
-                say!("\nヽ༼☉ ‿ ⚆༽ﾉ  🔥🔥🔥 ", Dark Magenta relative_dir, " 🔥🔥🔥  ╰(° _ o╰) ");
-            }
-
-            say!(Yellow "LIR TRANSFORMATION BUG - ");
-            say!(Dark Yellow "compiler_frontend developer skill issue (not your fault)");
-        }
-
-        ErrorType::Backend(BackendErrorType::WasmGeneration) => {
-            if !relative_dir.is_empty() {
-                say!("\nヽ༼☉ ‿ ⚆༽ﾉ  🔥🔥🔥🔥 ", Dark Magenta relative_dir, " 🔥🔥🔥🔥  ╰(° O °)╯ ");
-                say!(Yellow "WASM GENERATION BUG - ", Dark "compiler_frontend developer skill issue (not your fault)");
-            }
-        }
-    }
-
-    say!(Red e.msg);
-    for guidance_line in format_error_guidance_lines(&e) {
-        say!(Dark Yellow guidance_line);
-    }
-
-    println!("\n{line}");
-
-    // spaces before the relevant part of the line
-    print!(
-        "{}",
-        " ".repeat((e.location.start_pos.char_column - 1).max(0) as usize)
+    say!(
+        "\n",
+        Bright Bold Red error_display_name(&e.error_type),
+        Reset " ",
+        Reset error_visual(&e.error_type),
     );
 
-    let length_of_underline =
-        (e.location.end_pos.char_column - e.location.start_pos.char_column + 1).max(1) as usize;
-    say!(Red { "^".repeat(length_of_underline) });
+    say!(Reset e.msg.as_str());
+
+    if !relative_dir.is_empty() {
+        say!(
+            Blue "\n  --> ",
+            Reset Magenta relative_dir.as_str(),
+            Dark Magenta ":",
+            Reset Bold Blue display_line,
+            Reset Grey ":",
+            Reset Magenta display_column
+        );
+    } else {
+        say!(
+            Blue "\n   --> ",
+            Reset Magenta display_line,
+            Dark Magenta ":",
+            Reset Magenta display_column
+        );
+    }
+
+    if !line.is_empty() {
+        say!(Blue "    |");
+        let line_label = display_line.to_string();
+        let line_padding = " ".repeat(3usize.saturating_sub(line_label.len()));
+        say!(Blue line_padding, Bold Blue line_label, " | ", Reset line.as_str());
+        print!("{}", " ".repeat(display_line.to_string().len() + 4));
+
+        let underline_start = e.location.start_pos.char_column.max(0) as usize;
+        print!("{}", " ".repeat(underline_start));
+        let underline_length =
+            (e.location.end_pos.char_column - e.location.start_pos.char_column + 1).max(1) as usize;
+        say!(Red "^".repeat(underline_length));
+    }
+
+    for guidance_line in format_error_guidance_lines(&e) {
+        say!(Bright Blue "  ", guidance_line);
+    }
+
+    if line.is_empty() && e.location.scope.as_components().is_empty() {
+        say!(Dark "     No source location available.");
+    }
+}
+
+fn error_display_name(error_type: &ErrorType) -> &'static str {
+    match error_type {
+        ErrorType::Compiler => "Compiler Bug",
+        ErrorType::Syntax => "Syntax Error",
+        ErrorType::Config => "Malformed Config",
+        ErrorType::File => "Missing File or Directory",
+        ErrorType::Rule => "Language Rule Error",
+        ErrorType::Type => "Type Error",
+        ErrorType::DevServer => "Dev Server Issue",
+        ErrorType::BorrowChecker => "Borrow Checker Violation",
+        ErrorType::HirTransformation => "HIR Transformation Error",
+        ErrorType::Backend(BackendErrorType::LirTransformation) => "LIR Transformation Bug",
+        ErrorType::Backend(BackendErrorType::WasmGeneration) => "WASM Generation Bug",
+    }
+}
+
+fn error_visual(error_type: &ErrorType) -> &'static str {
+    match error_type {
+        ErrorType::Compiler => "🔥 ヽ༼☉ ‿ ⚆༽ﾉ 🔥",
+        ErrorType::Syntax => "(╯°□°)╯ 🔥",
+        ErrorType::Config => "🔥📄🔥",
+        ErrorType::File => "🔥📁🔥",
+        ErrorType::Rule => "(˶°o°)ﾉ 🔥",
+        ErrorType::Type => "(ಠ_ಠ) 🔥",
+        ErrorType::DevServer => "(ﾉ☉_⚆)ﾉ 🔥🖥️🔥",
+        ErrorType::BorrowChecker => "(╯°Д°)╯ 🔥",
+        ErrorType::HirTransformation => "(☉_☉) 🔥",
+        ErrorType::Backend(BackendErrorType::LirTransformation) => "ヽ(°〇°)ﾉ 🔥",
+        ErrorType::Backend(BackendErrorType::WasmGeneration) => "(° O °) 🔥",
+    }
 }
 
 fn format_terse_error_line(error: &CompilerError, string_table: &StringTable) -> String {

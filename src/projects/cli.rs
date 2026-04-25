@@ -460,7 +460,8 @@ fn print_build_message(build_result: BuildResult, duration: std::time::Duration)
         "\nBuilt ",
         Blue build_result.project.output_files.len(),
         Reset " files successfully in: ",
-        Green Bold #duration
+        Green Bold #duration,
+        Reset "🌱"
     );
 
     print_compiler_messages(CompilerMessages {

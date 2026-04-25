@@ -6,33 +6,9 @@ Each plan or PR that is needed will be linked here.
 
 Use the language surface integration matrix as a reference for what is currently implemented: `docs/src/docs/progress/#page.bst`
 
-## Path to Alpha
-These are the non-negotiable conditions for starting Alpha:
-
-- All claimed Alpha features compile, type check, and run through the full supported pipeline.
-- Unsupported syntax or incomplete features fail with structured compiler diagnostics, not panics.
-- The integration suite covers the supported language surface, not just recent feature areas.
-- The JS backend and HTML builder are stable enough for real small projects and docs-style sites.
-- Compiler diagnostics are useful, accurate, consistently formatted, and visually moving toward the Nushell-style goal.
-- Cross-platform output is stable enough that Windows and macOS do not produce avoidable golden drift.
-- The documentation site (written in beanstalk) inside the docs directory should be able to render a complete and good looking docs website fully using the Beanstalk pipeline. This will be the final testing ground for whether the language feels "ready" to be alpha.
-
 ---
 
 # Next Plans
-
-### Alpha cleanup
-
-Land final small consistency and hygiene fixes before the release branch/tag.
-
-**Checklist**
-- Remove obsolete rejection fixtures for features that are now supported.
-- Tighten comments, TODOs, and dead-code justifications.
-- Prune stale scaffolding where the current design has clearly replaced it.
-- Update release-facing docs and contribution notes if needed.
-
-**Done when**
-- The repo feels intentional at the point Alpha begins.
 
 ---
 

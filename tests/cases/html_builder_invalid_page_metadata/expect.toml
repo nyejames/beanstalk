@@ -3,5 +3,5 @@ entry = "."
 [backends.html]
 mode = "failure"
 warnings = "forbid"
-error_type = "rule"
+error_type = "Rule"
 message_contains = ["page_title", "must fold to a string"]

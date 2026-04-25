@@ -6,7 +6,6 @@
     <meta name="color-scheme" content="light dark">
     <title>Pattern Matching | Beanstalk</title>
     <meta name="description" content="Pattern matching in Beanstalk.">
-    <link rel="icon" href="/assets/favicon.ico">
     <style>
 /*!
   BS CSS CORE (absolute basics CSS reset)
@@ -313,7 +312,7 @@ body {
         </div>
     </nav>
      <h1 style="font-size: 2em;text-align: center;"> PATTERN MATCHING</h1>
-    <section class="container"><h1>Pattern matching</h1><p>    Pattern matching is a powerful tool for control flow in Beanstalk.     It provides the next level of expressiveness beyond simple if statements.     When you need to check more than one condition, this is what you use.</p><p>    It allows you to match on the value of an expression and execute different code based on the pattern that matches.    Pattern matching is also exhaustive, meaning that the compiler will check that all possible cases are handled, which can help prevent bugs.</p><pre style="
+    <section class="container"><h1>Pattern matching</h1><p>    Pattern matching is a control-flow tool for checking one value against multiple patterns.     Alpha supports literal patterns, relational ordered-scalar patterns, guards, unit choice variants, and explicit `else =&gt;` fallback arms.</p><p>    Non-choice matches must include `else =&gt;`.     Choice matches can omit `else =&gt;` only when every unit variant is covered and no arm has a guard.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12); 
         padding-left: 1em; 
         border-radius: 5px;
@@ -321,27 +320,34 @@ body {
         white-space: pre; 
         overflow-x: auto;
     "><code class='codeblock'>
-    <span class='bst-code-comment'>-- Pattern matching</span>
-    thing <span class='bst-code-operator'>=</span> <span class='bst-code-number'>69</span>
+    score <span class='bst-code-operator'>=</span> <span class='bst-code-number'>84</span>
+    result <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;unknown&quot;</span>
 
-    <span class='bst-code-keyword'>if</span> thing is<span class='bst-code-operator'>:</span>
-        case <span class='bst-code-number'>0</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;zero&quot;</span><span class='bst-code-parenthesis'>)</span>
-        case <span class='bst-code-operator'>&lt;</span> <span class='bst-code-number'>0</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;negative&quot;</span><span class='bst-code-parenthesis'>)</span>
-        case <span class='bst-code-operator'>&gt;</span> <span class='bst-code-number'>1</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;big number&quot;</span><span class='bst-code-parenthesis'>)</span>
-        case not <span class='bst-code-number'>5</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;not 5&quot;</span><span class='bst-code-parenthesis'>)</span>
-        <span class='bst-code-keyword'>else</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;only one&quot;</span><span class='bst-code-parenthesis'>)</span>
+    <span class='bst-code-keyword'>if</span> score is<span class='bst-code-operator'>:</span>
+        case <span class='bst-code-operator'>&lt;</span> <span class='bst-code-number'>0</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> result <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;invalid&quot;</span>
+        case <span class='bst-code-operator'>&gt;</span><span class='bst-code-operator'>=</span> <span class='bst-code-number'>90</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> result <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;excellent&quot;</span>
+        case <span class='bst-code-operator'>&gt;</span><span class='bst-code-operator'>=</span> <span class='bst-code-number'>70</span> <span class='bst-code-keyword'>if</span> true <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> result <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;passing&quot;</span>
+        <span class='bst-code-keyword'>else</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> result <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;retry&quot;</span>
     ;
+    </code></pre><p>    Choices use unit variants in the Alpha surface.     Exhaustive choice matches do not need a fallback arm when every variant is covered.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-operator'>#</span><span class='bst-code-struct'>Status</span> <span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>Ready,</span> <span class='bst-code-struct'>Busy,</span> <span class='bst-code-struct'>Offline;</span>
 
-    <span class='bst-code-comment'>-- Matching choices</span>
-    <span class='bst-code-keyword'>if</span> <span class='bst-code-struct'>Catagory</span> is<span class='bst-code-operator'>:</span>
-    case <span class='bst-code-struct'>A</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span>
-        io<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Category A&quot;</span><span class='bst-code-parenthesis'>)</span>
-    case <span class='bst-code-struct'>B</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span>
-        io<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Category B&quot;</span><span class='bst-code-parenthesis'>)</span>
-    case <span class='bst-code-struct'>C</span> <span class='bst-code-operator'>|</span>message<span class='bst-code-operator'>|</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span>
-        io<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Category</span> <span class='bst-code-struct'>C</span> with message<span class='bst-code-operator'>:</span> <span class='bst-code-parenthesis'>[</span>message<span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>)</span>
+    current <span class='bst-code-struct'>Status</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Status</span><span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Busy</span>
+    label <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;unknown&quot;</span>
+
+    <span class='bst-code-keyword'>if</span> current is<span class='bst-code-operator'>:</span>
+        case <span class='bst-code-struct'>Ready</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> label <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;ready&quot;</span>
+        case <span class='bst-code-struct'>Busy</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> label <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;busy&quot;</span>
+        case <span class='bst-code-struct'>Offline</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> label <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;offline&quot;</span>
     ;
-    </code></pre></section>
+    </code></pre><p>    Negated patterns and capture/tagged patterns such as `case Item |value| =&gt;` are deferred for Alpha.     Beanstalk does not use wildcard `case _ =&gt;` arms; use `else =&gt;` for fallback behavior.</p></section>
     <script>
     function __bs_is_ref(value) {
     return value !== null && typeof value === "object" && value.__bs_ref === true;

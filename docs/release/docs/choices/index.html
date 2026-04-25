@@ -6,7 +6,6 @@
     <meta name="color-scheme" content="light dark">
     <title>Choices | Beanstalk</title>
     <meta name="description" content="Choices in Beanstalk.">
-    <link rel="icon" href="/assets/favicon.ico">
     <style>
 /*!
   BS CSS CORE (absolute basics CSS reset)
@@ -313,7 +312,7 @@ body {
         </div>
     </nav>
      <h1 style="font-size: 2em;text-align: center;"> CHOICES</h1>
-    <section class="container"><h1>Choices (enums)</h1><p>    Choices are a way to define a set of possible values.     They are similar to enums in Rust (tagged unions).</p><p>    You create and access choices using a double colon.</p><pre style="
+    <section class="container"><h1>Choices (enums)</h1><p>    Choices are a way to define a set of possible values.      The Alpha compiler supports unit variants.     Payload variants, tagged variant bodies, default values, and constructor calls are deferred.</p><p>    You create and access choices using a double colon.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12); 
         padding-left: 1em; 
         border-radius: 5px;
@@ -321,22 +320,16 @@ body {
         white-space: pre; 
         overflow-x: auto;
     "><code class='codeblock'>
-    <span class='bst-code-struct'>Choice</span> <span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>Option</span><span class='bst-code-number'>1</span>, <span class='bst-code-struct'>Option</span><span class='bst-code-number'>2</span>, <span class='bst-code-struct'>Option</span><span class='bst-code-number'>3</span>;
+    <span class='bst-code-operator'>#</span><span class='bst-code-struct'>Status</span> <span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>Ready,</span> <span class='bst-code-struct'>Busy,</span> <span class='bst-code-struct'>Offline;</span>
 
-    option <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Choice</span><span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Option</span><span class='bst-code-number'>2</span>
+    current <span class='bst-code-struct'>Status</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Status</span><span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Busy</span>
 
-    <span class='bst-code-comment'>-- Another example with data attached to the Error choice and a Plex attached to the Pending choice</span>
-    <span class='bst-code-struct'>ResponseKind</span> <span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span>
-        <span class='bst-code-struct'>Success,</span>
-        <span class='bst-code-struct'>Error</span> <span class='bst-code-struct'>String,</span>
-        <span class='bst-code-struct'>Pending</span> <span class='bst-code-operator'>|</span>
-            <span class='bst-code-struct'>RetryCount</span> <span class='bst-code-struct'>Int,</span>
-            <span class='bst-code-struct'>Timeout</span> <span class='bst-code-type'>Float</span>
-        <span class='bst-code-operator'>|</span>,
+    pass_status <span class='bst-code-operator'>|</span>status <span class='bst-code-struct'>Status</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>Status</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>return</span> status
     ;
 
-    response <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>ResponseKind</span><span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Error</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Network failure&quot;</span><span class='bst-code-parenthesis'>)</span>
-    </code></pre><p>    Choices can also be defined with default values, the same way structs can.</p><pre style="
+    selected <span class='bst-code-operator'>=</span> pass_status<span class='bst-code-parenthesis'>(</span>current<span class='bst-code-parenthesis'>)</span>
+    </code></pre><p>    Choices work with assignment and pattern matching.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12); 
         padding-left: 1em; 
         border-radius: 5px;
@@ -344,13 +337,32 @@ body {
         white-space: pre; 
         overflow-x: auto;
     "><code class='codeblock'>
-    <span class='bst-code-struct'>Status</span> <span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span>
-        <span class='bst-code-struct'>Active</span> <span class='bst-code-type'>Bool</span> <span class='bst-code-operator'>=</span> true,
-        <span class='bst-code-struct'>Inactive</span> <span class='bst-code-type'>Bool</span> <span class='bst-code-operator'>=</span> false,
-    ;
+    <span class='bst-code-operator'>#</span><span class='bst-code-struct'>Status</span> <span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>Ready,</span> <span class='bst-code-struct'>Busy;</span>
 
-    <span class='bst-code-comment'>-- No need to set a value, it defaults to &#39;true&#39;</span>
-    currentStatus <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Status</span><span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Active</span>
+    current <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Status</span><span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Ready</span>
+    current <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Status</span><span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Busy</span>
+
+    label <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;unset&quot;</span>
+    <span class='bst-code-keyword'>if</span> current is<span class='bst-code-operator'>:</span>
+        case <span class='bst-code-struct'>Ready</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> label <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;ready&quot;</span>
+        case <span class='bst-code-struct'>Busy</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> label <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;busy&quot;</span>
+    ;
+    </code></pre><p>    These richer choice forms are reserved for post-Alpha design work and currently reject with structured diagnostics:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-comment'>-- Payload variant: deferred.</span>
+    <span class='bst-code-struct'>Response</span> <span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>Error</span> <span class='bst-code-struct'>String,</span> <span class='bst-code-struct'>Success;</span>
+
+    <span class='bst-code-comment'>-- Tagged variant body: deferred.</span>
+    <span class='bst-code-struct'>Response</span> <span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>Pending</span> <span class='bst-code-operator'>|</span> retry_count <span class='bst-code-type'>Int</span> <span class='bst-code-operator'>|</span>, <span class='bst-code-struct'>Success;</span>
+
+    <span class='bst-code-comment'>-- Constructor call: deferred.</span>
+    value <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Response</span><span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Success</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span>
     </code></pre></section>
     <script>
     function __bs_is_ref(value) {

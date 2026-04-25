@@ -1,7 +1,8 @@
 use super::{
-    format_error_guidance_lines, format_terse_compiler_messages, relative_display_path_from_root,
-    resolve_source_file_path, resolved_display_path,
+    error_display_name, error_visual, format_error_guidance_lines, format_terse_compiler_messages,
+    relative_display_path_from_root, resolve_source_file_path, resolved_display_path,
 };
+use crate::backends::error_types::BackendErrorType;
 use crate::compiler_frontend::basic_utility_functions::normalize_path;
 use crate::compiler_frontend::compiler_errors::{
     CompilerError, CompilerMessages, ErrorMetaDataKey, ErrorType, SourceLocation,
@@ -24,8 +25,8 @@ fn temp_dir(name: &str) -> PathBuf {
 }
 
 #[test]
-fn guidance_lines_include_stage_and_suggestions_when_present() {
-    let mut error = CompilerError::new_syntax_error("bad syntax", SourceLocation::default());
+fn guidance_lines_include_compiler_stage_and_suggestions_when_present() {
+    let mut error = CompilerError::compiler_error("bad compiler state");
     error.new_metadata_entry(
         ErrorMetaDataKey::CompilationStage,
         String::from("Expression Parsing"),
@@ -51,7 +52,7 @@ fn guidance_lines_include_stage_and_suggestions_when_present() {
             .iter()
             .any(|line| line.contains("Stage: Expression Parsing"))
     );
-    assert!(lines.iter().any(|line| line.contains("Help: Do the thing")));
+    assert!(lines.iter().any(|line| line == "Do the thing"));
     assert!(
         lines
             .iter()
@@ -69,6 +70,44 @@ fn guidance_lines_are_empty_when_metadata_is_missing() {
     let error = CompilerError::new_syntax_error("bad syntax", SourceLocation::default());
     let lines = format_error_guidance_lines(&error);
     assert!(lines.is_empty());
+}
+
+#[test]
+fn default_error_headers_keep_friendly_type_specific_visuals() {
+    let cases = [
+        (ErrorType::Syntax, "(╯°□°)╯ 🔥", "Syntax Error"),
+        (ErrorType::Rule, "(˶°o°)ﾉ 🔥", "Language Rule Error"),
+        (ErrorType::Compiler, "🔥 ヽ༼☉ ‿ ⚆༽ﾉ 🔥", "Compiler Bug"),
+        (ErrorType::File, "🔥📁🔥", "Missing File or Directory"),
+        (ErrorType::Config, "🔥📄🔥", "Malformed Config"),
+        (ErrorType::Type, "(ಠ_ಠ) 🔥", "Type Error"),
+        (ErrorType::DevServer, "(ﾉ☉_⚆)ﾉ 🔥🖥️🔥", "Dev Server Issue"),
+        (
+            ErrorType::BorrowChecker,
+            "(╯°Д°)╯ 🔥",
+            "Borrow Checker Violation",
+        ),
+        (
+            ErrorType::HirTransformation,
+            "(☉_☉) 🔥",
+            "HIR Transformation Error",
+        ),
+        (
+            ErrorType::Backend(BackendErrorType::LirTransformation),
+            "ヽ(°〇°)ﾉ 🔥",
+            "LIR Transformation Bug",
+        ),
+        (
+            ErrorType::Backend(BackendErrorType::WasmGeneration),
+            "(° O °) 🔥",
+            "WASM Generation Bug",
+        ),
+    ];
+
+    for (error_type, expected_visual, expected_name) in cases {
+        assert_eq!(error_visual(&error_type), expected_visual);
+        assert_eq!(error_display_name(&error_type), expected_name);
+    }
 }
 
 #[test]

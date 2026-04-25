@@ -11,33 +11,40 @@ import @styles/docs {navbar, title, section, palette, table, codeblock, theme_he
 #[section, $markdown:
 
     # Pattern matching
-    Pattern matching is a powerful tool for control flow in Beanstalk. 
-    It provides the next level of expressiveness beyond simple if statements. 
-    When you need to check more than one condition, this is what you use.
-    
-    It allows you to match on the value of an expression and execute different code based on the pattern that matches.
-    Pattern matching is also exhaustive, meaning that the compiler will check that all possible cases are handled, which can help prevent bugs.
+    Pattern matching is a control-flow tool for checking one value against multiple patterns.
+    Alpha supports literal patterns, relational ordered-scalar patterns, guards, unit choice variants, and explicit `else =>` fallback arms.
+
+    Non-choice matches must include `else =>`.
+    Choice matches can omit `else =>` only when every unit variant is covered and no arm has a guard.
 
     [codeblock, $code("bst"):
-        -- Pattern matching
-        thing = 69
+        score = 84
+        result ~= "unknown"
 
-        if thing is:
-            case 0 => io("zero")
-            case < 0 => io("negative")
-            case > 1 => io("big number")
-            case not 5 => io("not 5")
-            else => io("only one")
-        ;
-        
-        -- Matching choices
-        if Catagory is:
-        case A =>
-            io("Category A")
-        case B =>
-            io("Category B")
-        case C |message| =>
-            io([:Category C with message: [message]])
+        if score is:
+            case < 0 => result = "invalid"
+            case >= 90 => result = "excellent"
+            case >= 70 if true => result = "passing"
+            else => result = "retry"
         ;
     ]
+
+    Choices use unit variants in the Alpha surface.
+    Exhaustive choice matches do not need a fallback arm when every variant is covered.
+
+    [codeblock, $code("bst"):
+        #Status :: Ready, Busy, Offline;
+
+        current Status = Status::Busy
+        label ~= "unknown"
+
+        if current is:
+            case Ready => label = "ready"
+            case Busy => label = "busy"
+            case Offline => label = "offline"
+        ;
+    ]
+
+    Negated patterns and capture/tagged patterns such as `case Item |value| =>` are deferred for Alpha.
+    Beanstalk does not use wildcard `case _ =>` arms; use `else =>` for fallback behavior.
 ]

@@ -6,7 +6,6 @@
     <meta name="color-scheme" content="light dark">
     <title>Alpha Surface Matrix | Beanstalk</title>
     <meta name="description" content="Current implementation and coverage status for the Beanstalk Alpha compiler surface.">
-    <link rel="icon" href="/assets/favicon.ico">
     <style>
 /*!
   BS CSS CORE (absolute basics CSS reset)
@@ -313,11 +312,11 @@ body {
         </div>
     </nav>
      <h1 style="font-size: 2em;text-align: center;"> ALPHA SURFACE MATRIX</h1>
-    <section class="container"><p>This page tracks the compiler surface intended for the first Beanstalk Alpha.</p><p>It is an implementation matrix, not a full language specification.The wider language docs may describe intended or aspirational syntax.This page should describe what the compiler currently supports, rejects cleanly, or keeps experimental.</p><p>Use this together with <span style="
+    <section class="container"><p>This page tracks the compiler surface intended for the first Beanstalk Alpha.</p><p>It is an implementation matrix, not a full language specification. The wider language docs may describe intended or aspirational syntax. This page should describe what the compiler currently supports, rejects cleanly, or keeps experimental.</p><p>Use this together with <span style="
         color: #c444aff9; 
         padding: 0.1em; 
         font-family: var(--bst-font-family-monospace);
-    ">tests/cases/manifest.toml</span> when changing language features.</p><h2>Alpha target</h2><p>The supported Alpha target is:</p><ul><li>frontend parsing and diagnostics</li><li>typed AST construction</li><li>HIR lowering</li><li>borrow validation</li><li>JavaScript backend</li><li>HTML project builder</li><li>docs-style static site generation</li></ul><p>HTML-Wasm and the Rust interpreter are not Alpha stability targets.They may have tests and scaffolding, but they should not be counted as supported Alpha runtime surfaces.</p></section>
+    ">tests/cases/manifest.toml</span> when changing language features.</p><h2>Alpha target</h2><p>The supported Alpha target is:</p><ul><li>frontend parsing and diagnostics</li><li>typed AST construction</li><li>HIR lowering</li><li>borrow validation</li><li>JavaScript backend</li><li>HTML project builder</li><li>docs-style static site generation</li></ul><p>HTML-Wasm and the Rust interpreter are not Alpha stability targets. They may have tests and scaffolding, but they should not be counted as supported Alpha runtime surfaces.</p></section>
     <section class="container"><h1>Status legend</h1><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
             
     <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
@@ -372,6 +371,51 @@ body {
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;"> None</td>
      <td style="padding: 0.2em 0.5em;"> No clear canonical coverage found.</td>
+        </tr>
+        
+    </table><h1>Final pre-alpha sweep</h1><p>Last swept: April 24, 2026.</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+            
+    <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
+         <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Check</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Result</th> 
+    </tr>
+
+            
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> HTML Alpha matrix</td>
+     <td style="padding: 0.2em 0.5em;"> <span style="
+        color: #c444aff9; 
+        padding: 0.1em; 
+        font-family: var(--bst-font-family-monospace);
+    ">cargo run -- tests --backend html</span> passed 425 / 425 expected results: 266 successful compilations and 159 expected diagnostic failures.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> HTML-Wasm experimental matrix</td>
+     <td style="padding: 0.2em 0.5em;"> <span style="
+        color: #c444aff9; 
+        padding: 0.1em; 
+        font-family: var(--bst-font-family-monospace);
+    ">cargo run -- tests --backend html_wasm</span> passed 20 / 20 expected results. This remains experimental and is not counted as Alpha runtime support.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Deferred features</td>
+     <td style="padding: 0.2em 0.5em;"> Traits, choice payload/tagged/default/constructor paths, capture/tagged match patterns, removed collection syntax, and labeled scopes have canonical structured-diagnostic fixtures.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Diagnostics</td>
+     <td style="padding: 0.2em 0.5em;"> Representative syntax, type, rule, config/file, borrow-checker, and deferred-feature failures assert <span style="
+        color: #c444aff9; 
+        padding: 0.1em; 
+        font-family: var(--bst-font-family-monospace);
+    ">error_type</span> plus ordered message fragments.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Cross-platform goldens</td>
+     <td style="padding: 0.2em 0.5em;"> Exact goldens were re-checked. Non-contractual output should continue to use normalized goldens, artifact assertions, or rendered-output assertions. The current GitHub workflow deploys docs only, so Windows/macOS validation remains a separate release check.</td>
         </tr>
         
     </table></section>
@@ -635,7 +679,7 @@ body {
         </tr>
         
     </table></section>
-    <section class="container"><h1>Deferred or reserved surfaces</h1><p>These are intentionally not counted as supported Alpha features.If syntax exists, it should fail with a structured diagnostic rather than panic or lower incorrectly.</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+    <section class="container"><h1>Deferred or reserved surfaces</h1><p>These are intentionally not counted as supported Alpha features. If syntax exists, it should fail with a structured diagnostic rather than panic or lower incorrectly.</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
             
     <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
          <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Surface</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Status</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Canonical diagnostic direction</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Notes</th> 
@@ -698,7 +742,11 @@ body {
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;"> Negated match patterns</td>
      <td style="padding: 0.2em 0.5em;"> Deferred</td>
-     <td style="padding: 0.2em 0.5em;"> Add or keep a canonical deferred-pattern diagnostic if syntax is recognized.</td>
+     <td style="padding: 0.2em 0.5em;"> <span style="
+        color: #c444aff9; 
+        padding: 0.1em; 
+        font-family: var(--bst-font-family-monospace);
+    ">diagnostic_match_negated_pattern</span></td>
      <td style="padding: 0.2em 0.5em;"> Should wait until the match exhaustiveness model is deliberately extended.</td>
         </tr>
 
@@ -728,59 +776,53 @@ body {
         </tr>
         
     </table></section>
-    <section class="container"><h1>Current Alpha probe gaps</h1><p>These are the remaining areas to keep visible during the pre-alpha inspection.They are not all blockers, but they should be deliberately accepted, fixed, or moved out of the Alpha contract.</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+    <section class="container"><h1>Final sweep notes</h1><p>These are the scoped follow-ups after the final pre-alpha sweep. They belong to Alpha cleanup or post-Alpha planning unless they become release blockers.</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
             
     <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
-         <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Area</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Severity</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Action</th> 
+         <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Area</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Priority</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Action</th> 
     </tr>
 
             
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Matrix accuracy</td>
-     <td style="padding: 0.2em 0.5em;"> High</td>
-     <td style="padding: 0.2em 0.5em;"> Keep this page in sync with actual compiler behavior. Remove stale HTML-Wasm-as-supported wording and stale cross-platform drift notes once fixes are confirmed.</td>
+             <td style="padding: 0.2em 0.5em;"> CI platform coverage</td>
+     <td style="padding: 0.2em 0.5em;"> Alpha cleanup</td>
+     <td style="padding: 0.2em 0.5em;"> Add or run a Windows/macOS validation path before tagging Alpha. The repo currently has a docs deploy workflow, not a cross-platform validation workflow.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;"> Pattern matching scope</td>
-     <td style="padding: 0.2em 0.5em;"> High</td>
+     <td style="padding: 0.2em 0.5em;"> Post-Alpha unless promoted</td>
      <td style="padding: 0.2em 0.5em;"> Relational ordered-scalar patterns are now implemented and tested. Keep negated and capture/tagged patterns deferred for Alpha unless explicitly promoted.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;"> Choice scope</td>
-     <td style="padding: 0.2em 0.5em;"> High</td>
-     <td style="padding: 0.2em 0.5em;"> Decide whether unit-only choices are the Alpha contract or whether constructors / payloads need a contained pre-Alpha expansion.</td>
-        </tr>
-
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Unsupported feature diagnostics</td>
-     <td style="padding: 0.2em 0.5em;"> High</td>
-     <td style="padding: 0.2em 0.5em;"> Re-check all reserved/deferred syntax paths for structured diagnostics and no panics.</td>
+     <td style="padding: 0.2em 0.5em;"> Post-Alpha unless promoted</td>
+     <td style="padding: 0.2em 0.5em;"> Unit-only choices are the current Alpha contract. Constructors, payloads, tagged/default declarations, and full tagged unions stay deferred.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;"> Docs vs implementation</td>
-     <td style="padding: 0.2em 0.5em;"> Medium</td>
-     <td style="padding: 0.2em 0.5em;"> Keep aspirational language docs if useful, but make this page the current implementation tracker.</td>
+     <td style="padding: 0.2em 0.5em;"> Ongoing</td>
+     <td style="padding: 0.2em 0.5em;"> Keep aspirational design docs clearly labelled as future-facing. The progress page remains the implementation tracker.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;"> Char diagnostics</td>
-     <td style="padding: 0.2em 0.5em;"> Low</td>
+     <td style="padding: 0.2em 0.5em;"> Cleanup</td>
      <td style="padding: 0.2em 0.5em;"> Add more malformed-char diagnostics if time allows. Existing success coverage and baseline failure coverage are enough for Alpha if tests remain green.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;"> Cross-platform golden stability</td>
-     <td style="padding: 0.2em 0.5em;"> Medium</td>
-     <td style="padding: 0.2em 0.5em;"> Treat as mostly closed once Windows fixes are verified. Keep path and template output normalized where exact bytes are not contractual.</td>
+     <td style="padding: 0.2em 0.5em;"> Ongoing</td>
+     <td style="padding: 0.2em 0.5em;"> Keep path and template output normalized where exact bytes are not contractual.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;"> HTML-Wasm coverage</td>
-     <td style="padding: 0.2em 0.5em;"> Low for Alpha</td>
+     <td style="padding: 0.2em 0.5em;"> Post-Alpha</td>
      <td style="padding: 0.2em 0.5em;"> Keep experimental tests useful, but do not promote successful Wasm collection/runtime behavior to an Alpha requirement.</td>
         </tr>
         

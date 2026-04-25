@@ -22,5 +22,5 @@ import @styles/docs {navbar, section, theme_head, palette}
     The source code for this website can be found on @https://github.com/nyejames/beanstalk/tree/main/docs/src (Github).
 
     ## Documentation
-    The @./docs (docs for the basic language syntax) are unfinished and not all features are fully implemented or stable.
+    The @./docs (Alpha language docs) cover the supported compiler surface for the first Alpha.
 ]
